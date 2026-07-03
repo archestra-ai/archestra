@@ -18,6 +18,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+// Dependency-free by design — safe to import before test files apply mocks.
+import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
@@ -176,6 +178,13 @@ beforeEach(async () => {
     const truncateSql = `TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`;
     await pgliteClient.exec(truncateSql);
   }
+
+  // Process-local caches (e.g. the agent id/slug resolve cache) outlive the
+  // per-test truncation above — clear every registered one so a mapping cached
+  // by one test (fixture slugs are name-derived and can repeat) can't leak
+  // into the next. The registry module is dependency-free, so importing it
+  // here cannot pre-load real modules ahead of a test file's mocks.
+  clearRegisteredProcessLocalCaches();
 
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.

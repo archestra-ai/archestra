@@ -10,6 +10,8 @@ export class TaskQueueService {
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private activeTaskIds = new Set<string>();
   private stopping = false;
+  private pollInFlight: Promise<void> | null = null;
+  private lastStuckSweepAt = 0;
   private drainResolve: (() => void) | null = null;
 
   registerHandler(taskType: string, handler: TaskHandler): void {
@@ -87,6 +89,8 @@ export class TaskQueueService {
     const pollIntervalMs = config.kb.taskWorkerPollIntervalSeconds * 1000;
 
     this.stopping = false;
+    // Sweep on the first poll of a fresh worker, then at most once per minute.
+    this.lastStuckSweepAt = 0;
 
     this.pollIntervalId = setInterval(() => {
       this.poll().catch((error) => {
@@ -113,24 +117,35 @@ export class TaskQueueService {
       this.pollIntervalId = null;
     }
 
+    // Everything below shares one deadline: callers (server shutdown) only
+    // budget taskWorkerShutdownTimeoutSeconds plus a small buffer before
+    // force-exiting, so an unbounded pre-drain wait would let the process
+    // die before the drain/release ran.
+    const timeoutMs = config.kb.taskWorkerShutdownTimeoutSeconds * 1000;
+    const deadline = Date.now() + timeoutMs;
+
+    // A poll may be mid-dequeue with its task not yet tracked; wait for it so
+    // the drain below sees the full in-flight set and the process cannot exit
+    // before a just-dequeued task is released back to the queue.
+    if (this.pollInFlight) {
+      await this.raceWithDeadline(
+        this.pollInFlight.catch(() => {}),
+        deadline,
+      );
+    }
+
     if (this.activeTaskIds.size === 0) {
       logger.info("[TaskQueue] Worker stopped (no in-flight tasks)");
       return;
     }
 
     const taskIds = [...this.activeTaskIds];
-    const timeoutMs = config.kb.taskWorkerShutdownTimeoutSeconds * 1000;
     logger.info(
       { taskIds, timeoutMs },
       "[TaskQueue] Draining in-flight tasks...",
     );
 
-    const result = await Promise.race([
-      this.waitForDrain(),
-      new Promise<"timeout">((resolve) =>
-        setTimeout(() => resolve("timeout"), timeoutMs),
-      ),
-    ]);
+    const result = await this.raceWithDeadline(this.waitForDrain(), deadline);
 
     if (result === "timeout") {
       const remainingIds = [...this.activeTaskIds];
@@ -151,39 +166,105 @@ export class TaskQueueService {
 
   // ===== Private methods =====
 
-  private async poll(): Promise<void> {
-    if (this.stopping) return;
-    if (this.activeTaskIds.size >= config.kb.taskWorkerMaxConcurrent) return;
+  private poll(): Promise<void> {
+    // The interval fires regardless of whether the previous poll finished;
+    // reusing the in-flight promise prevents overlapping polls from racing on
+    // shared state and lets stopWorker await the critical section.
+    if (this.pollInFlight) {
+      return this.pollInFlight;
+    }
+    const run = this.doPoll().finally(() => {
+      this.pollInFlight = null;
+    });
+    this.pollInFlight = run;
+    return run;
+  }
 
-    // Reset stuck tasks (processing for more than 1 hour)
-    const resetCount = await TaskModel.resetStuckTasks(60 * 60 * 1000);
-    if (resetCount > 0) {
-      metrics.taskQueue.reportStuckTasksReset(resetCount);
-      logger.warn({ resetCount }, "[TaskQueue] Reset stuck tasks");
+  private async doPoll(): Promise<void> {
+    if (this.stopping) return;
+
+    if (Date.now() - this.lastStuckSweepAt >= STUCK_SWEEP_INTERVAL_MS) {
+      this.lastStuckSweepAt = Date.now();
+      // Reset stuck tasks (processing for more than 1 hour)
+      const swept = await TaskModel.resetStuckTasks(STUCK_TASK_TIMEOUT_MS);
+      if (swept.length > 0) {
+        metrics.taskQueue.reportStuckTasksReset(swept.length);
+        logger.warn(
+          { resetCount: swept.length },
+          "[TaskQueue] Reset stuck tasks",
+        );
+      }
+      // A stuck periodic task that went straight to dead would silently end
+      // its chain — resurrect it here.
+      for (const transition of swept) {
+        if (transition.periodic && transition.status === "dead") {
+          await this.rescheduleIfPeriodic(transition.taskType);
+        }
+      }
+      if (this.stopping) return;
     }
 
-    // Dequeue and process
-    const task = await TaskModel.dequeue();
-    if (!task) return;
+    // Dequeue and process until the concurrency cap is filled
+    while (
+      !this.stopping &&
+      this.activeTaskIds.size < config.kb.taskWorkerMaxConcurrent
+    ) {
+      const task = await TaskModel.dequeue();
+      if (!task) return;
 
-    this.activeTaskIds.add(task.id);
-    this.processTask(task)
-      .catch((error) => {
-        logger.error(
-          {
-            taskId: task.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-          "[TaskQueue] Unhandled error in processTask",
-        );
-      })
-      .finally(() => {
-        this.activeTaskIds.delete(task.id);
-        if (this.activeTaskIds.size === 0 && this.drainResolve) {
-          this.drainResolve();
-          this.drainResolve = null;
-        }
-      });
+      // Track immediately so a concurrent stopWorker sees this task.
+      this.activeTaskIds.add(task.id);
+
+      if (this.stopping) {
+        // stopWorker may have snapshotted an empty set while the dequeue
+        // was in flight; hand the task back instead of processing it
+        // outside the drain. Release before untracking so shutdown cannot
+        // proceed past the drain while the row is still marked processing.
+        await TaskModel.releaseToQueue([task.id]);
+        this.untrackTask(task.id);
+        return;
+      }
+
+      this.processTask(task)
+        .catch((error) => {
+          logger.error(
+            {
+              taskId: task.id,
+              error: error instanceof Error ? error.message : String(error),
+            },
+            "[TaskQueue] Unhandled error in processTask",
+          );
+        })
+        .finally(() => {
+          this.untrackTask(task.id);
+        });
+    }
+  }
+
+  private async raceWithDeadline<T>(
+    promise: Promise<T>,
+    deadline: number,
+  ): Promise<T | "timeout"> {
+    const remainingMs = Math.max(deadline - Date.now(), 0);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<"timeout">((resolve) => {
+          timer = setTimeout(() => resolve("timeout"), remainingMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private untrackTask(taskId: string): void {
+    this.activeTaskIds.delete(taskId);
+    if (this.activeTaskIds.size === 0 && this.drainResolve) {
+      this.drainResolve();
+      this.drainResolve = null;
+    }
   }
 
   private waitForDrain(): Promise<void> {
@@ -312,6 +393,9 @@ export class TaskQueueService {
 export const taskQueueService = new TaskQueueService();
 
 // ===== Internal helpers =====
+
+const STUCK_SWEEP_INTERVAL_MS = 60_000;
+const STUCK_TASK_TIMEOUT_MS = 60 * 60 * 1000;
 
 function isUniqueViolation(error: unknown): boolean {
   return (

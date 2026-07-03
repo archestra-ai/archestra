@@ -1225,7 +1225,6 @@ export const anthropicAdapterFactory: LLMProvider<
           "anthropic",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 

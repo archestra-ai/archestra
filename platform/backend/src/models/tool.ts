@@ -1573,7 +1573,6 @@ class ToolModel {
    * Assign default Archestra tools to an agent.
    *
    * Default tools are those listed in {@link DEFAULT_ARCHESTRA_TOOL_NAMES}:
-   * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
    *

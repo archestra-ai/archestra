@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { PassThrough } from "node:stream";
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -5950,6 +5951,113 @@ describe("K8sDeployment.streamLogs", () => {
     }
 
     expect(k8sLogMock).not.toHaveBeenCalled();
+  });
+
+  test("ready-poll does not accumulate abort listeners on the signal across iterations", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const ac = new AbortController();
+
+    // Pod never becomes Ready, so every 2s iteration takes the timeout path.
+    vi.spyOn(
+      deployment as unknown as {
+        findAnyPodForDeployment: () => Promise<k8s.V1Pod | undefined>;
+      },
+      "findAnyPodForDeployment",
+    ).mockResolvedValue(makePendingPod());
+
+    const out = new PassThrough();
+
+    vi.useFakeTimers();
+    try {
+      const done = (
+        deployment as unknown as {
+          pollAndStreamLogsWhenReady(
+            stream: NodeJS.WritableStream,
+            lines: number,
+            abortSignal?: AbortSignal,
+          ): Promise<void>;
+        }
+      ).pollAndStreamLogsWhenReady(out, 100, ac.signal);
+
+      const listenerCounts: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(2000);
+        listenerCounts.push(getEventListeners(ac.signal, "abort").length);
+      }
+      // Only the in-flight iteration may hold a listener; finished
+      // iterations must have removed theirs.
+      expect(Math.max(...listenerCounts)).toBeLessThanOrEqual(1);
+
+      ac.abort();
+      await vi.advanceTimersByTimeAsync(2000);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(getEventListeners(ac.signal, "abort")).toHaveLength(0);
+  });
+});
+
+describe("K8sDeployment pod lookup fallbacks", () => {
+  test("findPodForDeployment fallback lists only app=mcp-server pods", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const deploymentName = (deployment as unknown as { deploymentName: string })
+      .deploymentName;
+
+    const listNamespacedPod = vi
+      .fn()
+      // lookup by mcp-server-id label finds no running pod
+      .mockResolvedValueOnce({ items: [] })
+      // multi-tenant fallback list
+      .mockResolvedValueOnce({
+        items: [
+          {
+            metadata: { name: `${deploymentName}-abc12` },
+            status: { phase: "Running" },
+          },
+        ],
+      });
+    (deployment as unknown as { k8sApi: k8s.CoreV1Api }).k8sApi = {
+      listNamespacedPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await expect(deployment.hasRunningPod()).resolves.toBe(true);
+
+    expect(listNamespacedPod).toHaveBeenNthCalledWith(2, {
+      namespace: "default",
+      labelSelector: "app=mcp-server",
+    });
+  });
+
+  test("findAnyPodForDeployment fallback lists only app=mcp-server pods", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const deploymentName = (deployment as unknown as { deploymentName: string })
+      .deploymentName;
+
+    const ownPod = {
+      metadata: { name: `${deploymentName}-xyz99` },
+      status: { phase: "Pending" },
+    };
+    const listNamespacedPod = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [ownPod] });
+    (deployment as unknown as { k8sApi: k8s.CoreV1Api }).k8sApi = {
+      listNamespacedPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const pod = await (
+      deployment as unknown as {
+        findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined>;
+      }
+    ).findAnyPodForDeployment();
+
+    expect(pod?.metadata?.name).toBe(`${deploymentName}-xyz99`);
+    expect(listNamespacedPod).toHaveBeenNthCalledWith(2, {
+      namespace: "default",
+      labelSelector: "app=mcp-server",
+    });
   });
 });
 

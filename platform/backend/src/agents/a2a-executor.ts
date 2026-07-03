@@ -125,7 +125,7 @@ export interface A2AExecuteParams {
   chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
   /** Whether to block execution when an approval-required tool is called (defaults to true) */

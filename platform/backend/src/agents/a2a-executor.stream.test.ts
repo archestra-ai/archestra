@@ -200,7 +200,7 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(textPart?.text).toBe("Answer. Done.");
   });
 
-  test("drops a thinking-only turn to empty text and no leftover text part", async ({
+  test("reduces a thinking-only turn to empty text while keeping the (empty) text part", async ({
     makeOrganization,
     makeUser,
     makeInternalAgent,
@@ -209,7 +209,8 @@ describe("executeA2AMessage real stream boundary", () => {
     const user = await makeUser();
     const agent = await makeInternalAgent({ organizationId: org.id });
     // The pre-strip stream is non-empty, so the empty-response recovery does not
-    // re-trigger; stripping then leaves no visible answer.
+    // re-trigger; stripping leaves no visible answer, but the text part is kept
+    // (not dropped) so the message never collapses to zero parts.
     primeAgent(
       modelEmitting(textChunks("<thinking>only reasoning</thinking>")),
     );
@@ -223,9 +224,10 @@ describe("executeA2AMessage real stream boundary", () => {
     });
 
     expect(result.text).toBe("");
-    expect(result.responseUiMessage.parts.some((p) => p.type === "text")).toBe(
-      false,
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
     );
+    expect(textPart?.text).toBe("");
   });
 
   test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async ({

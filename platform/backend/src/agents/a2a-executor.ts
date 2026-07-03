@@ -481,26 +481,22 @@ export async function executeA2AMessage(
         );
       }
 
-      // Strip inline `<thinking>...</thinking>` blocks from the model's text
-      // output at this single A2A boundary, so every consumer (protocol reply,
-      // delegation tool result, email, scheduled-run persistence) shares the
-      // invariant. Text parts that become empty are dropped. Structured
-      // `reasoning` parts are left intact — they never reach a chat (the
-      // protocol keeps only text parts) and are needed for provider replay of
-      // the persisted history.
+      // Strip inline `<thinking>...</thinking>` text from the model's output at
+      // this single A2A boundary, so every consumer (protocol reply, delegation
+      // tool result, email, scheduled-run persistence) shares the invariant.
+      // Text parts are stripped in place — an emptied part is kept (not removed)
+      // so a thinking-only turn never collapses to a zero-part assistant message,
+      // which some providers reject when the persisted history is replayed.
+      // Structured `reasoning` parts are left untouched: the A2A protocol reply
+      // excludes them (only text parts survive), and where they are surfaced
+      // (the scheduled-run chat view) they render via the chat's reasoning UI,
+      // exactly as interactive chat does — stripping them is out of scope here.
       finalText = stripThinkingBlocks(finalText);
-      responseUiMessage = {
-        ...responseUiMessage,
-        parts: responseUiMessage.parts.flatMap<UIMessage["parts"][number]>(
-          (part) => {
-            if (part.type !== "text") {
-              return [part];
-            }
-            const text = stripThinkingBlocks(part.text);
-            return text.length === 0 ? [] : [{ ...part, text }];
-          },
-        ),
-      };
+      for (const part of responseUiMessage.parts) {
+        if (part.type === "text") {
+          part.text = stripThinkingBlocks(part.text);
+        }
+      }
 
       // Surface this run's tool calls on the caller's conversation, attributed
       // to the delegation call that invoked this agent. Nested delegations'

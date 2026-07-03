@@ -269,11 +269,17 @@ export function sanitizeOutputLimit(
  */
 export class ModelsDevClient {
   private readonly fetchTimeoutMs: number;
+  // Hand-rolled instead of cacheManager/LRUCacheManager: single-flight
+  // coalescing needs the in-flight promise as instance state, and the
+  // multi-MB registry payload does not belong in the Postgres-backed cache.
   private cachedResponse: {
     data: ModelsDevApiResponse;
     fetchedAt: number;
   } | null = null;
   private inflightFetch: Promise<ModelsDevApiResponse> | null = null;
+  // Bumped by clearFetchCache so a fetch started before the clear cannot
+  // repopulate the cache with pre-clear data when it settles.
+  private fetchGeneration = 0;
 
   constructor(opts?: { fetchTimeoutMs?: number }) {
     this.fetchTimeoutMs = opts?.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
@@ -296,20 +302,25 @@ export class ModelsDevClient {
       return this.inflightFetch;
     }
 
-    this.inflightFetch = this.doFetchModelsFromApi();
+    const fetchPromise = this.doFetchModelsFromApi();
+    this.inflightFetch = fetchPromise;
     try {
-      return await this.inflightFetch;
+      return await fetchPromise;
     } finally {
-      this.inflightFetch = null;
+      if (this.inflightFetch === fetchPromise) {
+        this.inflightFetch = null;
+      }
     }
   }
 
   /**
-   * Drops the in-memory fetch cache so the next call hits the network.
-   * Useful for manual resyncs; tests use it to isolate cases.
+   * Drops the in-memory fetch cache and detaches any in-flight fetch so the
+   * next call hits the network. Tests use it to isolate cases.
    */
   clearFetchCache(): void {
+    this.fetchGeneration++;
     this.cachedResponse = null;
+    this.inflightFetch = null;
   }
 
   /**
@@ -599,6 +610,7 @@ export class ModelsDevClient {
    * uncached so retries refetch instead of reusing a bad payload.
    */
   private async doFetchModelsFromApi(): Promise<ModelsDevApiResponse> {
+    const generation = this.fetchGeneration;
     try {
       const response = await fetch(MODELS_DEV_API_URL, {
         signal: AbortSignal.timeout(this.fetchTimeoutMs),
@@ -619,7 +631,9 @@ export class ModelsDevClient {
         return json as ModelsDevApiResponse;
       }
 
-      this.cachedResponse = { data: parseResult.data, fetchedAt: Date.now() };
+      if (generation === this.fetchGeneration) {
+        this.cachedResponse = { data: parseResult.data, fetchedAt: Date.now() };
+      }
       return parseResult.data;
     } catch (error) {
       logger.error(

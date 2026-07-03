@@ -158,8 +158,28 @@ describe("ModelsDevClient", () => {
       const second = await modelsDevClient.fetchModelsFromApi();
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(second).toEqual(first);
+      expect(second).toBe(first);
       expect(second.openai.models["gpt-4o"].name).toBe("GPT-4o");
+    });
+
+    test("refetches after the cache TTL expires", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+      await modelsDevClient.fetchModelsFromApi();
+
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.advanceTimersByTime(6 * 60 * 1000);
+        mockSuccessfulFetchOnce(mockResponse);
+        await modelsDevClient.fetchModelsFromApi();
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     test("concurrent calls share a single in-flight fetch", async () => {

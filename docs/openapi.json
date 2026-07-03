@@ -199782,7 +199782,7 @@
         "tags": [
           "Onboarding"
         ],
-        "description": "When the instance got activated for the feedback pop-up: an MCP server connected AND a successful tool call routed. Null until both happened.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
+        "description": "When the instance got activated for the feedback pop-up: an MCP server connected AND a successful tool call routed. Null until both happened, and always null on enterprise-licensed instances.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "responses": {
           "200": {
             "description": "Default Response",

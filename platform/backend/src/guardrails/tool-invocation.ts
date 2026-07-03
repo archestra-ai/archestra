@@ -98,6 +98,18 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     externalAgentId: params.externalAgentId,
   };
 
+  // Resolve the row that will execute (dynamic id if supplied, else the assigned
+  // row via the execution resolver) so policy evaluation and the approval check
+  // both act on that exact row when a name is shared by duplicate rows.
+  const resolvedToolId =
+    params.resolvedToolId ??
+    (
+      await ToolModel.getAssignedToolIdsByName(
+        [params.toolName],
+        params.agentId,
+      )
+    ).get(params.toolName);
+
   const policyBlock = await evaluatePolicies(
     [
       {
@@ -110,9 +122,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     params.contextIsTrusted,
     enabledToolNames,
     MCP_GATEWAY_ENFORCEMENT,
-    params.resolvedToolId
-      ? new Map([[params.toolName, params.resolvedToolId]])
-      : undefined,
+    resolvedToolId ? new Map([[params.toolName, resolvedToolId]]) : undefined,
   );
   if (policyBlock) {
     return policyBlock;
@@ -127,7 +137,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
       params.toolName,
       params.toolInput,
       policyContext,
-      params.resolvedToolId,
+      resolvedToolId,
     );
   if (!requiresApproval) {
     return null;
@@ -135,7 +145,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
 
   return buildToolInvocationPolicyBlockResult({
     toolName: params.toolName,
-    toolId: params.resolvedToolId,
+    toolId: resolvedToolId,
     toolInput: params.toolInput,
     reason: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     enforcement: MCP_GATEWAY_ENFORCEMENT,

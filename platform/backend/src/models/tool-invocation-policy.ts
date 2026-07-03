@@ -458,15 +458,17 @@ class ToolInvocationPolicyModel {
     if (namesNeedingLookup.length > 0) {
       const namesToResolve = new Set(namesNeedingLookup);
 
-      // Prefer the agent's assigned row so the policy is evaluated against the
-      // row the agent actually uses. getMcpToolsByAgent is deterministically
-      // ordered, so first-wins-by-name is stable when duplicates share a name.
-      // Skipped for the app-runtime caller, which passes an empty agentId.
+      // Prefer the agent's assigned row, resolved with the same order execution
+      // uses, so a duplicated name evaluates the policy against the row that
+      // will actually run. Skipped for the app-runtime caller (empty agentId).
       if (agentId) {
-        const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
-        for (const tool of assignedTools) {
-          if (namesToResolve.has(tool.name) && !toolIdsByName.has(tool.name)) {
-            toolIdsByName.set(tool.name, tool.id);
+        const assignedIds = await ToolModel.getAssignedToolIdsByName(
+          [...namesToResolve],
+          agentId,
+        );
+        for (const [name, id] of assignedIds) {
+          if (!toolIdsByName.has(name)) {
+            toolIdsByName.set(name, id);
           }
         }
       }

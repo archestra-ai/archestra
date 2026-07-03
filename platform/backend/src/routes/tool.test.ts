@@ -32,9 +32,12 @@ describe("GET /api/tools/:id", () => {
 
   test("returns id, name and parameters for a tool in the caller's org", async ({
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeTool,
   }) => {
     const catalog = await makeInternalMcpCatalog({ organizationId });
+    // An org-scoped install makes the catalog accessible to the caller.
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
     const tool = await makeTool({
       catalogId: catalog.id,
       name: "workspace__export_data",

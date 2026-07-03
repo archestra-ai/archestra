@@ -371,14 +371,25 @@ class ToolModel {
     }
 
     // Catalog-backed tools (including All-mode tools with no agent_tools row) are
-    // scoped by catalog access, which is org-scoped even for admins.
+    // scoped by catalog access, which is org-scoped even for admins. Mirror the
+    // discovery path (getMcpToolsAccessibleToUser): a catalog is only reachable
+    // if the caller also has an accessible install of it (org-visible catalogs
+    // can hold only other users' personal servers). The built-in Archestra
+    // catalog runs in-process with no install row, so it stays in.
     if (tool.catalogId) {
-      const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
-        params.userId,
-        params.isAdmin,
-        params.organizationId,
-      );
-      if (!catalogIds.includes(tool.catalogId)) {
+      const [catalogIds, installedCatalogIds] = await Promise.all([
+        McpCatalogTeamModel.getUserAccessibleCatalogIds(
+          params.userId,
+          params.isAdmin,
+          params.organizationId,
+        ),
+        McpServerModel.getAccessibleInstallCatalogIds(params.userId),
+      ]);
+      const accessible =
+        catalogIds.includes(tool.catalogId) &&
+        (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID ||
+          installedCatalogIds.has(tool.catalogId));
+      if (!accessible) {
         return null;
       }
     } else if (tool.agentId) {
@@ -1800,6 +1811,59 @@ class ToolModel {
   }
 
   /**
+   * Resolve assigned tool names to their row ids using the SAME filter and
+   * ordering as {@link getMcpToolsAssignedToAgent} (the execution resolver), so
+   * a tool-invocation policy is evaluated against the exact row that will run.
+   * First-wins per name mirrors execution's `mcpTools[0]`. Keep the WHERE/ORDER
+   * in sync with getMcpToolsAssignedToAgent.
+   */
+  static async getAssignedToolIdsByName(
+    toolNames: string[],
+    agentId: string,
+  ): Promise<Map<string, string>> {
+    if (toolNames.length === 0) {
+      return new Map();
+    }
+
+    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+
+    const rows = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          inArray(schema.toolsTable.name, toolNames),
+          isNotNull(schema.toolsTable.catalogId),
+          toolInEnvironmentPredicate(agentEnvironmentId),
+        ),
+      )
+      .orderBy(
+        desc(
+          ToolModel.hasHealthyMcpServerInstall(
+            schema.agentToolsTable.mcpServerId,
+          ),
+        ),
+        asc(schema.toolsTable.id),
+      );
+
+    const idsByName = new Map<string, string>();
+    for (const row of rows) {
+      if (!idsByName.has(row.name)) {
+        idsByName.set(row.name, row.id);
+      }
+    }
+    return idsByName;
+  }
+
+  /**
    * Find an agent-assigned MCP tool by its unprefixed name suffix.
    * Mirrors {@link getMcpToolsAssignedToAgent} but matches via RIGHT() suffix
    * instead of exact name, for when MCP App iframes call oncalltool with the
@@ -2079,6 +2143,7 @@ class ToolModel {
    */
   static async findByCatalogIdWithMeta(catalogId: string): Promise<
     Array<{
+      id: string;
       name: string;
       description: string | null;
       parameters: Record<string, unknown> | undefined;
@@ -2087,6 +2152,7 @@ class ToolModel {
   > {
     return db
       .select({
+        id: schema.toolsTable.id,
         name: schema.toolsTable.name,
         description: schema.toolsTable.description,
         parameters: schema.toolsTable.parameters,

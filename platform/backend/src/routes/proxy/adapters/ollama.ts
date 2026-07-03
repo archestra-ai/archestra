@@ -20,12 +20,7 @@ export const ollamaAdapterFactory = createOpenAiCompatibleAdapterFactory({
     options: CreateClientOptions,
   ): OpenAIProvider {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "ollama",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("ollama", options.agent, options.source)
       : undefined;
 
     // Ollama typically runs without auth; the OpenAI SDK still requires a non-empty key.

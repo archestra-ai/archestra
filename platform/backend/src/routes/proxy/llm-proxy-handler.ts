@@ -945,7 +945,6 @@ export async function handleLLMProxy<
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
-      externalAgentId,
       source,
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
@@ -1163,7 +1162,6 @@ async function handleStreaming<
               actualModel,
               ttftSeconds,
               source,
-              externalAgentId,
             );
           }
 
@@ -1386,7 +1384,6 @@ async function handleStreaming<
         toolCallCount: toolCalls.length,
         actualModel,
         source,
-        externalAgentId,
       });
     } else if (
       toolCalls.length > 0 &&
@@ -1480,7 +1477,6 @@ async function handleStreaming<
           },
           actualModel,
           source,
-          externalAgentId,
         );
 
         if (usage.outputTokens && firstChunkTime) {
@@ -1492,7 +1488,6 @@ async function handleStreaming<
             usage.outputTokens,
             totalDurationSeconds,
             source,
-            externalAgentId,
           );
         }
       });
@@ -1511,7 +1506,6 @@ async function handleStreaming<
           actualModel,
           costs.actualCost,
           source,
-          externalAgentId,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1522,7 +1516,6 @@ async function handleStreaming<
             cacheReadSavings: costs.cacheReadSavings,
           },
           source,
-          externalAgentId,
         );
       });
 
@@ -1772,7 +1765,6 @@ async function handleNonStreaming<
         toolCallCount: toolCalls.length,
         actualModel,
         source,
-        externalAgentId,
       });
 
       // Record interaction with refusal (usage already corrected above)
@@ -1790,7 +1782,6 @@ async function handleNonStreaming<
           actualModel,
           costs.actualCost,
           source,
-          externalAgentId,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1801,7 +1792,6 @@ async function handleNonStreaming<
             cacheReadSavings: costs.cacheReadSavings,
           },
           source,
-          externalAgentId,
         );
       });
 
@@ -1850,7 +1840,6 @@ async function handleNonStreaming<
   //   { input: usage.inputTokens, output: usage.outputTokens },
   //   actualModel,
   //   source,
-  //   externalAgentId,
   // );
 
   const costs = await calculateInteractionCosts({
@@ -1867,7 +1856,6 @@ async function handleNonStreaming<
       actualModel,
       costs.actualCost,
       source,
-      externalAgentId,
     );
     metrics.llm.reportLLMCacheCost(
       providerName,
@@ -1875,7 +1863,6 @@ async function handleNonStreaming<
       actualModel,
       { cacheCost: costs.cacheCost, cacheReadSavings: costs.cacheReadSavings },
       source,
-      externalAgentId,
     );
   });
 

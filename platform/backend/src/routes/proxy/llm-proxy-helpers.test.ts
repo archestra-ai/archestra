@@ -391,7 +391,6 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 2,
       actualModel: "gpt-4",
       source: "api",
-      externalAgentId: "ext-1",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith({
@@ -417,7 +416,6 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 1,
       actualModel: "claude-3-opus",
       source: "api",
-      externalAgentId: "ext-2",
     });
 
     expect(vi.mocked(metrics.llm.reportBlockedTools)).toHaveBeenCalledWith(
@@ -426,7 +424,6 @@ describe("recordBlockedToolCallMetrics", () => {
       1,
       "claude-3-opus",
       "api",
-      "ext-2",
     );
   });
 

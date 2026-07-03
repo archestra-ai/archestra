@@ -117,11 +117,21 @@ export class TaskQueueService {
       this.pollIntervalId = null;
     }
 
+    // Everything below shares one deadline: callers (server shutdown) only
+    // budget taskWorkerShutdownTimeoutSeconds plus a small buffer before
+    // force-exiting, so an unbounded pre-drain wait would let the process
+    // die before the drain/release ran.
+    const timeoutMs = config.kb.taskWorkerShutdownTimeoutSeconds * 1000;
+    const deadline = Date.now() + timeoutMs;
+
     // A poll may be mid-dequeue with its task not yet tracked; wait for it so
     // the drain below sees the full in-flight set and the process cannot exit
     // before a just-dequeued task is released back to the queue.
     if (this.pollInFlight) {
-      await this.pollInFlight.catch(() => {});
+      await this.raceWithDeadline(
+        this.pollInFlight.catch(() => {}),
+        deadline,
+      );
     }
 
     if (this.activeTaskIds.size === 0) {
@@ -130,18 +140,12 @@ export class TaskQueueService {
     }
 
     const taskIds = [...this.activeTaskIds];
-    const timeoutMs = config.kb.taskWorkerShutdownTimeoutSeconds * 1000;
     logger.info(
       { taskIds, timeoutMs },
       "[TaskQueue] Draining in-flight tasks...",
     );
 
-    const result = await Promise.race([
-      this.waitForDrain(),
-      new Promise<"timeout">((resolve) =>
-        setTimeout(() => resolve("timeout"), timeoutMs),
-      ),
-    ]);
+    const result = await this.raceWithDeadline(this.waitForDrain(), deadline);
 
     if (result === "timeout") {
       const remainingIds = [...this.activeTaskIds];
@@ -234,6 +238,24 @@ export class TaskQueueService {
         .finally(() => {
           this.untrackTask(task.id);
         });
+    }
+  }
+
+  private async raceWithDeadline<T>(
+    promise: Promise<T>,
+    deadline: number,
+  ): Promise<T | "timeout"> {
+    const remainingMs = Math.max(deadline - Date.now(), 0);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<"timeout">((resolve) => {
+          timer = setTimeout(() => resolve("timeout"), remainingMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
     }
   }
 

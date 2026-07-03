@@ -3393,6 +3393,104 @@ describe("K8sDeployment.deleteK8sService", () => {
   });
 });
 
+describe("K8sDeployment.createServiceForHttpServer (selector reconciliation)", () => {
+  function createK8sDeploymentWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "new-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  type PrivateCreateService = {
+    createServiceForHttpServer: (
+      httpPort: number,
+      nodePort?: number,
+    ) => Promise<void>;
+  };
+
+  // Regression: a service whose selector still targets a stale mcp-server-id
+  // (left over after the server record was recreated with a new id) selects
+  // zero pods and gets no endpoints, so every read/connect fails. An existing
+  // service must be reconciled to the current id, not skipped.
+  test("reconciles an existing service's selector to the current mcp-server-id", async () => {
+    const mockRead = vi.fn().mockResolvedValue({}); // service already exists
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      readNamespacedService: mockRead,
+      patchNamespacedService: mockPatch,
+      createNamespacedService: mockCreate,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await (
+      k8sDeployment as unknown as PrivateCreateService
+    ).createServiceForHttpServer(8080);
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockPatch).toHaveBeenCalledTimes(1);
+    const patchArg = mockPatch.mock.calls[0][0] as {
+      name: string;
+      namespace: string;
+      body: {
+        metadata: { labels: Record<string, string> };
+        spec: { selector: Record<string, string> };
+      };
+    };
+    expect(patchArg.name).toBe("mcp-test-server-service");
+    expect(patchArg.namespace).toBe("default");
+    expect(patchArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+    expect(patchArg.body.metadata.labels["mcp-server-id"]).toBe(
+      "new-server-id",
+    );
+  });
+
+  test("creates the service when it does not yet exist", async () => {
+    const notFound = { statusCode: 404, message: "Service not found" };
+    const mockRead = vi.fn().mockRejectedValue(notFound);
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      readNamespacedService: mockRead,
+      patchNamespacedService: mockPatch,
+      createNamespacedService: mockCreate,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await (
+      k8sDeployment as unknown as PrivateCreateService
+    ).createServiceForHttpServer(8080);
+
+    expect(mockPatch).not.toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const createArg = mockCreate.mock.calls[0][0] as {
+      body: { spec: { selector: Record<string, string> } };
+    };
+    expect(createArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+  });
+});
+
 describe("K8sDeployment.constructHttpServiceName", () => {
   function createK8sDeploymentForServiceName(
     serverName: string,

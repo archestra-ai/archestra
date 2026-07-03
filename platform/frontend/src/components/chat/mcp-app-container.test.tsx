@@ -218,10 +218,14 @@ describe("McpAppSection", () => {
     });
 
     // The panel is opened deliberately and carries no tool details, so a blank
-    // app must not leave a completely empty panel with no indication.
+    // app must not leave a completely empty panel with no indication — and it
+    // must offer a reload to recover a transient/stale empty resource.
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
     expect(
       screen.getByText("This app rendered nothing to display."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reload app" }),
     ).toBeInTheDocument();
   });
 

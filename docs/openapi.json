@@ -55776,7 +55776,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Pin an app for the current user (mirrors project pins). Personal — does not affect other members. Any user who can view the app may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Pin an app for the current user (mirrors project pins). Personal — does not affect other members. Any user who can view the app may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -56042,9 +56042,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "app:read"
+          ]
         }
       },
       "delete": {
@@ -56052,7 +56053,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Remove the current user's pin on an app. Idempotent; intentionally no visibility check, so a stale pin on an app that was since re-scoped away (or deleted) can still be cleared.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Remove the current user's pin on an app. Idempotent; intentionally no visibility check, so a stale pin on an app that was since re-scoped away (or deleted) can still be cleared.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -56318,9 +56319,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "app:read"
+          ]
         }
       }
     },
@@ -56330,7 +56332,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Pin an external (MCP-server) UI app for the current user, identified like open-in-chat by install + resource. Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Pin an external (MCP-server) UI app for the current user, identified like open-in-chat by install + resource. Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "requestBody": {
           "required": true,
           "content": {
@@ -56615,9 +56617,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "app:read"
+          ]
         }
       },
       "delete": {
@@ -56625,7 +56628,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` rides the query string (DELETE carries no body).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` rides the query string (DELETE carries no body).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -56900,9 +56903,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "app:read"
+          ]
         }
       }
     },

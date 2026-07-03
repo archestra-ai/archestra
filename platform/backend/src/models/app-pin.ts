@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 /** The listing identity of an external app: one UI resource of one install. */
-export interface ExternalAppPinRef {
+interface ExternalAppPinRef {
   mcpServerId: string;
   resourceUri: string;
 }

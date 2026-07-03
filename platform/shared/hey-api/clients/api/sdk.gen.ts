@@ -695,7 +695,7 @@ export const openExternalAppInChat = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `app:read`: View and run MCP Apps within your scope (org, your teams, your own)
  */
 export const unpinApp = <ThrowOnError extends boolean = false>(options: Options<UnpinAppData, ThrowOnError>) => (options.client ?? client).delete<UnpinAppResponses, UnpinAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/pin', ...options });
 
@@ -708,7 +708,7 @@ export const unpinApp = <ThrowOnError extends boolean = false>(options: Options<
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `app:read`: View and run MCP Apps within your scope (org, your teams, your own)
  */
 export const pinApp = <ThrowOnError extends boolean = false>(options: Options<PinAppData, ThrowOnError>) => (options.client ?? client).put<PinAppResponses, PinAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/pin', ...options });
 
@@ -721,7 +721,7 @@ export const pinApp = <ThrowOnError extends boolean = false>(options: Options<Pi
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `app:read`: View and run MCP Apps within your scope (org, your teams, your own)
  */
 export const unpinExternalApp = <ThrowOnError extends boolean = false>(options: Options<UnpinExternalAppData, ThrowOnError>) => (options.client ?? client).delete<UnpinExternalAppResponses, UnpinExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{mcpServerId}/pin', ...options });
 
@@ -734,7 +734,7 @@ export const unpinExternalApp = <ThrowOnError extends boolean = false>(options: 
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `app:read`: View and run MCP Apps within your scope (org, your teams, your own)
  */
 export const pinExternalApp = <ThrowOnError extends boolean = false>(options: Options<PinExternalAppData, ThrowOnError>) => (options.client ?? client).put<PinExternalAppResponses, PinExternalAppErrors, ThrowOnError>({
     url: '/api/apps/external/{mcpServerId}/pin',

@@ -294,7 +294,7 @@ jobs:
       - name: Trigger website deploy
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.WEBSITE_VERCEL_DEPLOY_HOOK_URL }}
-        run: curl -X POST "$VERCEL_DEPLOY_HOOK_URL"
+        run: curl -fsS -X POST "$VERCEL_DEPLOY_HOOK_URL"
 
   notify-release-failure:
     name: Notify release failure

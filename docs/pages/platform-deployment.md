@@ -911,10 +911,21 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
+- **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Developer-only convenience that skips the login screen by minting a real session for the user with this email when the app loads unauthenticated.
+  - Default: None (disabled)
+  - Ignored in production (`NODE_ENV=production` or `prod`); only takes effect in development builds
+  - The session is an ordinary one for that user — role-based access control is unchanged
+  - Example: `admin@example.com`
+
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
   - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
   - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
   - Required when using different domains or subdomains for frontend and backend
+
+- **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
+  - Default: `archestra`
+  - Browsers scope cookies to the host without the port, so multiple Archestra instances on different ports of the same host overwrite each other's session cookies. Give each instance a unique prefix to keep their sessions independent.
+  - Mainly useful for local development with parallel stacks; single-instance deployments can leave the default
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`

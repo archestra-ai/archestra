@@ -54,6 +54,24 @@ const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
+/**
+ * Developer-only convenience: when set (and NOT in production), the login screen
+ * is skipped by minting a real session for the user with this email (see the
+ * dev-auto-login Better Auth plugin). Hard-disabled in production so it can never
+ * bypass authentication on a real deployment. The session is an ordinary one for
+ * that user — RBAC is unchanged.
+ */
+const devAutoAuthenticateEmail = isProduction
+  ? undefined
+  : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+if (devAutoAuthenticateEmail) {
+  logger.warn(
+    { email: devAutoAuthenticateEmail },
+    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: the login screen is skipped by auto-minting a session for this user. Developer-only, ignored in production.",
+  );
+}
+
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
@@ -1117,6 +1135,14 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /**
+     * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
+     * scope cookies to the host without the port, so parallel local instances
+     * on different localhost ports clobber each other's sessions unless each
+     * uses a distinct prefix.
+     */
+    cookiePrefix:
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
@@ -1129,6 +1155,7 @@ const config = {
      */
     dynamicClientRegistrationEnabled:
       process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
+    devAutoAuthenticateEmail,
   },
   analytics: getAnalyticsConfig(),
   database: {

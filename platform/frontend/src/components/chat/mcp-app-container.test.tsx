@@ -185,6 +185,46 @@ describe("McpAppSection", () => {
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
+  it("keeps the tool-call details inspectable when the app HTML is empty", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+          toolDetails={<div data-testid="tool-details">details</div>}
+        />,
+      );
+    });
+
+    // A blank app document reserves no canvas, but its tool-call details — the
+    // input/output a user needs to diagnose why it rendered blank — must remain.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tool-details")).toBeInTheDocument();
+  });
+
+  it("shows an explicit empty state in the panel when the app HTML is empty", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+        />,
+      );
+    });
+
+    // The panel is opened deliberately and carries no tool details, so a blank
+    // app must not leave a completely empty panel with no indication.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("This app rendered nothing to display."),
+    ).toBeInTheDocument();
+  });
+
   it("keeps script-driven app HTML because it may render after initialization", async () => {
     await act(async () => {
       render(
@@ -948,31 +988,34 @@ describe("McpAppSection unavailable owned app", () => {
     >);
   });
 
-  it("shows a plain pill and reveals the error message only when expanded", async () => {
+  it("shows the error message while expanded and never mounts the runtime", async () => {
     const user = userEvent.setup();
 
     await act(async () => {
       render(
-        <McpAppSection
-          {...defaultProps}
-          appId={APP_ID}
-          appName="Dashboard"
-          toolCallId="tc1"
-          preloadedResource={preloadedResource}
-        />,
+        <AppsProvider apps={[]}>
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
       );
     });
 
-    // Collapsed: just the pill, no error text, and never the runtime (would 404).
+    // Apps default open, so the unavailable message shows immediately — but
+    // the runtime never mounts (it would 404).
     const pill = screen.getByRole("button", { name: "Dashboard" });
-    expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
 
-    // Expanding shows the unavailable message; the runtime still never mounts.
+    // Collapsing via the pill hides the message like any other app content.
     await act(async () => {
       await user.click(pill);
     });
-    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
   });
 });

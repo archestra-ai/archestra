@@ -1,8 +1,8 @@
 import {
+  buildBlockAlwaysPolicyReason,
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
   isAgentTool,
-  TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
   TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
 } from "@archestra/shared";
@@ -526,7 +526,7 @@ class ToolInvocationPolicyModel {
         if (policy.action === "block_always") {
           return {
             isAllowed: false,
-            reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
+            reason: buildBlockAlwaysPolicyReason(policy.reason),
             toolCallName,
           };
         }
@@ -572,7 +572,7 @@ class ToolInvocationPolicyModel {
           if (policy.action === "block_always") {
             return {
               isAllowed: false,
-              reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
+              reason: buildBlockAlwaysPolicyReason(policy.reason),
               toolCallName,
             };
           }

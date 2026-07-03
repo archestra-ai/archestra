@@ -498,6 +498,14 @@ function CreateOAuthClientDialog({
 
           <GrantTypeField value={grantType} onChange={setGrantType} />
 
+          <OauthClientVisibilityField
+            resource="llmOauthClient"
+            scope={scope}
+            onScopeChange={setScope}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+          />
+
           {isAuthorizationCode ? (
             <>
               <RedirectUrisField
@@ -533,14 +541,6 @@ function CreateOAuthClientDialog({
               />
             </>
           )}
-
-          <OauthClientVisibilityField
-            resource="llmOauthClient"
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-          />
         </DialogBody>
         <DialogStickyFooter>
           <Button
@@ -646,6 +646,15 @@ function EditOAuthClientDialog({
             />
           </div>
 
+          <OauthClientVisibilityField
+            resource="llmOauthClient"
+            scope={scope}
+            onScopeChange={setScope}
+            teamIds={teamIds}
+            onTeamIdsChange={setTeamIds}
+            initialScope={oauthClient?.scope}
+          />
+
           {isAuthorizationCode ? (
             <>
               <RedirectUrisField
@@ -681,15 +690,6 @@ function EditOAuthClientDialog({
               />
             </>
           )}
-
-          <OauthClientVisibilityField
-            resource="llmOauthClient"
-            scope={scope}
-            onScopeChange={setScope}
-            teamIds={teamIds}
-            onTeamIdsChange={setTeamIds}
-            initialScope={oauthClient?.scope}
-          />
         </DialogBody>
         <DialogStickyFooter>
           <Button

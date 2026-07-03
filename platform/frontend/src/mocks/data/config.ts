@@ -64,6 +64,7 @@ export function makePublicConfig(
   return {
     disableBasicAuth: false,
     disableInvitations: false,
+    devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
     analytics: {
       enabled: false,

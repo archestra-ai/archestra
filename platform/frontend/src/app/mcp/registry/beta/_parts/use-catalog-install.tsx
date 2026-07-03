@@ -23,6 +23,7 @@ import {
   setOAuthEnvironmentValues,
   setOAuthIsFirstInstallation,
   setOAuthPendingAfterEnvVars,
+  setOAuthReturnUrl,
   setOAuthScope,
   setOAuthServerType,
   setOAuthState,
@@ -767,10 +768,17 @@ export function useCatalogInstall(opts?: {
       );
       setOAuthIsFirstInstallation(isFirstInstallation);
 
+      // Remember where the install started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
+
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
-    } catch {
-      toast.error("Failed to initiate OAuth flow");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate OAuth flow",
+      );
     }
   };
 

@@ -10,7 +10,6 @@ import {
   PauseCircle,
   Pencil,
   Play,
-  Plus,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -61,7 +60,6 @@ import {
   type ScheduleTrigger,
   type ScheduleTriggerRun,
   type ScheduleTriggerRunStatus,
-  useCreateScheduleTrigger,
   useCreateScheduleTriggerRunConversation,
   useDeleteScheduleTrigger,
   useDisableScheduleTrigger,
@@ -142,10 +140,8 @@ export function ScheduleTriggersIndexPage() {
   const { data: agents = [], isLoading: agentsLoading } = useProfiles({
     filters: { agentType: "agent" },
   });
-  const createMutation = useCreateScheduleTrigger();
   const updateMutation = useUpdateScheduleTrigger();
   const deleteMutation = useDeleteScheduleTrigger();
-  const [createFormOpen, setCreateFormOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<ScheduleTrigger | null>(
     null,
   );
@@ -196,82 +192,17 @@ export function ScheduleTriggersIndexPage() {
 
   const allTriggers = triggersResponse?.data ?? [];
   const hasAgents = agentOptions.length > 0;
-  const preferredAgentId =
-    (filterAgentId &&
-      agentOptions.some((a) => a.value === filterAgentId) &&
-      filterAgentId) ||
-    agentOptions[0]?.value ||
-    "";
   const formPayload = buildScheduleTriggerPayload(formState);
-  const isSaving = createMutation.isPending || updateMutation.isPending;
-  const isComposerOpen = editingTrigger !== null || createFormOpen;
+  const isSaving = updateMutation.isPending;
+  const isComposerOpen = editingTrigger !== null;
 
   const getDefaultName = useCallback(
     (agentId: string) => getDefaultTriggerName(agentId, agentOptions),
     [agentOptions],
   );
 
-  useEffect(() => {
-    if (
-      editingTrigger ||
-      !createFormOpen ||
-      !preferredAgentId ||
-      formState.agentId
-    ) {
-      return;
-    }
-
-    setFormState((current) => ({
-      ...current,
-      agentId: preferredAgentId,
-      name: nameTouchedRef.current
-        ? current.name
-        : getDefaultName(preferredAgentId),
-    }));
-  }, [
-    createFormOpen,
-    editingTrigger,
-    formState.agentId,
-    preferredAgentId,
-    getDefaultName,
-  ]);
-
-  const handledAgentIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      !agentIdParam ||
-      !triggersResponse ||
-      isLoading ||
-      handledAgentIdRef.current === agentIdParam
-    )
-      return;
-    handledAgentIdRef.current = agentIdParam;
-    if (triggersResponse.data.length === 0) {
-      setEditingTrigger(null);
-      nameTouchedRef.current = false;
-      setFormState({
-        ...DEFAULT_FORM_STATE(),
-        agentId: agentIdParam,
-        name: getDefaultName(agentIdParam),
-      });
-      setCreateFormOpen(true);
-    }
-  }, [agentIdParam, triggersResponse, isLoading, getDefaultName]);
-
-  const openCreateComposer = () => {
-    setEditingTrigger(null);
-    nameTouchedRef.current = false;
-    setFormState({
-      ...DEFAULT_FORM_STATE(),
-      agentId: preferredAgentId,
-      name: getDefaultName(preferredAgentId),
-    });
-    setCreateFormOpen(true);
-  };
-
   const openEditComposer = useCallback((trigger: ScheduleTrigger) => {
     setEditingTrigger(trigger);
-    setCreateFormOpen(false);
     nameTouchedRef.current = true;
     setFormState({
       name: trigger.name,
@@ -284,7 +215,6 @@ export function ScheduleTriggersIndexPage() {
 
   const closeComposer = () => {
     setEditingTrigger(null);
-    setCreateFormOpen(false);
     nameTouchedRef.current = false;
     setFormState(DEFAULT_FORM_STATE());
     if (agentIdParam) {
@@ -293,16 +223,14 @@ export function ScheduleTriggersIndexPage() {
   };
 
   const submitForm = async () => {
-    if (!formPayload) {
+    if (!formPayload || !editingTrigger) {
       return;
     }
 
-    const result = editingTrigger
-      ? await updateMutation.mutateAsync({
-          id: editingTrigger.id,
-          body: formPayload,
-        })
-      : await createMutation.mutateAsync(formPayload);
+    const result = await updateMutation.mutateAsync({
+      id: editingTrigger.id,
+      body: formPayload,
+    });
 
     if (!result) {
       return;
@@ -482,14 +410,6 @@ export function ScheduleTriggersIndexPage() {
             selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
           />
         )}
-        <div className="ml-auto">
-          <ScheduleTriggerCreateButton
-            hasAgents={hasAgents}
-            onClick={openCreateComposer}
-          >
-            New task
-          </ScheduleTriggerCreateButton>
-        </div>
       </div>
 
       {!hasAgents && !agentsLoading && (
@@ -544,7 +464,7 @@ export function ScheduleTriggersIndexPage() {
         columns={columns}
         data={allTriggers}
         isLoading={isLoading}
-        emptyMessage="No scheduled tasks yet."
+        emptyMessage="No scheduled tasks yet. Create scheduled tasks from a project."
         manualPagination
         pagination={{
           pageIndex,
@@ -1056,32 +976,6 @@ function NextRunCell({
       <span className="text-sm text-muted-foreground/70">Invalid schedule</span>
     );
   }
-}
-
-function ScheduleTriggerCreateButton({
-  hasAgents,
-  onClick,
-  children,
-}: {
-  hasAgents: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <PermissionButton
-      permissions={{ scheduledTask: ["create"] }}
-      onClick={onClick}
-      disabled={!hasAgents}
-      tooltip={
-        hasAgents
-          ? undefined
-          : "You need access to at least one internal agent to create a schedule."
-      }
-    >
-      <Plus className="h-4 w-4" />
-      {children}
-    </PermissionButton>
-  );
 }
 
 const WEEKDAYS = [

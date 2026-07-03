@@ -29,7 +29,6 @@ import {
   createChatMcpElicitationBridge,
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
-import config from "@/config";
 import {
   AppAccessModel,
   AppModel,
@@ -60,14 +59,6 @@ import {
 // with the canonical Map-backed fake from src/__mocks__/cache-manager.ts. The
 // bridge and refine_app (the SUT) are real.
 vi.mock("@/cache-manager");
-
-// App tools are only dispatchable when the feature is enabled.
-// Pin the apps flag per TEST, not per file: the shared setup restores the
-// pristine config before and after every test, so a beforeAll-scoped
-// mutation does not survive, and a file must never depend on worker state.
-beforeEach(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
 
 function structured(result: { structuredContent?: unknown }): any {
   return result.structuredContent;

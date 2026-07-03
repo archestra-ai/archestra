@@ -284,8 +284,8 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
             # the engine pod for the kube-pod:// transport.
             export KUBECONFIG="${KUBECONFIG_PATH}"
-            export ARCHESTRA_CODE_RUNTIME_ENABLED="true"
-            export ARCHESTRA_AGENTS_SKILLS_ENABLED="${ARCHESTRA_AGENTS_SKILLS_ENABLED:-true}"
+            # Setting the Dagger runner host is what turns the code sandbox on;
+            # the backend enables the sandbox when a Dagger host is present.
             export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
             echo "Dagger Engine ready - code runtime enabled"
         else

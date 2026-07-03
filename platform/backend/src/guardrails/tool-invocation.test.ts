@@ -7,81 +7,12 @@ import {
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { AgentTeamModel, OrganizationModel, ToolModel } from "@/models";
+import { ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
   evaluatePolicies,
   evaluateSingleMcpToolInvocationPolicy,
-  getGlobalToolPolicy,
 } from "./tool-invocation";
-
-// ---------------------------------------------------------------------------
-// getGlobalToolPolicy
-// ---------------------------------------------------------------------------
-describe("getGlobalToolPolicy", () => {
-  test("returns org policy when agent has a team linked to an org", async ({
-    makeAgent,
-    makeOrganization,
-    makeTeam,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, {
-      globalToolPolicy: "restrictive",
-    });
-    const user = await makeUser();
-    const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ organizationId: org.id });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-
-    const policy = await getGlobalToolPolicy(agent.id);
-    expect(policy).toBe("restrictive");
-  });
-
-  test("returns permissive (default) when agent has a team linked to an org with default policy", async ({
-    makeAgent,
-    makeOrganization,
-    makeTeam,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const team = await makeTeam(org.id, user.id);
-    const agent = await makeAgent({ organizationId: org.id });
-    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
-
-    const policy = await getGlobalToolPolicy(agent.id);
-    expect(policy).toBe("permissive");
-  });
-
-  test("falls back to first org policy when agent has no teams", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, {
-      globalToolPolicy: "restrictive",
-    });
-    // Agent auto-creates its own org, but has no teams assigned
-    const agent = await makeAgent({ organizationId: org.id });
-
-    const policy = await getGlobalToolPolicy(agent.id);
-    // Falls back to first org in DB — which one that is depends on test
-    // isolation, but the function should not throw
-    expect(["permissive", "restrictive"]).toContain(policy);
-  });
-
-  test("returns permissive when agent ID does not exist (no teams, falls back to first org)", async ({
-    makeOrganization,
-  }) => {
-    // Ensure at least one org exists
-    await makeOrganization();
-    // Use a valid UUID that doesn't correspond to any agent
-    const policy = await getGlobalToolPolicy(crypto.randomUUID());
-    // Agent has no teams → falls back to first org → default is permissive
-    expect(["permissive", "restrictive"]).toContain(policy);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // evaluatePolicies
@@ -94,7 +25,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       new Set(),
-      "permissive",
     );
     expect(result).toBeNull();
   });
@@ -111,7 +41,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "permissive",
     );
 
     expect(result).not.toBeNull();
@@ -153,14 +82,13 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "permissive",
     );
 
     // archestra tools bypass both enabledToolNames and policy evaluation
     expect(result).toBeNull();
   });
 
-  test("returns null when all tools are allowed (permissive mode)", async ({
+  test("returns null when all tools are allowed", async ({
     makeAgent,
     makeTool,
   }) => {
@@ -179,7 +107,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "permissive",
     );
 
     expect(result).toBeNull();
@@ -213,7 +140,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "restrictive",
     );
 
     expect(result).not.toBeNull();
@@ -252,7 +178,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       new Set(["dangerous__delete_all"]),
-      "restrictive",
       { surface: "llm-proxy", sessionId: "session-123" },
     );
 
@@ -282,11 +207,6 @@ describe("evaluatePolicies", () => {
     makeToolPolicy,
   }) => {
     const agent = await makeAgent();
-    // Permissive mode skips policy evaluation entirely; use restrictive so
-    // the block_always policy below is actually consulted.
-    await OrganizationModel.patch(agent.organizationId, {
-      globalToolPolicy: "restrictive",
-    });
     const tool = await makeTool({ name: "dangerous__delete_all" });
     await makeAgentTool(agent.id, tool.id);
     await makeToolPolicy(tool.id, {
@@ -326,11 +246,9 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "permissive",
     );
 
     // Empty enabledToolNames set → no filtering → tool passes through
-    // In permissive mode, evaluateBatch returns allowed immediately
     expect(result).toBeNull();
   });
 
@@ -349,7 +267,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "permissive",
     );
 
     expect(result).not.toBeNull();
@@ -358,7 +275,7 @@ describe("evaluatePolicies", () => {
     expect(result?.blockedToolName).toBe("disabled_tool");
   });
 
-  test("blocks tool in restrictive mode with untrusted context and no policy", async ({
+  test("blocks tool with untrusted context and no policy", async ({
     makeAgent,
     makeTool,
   }) => {
@@ -378,7 +295,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       false, // untrusted context
       enabledTools,
-      "restrictive",
     );
 
     expect(result).not.toBeNull();
@@ -386,7 +302,7 @@ describe("evaluatePolicies", () => {
     expect(result?.reason).toContain("sensitive");
   });
 
-  test("allows tool in restrictive mode with trusted context and no policy", async ({
+  test("allows tool with trusted context and no policy", async ({
     makeAgent,
     makeTool,
   }) => {
@@ -405,13 +321,12 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true, // trusted context
       enabledTools,
-      "restrictive",
     );
 
     expect(result).toBeNull();
   });
 
-  test("block_always policy blocks even in permissive mode with trusted context", async ({
+  test("block_always policy blocks with trusted context", async ({
     makeAgent,
     makeTool,
     makeAgentTool,
@@ -427,8 +342,7 @@ describe("evaluatePolicies", () => {
 
     const enabledTools = new Set(["always_blocked_tool"]);
 
-    // Even with permissive mode, evaluateBatch short-circuits.
-    // But only in restrictive mode does it reach the per-tool policy check.
+    // The engine always enforces, so the per-tool block_always policy fires.
     const result = await evaluatePolicies(
       [
         {
@@ -440,7 +354,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "restrictive",
     );
 
     expect(result).not.toBeNull();
@@ -477,7 +390,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "restrictive",
     );
 
     expect(result).not.toBeNull();
@@ -516,7 +428,6 @@ describe("evaluatePolicies", () => {
       { teamIds: [] },
       true,
       enabledTools,
-      "restrictive",
     );
 
     // Condition doesn't match (/tmp/safe.txt doesn't start with /etc/),
@@ -535,11 +446,6 @@ describe("evaluateSingleMcpToolInvocationPolicy", () => {
     seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent();
-    // Permissive mode skips policy evaluation entirely; use restrictive so
-    // the block_always policy below is actually consulted.
-    await OrganizationModel.patch(agent.organizationId, {
-      globalToolPolicy: "restrictive",
-    });
     await seedAndAssignArchestraTools(agent.id);
 
     const kbToolName = archestraMcpBranding.getToolName(
@@ -570,11 +476,8 @@ describe("evaluateSingleMcpToolInvocationPolicy", () => {
     seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent();
-    await OrganizationModel.patch(agent.organizationId, {
-      globalToolPolicy: "restrictive",
-    });
     // Seeds the default allow_when_context_is_untrusted invocation policy —
-    // without it, restrictive mode + untrusted context would block the call.
+    // without it, an untrusted context would block the call.
     await seedAndAssignArchestraTools(agent.id);
 
     const kbToolName = archestraMcpBranding.getToolName(
@@ -597,9 +500,6 @@ describe("evaluateSingleMcpToolInvocationPolicy", () => {
     seedAndAssignArchestraTools,
   }) => {
     const agent = await makeAgent();
-    await OrganizationModel.patch(agent.organizationId, {
-      globalToolPolicy: "restrictive",
-    });
     await seedAndAssignArchestraTools(agent.id);
 
     const whoamiToolName = archestraMcpBranding.getToolName(

@@ -375,9 +375,9 @@ export const permissionDescriptions: Record<string, string> = {
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
   "agentSettings:read":
-    "View agent settings (default model, default agent, security engine, file uploads)",
+    "View agent settings (default model, default agent, default tool guardrails, file uploads)",
   "agentSettings:update":
-    "Modify agent settings (default model, default agent, security engine, file uploads)",
+    "Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other

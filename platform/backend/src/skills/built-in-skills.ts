@@ -41,11 +41,6 @@ interface BuiltInSkill {
   /** SKILL.md body. */
   content: string;
   files: BuiltInSkillFile[];
-  /**
-   * Seed only when the MCP Apps feature is enabled. Keeps a feature that ships
-   * dark behind ARCHESTRA_APPS_ENABLED out of the skill catalog until release.
-   */
-  requiresAppsFeature?: boolean;
 }
 
 /** `source_ref` value for a built-in skill. */
@@ -339,6 +334,5 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
       "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions.",
     content: BUILD_APP_SKILL,
     files: [],
-    requiresAppsFeature: true,
   },
 ];

@@ -2,7 +2,6 @@ import { SupportedProviders } from "@archestra/shared";
 import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
-import config from "@/config";
 import { afterEach, describe, expect, test } from "@/test";
 import { Authnz } from "./middleware";
 
@@ -715,47 +714,21 @@ describe("Authnz", () => {
       expect(mockReply.header).not.toHaveBeenCalled();
     });
 
-    test("challenges a credential-less connector request (RFC 9728) when apps are enabled", async () => {
-      const original = config.apps.enabled;
-      (config.apps as { enabled: boolean }).enabled = true;
-      try {
-        const mockRequest = {
-          url: CONNECTOR_URL,
-          method: "POST",
-          headers: { host: "localhost:9000" },
-        } as FastifyRequest;
-        const mockReply = makeReply();
+    test("challenges a credential-less connector request (RFC 9728)", async () => {
+      const mockRequest = {
+        url: CONNECTOR_URL,
+        method: "POST",
+        headers: { host: "localhost:9000" },
+      } as FastifyRequest;
+      const mockReply = makeReply();
 
-        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
-          "Unauthenticated",
-        );
-        expect(mockReply.header).toHaveBeenCalledWith(
-          "WWW-Authenticate",
-          expect.stringContaining("resource_metadata"),
-        );
-      } finally {
-        (config.apps as { enabled: boolean }).enabled = original;
-      }
-    });
-
-    test("does not challenge a connector request when apps are disabled (dark)", async () => {
-      const original = config.apps.enabled;
-      (config.apps as { enabled: boolean }).enabled = false;
-      try {
-        const mockRequest = {
-          url: CONNECTOR_URL,
-          method: "POST",
-          headers: { host: "localhost:9000" },
-        } as FastifyRequest;
-        const mockReply = makeReply();
-
-        await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
-          "Unauthenticated",
-        );
-        expect(mockReply.header).not.toHaveBeenCalled();
-      } finally {
-        (config.apps as { enabled: boolean }).enabled = original;
-      }
+      await expect(authnz.handle(mockRequest, mockReply)).rejects.toThrow(
+        "Unauthenticated",
+      );
+      expect(mockReply.header).toHaveBeenCalledWith(
+        "WWW-Authenticate",
+        expect.stringContaining("resource_metadata"),
+      );
     });
   });
 });

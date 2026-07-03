@@ -3,6 +3,7 @@
 import posthog, { type PostHogConfig } from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useCallback, useEffect, useRef } from "react";
+import { trackEvent } from "@/lib/analytics";
 import { useSession } from "@/lib/auth/auth.query";
 import config, { getTracingHeaderHosts } from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
@@ -77,10 +78,18 @@ export function PostHogProviderWrapper({
     }
 
     if (userId && userId !== lastIdentifiedUserIdRef.current && userEmail) {
+      // PostHog persists the distinct id in localStorage, so it only differs
+      // from the session's user id right after a sign-in on this browser
+      // (sign-out resets it to an anonymous id). Reloads while signed in keep
+      // the identified id, so they don't re-fire the event.
+      const isNewSignIn = posthog.get_distinct_id() !== userId;
       posthog.identify(userId, {
         email: userEmail,
         name: userName || userEmail,
       });
+      if (isNewSignIn) {
+        trackEvent("user_authenticated", {});
+      }
       hasIdentifiedUserRef.current = true;
       lastIdentifiedUserIdRef.current = userId;
       return;

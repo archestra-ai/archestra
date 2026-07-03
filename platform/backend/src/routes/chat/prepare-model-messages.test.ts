@@ -635,3 +635,167 @@ test("gemini: a normal user-first history is left unchanged (no synthetic turn a
   expect(modelMessages).toHaveLength(1);
   expect(modelMessages[0]?.role).toBe("user");
 });
+
+test("synthesizes an interrupted tool result for a tool call parked at approval-requested", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // The user never resolved the approval and sent a new message instead. On
+  // replay the pending call converts to a tool-call with no tool-result, which
+  // providers reject — permanently breaking the conversation.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "delete the file" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "filesystem__delete",
+          toolCallId: "call-pending-approval",
+          state: "approval-requested",
+          input: { path: "/tmp/x" },
+          approval: { id: "approval-1" },
+        },
+      ],
+    },
+    {
+      role: "user",
+      parts: [{ type: "text", text: "never mind, what is 2+2?" }],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const assistantIndex = modelMessages.findIndex(
+    (m) =>
+      m.role === "assistant" &&
+      Array.isArray(m.content) &&
+      m.content.some((p) => (p as { type?: string }).type === "tool-call"),
+  );
+  expect(assistantIndex).toBeGreaterThanOrEqual(0);
+
+  // The synthetic result must directly follow the assistant tool-call turn.
+  const toolMessage = modelMessages[assistantIndex + 1];
+  expect(toolMessage?.role).toBe("tool");
+  const results = (toolMessage?.content ?? []) as Array<{
+    type: string;
+    toolCallId: string;
+    output: { type: string; value: string };
+  }>;
+  expect(results).toHaveLength(1);
+  expect(results[0]).toMatchObject({
+    type: "tool-result",
+    toolCallId: "call-pending-approval",
+    output: { type: "error-text" },
+  });
+  expect(results[0].output.value).toContain("interrupted");
+});
+
+test("merges synthetic results into an existing tool message when only some calls resolved", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "do both things" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "tool_a",
+          toolCallId: "call-finished",
+          state: "output-available",
+          input: {},
+          output: { ok: true },
+        },
+        {
+          type: "dynamic-tool",
+          toolName: "tool_b",
+          toolCallId: "call-unanswered",
+          state: "approval-requested",
+          input: {},
+          approval: { id: "approval-2" },
+        },
+      ],
+    },
+    { role: "user", parts: [{ type: "text", text: "continue" }] },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const toolMessages = modelMessages.filter((m) => m.role === "tool");
+  expect(toolMessages).toHaveLength(1);
+  const resultIds = (
+    toolMessages[0].content as Array<{ type: string; toolCallId: string }>
+  )
+    .filter((p) => p.type === "tool-result")
+    .map((p) => p.toolCallId);
+  expect(resultIds).toEqual(
+    expect.arrayContaining(["call-finished", "call-unanswered"]),
+  );
+});
+
+test("leaves a fully-answered tool call history untouched", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "list files" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "filesystem__list",
+          toolCallId: "call-ok",
+          state: "output-available",
+          input: {},
+          output: { files: [] },
+        },
+        { type: "text", text: "Done." },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const toolMessages = modelMessages.filter((m) => m.role === "tool");
+  expect(toolMessages).toHaveLength(1);
+  const results = toolMessages[0].content as Array<{
+    type: string;
+    toolCallId: string;
+    output: { type: string };
+  }>;
+  expect(results).toHaveLength(1);
+  expect(results[0].output.type).not.toBe("error-text");
+});

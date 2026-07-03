@@ -88,6 +88,7 @@ describe("GET /api/apps", () => {
     const catalog = await makeInternalMcpCatalog({
       organizationId,
       name: "Get Time",
+      icon: "🕒",
       serverType: "remote",
       serverUrl: "https://example.com/mcp",
       scope: "org",
@@ -126,6 +127,8 @@ describe("GET /api/apps", () => {
       resourceUri: "ui://get-time/app.html",
       executionModel: "server-scoped",
       cspOrigin: "author-declared",
+      // The catalog's registry icon rides along so the card can show it.
+      icon: "🕒",
     });
   });
 

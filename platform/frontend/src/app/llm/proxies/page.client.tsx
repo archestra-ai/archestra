@@ -40,6 +40,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAgentDialogUrlParam } from "@/lib/hooks/use-agent-dialog-url-param";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { LlmProxyActions } from "./llm-proxy-actions";
@@ -190,7 +191,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     },
     [router],
   );
-  const [editingProxy, setEditingProxy] = useState<ProxyData | null>(null);
+  const editDialog = useAgentDialogUrlParam("edit");
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const restoreProxy = useRestoreProfile();
 
@@ -332,9 +333,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             agent={agent}
             canModify={canModify}
             onConnect={(a) => navigateToConnection(a.id)}
-            onEdit={(agentData) => {
-              setEditingProxy(agentData);
-            }}
+            onEdit={editDialog.open}
             onDelete={setDeletingProxyId}
             onRestore={(agentId) => {
               restoreProxy.mutate(agentId, {
@@ -471,10 +470,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
             />
 
             <AgentDialog
-              open={!!editingProxy}
-              onOpenChange={(open) => !open && setEditingProxy(null)}
-              agent={editingProxy}
-              agentType={editingProxy?.agentType || "llm_proxy"}
+              open={!!editDialog.agent}
+              onOpenChange={(open) => !open && editDialog.close()}
+              agent={editDialog.agent}
+              agentType={editDialog.agent?.agentType || "llm_proxy"}
               defaultIconType="llm_proxy"
             />
 

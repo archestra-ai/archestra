@@ -73,6 +73,7 @@ export function makePublicConfig(
     },
     ...overrides,
     maintenanceMode: overrides.maintenanceMode ?? null,
+    siteNotificationMessage: overrides.siteNotificationMessage ?? null,
   };
 }
 

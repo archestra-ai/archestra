@@ -19,7 +19,11 @@ beforeEach(() => {
 });
 
 // Import after mock is defined
-import { modelsDevClient, sanitizeOutputLimit } from "./models-dev-client";
+import {
+  ModelsDevClient,
+  modelsDevClient,
+  sanitizeOutputLimit,
+} from "./models-dev-client";
 
 // The canonical Map-backed fake from src/__mocks__/cache-manager.ts avoids
 // "CacheManager: Not started" errors; the store resets before every test.
@@ -85,6 +89,9 @@ function createMockApiResponse(
 describe("ModelsDevClient", () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    // The singleton caches fetched responses in memory; clear between tests
+    // so each case controls its own fetch behavior.
+    modelsDevClient.clearFetchCache();
   });
 
   afterEach(async () => {
@@ -128,6 +135,135 @@ describe("ModelsDevClient", () => {
       const result = await modelsDevClient.fetchModelsFromApi();
 
       expect(result).toEqual({});
+    });
+  });
+
+  describe("fetch caching", () => {
+    function mockSuccessfulFetchOnce(response: ModelsDevApiResponse) {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(response),
+      });
+    }
+
+    test("second call within TTL reuses the cached response", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+
+      const first = await modelsDevClient.fetchModelsFromApi();
+      const second = await modelsDevClient.fetchModelsFromApi();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(second).toBe(first);
+      expect(second.openai.models["gpt-4o"].name).toBe("GPT-4o");
+    });
+
+    test("refetches after the cache TTL expires", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+      await modelsDevClient.fetchModelsFromApi();
+
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        vi.advanceTimersByTime(6 * 60 * 1000);
+        mockSuccessfulFetchOnce(mockResponse);
+        await modelsDevClient.fetchModelsFromApi();
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test("concurrent calls share a single in-flight fetch", async () => {
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      let resolveFetch!: (value: unknown) => void;
+      mockFetch.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFetch = resolve;
+          }),
+      );
+
+      const firstCall = modelsDevClient.fetchModelsFromApi();
+      const secondCall = modelsDevClient.fetchModelsFromApi();
+      resolveFetch({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+      const [first, second] = await Promise.all([firstCall, secondCall]);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(second).toEqual(first);
+      expect(first.openai.models["gpt-4o"].name).toBe("GPT-4o");
+    });
+
+    test("does not cache the empty error result", async () => {
+      mockFetch.mockRejectedValueOnce(new Error("Network Error"));
+
+      const failed = await modelsDevClient.fetchModelsFromApi();
+      expect(failed).toEqual({});
+
+      const mockResponse = createMockApiResponse({
+        openai: createMockProvider("openai", {
+          "gpt-4o": createMockModel({ id: "gpt-4o", name: "GPT-4o" }),
+        }),
+      });
+      mockSuccessfulFetchOnce(mockResponse);
+
+      const recovered = await modelsDevClient.fetchModelsFromApi();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(recovered.openai).toBeDefined();
+    });
+
+    test("does not cache the raw fallback when schema validation fails", async () => {
+      // A provider value that is not an object fails schema validation; the
+      // raw fallback is returned but not cached, so a retry refetches instead
+      // of reusing a potentially malformed payload for the whole TTL.
+      const invalidPayload = { openai: "not-a-provider-object" };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(invalidPayload),
+      });
+
+      const first = await modelsDevClient.fetchModelsFromApi();
+      const second = await modelsDevClient.fetchModelsFromApi();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(first).toEqual(invalidPayload);
+      expect(second).toEqual(invalidPayload);
+    });
+  });
+
+  describe("fetch timeout", () => {
+    test("aborts a hanging fetch and returns an empty result", async () => {
+      const client = new ModelsDevClient({ fetchTimeoutMs: 10 });
+      mockFetch.mockImplementationOnce(
+        (_url: string, options: { signal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener("abort", () =>
+              reject(options.signal.reason),
+            );
+          }),
+      );
+
+      const result = await client.fetchModelsFromApi();
+
+      expect(result).toEqual({});
+      const fetchOptions = mockFetch.mock.calls[0][1];
+      expect(fetchOptions.signal).toBeInstanceOf(AbortSignal);
     });
   });
 

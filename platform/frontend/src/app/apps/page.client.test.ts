@@ -31,6 +31,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
   pinnedAt: null,
+  icon: null,
 };
 
 describe("matchesKind", () => {

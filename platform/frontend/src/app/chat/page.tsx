@@ -459,12 +459,13 @@ export function ChatPageContent({
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
 
-  // A chat started from a project is created up front by the project composer,
-  // which stashes its opening prompt and navigates straight here. Drain that
-  // prompt (and any attachments the composer stashed) into the
-  // pending-initial-message refs so the shared send effect delivers them as the
-  // conversation's first message. Gated on the conversation id, so an ordinary
-  // /chat/<id> open never consumes it.
+  // A chat whose conversation was created up front (by the project composer, or
+  // by the apps page for an external app whose tool needs inputs) stashes its
+  // opening prompt and navigates straight here. Drain that prompt (and any
+  // attachments the composer stashed) into the pending-initial-message refs so
+  // the shared send effect delivers them as the conversation's first message.
+  // Gated on the conversation id, so an ordinary /chat/<id> open never
+  // consumes it.
   useEffect(() => {
     if (!conversationId) return;
     const handoff = takePendingProjectChatHandoff(conversationId);

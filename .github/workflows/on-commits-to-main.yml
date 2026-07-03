@@ -100,5 +100,5 @@ jobs:
             --set "archestra.env.ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_CLIENT_SECRET=${ARCHESTRA_STAGING_OUTLOOK_CLIENT_SECRET}" \
             --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY}" \
             --values .github/values-staging.yaml \
-            --wait \
+            --atomic \
             --timeout 15m

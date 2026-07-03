@@ -60,8 +60,6 @@ export interface CreateClientOptions {
   baseUrl?: string;
   /** Agent for observability metrics (request duration, tokens) */
   agent?: Agent;
-  /** External agent ID from X-Archestra-Agent-Id header */
-  externalAgentId?: string;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */

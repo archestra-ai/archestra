@@ -16003,6 +16003,8 @@ export type OpenExternalAppInChatResponses = {
      */
     200: {
         conversationId: string;
+        mode: 'render' | 'prompt';
+        prompt?: string;
     };
 };
 

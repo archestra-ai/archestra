@@ -999,8 +999,13 @@ export async function handleLLMProxy<
       userTeams,
     };
 
+    // `return await`, not `return`: a bare `return promise` inside try/catch
+    // lets the promise's rejection bypass the catch below entirely — upstream
+    // provider failures then skip handleError's status mapping (clients get a
+    // generic 500 instead of the provider's 429/404/…), skip the failed-
+    // interaction record, and get captured as unhandled server exceptions.
     if (requestAdapter.isStreaming()) {
-      return handleStreaming(
+      return await handleStreaming(
         client,
         finalRequest,
         reply,
@@ -1010,7 +1015,13 @@ export async function handleLLMProxy<
         ensureStreamHeaders,
       );
     } else {
-      return handleNonStreaming(client, finalRequest, reply, provider, ctx);
+      return await handleNonStreaming(
+        client,
+        finalRequest,
+        reply,
+        provider,
+        ctx,
+      );
     }
   } catch (error) {
     // Persist failed interactions so they appear in LLM logs

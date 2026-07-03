@@ -135,6 +135,56 @@ export async function gateAppToolCall(params: {
   // Policy is keyed by the resolved (stored) name, so a suffix-addressed tool
   // cannot slip past a policy attached to its full name.
   const resolvedToolName = tool.toolName;
+  const refusal = await enforceAppRuntimeInvocationPolicy({
+    resolvedToolName,
+    displayName: toolName,
+    toolInput,
+    organizationId,
+    userId,
+    isContextTrusted: params.isContextTrusted,
+    treatRequireApprovalAsBlock: params.treatRequireApprovalAsBlock,
+  });
+  if (refusal) {
+    return { allowed: false, ...refusal };
+  }
+
+  return { allowed: true, kind: "upstream", resolvedToolName };
+}
+
+/**
+ * Evaluate a resolved tool's invocation policy for an app-runtime call — shared
+ * by every app-runtime entrypoint (the owned-app gate above and the
+ * server-scoped app proxy) so they cannot diverge on enforcement.
+ *
+ * `resolvedToolName` must be the stored (slugified) name the policy is keyed by.
+ * `isContextTrusted` mirrors the caller's trust: iframe runtimes pass `true`, so
+ * only `block_always`/`require_approval` gate and a no-policy tool stays
+ * callable; `preview_app_tool` forwards the chat's real trust so
+ * `block_when_context_is_untrusted` still fires. `treatRequireApprovalAsBlock`
+ * blocks `require_approval` where the caller has no way to present the prompt
+ * (the sandbox runtimes). Permissive orgs short-circuit to allow, as everywhere
+ * in the policy engine. Returns a JSON-RPC refusal `{ code, reason }`, or `null`
+ * when the call is allowed.
+ */
+export async function enforceAppRuntimeInvocationPolicy(params: {
+  resolvedToolName: string;
+  displayName: string;
+  toolInput: Record<string, unknown>;
+  organizationId: string;
+  userId: string;
+  isContextTrusted: boolean;
+  treatRequireApprovalAsBlock: boolean;
+}): Promise<{ code: number; reason: string } | null> {
+  const {
+    resolvedToolName,
+    displayName,
+    toolInput,
+    organizationId,
+    userId,
+    isContextTrusted,
+    treatRequireApprovalAsBlock,
+  } = params;
+
   const organization = await OrganizationModel.getById(organizationId);
   const globalToolPolicy: GlobalToolPolicy =
     organization?.globalToolPolicy ?? "permissive";
@@ -147,18 +197,17 @@ export async function gateAppToolCall(params: {
     "",
     [{ toolCallName: resolvedToolName, toolInput }],
     policyContext,
-    params.isContextTrusted,
+    isContextTrusted,
     globalToolPolicy,
   );
   if (!verdict.isAllowed) {
     return {
-      allowed: false,
       code: -32601,
-      reason: `Tool "${toolName}" is blocked by a tool-invocation policy — a security guardrail enforced by ${archestraMcpBranding.catalogName}, not by the tool itself: ${verdict.reason}`,
+      reason: `Tool "${displayName}" is blocked by a tool-invocation policy — a security guardrail enforced by ${archestraMcpBranding.catalogName}, not by the tool itself: ${verdict.reason}`,
     };
   }
 
-  if (params.treatRequireApprovalAsBlock) {
+  if (treatRequireApprovalAsBlock) {
     const requiresApproval =
       await ToolInvocationPolicyModel.checkApprovalRequired(
         resolvedToolName,
@@ -168,12 +217,11 @@ export async function gateAppToolCall(params: {
       );
     if (requiresApproval) {
       return {
-        allowed: false,
         code: -32601,
-        reason: `Tool "${toolName}" requires human approval, which the app sandbox cannot present; an authoring agent can exercise it via preview_app_tool.`,
+        reason: `Tool "${displayName}" requires human approval, which the app sandbox cannot present; an authoring agent can exercise it via preview_app_tool.`,
       };
     }
   }
 
-  return { allowed: true, kind: "upstream", resolvedToolName };
+  return null;
 }

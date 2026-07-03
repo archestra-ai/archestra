@@ -42,6 +42,12 @@ const organizationsTable = pgTable("organization", {
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
+  /**
+   * When the first-login onboarding survey was submitted (the forward to the
+   * website is best-effort). Null = not yet; the survey keeps reappearing for
+   * admins of an empty, unlicensed instance until submitted once.
+   */
+  onboardingSurveyCompletedAt: timestamp("onboarding_survey_completed_at"),
   theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()

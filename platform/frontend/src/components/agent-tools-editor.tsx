@@ -101,6 +101,14 @@ interface AgentToolsEditorProps {
   assignmentTeamIds?: string[];
   onSelectedCountChange?: (count: number) => void;
   /**
+   * Reports the effective set of currently-selected tool ids (pending edits
+   * included, server assignments for untouched catalogs). The exclusions editor
+   * uses it so a built-in the user just checked here — but hasn't saved — is
+   * treated as assigned and not seeded as disabled. Pass a referentially-stable
+   * callback (e.g. a `useState` setter).
+   */
+  onSelectedToolIdsChange?: (toolIds: ReadonlySet<string>) => void;
+  /**
    * When true (the agent-environments feature is on), scope the MCP list to
    * `agentEnvironmentId` and report cross-environment selections via
    * `onConflictsChange`. When false, all catalogs are shown and no conflicts
@@ -139,6 +147,7 @@ export const AgentToolsEditor = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     onSelectedCountChange,
+    onSelectedToolIdsChange,
     environmentScopingEnabled,
     agentEnvironmentId,
     agentEnvironmentName,
@@ -155,6 +164,7 @@ export const AgentToolsEditor = forwardRef<
       assignmentScope={assignmentScope}
       assignmentTeamIds={assignmentTeamIds}
       onSelectedCountChange={onSelectedCountChange}
+      onSelectedToolIdsChange={onSelectedToolIdsChange}
       environmentScopingEnabled={environmentScopingEnabled}
       agentEnvironmentId={agentEnvironmentId}
       agentEnvironmentName={agentEnvironmentName}
@@ -176,6 +186,7 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     onSelectedCountChange,
+    onSelectedToolIdsChange,
     environmentScopingEnabled = false,
     agentEnvironmentId = null,
     agentEnvironmentName,
@@ -365,6 +376,37 @@ const AgentToolsEditorContent = forwardRef<
     },
     [calculateTotalSelectedCount, onSelectedCountChange],
   );
+
+  // Effective current selection across every catalog: the pending edit when the
+  // user has touched a catalog, otherwise its saved assignments. Reported to the
+  // dialog so the exclusions editor's seed reflects unsaved Custom-tab edits.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const effectiveSelectedToolIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const catalog of catalogItems) {
+      const pending = pendingChangesRef.current.get(catalog.id);
+      if (pending) {
+        for (const id of pending.selectedToolIds) ids.add(id);
+      } else {
+        for (const at of assignedToolsByCatalog.get(catalog.id) ?? [])
+          ids.add(at.tool.id);
+      }
+    }
+    return ids;
+  }, [catalogItems, assignedToolsByCatalog, pendingVersion]);
+
+  // Report only when the CONTENT changes. The memo's inputs get fresh
+  // identities on every render while the queries are loading (`data = []`
+  // defaults), so keying the parent's setState off the Set's identity would
+  // loop render → new Set → setState → render forever and crash the dialog.
+  const lastReportedSelectionKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onSelectedToolIdsChange) return;
+    const key = [...effectiveSelectedToolIds].sort().join(",");
+    if (lastReportedSelectionKeyRef.current === key) return;
+    lastReportedSelectionKeyRef.current = key;
+    onSelectedToolIdsChange(effectiveSelectedToolIds);
+  }, [effectiveSelectedToolIds, onSelectedToolIdsChange]);
 
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({

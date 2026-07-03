@@ -12,11 +12,8 @@ import {
   policyBlockToToolError,
 } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
-import {
-  agentToolExclusionsService,
-  isToolRowExcluded,
-} from "@/services/agent-tool-exclusions";
+import { ConversationEnabledToolModel } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
@@ -200,11 +197,8 @@ async function visibleCandidates(params: {
   // Per-agent exclusions (Auto-tool mode): an excluded tool must not be
   // recovered from a short name, nor disclosed as a "did you mean" candidate.
   // Loaded once and applied to the assigned + discoverable contributions.
-  const exclusionSets =
-    await agentToolExclusionsService.getActiveExclusionSets(agentId);
-  const assigned = (await ToolModel.getMcpToolsByAgent(agentId)).filter(
-    (tool) => !isToolRowExcluded(tool, exclusionSets),
-  );
+  const { tools: assigned, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
   const names = assigned.map((tool) => tool.name);
   if (await dynamicAccessContext(accessParams)) {
     const discoverable = await getUnassignedDiscoverableTools({
@@ -350,12 +344,10 @@ async function dispatchTool({
   // Per-agent exclusions (Auto-tool mode, loaded once per dispatch): an
   // assigned-but-excluded tool drops out of the assigned set here and the
   // dynamic fallback refuses it too, so it resolves to "unavailable".
-  const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
-    context.agentId,
-  );
-  const assignedTools = (
-    await ToolModel.getMcpToolsByAgent(context.agentId)
-  ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
+  const { tools: assignedTools, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(
+      context.agentId,
+    );
   const assignedToolNames = new Set(assignedTools.map((tool) => tool.name));
   let availableTool: Tool | null = null;
   if (!assignedToolNames.has(resolvedName)) {

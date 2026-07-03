@@ -402,6 +402,13 @@ export const RouteId = {
   UpdateDefaultUserLimit: "updateDefaultUserLimit",
   DeleteDefaultUserLimit: "deleteDefaultUserLimit",
 
+  // Onboarding Routes
+  GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",
+  MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
+  GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
+  SubmitOnboardingSurvey: "submitOnboardingSurvey",
+  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
+
   // Organization Routes
   GetOrganization: "getOrganization",
   GetOnboardingStatus: "getOnboardingStatus",

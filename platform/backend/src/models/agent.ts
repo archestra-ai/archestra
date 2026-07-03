@@ -341,6 +341,15 @@ class AgentModel {
        * itself so those assignments are not pre-excluded.
        */
       skipExclusionPrefill?: boolean;
+      /**
+       * Skip auto-assigning the creation-default built-in tool set. Used by
+       * clone and import, which set their own authoritative assignment set
+       * right after create (a verbatim copy of the source agent, or the import
+       * payload's tools). Without this, the additive default assignment would
+       * force built-ins the source/payload deliberately lacked (e.g. todo_write)
+       * onto the new agent.
+       */
+      skipCreationDefaultTools?: boolean;
     },
   ): Promise<Agent> {
     // Auto-assign organizationId if not provided
@@ -422,37 +431,43 @@ class AgentModel {
     // Auto-assign the creation-default built-in tool set. Which groups apply
     // is composed by the shared getCreationDefaultArchestraToolShortNames from
     // the same flags the frontend create form reads, so the pre-selected set
-    // in the form and the server-side assignment cannot drift.
-    const organization = await OrganizationModel.getById(organizationId);
-    const creationDefaultShortNames = new Set<ArchestraToolShortName>(
-      getCreationDefaultArchestraToolShortNames({
-        skillsEnabled: organization?.skillToolsEnabled === true,
-        sandboxEnabled: config.skillsSandbox.enabled,
-      }),
-    );
-    const composesGroup = (group: readonly ArchestraToolShortName[]) =>
-      group.every((shortName) => creationDefaultShortNames.has(shortName));
-
-    // Always-on defaults (todo_write, query_knowledge_sources).
-    await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
-
-    // Agent Skill tools — org opted in via the "Enable and create a new
-    // skill" empty-state action.
-    if (composesGroup(SKILL_ARCHESTRA_TOOL_SHORT_NAMES)) {
-      await ToolModel.assignSkillToolsToAgent(createdAgent.id, organizationId);
-    }
-
-    // MCP App management tools — always on, so new agents can build and use
-    // apps without per-agent setup.
-    await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
-
-    // Code-execution sandbox + persistent-files tools — gated on the sandbox
-    // runtime flag, same as the composer.
-    if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
-      await ToolModel.assignSandboxToolsToAgent(
-        createdAgent.id,
-        organizationId,
+    // in the form and the server-side assignment cannot drift. Skipped by
+    // clone/import, which install their own authoritative assignment set.
+    if (!options?.skipCreationDefaultTools) {
+      const organization = await OrganizationModel.getById(organizationId);
+      const creationDefaultShortNames = new Set<ArchestraToolShortName>(
+        getCreationDefaultArchestraToolShortNames({
+          skillsEnabled: organization?.skillToolsEnabled === true,
+          sandboxEnabled: config.skillsSandbox.enabled,
+        }),
       );
+      const composesGroup = (group: readonly ArchestraToolShortName[]) =>
+        group.every((shortName) => creationDefaultShortNames.has(shortName));
+
+      // Always-on defaults (todo_write, query_knowledge_sources).
+      await ToolModel.assignDefaultArchestraToolsToAgent(createdAgent.id);
+
+      // Agent Skill tools — org opted in via the "Enable and create a new
+      // skill" empty-state action.
+      if (composesGroup(SKILL_ARCHESTRA_TOOL_SHORT_NAMES)) {
+        await ToolModel.assignSkillToolsToAgent(
+          createdAgent.id,
+          organizationId,
+        );
+      }
+
+      // MCP App management tools — always on, so new agents can build and use
+      // apps without per-agent setup.
+      await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
+
+      // Code-execution sandbox + persistent-files tools — gated on the sandbox
+      // runtime flag, same as the composer.
+      if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
+        await ToolModel.assignSandboxToolsToAgent(
+          createdAgent.id,
+          organizationId,
+        );
+      }
     }
 
     // Flip All-tools mode on last, atomically with the exclusion pre-fill.
@@ -2772,6 +2787,9 @@ class AgentModel {
           passthroughHeaders: null,
         },
         sourceAgent.scope === "personal" ? userId : undefined,
+        // Copy the source's assignments verbatim below; don't let create's
+        // default assignment force built-ins the source lacked onto the clone.
+        { skipCreationDefaultTools: true },
       );
 
       await AgentToolModel.cloneAssignments({

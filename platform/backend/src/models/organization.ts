@@ -166,6 +166,16 @@ class OrganizationModel {
   }
 
   /**
+   * Record that the first-login onboarding survey was submitted for this
+   * organization; the survey is never shown again once set.
+   */
+  static async markOnboardingSurveyCompleted(id: string): Promise<void> {
+    await OrganizationModel.patch(id, {
+      onboardingSurveyCompletedAt: new Date(),
+    });
+  }
+
+  /**
    * Turn on the Agent Skill tools for every organization that hasn't already
    * opted in. Run at startup so the model-facing skill tools are on by default
    * — newly created agents then

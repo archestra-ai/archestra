@@ -1,6 +1,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
+  asc,
   eq,
   ilike,
   inArray,
@@ -201,6 +202,19 @@ class McpServerModel {
       .limit(1);
 
     return result.length > 0;
+  }
+
+  /**
+   * When the first MCP server was connected; null when none exist. An
+   * activation signal for the feedback pop-up.
+   */
+  static async getFirstCreatedAt(): Promise<Date | null> {
+    const [row] = await db
+      .select({ createdAt: schema.mcpServersTable.createdAt })
+      .from(schema.mcpServersTable)
+      .orderBy(asc(schema.mcpServersTable.createdAt))
+      .limit(1);
+    return row?.createdAt ?? null;
   }
 
   static async findAll(

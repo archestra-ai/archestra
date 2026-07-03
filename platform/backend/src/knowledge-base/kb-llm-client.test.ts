@@ -12,9 +12,10 @@ vi.mock("@/clients/llm-client", () => ({
   createDirectLLMModel: mockCreateDirectLLMModel,
 }));
 
+import config from "@/config";
 import db, { schema } from "@/database";
 import { LlmProviderApiKeyModel, OrganizationModel } from "@/models";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import {
   getDefaultOrgEmbeddingConfig,
   resolveApiKeyFromChatApiKey,
@@ -31,6 +32,11 @@ async function createSecret(): Promise<string> {
 }
 
 describe("resolveEmbeddingConfig", () => {
+  const originalOllamaBaseUrl = config.llm.ollama.baseUrl;
+  afterEach(() => {
+    config.llm.ollama.baseUrl = originalOllamaBaseUrl;
+  });
+
   test("uses inferenceBaseUrl when resolving a chat API key", async ({
     makeOrganization,
   }) => {
@@ -55,6 +61,33 @@ describe("resolveEmbeddingConfig", () => {
 
     expect(result?.apiKey).toBe("azure-key");
     expect(result?.baseUrl).toBe("https://runtime.example.com/openai");
+  });
+
+  test("falls back to the configured provider base URL when the key has none", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    // A self-hosted Ollama key created with a blank Base URL stores NULL for
+    // both URL columns and needs no secret.
+    const chatApiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      name: "Ollama Key",
+      provider: "ollama",
+      secretId: null,
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+
+    // The deployment points Ollama at an in-cluster host, not localhost.
+    config.llm.ollama.baseUrl = "http://ollama:11434/v1";
+
+    const result = await resolveApiKeyFromChatApiKey(chatApiKey.id);
+
+    // Must use the configured host (same source chat/sync use), not the
+    // hardcoded localhost default that previously broke embeddings.
+    expect(result?.baseUrl).toBe("http://ollama:11434/v1");
   });
 
   test("returns config when org has embedding key and model configured", async ({

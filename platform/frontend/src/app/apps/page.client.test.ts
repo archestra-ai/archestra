@@ -39,7 +39,7 @@ describe("matchesKind", () => {
     expect(matchesKind(externalApp, "all")).toBe(true);
   });
 
-  it("matches only built-in apps when kind is owned", () => {
+  it("matches only platform-authored apps when kind is owned", () => {
     expect(matchesKind(ownedApp, "owned")).toBe(true);
     expect(matchesKind(externalApp, "owned")).toBe(false);
   });

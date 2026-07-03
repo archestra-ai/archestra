@@ -115,8 +115,8 @@ export default function AppsPage() {
           </SelectTrigger>
           <SelectContent position="popper" side="bottom" align="start">
             <SelectItem value="all">All kinds</SelectItem>
-            <SelectItem value="owned">Built-in</SelectItem>
-            <SelectItem value="external">MCP servers</SelectItem>
+            <SelectItem value="owned">Apps</SelectItem>
+            <SelectItem value="external">MCP Server Apps</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -189,9 +189,9 @@ function AppSection({ title, apps }: { title?: string; apps: AppListItem[] }) {
   );
 }
 
-// "Built-in" apps are authored inside the platform (source "owned"); "MCP
-// servers" are ui:// resources exposed by installed external MCP servers
-// (source "external"). Exported for tests.
+// "Apps" are authored inside the platform (source "owned"); "MCP Server Apps"
+// are ui:// resources exposed by installed external MCP servers (source
+// "external"). Exported for tests.
 export function matchesKind(app: AppListItem, kind: string): boolean {
   if (kind === "owned") return app.source === "owned";
   if (kind === "external") return app.source === "external";

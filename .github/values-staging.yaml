@@ -46,6 +46,18 @@ archestra:
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
+    # Per-server sandbox subdomain so MCP App iframes run on a real cross-origin
+    # (https://<hash>.sandbox.archestra.dev) rather than the opaque same-origin
+    # fallback. An opaque origin cannot be granted Permissions-Policy features,
+    # so camera/microphone/geolocation apps only work with a dedicated sandbox
+    # domain configured here.
+    #
+    # REQUIRES matching infra (archestra-ai/infra) before this takes effect:
+    #   - wildcard DNS: *.sandbox.archestra.dev -> the staging ingress IP
+    #   - wildcard TLS cert covering *.sandbox.archestra.dev
+    #   - ingress host rule routing *.sandbox.archestra.dev to the frontend (:3000)
+    # Until that infra lands, per-server subdomains will not resolve/serve TLS.
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "sandbox.archestra.dev"
     ARCHESTRA_TRUST_PROXY: "false"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"
     ARCHESTRA_AGENTS_INCOMING_EMAIL_PROVIDER: "outlook"

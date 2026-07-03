@@ -10,8 +10,10 @@
  *     (values are plain JSON; get(key) resolves to an entry { value, revision,
  *     owner } or null when absent, list() to [{key, value, revision, owner}];
  *     set(key, value, { ifRevision, owned }) resolves to { revision, owner } and
- *     rejects with { code: "conflict" } on a stale ifRevision or
- *     { code: "forbidden" } on an owned-key violation; delete clears a key)
+ *     by default rejects with { code: "conflict" } when the key changed since
+ *     this app last read it — pass { ifRevision: null } to force last-writer-wins,
+ *     or a number to guard on that exact revision — and { code: "forbidden" } on
+ *     an owned-key violation; delete clears a key)
  *   archestra.llm.complete(prompt, opts) — one host LLM completion (opts: { system, jsonMode });
  *                                     resolves to the text, rejects with { code: "llm_quota" }
  *                                     on a usage limit or { code: "llm_unavailable" } otherwise
@@ -307,32 +309,48 @@
   };
 
   // Each value is an entry { value, revision, owner }: revision powers optimistic
-  // concurrency (pass it back as set opts.ifRevision to fail a write that raced
-  // another viewer — the call rejects with { code: "conflict" }); owner is the
-  // viewer id that claimed the (shared) key, or null when unclaimed. delete is
-  // guarded by ownership rather than revision.
-  const storagePartition = (scope) =>
-    Object.freeze({
+  // concurrency — a later set of the same key guards on it automatically, failing
+  // a write that raced another instance with { code: "conflict" } (opts.ifRevision
+  // overrides the guard); owner is the viewer id that claimed the (shared) key, or
+  // null when unclaimed. delete is guarded by ownership rather than revision.
+  const storagePartition = (scope) => {
+    // The revision last seen for each key, from a get or a successful set. A
+    // write guards on it by default so a read-modify-write that raced another
+    // instance of this app is rejected as a conflict rather than silently
+    // overwriting the other's committed value.
+    const seenRevisions = new Map();
+    return Object.freeze({
       get: async (key) => {
         const sc = (await callTool(APP_DATA_TOOLS.get, { key, scope }))
           .structuredContent;
-        return sc && sc.revision != null
-          ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
-          : null;
+        const entry =
+          sc && sc.revision != null
+            ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
+            : null;
+        if (entry) seenRevisions.set(key, entry.revision);
+        return entry;
       },
-      // opts.ifRevision: write only if the stored revision matches (0 = create,
-      // i.e. fail if the key already exists). opts.owned: claim a new shared key
-      // for the viewer so only they (or the app's author/admins) may overwrite it.
+      // By default a write guards on the revision last seen for the key this
+      // session (a conflict rejects with { code: "conflict" }). opts.ifRevision
+      // overrides that guard: a number writes only if the stored revision
+      // matches (0 = create, i.e. fail if the key already exists); null opts out
+      // entirely (last-writer-wins). opts.owned: claim a new shared key for the
+      // viewer so only they (or the app's author/admins) may overwrite it.
       set: async (key, value, opts) => {
+        const expectedRevision =
+          opts && "ifRevision" in opts
+            ? (opts.ifRevision === null ? undefined : opts.ifRevision)
+            : seenRevisions.get(key);
         const sc = (
           await callTool(APP_DATA_TOOLS.set, {
             key,
             value,
             scope,
-            expectedRevision: opts?.ifRevision,
+            expectedRevision,
             claimOwner: opts?.owned,
           })
         ).structuredContent;
+        if (sc && sc.revision != null) seenRevisions.set(key, sc.revision);
         return { revision: sc?.revision, owner: sc?.owner ?? null };
       },
       list: async () =>
@@ -342,8 +360,10 @@
       // by its owner or the app's author/admins), not by revision.
       delete: async (key) => {
         await callTool(APP_DATA_TOOLS.delete, { key, scope });
+        seenRevisions.delete(key);
       },
     });
+  };
 
   // A single host LLM completion. Runs as the viewer through the org's app
   // runtime model (the app can't pick one); jsonMode steers the model to emit

@@ -23,6 +23,7 @@ import {
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import {
   type ChatMcpElicitationWriter,
   createChatMcpElicitationBridge,
@@ -1138,9 +1139,13 @@ describe("preview_app_tool", () => {
       makeUser,
       makeMember,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
-      const agent = await makeAgent({ name: "Preview Agent" });
+      const agent = await makeAgent({
+        name: "Preview Agent",
+        accessAllTools: true,
+      });
       organizationId = agent.organizationId;
       const user = await makeUser();
       await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -1153,6 +1158,7 @@ describe("preview_app_tool", () => {
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       toolName = `hf__search_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: toolName, catalogId: catalog.id });
 
@@ -1681,9 +1687,16 @@ describe("scaffold_app tools param", () => {
       makeUser,
       makeMember,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
-      const agent = await makeAgent({ name: "Tools Agent" });
+      // Dynamic access on: an unassigned tool is only assignable-by-name when the
+      // agent can discover it (mirrors search_tools), which needs the setting on
+      // and an accessible install of its catalog.
+      const agent = await makeAgent({
+        name: "Tools Agent",
+        accessAllTools: true,
+      });
       organizationId = agent.organizationId;
       const user = await makeUser();
       await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -1694,6 +1707,7 @@ describe("scaffold_app tools param", () => {
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       paperSearchName = `hf__paper_search_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: paperSearchName, catalogId: catalog.id });
     },
@@ -1759,6 +1773,123 @@ describe("scaffold_app tools param", () => {
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Unknown tool name");
   });
+
+  test("a duplicate tool name resolves to the canonical row, not an ambiguity error", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // A second installed catalog carries a tool with the SAME name — tools.name
+    // is unique only per catalog. The old path rejected this as "matches more
+    // than one installed tool"; it must now resolve to the one row discovery and
+    // the app runtime pick.
+    const catalog2 = await makeInternalMcpCatalog({ organizationId });
+    await makeMcpServer({ catalogId: catalog2.id, scope: "org" });
+    await makeTool({ name: paperSearchName, catalogId: catalog2.id });
+
+    const canonical = await resolveDynamicTool({
+      toolName: paperSearchName,
+      agentId: context.agent.id,
+      userId: context.userId,
+      organizationId,
+    });
+    expect(canonical).not.toBeNull();
+
+    const created = await scaffold({ name: "Dupes", tools: [paperSearchName] });
+    expect(created.isError).toBe(false);
+
+    const assignments = await AppToolModel.getAssignmentsForApp(
+      structured(created).id as string,
+    );
+    expect(assignments.map((a) => a.tool.id)).toEqual([canonical?.id]);
+  });
+
+  test("an assigned duplicate wins over a newer installed one, matching search_tools", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const dupName = `dup__tool_${crypto.randomUUID().slice(0, 8)}`;
+    // Assigned row, created first so it is the OLDER of the two duplicates.
+    const assignedCatalog = await makeInternalMcpCatalog({ organizationId });
+    await makeMcpServer({ catalogId: assignedCatalog.id, scope: "org" });
+    const assignedRow = await makeTool({
+      name: dupName,
+      catalogId: assignedCatalog.id,
+    });
+    await makeAgentTool(context.agent.id, assignedRow.id);
+    // Newer, unassigned duplicate in another installed catalog.
+    const newerCatalog = await makeInternalMcpCatalog({ organizationId });
+    await makeMcpServer({ catalogId: newerCatalog.id, scope: "org" });
+    await makeTool({ name: dupName, catalogId: newerCatalog.id });
+
+    const created = await scaffold({ name: "Assigned", tools: [dupName] });
+    expect(created.isError).toBe(false);
+    const assignments = await AppToolModel.getAssignmentsForApp(
+      structured(created).id as string,
+    );
+    // The assigned (older) row wins: search_tools ranks assigned before
+    // discoverable, and the app runtime executes the app-assigned row.
+    expect(assignments.map((a) => a.tool.id)).toEqual([assignedRow.id]);
+  });
+
+  test("a tool in a catalog with no accessible install is not assignable by name", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    // No install → not discoverable via search_tools, so not assignable by name
+    // either (the resolver matches what the user can actually reach and run).
+    const uninstalled = await makeInternalMcpCatalog({ organizationId });
+    const orphanName = `orphan__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: orphanName, catalogId: uninstalled.id });
+
+    const created = await scaffold({ name: "Orphan", tools: [orphanName] });
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
+
+  test("an unassigned, installed tool is not assignable when the agent lacks dynamic access", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Assignable-by-name == discoverable-by-this-agent: with "access all tools"
+    // off, an unassigned tool is invisible to search_tools, so it must not be
+    // assignable by name — even though its catalog is installed. (The by-id REST
+    // path stays as the unrestricted programmatic escape hatch.)
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      accessAllTools: false,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, strictAgent.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const strictContext = {
+      agent: { id: strictAgent.id, name: strictAgent.name },
+      organizationId: strictAgent.organizationId,
+      userId: user.id,
+    };
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: strictAgent.organizationId,
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const gatedName = `gated__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: gatedName, catalogId: catalog.id });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Gated", tools: [gatedName] },
+      strictContext,
+    );
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
 });
 
 describe("set_app_tools", () => {
@@ -1773,9 +1904,13 @@ describe("set_app_tools", () => {
       makeUser,
       makeMember,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
-      const agent = await makeAgent({ name: "Set Tools Agent" });
+      const agent = await makeAgent({
+        name: "Set Tools Agent",
+        accessAllTools: true,
+      });
       organizationId = agent.organizationId;
       const user = await makeUser();
       userId = user.id;
@@ -1787,6 +1922,7 @@ describe("set_app_tools", () => {
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       toolName = `acme__search_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: toolName, catalogId: catalog.id });
     },
@@ -1843,6 +1979,7 @@ describe("set_app_tools", () => {
 
   test("resolves tools in the app's bound environment, not the org default", async ({
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeTool,
     makeApp,
   }) => {
@@ -1854,6 +1991,7 @@ describe("set_app_tools", () => {
       organizationId,
       environmentId: env.id,
     });
+    await makeMcpServer({ catalogId: envCatalog.id, scope: "org" });
     const envToolName = `acme__env_${crypto.randomUUID().slice(0, 8)}`;
     await makeTool({ name: envToolName, catalogId: envCatalog.id });
 

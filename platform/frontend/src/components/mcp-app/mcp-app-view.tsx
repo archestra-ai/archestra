@@ -1126,9 +1126,7 @@ export function isRenderableMcpAppHtml(html: string): boolean {
  * before the `useTheme()` hook has hydrated).
  */
 function readDocumentTheme(): "light" | "dark" {
-  return document.documentElement.classList.contains("dark")
-    ? "dark"
-    : "light";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
 /** Reads a CSS custom property value from :root */

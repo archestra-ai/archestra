@@ -1848,6 +1848,48 @@ describe("scaffold_app tools param", () => {
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Unknown tool name");
   });
+
+  test("an unassigned, installed tool is not assignable when the agent lacks dynamic access", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Assignable-by-name == discoverable-by-this-agent: with "access all tools"
+    // off, an unassigned tool is invisible to search_tools, so it must not be
+    // assignable by name — even though its catalog is installed. (The by-id REST
+    // path stays as the unrestricted programmatic escape hatch.)
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      accessAllTools: false,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, strictAgent.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const strictContext = {
+      agent: { id: strictAgent.id, name: strictAgent.name },
+      organizationId: strictAgent.organizationId,
+      userId: user.id,
+    };
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: strictAgent.organizationId,
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const gatedName = `gated__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: gatedName, catalogId: catalog.id });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Gated", tools: [gatedName] },
+      strictContext,
+    );
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
 });
 
 describe("set_app_tools", () => {

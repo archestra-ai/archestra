@@ -1,3 +1,4 @@
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { describe, expect, test } from "@/test";
 import { buildAppCapabilityContext } from "./app-capability-context";
 
@@ -58,7 +59,7 @@ describe("buildAppCapabilityContext", () => {
     ]);
   });
 
-  test("a duplicate tool name is grounded once, not dropped as ambiguous", async ({
+  test("a duplicate tool name is grounded once, resolved to the canonical row", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -76,19 +77,24 @@ describe("buildAppCapabilityContext", () => {
       accessAllTools: true,
     });
 
-    // Two installed catalogs carry a tool with the SAME name — unique only per
-    // catalog. The old grounding dropped such names; it must now list the name
-    // once (the canonical row's description), matching what is assignable.
+    // Two installed catalogs carry a tool with the SAME name (unique only per
+    // catalog) but DIFFERENT descriptions, so the assertion pins which row won.
+    // The old grounding dropped such names; it must now list the name once,
+    // described by the same canonical row search_tools/run_tool resolve.
     const dupName = "acme__do_thing";
-    for (const _ of [0, 1]) {
+    for (const description of ["first catalog", "second catalog"]) {
       const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
       await makeMcpServer({ catalogId: catalog.id, scope: "org" });
-      await makeTool({
-        name: dupName,
-        description: "Do a thing",
-        catalogId: catalog.id,
-      });
+      await makeTool({ name: dupName, description, catalogId: catalog.id });
     }
+
+    const canonical = await resolveDynamicTool({
+      toolName: dupName,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+    expect(canonical).not.toBeNull();
 
     const context = await buildAppCapabilityContext({
       userId: user.id,
@@ -97,7 +103,7 @@ describe("buildAppCapabilityContext", () => {
     });
 
     expect(context.tools.filter((tool) => tool.name === dupName)).toEqual([
-      { name: dupName, description: "Do a thing" },
+      { name: dupName, description: canonical?.description ?? "" },
     ]);
   });
 

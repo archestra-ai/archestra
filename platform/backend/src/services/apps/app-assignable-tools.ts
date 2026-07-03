@@ -1,4 +1,4 @@
-import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { AGENT_TOOL_PREFIX, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import {
   dynamicAccessContext,
   userIsCatalogAdmin,
@@ -94,6 +94,9 @@ function isAppAssignable(tool: Tool): boolean {
   return (
     tool.catalogId != null &&
     tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID &&
+    // Reserved delegation-tool prefix, hidden from search_tools; a catalog tool
+    // reusing it must not be assignable through this discovery-matched path.
+    !tool.name.startsWith(AGENT_TOOL_PREFIX) &&
     !tool.clonedPendingDiscovery
   );
 }

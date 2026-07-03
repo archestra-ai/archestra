@@ -606,6 +606,11 @@ class ToolModel {
                 ),
               ),
               desc(schema.toolsTable.createdAt),
+              // Total order on ties (bulk-inserted tools share createdAt), so a
+              // duplicate assigned name resolves to the same row every time —
+              // matching getMcpToolsAccessibleToUser and keeping search_tools /
+              // app tool assignment deterministic.
+              asc(schema.toolsTable.id),
             )
         : [];
 
@@ -1760,10 +1765,10 @@ class ToolModel {
    * catalog-backed (non-null catalogId, which app dispatch requires), org-visible
    * (the catalog belongs to the org or is a global org-less entry), not an
    * Archestra built-in, not a clone pending discovery, and in the environment.
-   * The by-id, install-agnostic gate {@link resolveAppAssignableToolRows} applies
-   * to the agent's *assigned* tools — an assigned tool is reachable through its
-   * assignment without a separate discoverable install, but must still be
-   * org-visible and in-environment.
+   * This is the by-id, install-agnostic gate {@link resolveAppAssignableToolRows}
+   * applies to the agent's *assigned* tools — an assigned tool is reachable
+   * through its assignment without a separate discoverable install, but must
+   * still be org-visible and in-environment.
    */
   static async filterAppAssignableToolIds(
     organizationId: string,

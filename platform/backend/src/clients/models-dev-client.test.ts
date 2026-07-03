@@ -208,11 +208,12 @@ describe("ModelsDevClient", () => {
       expect(recovered.openai).toBeDefined();
     });
 
-    test("caches the raw payload when schema validation fails", async () => {
-      // A provider value that is not an object fails schema validation, so
-      // the client falls back to returning (and caching) the raw payload.
+    test("does not cache the raw fallback when schema validation fails", async () => {
+      // A provider value that is not an object fails schema validation; the
+      // raw fallback is returned but not cached, so a retry refetches instead
+      // of reusing a potentially malformed payload for the whole TTL.
       const invalidPayload = { openai: "not-a-provider-object" };
-      mockFetch.mockResolvedValueOnce({
+      mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(invalidPayload),
       });
@@ -220,7 +221,7 @@ describe("ModelsDevClient", () => {
       const first = await modelsDevClient.fetchModelsFromApi();
       const second = await modelsDevClient.fetchModelsFromApi();
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(first).toEqual(invalidPayload);
       expect(second).toEqual(invalidPayload);
     });

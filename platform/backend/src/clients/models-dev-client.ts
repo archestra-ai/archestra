@@ -260,10 +260,10 @@ export function sanitizeOutputLimit(
  * models.dev Model Registry Client.
  *
  * Fetches model metadata from models.dev API and syncs it to our database.
- * Successful fetch results (including the raw fallback used when schema
- * validation fails) are cached in memory for a short TTL, and concurrent
- * callers share a single in-flight request. Error results (`{}`) are never
- * cached, so a transient failure does not stick for the TTL.
+ * Validated fetch results are cached in memory for a short TTL, and
+ * concurrent callers share a single in-flight request. The raw fallback used
+ * when schema validation fails and the `{}` error result are never cached,
+ * so a transient bad response does not stick for the TTL.
  *
  * @public — exported so tests can construct instances with custom options
  */
@@ -594,8 +594,9 @@ export class ModelsDevClient {
   }
 
   /**
-   * Performs the actual network fetch. Caches successful results (validated
-   * or raw fallback); the `{}` error result is intentionally not cached.
+   * Performs the actual network fetch. Only validated responses are cached:
+   * the raw validation-fallback and the `{}` error result are returned
+   * uncached so retries refetch instead of reusing a bad payload.
    */
   private async doFetchModelsFromApi(): Promise<ModelsDevApiResponse> {
     try {
@@ -615,9 +616,7 @@ export class ModelsDevClient {
           "models.dev API response validation failed, using partial data",
         );
         // Fall back to casting if validation fails - the API may have added new fields
-        const rawData = json as ModelsDevApiResponse;
-        this.cachedResponse = { data: rawData, fetchedAt: Date.now() };
-        return rawData;
+        return json as ModelsDevApiResponse;
       }
 
       this.cachedResponse = { data: parseResult.data, fetchedAt: Date.now() };

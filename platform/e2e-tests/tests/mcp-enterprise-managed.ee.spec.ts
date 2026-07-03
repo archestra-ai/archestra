@@ -1,4 +1,4 @@
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Browser } from "@playwright/test";
 import {
   KEYCLOAK_OIDC,
   MCP_SERVER_ID_JAG_BACKEND_URL,
@@ -9,10 +9,12 @@ import {
   MCP_SERVER_JWKS_BACKEND_URL,
   MCP_SERVER_JWKS_EXTERNAL_URL,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  UI_BASE_URL,
 } from "../consts";
 import {
   getAdminKeycloakJwt,
   getMemberKeycloakJwt,
+  loginViaKeycloak,
   waitForApiEndpointHealthy,
   waitForServerInstallation,
 } from "../utils";
@@ -29,8 +31,9 @@ const DEBUG_TOOL_SHORT_NAME = "debug-auth-token";
 const WHOAMI_TOOL_SHORT_NAME = "whoami";
 
 test.describe("Enterprise-managed MCP credentials", () => {
-  test.skip("installs a protected remote MCP server without a manual access token", async ({
+  test("installs a protected remote MCP server without a manual access token", async ({
     request,
+    browser,
     createIdentityProvider,
     deleteIdentityProvider,
     deleteMcpCatalogItem,
@@ -54,6 +57,12 @@ test.describe("Enterprise-managed MCP credentials", () => {
         },
       },
     );
+    await linkAdminSsoAccount({
+      browser,
+      request,
+      providerName,
+      identityProviderId,
+    });
 
     let catalogId: string | undefined;
     let serverId: string | undefined;
@@ -105,11 +114,9 @@ test.describe("Enterprise-managed MCP credentials", () => {
     }
   });
 
-  // FIXME: install returns 500 "Sign in with SSO to link your identity provider
-  // before installing this MCP server" — protected-server install no longer
-  // accepts the enterprise-managed exchange path in CI. Unskip once fixed.
-  test.fixme("uses per-user exchanged credentials for agent tool execution", async ({
+  test("uses per-user exchanged credentials for agent tool execution", async ({
     request,
+    browser,
     createIdentityProvider,
     deleteIdentityProvider,
     deleteMcpCatalogItem,
@@ -136,6 +143,12 @@ test.describe("Enterprise-managed MCP credentials", () => {
         },
       },
     );
+    await linkAdminSsoAccount({
+      browser,
+      request,
+      providerName,
+      identityProviderId,
+    });
 
     let agentId: string | undefined;
     let catalogId: string | undefined;
@@ -153,13 +166,13 @@ test.describe("Enterprise-managed MCP credentials", () => {
       catalogId = await createProtectedEnterpriseManagedCatalogItem({
         request,
         name: catalogName,
+        identityProviderId,
       });
 
       serverId = await installProtectedCatalogServer({
         request,
         catalogId,
         name: catalogName,
-        accessToken: adminJwt,
       });
 
       await waitForServerInstallation(request, serverId);
@@ -219,11 +232,9 @@ test.describe("Enterprise-managed MCP credentials", () => {
     }
   });
 
-  // FIXME: install returns 500 "Sign in with SSO to link your identity provider
-  // before installing this MCP server" — protected-server install no longer
-  // accepts the enterprise-managed exchange path in CI. Unskip once fixed.
-  test.fixme("uses per-user exchanged credentials for MCP gateway tool execution", async ({
+  test("uses per-user exchanged credentials for MCP gateway tool execution", async ({
     request,
+    browser,
     createIdentityProvider,
     deleteIdentityProvider,
     deleteMcpCatalogItem,
@@ -250,6 +261,12 @@ test.describe("Enterprise-managed MCP credentials", () => {
         },
       },
     );
+    await linkAdminSsoAccount({
+      browser,
+      request,
+      providerName,
+      identityProviderId,
+    });
 
     let gatewayId: string | undefined;
     let catalogId: string | undefined;
@@ -267,13 +284,13 @@ test.describe("Enterprise-managed MCP credentials", () => {
       catalogId = await createProtectedEnterpriseManagedCatalogItem({
         request,
         name: catalogName,
+        identityProviderId,
       });
 
       serverId = await installProtectedCatalogServer({
         request,
         catalogId,
         name: catalogName,
-        accessToken: adminJwt,
       });
 
       await waitForServerInstallation(request, serverId);
@@ -331,9 +348,19 @@ test.describe("Enterprise-managed MCP credentials", () => {
     }
   });
 
-  // FIXME: install returns 500 "Connect IdJagGateway… before installing this MCP
-  // server" — the ID-JAG gateway connection prerequisite is not satisfied in CI.
-  // Unskip once fixed.
+  // FIXME: cannot run until the mcp-server-id-jag fixture grows an interactive
+  // OIDC flow. Install-time discovery for enterprise-managed catalogs requires
+  // the INSTALLING user to hold an SSO-linked account for the catalog's
+  // identity provider (backend getInstallDiscoveryAccessToken) and then
+  // performs an RFC 8693 token exchange against that IdP to mint the ID-JAG.
+  // The fixture's demo IdP (archestra-ai/examples,
+  // test-fixtures/mcp-server-id-jag) exposes no authorize endpoint — so no
+  // browser login can create the SSO-linked account — and its /token endpoint
+  // only accepts the jwt-bearer grant (`unsupported_grant_type` for RFC 8693
+  // token-exchange), so the install-time exchange can never succeed. The
+  // payload accessToken minted via /demo-idp/mint is ignored by the guard.
+  // Re-enable once the fixture supports an OIDC code flow + token-exchange
+  // grant, or once the product accepts a caller-supplied install-time ID-JAG.
   test.fixme("exchanges an ID-JAG at a remote MCP server before gateway tool execution", async ({
     request,
     createIdentityProvider,
@@ -484,6 +511,55 @@ async function expectIdJagDemoServerHealthy(
   });
 }
 
+/**
+ * Install-time tool discovery for enterprise-managed catalogs refuses to run
+ * unless the INSTALLING user has an SSO-linked better-auth account for the
+ * catalog's identity provider: the backend resolves that account's token as
+ * the RFC 8693 subject token (see getInstallDiscoveryAccessToken in
+ * backend/src/routes/mcp-server.ts) and otherwise rejects the install with
+ * "Sign in with SSO to link your identity provider…". The fixture admin is
+ * password-authenticated, so each test links it to the freshly created
+ * Keycloak provider through a real browser OIDC login; account linking by
+ * email (trusted provider + matching admin@example.com) attaches the Keycloak
+ * tokens to the existing admin user.
+ */
+async function linkAdminSsoAccount(params: {
+  browser: Browser;
+  request: APIRequestContext;
+  providerName: string;
+  identityProviderId: string;
+}): Promise<void> {
+  const context = await params.browser.newContext({ storageState: undefined });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${UI_BASE_URL}/auth/sign-in`);
+    await page.waitForLoadState("domcontentloaded");
+
+    const ssoButton = page.getByRole("button", {
+      name: new RegExp(params.providerName, "i"),
+    });
+    await expect(ssoButton).toBeVisible({ timeout: 15_000 });
+    await ssoButton.click();
+
+    expect(await loginViaKeycloak(page)).toBe(true);
+  } finally {
+    await context.close();
+  }
+
+  // The SSO callback persists the linked account row after the browser is
+  // already redirected; poll until the backend reports a usable link so the
+  // install below cannot race it.
+  await expect(async () => {
+    const response = await makeApiRequest({
+      request: params.request,
+      method: "get",
+      urlSuffix: `/api/identity-providers/${params.identityProviderId}/link-status`,
+    });
+    const status = (await response.json()) as { connected: boolean };
+    expect(status.connected).toBe(true);
+  }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000, 4000] });
+}
+
 async function createProfile(params: {
   request: APIRequestContext;
   name: string;
@@ -576,7 +652,7 @@ async function installProtectedCatalogServer(params: {
   request: APIRequestContext;
   catalogId: string;
   name: string;
-  accessToken: string;
+  accessToken?: string;
 }): Promise<string> {
   const response = await makeApiRequest({
     request: params.request,
@@ -585,7 +661,7 @@ async function installProtectedCatalogServer(params: {
     data: {
       name: params.name,
       catalogId: params.catalogId,
-      accessToken: params.accessToken,
+      ...(params.accessToken ? { accessToken: params.accessToken } : {}),
     },
   });
 

@@ -1,5 +1,6 @@
 import type { APIRequestContext, Browser } from "@playwright/test";
 import {
+  adminAuthFile,
   KEYCLOAK_OIDC,
   MCP_SERVER_ID_JAG_BACKEND_URL,
   MCP_SERVER_ID_JAG_EXTERNAL_URL,
@@ -9,6 +10,7 @@ import {
   MCP_SERVER_JWKS_BACKEND_URL,
   MCP_SERVER_JWKS_EXTERNAL_URL,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  SSO_DOMAIN,
   UI_BASE_URL,
 } from "../consts";
 import {
@@ -25,29 +27,61 @@ import {
   waitForGatewayIdentityProviderReady,
   waitForMcpGatewayJwtReady,
 } from "../utils/mcp-gateway";
-import { expect, test } from "./api-fixtures";
+import {
+  createIdentityProvider,
+  deleteIdentityProvider,
+  expect,
+  test,
+} from "./api-fixtures";
 
 const DEBUG_TOOL_SHORT_NAME = "debug-auth-token";
 const WHOAMI_TOOL_SHORT_NAME = "whoami";
 
+// Serial: every test shares the one SSO-linked identity provider created in
+// beforeAll, and concurrent browser OIDC logins for the same Keycloak user
+// only add flake surface. Serial keeps the whole file in one worker so the
+// beforeAll link is done exactly once per attempt.
+test.describe.configure({ mode: "serial" });
+
 test.describe("Enterprise-managed MCP credentials", () => {
-  test("installs a protected remote MCP server without a manual access token", async ({
-    request,
-    browser,
-    createIdentityProvider,
-    deleteIdentityProvider,
-    deleteMcpCatalogItem,
-    uninstallMcpServer,
-  }) => {
-    test.setTimeout(300_000);
+  // One Keycloak identity provider, SSO-linked to the admin once, shared by
+  // every test in this file. Two forces make this shared instead of per-test:
+  //  - install-time discovery for enterprise-managed catalogs requires the
+  //    INSTALLING user to hold an SSO-linked account for the catalog's IdP,
+  //    which needs a real browser OIDC login (slow, ~30s in CI); and
+  //  - better-auth caps live SSO providers (ssoConfig providersLimit: 10). A
+  //    provider per test, leaked whenever the login step failed before the
+  //    per-test cleanup, previously overflowed the cap across CI retries
+  //    (403 "You have reached the maximum number of SSO providers").
+  let adminApi: APIRequestContext;
+  let sharedProviderName: string;
+  let sharedIdentityProviderId: string;
 
-    await expectProtectedDemoServerHealthy(request);
+  test.beforeAll(async ({ playwright, browser }) => {
+    test.setTimeout(240_000);
 
-    const providerName = `EnterpriseManagedInstall${Date.now()}`;
-    const identityProviderId = await createIdentityProvider(
-      request,
-      providerName,
+    adminApi = await playwright.request.newContext({
+      storageState: adminAuthFile,
+    });
+    sharedProviderName = `EnterpriseManaged${Date.now()}`;
+    sharedIdentityProviderId = await createIdentityProvider(
+      adminApi,
+      sharedProviderName,
       {
+        // The admin signs in through this provider in a real browser, so the
+        // allowed email domain must cover admin@example.com and the OIDC
+        // endpoints must be split by reachability: the authorization endpoint
+        // is fetched by the BROWSER (host-visible NodePort URL) while the
+        // token endpoint is fetched by the BACKEND POD (in-cluster URL).
+        // Leaving them unset makes better-auth hydrate them via runtime OIDC
+        // discovery, whose document advertises host-visible URLs the backend
+        // pod cannot reach — the code-for-token exchange then dies with
+        // "?error=invalid_provider&error_description=token_response_not_found".
+        domain: SSO_DOMAIN,
+        oidcConfig: {
+          authorizationEndpoint: KEYCLOAK_OIDC.authorizationEndpoint,
+          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
+        },
         enterpriseManagedCredentials: {
           clientId: KEYCLOAK_OIDC.clientId,
           clientSecret: KEYCLOAK_OIDC.clientSecret,
@@ -59,10 +93,31 @@ test.describe("Enterprise-managed MCP credentials", () => {
     );
     await linkAdminSsoAccount({
       browser,
-      request,
-      providerName,
-      identityProviderId,
+      request: adminApi,
+      providerName: sharedProviderName,
+      identityProviderId: sharedIdentityProviderId,
     });
+  });
+
+  // Runs even when beforeAll failed part-way (e.g. the SSO login threw), so a
+  // created provider never leaks into the next retry's providersLimit budget.
+  test.afterAll(async () => {
+    if (adminApi) {
+      if (sharedIdentityProviderId) {
+        await deleteIdentityProvider(adminApi, sharedIdentityProviderId);
+      }
+      await adminApi.dispose();
+    }
+  });
+
+  test("installs a protected remote MCP server without a manual access token", async ({
+    request,
+    deleteMcpCatalogItem,
+    uninstallMcpServer,
+  }) => {
+    test.setTimeout(300_000);
+
+    await expectProtectedDemoServerHealthy(request);
 
     let catalogId: string | undefined;
     let serverId: string | undefined;
@@ -72,7 +127,7 @@ test.describe("Enterprise-managed MCP credentials", () => {
       catalogId = await createProtectedEnterpriseManagedCatalogItem({
         request,
         name: catalogName,
-        identityProviderId,
+        identityProviderId: sharedIdentityProviderId,
       });
 
       const installResponse = await makeApiRequest({
@@ -110,15 +165,11 @@ test.describe("Enterprise-managed MCP credentials", () => {
       if (catalogId) {
         await deleteMcpCatalogItem(request, catalogId);
       }
-      await deleteIdentityProvider(request, identityProviderId);
     }
   });
 
   test("uses per-user exchanged credentials for agent tool execution", async ({
     request,
-    browser,
-    createIdentityProvider,
-    deleteIdentityProvider,
     deleteMcpCatalogItem,
     uninstallMcpServer,
     deleteAgent,
@@ -129,26 +180,6 @@ test.describe("Enterprise-managed MCP credentials", () => {
 
     const adminJwt = await getAdminKeycloakJwt();
     const memberJwt = await getMemberKeycloakJwt();
-    const providerName = `EnterpriseManagedAgent${Date.now()}`;
-    const identityProviderId = await createIdentityProvider(
-      request,
-      providerName,
-      {
-        enterpriseManagedCredentials: {
-          clientId: KEYCLOAK_OIDC.clientId,
-          clientSecret: KEYCLOAK_OIDC.clientSecret,
-          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
-          tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
-        },
-      },
-    );
-    await linkAdminSsoAccount({
-      browser,
-      request,
-      providerName,
-      identityProviderId,
-    });
 
     let agentId: string | undefined;
     let catalogId: string | undefined;
@@ -159,14 +190,14 @@ test.describe("Enterprise-managed MCP credentials", () => {
         request,
         name: `Enterprise Managed Agent ${Date.now()}`,
         agentType: "agent",
-        identityProviderId,
+        identityProviderId: sharedIdentityProviderId,
       });
 
       const catalogName = `enterprise-managed-agent-${Date.now()}`;
       catalogId = await createProtectedEnterpriseManagedCatalogItem({
         request,
         name: catalogName,
-        identityProviderId,
+        identityProviderId: sharedIdentityProviderId,
       });
 
       serverId = await installProtectedCatalogServer({
@@ -228,15 +259,11 @@ test.describe("Enterprise-managed MCP credentials", () => {
       if (catalogId) {
         await deleteMcpCatalogItem(request, catalogId);
       }
-      await deleteIdentityProvider(request, identityProviderId);
     }
   });
 
   test("uses per-user exchanged credentials for MCP gateway tool execution", async ({
     request,
-    browser,
-    createIdentityProvider,
-    deleteIdentityProvider,
     deleteMcpCatalogItem,
     uninstallMcpServer,
     deleteAgent,
@@ -247,26 +274,6 @@ test.describe("Enterprise-managed MCP credentials", () => {
 
     const adminJwt = await getAdminKeycloakJwt();
     const memberJwt = await getMemberKeycloakJwt();
-    const providerName = `EnterpriseManagedGateway${Date.now()}`;
-    const identityProviderId = await createIdentityProvider(
-      request,
-      providerName,
-      {
-        enterpriseManagedCredentials: {
-          clientId: KEYCLOAK_OIDC.clientId,
-          clientSecret: KEYCLOAK_OIDC.clientSecret,
-          tokenEndpoint: KEYCLOAK_OIDC.tokenEndpoint,
-          tokenEndpointAuthentication: "client_secret_post",
-          subjectTokenType: "urn:ietf:params:oauth:token-type:access_token",
-        },
-      },
-    );
-    await linkAdminSsoAccount({
-      browser,
-      request,
-      providerName,
-      identityProviderId,
-    });
 
     let gatewayId: string | undefined;
     let catalogId: string | undefined;
@@ -277,14 +284,14 @@ test.describe("Enterprise-managed MCP credentials", () => {
         request,
         name: `Enterprise Managed Gateway ${Date.now()}`,
         agentType: "mcp_gateway",
-        identityProviderId,
+        identityProviderId: sharedIdentityProviderId,
       });
 
       const catalogName = `enterprise-managed-gateway-${Date.now()}`;
       catalogId = await createProtectedEnterpriseManagedCatalogItem({
         request,
         name: catalogName,
-        identityProviderId,
+        identityProviderId: sharedIdentityProviderId,
       });
 
       serverId = await installProtectedCatalogServer({
@@ -344,7 +351,6 @@ test.describe("Enterprise-managed MCP credentials", () => {
       if (catalogId) {
         await deleteMcpCatalogItem(request, catalogId);
       }
-      await deleteIdentityProvider(request, identityProviderId);
     }
   });
 
@@ -363,8 +369,6 @@ test.describe("Enterprise-managed MCP credentials", () => {
   // grant, or once the product accepts a caller-supplied install-time ID-JAG.
   test.fixme("exchanges an ID-JAG at a remote MCP server before gateway tool execution", async ({
     request,
-    createIdentityProvider,
-    deleteIdentityProvider,
     deleteMcpCatalogItem,
     uninstallMcpServer,
     deleteAgent,
@@ -518,7 +522,7 @@ async function expectIdJagDemoServerHealthy(
  * the RFC 8693 subject token (see getInstallDiscoveryAccessToken in
  * backend/src/routes/mcp-server.ts) and otherwise rejects the install with
  * "Sign in with SSO to link your identity provider…". The fixture admin is
- * password-authenticated, so each test links it to the freshly created
+ * password-authenticated, so the describe's beforeAll links it to the shared
  * Keycloak provider through a real browser OIDC login; account linking by
  * email (trusted provider + matching admin@example.com) attaches the Keycloak
  * tokens to the existing admin user.
@@ -541,7 +545,14 @@ async function linkAdminSsoAccount(params: {
     await expect(ssoButton).toBeVisible({ timeout: 15_000 });
     await ssoButton.click();
 
-    expect(await loginViaKeycloak(page)).toBe(true);
+    if (!(await loginViaKeycloak(page))) {
+      // loginViaKeycloak collapses every failure mode into a boolean; the URL
+      // it landed on carries better-auth's ?error=…&error_description=… and
+      // is the fastest way to diagnose a broken callback from CI output.
+      throw new Error(
+        `SSO login via ${params.providerName} did not produce a session; landed on ${page.url()}`,
+      );
+    }
   } finally {
     await context.close();
   }

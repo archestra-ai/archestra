@@ -3157,6 +3157,44 @@ describe("AgentModel", () => {
         await AgentModel.resolveIdFromIdOrSlug("non-existent-slug");
       expect(result).toBeNull();
     });
+
+    test("does not cache misses: a slug resolves as soon as its agent exists", async () => {
+      expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBeNull();
+
+      const agent = await AgentModel.create({
+        name: "Late Agent",
+        slug: "late-agent",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+
+      expect(await AgentModel.resolveIdFromIdOrSlug("late-agent")).toBe(
+        agent.id,
+      );
+    });
+
+    test("tolerates bounded staleness: a cached slug survives deletion until the TTL", async () => {
+      const agent = await AgentModel.create({
+        name: "Cached Then Deleted",
+        agentType: "mcp_gateway",
+        teams: [],
+        scope: "org",
+      });
+      const slug = agent.slug as string;
+
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBe(agent.id);
+
+      await AgentModel.delete(agent.id);
+
+      // Still served from the process-local cache — the documented tradeoff:
+      // downstream agent loads are what reject requests for deleted agents.
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBe(agent.id);
+
+      // Once the cache is cleared (as the TTL would), the miss is visible.
+      AgentModel.clearResolveIdCache();
+      expect(await AgentModel.resolveIdFromIdOrSlug(slug)).toBeNull();
+    });
   });
 
   describe("passthroughHeaders", () => {

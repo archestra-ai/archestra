@@ -177,6 +177,14 @@ beforeEach(async () => {
     await pgliteClient.exec(truncateSql);
   }
 
+  // The agent id/slug resolve cache is process-local while the database above
+  // is truncated per test — clear it so a mapping cached by one test (fixture
+  // slugs are name-derived and can repeat) can't leak into the next.
+  // Dynamic import: a top-level one would load config modules before the env
+  // assignments at the top of this file.
+  const { default: AgentModel } = await import("@/models/agent");
+  AgentModel.clearResolveIdCache();
+
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.
   // This allows organization tests to test both with and without existing organizations.

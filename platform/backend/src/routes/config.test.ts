@@ -47,6 +47,7 @@ describe("config routes", () => {
     expect(response.json()).toEqual({
       disableBasicAuth: expect.any(Boolean),
       disableInvitations: expect.any(Boolean),
+      devAutoLoginEnabled: expect.any(Boolean),
       maintenanceMode: null,
       enterpriseCoreActive: expect.any(Boolean),
       analytics: {

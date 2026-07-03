@@ -26273,6 +26273,7 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        devAutoLoginEnabled: boolean;
         maintenanceMode: string | null;
         enterpriseCoreActive: boolean;
         analytics: {

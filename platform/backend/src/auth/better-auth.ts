@@ -40,6 +40,7 @@ import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
+import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -153,6 +154,8 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    // Developer-only auto-login endpoint (self-guards to non-production + env var).
+    devAutoLoginPlugin(),
     /**
      * Linked downstream identity provider auth must live inside Better Auth,
      * rather than regular Fastify routes, because completing the flow has to

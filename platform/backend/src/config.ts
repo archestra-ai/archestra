@@ -55,11 +55,11 @@ const isDevelopment = !isProduction;
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
 /**
- * Developer-only convenience: when set (and NOT in production), the auth
- * middleware authenticates every request as the user with this email,
- * skipping the login screen entirely. Hard-disabled in production so it can
- * never bypass authentication on a real deployment. RBAC still applies — the
- * request runs with that user's real permissions, not god mode.
+ * Developer-only convenience: when set (and NOT in production), the login screen
+ * is skipped by minting a real session for the user with this email (see the
+ * dev-auto-login Better Auth plugin). Hard-disabled in production so it can never
+ * bypass authentication on a real deployment. The session is an ordinary one for
+ * that user — RBAC is unchanged.
  */
 const devAutoAuthenticateEmail = isProduction
   ? undefined
@@ -68,7 +68,7 @@ const devAutoAuthenticateEmail = isProduction
 if (devAutoAuthenticateEmail) {
   logger.warn(
     { email: devAutoAuthenticateEmail },
-    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: all requests will authenticate as this user. Developer-only, ignored in production.",
+    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: the login screen is skipped by auto-minting a session for this user. Developer-only, ignored in production.",
   );
 }
 

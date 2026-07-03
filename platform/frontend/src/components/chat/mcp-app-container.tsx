@@ -271,9 +271,17 @@ export function McpAppSection({
   );
 
   if (effectiveResourceState === "empty") {
-    // A blank app document reserves no canvas, but its tool-call details must
-    // stay inspectable — a blank render is usually a bug worth examining. Render
-    // them without mounting the runtime.
+    // A blank app document reserves no canvas (a blank render is usually a bug).
+    // In the panel — which the user opened deliberately and which passes no tool
+    // details — show an explicit empty state rather than a blank panel; inline,
+    // keep the tool-call details inspectable instead of dropping the section.
+    if (surface === "panel") {
+      return (
+        <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+          This app rendered nothing to display.
+        </div>
+      );
+    }
     return toolDetails ? <div className="w-full">{toolDetails}</div> : null;
   }
 

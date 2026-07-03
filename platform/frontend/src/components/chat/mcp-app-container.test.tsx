@@ -204,6 +204,27 @@ describe("McpAppSection", () => {
     expect(screen.getByTestId("tool-details")).toBeInTheDocument();
   });
 
+  it("shows an explicit empty state in the panel when the app HTML is empty", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+        />,
+      );
+    });
+
+    // The panel is opened deliberately and carries no tool details, so a blank
+    // app must not leave a completely empty panel with no indication.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("This app rendered nothing to display."),
+    ).toBeInTheDocument();
+  });
+
   it("keeps script-driven app HTML because it may render after initialization", async () => {
     await act(async () => {
       render(

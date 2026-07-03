@@ -44,7 +44,6 @@ describe("evaluateToolExecutionContextTrust", () => {
       organizationId,
       userId: "user-123",
       considerContextUntrusted: false,
-      globalToolPolicy: "restrictive",
       policyContext: {
         externalAgentId: "chat",
       },
@@ -87,7 +86,6 @@ describe("evaluateToolExecutionContextTrust", () => {
       organizationId,
       userId: "user-123",
       considerContextUntrusted: true,
-      globalToolPolicy: "restrictive",
       policyContext: {
         externalAgentId: "chat",
       },

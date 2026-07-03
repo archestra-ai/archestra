@@ -340,7 +340,6 @@ class OrganizationModel {
       defaultUserLimitCleanupInterval:
         org.defaultUserLimitCleanupInterval ?? null,
       onboardingComplete: org.onboardingComplete,
-      globalToolPolicy: org.globalToolPolicy,
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,
       allowChatFileUploads: org.allowChatFileUploads,

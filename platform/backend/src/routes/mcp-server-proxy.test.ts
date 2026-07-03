@@ -288,7 +288,7 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
     const catalog = await makeInternalMcpCatalog({
@@ -324,7 +324,7 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
     expect(mockCreateServerScopedServer).not.toHaveBeenCalled();
   });
 
-  test("a no-policy tool still passes the gate in a restrictive org (context-trusted app runtime does not over-block)", async ({
+  test("a no-policy tool still passes the gate (context-trusted app runtime does not over-block)", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -332,7 +332,7 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
     makeMcpServer,
     makeTool,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
     const catalog = await makeInternalMcpCatalog({

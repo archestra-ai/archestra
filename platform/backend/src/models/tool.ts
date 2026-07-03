@@ -80,7 +80,19 @@ class ToolModel {
    * Ensures the result matches the pattern ^[a-zA-Z0-9_-]{1,128}$ required by LLM providers.
    */
   static slugifyName(mcpServerName: string, toolName: string): string {
-    return `${mcpServerName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolName}`
+    return ToolModel.slugifyServerName(
+      `${mcpServerName}${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolName}`,
+    );
+  }
+
+  /**
+   * The server-name half of {@link slugifyName}. The transformation is
+   * per-character, so slugifying the server name alone yields exactly the
+   * prefix that full tool names (and mcp_tool_calls.mcp_server_name, which is
+   * parsed back out of them) carry for that server.
+   */
+  static slugifyServerName(mcpServerName: string): string {
+    return mcpServerName
       .toLowerCase()
       .replace(/\s+/g, "_") // Replace whitespace with underscores
       .replace(/[^a-z0-9_-]/g, ""); // Remove any characters not allowed in tool names

@@ -29,6 +29,7 @@ import {
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
   McpServerModel,
+  McpToolCallModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -1714,6 +1715,61 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         key
           ? await McpCatalogLabelModel.getValuesByKey(key)
           : await McpCatalogLabelModel.getAllValues(),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/usage",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogUsage,
+        description:
+          "Get tool-call usage stats (executed tools/call count and last call time) per catalog item visible to the caller",
+        tags: ["MCP Catalog"],
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              catalogId: UuidIdSchema,
+              toolCallCount: z.number().int(),
+              lastToolCallAt: z.string().datetime().nullable(),
+            }),
+          ),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+      const [items, statsByServerName] = await Promise.all([
+        // Reuse the list query so visibility scoping matches what the
+        // registry shows the caller.
+        InternalMcpCatalogModel.findAll({
+          expandSecrets: false,
+          userId: request.user.id,
+          isAdmin,
+          organizationId: request.organizationId,
+        }),
+        McpToolCallModel.getToolCallStatsByServerName(),
+      ]);
+
+      // Tool-call rows only carry the slugified server-name prefix of the
+      // full tool name, which is built from the catalog name at discovery
+      // time — so re-slugify each catalog name to join. Calls recorded under
+      // a since-renamed catalog name stay unmatched (best effort).
+      return reply.send(
+        items.map((item) => {
+          const stats = statsByServerName.get(
+            ToolModel.slugifyServerName(item.name),
+          );
+          return {
+            catalogId: item.id,
+            toolCallCount: stats?.callCount ?? 0,
+            lastToolCallAt: stats?.lastCallAt.toISOString() ?? null,
+          };
+        }),
       );
     },
   );

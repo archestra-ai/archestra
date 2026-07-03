@@ -64,6 +64,7 @@ export const RouteId = {
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
   GetInternalMcpCatalogLabelValues: "getInternalMcpCatalogLabelValues",
+  GetInternalMcpCatalogUsage: "getInternalMcpCatalogUsage",
   ListPendingImageApprovalCatalogItems: "listPendingImageApprovalCatalogItems",
   ApproveCatalogItemImage: "approveCatalogItemImage",
   GetDeploymentYamlPreview: "getDeploymentYamlPreview",

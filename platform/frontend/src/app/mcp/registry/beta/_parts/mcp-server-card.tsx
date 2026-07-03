@@ -8,6 +8,7 @@ import {
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import {
+  Activity,
   AlertTriangle,
   Copy,
   FileSearch,
@@ -111,6 +112,12 @@ export type McpServerCardProps = {
   onCancelInstallation?: (serverId: string) => void;
   /** When true, renders as a built-in Playwright server (non-editable, personal-only) */
   isBuiltInPlaywright?: boolean;
+  /**
+   * Tool-call usage for this catalog item. Only provided while a usage sort
+   * is active — the card then shows the call count so unused servers are
+   * identifiable at a glance.
+   */
+  usage?: { toolCallCount: number; lastToolCallAt: string | null };
 };
 
 export type McpServerCardVariant = "remote" | "local" | "builtin";
@@ -131,6 +138,7 @@ export function McpServerCard({
   onReinstall,
   onCancelInstallation,
   isBuiltInPlaywright = false,
+  usage,
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
@@ -538,6 +546,7 @@ export function McpServerCard({
   const hasCompactInfoContent =
     showAuthorAvatar ||
     toolsCount > 0 ||
+    usage != null ||
     (variant === "local" && deploymentServerIds.length > 0) ||
     (!isBuiltinVariant &&
       (connectionAvatars.length > 0 ||
@@ -576,6 +585,28 @@ export function McpServerCard({
               {toolsCount}
             </span>
           </div>
+          <div className="h-4 w-px bg-border" />
+        </>
+      )}
+      {usage != null && (
+        <>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1">
+                  <Activity className="h-3.5 w-3.5" />
+                  <span>{usage.toolCallCount}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {usage.toolCallCount === 0
+                  ? "No tool calls recorded"
+                  : `${usage.toolCallCount} tool calls · last used ${new Date(
+                      usage.lastToolCallAt ?? 0,
+                    ).toLocaleDateString()}`}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="h-4 w-px bg-border" />
         </>
       )}

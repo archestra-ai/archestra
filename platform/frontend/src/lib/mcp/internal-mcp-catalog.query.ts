@@ -13,6 +13,7 @@ const {
   getInternalMcpCatalogLabelKeys,
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
+  getInternalMcpCatalogUsage,
   getK8sImagePullSecrets,
   refreshInternalMcpCatalogImage,
   reinstallInternalMcpCatalogItem,
@@ -79,6 +80,23 @@ export function useInternalMcpCatalog(
       return data ?? [];
     },
     initialData: params?.initialData,
+    enabled: params?.enabled,
+  });
+}
+
+/**
+ * Per-catalog-item tool-call usage (executed calls + last call time). The
+ * aggregation scans the whole tool-call log, so callers only enable it when
+ * a usage-based sort is active.
+ */
+export function useInternalMcpCatalogUsage(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["mcp-catalog", "usage"],
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogUsage();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
     enabled: params?.enabled,
   });
 }

@@ -298,6 +298,38 @@ class McpToolCallModel {
       .from(schema.mcpToolCallsTable);
     return result.total;
   }
+
+  /**
+   * Aggregate executed tool calls (method "tools/call" only — listing or
+   * initialize traffic is not "usage") per mcp_server_name. The name is the
+   * slugified server prefix of the full tool name, so callers map it back to
+   * catalog items via ToolModel.slugifyServerName.
+   */
+  static async getToolCallStatsByServerName(): Promise<
+    Map<string, { callCount: number; lastCallAt: Date }>
+  > {
+    const rows = await db
+      .select({
+        mcpServerName: schema.mcpToolCallsTable.mcpServerName,
+        callCount: count(),
+        lastCallAt: sql<Date>`max(${schema.mcpToolCallsTable.createdAt})`,
+      })
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.method, "tools/call"))
+      .groupBy(schema.mcpToolCallsTable.mcpServerName);
+
+    return new Map(
+      rows.map((row) => [
+        row.mcpServerName,
+        {
+          callCount: Number(row.callCount),
+          // Drizzle returns raw sql aggregates untyped; PGlite/pg hand back a
+          // Date for timestamp columns, but normalize defensively.
+          lastCallAt: new Date(row.lastCallAt),
+        },
+      ]),
+    );
+  }
 }
 
 export default McpToolCallModel;

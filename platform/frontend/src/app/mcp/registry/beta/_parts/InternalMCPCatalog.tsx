@@ -37,6 +37,7 @@ import { useEnvironments } from "@/lib/environment.query";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import {
   useInternalMcpCatalog,
+  useInternalMcpCatalogUsage,
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
   useReinstallInternalMcpCatalogItem,
@@ -72,12 +73,14 @@ import {
   emptyRegistryFilters,
   type FilterGroup,
   type FilterOption,
+  isUsageSort,
   RegistryFilterChips,
   RegistryFilterDropdown,
   type RegistryFilters,
   RegistrySortMenu,
   type SortKey,
   STATUS_OPTIONS,
+  sortCatalogItems,
 } from "./registry-list-controls";
 import { useCatalogInstall } from "./use-catalog-install";
 
@@ -131,6 +134,24 @@ export function InternalMCPCatalog({
   const defaultEnvironment = useDefaultEnvironment();
 
   const [sort, setSort] = useState<SortKey>("name-asc");
+  // The usage aggregation scans the whole tool-call log server-side, so only
+  // fetch it once a usage sort is selected (the cards then also show counts).
+  const { data: catalogUsage } = useInternalMcpCatalogUsage({
+    enabled: isUsageSort(sort),
+  });
+  const usageByCatalogId = useMemo(
+    () =>
+      catalogUsage && new Map(catalogUsage.map((row) => [row.catalogId, row])),
+    [catalogUsage],
+  );
+  const usageCountByCatalogId = useMemo(
+    () =>
+      usageByCatalogId &&
+      new Map(
+        [...usageByCatalogId].map(([id, row]) => [id, row.toolCallCount]),
+      ),
+    [usageByCatalogId],
+  );
   const [filters, setFilters] = useState<RegistryFilters>(emptyRegistryFilters);
   const toggleFilter = useCallback((group: FilterGroup, value: string) => {
     setFilters((prev) => {
@@ -773,36 +794,15 @@ export function InternalMCPCatalog({
     return true;
   };
 
-  const sortItems = (list: CatalogItem[]) => {
-    switch (sort) {
-      case "name-desc":
-        return [...list].sort((a, b) => b.name.localeCompare(a.name));
-      case "newest":
-        return [...list].sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-      case "oldest":
-        return [...list].sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-      case "most-tools":
-        return [...list].sort(
-          (a, b) => (b.toolCount ?? 0) - (a.toolCount ?? 0),
-        );
-      default:
-        return [...list].sort((a, b) => a.name.localeCompare(b.name));
-    }
-  };
-
-  const allFilteredItems = sortItems(
+  const allFilteredItems = sortCatalogItems(
     filterByLabels(
       filterCatalogItems(catalogItems || [], searchQueryFromUrl),
       parsedLabels,
     )
       .filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID)
       .filter(matchesAdvancedFilters),
+    sort,
+    usageCountByCatalogId,
   );
 
   const personalItems = allFilteredItems.filter(
@@ -952,6 +952,11 @@ export function InternalMCPCatalog({
                     }
                     onCancelInstallation={install.cancelInstallation}
                     isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                    usage={
+                      isUsageSort(sort)
+                        ? usageByCatalogId?.get(item.id)
+                        : undefined
+                    }
                   />
                 );
               })}
@@ -998,6 +1003,11 @@ export function InternalMCPCatalog({
                     }
                     onCancelInstallation={install.cancelInstallation}
                     isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                    usage={
+                      isUsageSort(sort)
+                        ? usageByCatalogId?.get(item.id)
+                        : undefined
+                    }
                   />
                 );
               })}

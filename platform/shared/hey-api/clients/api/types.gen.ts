@@ -40952,6 +40952,91 @@ export type GetInternalMcpCatalogLabelValuesResponses = {
 
 export type GetInternalMcpCatalogLabelValuesResponse = GetInternalMcpCatalogLabelValuesResponses[keyof GetInternalMcpCatalogLabelValuesResponses];
 
+export type GetInternalMcpCatalogUsageData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/internal_mcp_catalog/usage';
+};
+
+export type GetInternalMcpCatalogUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogUsageError = GetInternalMcpCatalogUsageErrors[keyof GetInternalMcpCatalogUsageErrors];
+
+export type GetInternalMcpCatalogUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        catalogId: string;
+        toolCallCount: number;
+        lastToolCallAt: string | null;
+    }>;
+};
+
+export type GetInternalMcpCatalogUsageResponse = GetInternalMcpCatalogUsageResponses[keyof GetInternalMcpCatalogUsageResponses];
+
 export type CheckInvitationData = {
     body?: never;
     path: {

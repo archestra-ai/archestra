@@ -24,7 +24,9 @@ export type SortKey =
   | "name-desc"
   | "newest"
   | "oldest"
-  | "most-tools";
+  | "most-tools"
+  | "most-used"
+  | "least-used";
 
 export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "name-asc", label: "Name (A–Z)" },
@@ -32,7 +34,54 @@ export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "newest", label: "Newest" },
   { key: "oldest", label: "Oldest" },
   { key: "most-tools", label: "Most tools" },
+  { key: "most-used", label: "Most used" },
+  { key: "least-used", label: "Least used" },
 ];
+
+export function isUsageSort(sort: SortKey): boolean {
+  return sort === "most-used" || sort === "least-used";
+}
+
+/**
+ * Sort registry items. Usage sorts read tool-call counts from
+ * `usageByCatalogId` (items without an entry count as 0, so never-called
+ * servers surface first under "Least used") and tie-break by name so equal
+ * counts keep a stable, scannable order.
+ */
+export function sortCatalogItems<
+  T extends {
+    id: string;
+    name: string;
+    createdAt: string | Date;
+    toolCount?: number | null;
+  },
+>(items: T[], sort: SortKey, usageByCatalogId?: Map<string, number>): T[] {
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name);
+  const usage = (item: T) => usageByCatalogId?.get(item.id) ?? 0;
+
+  switch (sort) {
+    case "name-desc":
+      return [...items].sort((a, b) => b.name.localeCompare(a.name));
+    case "newest":
+      return [...items].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    case "oldest":
+      return [...items].sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+    case "most-tools":
+      return [...items].sort((a, b) => (b.toolCount ?? 0) - (a.toolCount ?? 0));
+    case "most-used":
+      return [...items].sort((a, b) => usage(b) - usage(a) || byName(a, b));
+    case "least-used":
+      return [...items].sort((a, b) => usage(a) - usage(b) || byName(a, b));
+    default:
+      return [...items].sort(byName);
+  }
+}
 
 export interface FilterOption {
   value: string;

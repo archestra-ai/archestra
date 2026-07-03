@@ -19,6 +19,10 @@ import type {
   ScheduleTriggerRun,
 } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  stripThinkingBlocks,
+  THINKING_ONLY_NOTICE,
+} from "@/utils/strip-thinking-blocks";
 
 /**
  * Shared helpers for the chat conversation backing a scheduled trigger run.
@@ -330,6 +334,37 @@ function buildMessagesFromInteractions(
   }
 
   if (messages.length > 0) {
+    // Reconstructed from raw LLM-proxy interactions, which bypass the A2A
+    // executor's sanitization, so strip inline `<thinking>` blocks here too.
+    // These messages are freshly built above, so mutate text parts in place.
+    // An assistant turn whose text was entirely `<thinking>` strips to nothing;
+    // substitute the notice so it matches the live executor path rather than
+    // rendering a blank bubble.
+    for (const message of messages) {
+      let hadText = false;
+      let hasVisibleText = false;
+      let noticeTarget: { text: string } | null = null;
+      for (const part of message.parts) {
+        if (part.type === "text" && typeof part.text === "string") {
+          if (part.text.trim() !== "") {
+            hadText = true;
+          }
+          part.text = stripThinkingBlocks(part.text);
+          if (part.text !== "") {
+            hasVisibleText = true;
+          }
+          noticeTarget ??= part;
+        }
+      }
+      if (
+        message.role === "assistant" &&
+        hadText &&
+        !hasVisibleText &&
+        noticeTarget
+      ) {
+        noticeTarget.text = THINKING_ONLY_NOTICE;
+      }
+    }
     return messages;
   }
 

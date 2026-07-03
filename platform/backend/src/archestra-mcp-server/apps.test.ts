@@ -2780,3 +2780,116 @@ describe("scaffoldPartialToolFailureResult", () => {
     expect(structured(result).status).toBe("partial");
   });
 });
+
+// Four handlers run an argument/context guard BEFORE loading the app. Pinning
+// that precedence: a missing appId paired with a bad secondary input must
+// surface the secondary guard's error, not "No app found" — so the guard keeps
+// its pre-load position.
+describe("pre-load guard precedence", () => {
+  const MISSING_APP_ID = "00000000-0000-4000-8000-000000000000";
+
+  async function adminContext(
+    makeAgent: any,
+    makeUser: any,
+    makeMember: any,
+  ): Promise<ArchestraContext> {
+    const agent = await makeAgent({ name: "Precedence Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    return {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+  }
+
+  test("edit_app: both edit modes on a missing app returns the mode error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const ctx = await adminContext(makeAgent, makeUser, makeMember);
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId: MISSING_APP_ID,
+        baseVersion: 1,
+        edits: [{ old_str: "a", new_str: "b" }],
+        replacementHtml: "<html><head></head></html>",
+      },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("either edits or replacementHtml");
+    expect(text).not.toContain("No app found");
+  });
+
+  test("publish_app: teams on org scope for a missing app returns the scope error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const ctx = await adminContext(makeAgent, makeUser, makeMember);
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      { appId: MISSING_APP_ID, scope: "org", teams: ["Whatever"] },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("teams is only valid");
+    expect(text).not.toContain("No app found");
+  });
+
+  test("preview_app_tool: no approval on a missing app returns the approval error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // The context deliberately omits approvalRequiredPoliciesHandled so the
+    // server-side approval backstop fires before the app is ever loaded.
+    const ctx = await adminContext(makeAgent, makeUser, makeMember);
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PREVIEW_APP_TOOL_SHORT_NAME),
+      { appId: MISSING_APP_ID, toolName: "some__tool" },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("requires human approval");
+    expect(text).not.toContain("No app found");
+  });
+
+  test("render_app: non-chat agent on a missing app returns the steer error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    // A gateway dispatch carries an agentId; a non-"agent" type hits render_app's
+    // steer guard, which must win over the missing-app load.
+    const agent = await makeAgent({
+      name: "Gateway Agent",
+      agentType: "profile",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    };
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
+      { appId: MISSING_APP_ID },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("renders nothing");
+    expect(text).not.toContain("No app found");
+  });
+});

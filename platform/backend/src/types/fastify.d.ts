@@ -1,4 +1,5 @@
 import type { User } from "./user";
+import type { AuditableRouteConfig } from "../middleware/audit-log-registry";
 import type {
   SelectServiceAccount,
   SelectServiceAccountToken,
@@ -15,8 +16,20 @@ declare module "fastify" {
       serviceAccount: SelectServiceAccount;
       token: SelectServiceAccountToken;
     };
-    /** Snapshot of the resource before the mutation; set by the audit preHandler hook. */
+    /** Sanitized snapshot of the resource before the mutation; set by the audit preHandler hook. */
     auditBefore?: Record<string, unknown> | null;
+    /**
+     * Memoized effective audit route config, computed once by whichever audit
+     * hook needs it first. Wrapped so a legitimately-undefined resolved config
+     * is still marked as computed.
+     */
+    auditEffectiveCfg?: { value: AuditableRouteConfig | undefined };
+    /**
+     * Memoized audited resource id, computed once by whichever audit hook
+     * needs it first. Wrapped so a legitimately-null resolved id is still
+     * marked as computed.
+     */
+    auditResourceId?: { value: string | null };
     /**
      * Post-state supplied by a route handler for the audit `after` snapshot,
      * used when the generic `fetchById` snapshot can't represent the result —

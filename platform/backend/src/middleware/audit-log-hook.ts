@@ -1,3 +1,4 @@
+import type { FastifyRequest } from "fastify";
 import logger from "@/logging";
 import AuditLogModel from "@/models/audit-log";
 import UserTokenModel from "@/models/user-token";
@@ -29,11 +30,10 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     // Always stamp event time before the handler executes.
     request.auditOccurredAt = new Date();
 
-    const routePattern = request.routeOptions.url;
-    const cfg = resolveEffectiveCfg(routePattern, request.method);
+    const cfg = getEffectiveCfg(request);
     if (!cfg?.fetchById) return;
 
-    const id = await resolveAuditedResourceId(request, cfg);
+    const id = await getAuditedResourceId(request, cfg);
     if (!id) return;
 
     const routeParams = request.params as Record<string, unknown> | undefined;
@@ -53,8 +53,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
     if (request.method !== "POST" || typeof payload !== "string")
       return payload;
 
-    const routePattern = request.routeOptions.url;
-    const cfg = resolveEffectiveCfg(routePattern, request.method);
+    const cfg = getEffectiveCfg(request);
     if (!cfg?.fetchById) return payload;
 
     // Skip oversized payloads (e.g. file upload responses) — the `id` we
@@ -80,12 +79,12 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 
     // 4xx/5xx mutations are now recorded — outcome column carries the signal.
     const routePattern = request.routeOptions.url;
-    const cfg = resolveEffectiveCfg(routePattern, request.method);
+    const cfg = getEffectiveCfg(request);
     const outcome = deriveOutcome(reply.statusCode);
     const action = resolveActionName(cfg, request.method);
 
     const id =
-      (cfg ? await resolveAuditedResourceId(request, cfg) : null) ??
+      (cfg ? await getAuditedResourceId(request, cfg) : null) ??
       request.auditResponseBodyId ??
       null;
 
@@ -127,7 +126,8 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       outcome,
       resourceType: cfg?.resourceType ?? null,
       resourceId: id,
-      before: sanitizeAuditSnapshot(request.auditBefore ?? null),
+      // auditBefore is stored pre-sanitized by the preHandler hook.
+      before: request.auditBefore ?? null,
       after: sanitizeAuditSnapshot(after),
       httpMethod: request.method,
       httpPath,
@@ -150,6 +150,38 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
 }
 
 // === Internal helpers
+
+/**
+ * Resolve the effective audit route config once per request; the audit hooks
+ * (preHandler/onSend/onResponse) all need it, so the first caller memoizes it
+ * on the request. The wrapper marks "computed" even when the result is
+ * undefined (unregistered route).
+ */
+function getEffectiveCfg(
+  request: FastifyRequest,
+): AuditableRouteConfig | undefined {
+  request.auditEffectiveCfg ??= {
+    value: resolveEffectiveCfg(request.routeOptions.url, request.method),
+  };
+  return request.auditEffectiveCfg.value;
+}
+
+/**
+ * Resolve the audited resource id once per request (it can hit the database,
+ * e.g. `currentUserPersonalToken`); preHandler and onResponse both need it.
+ * The wrapper marks "computed" even when the resolved id is null.
+ */
+async function getAuditedResourceId(
+  request: FastifyRequest,
+  cfg: AuditableRouteConfig,
+): Promise<string | null> {
+  if (!request.auditResourceId) {
+    request.auditResourceId = {
+      value: await resolveAuditedResourceId(request, cfg),
+    };
+  }
+  return request.auditResourceId.value;
+}
 
 const AUDIT_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 

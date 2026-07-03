@@ -10,13 +10,13 @@ lastUpdated: 2026-07-03
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-A project is a shared workspace that keeps a body of work together: its chats, the files they produce, standing instructions, and scheduled runs. Chats started in a project belong to it for their lifetime, and files the agent saves are owned by the project rather than the individual author. A project is private to its owner until shared with teams or the whole organization.
+A project is a shared workspace that groups related chats, the files they produce, standing instructions, and scheduled runs. Files the agent saves are owned by the project rather than the individual author, so anyone with access can use them. A project is private to its owner until shared with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
 
 ## Creating a Project
 
-Create a project from the Projects page, or convert an existing chat: choose **Create project** from the chat's menu in the sidebar, or ask the agent ("create a project out of this chat") when it has the `create_project_from_conversation` tool assigned. The chat and its saved files move into the new project. Only the chat's owner can do this, and only for a chat that is not already in a project.
+Create a project from the Projects page, or convert an existing chat by choosing **Create project** from the chat's menu in the sidebar. The chat and its saved files move into the new project.
 
 ![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
 

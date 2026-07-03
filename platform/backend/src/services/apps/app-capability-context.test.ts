@@ -58,6 +58,49 @@ describe("buildAppCapabilityContext", () => {
     ]);
   });
 
+  test("a duplicate tool name is grounded once, not dropped as ambiguous", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    // Dynamic access on, so discoverable (unassigned) tools are grounded.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+
+    // Two installed catalogs carry a tool with the SAME name — unique only per
+    // catalog. The old grounding dropped such names; it must now list the name
+    // once (the canonical row's description), matching what is assignable.
+    const dupName = "acme__do_thing";
+    for (const _ of [0, 1]) {
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        name: dupName,
+        description: "Do a thing",
+        catalogId: catalog.id,
+      });
+    }
+
+    const context = await buildAppCapabilityContext({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+    });
+
+    expect(context.tools.filter((tool) => tool.name === dupName)).toEqual([
+      { name: dupName, description: "Do a thing" },
+    ]);
+  });
+
   test("describes the window.archestra SDK surface", async ({
     makeOrganization,
     makeUser,

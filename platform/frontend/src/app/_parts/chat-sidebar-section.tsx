@@ -141,6 +141,9 @@ export function ChatSidebarSection({
   const { data: canCreateProject } = useHasPermissions({
     project: ["create"],
   });
+  const { data: canReadProjects } = useHasPermissions({
+    project: ["read"],
+  });
   const [createProjectConv, setCreateProjectConv] = useState<{
     id: string;
     title: string;
@@ -160,7 +163,11 @@ export function ChatSidebarSection({
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
   );
 
-  const { data: projectsData } = useProjects();
+  // /api/projects requires project:read; skip the fetch for roles without it
+  // so the sidebar doesn't 403 (and toast) on every chat page.
+  const { data: projectsData } = useProjects({
+    enabled: canReadProjects === true,
+  });
   const pinProjectMutation = usePinProject();
   const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
   const pinnedItems = buildPinnedSidebarItems({

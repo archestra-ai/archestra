@@ -170,7 +170,11 @@ test("the render lint flags a hidden element an app override left visible", asyn
         window as unknown as {
           __appDiagnostics: { errorType?: string; message?: string }[];
         }
-      ).__appDiagnostics.filter((d) => d.errorType === "hidden-overridden"),
+      ).__appDiagnostics.filter(
+        (d) =>
+          d.errorType === "render-check" &&
+          (d.message ?? "").includes("[hidden-overridden]"),
+      ),
     );
 
   try {

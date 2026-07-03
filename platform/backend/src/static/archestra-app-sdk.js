@@ -189,11 +189,15 @@
         if (offenders.length >= 5) break;
       }
       if (offenders.length > 0) {
+        // `render-check` is the general channel for proactive render-correctness
+        // checks; the specific check is named in brackets so the model — and the
+        // host's dedup, keyed on the message prefix — can tell them apart. A new
+        // check posts here rather than minting its own diagnostic type.
         postDiagnostic(
-          "hidden-overridden",
-          "Element(s) with the `hidden` attribute are still rendered — a CSS rule " +
-            "(e.g. `display:` on the element) is overriding `hidden`, leaving them " +
-            "stuck visible: " +
+          "render-check",
+          "[hidden-overridden] Element(s) with the `hidden` attribute are still " +
+            "rendered — a CSS rule (e.g. `display:` on the element) is overriding " +
+            "`hidden`, leaving them stuck visible: " +
             offenders.join(", "),
         );
       }

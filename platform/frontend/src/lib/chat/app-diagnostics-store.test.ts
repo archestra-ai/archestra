@@ -36,17 +36,15 @@ describe("parseForwardedDiagnostic", () => {
     expect(entry).toEqual({ type: errorType, message: "hello from the app" });
   });
 
-  it("accepts the hidden-overridden render lint over the runtime-error lane", () => {
+  it("accepts a render-check diagnostic over the runtime-error lane", () => {
     const entry = parseForwardedDiagnostic({
       type: "mcp-apps:runtime-error",
-      errorType: "hidden-overridden",
-      message:
-        "Element(s) with the `hidden` attribute are still rendered: #modal",
+      errorType: "render-check",
+      message: "[hidden-overridden] #modal is still rendered",
     });
     expect(entry).toEqual({
-      type: "hidden-overridden",
-      message:
-        "Element(s) with the `hidden` attribute are still rendered: #modal",
+      type: "render-check",
+      message: "[hidden-overridden] #modal is still rendered",
     });
   });
 
@@ -125,10 +123,10 @@ describe("diagnostics store", () => {
     expect(getAppDiagnosticCounts().get(APP)).toEqual({ errors: 2, logs: 3 });
   });
 
-  it("counts the hidden-overridden render lint as an error, not a log", () => {
+  it("counts a render-check diagnostic as an error, not a log", () => {
     reportAppDiagnostic(APP, 1, {
-      type: "hidden-overridden",
-      message: "stuck modal: #confirm-modal",
+      type: "render-check",
+      message: "[hidden-overridden] stuck modal: #confirm-modal",
     });
     expect(getAppDiagnosticCounts().get(APP)).toEqual({ errors: 1, logs: 0 });
   });

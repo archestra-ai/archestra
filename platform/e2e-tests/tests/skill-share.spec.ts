@@ -24,12 +24,6 @@ test.describe("Skills marketplace step on /connection", () => {
     makeRandomString,
     goToPage,
   }) => {
-    const featuresEnabled = await skillsFeatureEnabled(page);
-    test.skip(
-      !featuresEnabled,
-      "ARCHESTRA_AGENTS_SKILLS_ENABLED is off in this environment",
-    );
-
     const skillName = makeRandomString(8, "share-skill").toLowerCase();
     const skillId = await createSkillViaApi(page, skillName);
     let createdLinkId: string | null = null;
@@ -106,15 +100,6 @@ test.describe("Skills marketplace step on /connection", () => {
     }
   });
 });
-
-async function skillsFeatureEnabled(page: Page): Promise<boolean> {
-  const response = await page.request.get(`${UI_BASE_URL}/api/config`);
-  if (!response.ok()) return false;
-  const body = (await response.json()) as {
-    features?: { agentSkillsEnabled?: boolean };
-  };
-  return body.features?.agentSkillsEnabled === true;
-}
 
 async function createSkillViaApi(
   page: Page,

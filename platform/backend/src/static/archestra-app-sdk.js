@@ -165,12 +165,16 @@
   // app never awaits ready
   ready.catch(() => {});
 
-  // Render lint: an element carrying the `hidden` attribute that still paints
-  // means an app CSS rule is overriding the UA `[hidden] { display: none }` (the
-  // base sheet's `!important` reset normally prevents this) — a modal or toggled
-  // element stuck visible. It throws nothing and violates no CSP, so only a DOM
-  // check catches it. One pass after the handshake + a paint beat, mirroring the
-  // screenshot timing, so async-first-render apps are covered too.
+  // Render lint: an element carrying the `hidden` attribute that still occupies
+  // a visible box means a CSS rule is overriding `hidden`, leaving a modal or
+  // toggled element stuck visible. The base sheet's `[hidden]` reset prevents the
+  // ordinary case; this is the backstop for what slips past it — an app that
+  // beats the reset with its own `!important`, or a render where the base sheet
+  // never loaded. Such a render throws nothing and violates no CSP, so only a DOM
+  // check catches it before validate_app reports "clean". Scans the initial
+  // render: static markup plus anything the app's own `ready.then` handler
+  // painted synchronously (that runs before the frame below, since the SDK
+  // registers this handler first).
   const reportHiddenOverridden = () => {
     try {
       const offenders = [];
@@ -178,7 +182,10 @@
         // `hidden="until-found"` is intentionally in the layout (find-in-page),
         // so it is not an override; only the boolean form should stay unpainted.
         if (el.getAttribute("hidden") === "until-found") continue;
-        if (el.getClientRects().length === 0) continue;
+        // A visible box, not merely a layout box: a collapsed element (height:0,
+        // an app's own animation/disclosure state) is not "stuck visible".
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
         const id = el.id ? "#" + el.id : "";
         const cls = el.classList.length ? "." + [...el.classList].join(".") : "";
         offenders.push(el.tagName.toLowerCase() + id + cls);
@@ -197,9 +204,15 @@
       // render lint is best-effort; never surface a failure to the app
     }
   };
+  // Two frames after the handshake: late enough that layout is settled (so
+  // getClientRects is meaningful), but before the host's render-settle snapshot
+  // post (~1.5s after the iframe mounts), so a broken render reaches validate_app
+  // instead of being masked by an earlier clean snapshot.
   ready
     .then(() => {
-      setTimeout(reportHiddenOverridden, 1500);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(reportHiddenOverridden),
+      );
     })
     .catch(() => {});
 

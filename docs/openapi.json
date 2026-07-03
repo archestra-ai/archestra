@@ -55466,7 +55466,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Open an external (MCP-server) UI app in chat: create a conversation with the app rendered against the given install (no model turn) and return its id to navigate to.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)\n`chat:create`: Start new chat conversations",
+        "description": "Open an external (MCP-server) UI app in chat: create a conversation and return its id to navigate to. When the tool needs no inputs the app is seeded already rendered (no model turn); when it has required inputs the conversation is created empty and the response carries an opening prompt for the client to send.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)\n`chat:create`: Start new chat conversations",
         "requestBody": {
           "required": true,
           "content": {
@@ -55510,10 +55510,21 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "render",
+                        "prompt"
+                      ]
+                    },
+                    "prompt": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "conversationId"
+                    "conversationId",
+                    "mode"
                   ],
                   "additionalProperties": false
                 }

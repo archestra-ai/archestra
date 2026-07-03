@@ -1,4 +1,7 @@
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import {
@@ -153,6 +156,54 @@ describe("clone agent route", () => {
         },
       ]),
     );
+  });
+
+  test("does not force-assign creation-default built-ins the source agent lacked", async ({
+    makeInternalAgent,
+    makeTool,
+    makeAgentTool,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    // Source is created before the built-ins are seeded, so its own create
+    // can't auto-assign todo_write — it genuinely lacks it.
+    const baseTool = await makeTool({ name: "tool-a" });
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Source Agent",
+      scope: "org",
+      teams: [],
+      labels: [],
+    });
+    await makeAgentTool(sourceAgent.id, baseTool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+
+    // Seed the built-in rows now, so the clone's create COULD force-assign
+    // todo_write (the pre-fix behavior) — the fix must skip that.
+    const seedHost = await makeAgent({ organizationId });
+    await seedAndAssignArchestraTools(seedHost.id);
+    const todoWrite = await ToolModel.findByName(TOOL_TODO_WRITE_FULL_NAME);
+    if (!todoWrite) throw new Error("todo_write not seeded");
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    const clonedToolIds = (
+      await db
+        .select({ toolId: schema.agentToolsTable.toolId })
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, cloned.id))
+    ).map((row) => row.toolId);
+
+    // The clone is an exact copy of the source's assignments — the always-on
+    // default todo_write is NOT force-added.
+    expect(clonedToolIds).toContain(baseTool.id);
+    expect(clonedToolIds).not.toContain(todoWrite.id);
   });
 
   test("cannot clone built-in agents", async ({ makeInternalAgent }) => {

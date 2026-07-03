@@ -1297,6 +1297,40 @@ class McpClient {
 
     let tool: McpToolAssignment | undefined = mcpTools[0];
 
+    const accessAllTools =
+      owner.type === "agent" && (await AgentModel.getAccessAllTools(owner.id));
+
+    // Per-agent exclusions (Auto-tool mode). Loaded once here and reused for
+    // both the precedence resolution just below and the final execution gate
+    // further down, so a single dispatch never queries them twice.
+    const exclusionSets = accessAllTools
+      ? await agentToolExclusionsService.getExclusionSets(owner.id)
+      : null;
+
+    // Assigned rows normally keep precedence over the dispatcher's
+    // dynamically-resolved row. But tool names are unique only per catalog, so a
+    // name can back an assigned row in one catalog AND a discoverable row in
+    // another. When the assigned row is EXCLUDED while the dispatcher resolved a
+    // non-excluded same-named row, letting the assigned row win would refuse a
+    // tool search_tools/run_tool just advertised. Drop the excluded assigned row
+    // so the dynamic row below takes over.
+    if (
+      tool &&
+      exclusionSets &&
+      availableTool &&
+      availableTool.name === toolCall.name &&
+      isToolIdentityExcluded(
+        { catalogId: tool.catalogId, name: tool.toolName },
+        exclusionSets,
+      ) &&
+      !isToolIdentityExcluded(
+        { catalogId: availableTool.catalogId, name: availableTool.name },
+        exclusionSets,
+      )
+    ) {
+      tool = undefined;
+    }
+
     // Dynamic tool access ("All tools" mode): the dispatcher pre-resolved a
     // tool the agent has no assignment row for. Shape it like an assignment so
     // downstream resolution is identical. It has no row to inherit a credential
@@ -1335,42 +1369,35 @@ class McpClient {
       };
     }
 
-    const accessAllTools =
-      owner.type === "agent" && (await AgentModel.getAccessAllTools(owner.id));
-
     // Per-agent exclusions (Auto-tool mode) — the deep execution gate backing
     // every dispatch path (gateway tools/call, run_tool, and chat's CACHED
     // AI-SDK tool wrappers, which execute here without re-entering the gateway
     // handler). Checked by resolved tool identity, after suffix recovery and
     // dynamic-dispatch resolution, so no alias can bypass it. Excluded tools
     // surface as unavailable, matching the discovery-side refusals.
-    if (accessAllTools) {
-      const exclusionSets = await agentToolExclusionsService.getExclusionSets(
-        owner.id,
-      );
-      if (
-        isToolIdentityExcluded(
-          { catalogId: tool.catalogId, name: tool.toolName },
-          exclusionSets,
-        )
-      ) {
-        const message = unavailableThirdPartyToolMessage(toolCall.name);
-        return {
-          error: await this.createErrorResult(
-            toolCall,
-            owner,
+    if (
+      exclusionSets &&
+      isToolIdentityExcluded(
+        { catalogId: tool.catalogId, name: tool.toolName },
+        exclusionSets,
+      )
+    ) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
+      return {
+        error: await this.createErrorResult(
+          toolCall,
+          owner,
+          message,
+          tool.catalogName || "unknown",
+          undefined,
+          {
+            type: "tool_state",
+            code: "unknown_tool",
             message,
-            tool.catalogName || "unknown",
-            undefined,
-            {
-              type: "tool_state",
-              code: "unknown_tool",
-              message,
-              toolName: toolCall.name,
-            },
-          ),
-        };
-      }
+            toolName: toolCall.name,
+          },
+        ),
+      };
     }
 
     // "All tools" mode overrides a leftover per-tool credential pin. When the
@@ -3700,12 +3727,11 @@ class McpClient {
     // excluded tools' resource URIs). Callers pass the sets they already
     // loaded; loaded here otherwise. Empty (no-op) unless the agent's
     // accessAllTools setting is on.
-    const effectiveExclusions =
-      exclusionSets ??
-      (await agentToolExclusionsService.getActiveExclusionSets(agentId));
-    const tools = (await ToolModel.getMcpToolsByAgent(agentId)).filter(
-      (tool) => !isToolRowExcluded(tool, effectiveExclusions),
-    );
+    const { tools, exclusionSets: effectiveExclusions } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(
+        agentId,
+        exclusionSets,
+      );
     const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(
       tools.map((tool) => tool.name),
       agentId,

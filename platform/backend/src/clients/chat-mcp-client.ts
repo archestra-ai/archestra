@@ -35,10 +35,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
-import {
-  agentToolExclusionsService,
-  isToolRowExcluded,
-} from "@/services/agent-tool-exclusions";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
@@ -1071,15 +1068,10 @@ export async function getChatMcpToolUiResourceUris(
     // Per-agent exclusions (Auto-tool mode): an excluded tool must not emit a
     // UI hint that would mount its app iframe. Empty (no-op) unless the
     // agent's accessAllTools setting is on.
-    const [tools, exclusionSets] = await Promise.all([
-      ToolModel.getMcpToolsByAgent(agentId),
-      agentToolExclusionsService.getActiveExclusionSets(agentId),
-    ]);
+    const { tools } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
     const result: Record<string, string> = {};
     for (const tool of tools) {
-      if (isToolRowExcluded(tool, exclusionSets)) {
-        continue;
-      }
       const uriFromMeta = (
         tool.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
       )?._meta?.ui?.resourceUri;

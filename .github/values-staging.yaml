@@ -39,6 +39,13 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
     ARCHESTRA_API_BASE_URL: "https://frontend.archestra.dev,https://backend.archestra.dev"
+    # Dedicated origin for MCP App sandboxes so browser device permissions
+    # (camera/mic/geolocation/clipboard) can be delegated to app iframes. Each
+    # app renders at <hash>.sandbox.archestra.dev (a real cross-origin); without
+    # this, sandboxes fall back to the frontend's opaque origin and browsers
+    # block those features. Requires *.sandbox.archestra.dev DNS + wildcard TLS
+    # + an ingress rule to the frontend service (archestra-ai/infra).
+    ARCHESTRA_MCP_SANDBOX_DOMAIN: "sandbox.archestra.dev"
     ARCHESTRA_GEMINI_VERTEX_AI_ENABLED: "true"
     ARCHESTRA_GEMINI_VERTEX_AI_PROJECT: "friendly-path-465518-r6"
     ARCHESTRA_GEMINI_VERTEX_AI_LOCATION: "us-central1"

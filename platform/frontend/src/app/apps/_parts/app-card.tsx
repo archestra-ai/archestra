@@ -5,6 +5,8 @@ import {
   AppWindow,
   Loader2,
   MoreHorizontal,
+  Pin,
+  PinOff,
   Server,
   Settings,
   SquareArrowOutUpRight,
@@ -29,7 +31,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useOpenAppInChat, useOpenExternalAppInChat } from "@/lib/app.query";
+import {
+  type PinAppTarget,
+  useOpenAppInChat,
+  useOpenExternalAppInChat,
+  usePinApp,
+} from "@/lib/app.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils";
 import { AppDeleteDialog } from "./app-delete-dialog";
@@ -76,6 +83,26 @@ function CardOverflowMenu({
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+}
+
+// Pin/Unpin menu item (mirrors the project card's): pins are per-user and
+// toggle from the same overflow menu on both card kinds.
+function PinMenuItem({
+  pinned,
+  target,
+}: {
+  pinned: boolean;
+  target: PinAppTarget;
+}) {
+  const pinAppMutation = usePinApp();
+  return (
+    <DropdownMenuItem
+      onSelect={() => pinAppMutation.mutate({ pinned: !pinned, target })}
+    >
+      {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+      {pinned ? "Unpin" : "Pin"}
+    </DropdownMenuItem>
   );
 }
 
@@ -166,6 +193,10 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
             />
           }
         >
+          <PinMenuItem
+            pinned={!!app.pinnedAt}
+            target={{ source: "owned", appId: app.id }}
+          />
           <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
             <Settings className="h-4 w-4" />
             Settings
@@ -261,6 +292,14 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
       {isOpening ? <CardOpeningOverlay /> : null}
 
       <CardOverflowMenu leading={<ScopeBadge scope={app.scope} hidePersonal />}>
+        <PinMenuItem
+          pinned={!!app.pinnedAt}
+          target={{
+            source: "external",
+            mcpServerId: app.mcpServerId,
+            resourceUri: app.resourceUri,
+          }}
+        />
         <DropdownMenuItem asChild>
           <Link href={runHref} target="_blank" rel="noreferrer">
             <SquareArrowOutUpRight className="h-4 w-4" />

@@ -24,6 +24,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
+  usePinApp: () => ({ mutate: vi.fn() }),
   // The card hosts the shared AppSettingsDialog, which reads the app by id.
   useApp: () => ({ data: undefined }),
 }));
@@ -93,6 +94,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
+  pinnedAt: null,
 };
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
@@ -106,6 +108,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   resourceUri: "ui://pm/board.html",
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
+  pinnedAt: null,
 };
 
 describe("ExternalAppCard", () => {

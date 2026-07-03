@@ -68,6 +68,8 @@ const AppListItemBaseSchema = z.object({
   description: z.string().nullable(),
   executionModel: z.enum(["viewer-scoped", "server-scoped"]),
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
+  /** When the requesting user pinned this app; null = not pinned. */
+  pinnedAt: z.date().nullable(),
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({

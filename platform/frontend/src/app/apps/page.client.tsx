@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApps } from "@/lib/app.query";
+import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
 import { useSession } from "@/lib/auth/auth.query";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
@@ -44,13 +45,19 @@ export default function AppsPage() {
   );
   const [createOpen, setCreateOpen] = useState(false);
 
+  // Pinned-first grouping applies on top of the scope filter, mirroring the
+  // Projects page: a "Pinned" section above, everything else below.
   const filtered = useMemo(
     () =>
-      (data?.data ?? []).filter((app) =>
-        matchesFilter(app, filter, currentUserId),
+      sortAppsPinnedFirst(
+        (data?.data ?? []).filter((app) =>
+          matchesFilter(app, filter, currentUserId),
+        ),
       ),
     [data, filter, currentUserId],
   );
+  const pinnedApps = filtered.filter((app) => app.pinnedAt);
+  const unpinnedApps = filtered.filter((app) => !app.pinnedAt);
 
   const setParam = (name: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -116,27 +123,52 @@ export default function AppsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((app) => (
-              <AppCard
-                // Several tools of one server can share a widget resource, so
-                // (mcpServerId, resourceUri) alone collides; duplicate keys make
-                // React duplicate/omit cards on search re-renders, breaking the
-                // grid. The tool-scoped name disambiguates.
-                key={
-                  app.source === "owned"
-                    ? app.id
-                    : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
-                }
-                app={app}
-              />
-            ))}
+          <div className="space-y-6">
+            {pinnedApps.length > 0 && (
+              <AppSection title="Pinned" apps={pinnedApps} />
+            )}
+            <AppSection
+              title={pinnedApps.length > 0 ? "All apps" : undefined}
+              apps={unpinnedApps}
+            />
           </div>
         )}
       </LoadingWrapper>
 
       <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
+  );
+}
+
+// Mirrors the Projects page's ProjectSection: an optional uppercase header over
+// the card grid, used to split "Pinned" from the rest.
+function AppSection({ title, apps }: { title?: string; apps: AppListItem[] }) {
+  if (apps.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      {title ? (
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h2>
+      ) : null}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {apps.map((app) => (
+          <AppCard
+            // Several tools of one server can share a widget resource, so
+            // (mcpServerId, resourceUri) alone collides; duplicate keys make
+            // React duplicate/omit cards on search re-renders, breaking the
+            // grid. The tool-scoped name disambiguates.
+            key={
+              app.source === "owned"
+                ? app.id
+                : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
+            }
+            app={app}
+          />
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -127,7 +127,10 @@ jobs:
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          push: "true"
+          # outputs= replaces the push:"true" shorthand to push with zstd-compressed
+          # layers: zstd is ~3-5x faster to decompress than gzip, cutting the e2e
+          # shard's image pull ~15-20s (the pull is dominated by single-threaded gunzip).
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
           tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
           # E2E image consumed only by CI shards — skip SLSA provenance attestation to
           # trim export time and keep a plain single-manifest image. (Published release

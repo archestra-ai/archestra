@@ -117,6 +117,23 @@ function renderTab() {
   );
 }
 
+// The staged host (the app settings form) drives selection as a controlled
+// Set; toggles report up via onSelectionChange instead of persisting live.
+function renderControlled(onSelectionChange: (next: Set<string>) => void) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AppToolsEditor
+        appId={APP_ID}
+        selectedToolIds={new Set(["t-create"])}
+        onSelectionChange={onSelectionChange}
+      />
+    </QueryClientProvider>,
+  );
+}
+
 describe("AppToolsEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -214,6 +231,60 @@ describe("AppToolsEditor", () => {
     // live editor fired no assignment — the user picks tools deliberately.
     expect(await screen.findByLabelText("create_page")).not.toBeChecked();
     expect(assignMutate).not.toHaveBeenCalled();
+  });
+
+  it("stages every tool of a server added in the settings form, persisting nothing", async () => {
+    const user = userEvent.setup();
+    const NOTION_ID = "notion-catalog";
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [makeCatalog(), makeCatalog({ id: NOTION_ID, name: "Notion" })],
+    });
+    fetchCatalogToolsMock.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === NOTION_ID
+          ? [
+              {
+                id: "n-page",
+                name: "create_page",
+                description: null,
+                catalogId: NOTION_ID,
+              },
+              {
+                id: "n-db",
+                name: "query_db",
+                description: null,
+                catalogId: NOTION_ID,
+              },
+            ]
+          : [makeTool("t-create", "create_issue")],
+      ),
+    );
+    const onSelectionChange = vi.fn();
+    renderControlled(onSelectionChange);
+
+    await screen.findByRole("button", { name: /JIRA/ });
+    await user.click(screen.getByRole("button", { name: /add/i }));
+    await user.click(
+      await screen.findByRole("menuitemcheckbox", { name: /notion/i }),
+    );
+
+    // Staged mode merges every tool of the added server into the selection and
+    // fires no live mutation — the opposite of the uncontrolled host above.
+    expect(onSelectionChange).toHaveBeenLastCalledWith(
+      new Set(["t-create", "n-page", "n-db"]),
+    );
+    expect(assignMutate).not.toHaveBeenCalled();
+    expect(unassignMutate).not.toHaveBeenCalled();
+  });
+
+  it("flags an assigned server that sits outside the app's environment", async () => {
+    useInternalMcpCatalogMock.mockReturnValue({
+      data: [makeCatalog({ environmentId: "env-other" })],
+    });
+    renderTab();
+
+    const pill = await screen.findByRole("button", { name: /JIRA/ });
+    expect(pill).toHaveTextContent("outside this environment");
   });
 
   it("surfaces an assignment with no listed MCP server as a removable fallback", async () => {

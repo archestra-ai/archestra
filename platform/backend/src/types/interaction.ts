@@ -186,8 +186,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:chatCompletions"]),
     request: withReadFallback(OpenAi.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(OpenAi.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(OpenAi.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(OpenAi.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -196,7 +197,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:responses"]),
     request: withReadFallback(OpenAi.API.ResponsesRequestSchema),
-    processedRequest: withReadFallback(OpenAi.API.ResponsesRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(OpenAi.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(OpenAi.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -205,7 +208,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openai:embeddings"]),
     request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
-    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
   }),
   // Gemini embeddings are persisted through the OpenAI-compatible embedding
@@ -213,14 +218,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:embeddings"]),
     request: withReadFallback(OpenAi.API.EmbeddingRequestSchema),
-    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(OpenAi.API.EmbeddingRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(OpenAi.API.EmbeddingResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["gemini:generateContent"]),
     request: withReadFallback(Gemini.API.GenerateContentRequestSchema),
-    processedRequest:
-      withReadFallback(Gemini.API.GenerateContentRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Gemini.API.GenerateContentRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Gemini.API.GenerateContentResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -229,7 +237,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["anthropic:messages"]),
     request: withReadFallback(Anthropic.API.MessagesRequestSchema),
-    processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Anthropic.API.MessagesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -238,7 +248,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["bedrock:converse"]),
     request: withReadFallback(Bedrock.API.ConverseRequestSchema),
-    processedRequest: withReadFallback(Bedrock.API.ConverseRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Bedrock.API.ConverseRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Bedrock.API.ConverseResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -247,8 +259,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cerebras:chatCompletions"]),
     request: withReadFallback(Cerebras.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Cerebras.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Cerebras.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Cerebras.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -257,8 +270,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["mistral:chatCompletions"]),
     request: withReadFallback(Mistral.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Mistral.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Mistral.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Mistral.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -267,8 +281,11 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["perplexity:chatCompletions"]),
     request: withReadFallback(Perplexity.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Perplexity.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(
+      Perplexity.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
     response: withErrorResponse(Perplexity.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -277,8 +294,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["groq:chatCompletions"]),
     request: withReadFallback(Groq.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Groq.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Groq.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Groq.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -287,7 +305,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["xai:chatCompletions"]),
     request: withReadFallback(Xai.API.ChatCompletionRequestSchema),
-    processedRequest: withReadFallback(Xai.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Xai.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Xai.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -296,8 +316,11 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["openrouter:chatCompletions"]),
     request: withReadFallback(Openrouter.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Openrouter.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(
+      Openrouter.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
     response: withErrorResponse(Openrouter.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -306,21 +329,25 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["vllm:chatCompletions"]),
     request: withReadFallback(Vllm.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Vllm.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Vllm.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Vllm.API.ChatCompletionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["ollama:chatCompletions"]),
     request: withReadFallback(Ollama.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Ollama.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Ollama.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Ollama.API.ChatCompletionResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cohere:chat"]),
     request: withReadFallback(Cohere.API.ChatRequestSchema),
-    processedRequest: withReadFallback(Cohere.API.ChatRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Cohere.API.ChatRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Cohere.API.ChatResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -329,8 +356,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["zhipuai:chatCompletions"]),
     request: withReadFallback(Zhipuai.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Zhipuai.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Zhipuai.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Zhipuai.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -339,8 +367,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["deepseek:chatCompletions"]),
     request: withReadFallback(DeepSeek.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(DeepSeek.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(DeepSeek.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(DeepSeek.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -349,8 +378,11 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["github-copilot:chatCompletions"]),
     request: withReadFallback(GithubCopilot.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(GithubCopilot.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(
+      GithubCopilot.API.ChatCompletionRequestSchema,
+    )
+      .nullable()
+      .optional(),
     response: withErrorResponse(GithubCopilot.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -359,8 +391,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["minimax:chatCompletions"]),
     request: withReadFallback(Minimax.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Minimax.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Minimax.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Minimax.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -369,8 +402,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:chatCompletions"]),
     request: withReadFallback(Azure.API.ChatCompletionRequestSchema),
-    processedRequest:
-      withReadFallback(Azure.API.ChatCompletionRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Azure.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Azure.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
@@ -379,7 +413,9 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["azure:responses"]),
     request: withReadFallback(Azure.API.ResponsesRequestSchema),
-    processedRequest: withReadFallback(Azure.API.ResponsesRequestSchema).nullable().optional(),
+    processedRequest: withReadFallback(Azure.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
     response: withErrorResponse(Azure.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */

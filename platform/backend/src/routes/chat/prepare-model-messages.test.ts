@@ -663,7 +663,10 @@ test("synthesizes an interrupted tool result for a tool call parked at approval-
         },
       ],
     },
-    { role: "user", parts: [{ type: "text", text: "never mind, what is 2+2?" }] },
+    {
+      role: "user",
+      parts: [{ type: "text", text: "never mind, what is 2+2?" }],
+    },
   ] as unknown as ChatMessage[];
 
   const { modelMessages } = await __test.buildModelMessagesForProvider({

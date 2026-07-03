@@ -209,12 +209,12 @@ async fn run_benchmark(a: BenchArgs) -> ExitCode {
     )
     .await
     {
-        None => ExitCode::FAILURE,
-        Some(Err(e)) => {
+        GuardedRun::Interrupted(code) => ExitCode::from(code),
+        GuardedRun::Completed(Err(e)) => {
             tracing::error!("benchmark failed: {e}");
             ExitCode::FAILURE
         }
-        Some(Ok(outcome)) => benchmark_exit(&outcome),
+        GuardedRun::Completed(Ok(outcome)) => benchmark_exit(&outcome),
     }
 }
 
@@ -228,13 +228,16 @@ async fn run_analyze(a: AnalyzeArgs) -> ExitCode {
         explore_root: a.knobs.explore_root,
         concurrency: a.knobs.concurrency,
     };
-    match analyze(cfg).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("✗ analyze failed: {e:#}");
-            ExitCode::FAILURE
+    run_until_signal(async move {
+        match analyze(cfg).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("✗ analyze failed: {e:#}");
+                ExitCode::FAILURE
+            }
         }
-    }
+    })
+    .await
 }
 
 /// Render the run's trajectories and print the manifest as JSON on stdout. Synchronous: no network,
@@ -268,25 +271,28 @@ async fn run_dashboard(a: DashboardArgs) -> ExitCode {
         experiments_dir,
         port: a.port,
     };
-    match bench_dashboard::serve(cfg).await {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("✗ dashboard failed: {e:#}");
-            ExitCode::FAILURE
+    run_until_signal(async move {
+        match bench_dashboard::serve(cfg).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("✗ dashboard failed: {e:#}");
+                ExitCode::FAILURE
+            }
         }
-    }
+    })
+    .await
 }
 
 async fn run_full(a: FullArgs) -> ExitCode {
     // A fresh run dir every time (no --run-dir): `full` must never overwrite an existing run's
     // config.json/aggregate.json. `run()` picks the timestamped dir and returns it for the analyze step.
     let outcome = match guarded_run(&a.common, None, None, false).await {
-        None => return ExitCode::FAILURE,
-        Some(Err(e)) => {
+        GuardedRun::Interrupted(code) => return ExitCode::from(code),
+        GuardedRun::Completed(Err(e)) => {
             tracing::error!("benchmark failed: {e}");
             return ExitCode::FAILURE;
         }
-        Some(Ok(outcome)) => outcome,
+        GuardedRun::Completed(Ok(outcome)) => outcome,
     };
     let bench_code = benchmark_exit(&outcome);
 
@@ -299,33 +305,48 @@ async fn run_full(a: FullArgs) -> ExitCode {
         explore_root: a.knobs.explore_root,
         concurrency: a.knobs.concurrency,
     };
-    match analyze(cfg).await {
-        Ok(()) => bench_code,
-        Err(e) => {
-            eprintln!("✗ analyze failed: {e:#}");
-            ExitCode::FAILURE
+    run_until_signal(async move {
+        match analyze(cfg).await {
+            Ok(()) => bench_code,
+            Err(e) => {
+                eprintln!("✗ analyze failed: {e:#}");
+                ExitCode::FAILURE
+            }
         }
-    }
+    })
+    .await
+}
+
+/// Conventional 128+signo exit codes for a signal-terminated process, shared by both signal guards.
+const SIGINT_EXIT: u8 = 130;
+const SIGTERM_EXIT: u8 = 143;
+
+/// Outcome of a signal-guarded benchmark run: either it ran to completion (carrying `run`'s own
+/// result) or a signal interrupted it after teardown, carrying the conventional exit code to
+/// propagate so every interrupt path exits 130/143 alike.
+enum GuardedRun {
+    Completed(Result<RunOutcome, RunError>),
+    Interrupted(u8),
 }
 
 /// Run the benchmark under a signal guard: on SIGINT/SIGTERM the `run` future is dropped mid-flight,
 /// so any still-registered instances (process groups + benchmark DBs) are torn down before exit.
-/// `None` means a signal fired; `Some(result)` is the completed run.
+/// `Interrupted` means a signal fired; `Completed` is the finished run.
 async fn guarded_run(
     common: &CommonBenchArgs,
     out: Option<&Path>,
     run_dir: Option<&Path>,
     update_mcp_lock: bool,
-) -> Option<Result<RunOutcome, RunError>> {
-    let result = tokio::select! {
+) -> GuardedRun {
+    let signal_code = tokio::select! {
         biased;
         _ = tokio::signal::ctrl_c() => {
             info!("received SIGINT, tearing down live instances...");
-            None
+            SIGINT_EXIT
         }
         _ = sigterm() => {
             info!("received SIGTERM, tearing down live instances...");
-            None
+            SIGTERM_EXIT
         }
         result = run(
             &common.bench_dir,
@@ -338,26 +359,47 @@ async fn guarded_run(
             common.max_workers,
             update_mcp_lock,
             common.platform_dir.as_deref(),
-        ) => Some(result),
+        ) => return GuardedRun::Completed(result),
     };
-    if result.is_none() {
-        // run() was dropped mid-flight, so live instances are still registered; shutdown_all tears
-        // them down now. Race it against a second signal so the user can force-exit immediately —
-        // that may leave still-draining process groups / benchmark DBs un-cleaned, acceptable as an
-        // explicit user-requested abort.
-        tokio::select! {
-            _ = shutdown_all() => {}
-            _ = tokio::signal::ctrl_c() => {
-                warn!("second interrupt — exiting now, teardown may be incomplete");
-                std::process::exit(130);
-            }
-            _ = sigterm() => {
-                warn!("SIGTERM during teardown — exiting now, teardown may be incomplete");
-                std::process::exit(143);
-            }
+    // run() was dropped mid-flight, so live instances are still registered; shutdown_all tears
+    // them down now. Race it against a second signal so the user can force-exit immediately —
+    // that may leave still-draining process groups / benchmark DBs un-cleaned, acceptable as an
+    // explicit user-requested abort.
+    tokio::select! {
+        _ = shutdown_all() => {}
+        _ = tokio::signal::ctrl_c() => {
+            warn!("second interrupt — exiting now, teardown may be incomplete");
+            std::process::exit(SIGINT_EXIT as i32);
+        }
+        _ = sigterm() => {
+            warn!("SIGTERM during teardown — exiting now, teardown may be incomplete");
+            std::process::exit(SIGTERM_EXIT as i32);
         }
     }
-    result
+    GuardedRun::Interrupted(signal_code)
+}
+
+/// Race an interruptible phase future against SIGINT/SIGTERM so it stays killable even after the
+/// benchmark phase installed tokio's process-global signal handler. That handler replaces the OS
+/// default "terminate" disposition the first time `ctrl_c()` is created (in `guarded_run`); once it
+/// exists, a later phase that awaits nothing on the signal — the analyze phase of `full` — would
+/// hang on Ctrl-C. Wrapping the phase here keeps every long-running async command responsive,
+/// whether or not a handler was already installed. On a signal the phase future is dropped, so its
+/// own cleanup runs (the reduce `TempDir` is removed, in-flight requests are cancelled), and we exit
+/// with the conventional 128+signo code.
+async fn run_until_signal(work: impl std::future::Future<Output = ExitCode>) -> ExitCode {
+    tokio::select! {
+        biased;
+        _ = tokio::signal::ctrl_c() => {
+            warn!("received SIGINT, aborting");
+            ExitCode::from(SIGINT_EXIT)
+        }
+        _ = sigterm() => {
+            warn!("received SIGTERM, aborting");
+            ExitCode::from(SIGTERM_EXIT)
+        }
+        code = work => code,
+    }
 }
 
 fn benchmark_exit(outcome: &RunOutcome) -> ExitCode {

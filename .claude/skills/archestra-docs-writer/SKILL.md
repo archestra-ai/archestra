@@ -20,14 +20,15 @@ Sentence rules:
 5. Name a thing once, then rely on context. Never the same noun three times in one sentence.
 6. Active voice, present tense.
 7. Second person for user actions; impersonal for system behavior.
+8. Friendly, not dry: speak to the reader ("You can add your own files too"), give tiny concrete examples in passing ("a report, an export"), and use a dash for rhythm where it helps. Facts stay the substance; friendliness is the delivery.
 
 Content rules:
 
-8. A benefit is stated as a plain consequence ("so you can review what the agent did") — at most one per section.
-9. Cut any detail that doesn't change how someone uses the feature: size limits, edge cases, ownership caveats, internal tool names, permission mechanics. Link to a reference page instead.
-10. Don't describe what the UI or the screenshot already shows.
-11. Headers are Title Case and name the thing ("Scheduled Tasks"), never the benefit.
-12. Each page has a use case section with concrete, fictional data (never real customer names). The scenario comes from the user — ask for it before writing.
+9. A benefit is stated as a plain consequence ("so you can review what the agent did") — at most one per section.
+10. Cut any detail that doesn't change how someone uses the feature: size limits, edge cases, ownership caveats, internal tool names, permission mechanics. Link to a reference page instead.
+11. Don't describe what the UI or the screenshot already shows.
+12. Headers are Title Case and name the thing ("Scheduled Tasks"), never the benefit.
+13. Each page has a use case section with concrete, fictional data (never real customer names). The scenario comes from the user — ask for it before writing.
 
 ## Calibration Examples
 

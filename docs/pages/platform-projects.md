@@ -10,19 +10,21 @@ lastUpdated: 2026-07-03
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-A project is a shared workspace for chats, files, instructions, and scheduled tasks. Files saved in a project are available to everyone in it. A project is private until you share it with teams or the whole organization.
+A project is a shared workspace for your chats, files, instructions, and scheduled tasks. Everything saved in a project is available to everyone in it. Projects are private until you share them with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
 
 ## Creating a Project
 
-Create a project from the Projects page, or turn an existing chat into one with **Create project** in the chat's menu. The chat and its files move into the new project.
+Start a project from the Projects page, or turn an existing chat into one with **Create project** in the chat's menu — the chat and its files move right in.
 
 ![Chat sidebar menu with the Create project action](/docs/automated_screenshots/platform-projects_create-from-chat.webp)
 
 ## Files
 
-Files the agent saves go to the project. You can also drag and drop your own files onto the Files panel. You can edit text and Markdown files in place.
+When an agent saves a file in a project chat — a report, an export, a cleaned-up spreadsheet — it goes to the project, not just that chat. The project page lists them all, and every chat in the project can read them.
+
+You can add your own files too: drag and drop them onto the Files panel. Text and Markdown files are editable right in the panel, so a small fix doesn't need a re-upload.
 
 Every project has an `instructions.md` file, pinned at the top of the Files panel. Write the rules once, and every chat in the project follows them.
 
@@ -30,7 +32,7 @@ Every project has an `instructions.md` file, pinned at the top of the Files pane
 
 ## Scheduled Tasks
 
-A schedule runs an agent on a recurring basis. Every run is saved as a chat in the project, so you can review what the agent did.
+A schedule runs an agent for you on a recurring basis. Every run is saved as a chat in the project, so you can always see what the agent did.
 
 ![New schedule dialog](/docs/automated_screenshots/platform-projects_schedule-dialog.webp)
 

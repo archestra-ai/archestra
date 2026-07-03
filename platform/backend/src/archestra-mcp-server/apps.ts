@@ -1218,13 +1218,11 @@ export const tools = registry.tools;
 // Internal helpers
 // =============================================================================
 
-// =============================================================================
-// Tool spine — every app tool opens by narrowing the caller to an authed
-// context and (for id-scoped tools) loading and authorizing the target app.
-// These two helpers hold that spine in one place; a handler runs any pre-load
-// argument guard between them, so its original narrow → guard → load → authorize
-// order is preserved. Both return a ready error result on failure.
-// =============================================================================
+// Tool spine — every app tool opens by narrowing the caller to an authed context
+// and (for id-scoped tools) loading and authorizing the target app. These two
+// helpers hold that spine in one place; a handler runs any argument guard inline
+// between them, keeping the narrow → guard → load → authorize order. Both return
+// a ready error result on failure.
 
 type AuthedCaller = { userId: string; organizationId: string };
 

@@ -11,7 +11,7 @@ export const BUILD_APP_SKILL_POINTER =
 // by validate_app / get_app_diagnostics result text, so the guidance stays
 // identical wherever the model reads it.
 export const NO_RENDER_PROCEED =
-  "This is the normal state right after authoring: a render is captured only when a viewer opens the app (inline in chat or at its standalone page), so a clean validate_app static pass is enough to proceed — runtime diagnostics arrive on the next render, not from re-checking here.";
+  "This is the normal state right after authoring: a render is captured only when a viewer opens the app (inline in chat or at its standalone page) — re-checking here does not trigger one, so do not poll. A clean validate_app static pass is enough to proceed; runtime diagnostics arrive on their own on the next render.";
 
 // Authoring conventions for MCP Apps, kept in one place and embedded into the
 // Build App built-in skill (built-in-skills.ts) so the per-tool descriptions can

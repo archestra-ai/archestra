@@ -41,9 +41,14 @@ watch_file('.env')
 # Load sub-Tiltfiles by label
 load_dynamic('./dev/Tiltfile.database')
 
-# Code execution runtime (Dagger Engine) — loaded only when enabled, so a
-# privileged engine is not deployed unless ARCHESTRA_CODE_RUNTIME_ENABLED=true.
-if os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true':
+# Code execution runtime (Dagger Engine) — loaded when the local toggle is on or
+# a runner host is configured (the backend enables the sandbox on host presence,
+# so its native addon must be built either way). With a host set, Tiltfile.coderuntime
+# skips deploying the privileged engine and only builds the addon.
+if (
+    os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
+    or os.getenv('ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST')
+):
   load_dynamic('./dev/Tiltfile.coderuntime')
 
 # S3 file storage (MinIO) — only when the file-storage provider is s3, so the

@@ -61,7 +61,12 @@ def get_frontend_env():
 
 frontend_env_vars = get_frontend_env()
 
-code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
+# The backend enables the sandbox when a runner host is configured, so wire its
+# local build/engine deps on host presence too, not just the local toggle.
+code_runtime_enabled = (
+    os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
+    or bool(os.getenv('ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST'))
+)
 backend_resource_deps = ['db-migrate']
 if code_runtime_enabled:
   # Skip the local port-forward dep when pointing at an external engine — that

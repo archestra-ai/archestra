@@ -999,6 +999,10 @@ export async function handleLLMProxy<
       userTeams,
     };
 
+    // handleStreaming is self-contained: it persists its own failed-interaction
+    // record and routes errors through handleError before its promise settles,
+    // so it returns a bare promise (awaiting it here would double-persist via
+    // the catch below).
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -1009,9 +1013,14 @@ export async function handleLLMProxy<
         ctx,
         ensureStreamHeaders,
       );
-    } else {
-      return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
+    // `return await`, not `return`: handleNonStreaming relies on THIS catch for
+    // provider failures. A bare `return promise` inside try/catch lets the
+    // rejection bypass the catch entirely — upstream failures then skip
+    // handleError's status mapping (clients get a generic 500 instead of the
+    // provider's 429/404/…), skip the failed-interaction record, and get
+    // captured as unhandled server exceptions.
+    return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     // Persist failed interactions so they appear in LLM logs
     try {

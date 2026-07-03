@@ -14,17 +14,23 @@ export type AppDiagnosticType =
   | "unhandledrejection"
   | "console.error"
   | "csp-violation"
+  | "render-check"
   | "console.log"
   | "console.warn"
   | "console.info";
 
 // Error-class diagnostics signal an actual failure (rendered prominently);
 // the remaining console.{log,warn,info} types are ordinary log output.
+// `render-check` is the SDK's proactive render-correctness channel (e.g. a
+// `hidden` element left painted by app CSS) — a broken render that throws
+// nothing. Only objective contract violations post here, since it gates publish;
+// heuristic "looks broken" checks should be advisory, not this class.
 const ERROR_DIAGNOSTIC_TYPES: ReadonlySet<AppDiagnosticType> = new Set([
   "error",
   "unhandledrejection",
   "console.error",
   "csp-violation",
+  "render-check",
 ]);
 
 export function isErrorDiagnostic(type: AppDiagnosticType): boolean {
@@ -53,6 +59,7 @@ const DIAGNOSTIC_TYPES: readonly AppDiagnosticType[] = [
   "unhandledrejection",
   "console.error",
   "csp-violation",
+  "render-check",
   "console.log",
   "console.warn",
   "console.info",

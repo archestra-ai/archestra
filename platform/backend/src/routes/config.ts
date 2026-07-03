@@ -67,10 +67,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
-              agentSkillsEnabled: z.boolean(),
-              agentEnvironmentsEnabled: z.boolean(),
-              appsEnabled: z.boolean(),
-              projectsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -129,10 +125,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
-          agentSkillsEnabled: config.agents.skillsEnabled,
-          agentEnvironmentsEnabled: config.agents.environmentsEnabled,
-          appsEnabled: config.apps.enabled,
-          projectsEnabled: config.projects.enabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),

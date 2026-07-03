@@ -824,19 +824,7 @@ The following environment variables can be used to configure Archestra Platform.
   - `permissive`: Tools are allowed, unless a specific policy is set for them.
   - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
 
-- **`ARCHESTRA_BETA`** - Master switch for ships-dark preview features. When `true`, every `ARCHESTRA_*_ENABLED` product-feature gate below defaults on at once — Agent Skills, Agent Environments, agent hooks, the code runtime, MCP Apps, and Projects. An explicit per-flag value always wins, so `ARCHESTRA_BETA=true` with `ARCHESTRA_APPS_ENABLED=false` keeps Apps off. Beta only flips intent — the sandbox and agent hooks still need a Dagger runner host to run. Does not touch credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), enterprise-licensed features, or always-on defaults (DCR, chat secret scanning, knowledge-base hybrid search).
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_AGENTS_SKILLS_ENABLED`** - Enables Agent Skills — reusable `SKILL.md` instruction sets that agents load on demand. When off, the Skills page and its sidebar link are hidden and the feature cannot be enabled for an organization.
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`** - Shows the per-environment sandbox binding selector on the agent form, letting an agent's code sandbox run on a deployment environment's dedicated Dagger engine under that environment's egress policy. When off, the selector is hidden. Requires the code runtime and Kubernetes.
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
+- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`). Its only product effect is selecting the beta Connect and MCP Registry page variants (`/connection_beta`, `/mcp/registry/beta`). The code sandbox and agent hooks are enabled whenever a Dagger runner host is configured (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`).
   - Default: `false`
   - Values: `true`, `false`
 
@@ -844,9 +832,6 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_APPS_ENABLED`** - Enables user-authored MCP Apps — apps created inside Archestra (from chat or the `/apps` page) with their own data store and assignable tools. When off, the `/apps` page and its sidebar link are hidden, the app tools and routes are not registered, and the feature cannot be used.
-  - Default: `false`
-  - Values: `true`, `false`
 
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`

@@ -3,7 +3,6 @@ import { EDITABLE_TEXT_FILE_MAX_BYTES, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { FileNotDeletableError, fileStore } from "@/skills-sandbox/file-store";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
@@ -256,27 +255,25 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  if (config.projects.enabled) {
-    fastify.get(
-      "/api/skill-sandbox/conversations/:conversationId/artifacts",
-      {
-        schema: {
-          operationId: RouteId.GetSkillSandboxConversationArtifacts,
-          description:
-            "List the artifact files produced in a conversation's sandbox.",
-          tags: ["Skills"],
-          params: z.object({ conversationId: z.string().uuid() }),
-          response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
-        },
+  fastify.get(
+    "/api/skill-sandbox/conversations/:conversationId/artifacts",
+    {
+      schema: {
+        operationId: RouteId.GetSkillSandboxConversationArtifacts,
+        description:
+          "List the artifact files produced in a conversation's sandbox.",
+        tags: ["Skills"],
+        params: z.object({ conversationId: z.string().uuid() }),
+        response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
       },
-      async ({ params: { conversationId }, organizationId, user }) =>
-        fileStore.list({
-          organizationId,
-          conversationId,
-          authorUserId: user.id,
-        }),
-    );
-  }
+    },
+    async ({ params: { conversationId }, organizationId, user }) =>
+      fileStore.list({
+        organizationId,
+        conversationId,
+        authorUserId: user.id,
+      }),
+  );
 };
 
 export default skillSandboxArtifactRoutes;

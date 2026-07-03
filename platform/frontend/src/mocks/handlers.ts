@@ -120,6 +120,18 @@ export const handlers: HttpHandler[] = [
     activatedAt: null,
   }),
   ...getJson("/api/organization/mcp-preset-entries", []),
+  ...getJson("/api/projects", []),
+  ...getJson("/api/apps", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {

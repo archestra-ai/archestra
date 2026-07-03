@@ -10,7 +10,7 @@ lastUpdated: 2026-07-03
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-A project is a shared workspace for chats, files, instructions, and scheduled tasks. Files saved in a project stay in the project, so anyone with access can use them. A project is private until you share it with teams or the whole organization.
+A project is a shared workspace for chats, files, instructions, and scheduled tasks. Files saved in a project are available to everyone in it. A project is private until you share it with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)
 

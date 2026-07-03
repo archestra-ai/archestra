@@ -303,8 +303,12 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       // Remember where the install started so the callback returns here
       setOAuthReturnUrl(window.location.href);
       window.location.href = authorizationUrl;
-    } catch {
-      toast.error("Failed to initiate OAuth flow");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate OAuth flow",
+      );
     }
   };
 

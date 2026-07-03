@@ -794,6 +794,15 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         "External export blocked",
       );
+      // The block carries a machine-readable policy_denied error so clients can
+      // render it structurally instead of scraping the prose.
+      const archestraError = (result.structuredContent as any)?.archestraError;
+      expect(archestraError).toMatchObject({
+        type: "policy_denied",
+        toolName: "workspace__export_data",
+        input: { destination: "external" },
+      });
+      expect((result._meta as any)?.archestraError).toEqual(archestraError);
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
   });

@@ -19,7 +19,6 @@ const {
   searchSkillCatalog,
   previewGithubSkill,
   importGithubSkills,
-  enableSkillToolDefaults,
 } = archestraApiSdk;
 
 export type SkillCatalogResult =
@@ -214,35 +213,6 @@ export function usePreviewGithubSkill(
       });
       throwOnApiError(error);
       return data;
-    },
-  });
-}
-
-export function useEnableSkillToolDefaults() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await enableSkillToolDefaults();
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      // Backfill has added skill tools to every agent in the org — invalidate
-      // all agent/tool caches so the gateway and other agent pages refresh.
-      queryClient.invalidateQueries({ queryKey: ["organization"] });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      queryClient.invalidateQueries({ queryKey: ["tools"] });
-      const { agentsBackfilled } = data;
-      toast.success(
-        `Skill tools enabled for ${agentsBackfilled} agent${
-          agentsBackfilled === 1 ? "" : "s"
-        }`,
-      );
     },
   });
 }

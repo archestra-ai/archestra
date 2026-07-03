@@ -7,7 +7,10 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import {
+  evaluateSingleMcpToolInvocationPolicy,
+  policyBlockToToolError,
+} from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { agentOwner, type Tool } from "@/types";
@@ -23,6 +26,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredToolErrorResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import {
@@ -381,7 +385,12 @@ async function dispatchTool({
       : assignedToolNames,
   });
   if (policyBlock) {
-    return errorResult(policyBlock.refusalMessage);
+    // Attach the structured policy_denied error (in _meta + structuredContent)
+    // so clients parse the block without scraping the prose.
+    return structuredToolErrorResult({
+      error: policyBlockToToolError(policyBlock),
+      text: `Error: ${policyBlock.refusalMessage}`,
+    });
   }
 
   // Cheap structural pre-check against the target's stored schema. Runs only

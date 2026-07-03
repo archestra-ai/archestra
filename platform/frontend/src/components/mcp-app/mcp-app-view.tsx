@@ -300,7 +300,12 @@ export const McpAppRuntime = function McpAppRuntime({
       {
         hostContext: {
           displayMode: displayModeRef.current,
-          theme: (resolvedThemeRef.current ?? "light") as "light" | "dark",
+          // Fall back to the <html> class when the theme hook hasn't hydrated
+          // yet (hard load): next-themes stamps the class pre-React, so a
+          // dark-mode page never announces itself as light.
+          theme: (resolvedThemeRef.current ?? readDocumentTheme()) as
+            | "light"
+            | "dark",
           platform: "web",
           availableDisplayModes: AVAILABLE_DISPLAY_MODES,
           containerDimensions: containerDimensionsHint(
@@ -605,9 +610,7 @@ export const McpAppRuntime = function McpAppRuntime({
     if (!bridge) return;
     const observer = new MutationObserver(() => {
       bridge.setHostContext({
-        theme: document.documentElement.classList.contains("dark")
-          ? "dark"
-          : "light",
+        theme: readDocumentTheme(),
         styles: { variables: buildMcpUiStyleVariables() },
       });
     });
@@ -829,6 +832,21 @@ function SandboxIframe({
     iframe.style.height = `${initialHeightRef.current}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
+    // Propagate the host theme into the sandbox chain: per CSS Color
+    // Adjustment, the frame element's used color-scheme sets the embedded
+    // document's *preferred* color scheme, and the proxy hands it on to the
+    // app frame (`color-scheme: inherit` + its `light dark` meta). Apps that
+    // theme via `@media (prefers-color-scheme)` / `light-dark()` instead of
+    // the bridge's hostContext.theme then follow the app theme rather than
+    // the OS — matching how desktop MCP hosts render them.
+    iframe.style.colorScheme = readDocumentTheme();
+    const themeObserver = new MutationObserver(() => {
+      iframe.style.colorScheme = readDocumentTheme();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     // With dedicated subdomain: allow-same-origin is safe (different origin from backend).
     // Without: no allow-same-origin → opaque origin for security isolation.
     iframe.setAttribute(
@@ -926,6 +944,7 @@ function SandboxIframe({
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
       iframe.remove();
@@ -1100,6 +1119,15 @@ export function isRenderableMcpAppHtml(html: string): boolean {
 }
 
 // ── Host-theme bridging helpers ──────────────────────────────────────────────
+
+/**
+ * The host's light/dark theme, read from the class next-themes stamps on
+ * `<html>` (set synchronously by its inline script, so it's correct even
+ * before the `useTheme()` hook has hydrated).
+ */
+function readDocumentTheme(): "light" | "dark" {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
 
 /** Reads a CSS custom property value from :root */
 function getCssVar(name: string): string {

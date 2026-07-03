@@ -202,6 +202,11 @@ class BedrockOpenaiStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): Uint8Array[] {
+    // Mark the inner adapter as refusal-replaced (side effect only; its
+    // Converse-format bytes are unused here) so inner.toProviderResponse()
+    // persists the refusal rather than the blocked tool calls. The encoder
+    // already emits a self-contained "stop" finish for the wire.
+    this.inner.formatCompleteTextSSE(text);
     return this.encoder.formatCompleteText(text);
   }
 

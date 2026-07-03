@@ -588,7 +588,12 @@ function McpGateways({
               defaultIconType="mcp_gateway"
               openToolsCombobox={
                 openToolsFromUrl &&
-                editingGateway?.id === autoOpenedEditGatewayId
+                editingGateway?.id === autoOpenedEditGatewayId &&
+                // "All" gateways hide the tool editor (there is nothing to
+                // pick), so its search combobox would open inside a
+                // display:none subtree and render unanchored in the corner.
+                // Only auto-open the picker for Custom gateways.
+                !editingGateway?.accessAllTools
               }
             />
 

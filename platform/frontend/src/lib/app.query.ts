@@ -136,8 +136,11 @@ export function useOpenAppInChat() {
 }
 
 // Opens an external (MCP-server) app in chat against a concrete install: the
-// backend seeds a conversation with the UI rendered inline and returns its id.
-// The caller navigates to `/chat/<conversationId>` on success.
+// backend creates a conversation and returns its id plus how it was set up —
+// `mode: "render"` (UI seeded inline) or `mode: "prompt"` (empty conversation
+// plus an opening prompt for the caller to send, used when the tool has
+// required inputs). The caller navigates to `/chat/<conversationId>` on
+// success.
 export function useOpenExternalAppInChat() {
   return useMutation({
     mutationFn: async (params: {

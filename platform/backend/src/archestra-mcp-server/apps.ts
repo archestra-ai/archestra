@@ -373,6 +373,8 @@ const registry = defineArchestraTools([
       // path), so tools resolve within the default environment — not the
       // authoring agent's — keeping assignments consistent with the app's env.
       const toolsResolution = await resolveToolsParam({
+        agentId: context.agent.id,
+        userId: context.userId,
         organizationId: context.organizationId,
         tools: args.tools,
         environmentId: null,
@@ -508,6 +510,9 @@ const registry = defineArchestraTools([
         userId,
         organizationId,
         agentId: context.agentId ?? context.agent.id,
+        // Ground in the app's environment (set_app_tools/runtime resolve there),
+        // not the authoring agent's — an app is bound to a deliberate env.
+        environmentId: app.environmentId,
       });
 
       // Seed the model from the app's current spec, or derive a minimal one from
@@ -890,6 +895,8 @@ const registry = defineArchestraTools([
       // Fence resolution against the app's bound environment (not the org
       // default scaffold_app uses), so a tool only valid elsewhere is rejected.
       const resolution = await resolveToolsParam({
+        agentId: context.agent.id,
+        userId,
         organizationId,
         tools: args.tools,
         environmentId: app.environmentId,
@@ -1895,6 +1902,8 @@ type ResolvedTools = Array<{ id: string; name: string }>;
  * "leave assignments untouched"; `[]` clears them.
  */
 async function resolveToolsParam(params: {
+  agentId: string;
+  userId: string;
   organizationId: string;
   tools: string[] | undefined;
   environmentId: string | null;
@@ -1903,6 +1912,8 @@ async function resolveToolsParam(params: {
 > {
   if (params.tools === undefined) return { ok: true, tools: undefined };
   const resolution = await resolveAppToolsByName({
+    agentId: params.agentId,
+    userId: params.userId,
     organizationId: params.organizationId,
     toolNames: params.tools,
     environmentId: params.environmentId,

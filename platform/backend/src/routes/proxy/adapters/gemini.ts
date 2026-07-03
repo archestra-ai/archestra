@@ -563,6 +563,10 @@ class GeminiStreamAdapter
   readonly state: StreamAccumulatorState;
   private model: string = "";
   private inlineDataParts: Gemini.Types.MessagePart[] = [];
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal, so toProviderResponse persists the refusal (finishReason STOP, no
+  // function calls) instead of the blocked tool calls.
+  private replacedText: string | null = null;
 
   // Gemini 3 requires thoughtSignature on all model parts when they are
   // sent back as conversation history. Track signatures during streaming
@@ -729,6 +733,7 @@ class GeminiStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
     const chunk: GeminiResponse = {
       candidates: [
         {
@@ -751,6 +756,28 @@ class GeminiStreamAdapter
   }
 
   toProviderResponse(): GeminiResponse {
+    if (this.replacedText !== null) {
+      return {
+        candidates: [
+          {
+            content: { parts: [{ text: this.replacedText }], role: "model" },
+            finishReason: "STOP",
+            index: 0,
+          },
+        ],
+        usageMetadata: this.state.usage
+          ? {
+              promptTokenCount: this.state.usage.inputTokens,
+              candidatesTokenCount: this.state.usage.outputTokens,
+              totalTokenCount:
+                this.state.usage.inputTokens + this.state.usage.outputTokens,
+            }
+          : undefined,
+        modelVersion: this.state.model,
+        responseId: this.state.responseId || `gemini-${Date.now()}`,
+      };
+    }
+
     const parts: Gemini.Types.MessagePart[] = [];
 
     // Add thought text part if present (separate from output text).

@@ -6,7 +6,7 @@ import {
   type ProviderApiKeyMap,
   ProviderKeyMappingsField,
 } from "@/components/provider-key-mappings-field";
-import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 export function ProviderKeyAccessFields({
   providerApiKeyIds,
@@ -23,13 +23,14 @@ export function ProviderKeyAccessFields({
   );
 
   return (
-    <div className="space-y-4 rounded-md border p-4">
+    <div className="space-y-4">
+      <Separator />
       <div className="space-y-1">
-        <Label className="font-medium">Provider Keys</Label>
+        <h3 className="text-sm font-semibold">Provider Keys</h3>
         <p className="text-sm text-muted-foreground">
-          Map one or more Model Provider keys this credential can use.
-          Provider-specific proxy routes use the matching provider key, and
-          Model Router requests use the provider prefix in the requested model.{" "}
+          Choose which provider API keys this credential can use. Each request
+          uses the key matching its provider — from the proxy route, or the
+          model&apos;s provider prefix for Model Router requests.{" "}
           <a
             href={docsUrl}
             target="_blank"

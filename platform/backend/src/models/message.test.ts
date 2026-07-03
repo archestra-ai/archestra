@@ -49,6 +49,43 @@ describe("MessageModel", () => {
     });
   });
 
+  describe("existsForConversation", () => {
+    test("reports emptiness without loading rows", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Exists Test Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Exists Test",
+      });
+
+      expect(await MessageModel.existsForConversation(conversation.id)).toBe(
+        false,
+      );
+
+      await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "temp-id",
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      });
+
+      expect(await MessageModel.existsForConversation(conversation.id)).toBe(
+        true,
+      );
+    });
+  });
+
   describe("bulkCreate", () => {
     test("updates conversation updatedAt when messages are bulk created", async ({
       makeUser,

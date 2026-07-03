@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { WithAuthCheck } from "./with-auth-check";
 
 // Mock Sentry
@@ -15,6 +16,23 @@ vi.mock("next/navigation");
 
 // Mock auth query
 vi.mock("@/lib/auth/auth.query");
+
+// Mock public config query (dev auto-login disabled by default in tests)
+vi.mock("@/lib/config/config.query", () => ({
+  usePublicConfig: vi.fn(() => ({
+    data: { devAutoLoginEnabled: false },
+    isLoading: false,
+  })),
+}));
+
+// Provide a QueryClient stand-in so useQueryClient() doesn't require a provider
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  return {
+    ...actual,
+    useQueryClient: vi.fn(() => ({ invalidateQueries: vi.fn() })),
+  };
+});
 
 // Mock shared module
 vi.mock("@archestra/shared", () => ({
@@ -456,6 +474,73 @@ describe("WithAuthCheck", () => {
           </WithAuthCheck>,
         );
       }).not.toThrow();
+    });
+  });
+
+  describe("developer auto-login", () => {
+    beforeEach(() => {
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+    });
+
+    afterEach(() => {
+      // Restore the default (disabled) so other suites are unaffected.
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: false },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.unstubAllGlobals();
+    });
+
+    it("calls the dev-auto-login endpoint when enabled and unauthenticated", async () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("/api/auth/dev-auto-login", {
+          method: "POST",
+        });
+      });
+      // Endpoint is hit exactly once (guarded by a ref) rather than the login
+      // form being shown.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to the sign-in redirect when auto-login fails", async () => {
+      vi.mocked(usePublicConfig).mockReturnValue({
+        data: { devAutoLoginEnabled: true },
+        isLoading: false,
+      } as unknown as ReturnType<typeof usePublicConfig>);
+      vi.mocked(usePathname).mockReturnValue("/dashboard");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+      );
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      await waitFor(() => {
+        expect(mockRouterPush).toHaveBeenCalledWith(
+          "/auth/sign-in?redirectTo=%2Fdashboard",
+        );
+      });
     });
   });
 });

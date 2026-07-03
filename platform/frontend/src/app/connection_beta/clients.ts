@@ -3,6 +3,14 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 
+/**
+ * Title of the final wizard step for OAuth-gated clients. Registering the
+ * gateway only tells the client where it lives — the gateway authorizes each
+ * user individually, so a one-time browser sign-in is still needed before its
+ * tools work.
+ */
+export const FINISH_OAUTH_FLOW_TITLE = "Finish the OAuth flow";
+
 export interface ClientStep {
   title: string;
   body?: string;
@@ -192,8 +200,8 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
           buildCommand: () => "claude /mcp",
         },
         {
-          title: "Finish the OAuth flow",
-          body: "Claude Code opens your browser. Sign in and approve the gateway.",
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Claude Code opens your browser. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
         },
       ],
     },
@@ -284,8 +292,8 @@ claude`,
           buildCommand: ({ url }) => url,
         },
         {
-          title: "Finish the OAuth flow",
-          body: "Claude Desktop opens your browser. Sign in and approve the gateway; the connector's tools then appear in chat.",
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Claude Desktop opens your browser. Sign in and approve the gateway — it grants tool access per user, so the connector's tools appear in chat only after this one-time sign-in.",
         },
       ],
     },

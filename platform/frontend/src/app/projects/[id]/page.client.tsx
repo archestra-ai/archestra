@@ -572,7 +572,7 @@ function ProjectFilesSidebar({
     <ResizableRightPanel>
       <FileDropZone
         onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
-        disabled={uploadProjectFiles.isPending}
+        uploading={uploadProjectFiles.isPending}
         className="flex-1 min-h-0 flex flex-col gap-0"
       >
         <div className="flex-1 min-h-0 overflow-hidden relative">

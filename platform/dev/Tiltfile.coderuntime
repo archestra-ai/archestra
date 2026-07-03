@@ -76,6 +76,7 @@ local_resource(
     '../archestra-rs/sandbox-core/src',
     '../archestra-rs/sandbox-rs/Cargo.toml',
     '../archestra-rs/sandbox-core/Cargo.toml',
+    '../archestra-rs/Cargo.toml',
     '../archestra-rs/Cargo.lock',
   ],
   resource_deps=['pnpm-install'],

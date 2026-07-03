@@ -102,6 +102,7 @@ if apps_enabled:
       '../archestra-rs/app-runtime-core/src',
       '../archestra-rs/app-runtime-rs/Cargo.toml',
       '../archestra-rs/app-runtime-core/Cargo.toml',
+      '../archestra-rs/Cargo.toml',
       '../archestra-rs/Cargo.lock',
     ],
     resource_deps=['pnpm-install'],

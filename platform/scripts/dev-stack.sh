@@ -79,7 +79,9 @@ ensure_native_addons() {
     return 0
   fi
   echo "→ Building missing native addons (first build takes a few minutes): ${filters[*]}" >&2
-  (cd "$platform_dir" && pnpm "${filters[@]}" build)
+  # build:dev = the fast release-fast profile, matching what Tilt runs for these
+  # addons; CI/Docker still build the optimized --release binary.
+  (cd "$platform_dir" && pnpm "${filters[@]}" build:dev)
 }
 
 cmd_up() {
@@ -250,6 +252,15 @@ PYEOF
 ================================================================
 
 EOF
+
+  # Share the Rust build cache across worktrees for both the addon preflight and
+  # the `tilt up` below. The Tiltfile sets the same default, but Tilt has not run
+  # yet at preflight time, so without this the preflight cold-builds per worktree.
+  # Exporting here means both paths hit one cache. Honors an existing override;
+  # keep the default path in sync with platform/Tiltfile.
+  if [ -z "${CARGO_TARGET_DIR:-}" ] && [ -n "${HOME:-}" ]; then
+    export CARGO_TARGET_DIR="$HOME/.cache/archestra-rs-target"
+  fi
 
   ensure_native_addons "$platform_dir"
 

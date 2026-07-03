@@ -93,7 +93,6 @@ import {
 import {
   fetchConversationEnabledTools,
   invalidateConversationFileQueries,
-  useClearChatErrors,
   useCompactConversation,
   useConversation,
   useConversationFiles,
@@ -1042,25 +1041,20 @@ export function ChatPageContent({
     });
   }, [resendLastUserMessage]);
 
-  // "Try again" on a retryable chat error: resend the last user turn, and only
-  // once the resend is genuinely issued clear the persisted error so the card
-  // disappears. Ordering matters — clearing first would wipe the error card even
-  // if the resend never started. If the resend itself fails, keep the card so the
-  // user still sees the error. Owner-editable chats only (read-only viewers render
+  // "Try again" on a retryable chat error: resend the last user turn. The
+  // session's regenerateUserMessage clears the persisted error rows once the
+  // resend is genuinely issued (so the card disappears without wiping the
+  // error when the resend never starts) — same as the regenerate action on a
+  // message. If the resend itself fails, the card stays so the user still sees
+  // the error. Owner-editable chats only (read-only viewers render
   // MessageThread instead of this).
-  const clearChatErrors = useClearChatErrors();
   const handleChatErrorRetry = useCallback(async () => {
-    if (!conversationId) return;
-    let resent: boolean;
     try {
-      resent = await resendLastUserMessage();
+      await resendLastUserMessage();
     } catch (error) {
       console.error("[Chat] Retry failed to resend the last message", error);
-      return;
     }
-    if (!resent) return;
-    await clearChatErrors.mutateAsync({ id: conversationId });
-  }, [conversationId, clearChatErrors, resendLastUserMessage]);
+  }, [resendLastUserMessage]);
   // Hide the error while the session is auto-recovering (retry scheduled or
   // reattaching to the still-running response) — flashing a "connection
   // error" card for a turn that restores itself a second later reads as

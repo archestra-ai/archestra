@@ -94,7 +94,9 @@ local_resource(
 if apps_enabled:
   local_resource(
     'app-runtime-rs-build',
-    cmd='pnpm --filter @archestra/app-runtime-rs build',
+    # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
+    # rebuilds; CI/Docker still build the optimized --release binary.
+    cmd='pnpm --filter @archestra/app-runtime-rs build:dev',
     deps=[
       '../archestra-rs/app-runtime-rs/src',
       '../archestra-rs/app-runtime-core/src',

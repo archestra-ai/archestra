@@ -221143,6 +221143,7 @@
                 },
                 "required": [
                   "name",
+                  "projectId",
                   "cronExpression",
                   "timezone",
                   "messageTemplate"

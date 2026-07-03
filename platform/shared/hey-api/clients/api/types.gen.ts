@@ -57510,7 +57510,7 @@ export type CreateScheduleTriggerData = {
     body: {
         name: string;
         agentId?: string;
-        projectId?: string;
+        projectId: string;
         enabled?: boolean;
         cronExpression: string;
         timezone: string;

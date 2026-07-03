@@ -351,7 +351,10 @@ export function useCreateScheduleTrigger() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (body: ScheduleTriggerRequestBody) => {
+    // A scheduled task is always scoped to a project, so create requires it.
+    mutationFn: async (
+      body: ScheduleTriggerRequestBody & { projectId: string },
+    ) => {
       const response = await createScheduleTrigger({ body });
       if (response.error) {
         handleApiError(response.error);

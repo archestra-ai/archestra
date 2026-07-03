@@ -43,27 +43,32 @@ const ScheduleTriggerBodyFieldsSchema = z.object({
   // Optional: callers without `agent:read` (e.g. a basic-user role) omit it and
   // the handler falls back to the org's default agent.
   agentId: UuidIdSchema.optional(),
-  // Required at the handler: a scheduled task is always scoped to a project.
+  // Optional in the shared shape so updates can omit it; create requires it
+  // (see CreateScheduleTriggerBodySchema) since a scheduled task is scoped to a
+  // project.
   projectId: UuidIdSchema.optional(),
   enabled: z.boolean().optional().default(true),
   ...ScheduleTriggerConfigurationSchemaBase.shape,
 });
 
-const CreateScheduleTriggerBodySchema =
-  ScheduleTriggerBodyFieldsSchema.superRefine((data, ctx) => {
-    const result = ScheduleTriggerConfigurationSchema.safeParse(data);
-    if (result.success) {
-      return;
-    }
+// A scheduled task is scoped to a project, so create requires projectId — the
+// contract clients see, not just a runtime check.
+const CreateScheduleTriggerBodySchema = ScheduleTriggerBodyFieldsSchema.extend({
+  projectId: UuidIdSchema,
+}).superRefine((data, ctx) => {
+  const result = ScheduleTriggerConfigurationSchema.safeParse(data);
+  if (result.success) {
+    return;
+  }
 
-    for (const issue of result.error.issues) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: issue.message,
-        path: issue.path,
-      });
-    }
-  });
+  for (const issue of result.error.issues) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: issue.message,
+      path: issue.path,
+    });
+  }
+});
 
 const UpdateScheduleTriggerBodySchema =
   ScheduleTriggerBodyFieldsSchema.partial().superRefine((data, ctx) => {
@@ -275,16 +280,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId = defaultAgent.id;
       }
 
-      // Schedules belong to a project; verify the caller can access it.
-      if (!body.projectId) {
-        throw new ApiError(400, "A project is required for scheduled tasks");
-      }
+      // projectId is required by the schema; verify the caller can access it.
+      const projectId = body.projectId;
       await projectService.get({
-        id: body.projectId,
+        id: projectId,
         organizationId,
         userId: user.id,
       });
-      const projectId = body.projectId;
 
       const trigger = await ScheduleTriggerModel.create({
         organizationId,

@@ -230,14 +230,6 @@ const contentNavGroups: NavGroup[] = [
         url: "/agents",
         icon: Bot,
         customIsActive: (pathname: string) => pathname.startsWith("/agents"),
-        subItems: [
-          {
-            title: "Scheduled Tasks",
-            url: "/scheduled-tasks",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/scheduled-tasks"),
-          },
-        ],
       },
       {
         title: "Skills",
@@ -654,9 +646,8 @@ export function AppSidebar() {
     [showConnect, betaEnabled],
   );
 
-  // Filter nav groups based on feature flags
+  // With ARCHESTRA_BETA on, some nav items point at their beta routes.
   const filteredNavGroups = React.useMemo(() => {
-    // With ARCHESTRA_BETA on, these nav items point at their beta routes.
     const betaNavUrls: Record<string, string> = {
       "MCP Registry": "/mcp/registry/beta",
     };
@@ -664,19 +655,7 @@ export function AppSidebar() {
       ...group,
       items: group.items.map((item) => {
         const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
-        const resolved = betaUrl ? { ...item, url: betaUrl } : item;
-        return resolved.subItems
-          ? {
-              ...resolved,
-              subItems: resolved.subItems.filter((sub) => {
-                // Schedules are managed per-project on the project detail page
-                // (the per-project runs view), so the standalone entry is
-                // hidden.
-                if (sub.url === "/scheduled-tasks") return false;
-                return true;
-              }),
-            }
-          : resolved;
+        return betaUrl ? { ...item, url: betaUrl } : item;
       }),
     }));
   }, [betaEnabled]);

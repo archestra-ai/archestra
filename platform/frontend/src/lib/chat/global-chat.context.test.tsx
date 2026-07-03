@@ -97,6 +97,9 @@ describe("ChatProvider retries", () => {
     // the replayed stream concludes, so a plain vi.fn() (returning undefined)
     // would misrepresent the SDK contract.
     mocks.resumeStream.mockReturnValue(new Promise(() => {}));
+    // regenerate now clears persisted chat errors unconditionally (fire-and-
+    // forget with a .catch), so the mutateAsync mock must return a promise.
+    mocks.clearChatErrors.mockResolvedValue({ success: true });
     chatOptions = undefined;
     const messages: UIMessage[] = [];
     mocks.useChat.mockImplementation((options) => {
@@ -352,7 +355,11 @@ describe("ChatProvider retries", () => {
     });
   });
 
-  it("does not clear chat errors on regenerate when the conversation has none", async () => {
+  it("clears chat errors on regenerate even when the client cache shows none", async () => {
+    // The failed turn persists its error row asynchronously, so the client
+    // cache frequently has not loaded it yet when the user regenerates. The
+    // clear must still fire — otherwise the stale row (still on the server)
+    // resurfaces on the next conversation refetch, above the new answer.
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,
     };
@@ -385,7 +392,9 @@ describe("ChatProvider retries", () => {
     });
 
     expect(mocks.regenerate).toHaveBeenCalledWith({ messageId: "user-1" });
-    expect(mocks.clearChatErrors).not.toHaveBeenCalled();
+    expect(mocks.clearChatErrors).toHaveBeenCalledWith({
+      id: "conversation-1",
+    });
   });
 
   it("updates live context token estimate from usage and compaction data", async () => {

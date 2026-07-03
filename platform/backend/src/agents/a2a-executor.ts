@@ -46,6 +46,7 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
 import {
   type StageResult,
   stageAttachmentsIntoSandbox,
@@ -479,6 +480,27 @@ export async function executeA2AMessage(
           "A2A execution failed: no response UIMessage generated",
         );
       }
+
+      // Strip inline `<thinking>...</thinking>` blocks from the model's text
+      // output at this single A2A boundary, so every consumer (protocol reply,
+      // delegation tool result, email, scheduled-run persistence) shares the
+      // invariant. Text parts that become empty are dropped. Structured
+      // `reasoning` parts are left intact — they never reach a chat (the
+      // protocol keeps only text parts) and are needed for provider replay of
+      // the persisted history.
+      finalText = stripThinkingBlocks(finalText);
+      responseUiMessage = {
+        ...responseUiMessage,
+        parts: responseUiMessage.parts.flatMap<UIMessage["parts"][number]>(
+          (part) => {
+            if (part.type !== "text") {
+              return [part];
+            }
+            const text = stripThinkingBlocks(part.text);
+            return text.length === 0 ? [] : [{ ...part, text }];
+          },
+        ),
+      };
 
       // Surface this run's tool calls on the caller's conversation, attributed
       // to the delegation call that invoked this agent. Nested delegations'

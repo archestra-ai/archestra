@@ -19,6 +19,7 @@ import type {
   ScheduleTriggerRun,
 } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
 
 /**
  * Shared helpers for the chat conversation backing a scheduled trigger run.
@@ -330,6 +331,16 @@ function buildMessagesFromInteractions(
   }
 
   if (messages.length > 0) {
+    // Reconstructed from raw LLM-proxy interactions, which bypass the A2A
+    // executor's sanitization, so strip inline `<thinking>` blocks here too.
+    // These messages are freshly built above, so mutate text parts in place.
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (part.type === "text" && typeof part.text === "string") {
+          part.text = stripThinkingBlocks(part.text);
+        }
+      }
+    }
     return messages;
   }
 

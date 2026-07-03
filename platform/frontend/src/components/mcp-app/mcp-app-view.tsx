@@ -141,8 +141,8 @@ export const McpAppRuntime = function McpAppRuntime({
   const [loadError, setLoadError] = useState<string | null>(null);
   // Auth error from the app's most recent proxied tools/call — drives a
   // host-side connect banner above the iframe (see McpAppAuthBanner).
-  const [toolCallAuthState, setToolCallAuthState] =
-    useState<ConnectableAuthState | null>(null);
+  const [toolCallAuthError, setToolCallAuthError] =
+    useState<McpAppToolCallAuthError | null>(null);
 
   // Stable identity for the bridge-creation effect — re-run when the endpoint or
   // resource changes, never on unrelated re-renders. The effect derives its
@@ -388,7 +388,7 @@ export const McpAppRuntime = function McpAppRuntime({
     // connect banner OUTSIDE the iframe — the app may only print the error
     // text, and the sandbox blocks popups so an in-app link couldn't open.
     // A fresh render (endpoint/resource/reload change) starts with no banner.
-    setToolCallAuthState(null);
+    setToolCallAuthError(null);
     const proxyToolCall = async (params: {
       name: string;
       arguments?: unknown;
@@ -396,12 +396,11 @@ export const McpAppRuntime = function McpAppRuntime({
       const result = await mcpProxy("tools/call", params);
       const authState = resolveMcpAppToolCallAuthState(result);
       if (authState) {
+        const next = { toolName: params.name, authState };
         // Keep the previous object when the same refusal repeats (an app retry
         // loop) so the banner doesn't re-render on every failed call.
-        setToolCallAuthState((prev) =>
-          prev && isSameConnectableAuthState(prev, authState)
-            ? prev
-            : authState,
+        setToolCallAuthError((prev) =>
+          prev && isSameToolCallAuthError(prev, next) ? prev : next,
         );
       }
       return result;
@@ -688,10 +687,11 @@ export const McpAppRuntime = function McpAppRuntime({
 
   return (
     <div>
-      {toolCallAuthState && (
+      {toolCallAuthError && (
         <McpAppAuthBanner
-          authState={toolCallAuthState}
-          onDismiss={() => setToolCallAuthState(null)}
+          toolName={toolCallAuthError.toolName}
+          authState={toolCallAuthError.authState}
+          onDismiss={() => setToolCallAuthError(null)}
         />
       )}
       {loadError && (
@@ -756,17 +756,23 @@ export const McpAppRuntime = function McpAppRuntime({
   );
 };
 
-/** Same auth refusal (kind + action URL + server): the banner needn't update. */
-function isSameConnectableAuthState(
-  a: ConnectableAuthState,
-  b: ConnectableAuthState,
+/** An auth refusal from a proxied tools/call, plus the tool that hit it. */
+type McpAppToolCallAuthError = {
+  toolName: string;
+  authState: ConnectableAuthState;
+};
+
+/** Same auth refusal (tool + kind + action URL): the banner needn't update. */
+function isSameToolCallAuthError(
+  a: McpAppToolCallAuthError,
+  b: McpAppToolCallAuthError,
 ): boolean {
   const urlOf = (state: ConnectableAuthState) =>
     state.kind === "auth-expired" ? state.reauthUrl : state.actionUrl;
   return (
-    a.kind === b.kind &&
-    urlOf(a) === urlOf(b) &&
-    a.catalogName === b.catalogName
+    a.toolName === b.toolName &&
+    a.authState.kind === b.authState.kind &&
+    urlOf(a.authState) === urlOf(b.authState)
   );
 }
 

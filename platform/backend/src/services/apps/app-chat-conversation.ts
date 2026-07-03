@@ -66,9 +66,7 @@ export async function createSeededAppConversation(params: {
       input: { appId: app.id },
       output: buildAppRenderResult(app),
     },
-    // Skip for a brand-new app: its default template already lists these capabilities.
-    greeting:
-      app.latestVersion > 1 ? buildAppOpenedGreeting(app.name) : undefined,
+    greeting: buildAppOpenedGreeting(app.name),
   });
 }
 
@@ -217,12 +215,8 @@ async function resolveDefaultChatAgentId(params: {
 /** Markdown greeting seeded when an owned app is opened in chat. */
 function buildAppOpenedGreeting(name: string): string {
   return (
-    `Here's **${name}**, up and running.\n\n` +
-    `It's an MCP app, so it can use:\n` +
-    `- Your connected MCP tools & servers\n` +
-    `- A private + shared data store\n` +
-    `- Built-in AI to summarize & generate\n\n` +
-    `Use it as-is, or tell me what you'd like to change or add ` +
-    `— I'll update it live.`
+    `Here's **${name}**.\n\n` +
+    `Want to change the app? Tell me how!\n\n` +
+    `Want to use the app? Use the UI 👉, or ask me to!`
   );
 }

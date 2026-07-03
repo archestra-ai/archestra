@@ -119,10 +119,14 @@ export default function AppsPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((app) => (
               <AppCard
+                // Several tools of one server can share a widget resource, so
+                // (mcpServerId, resourceUri) alone collides; duplicate keys make
+                // React duplicate/omit cards on search re-renders, breaking the
+                // grid. The tool-scoped name disambiguates.
                 key={
                   app.source === "owned"
                     ? app.id
-                    : `${app.mcpServerId}:${app.resourceUri}`
+                    : `${app.mcpServerId}:${app.resourceUri}:${app.name}`
                 }
                 app={app}
               />

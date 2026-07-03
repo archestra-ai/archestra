@@ -40,6 +40,10 @@ export function useTriggerStatuses() {
       ? reachable && hasLlmKey && !!slack?.configured
       : hasLlmKey && !!slack?.configured;
 
+  // Telegram uses long polling — no public URL needed, so no reachability gate.
+  const telegram = chatOpsProviders?.find((p) => p.id === "telegram");
+  const telegramActive = hasLlmKey && !!telegram?.configured;
+
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
 
@@ -50,6 +54,7 @@ export function useTriggerStatuses() {
   const triggers = [
     { active: msTeamsActive, href: "/messaging-channels/ms-teams" },
     { active: slackActive, href: "/messaging-channels/slack" },
+    { active: telegramActive, href: "/messaging-channels/telegram" },
     { active: emailActive, href: "/messaging-channels/email" },
     { active: a2aActive, href: "/messaging-channels/a2a" },
   ] as const;
@@ -59,6 +64,7 @@ export function useTriggerStatuses() {
   return {
     msTeams: msTeamsActive,
     slack: slackActive,
+    telegram: telegramActive,
     email: emailActive,
     a2a: a2aActive,
     firstActiveHref,

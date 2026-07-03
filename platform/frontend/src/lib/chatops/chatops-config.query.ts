@@ -112,6 +112,39 @@ export function useDisconnectNgrok() {
   });
 }
 
+export function useUpdateTelegramChatOpsConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: NonNullable<
+        archestraApiTypes.UpdateTelegramChatOpsConfigData["body"]
+      >,
+    ) => {
+      const { data, error } = await archestraApiSdk.updateTelegramChatOpsConfig(
+        { body },
+      );
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success("Telegram configuration updated");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+    onError: (error) => {
+      console.error("Telegram config update error:", error);
+      toast.error("Failed to update Telegram configuration");
+    },
+  });
+}
+
 export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 

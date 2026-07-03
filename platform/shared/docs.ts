@@ -53,6 +53,7 @@ export const DocsPage = {
   PlatformSecretsManagement: "platform-secrets-management",
   PlatformSlack: "platform-slack",
   PlatformSsoTeamSync: "platform-sso-team-sync",
+  PlatformTelegram: "platform-telegram",
   PlatformSupportedLlmProviders: "platform-supported-llm-providers",
   PlatformVercelAiExample: "platform-vercel-ai-example",
 } as const;

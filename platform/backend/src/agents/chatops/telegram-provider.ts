@@ -123,7 +123,11 @@ class TelegramProvider implements ChatOpsProvider {
 
     const chatType = message.chat.type;
     // Broadcast channels have no interactive senders; ignore them.
-    if (chatType !== "private" && chatType !== "group" && chatType !== "supergroup") {
+    if (
+      chatType !== "private" &&
+      chatType !== "group" &&
+      chatType !== "supergroup"
+    ) {
       return null;
     }
     const isGroup = chatType !== "private";
@@ -156,7 +160,11 @@ class TelegramProvider implements ChatOpsProvider {
       await this.downloadMessageAttachments(message);
 
     // Service messages, stickers, etc. — nothing for the agent to act on.
-    if (!text.trim() && attachments.length === 0 && skippedAttachments.length === 0) {
+    if (
+      !text.trim() &&
+      attachments.length === 0 &&
+      skippedAttachments.length === 0
+    ) {
       return null;
     }
 
@@ -321,7 +329,9 @@ class TelegramProvider implements ChatOpsProvider {
   }
 
   /** Bots cannot read chat history in Telegram; context rides the message itself. */
-  async getThreadHistory(_params: ThreadHistoryParams): Promise<ChatThreadMessage[]> {
+  async getThreadHistory(
+    _params: ThreadHistoryParams,
+  ): Promise<ChatThreadMessage[]> {
     return [];
   }
 
@@ -448,7 +458,9 @@ class TelegramProvider implements ChatOpsProvider {
     }));
   }
 
-  async discoverChannels(_context: unknown): Promise<DiscoveredChannel[] | null> {
+  async discoverChannels(
+    _context: unknown,
+  ): Promise<DiscoveredChannel[] | null> {
     // The Bot API cannot list the chats a bot is in; bindings are created
     // when the first message from a chat arrives.
     return null;
@@ -665,7 +677,9 @@ class TelegramProvider implements ChatOpsProvider {
     }
   }
 
-  private async handleApprovalCallback(cb: TelegramCallbackQuery): Promise<void> {
+  private async handleApprovalCallback(
+    cb: TelegramCallbackQuery,
+  ): Promise<void> {
     const [, key, action] = (cb.data ?? "").split("|");
     const cacheKey = approvalCacheKey(key);
     const payload =
@@ -802,7 +816,8 @@ class TelegramProvider implements ChatOpsProvider {
     const photo = message.photo
       ?.filter(
         (size) =>
-          (size.file_size ?? 0) <= CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+          (size.file_size ?? 0) <=
+          CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
       )
       .at(-1);
     if (message.photo && !photo) {
@@ -824,7 +839,8 @@ class TelegramProvider implements ChatOpsProvider {
     if (message.document) {
       const { document } = message;
       if (
-        (document.file_size ?? 0) > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
+        (document.file_size ?? 0) >
+        CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
       ) {
         skippedAttachments.push({
           name: document.file_name,
@@ -850,7 +866,9 @@ class TelegramProvider implements ChatOpsProvider {
           `${TELEGRAM_API_BASE}/file/bot${this.config.botToken}/${info.file_path}`,
         );
         if (!response.ok) {
-          throw new Error(`file download failed with status ${response.status}`);
+          throw new Error(
+            `file download failed with status ${response.status}`,
+          );
         }
         const buffer = Buffer.from(await response.arrayBuffer());
         if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {

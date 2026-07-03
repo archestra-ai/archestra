@@ -692,7 +692,7 @@ function ChannelRows({
           : undefined;
         const deepLink = binding.isDm
           ? providerStatus
-            ? providerConfig.getDmDeepLink?.(providerStatus)
+            ? providerConfig.getDmDeepLink?.(providerStatus, binding)
             : null
           : providerConfig.buildDeepLink(binding);
 

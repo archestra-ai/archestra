@@ -510,6 +510,9 @@ const registry = defineArchestraTools([
         userId,
         organizationId,
         agentId: context.agentId ?? context.agent.id,
+        // Ground in the app's environment (set_app_tools/runtime resolve there),
+        // not the authoring agent's — an app is bound to a deliberate env.
+        environmentId: app.environmentId,
       });
 
       // Seed the model from the app's current spec, or derive a minimal one from

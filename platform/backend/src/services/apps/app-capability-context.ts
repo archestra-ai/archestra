@@ -1,5 +1,4 @@
 import { ARCHESTRA_APP_SDK_SUMMARY } from "@/archestra-mcp-server/app-authoring-guidance";
-import { AgentModel } from "@/models";
 import { resolveAppAssignableToolRows } from "./app-assignable-tools";
 
 interface AppCapabilityTool {
@@ -28,20 +27,29 @@ interface AppCapabilityContext {
  * because apps reach the data store through archestra.storage), so the grounding
  * lists exactly the names that can really be attached and each description comes
  * from the row that would actually be assigned and run.
+ *
+ * Grounding resolves in the *app's* `environmentId`, not the authoring agent's:
+ * an app is bound to a deliberate environment (e.g. staging/prod) and its tools
+ * are assigned (set_app_tools) and executed (runtime gate) there, so the
+ * capability list must reflect that environment even when the agent editing the
+ * app runs in a different one.
  */
 export async function buildAppCapabilityContext(params: {
   userId: string;
   organizationId: string;
-  /** The chat agent making the request (for agent-scoped tool resolution). */
+  /** The chat agent making the request (for its assigned tools + dynamic-access
+   * gate; the environment comes from the app, not the agent). */
   agentId: string;
+  /** The app's bound environment — the tools it can actually assign and run. */
+  environmentId: string | null;
 }): Promise<AppCapabilityContext> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, environmentId, organizationId, userId } = params;
 
   const byName = await resolveAppAssignableToolRows({
     agentId,
     userId,
     organizationId,
-    environmentId: await AgentModel.findEnvironmentId(agentId),
+    environmentId,
   });
 
   const tools: AppCapabilityTool[] = [...byName.values()]

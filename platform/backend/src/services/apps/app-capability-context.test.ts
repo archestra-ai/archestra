@@ -1,4 +1,5 @@
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
+import { EnvironmentModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { buildAppCapabilityContext } from "./app-capability-context";
 
@@ -52,6 +53,7 @@ describe("buildAppCapabilityContext", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
+      environmentId: null,
     });
 
     expect(context.tools).toEqual([
@@ -100,11 +102,62 @@ describe("buildAppCapabilityContext", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
+      environmentId: null,
     });
 
     expect(context.tools.filter((tool) => tool.name === dupName)).toEqual([
       { name: dupName, description: canonical?.description ?? "" },
     ]);
+  });
+
+  test("grounds in the app's environment, not the authoring agent's", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    // Agent runs in the default environment; the app is bound elsewhere.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+    const appEnv = await EnvironmentModel.create({
+      organizationId: org.id,
+      name: `Prod ${crypto.randomUUID().slice(0, 8)}`,
+    });
+
+    // A tool only in the app's (non-default) environment.
+    const appEnvCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      environmentId: appEnv.id,
+    });
+    await makeMcpServer({ catalogId: appEnvCatalog.id, scope: "org" });
+    await makeTool({ name: "prod__deploy", catalogId: appEnvCatalog.id });
+
+    // A tool only in the default environment (the agent's env).
+    const defaultCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+    });
+    await makeMcpServer({ catalogId: defaultCatalog.id, scope: "org" });
+    await makeTool({ name: "default__thing", catalogId: defaultCatalog.id });
+
+    const context = await buildAppCapabilityContext({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      environmentId: appEnv.id,
+    });
+
+    const names = context.tools.map((tool) => tool.name);
+    // Grounds the app-env tool, not the agent-env one.
+    expect(names).toContain("prod__deploy");
+    expect(names).not.toContain("default__thing");
   });
 
   test("describes the window.archestra SDK surface", async ({
@@ -122,6 +175,7 @@ describe("buildAppCapabilityContext", () => {
       userId: user.id,
       organizationId: org.id,
       agentId: agent.id,
+      environmentId: null,
     });
 
     expect(context.sdkSummary.length).toBeGreaterThan(0);

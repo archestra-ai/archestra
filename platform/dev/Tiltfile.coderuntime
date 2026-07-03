@@ -68,12 +68,15 @@ if not external_engine:
 # is picked up. Only runs under the code runtime, the addon's sole consumer.
 local_resource(
   'sandbox-rs-build',
-  cmd='pnpm --filter @archestra/sandbox-rs build',
+  # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
+  # rebuilds; CI/Docker still build the optimized --release binary.
+  cmd='pnpm --filter @archestra/sandbox-rs build:dev',
   deps=[
     '../archestra-rs/sandbox-rs/src',
     '../archestra-rs/sandbox-core/src',
     '../archestra-rs/sandbox-rs/Cargo.toml',
     '../archestra-rs/sandbox-core/Cargo.toml',
+    '../archestra-rs/Cargo.toml',
     '../archestra-rs/Cargo.lock',
   ],
   resource_deps=['pnpm-install'],

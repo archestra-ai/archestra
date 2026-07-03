@@ -65,14 +65,9 @@ spec:
             - name: BENCH_LANES
               value: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-54-nano,gpt-54-mini,claude-haiku-45,mimo-25,qwen36-35b-a3b,qwen36-27b"
             # Dagger runner host is resolved from the live staging Deployment by CI.
+            # Setting it also turns on the code sandbox (gated on the host's presence).
             - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
               value: "${DAGGER_RUNNER_HOST}"
-            # Tool surface the basic env needs; code runtime (which also gates the sandbox) is forced on
-            # by the bench, so only the agent-feature flags are set here.
-            - name: ARCHESTRA_AGENTS_SKILLS_ENABLED
-              value: "true"
-            - name: ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED
-              value: "true"
             - name: ZAI_API_KEY
               valueFrom:
                 secretKeyRef:

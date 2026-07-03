@@ -4,7 +4,6 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
-import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import FileModel from "@/models/file";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -19,10 +18,8 @@ describe("create_project_from_conversation tool", () => {
   let userId: string;
   let organizationId: string;
   let baseContext: ArchestraContext;
-  const projectsEnabled = config.projects.enabled;
 
   beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
-    (config.projects as { enabled: boolean }).enabled = true;
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
@@ -34,10 +31,6 @@ describe("create_project_from_conversation tool", () => {
       userId,
       organizationId,
     };
-  });
-
-  afterEach(() => {
-    (config.projects as { enabled: boolean }).enabled = projectsEnabled;
   });
 
   test("creates a project from the current chat and moves its files", async ({
@@ -90,20 +83,5 @@ describe("create_project_from_conversation tool", () => {
     expect((result.content[0] as any).text).toContain(
       "requires an active chat conversation",
     );
-  });
-
-  test("is not dispatchable when the projects feature is off", async ({
-    makeConversation,
-  }) => {
-    (config.projects as { enabled: boolean }).enabled = false;
-    const conv = await makeConversation(agent.id, { userId, organizationId });
-
-    await expect(
-      executeArchestraTool(
-        TOOL_NAME,
-        {},
-        { ...baseContext, conversationId: conv.id },
-      ),
-    ).rejects.toMatchObject({ code: -32601 });
   });
 });

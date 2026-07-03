@@ -52,9 +52,9 @@ gcloud storage buckets add-iam-policy-binding gs://archestra-bench-history \
 
 All three are synced into the `archestra-bench-secrets` k8s secret each run, where the pod reads them:
 
-- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `archestra-bench/lanes.toml`).
+- `ZAI_API_KEY` — the glm lane key (`api_key_env = ZAI_API_KEY` in `ai-labs/lanes.toml`).
 - `OPENROUTER_API_KEY` — the key for every `provider = "openrouter"` lane in
-  `archestra-bench/lanes.toml` (their default `api_key_env`).
+  `ai-labs/lanes.toml` (their default `api_key_env`).
 - `SLACK_BENCH_WEBHOOK_URL` — Slack incoming webhook for the summary message. If unset, the pod skips
   the Slack post.
 

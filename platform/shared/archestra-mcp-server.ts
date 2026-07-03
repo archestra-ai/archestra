@@ -468,10 +468,9 @@ export function isSkillRuntimeTool(toolName: string): boolean {
 }
 
 /**
- * MCP App management tools — assigned to new agents by default when the apps
- * feature (`ARCHESTRA_APPS_ENABLED`) is on, so "build me an app" works
- * without per-agent setup. delete_app completes the lifecycle but stays
- * search-gated in `search_and_run_only` mode (see
+ * MCP App management tools — assigned to new agents by default, so "build me
+ * an app" works without per-agent setup. delete_app completes the lifecycle
+ * but stays search-gated in `search_and_run_only` mode (see
  * ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES).
  */
 export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -506,8 +505,8 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 /**
  * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
  * but they operate purely on persistent file storage and never touch the Dagger
- * runtime — so their exposure and dynamic-access participation are driven by the
- * Projects feature flag (`config.projects.enabled`), not the runtime flag (see
+ * runtime — their exposure and dynamic-access participation follow the sandbox
+ * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
  * `dynamic-tools.ts` and the backend `index.ts` registration gate).
  */
 export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -533,15 +532,6 @@ const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
 
 export function isSandboxArchestraToolShortName(shortName: string): boolean {
   return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
-}
-
-const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
-  new Set(PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
-
-export function isProjectsFileArchestraToolShortName(
-  shortName: string,
-): boolean {
-  return PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
 /**

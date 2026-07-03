@@ -7,7 +7,6 @@ import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type {
   CommonMessage,
   DualLlmAnalysis,
-  GlobalToolPolicy,
   ToolResultUpdates,
   UnsafeContextBoundary,
   UnsafeContextBoundaryReason,
@@ -22,7 +21,6 @@ import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
  * @param apiKey - API key for the LLM provider (optional for Gemini with Vertex AI)
  * @param provider - The LLM provider
  * @param considerContextUntrusted - If true, marks context as untrusted from the beginning
- * @param globalToolPolicy - The organization's global tool policy ("permissive" or "restrictive")
  * @param onDualLlmStart - Optional callback when dual LLM processing starts
  * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
  * @returns Object with tool result updates and trust status
@@ -33,7 +31,6 @@ export async function evaluateIfContextIsTrusted(
   organizationId: string,
   userId: string | undefined,
   considerContextUntrusted: boolean = false,
-  globalToolPolicy: GlobalToolPolicy = "restrictive",
   policyContext: PolicyEvaluationContext,
   onDualLlmStart?: () => void,
   onDualLlmProgress?: (progress: {
@@ -54,7 +51,6 @@ export async function evaluateIfContextIsTrusted(
       agentId,
       messageCount: messages.length,
       considerContextUntrusted,
-      globalToolPolicy,
     },
     "[trustedData] evaluateIfContextIsTrusted: starting evaluation",
   );
@@ -127,7 +123,7 @@ export async function evaluateIfContextIsTrusted(
 
   // Bulk evaluate all tool calls for trusted data policies
   logger.debug(
-    { agentId, toolCallCount: allToolCalls.length, globalToolPolicy },
+    { agentId, toolCallCount: allToolCalls.length },
     "[trustedData] evaluateIfContextIsTrusted: bulk evaluating trusted data policies",
   );
   const evaluationResults = await TrustedDataPolicyModel.evaluateBulk(
@@ -136,7 +132,6 @@ export async function evaluateIfContextIsTrusted(
       toolName,
       toolOutput: toolResult,
     })),
-    globalToolPolicy,
     policyContext,
   );
 

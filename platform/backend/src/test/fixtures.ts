@@ -185,7 +185,13 @@ async function makeVirtualApiKey(
  */
 async function makeOrganization(
   overrides: Partial<
-    Pick<InsertOrganization, "name" | "slug" | "globalToolPolicy">
+    Pick<
+      InsertOrganization,
+      | "name"
+      | "slug"
+      | "defaultDiscoveredToolInvocationPolicy"
+      | "defaultDiscoveredToolResultPolicy"
+    >
   > = {},
 ) {
   const orgId = crypto.randomUUID();
@@ -665,6 +671,7 @@ async function makeInternalMcpCatalog(
       InsertInternalMcpCatalog,
       | "id"
       | "name"
+      | "icon"
       | "serverType"
       | "serverUrl"
       | "description"

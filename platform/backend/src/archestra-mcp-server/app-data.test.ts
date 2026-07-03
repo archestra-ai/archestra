@@ -4,16 +4,8 @@ import {
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
 } from "@archestra/shared";
-import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
 import { type ArchestraContext, executeArchestraTool } from ".";
-
-// Pin the apps flag per TEST, not per file: the shared setup restores the
-// pristine config before and after every test, so a beforeAll-scoped
-// mutation does not survive, and a file must never depend on worker state.
-beforeEach(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
 
 function archestraError(result: { structuredContent?: unknown }): any {
   return (result.structuredContent as any)?.archestraError;

@@ -15,7 +15,7 @@
 export const meta = {
   name: 'archestra-bench-crawl',
   description: 'Ground each bench finding: one repo-crawler agent per issue, in parallel',
-  phases: [{ title: 'Crawl', detail: 'locate and read the real platform/ and archestra-bench/ code' }],
+  phases: [{ title: 'Crawl', detail: 'locate and read the real platform/ and ai-labs/ code' }],
 }
 
 // The runtime may hand `args` to the script as a JSON string rather than a

@@ -10,8 +10,6 @@ MCP Apps are interactive interfaces authored inside Archestra. An app is an HTML
 
 Archestra already hosts and renders MCP Apps served by external MCP servers. This feature adds the authoring side: apps you own, backed by a data store and your own assignable tools, deliberately decoupled from agents.
 
-Ships behind `ARCHESTRA_APPS_ENABLED` (off by default). See [Deployment](./platform-deployment).
-
 ## Authoring and running
 
 Authoring is a staged flow — each tool's result points at the next step:

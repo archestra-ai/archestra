@@ -539,7 +539,6 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
 describe("getChatMcpTools approval gating", () => {
   test("blockOnApprovalRequired removes needsApproval and blocks approval-required execution", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv({
-      orgOverrides: { globalToolPolicy: "restrictive" },
       isolationKey: "headless-exec-1",
       gatewayTools: [externalTool("extsrv__restricted_export")],
     });
@@ -628,9 +627,7 @@ describe("getChatMcpTools approval gating", () => {
   });
 
   test("delegation needsApproval targets the delegation tool itself, not a tool_name in args", async () => {
-    const { agent, org, baseParams } = await setupChatToolEnv({
-      orgOverrides: { globalToolPolicy: "restrictive" },
-    });
+    const { agent, org, baseParams } = await setupChatToolEnv();
     const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
     const guardedTool = await f.makeTool({
       name: "extsrv__guarded_export",

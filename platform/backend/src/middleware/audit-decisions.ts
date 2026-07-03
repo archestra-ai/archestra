@@ -320,6 +320,10 @@ export const AUDIT_DECISIONS = {
     reason:
       "app-scoped runtime data store; written by app HTML, no admin signal",
   },
+  appPinsTable: {
+    audited: false,
+    reason: "per-user pin on an app; personal preference, not an access change",
+  },
   appRenderDiagnosticsTable: {
     audited: false,
     reason:

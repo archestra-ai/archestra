@@ -189,11 +189,6 @@ export class Authnz {
     request: FastifyRequest,
     reply: FastifyReply,
   ): void => {
-    // Dark when the feature is off: no OAuth challenge that would advertise the
-    // connector mechanism exists.
-    if (!config.apps.enabled) {
-      return;
-    }
     const appId = appIdFromConnectorPath(request.url);
     if (!appId) {
       return;

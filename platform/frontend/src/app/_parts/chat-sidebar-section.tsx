@@ -5,6 +5,7 @@ import {
   getChatItemUnreadIndicatorTestId,
 } from "@archestra/shared";
 import {
+  AppWindow,
   Folder,
   FolderPlus,
   Loader2,
@@ -12,6 +13,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Server,
   Sparkles,
   Trash2,
   UsersRound,
@@ -51,6 +53,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
+import {
+  useApps,
+  useOpenAppInChat,
+  useOpenExternalAppInChat,
+  usePinApp,
+} from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -66,7 +74,6 @@ import {
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
-import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
 import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { usePinProject, useProjects } from "@/lib/projects/projects.query";
@@ -142,6 +149,9 @@ export function ChatSidebarSection({
   const { data: canCreateProject } = useHasPermissions({
     project: ["create"],
   });
+  const { data: canReadProjects } = useHasPermissions({
+    project: ["read"],
+  });
   const [createProjectConv, setCreateProjectConv] = useState<{
     id: string;
     title: string;
@@ -161,15 +171,25 @@ export function ChatSidebarSection({
     (c) => !c.pinnedAt && !isScheduledRunConversation(c),
   );
 
-  const projectsEnabled = useFeature("projectsEnabled") === true;
-  const { data: projectsData } = useProjects({ enabled: projectsEnabled });
+  // /api/projects requires project:read; skip the fetch for roles without it
+  // so the sidebar doesn't 403 (and toast) on every chat page.
+  const { data: projectsData } = useProjects({
+    enabled: canReadProjects === true,
+  });
   const pinProjectMutation = usePinProject();
-  const pinnedProjects = projectsEnabled
-    ? (projectsData ?? []).filter((p) => p.pinnedAt)
-    : [];
+  const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
+  // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
+  // /api/apps is access-filtered (returns the caller's accessible apps), so it
+  // needs no permission gate.
+  const { data: appsData } = useApps({ limit: 100, offset: 0 });
+  const pinAppMutation = usePinApp();
+  const openAppMutation = useOpenAppInChat();
+  const openExternalAppMutation = useOpenExternalAppInChat();
+  const pinnedApps = (appsData?.data ?? []).filter((a) => a.pinnedAt);
   const pinnedItems = buildPinnedSidebarItems({
     chats: conversations.filter((c) => !isScheduledRunConversation(c)),
     projects: pinnedProjects,
+    apps: pinnedApps,
   });
 
   useEffect(() => {
@@ -259,6 +279,38 @@ export function ChatSidebarSection({
     pinProjectMutation.mutate({ id, pinned: false });
   };
 
+  // Opening a pinned app is the card's canonical open action: seed a chat with
+  // the app rendered and navigate to it.
+  const handleSelectApp = async (appItem: (typeof pinnedApps)[number]) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    const result =
+      appItem.source === "owned"
+        ? await openAppMutation.mutateAsync(appItem.id)
+        : await openExternalAppMutation.mutateAsync({
+            mcpServerId: appItem.mcpServerId,
+            resourceUri: appItem.resourceUri,
+          });
+    if (result?.conversationId) {
+      router.push(`/chat/${result.conversationId}`);
+    }
+  };
+
+  const handleUnpinApp = (appItem: (typeof pinnedApps)[number]) => {
+    pinAppMutation.mutate({
+      pinned: false,
+      target:
+        appItem.source === "owned"
+          ? { source: "owned", appId: appItem.id }
+          : {
+              source: "external",
+              mcpServerId: appItem.mcpServerId,
+              resourceUri: appItem.resourceUri,
+            },
+    });
+  };
+
   const openConversationSearch = () => {
     window.dispatchEvent(
       new CustomEvent("open-conversation-search", {
@@ -285,7 +337,6 @@ export function ChatSidebarSection({
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
     const showCreateProject = canCreateProjectFromChat({
-      projectsEnabled,
       hasCreatePermission: canCreateProject === true,
       conversation: conv,
     });
@@ -573,7 +624,71 @@ export function ChatSidebarSection({
     );
   };
 
-  if (!isLoading && conversations.length === 0 && pinnedProjects.length === 0) {
+  // Mirrors renderProjectItem: an icon + name row that opens the app, with an
+  // Unpin action in its overflow menu. Apps have no stable route, so no active
+  // state.
+  const renderAppItem = (appItem: (typeof pinnedApps)[number]) => {
+    const menuKey =
+      appItem.source === "owned"
+        ? `app:${appItem.id}`
+        : `app:${appItem.mcpServerId}:${appItem.resourceUri}`;
+    const isMenuOpen = openMenuId === menuKey;
+    const AppIcon = appItem.source === "owned" ? AppWindow : Server;
+
+    return (
+      <SidebarMenuSubItem key={menuKey}>
+        <div className="flex items-center justify-between w-full gap-1">
+          <SidebarMenuButton
+            onClick={() => handleSelectApp(appItem)}
+            className="cursor-pointer flex-1 justify-between"
+          >
+            <span className="flex items-center gap-2 min-w-0 flex-1">
+              <AppIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <TruncatedText
+                message={appItem.name}
+                maxLength={MAX_TITLE_LENGTH}
+                className="truncate"
+                showTooltip={false}
+              />
+            </span>
+            <DropdownMenu
+              open={isMenuOpen}
+              onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                <MoreHorizontal
+                  className={cn(
+                    "h-4 w-4 p-0 shrink-0 transition-opacity",
+                    isMenuOpen
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/menu-sub-item:opacity-100",
+                  )}
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUnpinApp(appItem);
+                  }}
+                >
+                  <PinOff className="h-4 w-4 mr-2" />
+                  Unpin
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuButton>
+        </div>
+      </SidebarMenuSubItem>
+    );
+  };
+
+  if (
+    !isLoading &&
+    conversations.length === 0 &&
+    pinnedProjects.length === 0 &&
+    pinnedApps.length === 0
+  ) {
     return null;
   }
 
@@ -596,7 +711,9 @@ export function ChatSidebarSection({
                       {pinnedItems.map((it) =>
                         it.type === "chat"
                           ? renderConversationItem(it.item)
-                          : renderProjectItem(it.item),
+                          : it.type === "project"
+                            ? renderProjectItem(it.item)
+                            : renderAppItem(it.item),
                       )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>

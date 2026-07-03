@@ -69,7 +69,10 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 type MakeUserOverrides = Partial<
-  Pick<InsertUser, "email" | "name" | "emailVerified" | "role">
+  Pick<
+    InsertUser,
+    "email" | "name" | "emailVerified" | "role" | "twoFactorEnabled"
+  >
 >;
 
 /**

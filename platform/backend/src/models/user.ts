@@ -5,7 +5,6 @@ import {
   type PredefinedRoleName,
 } from "@archestra/shared";
 import { count, eq, getTableColumns, inArray } from "drizzle-orm";
-import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
@@ -42,6 +41,11 @@ class UserModel {
         return existing[0];
       }
 
+      // Imported lazily so that merely importing UserModel does not construct
+      // the Better Auth instance (which eagerly initializes its context and
+      // requires the auth secret). This keeps UserModel usable from standalone
+      // scripts that never sign anyone up.
+      const { betterAuth } = await import("@/auth");
       const result = await betterAuth.api.signUpEmail({
         body: {
           email,
@@ -195,9 +199,14 @@ class UserModel {
   /**
    * Update a user with partial data
    */
-  static async patch(userId: string, data: Partial<UpdateUser>) {
+  static async patch(
+    userId: string,
+    data: Partial<UpdateUser>,
+    tx?: Transaction,
+  ) {
     logger.debug({ userId, data }, "UserModel.patch: updating user");
-    const result = await db
+    const dbOrTx = tx ?? db;
+    const result = await dbOrTx
       .update(schema.usersTable)
       .set(data)
       .where(eq(schema.usersTable.id, userId));

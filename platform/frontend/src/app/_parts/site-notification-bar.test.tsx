@@ -1,7 +1,19 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
-import { SiteNotificationBar } from "./site-notification-bar";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { usePublicConfig } from "@/lib/config/config.query";
+import {
+  EnvSiteNotificationBar,
+  SiteNotificationBar,
+} from "./site-notification-bar";
+
+vi.mock("@/lib/config/config.query");
+
+function mockPublicConfig(siteNotificationMessage: string | null) {
+  vi.mocked(usePublicConfig).mockReturnValue({
+    data: { siteNotificationMessage },
+  } as ReturnType<typeof usePublicConfig>);
+}
 
 describe("SiteNotificationBar", () => {
   beforeEach(() => {
@@ -48,6 +60,31 @@ describe("SiteNotificationBar", () => {
     );
 
     expect(screen.getByText("Second announcement")).toBeInTheDocument();
+  });
+
+  it("renders the env-driven banner and re-shows it when the message changes after dismissal", async () => {
+    const user = userEvent.setup();
+    mockPublicConfig("Parallel staging stack");
+
+    const { rerender } = render(<EnvSiteNotificationBar />);
+    expect(screen.getByText("Parallel staging stack")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Dismiss notification" }),
+    );
+    expect(
+      screen.queryByText("Parallel staging stack"),
+    ).not.toBeInTheDocument();
+
+    mockPublicConfig("New message");
+    rerender(<EnvSiteNotificationBar />);
+    expect(screen.getByText("New message")).toBeInTheDocument();
+  });
+
+  it("renders nothing when the env message is not set", () => {
+    mockPublicConfig(null);
+    const { container } = render(<EnvSiteNotificationBar />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("renders markdown headings and links", () => {

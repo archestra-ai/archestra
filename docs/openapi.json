@@ -93631,6 +93631,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "siteNotificationMessage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "enterpriseCoreActive": {
                       "type": "boolean"
                     },
@@ -93676,6 +93680,7 @@
                     "disableInvitations",
                     "devAutoLoginEnabled",
                     "maintenanceMode",
+                    "siteNotificationMessage",
                     "enterpriseCoreActive",
                     "analytics"
                   ],

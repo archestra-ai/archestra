@@ -14,6 +14,7 @@ import type {
 } from "@modelcontextprotocol/ext-apps";
 import {
   AppBridge,
+  buildAllowAttribute,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
@@ -714,6 +715,7 @@ export const McpAppRuntime = function McpAppRuntime({
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
+
 // Coalesce a burst of render errors into one early server post.
 const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
 // Settle window after a resource becomes renderable before posting the snapshot
@@ -796,6 +798,16 @@ function SandboxIframe({
   // Read inside the (effect-bound) size handler; a ref keeps the latest cap
   // without re-binding onsizechange on every cap change.
   const maxHeightRef = useRef(maxHeight);
+  // Permissions-Policy delegation for the outer proxy iframe. The inner app
+  // frame is delegated the same way inside the sandbox proxy; both reuse the
+  // library's mapping so a feature must be granted on EVERY frame in the chain.
+  // Derived to a stable primitive so it can gate the iframe-creation effect
+  // without the raw `permissions` object (new reference each render) forcing
+  // needless remounts.
+  const allowAttribute = useMemo(
+    () => buildAllowAttribute(permissions),
+    [permissions],
+  );
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
@@ -825,6 +837,22 @@ function SandboxIframe({
         ? "allow-scripts allow-same-origin allow-forms allow-popups"
         : "allow-scripts allow-forms allow-popups",
     );
+
+    // Delegate declared Permissions-Policy features (camera/mic/geo/clipboard)
+    // to the proxy frame so it can pass them on to the inner app frame — without
+    // this the inner frame's `allow` is inert. Powerful features cannot be
+    // delegated to an opaque origin, so they only take effect on a dedicated
+    // sandbox origin; warn rather than fail silently otherwise.
+    if (allowAttribute) {
+      iframe.setAttribute("allow", allowAttribute);
+      if (!useDedicatedOrigin) {
+        console.warn(
+          `MCP App requested permissions (${allowAttribute}) but the sandbox runs on an opaque origin; ` +
+            "browser Permissions-Policy cannot grant them. Configure a dedicated sandbox origin (mcpSandboxDomain).",
+        );
+      }
+    }
+
     iframe.src = sandboxUrl.href;
     iframeRef.current = iframe;
 
@@ -910,7 +938,13 @@ function SandboxIframe({
       setConnectedBridge((current) => (current === appBridge ? null : current));
       setInitialized(false);
     };
-  }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);
+  }, [
+    sandboxUrl.href,
+    sandboxUrl.origin,
+    appBridge,
+    useDedicatedOrigin,
+    allowAttribute,
+  ]);
 
   // Set up size change and initialized handlers
   useEffect(() => {

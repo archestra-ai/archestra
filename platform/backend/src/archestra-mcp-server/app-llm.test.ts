@@ -7,14 +7,7 @@ import {
 import { APICallError, generateText } from "ai";
 import { vi } from "vitest";
 import config from "@/config";
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -32,12 +25,11 @@ vi.mock("@/utils/llm-resolution", async (importActual) => ({
 
 const llmTool = getArchestraToolFullName(TOOL_APP_LLM_COMPLETE_SHORT_NAME);
 
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
+// Pin the apps flag per TEST, not per file: the shared setup restores the
+// pristine config before and after every test, so a beforeAll-scoped
+// mutation does not survive, and a file must never depend on worker state.
+beforeEach(() => {
   (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
 });
 
 function archestraError(result: { structuredContent?: unknown }): any {

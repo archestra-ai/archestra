@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   useConnectNgrok,
   useNgrokConfig,
@@ -92,15 +93,11 @@ export function NgrokSetupDialog({
         </DialogHeader>
         <DialogBody className="space-y-4 p-3">
           <div className="space-y-1.5">
-            <Input
-              // plain text on purpose: -webkit-text-security masking makes
-              // iCloud Passwords treat the field as a password input and
-              // pop its AutoFill prompt over the dialog
-              type="text"
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-              data-bwignore
+            <SecretInput
+              // masked={false}: the value swap below already renders the
+              // saved-token mask, and a newly typed token stays visible
+              // (this dialog's pre-SecretInput behavior)
+              masked={false}
               placeholder={
                 hasSavedToken
                   ? "leave empty to reuse the saved token"

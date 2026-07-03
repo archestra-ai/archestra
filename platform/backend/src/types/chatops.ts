@@ -79,6 +79,16 @@ export interface SkippedAttachment {
 }
 
 /**
+ * Per-input-file result of downloading thread-history files. The returned
+ * array is positionally aligned with the input: `outcomes[i]` describes
+ * `files[i]`, so callers can attribute every skip back to the history turn
+ * the file came from.
+ */
+export type ThreadFileOutcome =
+  | { status: "delivered"; attachment: A2AAttachment }
+  | { status: "skipped"; skipped: SkippedAttachment };
+
+/**
  * Represents an incoming chat message from a chatops provider
  */
 export interface IncomingChatMessage {
@@ -505,9 +515,11 @@ export interface ChatOpsProvider {
    * Download files from thread history messages.
    * Reuses the provider's existing download logic (auth headers, SSRF protection, etc.).
    * @param files - File metadata from thread history messages
-   * @returns Downloaded attachments in A2A format (base64-encoded)
+   * @returns One outcome per input file, positionally aligned with `files`:
+   * either the downloaded attachment (base64-encoded A2A format) or the
+   * skip record explaining why it was not delivered
    */
-  downloadFiles(files: ChatThreadMessageFile[]): Promise<A2AAttachment[]>;
+  downloadFiles(files: ChatThreadMessageFile[]): Promise<ThreadFileOutcome[]>;
 
   /**
    * Discover all channels in a workspace/team.

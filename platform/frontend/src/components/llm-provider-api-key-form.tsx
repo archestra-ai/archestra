@@ -26,6 +26,7 @@ import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { SecretInput } from "./ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -748,14 +749,10 @@ export function LlmProviderApiKeyForm({
                     </p>
                   )}
                   <div className="relative">
-                    <Input
+                    <SecretInput
                       id="llm-provider-api-key-value"
-                      type="password"
                       placeholder={providerConfig.placeholder}
                       disabled={isPending}
-                      autoComplete="new-password"
-                      data-1p-ignore
-                      data-lpignore="true"
                       className={
                         showConfiguredStyling ? "border-green-500 pr-10" : ""
                       }
@@ -787,11 +784,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-aws-access-key-id">
                     Access Key ID
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-access-key-id"
-                    type="password"
                     placeholder="AKIA..."
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsAccessKeyId")}
                   />
@@ -800,11 +795,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-aws-secret-access-key">
                     Secret Access Key
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-secret-access-key"
-                    type="password"
                     placeholder="••••••••"
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsSecretAccessKey")}
                   />
@@ -816,11 +809,9 @@ export function LlmProviderApiKeyForm({
                       (optional)
                     </span>
                   </Label>
-                  <Input
+                  <SecretInput
                     id="llm-provider-aws-session-token"
-                    type="password"
                     placeholder="Required for temporary credentials (STS / AssumeRole)"
-                    autoComplete="off"
                     disabled={isPending}
                     {...form.register("awsSessionToken")}
                   />

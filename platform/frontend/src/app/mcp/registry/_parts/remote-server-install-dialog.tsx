@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LinkifiedText } from "@/components/ui/linkified-text";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -20,10 +21,7 @@ import {
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
 import {
@@ -521,21 +519,25 @@ export function RemoteServerInstallDialog({
                       }
                     />
                   </Suspense>
+                ) : fieldConfig.sensitive ? (
+                  <SecretInput
+                    id={fieldName}
+                    placeholder={
+                      fieldConfig.default?.toString() || fieldConfig.description
+                    }
+                    value={configValues[fieldName] || ""}
+                    onChange={(e) =>
+                      setConfigValues((prev) => ({
+                        ...prev,
+                        [fieldName]: e.target.value,
+                      }))
+                    }
+                  />
                 ) : (
                   <Input
                     id={fieldName}
-                    type={
-                      fieldConfig.sensitive
-                        ? "password"
-                        : fieldConfig.type === "number"
-                          ? "number"
-                          : "text"
-                    }
-                    autoComplete={
-                      fieldConfig.sensitive
-                        ? MCP_SECRET_AUTOCOMPLETE
-                        : MCP_CONFIG_AUTOCOMPLETE
-                    }
+                    type={fieldConfig.type === "number" ? "number" : "text"}
+                    autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                     placeholder={
                       fieldConfig.default?.toString() || fieldConfig.description
                     }
@@ -549,7 +551,6 @@ export function RemoteServerInstallDialog({
                     min={fieldConfig.min}
                     max={fieldConfig.max}
                     aria-invalid={
-                      !fieldConfig.sensitive &&
                       configRegexError(fieldName, fieldConfig.type)
                         ? true
                         : undefined

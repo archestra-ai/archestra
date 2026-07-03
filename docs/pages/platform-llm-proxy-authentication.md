@@ -120,7 +120,7 @@ A valid passthrough key authenticates the user at the proxy, but it does not by 
 
 ### Configuring Claude Code and Claude Desktop
 
-The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code's subscription passthrough, the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
+The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code passthrough — a Claude subscription on the Anthropic provider, or your own AWS credentials on the Bedrock provider — the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
 
 ```json
 {
@@ -131,7 +131,7 @@ The in-app Connection page wires this header up per platform (macOS, Linux, Wind
 }
 ```
 
-`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
+`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several) and applies to the Bedrock transport too, so the same headers attribute requests routed through a Bedrock proxy. Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
 
 The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough key but is independent of it, so it is present even when no passthrough key is provisioned.
 
@@ -156,6 +156,8 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
 
 You can edit a client_credentials client later to update its name, allowed LLM proxies, or provider key mappings; edit an authorization_code client to update its redirect URIs. The grant type is fixed at creation. Rotate the client secret when the existing secret needs to be replaced.
+
+Each OAuth client also has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `llmOauthClient:team-admin`, organization-wide visibility requires `llmOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which LLM proxies or provider keys the client's tokens can use at runtime.
 
 ### Getting an Access Token
 

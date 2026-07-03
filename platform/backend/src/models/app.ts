@@ -171,6 +171,35 @@ class AppModel {
     return result ?? null;
   }
 
+  /**
+   * The id of the active app matching an author's name, if any (else null).
+   * Mirrors the partial unique index `apps_org_author_name_uidx`
+   * (organizationId, authorId, name WHERE deleted_at IS NULL). Id-only select
+   * on purpose: the winning row may not be catalog-backed yet, so no JOINs.
+   */
+  static async findIdByOrgAuthorName({
+    organizationId,
+    authorId,
+    name,
+  }: {
+    organizationId: string;
+    authorId: string;
+    name: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, organizationId),
+          eq(schema.appsTable.authorId, authorId),
+          eq(schema.appsTable.name, name),
+          notDeleted(schema.appsTable),
+        ),
+      );
+    return result?.id ?? null;
+  }
+
   /** A single active app, returned only if the caller may view it (else null). */
   static async findByIdForCaller(params: {
     id: string;

@@ -162,6 +162,60 @@ describe("AppModel.delete (soft)", () => {
   });
 });
 
+describe("AppModel.findIdByOrgAuthorName", () => {
+  test("finds an author's active app by name, ignores deleted and other authors", async ({
+    makeUser,
+    makeApp,
+  }) => {
+    const author = await makeUser();
+    const other = await makeUser();
+    const app = await makeApp({
+      name: "Lookup",
+      scope: "org",
+      authorId: author.id,
+    });
+
+    expect(
+      await AppModel.findIdByOrgAuthorName({
+        organizationId: app.organizationId,
+        authorId: author.id,
+        name: "Lookup",
+      }),
+    ).toBe(app.id);
+
+    expect(await AppModel.delete(app.id)).toBe(true);
+    expect(
+      await AppModel.findIdByOrgAuthorName({
+        organizationId: app.organizationId,
+        authorId: author.id,
+        name: "Lookup",
+      }),
+    ).toBeNull();
+
+    // A same-name app under a different author is not surfaced for the original.
+    const otherApp = await makeApp({
+      name: "Lookup",
+      scope: "org",
+      authorId: other.id,
+      organizationId: app.organizationId,
+    });
+    expect(
+      await AppModel.findIdByOrgAuthorName({
+        organizationId: app.organizationId,
+        authorId: author.id,
+        name: "Lookup",
+      }),
+    ).toBeNull();
+    expect(
+      await AppModel.findIdByOrgAuthorName({
+        organizationId: app.organizationId,
+        authorId: other.id,
+        name: "Lookup",
+      }),
+    ).toBe(otherApp.id);
+  });
+});
+
 describe("AppVersionModel.computeContentHash", () => {
   test("is stable across permission key ordering", () => {
     const a = AppVersionModel.computeContentHash({

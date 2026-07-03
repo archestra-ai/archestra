@@ -194,7 +194,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
         },
         {
           title: "Finish the OAuth flow",
-          body: "Claude Code opens your browser. Sign in and approve the gateway.",
+          body: "Claude Code opens your browser. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
         },
       ],
     },
@@ -221,6 +221,13 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
     "ANTHROPIC_BEDROCK_BASE_URL": "${url}"
   }
 }`,
+              },
+              {
+                title: "Add your personal auth key header",
+                body: "Add ANTHROPIC_CUSTOM_HEADERS to the same env block and set to the value below to authenticate on the LLM Proxy.",
+                showPassthroughKey: true,
+                passthroughKeyVariant: "env",
+                passthroughKeyAgentId: CLAUDE_CODE_CLIENT_ID,
               },
               {
                 title: "Export your Bedrock API key in the shell",
@@ -293,7 +300,7 @@ claude`,
         },
         {
           title: "Finish the OAuth flow",
-          body: 'Click "Sign in & test" — Claude Desktop opens your browser. Sign in and approve the gateway; the gateway tools then appear in chat.',
+          body: 'Click "Sign in & test" — Claude Desktop opens your browser. Sign in and approve the gateway; it grants tool access per user, so the gateway tools appear in chat only after this one-time sign-in.',
         },
       ],
     },

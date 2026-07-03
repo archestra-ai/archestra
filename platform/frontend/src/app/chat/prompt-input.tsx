@@ -9,6 +9,7 @@ import {
   getMediaType,
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
+  parseSandboxCommand,
   supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
@@ -44,6 +45,7 @@ import {
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
 import { useFeature } from "@/lib/config/config.query";
+import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
@@ -72,8 +74,21 @@ function formatBytes(bytes: number): string {
     : `${Math.round(bytes / 1024)} KB`;
 }
 
+/**
+ * Options riding alongside a submitted message. At most one is set: a `/`
+ * slash command activates a skill, a `!` prefix marks the message for direct
+ * sandbox execution (the marker lands in `metadata.sandboxCommand`).
+ */
+export type ChatSubmitOptions = {
+  skill?: ChatSkillMetadata;
+  sandboxCommand?: true;
+};
+
 export interface ArchestraPromptInputProps
-  extends Omit<ChatPromptInputToolsProps, "textareaRef"> {
+  extends Omit<
+    ChatPromptInputToolsProps,
+    "textareaRef" | "isNarrow" | "toolbarRef"
+  > {
   /**
    * Handle a submit. The textarea and the saved draft are cleared only when
    * this resolves/returns without throwing. Throw (or reject) to reject the
@@ -82,7 +97,7 @@ export interface ArchestraPromptInputProps
   onSubmit: (
     message: PromptInputMessage,
     e: FormEvent<HTMLFormElement>,
-    options?: { skill?: ChatSkillMetadata },
+    options?: ChatSubmitOptions,
   ) => void | Promise<void>;
   status: ChatStatus;
   // Tools integration props
@@ -105,6 +120,13 @@ export interface ArchestraPromptInputProps
   onCompactConversation?: () => Promise<void> | void;
   /** Whether Playwright setup overlay is visible (for showing Playwright install dialog) */
   isPlaywrightSetupVisible: boolean;
+  /**
+   * One-shot composer prefill (e.g. a skill slash command from a deep link).
+   * Applied to the controller-owned input, then acknowledged via
+   * onPrefillApplied so the owner can clear it and it is never re-applied.
+   */
+  prefillText?: string | null;
+  onPrefillApplied?: () => void;
 }
 
 type SlashCommand = {
@@ -156,6 +178,8 @@ const PromptInputContent = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   sandboxAvailable,
+  prefillText,
+  onPrefillApplied,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -163,6 +187,20 @@ const PromptInputContent = ({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+
+  // Collapse the toolbar based on whether its inline controls actually fit —
+  // measured on the footer, not the viewport — so it reacts when the right-side
+  // panel squeezes the input while the window stays wide, and only collapses
+  // when the controls genuinely no longer fit.
+  const footerRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const trailingRef = useRef<HTMLDivElement>(null);
+  const isNarrow = useToolbarCollapse({
+    availableRef: footerRef,
+    contentRef: toolbarRef,
+    trailingRef,
+  });
+
   const commandItemRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [dismissedSlashCommandValue, setDismissedSlashCommandValue] = useState<
@@ -187,8 +225,9 @@ const PromptInputContent = ({
     placeholders: orgData?.chatPlaceholders,
   });
 
-  // Skills exposed as slash commands, gated by the org flag.
-  const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  // Skills exposed as slash commands whenever the org's skill tools are on —
+  // the same flag that gates the backend's activation injection.
+  const skillSlashCommandsEnabled = orgData?.skillToolsEnabled ?? false;
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100 },
     { enabled: skillSlashCommandsEnabled },
@@ -277,6 +316,22 @@ const PromptInputContent = ({
     }
   }, [controller.textInput.value, storageKey]);
 
+  // Apply a one-shot prefill from the page (e.g. a skill deep link). The
+  // controller stays the single owner of the input value — the page hands the
+  // text over once and clears its request via onPrefillApplied, so editing or
+  // deleting the text afterwards behaves exactly like typed input.
+  useEffect(() => {
+    if (prefillText == null) return;
+    controller.textInput.setInput(prefillText);
+    onPrefillApplied?.();
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [
+    prefillText,
+    onPrefillApplied,
+    controller.textInput.setInput,
+    textareaRef,
+  ]);
+
   // Handle speech transcription by updating controller state
   const handleTranscriptionChange = useCallback(
     (text: string) => {
@@ -284,6 +339,12 @@ const PromptInputContent = ({
     },
     [controller.textInput],
   );
+
+  // Subtle affordance for the `!` convention: shown while the typed text
+  // starts with `!` on a sandbox-equipped agent, i.e. whenever submitting
+  // could run it as a sandbox command instead of sending it to the model.
+  const isSandboxCommandHintVisible =
+    sandboxAvailable && controller.textInput.value.trimStart().startsWith("!");
 
   // The picker stays open while the user is still typing the command token;
   // once a space is entered they have moved on to the prompt body.
@@ -430,7 +491,7 @@ const PromptInputContent = ({
   const pendingSubmissionRef = useRef<{
     outgoing: PromptInputMessage;
     e: FormEvent<HTMLFormElement>;
-    options?: { skill: ChatSkillMetadata };
+    options?: ChatSubmitOptions;
     resolve: () => void;
     reject: (reason?: unknown) => void;
   } | null>(null);
@@ -444,7 +505,7 @@ const PromptInputContent = ({
     (
       outgoing: PromptInputMessage,
       e: FormEvent<HTMLFormElement>,
-      options?: { skill: ChatSkillMetadata },
+      options?: ChatSubmitOptions,
     ): void | Promise<void> => {
       const result = onSubmit(outgoing, e, options);
       if (result instanceof Promise) {
@@ -473,6 +534,13 @@ const PromptInputContent = ({
         return;
       }
 
+      // a `!`-prefixed message runs directly in the conversation's sandbox —
+      // disjoint from the `/`-commands above and the skill commands below,
+      // since those require a `/` prefix. The text is sent exactly as typed;
+      // only a metadata marker rides along.
+      const isSandboxCommand =
+        sandboxAvailable && parseSandboxCommand(trimmed) !== null;
+
       // a skill command activates the skill; any text after the token is an
       // optional prompt — a bare skill command sends with an empty prompt
       let outgoing = message;
@@ -483,7 +551,11 @@ const PromptInputContent = ({
         outgoing = { ...message, text: parsed.remaining };
       }
 
-      const options = skill ? { skill } : undefined;
+      const options: ChatSubmitOptions | undefined = skill
+        ? { skill }
+        : isSandboxCommand
+          ? { sandboxCommand: true }
+          : undefined;
 
       if (sensitiveDataDetectionEnabled && outgoing.text.length > 0) {
         const findings = scanText(outgoing.text);
@@ -511,6 +583,7 @@ const PromptInputContent = ({
       onCompactConversation,
       runCompactCommand,
       runDebugCommand,
+      sandboxAvailable,
       sensitiveDataDetectionEnabled,
       skillCommands,
     ],
@@ -570,6 +643,13 @@ const PromptInputContent = ({
 
   return (
     <div className="relative">
+      {isSandboxCommandHintVisible && (
+        <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">
+          Messages starting with{" "}
+          <span className="font-mono font-medium">!</span> run as commands in
+          the sandbox
+        </div>
+      )}
       {isSlashCommandOpen && (
         <div className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
           <PromptInputCommand className="h-auto rounded-none bg-transparent">
@@ -657,8 +737,10 @@ const PromptInputContent = ({
             />
           )}
         </PromptInputBody>
-        <PromptInputFooter>
+        <PromptInputFooter ref={footerRef}>
           <ChatPromptInputTools
+            isNarrow={isNarrow}
+            toolbarRef={toolbarRef}
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             conversationId={conversationId}
@@ -686,7 +768,7 @@ const PromptInputContent = ({
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
           />
-          <div className="flex items-center gap-2">
+          <div ref={trailingRef} className="flex items-center gap-2">
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
@@ -741,6 +823,8 @@ const ArchestraPromptInput = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  prefillText,
+  onPrefillApplied,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -833,6 +917,8 @@ const ArchestraPromptInput = ({
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
+          prefillText={prefillText}
+          onPrefillApplied={onPrefillApplied}
         />
       </PromptInputProvider>
     </div>

@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Copy,
   FileSearch,
+  Globe,
   MessageSquare,
   Pencil,
   Plus,
@@ -24,7 +25,6 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   Avatar,
   AvatarFallback,
@@ -51,15 +51,10 @@ import {
 } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
-import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
-import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
-import {
-  fetchCatalogTools,
-  useReinstallInternalMcpCatalogItem,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -79,6 +74,7 @@ import {
 } from "../../_parts/uninstall-server-dialog";
 import { useCanReauthenticate } from "../../_parts/use-can-reauthenticate";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
+import { useChatWithCatalogItem } from "./use-chat-with-catalog-item";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -138,9 +134,7 @@ export function McpServerCard({
 }: McpServerCardBaseProps) {
   const isPlaywrightVariant = isBuiltInPlaywright;
 
-  const createAgent = useCreateProfile();
-  const bulkAssignTools = useBulkAssignTools();
-  const [isChatCreating, setIsChatCreating] = useState(false);
+  const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
@@ -258,50 +252,6 @@ export function McpServerCard({
       setEditNoAccessOpen(true);
     }
   }, [editParam, item.id, canEditCatalog, canEditCatalogLoading, router]);
-
-  const handleChatWithMcpServer = async () => {
-    setIsChatCreating(true);
-    const agentName = item.name;
-    try {
-      // Get or create: check if a personal agent with this name already exists for the current user
-      const existingAgents = await fetchInternalAgents();
-      const existing = existingAgents?.find(
-        (a) => a.name === agentName && a.authorId === currentUserId,
-      );
-
-      const agent =
-        existing ??
-        (await createAgent.mutateAsync({
-          name: agentName,
-          agentType: "agent",
-          scope: "personal",
-          teams: [],
-          icon: item.icon ?? undefined,
-        }));
-
-      const tools = await fetchCatalogTools(item.id);
-
-      if (agent && tools && tools.length > 0) {
-        const assignments = tools.map((tool) => ({
-          agentId: agent.id,
-          toolId: tool.id,
-          resolveAtCallTime: true,
-          ...(item.enterpriseManagedConfig
-            ? { credentialResolutionMode: "enterprise_managed" as const }
-            : {}),
-        }));
-        await bulkAssignTools.mutateAsync({ assignments });
-      }
-
-      if (agent) {
-        window.location.href = `/chat/new?agent_id=${agent.id}`;
-      }
-    } catch {
-      toast.error("Failed to create chat agent");
-    } finally {
-      setIsChatCreating(false);
-    }
-  };
 
   const mcpServerOfCurrentCatalogItem = allMcpServers?.filter(
     (s) => s.catalogId === item.id,
@@ -516,7 +466,7 @@ export function McpServerCard({
       size="sm"
       className="flex-1"
       disabled={isChatCreating}
-      onClick={handleChatWithMcpServer}
+      onClick={() => startChat(item)}
     >
       <MessageSquare className="h-4 w-4" />
       {isChatCreating ? "Creating..." : "Chat"}
@@ -651,91 +601,87 @@ export function McpServerCard({
           <div className="h-4 w-px bg-border" />
         </>
       )}
-      {!isBuiltinVariant && hasOrgConnection && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => goToItemPage("credentials")}
-                className="inline-flex items-center rounded-full"
-              >
-                <ResourceVisibilityBadge
-                  scope="org"
-                  teams={undefined}
-                  authorId={undefined}
-                  authorName={undefined}
-                  currentUserId={undefined}
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Installed organization-wide. Manage credentials to review.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-      {!isBuiltinVariant && connectionAvatars.length > 0 && (
-        <div className="flex items-center gap-2">
-          <AvatarGroup>
-            {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
-              const connDeployment = computeDeploymentStatusSummary(
-                entry.serverIds,
-                effectiveDeploymentStatuses,
-              );
-              const borderClass = connDeployment
-                ? {
-                    running: "border-green-600 dark:border-green-800",
-                    pending: "border-yellow-500 dark:border-yellow-600",
-                    failed: "border-red-500 dark:border-red-700",
-                    degraded: "border-orange-500 dark:border-orange-600",
-                  }[connDeployment.overallState]
-                : "border-background";
-              return (
-                <TooltipProvider key={entry.key}>
+      {!isBuiltinVariant &&
+        (connectionAvatars.length > 0 || hasOrgConnection) && (
+          <div className="flex items-center gap-2">
+            <AvatarGroup>
+              {hasOrgConnection && (
+                <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Avatar className={`size-6 border-2 ${borderClass}`}>
-                        <AvatarFallback
-                          className={`text-[10px] ${entry.type === "team" ? "bg-accent" : ""}`}
-                        >
-                          {entry.label.slice(0, 2).toUpperCase()}
+                      <Avatar
+                        className="size-6 border-2 border-background cursor-pointer"
+                        onClick={() => goToItemPage("credentials")}
+                      >
+                        <AvatarFallback className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          <Globe className="h-3 w-3" />
                         </AvatarFallback>
                       </Avatar>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {entry.type === "team"
-                        ? `Team: ${entry.label}`
-                        : entry.label}
+                      Installed organization-wide. Manage credentials to review.
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              );
-            })}
-            {extraCount > 0 && (
-              <AvatarGroupCount className="size-6 text-[10px]">
-                +{extraCount}
-              </AvatarGroupCount>
-            )}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Avatar
-                    className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => goToItemPage("credentials")}
-                    data-testid={getManageCredentialsButtonTestId(item.name)}
-                  >
-                    <AvatarFallback className="text-muted-foreground bg-muted">
-                      <Plus className="h-3 w-3" />
-                    </AvatarFallback>
-                  </Avatar>
-                </TooltipTrigger>
-                <TooltipContent>Manage credentials</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </AvatarGroup>
-        </div>
-      )}
+              )}
+              {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
+                const connDeployment = computeDeploymentStatusSummary(
+                  entry.serverIds,
+                  effectiveDeploymentStatuses,
+                );
+                const borderClass = connDeployment
+                  ? {
+                      running: "border-green-600 dark:border-green-800",
+                      pending: "border-yellow-500 dark:border-yellow-600",
+                      failed: "border-red-500 dark:border-red-700",
+                      degraded: "border-orange-500 dark:border-orange-600",
+                    }[connDeployment.overallState]
+                  : "border-background";
+                return (
+                  <TooltipProvider key={entry.key}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Avatar className={`size-6 border-2 ${borderClass}`}>
+                          <AvatarFallback
+                            className={`text-[10px] ${entry.type === "team" ? "bg-accent" : ""}`}
+                          >
+                            {entry.label.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {entry.type === "team"
+                          ? `Team: ${entry.label}`
+                          : entry.label}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })}
+              {extraCount > 0 && (
+                <AvatarGroupCount className="size-6 text-[10px]">
+                  +{extraCount}
+                </AvatarGroupCount>
+              )}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Avatar
+                      className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => goToItemPage("credentials")}
+                      data-testid={getManageCredentialsButtonTestId(item.name)}
+                    >
+                      <AvatarFallback className="text-muted-foreground bg-muted">
+                        <Plus className="h-3 w-3" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent>Manage credentials</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </AvatarGroup>
+          </div>
+        )}
       {!isBuiltinVariant && oauthReauthIndicator}
     </div>
   ) : null;

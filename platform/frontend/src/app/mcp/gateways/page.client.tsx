@@ -565,7 +565,15 @@ function McpGateways({
               agent={editDialog.agent}
               agentType={editDialog.agent?.agentType || "mcp_gateway"}
               defaultIconType="mcp_gateway"
-              openToolsCombobox={openToolsFromUrl && editDialog.openedFromUrl}
+              openToolsCombobox={
+                openToolsFromUrl &&
+                editDialog.openedFromUrl &&
+                // "All" gateways hide the tool editor (there is nothing to
+                // pick), so its search combobox would open inside a
+                // display:none subtree and render unanchored in the corner.
+                // Only auto-open the picker for Custom gateways.
+                !editDialog.agent?.accessAllTools
+              }
             />
 
             {deletingGatewayId && (

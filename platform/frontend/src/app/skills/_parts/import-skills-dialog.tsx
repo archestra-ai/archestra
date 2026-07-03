@@ -31,12 +31,14 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDiscoverGithubSkills,
   useImportGithubSkills,
@@ -92,6 +94,7 @@ export function ImportSkillsDialog({
   const discover = useDiscoverGithubSkills();
   const importSkills = useImportGithubSkills();
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const appName = useAppName();
 
   const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
   const [path, setPath] = useState("");
@@ -613,6 +616,15 @@ export function ImportSkillsDialog({
         </div>
       ) : (
         <div className="space-y-6">
+          <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0" />
+            <p>
+              Importing copies the selected skills into your organization once.{" "}
+              {appName} doesn’t pull from the repo afterward — later changes
+              there won’t appear here, your edits here won’t go back to GitHub,
+              and re-importing skips skills you’ve already imported.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="skill-repo-url">Repository URL</Label>
             <Input
@@ -670,15 +682,11 @@ export function ImportSkillsDialog({
             }
             patFields={
               <>
-                <Input
+                <SecretInput
                   id="skill-token"
-                  type="password"
                   value={githubToken}
                   onChange={(e) => setGithubToken(e.target.value)}
                   placeholder="ghp_…"
-                  autoComplete="new-password"
-                  data-1p-ignore
-                  data-lpignore="true"
                 />
                 <p className="text-sm text-muted-foreground">
                   Required for private repositories. Used only for this import

@@ -927,19 +927,25 @@ describe("McpServerModel", () => {
       const failed = await McpServerModel.update(server.id, {
         oauthRefreshError: "refresh_failed",
         oauthRefreshErrorMessage: "invalid_grant",
+        oauthRefreshErrorDescription: "The refresh token is invalid",
         oauthRefreshFailedAt: failedAt,
       });
       expect(failed?.oauthRefreshError).toBe("refresh_failed");
       expect(failed?.oauthRefreshErrorMessage).toBe("invalid_grant");
+      expect(failed?.oauthRefreshErrorDescription).toBe(
+        "The refresh token is invalid",
+      );
       expect(failed?.oauthRefreshFailedAt?.getTime()).toBe(failedAt.getTime());
 
       const cleared = await McpServerModel.update(server.id, {
         oauthRefreshError: null,
         oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
         oauthRefreshFailedAt: null,
       });
       expect(cleared?.oauthRefreshError).toBeNull();
       expect(cleared?.oauthRefreshErrorMessage).toBeNull();
+      expect(cleared?.oauthRefreshErrorDescription).toBeNull();
       expect(cleared?.oauthRefreshFailedAt).toBeNull();
     });
   });

@@ -155,6 +155,21 @@ const libreBaskervilleFont = localFont({
   preload: false,
 });
 
+// Disc-glyph font that renders every character as a dot — visual masking for
+// app-secret fields (.secret-masked in globals.css) without type="password",
+// which would summon browser password managers. Source: text-security@3.2.1
+// (https://github.com/noppa/text-security), SIL OFL 1.1 — same license family
+// as the theme fonts above. display "block" + no fallback so the secret is
+// never flashed in a real-glyph font while loading.
+const secretMaskFont = localFont({
+  src: "../fonts/TextSecurityDisc.woff2",
+  variable: "--font-secret-mask",
+  display: "block",
+  fallback: [],
+  adjustFontFallback: false,
+  preload: false,
+});
+
 export const metadata: Metadata = {
   description: DEFAULT_APP_DESCRIPTION,
 };
@@ -168,7 +183,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable}`}
+      className={`${latoFont.variable} ${interFont.variable} ${openSansFont.variable} ${robotoFont.variable} ${sourceSansFont.variable} ${jetbrainsMonoFont.variable} ${dmSansFont.variable} ${poppinsFont.variable} ${oxaniumFont.variable} ${montserratFont.variable} ${sourceCodeProFont.variable} ${merriweatherFont.variable} ${quicksandFont.variable} ${outfitFont.variable} ${plusJakartaSansFont.variable} ${libreBaskervilleFont.variable} ${secretMaskFont.variable}`}
     >
       <head>
         <PublicEnvScript />

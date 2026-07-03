@@ -254,6 +254,13 @@ export const MinimaxErrorTypes = {
 export enum ChatErrorCode {
   /** Rate/quota exceeded - retryable after delay */
   RateLimit = "rate_limit",
+  /**
+   * An Archestra-configured cost/usage limit blocked the request. Distinct from
+   * RateLimit: this is Archestra enforcing a budget, not the provider throttling
+   * traffic, so it is NOT retryable — retrying re-hits the same cap. Pairs with
+   * the `usageLimitExceeded`/`usageLimitEntityType` fields below.
+   */
+  UsageLimitExceeded = "usage_limit_exceeded",
   /** Invalid or missing API key */
   Authentication = "authentication",
   /** API key lacks permissions for the requested resource */
@@ -296,6 +303,8 @@ export enum ChatErrorCode {
 export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.RateLimit]:
     "Too many requests. Please wait a moment and try again.",
+  [ChatErrorCode.UsageLimitExceeded]:
+    "Archestra blocked this request because a configured usage limit has been reached. Contact your administrator to raise the limit or wait for it to reset.",
   [ChatErrorCode.Authentication]:
     "Invalid API key. Please check your Chat Settings.",
   [ChatErrorCode.PermissionDenied]:

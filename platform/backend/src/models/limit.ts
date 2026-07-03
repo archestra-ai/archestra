@@ -1152,6 +1152,8 @@ export class LimitValidationService {
           limitDescription,
           totalTokensIn,
           totalTokensOut,
+          cleanupInterval: limit.cleanupInterval,
+          models: limit.model,
         });
       }
 
@@ -1215,6 +1217,8 @@ export class LimitValidationService {
             limitDescription: "cost_dollars",
             totalTokensIn: usage.tokensIn,
             totalTokensOut: usage.tokensOut,
+            cleanupInterval: envDefault.cleanupInterval,
+            models: envDefault.model,
           });
         }
       }
@@ -1248,6 +1252,8 @@ export class LimitValidationService {
         limitDescription: "cost_dollars",
         totalTokensIn: usage.tokensIn,
         totalTokensOut: usage.tokensOut,
+        cleanupInterval: globalDefault.cleanupInterval,
+        models: globalDefault.model,
       });
     } catch (error) {
       logger.error(
@@ -1537,41 +1543,105 @@ function buildLimitViolationResponse(params: {
   limitDescription: "tokens" | "cost_dollars";
   totalTokensIn: number;
   totalTokensOut: number;
+  cleanupInterval?: LimitCleanupInterval | null;
+  models?: string[] | null;
 }): LimitViolationResponse {
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
+  // Human-readable description of the exact rule that fired, so both the LLM
+  // (via the metadata block) and the end user (via the content message) can
+  // tell *which* Archestra limit blocked them rather than guessing.
+  const scopeLabel = formatLimitEntityType(params.entityType);
+  const modelScope = describeLimitModelScope(params.models);
+  const resetWindow = describeLimitResetWindow(params.cleanupInterval);
   const archestraMetadata = `
 <archestra-limit-type>token_cost</archestra-limit-type>
 <archestra-limit-entity-type>${params.entityType}</archestra-limit-entity-type>
 <archestra-limit-entity-id>${params.entityId}</archestra-limit-entity-id>
+<archestra-limit-model-scope>${modelScope}</archestra-limit-model-scope>
+<archestra-limit-reset-window>${resetWindow ?? "n/a"}</archestra-limit-reset-window>
 <archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
 <archestra-limit-value>${params.limitValue}</archestra-limit-value>
 <archestra-limit-remaining>${remaining}</archestra-limit-remaining>`;
 
-  const contentMessage =
+  // Lead with explicit Archestra attribution: the screenshots in the bug report
+  // showed clients framing this as a provider rate limit ("not your usage
+  // limit"), so the first line must make clear that Archestra enforced it.
+  const header = `This request was blocked by Archestra (not the AI provider): the ${scopeLabel} cost limit has been reached.`;
+  const ruleLine = `Rule: ${scopeLabel} cost limit, applied to ${modelScope}${
+    resetWindow ? `, resets ${resetWindow}` : ""
+  }.`;
+  const footer = resetWindow
+    ? `Contact your administrator to raise the limit, or wait for the usage to reset (${resetWindow}).`
+    : "Contact your administrator to raise the limit, or wait for the usage to reset.";
+
+  const usageBlock =
     params.limitDescription === "cost_dollars"
-      ? `
-I cannot process this request because the ${params.entityType}-level token cost limit has been exceeded.
-
-Current usage: $${params.comparisonValue.toFixed(2)}
+      ? `Current usage: $${params.comparisonValue.toFixed(2)}
 Limit: $${params.limitValue.toFixed(2)}
-Remaining: $${remaining.toFixed(2)}
-
-Please contact your administrator to increase the limit or wait for the usage to reset.`
-      : `
-I cannot process this request because the ${params.entityType}-level token cost limit has been exceeded.
-
-Current usage: ${totalTokens.toLocaleString()} tokens
+Remaining: $${remaining.toFixed(2)}`
+      : `Current usage: ${totalTokens.toLocaleString()} tokens
 Limit: ${params.limitValue.toLocaleString()} tokens
-Remaining: ${Math.max(0, params.limitValue - totalTokens).toLocaleString()} tokens
+Remaining: ${Math.max(0, params.limitValue - totalTokens).toLocaleString()} tokens`;
 
-Please contact your administrator to increase the limit or wait for the usage to reset.`;
+  const contentMessage = `
+${header}
+
+${ruleLine}
+
+${usageBlock}
+
+${footer}`;
 
   return [
     `${archestraMetadata}\n${contentMessage}`,
     contentMessage,
     { entityType: params.entityType, limitType: "token_cost" },
   ];
+}
+
+/** Render a limit's entity type for human display, e.g. "virtual_key" -> "virtual key-level". */
+function formatLimitEntityType(entityType: LimitEntityType): string {
+  return `${entityType.replace(/_/g, " ")}-level`;
+}
+
+/** Describe which models a limit covers, e.g. "all models" or "models gpt-4o, claude-3-5-sonnet". */
+function describeLimitModelScope(models?: string[] | null): string {
+  const normalized = normalizeLimitModels(models);
+  if (!normalized) {
+    return "all models";
+  }
+  return normalized.length === 1
+    ? `model ${normalized[0]}`
+    : `models ${normalized.join(", ")}`;
+}
+
+/** Turn a cleanup interval into a human reset cadence, e.g. "every 24 hours", "monthly (calendar month)". */
+function describeLimitResetWindow(
+  interval?: LimitCleanupInterval | null,
+): string | null {
+  switch (interval) {
+    case "1h":
+      return "every hour";
+    case "12h":
+      return "every 12 hours";
+    case "24h":
+      return "every 24 hours";
+    case "1w":
+      return "every week";
+    case "1m":
+      return "every month";
+    case "calendar_day":
+      return "daily (calendar day)";
+    case "calendar_week_sunday":
+      return "weekly (calendar week, Sunday start)";
+    case "calendar_week_monday":
+      return "weekly (calendar week, Monday start)";
+    case "calendar_month":
+      return "monthly (calendar month)";
+    default:
+      return null;
+  }
 }
 
 function normalizeLimitModels(models: string[] | null | undefined) {

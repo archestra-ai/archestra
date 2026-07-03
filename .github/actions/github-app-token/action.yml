@@ -11,12 +11,6 @@ outputs:
   token:
     description: Generated GitHub App token.
     value: ${{ steps.create-token.outputs.token }}
-  installation-id:
-    description: Installation ID used to generate the token.
-    value: ${{ steps.create-token.outputs.installation-id }}
-  app-slug:
-    description: Slug of the GitHub App.
-    value: ${{ steps.create-token.outputs.app-slug }}
 runs:
   using: composite
   steps:

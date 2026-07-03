@@ -189,8 +189,10 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     const refusalOrContent = message.refusal || message.content;
     expect(refusalOrContent).toBeTruthy();
     expect(refusalOrContent).toContain("read_file");
-    expect(refusalOrContent).toContain("denied");
-    expect(refusalOrContent).toContain("tool invocation policy");
+    expect(refusalOrContent).toContain(
+      "Archestra LLM Proxy blocked unsafe tool call",
+    );
+    expect(refusalOrContent).toContain("tool call policy violated");
 
     // The blocked interaction was persisted with the untrusted request content.
     const interactions = await db

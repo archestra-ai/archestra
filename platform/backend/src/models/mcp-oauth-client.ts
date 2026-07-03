@@ -7,18 +7,27 @@ import {
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, sql } from "drizzle-orm";
 import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import {
   MCP_OAUTH_CLIENT_METADATA_TYPE,
   type McpOauthClientGrantType,
   McpOauthClientMetadataSchema,
 } from "@/types/mcp-oauth-client";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import { escapeLikePattern } from "@/utils/sql-search";
+import OauthClientTeamModel from "./oauth-client-team";
+import UserModel from "./user";
 
 class McpOauthClientModel {
   static async findAllByOrganization(params: {
     organizationId: string;
     search?: string;
+    /**
+     * Restricts results to clients the user may see (org-scoped, own personal,
+     * teams they belong to). Omit only for internal callers that must see
+     * everything; admin viewers are unfiltered.
+     */
+    viewer?: { userId: string; isAdmin: boolean };
   }) {
     const rows = await db
       .select()
@@ -31,6 +40,11 @@ class McpOauthClientModel {
             ? ilike(
                 schema.oauthClientsTable.name,
                 `%${escapeLikePattern(params.search.trim())}%`,
+              )
+            : undefined,
+          params.viewer && !params.viewer.isAdmin
+            ? OauthClientTeamModel.accessibleScopeCondition(
+                params.viewer.userId,
               )
             : undefined,
         ),
@@ -46,6 +60,9 @@ class McpOauthClientModel {
     grantType?: McpOauthClientGrantType;
     allowedGatewayIds?: string[];
     redirectUris?: string[];
+    scope?: ResourceVisibilityScope;
+    teams?: string[];
+    authorId: string;
   }) {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
@@ -67,38 +84,48 @@ class McpOauthClientModel {
       organizationId: params.organizationId,
       grantType,
       allowedGatewayIds: params.allowedGatewayIds ?? [],
+      scope: params.scope ?? "personal",
+      authorId: params.authorId,
     };
+    const teams = params.teams ?? [];
 
-    const [client] = await db
-      .insert(schema.oauthClientsTable)
-      .values({
-        id: crypto.randomUUID(),
-        clientId: `${MCP_OAUTH_CLIENT_ID_PREFIX}${randomBytes(18).toString("base64url")}`,
-        clientSecret: clientSecretHash,
-        name: params.name,
-        // authorization_code is a confidential client (client_secret_post) that
-        // additionally requires PKCE; its tokens flow through better-auth's
-        // standard authorize→token exchange and are user-bound.
-        redirectUris: isAuthorizationCode ? (params.redirectUris ?? []) : [],
-        tokenEndpointAuthMethod: "client_secret_post",
-        grantTypes: isAuthorizationCode
-          ? ["authorization_code", "refresh_token"]
-          : ["client_credentials"],
-        responseTypes: isAuthorizationCode ? ["code"] : [],
-        requirePKCE: isAuthorizationCode,
-        public: false,
-        scopes: isAuthorizationCode
-          ? [MCP_GATEWAY_OAUTH_SCOPE, OFFLINE_ACCESS_OAUTH_SCOPE]
-          : [MCP_GATEWAY_OAUTH_SCOPE],
-        type: "service",
-        metadata,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+    const client = await withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .insert(schema.oauthClientsTable)
+        .values({
+          id: crypto.randomUUID(),
+          clientId: `${MCP_OAUTH_CLIENT_ID_PREFIX}${randomBytes(18).toString("base64url")}`,
+          clientSecret: clientSecretHash,
+          name: params.name,
+          // authorization_code is a confidential client (client_secret_post) that
+          // additionally requires PKCE; its tokens flow through better-auth's
+          // standard authorize→token exchange and are user-bound.
+          redirectUris: isAuthorizationCode ? (params.redirectUris ?? []) : [],
+          tokenEndpointAuthMethod: "client_secret_post",
+          grantTypes: isAuthorizationCode
+            ? ["authorization_code", "refresh_token"]
+            : ["client_credentials"],
+          responseTypes: isAuthorizationCode ? ["code"] : [],
+          requirePKCE: isAuthorizationCode,
+          public: false,
+          scopes: isAuthorizationCode
+            ? [MCP_GATEWAY_OAUTH_SCOPE, OFFLINE_ACCESS_OAUTH_SCOPE]
+            : [MCP_GATEWAY_OAUTH_SCOPE],
+          type: "service",
+          metadata,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      if (teams.length > 0) {
+        await OauthClientTeamModel.syncTeams(row.id, teams, tx);
+      }
+      return row;
+    });
 
     return {
-      oauthClient: hydrateOauthClients([client])[0],
+      oauthClient: (await hydrateOauthClients([client]))[0],
       clientSecret,
     };
   }
@@ -116,7 +143,7 @@ class McpOauthClientModel {
       )
       .limit(1);
 
-    return client ? (hydrateOauthClients([client])[0] ?? null) : null;
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async findByClientId(clientId: string) {
@@ -134,7 +161,7 @@ class McpOauthClientModel {
     if (!client || client.disabled) {
       return null;
     }
-    return hydrateOauthClients([client])[0] ?? null;
+    return (await hydrateOauthClients([client]))[0] ?? null;
   }
 
   static async findClientForCredentials(params: {
@@ -161,7 +188,7 @@ class McpOauthClientModel {
       return null;
     }
 
-    return hydrateOauthClients([client])[0] ?? null;
+    return (await hydrateOauthClients([client]))[0] ?? null;
   }
 
   static async rotateSecret(params: { id: string; organizationId: string }) {
@@ -190,7 +217,7 @@ class McpOauthClientModel {
 
     if (!client) return null;
     return {
-      oauthClient: hydrateOauthClients([client])[0],
+      oauthClient: (await hydrateOauthClients([client]))[0],
       clientSecret,
     };
   }
@@ -201,6 +228,9 @@ class McpOauthClientModel {
     name: string;
     allowedGatewayIds?: string[];
     redirectUris?: string[];
+    scope?: ResourceVisibilityScope;
+    /** `undefined` leaves team assignments untouched; `[]` clears them. */
+    teams?: string[];
   }) {
     // The grant type is fixed at creation; reload the client to preserve it and
     // to apply only the fields that grant type actually uses.
@@ -212,34 +242,44 @@ class McpOauthClientModel {
     const isAuthorizationCode = existing.grantType === "authorization_code";
 
     // allowedGatewayIds applies to both grant types (see create()); update it
-    // for either, falling back to the existing value when omitted.
+    // for either, falling back to the existing value when omitted. The author
+    // is fixed at creation; scope falls back to the existing value.
     const metadata = {
       type: MCP_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
       grantType: existing.grantType,
       allowedGatewayIds: params.allowedGatewayIds ?? existing.allowedGatewayIds,
+      scope: params.scope ?? existing.scope,
+      authorId: existing.authorId,
     };
 
-    const [client] = await db
-      .update(schema.oauthClientsTable)
-      .set({
-        name: params.name,
-        metadata,
-        ...(isAuthorizationCode
-          ? { redirectUris: params.redirectUris ?? existing.redirectUris }
-          : {}),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${MCP_OAUTH_CLIENT_METADATA_TYPE}`,
-          sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
-        ),
-      )
-      .returning();
+    const client = await withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .update(schema.oauthClientsTable)
+        .set({
+          name: params.name,
+          metadata,
+          ...(isAuthorizationCode
+            ? { redirectUris: params.redirectUris ?? existing.redirectUris }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.oauthClientsTable.id, params.id),
+            sql`${schema.oauthClientsTable.metadata}->>'type' = ${MCP_OAUTH_CLIENT_METADATA_TYPE}`,
+            sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+          ),
+        )
+        .returning();
 
-    return client ? (hydrateOauthClients([client])[0] ?? null) : null;
+      if (row && params.teams !== undefined) {
+        await OauthClientTeamModel.syncTeams(row.id, params.teams, tx);
+      }
+      return row;
+    });
+
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async delete(params: { id: string; organizationId: string }) {
@@ -273,6 +313,9 @@ class McpOauthClientModel {
       allowedGatewayIds: [...client.allowedGatewayIds].sort(),
       redirectUris: [...client.redirectUris].sort(),
       disabled: client.disabled,
+      scope: client.scope,
+      authorId: client.authorId,
+      teamIds: client.teams.map((team) => team.id).sort(),
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
     };
@@ -293,13 +336,32 @@ function compareClientSecret(secret: string, storedHash: string) {
   return verifyPassword({ password: secret, hash: storedHash });
 }
 
-function hydrateOauthClients(
+async function hydrateOauthClients(
   clients: Array<typeof schema.oauthClientsTable.$inferSelect>,
 ) {
-  return clients.flatMap((client) => {
-    const metadata = McpOauthClientMetadataSchema.safeParse(
-      client.metadata,
-    ).data;
+  const parsed = clients.map((client) => ({
+    client,
+    metadata: McpOauthClientMetadataSchema.safeParse(client.metadata).data,
+  }));
+
+  // Only fetch what the rows actually reference so the runtime token paths
+  // (org-scoped, authorless clients) stay free of extra queries.
+  const teamScopedIds = parsed
+    .filter(({ metadata }) => metadata?.scope === "team")
+    .map(({ client }) => client.id);
+  const authorIds = [
+    ...new Set(
+      parsed.flatMap(({ metadata }) =>
+        metadata?.authorId ? [metadata.authorId] : [],
+      ),
+    ),
+  ];
+  const [teamsMap, authorNames] = await Promise.all([
+    OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
+    UserModel.getNamesByIds(authorIds),
+  ]);
+
+  return parsed.flatMap(({ client, metadata }) => {
     if (!metadata) return [];
     return [
       {
@@ -311,6 +373,12 @@ function hydrateOauthClients(
         allowedGatewayIds: metadata.allowedGatewayIds,
         redirectUris: client.redirectUris ?? [],
         disabled: client.disabled ?? false,
+        scope: metadata.scope,
+        authorId: metadata.authorId,
+        authorName: metadata.authorId
+          ? (authorNames.get(metadata.authorId) ?? null)
+          : null,
+        teams: teamsMap.get(client.id) ?? [],
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,
       },

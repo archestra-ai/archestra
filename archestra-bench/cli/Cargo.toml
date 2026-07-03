@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 archestra_bench = { path = "../runner" }
 trajectory-analyzer = { path = "../analyzer" }
+bench-dashboard = { path = "../dashboard" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 clap = { version = "4", features = ["derive", "env"] }
 serde_json = "1"

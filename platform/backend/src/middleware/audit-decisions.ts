@@ -352,6 +352,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",
   },
+  oauthClientTeamsTable: {
+    audited: false,
+    reason: "join: oauth client × team; parent (oauth client) audited",
+  },
   mcpServerUsersTable: {
     audited: false,
     reason: "join: mcp server × user; parent (mcp server) audited",

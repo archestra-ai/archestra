@@ -3,6 +3,30 @@ export interface OAuthCallbackErrorState {
   description: string;
 }
 
+/**
+ * Convert the stored OAuth return URL into an app-internal path for router
+ * navigation. Returns null when the URL is malformed or points at a different
+ * origin, so callers fall back to a safe default instead of open-redirecting.
+ */
+export function toInternalReturnPath(
+  returnUrl: string | null,
+  origin: string,
+): string | null {
+  if (!returnUrl) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(returnUrl, origin);
+    if (parsed.origin !== origin) {
+      return null;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export function getOAuthCallbackErrorState(params: {
   code: string | null;
   error: string | null;

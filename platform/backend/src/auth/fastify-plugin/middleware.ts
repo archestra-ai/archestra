@@ -321,10 +321,15 @@ export class Authnz {
       },
       "[Authnz] Checking required permissions",
     );
+    // Pass the DB-fresh identity populateUserInfo already resolved so the
+    // permission check never consults the (possibly stale) session cookie.
     const result = await hasPermission(
       requiredPermissions,
       request.headers,
       request.serviceAccount,
+      request.user && request.organizationId
+        ? { userId: request.user.id, organizationId: request.organizationId }
+        : undefined,
     );
     logger.trace({ routeId, result }, "[Authnz] hasPermission result");
     return result;

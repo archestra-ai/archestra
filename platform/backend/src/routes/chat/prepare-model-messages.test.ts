@@ -513,3 +513,125 @@ test("an inlineable text-document attachment counts toward the context gate", as
     ContextWindowExceededError,
   );
 });
+
+const RENDER_APP_APP_ID = "402e041f-a78c-40a0-b8b3-a14d91633fce";
+
+// Mirrors an owned-app chat seeded by createSeededAppConversation: the first
+// message is a synthetic render_app assistant tool-call, followed by the user's
+// first real prompt.
+function renderAppSeedMessages(): ChatMessage[] {
+  return [
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "archestra__render_app",
+          toolCallId: "call_render_1",
+          state: "output-available",
+          input: { appId: RENDER_APP_APP_ID },
+          output: { content: [{ type: "text", text: "app rendered" }] },
+        },
+      ],
+    },
+    {
+      role: "user",
+      parts: [{ type: "text", text: "make a simple shopping list app" }],
+    },
+  ] as unknown as ChatMessage[];
+}
+
+function firstToolCall(
+  messages: ModelMessage[],
+): { toolName?: string; input?: unknown } | undefined {
+  for (const message of messages) {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) {
+      continue;
+    }
+    for (const part of message.content) {
+      if ((part as { type?: string }).type === "tool-call") {
+        return part as { toolName?: string; input?: unknown };
+      }
+    }
+  }
+  return undefined;
+}
+
+test("gemini: render_app-seeded history gets a leading user turn so contents don't open with a functionCall", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages: renderAppSeedMessages(),
+    provider: "gemini",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  // The whole sequence must map to valid Gemini contents: a leading user turn,
+  // then the seed's functionCall (assistant) immediately paired with its
+  // functionResponse (tool), then the real user prompt — i.e.
+  // user -> model(functionCall) -> user(functionResponse) -> user(text). Pin the
+  // full order so a regression that strands the functionCall (Gemini 400) is
+  // caught here, not only in an end-to-end call.
+  expect(modelMessages.map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+    "tool",
+    "user",
+  ]);
+  // The functionCall/functionResponse pair references the same seeded tool call.
+  const toolCall = firstToolCall(modelMessages);
+  expect(toolCall?.toolName).toBe("archestra__render_app");
+  // The render_app seed is preserved (not dropped) — its tool result carries the
+  // app id the app tools require to edit the bound app.
+  expect(JSON.stringify(toolCall?.input)).toContain(RENDER_APP_APP_ID);
+});
+
+test("non-gemini: render_app-seeded history keeps the assistant tool-call first (no leading user turn injected)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages: renderAppSeedMessages(),
+    provider: "openai",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  expect(modelMessages[0]?.role).toBe("assistant");
+});
+
+test("gemini: a normal user-first history is left unchanged (no synthetic turn added)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "hello" }] },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "gemini",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  expect(modelMessages).toHaveLength(1);
+  expect(modelMessages[0]?.role).toBe("user");
+});

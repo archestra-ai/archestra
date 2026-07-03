@@ -29,7 +29,9 @@ import type {
   ChatOpsApprovalDecision,
   ChatOpsProvider,
   ChatReplyOptions,
+  ChatThreadMessage,
   IncomingChatMessage,
+  SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
@@ -42,6 +44,7 @@ import {
   CHATOPS_NO_REPLY_SENTINEL,
   THREAD_MUTE_HINT,
 } from "./constants";
+import { buildHistorySkippedAttachmentsNote } from "./utils";
 
 describe("matchesAgentName", () => {
   test("matches exact name", () => {
@@ -2301,8 +2304,10 @@ describe("ChatOpsManager attachment passthrough", () => {
         isFromBot: true,
       },
     ];
-    // downloadFiles returns the base64-encoded image
-    mockProvider.downloadFiles = async () => [historyImageAttachment];
+    // downloadFiles reports the base64-encoded image as delivered
+    mockProvider.downloadFiles = async () => [
+      { status: "delivered", attachment: historyImageAttachment },
+    ];
 
     const manager = new ChatOpsManager();
     (
@@ -2400,7 +2405,9 @@ describe("ChatOpsManager attachment passthrough", () => {
         ],
       },
     ];
-    const downloadFilesSpy = vi.fn().mockResolvedValue([downloadedPdf]);
+    const downloadFilesSpy = vi
+      .fn<ChatOpsProvider["downloadFiles"]>()
+      .mockResolvedValue([{ status: "delivered", attachment: downloadedPdf }]);
     mockProvider.downloadFiles = downloadFilesSpy;
 
     const manager = new ChatOpsManager();
@@ -2518,7 +2525,11 @@ describe("ChatOpsManager attachment passthrough", () => {
         ],
       },
     ];
-    const downloadFilesSpy = vi.fn().mockResolvedValue([downloadedHistoryPdf]);
+    const downloadFilesSpy = vi
+      .fn<ChatOpsProvider["downloadFiles"]>()
+      .mockResolvedValue([
+        { status: "delivered", attachment: downloadedHistoryPdf },
+      ]);
     mockProvider.downloadFiles = downloadFilesSpy;
 
     const manager = new ChatOpsManager();
@@ -2561,6 +2572,397 @@ describe("ChatOpsManager attachment passthrough", () => {
       expect.arrayContaining([
         expect.objectContaining({ name: "current.pdf" }),
       ]),
+    );
+    // The trimmed file's turn carries a total_limit_reached note (built with
+    // the decoded size of the downloaded attachment, mirroring the manager).
+    const trimNote = buildHistorySkippedAttachmentsNote([
+      {
+        name: "history.pdf",
+        sizeBytes: Math.ceil(
+          (downloadedHistoryPdf.contentBase64.length * 3) / 4,
+        ),
+        reason: "total_limit_reached",
+      },
+    ]);
+    expect(executorSpy.mock.calls[0][0].message.split("\n")).toContain(
+      `Test User: Here is the report${trimNote}`,
+    );
+  });
+
+  test("appends a provider-skip note to the history turn the file came from", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const deliveredDeck = {
+      contentType: "application/pdf",
+      contentBase64: Buffer.alloc(10_000).toString("base64"),
+      name: "deck.pdf",
+    };
+    const deliveredSheet = {
+      contentType: "application/vnd.ms-excel",
+      contentBase64: Buffer.alloc(2_000).toString("base64"),
+      name: "budget.xlsx",
+    };
+    const skippedSheet: SkippedAttachment = {
+      name: "budget.xlsx",
+      sizeBytes: 2048,
+      reason: "download_failed",
+    };
+
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "msg-skip-turn",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-skip-turn",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "history-skip@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "history-skip@example.com",
+    });
+    mockProvider.getThreadHistory = async () => [
+      {
+        messageId: "turn-0",
+        senderId: "u-alice",
+        senderName: "Alice",
+        text: "here is the deck",
+        timestamp: new Date(Date.now() - 120_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/deck.pdf",
+            mimetype: "application/pdf",
+            name: "deck.pdf",
+            size: 1024,
+          },
+        ],
+      },
+      {
+        messageId: "turn-1",
+        senderId: "u-bob",
+        senderName: "Bob",
+        text: "and the budget sheet",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/budget.xlsx",
+            mimetype: "application/vnd.ms-excel",
+            name: "budget.xlsx",
+            size: 2048,
+          },
+        ],
+      },
+    ];
+    // Outcomes are positionally aligned with the input files: the deck is
+    // delivered, the sheet is skipped by the provider.
+    mockProvider.downloadFiles = async () => [
+      { status: "delivered", attachment: deliveredDeck },
+      { status: "skipped", skipped: skippedSheet },
+    ];
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage({
+        threadId: "thread-123",
+        isThreadReply: true,
+        text: "summarize both files",
+      }),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    const skipRunLines = executorSpy.mock.calls[0][0].message.split("\n");
+    // The note lands on the turn the skipped file came from...
+    expect(skipRunLines).toContain(
+      `Bob: and the budget sheet${buildHistorySkippedAttachmentsNote([skippedSheet])}`,
+    );
+    // ...while the delivered file's turn stays untouched.
+    expect(skipRunLines).toContain("Alice: here is the deck");
+    // Only the delivered attachment reaches the agent.
+    expect(executorSpy.mock.calls[0][0].attachments).toEqual([
+      expect.objectContaining({ name: "deck.pdf" }),
+    ]);
+
+    // Re-run the same thread with everything delivered: skips must not add
+    // or remove any lines — the note attaches to an existing turn.
+    mockProvider.downloadFiles = async () => [
+      { status: "delivered", attachment: deliveredDeck },
+      { status: "delivered", attachment: deliveredSheet },
+    ];
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "test-attach-msg-2",
+        threadId: "thread-123",
+        isThreadReply: true,
+        text: "summarize both files",
+      }),
+      provider: mockProvider,
+    });
+    const noSkipRunLines = executorSpy.mock.calls[1][0].message.split("\n");
+    expect(skipRunLines.length).toBe(noSkipRunLines.length);
+  });
+
+  test("leaves history lines untouched when every file is delivered", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "msg-no-skip",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-no-skip",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "no-skip-history@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const historyWithFiles: ChatThreadMessage[] = [
+      {
+        messageId: "turn-0",
+        senderId: "u-alice",
+        senderName: "Alice",
+        text: "here is the deck",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/deck.pdf",
+            mimetype: "application/pdf",
+            name: "deck.pdf",
+            size: 1024,
+          },
+        ],
+      },
+      {
+        messageId: "turn-1",
+        senderId: "bot",
+        senderName: "Bot",
+        text: "Got it.",
+        timestamp: new Date(Date.now() - 30_000),
+        isFromBot: true,
+      },
+    ];
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "no-skip-history@example.com",
+    });
+    mockProvider.getThreadHistory = async () => historyWithFiles;
+    mockProvider.downloadFiles = async () => [
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "application/pdf",
+          contentBase64: Buffer.alloc(10_000).toString("base64"),
+          name: "deck.pdf",
+        },
+      },
+    ];
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage({
+        threadId: "thread-123",
+        isThreadReply: true,
+        text: "what did Alice share?",
+      }),
+      provider: mockProvider,
+    });
+    expect(result.success).toBe(true);
+
+    // The same thread without any files must produce the exact same prompt
+    // text: fully delivered files add no notes and no guidance line.
+    mockProvider.getThreadHistory = async () =>
+      historyWithFiles.map(({ files: _files, ...msg }) => msg);
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "test-attach-msg-2",
+        threadId: "thread-123",
+        isThreadReply: true,
+        text: "what did Alice share?",
+      }),
+      provider: mockProvider,
+    });
+
+    expect(executorSpy.mock.calls[0][0].message).toBe(
+      executorSpy.mock.calls[1][0].message,
+    );
+  });
+
+  test("renders a file-only history turn as an attachment line and appends its skip note there", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "ok",
+        messageId: "msg-file-only",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "msg-file-only",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        },
+      });
+
+    const user = await makeUser({ email: "file-only-turn@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "file-only-turn@example.com",
+    });
+    mockProvider.getThreadHistory = async () => [
+      {
+        messageId: "file-only-msg",
+        senderId: "u-alice",
+        senderName: "Alice",
+        text: "",
+        timestamp: new Date(Date.now() - 60_000),
+        isFromBot: false,
+        files: [
+          {
+            url: "https://files.slack.com/files-pri/T123/photo.png",
+            mimetype: "image/png",
+            name: "photo.png",
+            size: 1024,
+          },
+        ],
+      },
+    ];
+    mockProvider.downloadFiles = async () => [
+      {
+        status: "delivered",
+        attachment: {
+          contentType: "image/png",
+          contentBase64: Buffer.alloc(5_000).toString("base64"),
+          name: "photo.png",
+        },
+      },
+    ];
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage({
+        threadId: "thread-123",
+        isThreadReply: true,
+        text: "what is in the photo?",
+      }),
+      provider: mockProvider,
+    });
+    expect(result.success).toBe(true);
+
+    // The file-only turn renders as an Alice line naming its attachment
+    // (sender and file name are data, not pinned wording; capture the line
+    // instead of hardcoding the prose around them).
+    const fileOnlyLine = executorSpy.mock.calls[0][0].message
+      .split("\n")
+      .find(
+        (line: string) =>
+          line.startsWith("Alice:") && line.includes("photo.png"),
+      );
+    expect(fileOnlyLine).toBeDefined();
+
+    // When the provider skips that file, the note lands on the same line.
+    const skippedPhoto: SkippedAttachment = {
+      name: "photo.png",
+      sizeBytes: 1024,
+      reason: "download_failed",
+    };
+    mockProvider.downloadFiles = async () => [
+      { status: "skipped", skipped: skippedPhoto },
+    ];
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "test-attach-msg-2",
+        threadId: "thread-123",
+        isThreadReply: true,
+        text: "what is in the photo?",
+      }),
+      provider: mockProvider,
+    });
+    expect(executorSpy.mock.calls[1][0].message.split("\n")).toContain(
+      `${fileOnlyLine}${buildHistorySkippedAttachmentsNote([skippedPhoto])}`,
     );
   });
 

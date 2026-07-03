@@ -158,11 +158,14 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
-  search_files: { resource: "sandbox", action: "execute" },
-  read_file: { resource: "sandbox", action: "execute" },
-  save_file: { resource: "sandbox", action: "execute" },
-  edit_file: { resource: "sandbox", action: "execute" },
-  delete_file: { resource: "sandbox", action: "execute" },
+  // Persistent file store — these operate on `skill_sandbox_files`, not the
+  // sandbox itself, so they gate on `file:manage`. Per-file authorization
+  // (authorship, project membership) stays in the handlers.
+  search_files: { resource: "file", action: "manage" },
+  read_file: { resource: "file", action: "manage" },
+  save_file: { resource: "file", action: "manage" },
+  edit_file: { resource: "file", action: "manage" },
+  delete_file: { resource: "file", action: "manage" },
 
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check

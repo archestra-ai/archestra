@@ -63,6 +63,7 @@ const actionLabels: Record<Action, string> = {
   query: "Query",
   execute: "Execute",
   "deploy-to-restricted": "Deploy to Restricted",
+  manage: "Manage",
 };
 
 export function RolePermissionsCard() {

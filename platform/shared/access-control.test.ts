@@ -99,6 +99,32 @@ describe("access-control", () => {
     });
   });
 
+  describe("project file routes", () => {
+    // Project file surfaces combine project-level access with the files gate;
+    // the sandbox permission is reserved for actual sandbox execution
+    // (run_command/upload_file/download_file).
+    test("GetProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+      const required = requiredEndpointPermissionsMap[RouteId.GetProjectFiles];
+      expect(required?.project).toContain("read");
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("UploadProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.UploadProjectFiles];
+      expect(required?.project).toContain("read");
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("all predefined roles have file:manage", () => {
+      for (const permissions of Object.values(predefinedPermissionsMap)) {
+        expect(permissions.file).toContain("manage");
+      }
+    });
+  });
+
   describe("MCP server re-authentication route", () => {
     // Returns true when `rolePermissions` covers every resource:action pair the
     // route's RBAC middleware gate demands. Mirrors what hasPermission() does

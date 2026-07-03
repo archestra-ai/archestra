@@ -17,6 +17,7 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import { ProviderError } from "@/routes/chat/errors";
+import { THINKING_ONLY_NOTICE } from "@/utils/strip-thinking-blocks";
 import { executeA2AMessage } from "./a2a-executor";
 
 const {
@@ -200,7 +201,7 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(textPart?.text).toBe("Answer. Done.");
   });
 
-  test("reduces a thinking-only turn to empty text while keeping the (empty) text part", async ({
+  test("substitutes a notice when a thinking-only turn strips to nothing", async ({
     makeOrganization,
     makeUser,
     makeInternalAgent,
@@ -209,8 +210,8 @@ describe("executeA2AMessage real stream boundary", () => {
     const user = await makeUser();
     const agent = await makeInternalAgent({ organizationId: org.id });
     // The pre-strip stream is non-empty, so the empty-response recovery does not
-    // re-trigger; stripping leaves no visible answer, but the text part is kept
-    // (not dropped) so the message never collapses to zero parts.
+    // re-trigger; stripping leaves no visible answer, so the notice stands in —
+    // in both the headless text and the message's text part.
     primeAgent(
       modelEmitting(textChunks("<thinking>only reasoning</thinking>")),
     );
@@ -223,11 +224,11 @@ describe("executeA2AMessage real stream boundary", () => {
       conversationId: "conv-1",
     });
 
-    expect(result.text).toBe("");
+    expect(result.text).toBe(THINKING_ONLY_NOTICE);
     const textPart = result.responseUiMessage.parts.find(
       (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
     );
-    expect(textPart?.text).toBe("");
+    expect(textPart?.text).toBe(THINKING_ONLY_NOTICE);
   });
 
   test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async ({

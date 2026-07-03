@@ -10,3 +10,11 @@
 export function stripThinkingBlocks(text: string): string {
   return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
 }
+
+/**
+ * Stands in for an assistant turn whose entire text output was inline
+ * `<thinking>` and stripped to nothing, so a user-facing surface (A2A reply,
+ * reconstructed transcript) carries an explanation rather than a blank message.
+ */
+export const THINKING_ONLY_NOTICE =
+  "The agent produced only internal reasoning and no visible response.";

@@ -46,7 +46,10 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
-import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
+import {
+  stripThinkingBlocks,
+  THINKING_ONLY_NOTICE,
+} from "@/utils/strip-thinking-blocks";
 import {
   type StageResult,
   stageAttachmentsIntoSandbox,
@@ -491,6 +494,7 @@ export async function executeA2AMessage(
       // excludes them (only text parts survive), and where they are surfaced
       // (the scheduled-run chat view) they render via the chat's reasoning UI,
       // exactly as interactive chat does — stripping them is out of scope here.
+      const hadTextBeforeStrip = finalText.trim() !== "";
       finalText = stripThinkingBlocks(finalText);
       for (const part of responseUiMessage.parts) {
         if (part.type === "text") {
@@ -519,6 +523,22 @@ export async function executeA2AMessage(
         repeatTracker.hasReachedTerminationCeiling()
       ) {
         finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      } else if (hadTextBeforeStrip && finalText.trim() === "") {
+        // The whole textual answer was `<thinking>` and stripped to nothing.
+        // Substitute the notice in both the headless `text` and the message so
+        // the protocol reply / persistence (built from text parts) carries it.
+        finalText = THINKING_ONLY_NOTICE;
+        const firstTextPart = responseUiMessage.parts.find(
+          (p) => p.type === "text",
+        );
+        if (firstTextPart?.type === "text") {
+          firstTextPart.text = THINKING_ONLY_NOTICE;
+        } else {
+          responseUiMessage.parts.push({
+            type: "text",
+            text: THINKING_ONLY_NOTICE,
+          });
+        }
       }
     } catch (streamError) {
       const capturedStreamError = getCapturedStreamError();

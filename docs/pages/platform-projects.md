@@ -2,7 +2,7 @@
 title: Projects
 category: Agents
 order: 3
-description: A shared workspace where chats, files, and scheduled runs build on each other
+description: A shared workspace to organize your work
 lastUpdated: 2026-07-03
 ---
 

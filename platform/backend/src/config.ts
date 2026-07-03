@@ -965,8 +965,10 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
     return undefined;
   }
 
+  // A host that's set but malformed is a genuine misconfiguration (unlike an
+  // absent host, which just means "no sandbox here") — surface it loudly.
   if (!isSupportedDaggerRunnerHost(runnerHost)) {
-    logger.warn(
+    logger.error(
       "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
     );
     return undefined;

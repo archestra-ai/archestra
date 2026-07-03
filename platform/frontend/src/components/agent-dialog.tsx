@@ -1352,10 +1352,10 @@ export function AgentDialog({
 
                     {/* Environment assignment (below description).
                       - Agent: binds the agent's code sandbox to a per-environment
-                        Dagger engine + egress policy (feature-flagged).
+                        Dagger engine + egress policy.
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
-                      Hidden when only the default environment is available. */}
+                      Renders disabled when only the default environment exists. */}
                     {(isInternalAgent ||
                       agentType === "llm_proxy" ||
                       agentType === "mcp_gateway") && (

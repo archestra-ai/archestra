@@ -278,4 +278,90 @@ describe("mcpServerProxyRoutes gate pass-through", () => {
       catalogId: catalog.id,
     });
   });
+
+  test("tools/call for a block_always-policied tool is rejected by the invocation policy, not just visibility", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "blocked",
+      meta: { _meta: { ui: { visibility: ["app"] } } },
+    });
+    // Unconditional block on every call to this tool.
+    await makeToolPolicy(tool.id, { action: "block_always", conditions: [] });
+    // A policy block must reject at the gate (200 JSON-RPC error); reaching the
+    // transport here would throw and surface as 500.
+    mockCreateServerScopedServer.mockImplementation(() => {
+      throw new Error("transport must not be reached for a blocked tool");
+    });
+    app = await buildApp(user.id, org.id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_HEADERS,
+      payload: rpc("tools/call", { name: "blocked", arguments: {} }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().error?.message).toMatch(/tool-invocation policy/i);
+    expect(mockCreateServerScopedServer).not.toHaveBeenCalled();
+  });
+
+  test("a no-policy tool still passes the gate in a restrictive org (context-trusted app runtime does not over-block)", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "unpoliced",
+      meta: { _meta: { ui: { visibility: ["app"] } } },
+    });
+    mockCreateServerScopedServer.mockImplementation(() => {
+      throw new Error("transport unavailable in test");
+    });
+    app = await buildApp(user.id, org.id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_HEADERS,
+      payload: rpc("tools/call", { name: "unpoliced", arguments: {} }),
+    });
+
+    // Reached the transport → passed the gate (a rejection would be a 200
+    // JSON-RPC error). A tool with no block/approval policy stays callable.
+    expect(res.statusCode).toBe(500);
+    expect(mockCreateServerScopedServer).toHaveBeenCalled();
+  });
 });

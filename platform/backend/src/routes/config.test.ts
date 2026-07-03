@@ -49,6 +49,7 @@ describe("config routes", () => {
       disableInvitations: expect.any(Boolean),
       devAutoLoginEnabled: expect.any(Boolean),
       maintenanceMode: null,
+      siteNotificationMessage: null,
       enterpriseCoreActive: expect.any(Boolean),
       analytics: {
         enabled: expect.any(Boolean),

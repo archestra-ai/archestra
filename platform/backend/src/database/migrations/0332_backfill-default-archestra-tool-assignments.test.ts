@@ -16,6 +16,15 @@ const STATEMENT = migrationSql
   .join("\n")
   .trim();
 
+// The line filter above would also swallow a `--> statement-breakpoint`,
+// silently fusing statements the migrator runs separately. This migration is
+// single-statement by design; fail loudly if that ever changes.
+if (migrationSql.includes("statement-breakpoint")) {
+  throw new Error(
+    "0332 test loader only supports a single-statement migration",
+  );
+}
+
 // Frozen snapshot of the groups the migration assigns. Deliberately NOT
 // imported from @archestra/shared: the SQL is a point-in-time artifact, so a
 // tool added to a group later must not change what this migration does.

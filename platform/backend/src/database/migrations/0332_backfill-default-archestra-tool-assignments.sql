@@ -2,17 +2,24 @@
 -- skills, apps groups) to every pre-existing agent of type 'agent'.
 --
 -- Newly created agents receive these groups via AgentModel.create's assign
--- hooks, but agents created before those hooks/tools shipped have no
--- agent_tools rows and cannot use the sandbox, chat file tools, skills, or app
--- authoring without manual assignment. This runs exactly once (Helm
--- pre-upgrade migration hook, before the app boots and seeds), so a user who
--- unassigns any of these tools later is never re-assigned by subsequent
--- deploys.
+-- hooks, but agents created before those hooks/tools shipped lack the rows
+-- and cannot use the sandbox, chat file tools, skills, or app authoring
+-- without manual assignment. Like the existing skill/app startup backfills,
+-- this fills the missing group tools for every custom-mode agent — including
+-- re-adding a group tool an admin removed before this release ships (one
+-- time). It runs exactly once (Helm pre-upgrade migration hook, before the
+-- app boots and seeds), so a tool unassigned after this release is never
+-- re-assigned by subsequent deploys.
 --
 -- Only tool rows that already exist from previous releases are assigned:
--- skills/apps tools are always seeded; sandbox/files tools exist only if the
--- sandbox feature flag was on at last boot. Tool rows first introduced by a
--- later flag enablement are not retrofitted to old agents.
+-- skills/apps tools are always seeded; sandbox/files tool rows exist if the
+-- sandbox feature flag was EVER on (seeding never prunes flag-inactive
+-- built-ins), so flag-off deployments that once trialed the sandbox get
+-- dormant assignments that only surface if the flag is re-enabled. Tool rows
+-- first introduced by a later flag enablement are not retrofitted to old
+-- agents. The per-org skills opt-in (organization.skill_tools_enabled) is
+-- deliberately not checked: skills are a default capability and startup
+-- enables the opt-in for every org anyway (enableSkillToolsForExistingOrgs).
 --
 -- Tool selection is scoped to the built-in Archestra catalog rows only —
 -- exactly the predicate of the tools_archestra_catalog_name_uidx partial

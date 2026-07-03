@@ -3417,16 +3417,16 @@ class McpClient {
    * (buildExternalAppRenderResult), whose absence otherwise misroutes the app's
    * `callServerTool` to the agent gateway.
    *
+   * Binds to the same install run_tool executes against, for any number of
+   * installs: a valid service-account pin (`dynamicConnectionMcpServerId`)
+   * routes every caller to one install; otherwise the caller's own→team→org
+   * connection policy resolves it (`findMcpServerForResource`), so a
+   * per-user-credentialed catalog binds each caller to their own install.
+   *
    * Returns null (render stays unbound, callbacks fail cleanly rather than
-   * misrouting) when:
-   * - the resource is an owned-app backing (`serverType === "app"`, rendered by
-   *   app id via render_app), or
-   * - the catalog has anything other than exactly one install. This method
-   *   resolves the install by the caller's own→team→org connection policy, but
-   *   run_tool executes against the install chosen by the *tool's* credential
-   *   policy (a static/service-account pin can point elsewhere). Those agree
-   *   only when there is a single install, so binding is limited to that case —
-   *   a different install would route callbacks to the wrong server/account.
+   * misrouting) when the caller has no accessible install for the resource, or
+   * the resource is an owned-app backing (`serverType === "app"`, rendered by
+   * app id via render_app).
    */
   async resolveUiAppInstallIdForCaller(
     resourceUri: string,
@@ -3441,11 +3441,14 @@ class McpClient {
     if (!resolved || resolved.catalogItem.serverType === "app") {
       return null;
     }
-    const installs = await McpServerModel.findByCatalogId(
-      resolved.catalogItem.id,
-    );
-    if (installs.length !== 1) {
-      return null;
+    const pinnedId = resolved.catalogItem.dynamicConnectionMcpServerId;
+    if (pinnedId) {
+      const installs = await McpServerModel.findByCatalogId(
+        resolved.catalogItem.id,
+      );
+      if (installs.some((server) => server.id === pinnedId)) {
+        return pinnedId;
+      }
     }
     return resolved.server.id;
   }

@@ -2,8 +2,9 @@
 members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs"]
 resolver = "2"
 
+# No LTO: for these NAPI shims it measured slower to build AND a larger binary
+# (little cross-crate hot code to inline), so it was pure cost.
 [profile.release]
-lto = "thin"
 strip = "symbols"
 
 # Local dev default is debug=2 — heavy debuginfo we don't use in a native addon.

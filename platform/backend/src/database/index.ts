@@ -176,14 +176,25 @@ async function doInitializeDatabase(): Promise<void> {
     connectionString = config.database.url;
   }
 
-  pool = createPool(connectionString);
-  db = drizzle({
-    client: pool,
-    schema,
-  });
+  // Assign the globals only once everything has succeeded: a throw from the
+  // instrumentation below must not leave a half-initialized db that makes
+  // the next initializeDatabase() call return early instead of retrying.
+  const newPool = createPool(connectionString);
+  try {
+    const newDb = drizzle({
+      client: newPool,
+      schema,
+    });
 
-  instrumentDrizzleClient(db, { dbSystem: "postgresql" });
-  installDbErrorSafetyNet();
+    instrumentDrizzleClient(newDb, { dbSystem: "postgresql" });
+    installDbErrorSafetyNet();
+
+    pool = newPool;
+    db = newDb;
+  } catch (error) {
+    await newPool.end().catch(() => {});
+    throw error;
+  }
   logger.info(
     { poolMax: config.database.poolMax },
     "Database connection pool initialized",

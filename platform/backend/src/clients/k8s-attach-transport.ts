@@ -37,6 +37,11 @@ export class K8sAttachTransport implements Transport {
     if (this.isStarted) {
       return;
     }
+    // The transport is single-use: callers construct a fresh instance per
+    // connection, so starting after close() is a bug, not a restart.
+    if (this.closed) {
+      throw new Error("Transport closed before attach completed");
+    }
 
     const { k8sAttach, namespace, podName, containerName } = this.params;
 

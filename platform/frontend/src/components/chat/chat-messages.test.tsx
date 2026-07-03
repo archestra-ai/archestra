@@ -144,6 +144,22 @@ vi.mock("@/components/chat/mcp-app-container", () => ({
       data-uri={props.uiResourceUri}
     />
   ),
+  McpAppEntryPill: (props: { appId?: string; toolName: string }) => (
+    <div
+      data-testid="mcp-app-pill"
+      data-app-id={props.appId ?? ""}
+      data-tool-name={props.toolName}
+    />
+  ),
+  // The content half carries the app-binding contract (uri + appId), so it
+  // keeps the mcp-app-section testid the binding assertions target.
+  McpAppEntryContent: (props: { uiResourceUri: string; appId?: string }) => (
+    <div
+      data-testid="mcp-app-section"
+      data-app-id={props.appId ?? ""}
+      data-uri={props.uiResourceUri}
+    />
+  ),
   McpToolOutput: null,
 }));
 

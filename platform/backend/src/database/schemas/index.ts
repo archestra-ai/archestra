@@ -53,6 +53,7 @@ export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";
+export { default as appPinsTable } from "./app-pin";
 export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
 export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";

@@ -37,7 +37,10 @@ import {
   filterToolNamesByPermission,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
-import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
+import {
+  getUnassignedDiscoverableTools,
+  resolveDynamicTool,
+} from "@/archestra-mcp-server/dynamic-tools";
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
@@ -295,11 +298,28 @@ export async function createAgentServer(
       return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
     };
 
-    // Dynamically enrich the knowledge sources tool description with
-    // the agent's actual knowledge base names and connector types
+    // Dynamically enrich the knowledge sources tool description with the
+    // agent's actual knowledge base names and connector types, and the
+    // search_tools description with the servers in its search space. The
+    // latter involves resolving the dynamically discoverable tool space, so
+    // skip it when search_tools is not in the advertised list anyway ("full"
+    // exposure mode hides the meta tools).
+    const advertisesSearchTools = permittedTools.some(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_SEARCH_TOOLS_SHORT_NAME,
+    );
     const [kbToolDescription, searchToolsDescription] = await Promise.all([
       buildKnowledgeSourcesDescription(agentId),
-      buildSearchToolsDescription(mcpTools, catalogsById),
+      advertisesSearchTools
+        ? buildSearchToolsDescription({
+            mcpTools,
+            agentId,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
+            prefetchedCatalogs: catalogsById,
+          })
+        : null,
     ]);
 
     const toolsList: McpListTool[] = permittedTools.map(
@@ -1773,6 +1793,7 @@ function filterExposedTools(params: {
 type McpListTool = ListToolsResult["tools"][number];
 
 type McpToolForSearchDescription = {
+  name: string;
   catalogId: string | null;
 };
 
@@ -1826,12 +1847,23 @@ function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
   return Array.from(deduped.values());
 }
 
-async function buildSearchToolsDescription(
-  mcpTools: McpToolForSearchDescription[],
+// Caps for the server list appended to the search_tools description: how many
+// servers are named (past this the list degrades to ", and N more") and how
+// much of each server's own description is quoted alongside its name.
+const SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS = 100;
+const SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH = 200;
+
+async function buildSearchToolsDescription(params: {
+  mcpTools: McpToolForSearchDescription[];
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
   prefetchedCatalogs?: Awaited<
     ReturnType<typeof InternalMcpCatalogModel.getByIds>
-  >,
-) {
+  >;
+}) {
+  const { agentId, mcpTools, organizationId, prefetchedCatalogs, userId } =
+    params;
   const searchTool = getArchestraMcpTools().find(
     (tool) =>
       archestraMcpBranding.getToolShortName(tool.name) ===
@@ -1842,9 +1874,20 @@ async function buildSearchToolsDescription(
     return null;
   }
 
+  // Mirror search_tools' actual search space: the catalogs backing the
+  // assigned tools, widened by the dynamically discoverable ones when the
+  // agent's "access all tools" setting is on (getUnassignedDiscoverableTools
+  // self-gates on that setting and a real authenticated user).
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: new Set(mcpTools.map((tool) => tool.name)),
+    agentId,
+    userId,
+    organizationId,
+  });
+
   const catalogIds = [
     ...new Set(
-      mcpTools
+      [...mcpTools, ...discoverableTools]
         .map((tool) => tool.catalogId)
         .filter(
           (catalogId): catalogId is string =>
@@ -1857,29 +1900,45 @@ async function buildSearchToolsDescription(
     return baseDescription;
   }
 
-  const catalogs =
-    prefetchedCatalogs ?? (await InternalMcpCatalogModel.getByIds(catalogIds));
-  const catalogSummaries = catalogIds
+  const catalogs = new Map(prefetchedCatalogs ?? []);
+  const missingCatalogIds = catalogIds.filter((id) => !catalogs.has(id));
+  if (missingCatalogIds.length > 0) {
+    const fetched = await InternalMcpCatalogModel.getByIds(missingCatalogIds);
+    for (const [id, catalog] of fetched) {
+      catalogs.set(id, catalog);
+    }
+  }
+
+  const resolvedCatalogs = catalogIds
     .map((catalogId) => catalogs.get(catalogId))
-    .filter((catalog) => catalog !== undefined)
-    .slice(0, 10)
-    .map((catalog) => {
-      const labels = catalog.labels
-        .slice(0, 3)
-        .map((label) => `${label.key}:${label.value}`)
-        .join(", ");
-      return labels ? `${catalog.name} (labels: ${labels})` : catalog.name;
-    });
+    .filter((catalog) => catalog !== undefined);
+  const catalogSummaries = resolvedCatalogs
+    .slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS)
+    .map((catalog) =>
+      catalog.description
+        ? `${catalog.name} (${summarizeCatalogDescription(catalog.description)})`
+        : catalog.name,
+    );
 
   if (catalogSummaries.length === 0) {
     return baseDescription;
   }
 
-  const remainingCount = catalogIds.length - catalogSummaries.length;
+  const remainingCount = resolvedCatalogs.length - catalogSummaries.length;
   const remainingText =
     remainingCount > 0 ? `, and ${remainingCount} more` : "";
 
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
+}
+
+// One-line, length-capped rendering of a catalog's own description for
+// embedding in the search_tools description.
+function summarizeCatalogDescription(description: string): string {
+  const collapsed = description.replace(/\s+/g, " ").trim();
+  return collapsed.length >
+    SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH
+    ? `${collapsed.slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH)}…`
+    : collapsed;
 }
 
 /** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */

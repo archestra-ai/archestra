@@ -1,5 +1,8 @@
+import { Eye, EyeOff } from "lucide-react";
 import type * as React from "react";
+import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -10,6 +13,10 @@ type SecretInputProps = Omit<React.ComponentProps<"input">, "type"> & {
   // for fields whose sensitivity is caller-controlled (e.g. a "sensitive"
   // switch) or that were never masked.
   masked?: boolean;
+  // Render an "eye" toggle that reveals/hides the masked value. Off by default
+  // so existing secret fields are unaffected; opt in where the user needs to
+  // verify what they typed or pasted (e.g. the Add API Key form).
+  revealable?: boolean;
 };
 
 // Input for app secrets (API keys, tokens, client secrets). Always renders
@@ -21,28 +28,68 @@ type SecretInputProps = Omit<React.ComponentProps<"input">, "type"> & {
 // must not be able to reintroduce autofill on a secret field.
 function SecretInput({
   masked = true,
+  revealable = false,
   className,
+  disabled,
   onCopy,
   onCut,
   ...props
 }: SecretInputProps) {
-  return (
+  const [revealed, setRevealed] = useState(false);
+  // Revealing turns off masking, which also lifts the copy/cut guards below so
+  // the user can copy a value they've chosen to see.
+  const effectiveMasked = masked && !revealed;
+
+  const input = (
     <Input
       type="text"
-      className={cn(masked && "secret-masked", className)}
+      disabled={disabled}
+      className={cn(
+        effectiveMasked && "secret-masked",
+        revealable && "pr-10",
+        className,
+      )}
       // parity with type="password": a masked value cannot be copied or cut
       // out of the field (cut would also delete the selection)
       onCopy={(e) => {
-        if (masked) e.preventDefault();
+        if (effectiveMasked) e.preventDefault();
         onCopy?.(e);
       }}
       onCut={(e) => {
-        if (masked) e.preventDefault();
+        if (effectiveMasked) e.preventDefault();
         onCut?.(e);
       }}
       {...props}
       {...SECRET_FIELD_SUPPRESSION_PROPS}
     />
+  );
+
+  if (!revealable) {
+    return input;
+  }
+
+  return (
+    <div className="relative">
+      {input}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        disabled={disabled}
+        onClick={() => setRevealed((value) => !value)}
+        className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 text-muted-foreground"
+        title={revealed ? "Hide value" : "Show value"}
+      >
+        {revealed ? (
+          <EyeOff className="h-4 w-4" />
+        ) : (
+          <Eye className="h-4 w-4" />
+        )}
+        <span className="sr-only">
+          {revealed ? "Hide value" : "Show value"}
+        </span>
+      </Button>
+    </div>
   );
 }
 

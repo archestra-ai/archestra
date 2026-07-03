@@ -115,6 +115,73 @@ describe("LlmProviderApiKeyModel", () => {
       expect(key.isPrimary).toBe(true);
     });
 
+    test("creating a new primary demotes the current primary in the same scope", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const first = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "First Org Key",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      // Previously this violated chat_api_keys_primary_org_unique and 500'd.
+      const second = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Second Org Key",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      expect(second.isPrimary).toBe(true);
+      const demoted = await LlmProviderApiKeyModel.findById(first.id);
+      expect(demoted?.isPrimary).toBe(false);
+    });
+
+    test("a new primary does not demote primaries in other scopes or providers", async ({
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+
+      const personalPrimary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Personal Primary",
+        provider: "openai",
+        scope: "personal",
+        userId: user.id,
+        isPrimary: true,
+      });
+      const otherProviderPrimary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Anthropic Org Primary",
+        provider: "anthropic",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "OpenAI Org Primary",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      expect(
+        (await LlmProviderApiKeyModel.findById(personalPrimary.id))?.isPrimary,
+      ).toBe(true);
+      expect(
+        (await LlmProviderApiKeyModel.findById(otherProviderPrimary.id))
+          ?.isPrimary,
+      ).toBe(true);
+    });
+
     test("allows personal keys for different providers", async ({
       makeOrganization,
       makeUser,
@@ -299,6 +366,54 @@ describe("LlmProviderApiKeyModel", () => {
 
       expect(updated).toBeDefined();
       expect(updated?.name).toBe("Updated Name");
+    });
+
+    test("promoting a key to primary demotes the current primary in its scope", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const currentPrimary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Current Primary",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+      const challenger = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Challenger",
+        provider: "openai",
+        scope: "org",
+      });
+
+      // Previously this violated chat_api_keys_primary_org_unique and 500'd.
+      const promoted = await LlmProviderApiKeyModel.update(challenger.id, {
+        isPrimary: true,
+      });
+
+      expect(promoted?.isPrimary).toBe(true);
+      expect(
+        (await LlmProviderApiKeyModel.findById(currentPrimary.id))?.isPrimary,
+      ).toBe(false);
+    });
+
+    test("re-promoting the current primary is a no-op that keeps it primary", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const primary = await LlmProviderApiKeyModel.create({
+        organizationId: org.id,
+        name: "Primary",
+        provider: "openai",
+        scope: "org",
+        isPrimary: true,
+      });
+
+      const updated = await LlmProviderApiKeyModel.update(primary.id, {
+        isPrimary: true,
+      });
+
+      expect(updated?.isPrimary).toBe(true);
     });
   });
 

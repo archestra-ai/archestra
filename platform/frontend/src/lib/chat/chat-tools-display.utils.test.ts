@@ -21,7 +21,7 @@ describe("getDefaultEnabledToolIds", () => {
   it("includes archestra tools (they are not filtered out)", () => {
     const tools = [
       { id: "a1", name: "archestra__web_search" },
-      { id: "a2", name: "archestra__artifact_write" },
+      { id: "a2", name: "archestra__todo_write" },
       { id: "a3", name: "archestra__some_custom_tool" },
       { id: "m1", name: "other_server__some_tool" },
     ];

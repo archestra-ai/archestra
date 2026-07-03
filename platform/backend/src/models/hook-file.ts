@@ -1,6 +1,11 @@
 import { and, asc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { HookFile, InsertHookFile, UpdateHookFile } from "@/types/hook";
+import type {
+  HookEvent,
+  HookFile,
+  InsertHookFile,
+  UpdateHookFile,
+} from "@/types/hook";
 import { InsertHookFileSchema, UpdateHookFileSchema } from "@/types/hook";
 
 class HookFileModel {
@@ -49,24 +54,23 @@ class HookFileModel {
       );
   }
 
-  static async listEnabledByAgent(
-    agentId: string,
-    organizationId: string,
-  ): Promise<HookFile[]> {
+  static async listEnabledByAgentAndEvent(params: {
+    agentId: string;
+    organizationId: string;
+    event: HookEvent;
+  }): Promise<HookFile[]> {
     return await db
       .select()
       .from(schema.hookFilesTable)
       .where(
         and(
-          eq(schema.hookFilesTable.agentId, agentId),
-          eq(schema.hookFilesTable.organizationId, organizationId),
+          eq(schema.hookFilesTable.agentId, params.agentId),
+          eq(schema.hookFilesTable.organizationId, params.organizationId),
+          eq(schema.hookFilesTable.event, params.event),
           eq(schema.hookFilesTable.enabled, true),
         ),
       )
-      .orderBy(
-        asc(schema.hookFilesTable.event),
-        asc(schema.hookFilesTable.fileName),
-      );
+      .orderBy(asc(schema.hookFilesTable.fileName));
   }
 
   static async update(params: {

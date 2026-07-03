@@ -12,7 +12,7 @@ Do not edit manually.
 
 The Archestra MCP Server is a built-in MCP server that ships with the platform and requires no installation. It exposes tools for managing platform resources such as agents, MCP servers, policies, and limits.
 
-Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`artifact_write`](#artifact_write), [`todo_write`](#todo_write).
+Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`todo_write`](#todo_write).
 
 Additionally, [`query_knowledge_sources`](#query_knowledge_sources) is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have `knowledgeSource:query`.
 
@@ -1700,7 +1700,6 @@ Required RBAC permission: `knowledgeSource:update`
 | `todo_write` | Write todos to the current conversation. | None (no additional RBAC permission required) |
 | `swap_agent` | Switch the current conversation to a different agent. | `agent:read` |
 | `swap_to_default_agent` | Return to the default agent. | None (no additional RBAC permission required) |
-| `artifact_write` | Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. | None (no additional RBAC permission required) |
 | `create_project_from_conversation` | Turn the current chat into a project. | `project:create` |
 
 #### todo_write
@@ -1754,23 +1753,6 @@ This tool takes no arguments.
 | `success` | `boolean` | Yes | Whether the swap succeeded. |
 | `agent_id` | `string` | Yes | The agent ID the conversation now uses. |
 | `agent_name` | `string` | Yes | The agent name the conversation now uses. |
-
-#### artifact_write
-
-Required RBAC permission: None (no additional RBAC permission required)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `content` | `string` | Yes | The markdown content to write to the conversation artifact. This completely replaces any existing artifact content. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `boolean` | Yes | Whether the artifact write succeeded. |
-| `characterCount` | `integer` | Yes | The number of characters written to the artifact. |
 
 #### create_project_from_conversation
 

@@ -9,8 +9,15 @@ type OpenAiResponsesArm = Extract<
 
 // Failed interactions persist `{ error }` in place of a provider response;
 // DynamicInteraction handles those before delegating here, so this mapper only
-// ever sees a real provider response.
-type OpenAiResponsesInteractionRecord = Omit<OpenAiResponsesArm, "response"> & {
+// ever sees a real provider response. The request side of the API type also
+// carries a loose read-back arm (a drifted persisted row serializes raw
+// instead of 500-ing the list) — narrow to the canonical request shape here;
+// every access below is already defensive about the runtime payload.
+type OpenAiResponsesInteractionRecord = Omit<
+  OpenAiResponsesArm,
+  "request" | "response"
+> & {
+  request: Extract<OpenAiResponsesArm["request"], { model: string }>;
   response: Exclude<OpenAiResponsesArm["response"], { error: string }>;
 };
 

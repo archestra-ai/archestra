@@ -13,9 +13,9 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 FROM rust:1-alpine@sha256:f87aa870663e2b57ec8c69de82c7eedf7383bee987eef7612c0359635eaadb41 AS bench-builder
 RUN apk add --no-cache musl-dev
 WORKDIR /src
-COPY archestra-bench ./archestra-bench
+COPY ai-labs ./ai-labs
 RUN cargo build --release --locked \
-    --manifest-path archestra-bench/Cargo.toml --bin archestra-bench
+    --manifest-path ai-labs/Cargo.toml --bin archestra-bench
 
 FROM ${PLATFORM_IMAGE} AS runner
 USER root
@@ -32,14 +32,14 @@ RUN uv venv /opt/bench-venv \
        tensorboard==2.20.0 google-cloud-storage==3.12.0
 ENV PATH="/opt/bench-venv/bin:${PATH}"
 
-COPY --from=bench-builder /src/archestra-bench/target/release/archestra-bench /usr/local/bin/archestra-bench
+COPY --from=bench-builder /src/ai-labs/target/release/archestra-bench /usr/local/bin/archestra-bench
 # Fixtures the harness reads locally via --bench-dir (skills are web-pinned and fetched at runtime, so
 # they are not copied). tasks/ carries each task's verifier.py + inputs/ + expected/.
-COPY archestra-bench/envs /bench/envs
-COPY archestra-bench/tasks /bench/tasks
-COPY archestra-bench/lanes.toml /bench/lanes.toml
+COPY ai-labs/envs /bench/envs
+COPY ai-labs/tasks /bench/tasks
+COPY ai-labs/lanes.toml /bench/lanes.toml
 # Post-run reporting (TensorBoard export + GCS upload + Slack) runs in-pod with the baked venv python3.
-COPY archestra-bench/scripts /bench/scripts
+COPY ai-labs/scripts /bench/scripts
 COPY .github/bench/runner-entrypoint.sh /usr/local/bin/run-benchmark
 RUN chmod +x /usr/local/bin/run-benchmark
 

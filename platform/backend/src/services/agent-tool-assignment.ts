@@ -11,6 +11,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { resolveAppAssignableToolRows } from "@/services/apps/app-assignable-tools";
 import type {
   AgentScope,
   CredentialResolutionMode,
@@ -166,18 +167,21 @@ export async function validateAssignment(
 }
 
 /**
- * Resolve a declarative tool-name list (the `tools` param of the
- * `scaffold_app` chat tool) to assignable tool rows — clean or
- * fail, never a silent partial set. Names resolve strictly within the caller's
- * organization (`ToolModel.findAppAssignableToolsByNames`; a global lookup
- * would let a caller attach another org's tool row), built-ins are rejected,
- * and an ambiguous or unknown name errors with the offenders listed. The
- * resulting assignments use dynamic credential resolution: the server (and so
- * the credential) is picked per viewing user at call time, which both makes
- * the assignment valid without an explicit mcpServerId and gives shared apps
- * per-viewer auth.
+ * Resolve a declarative tool-name list (the `tools` param of `scaffold_app` /
+ * `set_app_tools`) to assignable tool rows — clean or fail, never a silent
+ * partial set. Names resolve through {@link resolveAppAssignableToolRows}, the
+ * shared surface `search_tools` and the app runtime resolve against, so a
+ * duplicate name (unique only per catalog) collapses to the SAME canonical row
+ * the model saw and the app will execute — never an ambiguity error the caller
+ * cannot disambiguate. Built-ins are rejected and an unknown name errors with
+ * the offenders listed. The resulting assignments use dynamic credential
+ * resolution: the server (and so the credential) is picked per viewing user at
+ * call time, which both makes the assignment valid without an explicit
+ * mcpServerId and gives shared apps per-viewer auth.
  */
 export async function resolveAppToolsByName(params: {
+  agentId: string;
+  userId: string;
   organizationId: string;
   toolNames: readonly string[];
   /** Environment to resolve tools within (the app's bound environment; the org
@@ -197,15 +201,12 @@ export async function resolveAppToolsByName(params: {
     );
   }
 
-  const rows = await ToolModel.findAppAssignableToolsByNames(
-    params.organizationId,
-    requested,
-    params.environmentId,
-  );
-  const byName = new Map<string, typeof rows>();
-  for (const row of rows) {
-    byName.set(row.name, [...(byName.get(row.name) ?? []), row]);
-  }
+  const byName = await resolveAppAssignableToolRows({
+    agentId: params.agentId,
+    userId: params.userId,
+    organizationId: params.organizationId,
+    environmentId: params.environmentId,
+  });
 
   const unknown = requested.filter((name) => !byName.has(name));
   if (unknown.length > 0) {
@@ -213,25 +214,11 @@ export async function resolveAppToolsByName(params: {
       `Unknown tool name(s) for this organization: ${unknown.join(", ")}. Use search_tools to discover available tools.`,
     );
   }
-  const ambiguous = requested.filter(
-    (name) => (byName.get(name) ?? []).length > 1,
-  );
-  if (ambiguous.length > 0) {
-    return appToolsValidationError(
-      `Tool name(s) match more than one installed tool and cannot be assigned by name: ${ambiguous.join(", ")}.`,
-    );
-  }
-  const pendingDiscovery = rows.filter((row) => row.clonedPendingDiscovery);
-  if (pendingDiscovery.length > 0) {
-    return appToolsValidationError(
-      `Tool(s) not available until their server is installed: ${pendingDiscovery.map((row) => row.name).join(", ")}`,
-    );
-  }
 
   return {
     tools: requested.map((name) => {
       // biome-ignore lint/style/noNonNullAssertion: unknown names errored above
-      const row = byName.get(name)![0];
+      const row = byName.get(name)!;
       return { id: row.id, name: row.name };
     }),
   };

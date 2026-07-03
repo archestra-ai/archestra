@@ -863,12 +863,7 @@ function createCohereClient(
   const baseUrl = options.baseUrl || config.llm.cohere.baseUrl;
   // Only wrap fetch with metrics when agent context is available
   const observableFetch = options.agent
-    ? metrics.llm.getObservableFetch(
-        "cohere",
-        options.agent,
-        options.source,
-        options.externalAgentId,
-      )
+    ? metrics.llm.getObservableFetch("cohere", options.agent, options.source)
     : fetch;
 
   return {

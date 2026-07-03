@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   McpAppFullscreenExitButton,
-  McpAppMarkerCircle,
+  McpAppPill,
   McpAppStandaloneButton,
 } from "./mcp-app-chrome";
 
@@ -35,21 +35,21 @@ describe("address-pill action buttons", () => {
   });
 });
 
-describe("McpAppMarkerCircle", () => {
-  it("labels the pill with the app name without mounting an iframe", () => {
+describe("McpAppPill", () => {
+  it("shows the app name inline without mounting an iframe", () => {
     const { container } = render(
-      <McpAppMarkerCircle label="Dashboard" onClick={() => {}} />,
+      <McpAppPill label="Dashboard" onClick={() => {}} />,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Dashboard" }),
-    ).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Dashboard" });
+    // The name is visible pill text, not just a tooltip/aria label.
+    expect(button).toHaveTextContent("Dashboard");
     expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
 
   it("toggles on click and reflects its pressed state", async () => {
     const onClick = vi.fn();
-    render(<McpAppMarkerCircle label="Dashboard" pressed onClick={onClick} />);
+    render(<McpAppPill label="Dashboard" pressed onClick={onClick} />);
 
     const button = screen.getByRole("button", { name: "Dashboard" });
     expect(button).toHaveAttribute("aria-pressed", "true");

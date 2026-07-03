@@ -92,12 +92,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
     const resolvedBaseUrl = options.baseUrl || config.llm.openai.baseUrl;
 
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "openai",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("openai", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({

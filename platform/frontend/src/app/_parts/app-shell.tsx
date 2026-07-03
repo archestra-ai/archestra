@@ -29,7 +29,10 @@ import { useActiveSiteNotification } from "@/lib/site-notification.query";
 import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { AppSidebar } from "./sidebar";
-import { SiteNotificationBar } from "./site-notification-bar";
+import {
+  EnvSiteNotificationBar,
+  SiteNotificationBar,
+} from "./site-notification-bar";
 
 const SIDEBAR_COLLAPSED_PERMISSION: Permissions = {
   simpleView: ["enable"],
@@ -89,6 +92,7 @@ export function AppShell({ children }: AppShellProps) {
     return (
       <main className="h-screen w-full flex flex-col bg-background">
         <MaintenanceModeOverlay />
+        <EnvSiteNotificationBar />
         <div className="flex-1 flex flex-col">{children}</div>
         <Version />
         <Toaster />
@@ -122,6 +126,7 @@ export function AppShell({ children }: AppShellProps) {
             <MaintenanceModeOverlay />
             <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
               <ConnectivityBar />
+              <EnvSiteNotificationBar />
               {notification && (
                 <SiteNotificationBar
                   content={notification.content}

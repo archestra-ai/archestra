@@ -1666,19 +1666,17 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
     ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
     ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
     ),
   },
   secretsManager: {
@@ -1723,6 +1721,10 @@ const config = {
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

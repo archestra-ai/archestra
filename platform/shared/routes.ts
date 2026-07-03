@@ -637,6 +637,10 @@ export const RouteId = {
   GetAppTemplates: "getAppTemplates",
   OpenAppInChat: "openAppInChat",
   OpenExternalAppInChat: "openExternalAppInChat",
+  PinApp: "pinApp",
+  UnpinApp: "unpinApp",
+  PinExternalApp: "pinExternalApp",
+  UnpinExternalApp: "unpinExternalApp",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)

@@ -189,6 +189,9 @@ const PublicConfigResponseSchema = z.strictObject({
   // false in production (the driving env var is ignored there).
   devAutoLoginEnabled: z.boolean(),
   maintenanceMode: z.string().nullable(),
+  // Instance-wide banner (markdown) rendered at the top of the UI. Exposed
+  // pre-auth so operators can label an instance on the login screen too.
+  siteNotificationMessage: z.string().nullable(),
   // Effective enterprise core flag (env var OR small-team free tier). Exposed
   // pre-auth so the login screen can decide whether to render the SSO picker.
   enterpriseCoreActive: z.boolean(),
@@ -214,6 +217,7 @@ async function getPublicConfigResponse(): Promise<
     disableInvitations: config.auth.disableInvitations,
     devAutoLoginEnabled: !!config.auth.devAutoAuthenticateEmail,
     maintenanceMode: config.maintenanceMode,
+    siteNotificationMessage: config.siteNotificationMessage,
     enterpriseCoreActive: enterpriseTier.isCoreActive(),
     analytics: {
       enabled: config.analytics.enabled,

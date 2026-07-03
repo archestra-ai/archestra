@@ -4,7 +4,6 @@ import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import React from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   DOTTED_NAV_ITEMS,
   type NavDotKey,
@@ -29,8 +28,6 @@ export function useNavOnboarding() {
   const pathname = usePathname();
   const { data: seenData, isSuccess: seenLoaded } = useSeenNavItems();
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const projectsEnabled = useFeature("projectsEnabled");
-  const appsEnabled = useFeature("appsEnabled");
   // Connect is compound-gated (same as the sidebar): both reads required.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const { data: canReadMcpGateway } = useHasPermissions({
@@ -41,7 +38,6 @@ export function useNavOnboarding() {
   const ready =
     seenLoaded &&
     permissionMap !== null &&
-    projectsEnabled !== undefined &&
     canReadLlmProxy !== undefined &&
     canReadMcpGateway !== undefined;
 
@@ -51,11 +47,9 @@ export function useNavOnboarding() {
     const visible = (key: NavDotKey): boolean => {
       switch (key) {
         case "nav:projects":
-          return (
-            projectsEnabled === true && (permissionMap["/projects"] ?? true)
-          );
+          return permissionMap["/projects"] ?? true;
         case "nav:apps":
-          return appsEnabled === true && (permissionMap["/apps"] ?? true);
+          return permissionMap["/apps"] ?? true;
         case "nav:connect":
           return canReadLlmProxy === true && canReadMcpGateway === true;
         case "nav:model-providers":
@@ -69,15 +63,7 @@ export function useNavOnboarding() {
         (item) => visible(item.key) && !seen.has(item.key),
       ).map((item) => item.key),
     );
-  }, [
-    ready,
-    seenData,
-    permissionMap,
-    projectsEnabled,
-    appsEnabled,
-    canReadLlmProxy,
-    canReadMcpGateway,
-  ]);
+  }, [ready, seenData, permissionMap, canReadLlmProxy, canReadMcpGateway]);
 
   const markSeen = React.useCallback(
     (key: NavDotKey) => {

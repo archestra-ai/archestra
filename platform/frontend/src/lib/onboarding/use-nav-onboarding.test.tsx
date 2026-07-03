@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
-vi.mock("@/lib/config/config.query");
 
 const markMutate = vi.fn();
 const mockSeenQuery: { data?: { items: string[] }; isSuccess: boolean } = {
@@ -18,7 +17,6 @@ vi.mock("@/lib/onboarding/onboarding.query", () => ({
 
 import { usePathname } from "next/navigation";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useNavOnboarding } from "./use-nav-onboarding";
 
 const allPermissions = {
@@ -37,7 +35,6 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
-  vi.mocked(useFeature).mockReturnValue(true);
 });
 
 describe("useNavOnboarding", () => {
@@ -85,14 +82,17 @@ describe("useNavOnboarding", () => {
     expect(result.current.showCollapsedToggleDot).toBe(false);
   });
 
-  it("hides feature-flag-disabled items", () => {
-    vi.mocked(useFeature).mockReturnValue(false);
+  it("hides permission-gated chats items independently", () => {
+    vi.mocked(usePermissionMap).mockReturnValue({
+      ...allPermissions,
+      "/projects": false,
+      "/apps": false,
+    });
 
     const { result } = renderHook(() => useNavOnboarding());
 
     expect(result.current.unseenKeys.has("nav:projects")).toBe(false);
     expect(result.current.unseenKeys.has("nav:apps")).toBe(false);
-    // Permission-gated items are unaffected by the feature flags.
     expect(result.current.unseenKeys.has("nav:mcp-registry")).toBe(true);
   });
 

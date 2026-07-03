@@ -20,11 +20,16 @@ import {
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
+import { McpAppAuthBanner } from "@/components/mcp-app/mcp-app-auth-banner";
 import {
   getAppDiagnostics,
   parseForwardedDiagnostic,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
+import {
+  type ConnectableAuthState,
+  resolveMcpAppToolCallAuthState,
+} from "@/lib/chat/mcp-error-ui";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 
@@ -134,6 +139,10 @@ export const McpAppRuntime = function McpAppRuntime({
     preloadedResource ?? null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Auth error from the app's most recent proxied tools/call — drives a
+  // host-side connect banner above the iframe (see McpAppAuthBanner).
+  const [toolCallAuthState, setToolCallAuthState] =
+    useState<ConnectableAuthState | null>(null);
 
   // Stable identity for the bridge-creation effect — re-run when the endpoint or
   // resource changes, never on unrelated re-renders. The effect derives its
@@ -373,6 +382,31 @@ export const McpAppRuntime = function McpAppRuntime({
       return json.result;
     };
 
+    // Proxy a tools/call and sniff the result for the gateway's auth-required /
+    // auth-expired refusal (structured `archestraError`, prose fallback). The
+    // result still flows to the app unchanged; the host additionally raises a
+    // connect banner OUTSIDE the iframe — the app may only print the error
+    // text, and the sandbox blocks popups so an in-app link couldn't open.
+    // A fresh render (endpoint/resource/reload change) starts with no banner.
+    setToolCallAuthState(null);
+    const proxyToolCall = async (params: {
+      name: string;
+      arguments?: unknown;
+    }) => {
+      const result = await mcpProxy("tools/call", params);
+      const authState = resolveMcpAppToolCallAuthState(result);
+      if (authState) {
+        // Keep the previous object when the same refusal repeats (an app retry
+        // loop) so the banner doesn't re-render on every failed call.
+        setToolCallAuthState((prev) =>
+          prev && isSameConnectableAuthState(prev, authState)
+            ? prev
+            : authState,
+        );
+      }
+      return result;
+    };
+
     if (endpoint.kind === "agent") {
       const serverPrefix = endpoint.serverPrefix;
 
@@ -382,7 +416,7 @@ export const McpAppRuntime = function McpAppRuntime({
         const rawName = parseFullToolName(params.name).toolName;
         const toolName = buildFullToolName(serverPrefix, rawName);
 
-        return mcpProxy("tools/call", {
+        return proxyToolCall({
           name: toolName,
           arguments: params.arguments,
         });
@@ -452,7 +486,7 @@ export const McpAppRuntime = function McpAppRuntime({
       // list/template/prompt handlers return empty rather than hitting an
       // unimplemented method.
       appBridge.oncalltool = async (params) =>
-        mcpProxy("tools/call", {
+        proxyToolCall({
           name: params.name,
           arguments: params.arguments,
         });
@@ -654,6 +688,12 @@ export const McpAppRuntime = function McpAppRuntime({
 
   return (
     <div>
+      {toolCallAuthState && (
+        <McpAppAuthBanner
+          authState={toolCallAuthState}
+          onDismiss={() => setToolCallAuthState(null)}
+        />
+      )}
       {loadError && (
         <div className="flex items-center justify-center rounded-lg bg-destructive/10 border border-destructive/20 min-h-[100px] p-4">
           <div className="flex flex-col items-center gap-2 text-center">
@@ -715,6 +755,20 @@ export const McpAppRuntime = function McpAppRuntime({
     </div>
   );
 };
+
+/** Same auth refusal (kind + action URL + server): the banner needn't update. */
+function isSameConnectableAuthState(
+  a: ConnectableAuthState,
+  b: ConnectableAuthState,
+): boolean {
+  const urlOf = (state: ConnectableAuthState) =>
+    state.kind === "auth-expired" ? state.reauthUrl : state.actionUrl;
+  return (
+    a.kind === b.kind &&
+    urlOf(a) === urlOf(b) &&
+    a.catalogName === b.catalogName
+  );
+}
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;

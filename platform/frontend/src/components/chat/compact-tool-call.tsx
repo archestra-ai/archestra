@@ -262,8 +262,17 @@ export function CompactToolGroup({
 
   const expandedEntry = tools.find((t) => t.key === expandedKey);
 
+  // While no entry is expanded the group is an inline box, so consecutive
+  // pill-only groups (and collapsed MCP App renders) flow on one line instead
+  // of stacking one row per group. Expanding an entry needs the full chat
+  // width for its card, so the group becomes a block again.
   return (
-    <div className="mb-4">
+    <div
+      className={cn(
+        "mb-4",
+        !expandedEntry && "mr-1.5 inline-flex max-w-full align-top",
+      )}
+    >
       <div className="flex flex-wrap gap-1.5 items-center">
         {tools.map((entry) => {
           if (entry.kind === "hook") {

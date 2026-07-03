@@ -298,14 +298,16 @@ export function McpAppSection({
           hasError
           onClick={() => setUnavailableOpen((open) => !open)}
         />
-        <div className="flex w-full flex-col items-start gap-2">
-          {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
-          {unavailableOpen ? (
-            <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-              {headerName} app is no longer available
-            </div>
-          ) : null}
-        </div>
+        {toolDetails || unavailableOpen ? (
+          <div className="flex w-full flex-col items-start gap-2">
+            {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
+            {unavailableOpen ? (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+                {headerName} app is no longer available
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </>
     );
   }
@@ -448,34 +450,38 @@ export function McpAppSection({
 
   // Under the marker row: tool-call details, then (only while expanded inline) the
   // app card, its "Open in right panel" button, and the diagnostics summary.
-  const belowColumn = (
-    <div className="flex w-full flex-col items-start gap-2">
-      {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
-      {expandedInline ? (
-        <div className="flex w-full flex-col items-start gap-2">
-          {liveSurface}
-          {toolCallId && displayMode !== "fullscreen" ? (
-            // Match the card's 80% width and right-justify so the buttons line
-            // up with the app's right edge, not the full chat width.
-            <div className="flex w-full max-w-[80%] justify-end gap-1">
-              {appId ? <McpAppStandaloneButton appId={appId} /> : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={handleShowInPanel}
-              >
-                <PanelRight className="h-3.5 w-3.5" />
-                Open in right panel
-              </Button>
-            </div>
-          ) : null}
-          {diagnostics}
-        </div>
-      ) : null}
-    </div>
-  );
+  // Rendered only when it has content — an always-present `w-full` sibling would
+  // force a line break in the host's flex-wrap row, so consecutive collapsed
+  // pills couldn't share a line.
+  const belowColumn =
+    !toolDetails && !expandedInline ? null : (
+      <div className="flex w-full flex-col items-start gap-2">
+        {toolDetails ? <div className="w-full">{toolDetails}</div> : null}
+        {expandedInline ? (
+          <div className="flex w-full flex-col items-start gap-2">
+            {liveSurface}
+            {toolCallId && displayMode !== "fullscreen" ? (
+              // Match the card's 80% width and right-justify so the buttons line
+              // up with the app's right edge, not the full chat width.
+              <div className="flex w-full max-w-[80%] justify-end gap-1">
+                {appId ? <McpAppStandaloneButton appId={appId} /> : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={handleShowInPanel}
+                >
+                  <PanelRight className="h-3.5 w-3.5" />
+                  Open in right panel
+                </Button>
+              </div>
+            ) : null}
+            {diagnostics}
+          </div>
+        ) : null}
+      </div>
+    );
 
   return (
     <>

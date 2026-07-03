@@ -25,6 +25,7 @@ export class K8sAttachTransport implements Transport {
   private stdinStream?: Readable;
   private readBuffer = new ReadBuffer();
   private isStarted = false;
+  private closed = false;
 
   onclose?: () => void;
   onerror?: (error: Error) => void;
@@ -35,6 +36,11 @@ export class K8sAttachTransport implements Transport {
   async start(): Promise<void> {
     if (this.isStarted) {
       return;
+    }
+    // The transport is single-use: callers construct a fresh instance per
+    // connection, so starting after close() is a bug, not a restart.
+    if (this.closed) {
+      throw new Error("Transport closed before attach completed");
     }
 
     const { k8sAttach, namespace, podName, containerName } = this.params;
@@ -99,6 +105,16 @@ export class K8sAttachTransport implements Transport {
           false /* tty */,
         )
         .then((ws) => {
+          // close() may have run while attach was in flight — the just-arrived
+          // websocket has no owner then, so shut it down instead of adopting
+          // it, and fail the start: callers must not treat a canceled
+          // transport as successfully started.
+          if (this.closed) {
+            ws.close();
+            reject(new Error("Transport closed before attach completed"));
+            return;
+          }
+
           this.ws = ws;
           this.isStarted = true;
 
@@ -143,6 +159,8 @@ export class K8sAttachTransport implements Transport {
   }
 
   async close(): Promise<void> {
+    this.closed = true;
+
     if (this.ws) {
       this.ws.close();
       this.ws = undefined;

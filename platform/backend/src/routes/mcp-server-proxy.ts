@@ -6,6 +6,7 @@ import QuickLRU from "quick-lru";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import { McpServerModel, ToolModel } from "@/models";
+import { enforceAppRuntimeInvocationPolicy } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type McpServer, UuidIdSchema } from "@/types";
 import {
   createStatelessTransport,
@@ -73,7 +74,13 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Gate tools/call on _meta.ui.visibility: model-only tools are not
       // app-callable. Fail-closed on unknown tools. Mirrors the agent proxy.
       if (body.method === "tools/call") {
-        const denied = await rejectDisallowedToolCall(catalogId, body, reply);
+        const denied = await rejectDisallowedToolCall(
+          catalogId,
+          body,
+          reply,
+          userId,
+          organizationId,
+        );
         if (denied) return denied;
       }
 
@@ -145,10 +152,12 @@ async function rejectDisallowedToolCall(
   catalogId: string,
   body: Record<string, unknown>,
   reply: StatusReply,
+  userId: string,
+  organizationId: string,
 ): Promise<object | null> {
   const callParams =
     body.params && typeof body.params === "object"
-      ? (body.params as { name?: unknown })
+      ? (body.params as { name?: unknown; arguments?: unknown })
       : undefined;
   const toolName =
     typeof callParams?.name === "string" ? callParams.name : undefined;
@@ -187,6 +196,29 @@ async function rejectDisallowedToolCall(
       `Tool "${toolName}" is not accessible from MCP Apps (visibility: [${visibility.join(", ")}])`,
     );
   }
+
+  // This runtime dispatches to the upstream with the install's own credentials
+  // and otherwise never touches the policy engine, so tool-invocation policies
+  // must be enforced here — mirroring the owned-app runtime (gateAppToolCall).
+  // The app sandbox is a trusted, no-approval-UI context, so
+  // block_always/require_approval gate the call while a no-policy tool stays
+  // callable. Policy is keyed by the stored (slugified) name.
+  const refusal = await enforceAppRuntimeInvocationPolicy({
+    resolvedToolName: tool.name,
+    displayName: toolName,
+    toolInput:
+      callParams?.arguments && typeof callParams.arguments === "object"
+        ? (callParams.arguments as Record<string, unknown>)
+        : {},
+    organizationId,
+    userId,
+    isContextTrusted: true,
+    treatRequireApprovalAsBlock: true,
+  });
+  if (refusal) {
+    return jsonRpcError(reply, body.id, refusal.code, refusal.reason);
+  }
+
   return null;
 }
 

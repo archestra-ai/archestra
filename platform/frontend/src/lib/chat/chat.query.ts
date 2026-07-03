@@ -497,9 +497,10 @@ export function useCompactConversation() {
 }
 
 /**
- * Clear a conversation's recorded chat errors. Used by the scheduled-run
- * "Try again" affordance: after wiping the error rows we invalidate the
- * conversation so the inline error card disappears before the prompt is resent.
+ * Clear a conversation's recorded chat errors. Used by the chat session's
+ * regenerate flow ("Try again" on the error card, the regenerate action on a
+ * user message, edited resends): after wiping the error rows we invalidate the
+ * conversation so the stale inline error card disappears.
  */
 export function useClearChatErrors() {
   const queryClient = useQueryClient();

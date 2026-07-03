@@ -1413,6 +1413,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },
+  // Per-user app pins (mirrors PinProject/UnpinProject): any viewer may pin —
+  // the handlers gate per-instance visibility; unpin is intentionally
+  // unchecked there so stale pins can always be cleared.
+  [RouteId.PinApp]: { app: ["read"] },
+  [RouteId.UnpinApp]: { app: ["read"] },
+  [RouteId.PinExternalApp]: { app: ["read"] },
+  [RouteId.UnpinExternalApp]: { app: ["read"] },
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
   [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },

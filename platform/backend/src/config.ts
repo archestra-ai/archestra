@@ -1721,6 +1721,10 @@ const config = {
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

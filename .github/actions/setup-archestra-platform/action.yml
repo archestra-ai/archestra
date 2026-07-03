@@ -64,6 +64,14 @@ inputs:
     description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
     required: false
     default: ""
+  image-pull-timeout-seconds:
+    description: |
+      How long to wait for the platform / MCP server base images to become pullable before failing.
+      With a value > 0, callers may start this action while the image build job is still running:
+      all image-independent setup (Kind cluster, dependency images) happens first, then the pull
+      step polls the registry until the freshly pushed image appears. 0 = single pull attempt.
+    required: false
+    default: "0"
   extra-helm-set:
     description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
     required: false
@@ -95,20 +103,6 @@ runs:
         tags: ${{ inputs.platform-image-tag }}
         turbo-team: ${{ inputs.turbo-team }}
         turbo-token: ${{ inputs.turbo-token }}
-
-    - name: Pull Docker image (if not already present)
-      if: ${{ inputs.build-platform-image != 'true' }}
-      shell: bash
-      env:
-        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
-      run: |
-        # Check if image already exists locally (e.g., loaded from artifact)
-        if docker image inspect "${PLATFORM_IMAGE_TAG}" > /dev/null 2>&1; then
-          echo "Image ${PLATFORM_IMAGE_TAG} already exists locally, skipping pull"
-        else
-          echo "Pulling image ${PLATFORM_IMAGE_TAG} from registry..."
-          docker pull "${PLATFORM_IMAGE_TAG}"
-        fi
 
     - name: Cache MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
@@ -186,6 +180,61 @@ runs:
           exit 1
         fi
         echo "All MCP dependency images fetched successfully"
+
+    # Deliberately placed AFTER the Kind cluster and MCP dependency image setup:
+    # everything above is independent of the platform image, so when the caller
+    # starts this action while the platform image build is still running (see
+    # image-pull-timeout-seconds), that work overlaps with the build and the
+    # wait below only covers whatever build time is actually left.
+    - name: Wait for and pull images (if not already present)
+      if: ${{ inputs.build-platform-image != 'true' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        PULL_TIMEOUT_SECONDS: ${{ inputs.image-pull-timeout-seconds }}
+      run: |
+        # Pull an image unless it is already in the local daemon (e.g. loaded
+        # from a build artifact on fork PRs). Retries until the deadline so the
+        # image build may still be in flight when this step starts.
+        wait_and_pull() {
+          local image="$1"
+          if docker image inspect "${image}" > /dev/null 2>&1; then
+            echo "Image ${image} already exists locally, skipping pull"
+            return 0
+          fi
+          local deadline=$(( $(date +%s) + PULL_TIMEOUT_SECONDS ))
+          while true; do
+            if docker pull "${image}"; then
+              return 0
+            fi
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for ${image} to become pullable"
+              return 1
+            fi
+            echo "Image ${image} not available yet, retrying in 10s..."
+            sleep 10
+          done
+        }
+
+        PIDS=()
+        wait_and_pull "${PLATFORM_IMAGE_TAG}" &
+        PIDS+=($!)
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          wait_and_pull "${MCP_SERVER_BASE_IMAGE_TAG}" &
+          PIDS+=($!)
+        fi
+
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more image pulls failed"
+          exit 1
+        fi
 
     - name: Load all images into Kind in parallel
       shell: bash

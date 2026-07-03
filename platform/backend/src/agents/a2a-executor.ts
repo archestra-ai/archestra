@@ -21,7 +21,7 @@ import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
-import { guardStepMessages } from "@/agents/step-context-guard";
+import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -386,15 +386,16 @@ export async function executeA2AMessage(
         ceiling: config.chat.maxOutputTokensCeiling,
       }),
       // Per-step context guard: cap oversized tool results and keep the
-      // accumulated step history inside the model's context window. Overrides
-      // only what each step sends to the model — the loop's own state (and the
+      // accumulated step history inside the model's context window, compacting
+      // the older prefix into an LLM summary when it overflows. Overrides only
+      // what each step sends to the model — the loop's own state (and the
       // persisted/streamed UIMessage) keeps the full tool outputs.
-      prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
-        messages: guardStepMessages({
-          messages,
-          contextLength: modelRow?.contextLength ?? null,
-          systemPrompt,
-        }),
+      prepareStep: createStepContextGuard({
+        model,
+        contextLength: modelRow?.contextLength ?? null,
+        systemPrompt,
+        abortSignal,
+        logContext: { agentId: agent.id, sessionId },
       }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =

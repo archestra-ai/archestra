@@ -228,7 +228,24 @@ export default function AgentSettingsPage() {
     <SettingsSectionStack>
       <SettingsBlock
         title="Default Model for Agents and New Chats"
-        description="Select the LLM provider API key and model that will be used by default when creating new agents and starting new chat conversations."
+        description={
+          <>
+            Select the LLM provider API key and model that will be used by
+            default when creating new agents and starting new chat
+            conversations.
+            <span className="mt-2 block">
+              It's also the fallback for {appName}'s{" "}
+              <Link
+                href="/agents?scope=built_in"
+                className="text-primary hover:underline"
+              >
+                built-in agents
+              </Link>{" "}
+              — like chat title generation and context compaction — when they
+              don't have their own model.
+            </span>
+          </>
+        }
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}

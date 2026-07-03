@@ -2142,7 +2142,7 @@ Required RBAC permission: `app:update`
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id to publish. |
 | `scope` | `"team" \| "org"` | Yes | Publish to specific teams or to the whole organization. Promotes the app out of personal scope. |
-| `teamIds` | `string[]` | No | Target team ids — required when scope is team. |
+| `teams` | `string[]` | No | Target teams, each a team name or team id — required when scope is team. Pass the team name the user gave (e.g. ["Platform"]); no need to look up ids first. |
 
 ##### Output
 
@@ -2171,7 +2171,7 @@ Required RBAC permission: `app:update`
 | `toolName` | `string` | Yes |  |
 | `isError` | `boolean` | Yes |  |
 | `truncated` | `boolean` | Yes |  |
-| `output` | `string` | Yes | The tool's output, framed as untrusted data. |
+| `output` | `string` | Yes | The JSON-serialized value archestra.tools.call resolves with for this result, framed as untrusted data (media dataUrls are elided). |
 
 #### get_app_diagnostics
 

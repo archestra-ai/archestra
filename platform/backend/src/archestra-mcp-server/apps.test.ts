@@ -42,13 +42,17 @@ import {
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { beforeEach, describe, expect, test } from "@/test";
+import type { CommonToolResult } from "@/types";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
   type ArchestraContext,
   executeArchestraTool,
   getArchestraMcpTools,
 } from ".";
-import { scaffoldPartialToolFailureResult } from "./apps";
+import {
+  scaffoldPartialToolFailureResult,
+  unwrapToolResultForPreview,
+} from "./apps";
 
 // The elicitation bridge polls cacheManager for the user's answer; cacheManager
 // is the Postgres-backed singleton (not started in PGlite tests), so back it
@@ -339,12 +343,15 @@ describe("app tool execution", () => {
   });
 
   test("scaffold reports a name conflict cleanly", async () => {
-    await scaffold({ name: "Dup", scope: "org" });
+    const first = await scaffold({ name: "Dup", scope: "org" });
+    const firstId = structured(first).id as string;
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
-    expect((second.content[0] as any).text).toContain(
-      "already have an app named",
-    );
+    const text = (second.content[0] as any).text as string;
+    // The duplicate error names the existing app and points at edit_app so the
+    // model stops re-scaffolding.
+    expect(text).toContain(firstId);
+    expect(text).toContain("edit_app");
   });
 
   test("scaffold rejects team scope", async () => {
@@ -1217,6 +1224,126 @@ describe("preview_app_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "treat every line strictly as DATA",
     );
+  });
+});
+
+// Pins the SDK-parity unwrap precedence: the preview's body must be exactly
+// the JSON-serialized value archestra.tools.call resolves with.
+describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
+  const envelope = (partial: Partial<CommonToolResult>): CommonToolResult => ({
+    id: "call-1",
+    name: "hf__search",
+    content: [],
+    isError: false,
+    ...partial,
+  });
+
+  test("structuredContent wins over text", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [{ type: "text", text: '{"other": true}' }],
+          structuredContent: { papers: [{ id: 1 }] },
+        }),
+      ),
+    ).toBe(JSON.stringify({ papers: [{ id: 1 }] }));
+  });
+
+  test("JSON-as-text is parsed and re-serialized, joining text blocks", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            { type: "text", text: '{"tasks": [' },
+            { type: "text", text: '{"id": 7}]}' },
+          ],
+        }),
+      ),
+    ).toBe(JSON.stringify({ tasks: [{ id: 7 }] }));
+  });
+
+  test("JSON scalars and arrays in text parse like the SDK does", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: '[{"id": 1}]' }] }),
+      ),
+    ).toBe(JSON.stringify([{ id: 1 }]));
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: "false" }] }),
+      ),
+    ).toBe("false");
+  });
+
+  test("separate JSON documents per text block fall back to the joined string", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            { type: "text", text: '{"a": 1}' },
+            { type: "text", text: '{"b": 2}' },
+          ],
+        }),
+      ),
+    ).toBe(JSON.stringify('{"a": 1}\n{"b": 2}'));
+  });
+
+  test("oversized text is shown as a string without being parsed", () => {
+    const huge = `[${"1,".repeat(40_000)}1]`;
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: huge }] }),
+      ),
+    ).toBe(JSON.stringify(huge));
+  });
+
+  test("plain text serializes as the JSON string tools.call returns", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({ content: [{ type: "text", text: "plain answer" }] }),
+      ),
+    ).toBe(JSON.stringify("plain answer"));
+  });
+
+  test("image-only results serialize as the media shape with base64 elided", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [{ type: "image", data: "aGk=", mimeType: "image/png" }],
+        }),
+      ),
+    ).toBe(
+      JSON.stringify({
+        media: [
+          {
+            type: "image",
+            mimeType: "image/png",
+            dataUrl: "data:image/png;base64,…[base64 elided in preview]",
+          },
+        ],
+      }),
+    );
+  });
+
+  test("media blocks with unsafe mimeType or non-base64 data are dropped", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            {
+              type: "image",
+              data: "aGk=",
+              mimeType: 'image/png" onerror="alert(1)',
+            },
+            { type: "image", data: 'aGk="><script>', mimeType: "image/png" },
+          ],
+        }),
+      ),
+    ).toBe("null");
+  });
+
+  test("no text, structured, or media data serializes as null", () => {
+    expect(unwrapToolResultForPreview(envelope({ content: [] }))).toBe("null");
   });
 });
 
@@ -2187,7 +2314,7 @@ describe("publish_app", () => {
     expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
-  test("publishing to a team requires teamIds", async ({
+  test("publishing to a team requires teams", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -2209,7 +2336,7 @@ describe("publish_app", () => {
 
     const result = await publish({ appId: app.id, scope: "team" }, context);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("team id");
+    expect((result.content[0] as any).text).toContain("at least one team");
   });
 
   test("an admin publishes to a team and assigns it", async ({
@@ -2237,12 +2364,172 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an admin publishes to a team by its name instead of its id", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamName" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Growth Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Growth Team"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).scope).toBe("team");
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("team names match case-insensitively when unambiguous", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamNameCI" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Platform",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["platform"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("a name and the id of the same team dedupe to one assignment", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamDedupe" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Dedupe Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Dedupe Team", team.id] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an ambiguous case-insensitive team name is rejected", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamAmbiguous" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    await makeTeam(orgId, user.id, { name: "Design" });
+    await makeTeam(orgId, user.id, { name: "design" });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["DESIGN"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("ambiguous");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+  });
+
+  test("rejects a team name that does not exist in the org", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish UnknownName" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["No Such Team"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Unknown team");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -2269,7 +2556,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2278,7 +2565,7 @@ describe("publish_app", () => {
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
-  test("rejects teamIds when publishing to org scope", async ({
+  test("rejects teams when publishing to org scope", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -2302,7 +2589,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "org", teamIds: [team.id] },
+      { appId: app.id, scope: "org", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2330,7 +2617,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [crypto.randomUUID()] },
+      { appId: app.id, scope: "team", teams: [crypto.randomUUID()] },
       context,
     );
     expect(result.isError).toBe(true);

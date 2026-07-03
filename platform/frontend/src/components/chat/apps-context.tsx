@@ -8,6 +8,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import { buildAppGroups } from "./apps-context.utils";
+import type { McpToolOutput } from "./mcp-app-container";
 
 export interface PanelApp {
   toolCallId: string;
@@ -37,6 +39,14 @@ export interface PanelApp {
   mcpServerId?: string | null;
   /** Latest owned-app version this entry shows. */
   version?: number | null;
+  /**
+   * External MCP-UI tool result, so a panel-hosted render can seed its iframe
+   * (`sendToolResult`) exactly like the inline render instead of re-calling the
+   * source tool. Owned apps have none (their management result is not app data).
+   */
+  rawOutput?: McpToolOutput | null;
+  /** Tool input for the iframe; best-effort — only present on same-part results. */
+  toolInput?: Record<string, unknown> | null;
   /** Timestamp (ms) when the app first registered — used to order entries and default to the latest. */
   createdAt: number;
 }
@@ -44,21 +54,17 @@ export interface PanelApp {
 interface AppsContextValue {
   /** All apps currently mounted in the conversation, in the order they appeared. */
   apps: PanelApp[];
-  /**
-   * toolCallId of the single open app — the one shown either inline in the chat
-   * stream or in the right panel. Every section derives its pressed / inline /
-   * panel state from this one value; opening any app collapses the previous one
-   * to a pill. Defaults to the latest app.
-   */
-  openToolCallId: string | null;
-  /**
-   * Set the single open app, or `null` to collapse (nothing open). Pills pass
-   * their toolCallId to open, or `null` when they're already open to toggle
-   * closed. Where the app then shows — inline or the right panel — is derived
-   * from `portalTarget` (whether the Apps tab is hosting), not stored here.
-   */
-  setOpenToolCallId: (toolCallId: string | null) => void;
-  /** Open the right panel on the Apps tab. Call alongside `setOpenToolCallId` to send an app there ("Open in right panel"). */
+  /** Whether this render is expanded inline. Apps expand by default; only the canonical (latest) owned render can. */
+  isAppOpen: (toolCallId: string) => boolean;
+  /** Toggle one app's inline expansion (canonicalized), leaving other open apps alone. */
+  toggleAppOpen: (toolCallId: string) => void;
+  /** The single app the right panel hosts: the explicit pick, else the latest still-open app, else the latest — never blank. */
+  panelToolCallId: string | null;
+  /** Point the right panel at an app (pill selector / "Open in right panel"). */
+  setPanelApp: (toolCallId: string) => void;
+  /** Map any render to the canonical render for its app (latest owned render, or itself). */
+  canonicalToolCallId: (toolCallId: string) => string;
+  /** Open the right panel on the Apps tab. */
   openRightPanel: () => void;
   /** DOM node where the open app should portal its content; null when the panel is not on the Apps tab. */
   portalTarget: HTMLElement | null;
@@ -76,10 +82,16 @@ interface AppsContextValue {
 
 const AppsContext = createContext<AppsContextValue | null>(null);
 
+const EMPTY_SET: ReadonlySet<string> = new Set();
+const EMPTY_MAP: ReadonlyMap<string, string> = new Map();
+
 const NOOP_VALUE: AppsContextValue = {
   apps: [],
-  openToolCallId: null,
-  setOpenToolCallId: () => {},
+  isAppOpen: () => false,
+  toggleAppOpen: () => {},
+  panelToolCallId: null,
+  setPanelApp: () => {},
+  canonicalToolCallId: (id) => id,
   openRightPanel: () => {},
   portalTarget: null,
   setPortalTarget: () => {},
@@ -102,42 +114,106 @@ export function AppsProvider({
   onClosePanel?: () => void;
   children: ReactNode;
 }) {
-  // `undefined` = untouched, so the open app defaults to the latest; a string is
-  // an explicit choice; `null` is an explicit collapse (nothing open).
-  const [explicitOpen, setExplicitOpen] = useState<string | null | undefined>(
-    undefined,
-  );
+  // Apps the user explicitly collapsed, keyed per app (an `AppGroup.key`).
+  // Everything expands by default, so a new app auto-opens by being absent here.
+  const [closedKeys, setClosedKeys] = useState<ReadonlySet<string>>(EMPTY_SET);
+  // Which render of an owned app the user picked as visible (appId → toolCallId);
+  // absent → the latest. Clicking an older owned pill points it here.
+  const [pickedOwnedRender, setPickedOwnedRender] =
+    useState<ReadonlyMap<string, string>>(EMPTY_MAP);
+  // Explicit right-panel pick; null falls back to the latest still-open app.
+  const [explicitPanelId, setExplicitPanelId] = useState<string | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Resolve the open app: untouched → the latest (most recently registered) app;
-  // an explicit collapse (`null`) → nothing; an explicit choice → that app while
-  // it's still present. A stale choice (a superseded owned-app render, or an id
-  // from a previous conversation) isn't found and falls through to the latest,
-  // so a new render of an owned app takes focus and no reset is needed on switch.
-  const openToolCallId = useMemo(() => {
-    const latestToolCallId =
-      apps.reduce<PanelApp | null>(
-        (latest, a) =>
-          !latest || a.createdAt >= latest.createdAt ? a : latest,
-        null,
-      )?.toolCallId ?? null;
-    // An explicit collapse (null) empties the inline stream, but the panel
-    // always hosts one app when the conversation has any — fall back to the
-    // latest there so the Apps tab never renders blank.
-    if (explicitOpen === null) return portalTarget ? latestToolCallId : null;
-    if (explicitOpen && apps.some((a) => a.toolCallId === explicitOpen)) {
-      return explicitOpen;
-    }
-    return latestToolCallId;
-  }, [explicitOpen, apps, portalTarget]);
+  // One group per app: owned renders fold into a shared group with a single
+  // visible `activeRender` (the user's pick while present, else the latest);
+  // external renders are singleton groups. `groupByToolCallId` maps any render to
+  // its group so every callback below is an O(1) lookup instead of a scan.
+  const { groupByToolCallId } = useMemo(
+    () => buildAppGroups(apps, pickedOwnedRender),
+    [apps, pickedOwnedRender],
+  );
 
-  // Setting the open app always returns to the live app — the settings form
-  // belongs to the app that was open, not the one switched to.
-  const setOpenToolCallId = useCallback((toolCallId: string | null) => {
-    setExplicitOpen(toolCallId);
-    setSettingsOpen(false);
-  }, []);
+  // The visible (canonical) render for an app: its group's active render. An
+  // unknown id (e.g. a render not yet in `apps`) is its own canonical render.
+  const canonicalToolCallId = useCallback(
+    (id: string) => groupByToolCallId.get(id)?.activeRender.toolCallId ?? id,
+    [groupByToolCallId],
+  );
+
+  // Open when this is the group's active render and the group isn't collapsed.
+  // An unknown id is treated as its own default-open singleton.
+  const isAppOpen = useCallback(
+    (id: string) => {
+      const group = groupByToolCallId.get(id);
+      if (!group) return !closedKeys.has(id);
+      return group.activeRender.toolCallId === id && !closedKeys.has(group.key);
+    },
+    [groupByToolCallId, closedKeys],
+  );
+
+  // Collapse when this render is the visible, open one; otherwise make it the
+  // visible render (moving an owned dup here) and open the app.
+  const toggleAppOpen = useCallback(
+    (id: string) => {
+      const group = groupByToolCallId.get(id);
+      const key = group?.key ?? id;
+      const appId = group?.appId ?? null;
+      const visibleHere = (group?.activeRender.toolCallId ?? id) === id;
+      if (visibleHere && !closedKeys.has(key)) {
+        setClosedKeys((prev) => new Set(prev).add(key));
+      } else {
+        if (appId) {
+          setPickedOwnedRender((prev) => new Map(prev).set(appId, id));
+        }
+        setClosedKeys((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+      setSettingsOpen(false);
+    },
+    [groupByToolCallId, closedKeys],
+  );
+
+  // Switching the panel app drops the previous app's settings form.
+  const setPanelApp = useCallback(
+    (id: string) => {
+      setExplicitPanelId(canonicalToolCallId(id));
+      setSettingsOpen(false);
+    },
+    [canonicalToolCallId],
+  );
+
+  // One hosted app, never blank: explicit pick, else latest still-open active
+  // render, else the latest active render overall.
+  const panelToolCallId = useMemo(() => {
+    if (explicitPanelId && groupByToolCallId.has(explicitPanelId)) {
+      return explicitPanelId;
+    }
+    const isActive = (a: PanelApp) =>
+      groupByToolCallId.get(a.toolCallId)?.activeRender.toolCallId ===
+      a.toolCallId;
+    const latestBy = (predicate: (a: PanelApp) => boolean) =>
+      apps
+        .filter(predicate)
+        .reduce<PanelApp | null>(
+          (latest, a) =>
+            !latest || a.createdAt >= latest.createdAt ? a : latest,
+          null,
+        )?.toolCallId ?? null;
+    const latestOpen = latestBy(
+      (a) =>
+        isActive(a) &&
+        !closedKeys.has(
+          groupByToolCallId.get(a.toolCallId)?.key ?? a.toolCallId,
+        ),
+    );
+    return latestOpen ?? latestBy(isActive);
+  }, [explicitPanelId, apps, closedKeys, groupByToolCallId]);
 
   const openRightPanel = useCallback(() => {
     onShowInPanel?.();
@@ -151,8 +227,11 @@ export function AppsProvider({
   const value = useMemo<AppsContextValue>(
     () => ({
       apps,
-      openToolCallId,
-      setOpenToolCallId,
+      isAppOpen,
+      toggleAppOpen,
+      panelToolCallId,
+      setPanelApp,
+      canonicalToolCallId,
       openRightPanel,
       portalTarget,
       setPortalTarget,
@@ -162,8 +241,11 @@ export function AppsProvider({
     }),
     [
       apps,
-      openToolCallId,
-      setOpenToolCallId,
+      isAppOpen,
+      toggleAppOpen,
+      panelToolCallId,
+      setPanelApp,
+      canonicalToolCallId,
       openRightPanel,
       portalTarget,
       closePanel,

@@ -265,6 +265,12 @@ const MessageThread = ({
 
                         switch (part.type) {
                           case "text": {
+                            // Some models emit whitespace-only text alongside
+                            // tool calls (e.g. a lone " "); rendering it would
+                            // produce an empty message bubble
+                            if (!part.text.trim()) {
+                              return null;
+                            }
                             const policyDenied = parsePolicyDenied(part.text);
                             const shouldRenderUnsafeContextDivider =
                               message.role === "assistant" &&

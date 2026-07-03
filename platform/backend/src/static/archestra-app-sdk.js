@@ -17,8 +17,13 @@
  *                                     on a usage limit or { code: "llm_unavailable" } otherwise
  *   archestra.llm.prompt`...`       — tagged-template prompt builder (pure string, no round-trip)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
- *                                     throws { code: "auth_required", url } when the
- *                                     upstream MCP server needs (re)authentication
+ *                                     resolves with the tool's data unwrapped from the MCP
+ *                                     envelope (structuredContent when the tool provides it,
+ *                                     else JSON parsed from its text output, else the raw
+ *                                     text, else { media: [{ type, mimeType, dataUrl }] }
+ *                                     for image/audio-only results, else null); throws
+ *                                     { code: "auth_required", url } when the upstream MCP
+ *                                     server needs (re)authentication
  *   archestra.tools.list()          — the app's assigned tools (name/description/inputSchema)
  *   archestra.ui.openLink(url) / archestra.ui.requestDisplayMode(mode)
  *   archestra.context               — { appId, version } of the running app (sync)
@@ -201,8 +206,10 @@
     null;
 
   /**
-   * Call a tool and resolve with its result. Tool-level failures throw —
-   * apps handle one error channel instead of checking isError:
+   * Call a tool and resolve with the raw MCP result envelope. Internal raw
+   * path — the storage/llm wrappers read the envelope directly; tools.call
+   * unwraps it (see unwrapToolResult). Tool-level failures throw — apps
+   * handle one error channel instead of checking isError:
    * - upstream MCP needs (re)auth → { code: "auth_required", url } so the app
    *   can render a "Connect" link (the user authenticates in the registry UI);
    * - any other tool error → { code: "tool_error" } with the error text.
@@ -258,6 +265,45 @@
       );
     }
     return result;
+  };
+
+  // Unwrap a successful envelope into the data an app actually wants:
+  // structuredContent when it is a non-null object, else JSON parsed from the
+  // joined text blocks, else the raw text, else { media } for image/audio-only
+  // results (dataUrl drops straight into an <img>/<audio> src), else null.
+  // Mirrored server-side by unwrapToolResultForPreview in
+  // archestra-mcp-server/apps.ts (this file is injected browser JS, so the
+  // two implementations cannot share code) — keep them in step.
+  const unwrapToolResult = (result) => {
+    const sc = result.structuredContent;
+    if (sc && typeof sc === "object") return sc;
+    const text = textOf(result);
+    if (text.trim()) {
+      try {
+        return JSON.parse(text.trim());
+      } catch {
+        return text;
+      }
+    }
+    // Tool results are untrusted: only a strict type/subtype mimeType and
+    // base64-alphabet data may enter the data URL, so a malicious block can
+    // never smuggle quotes/markup into an attribute an app interpolates.
+    const media = (result.content || [])
+      .filter(
+        (c) =>
+          c &&
+          (c.type === "image" || c.type === "audio") &&
+          typeof c.data === "string" &&
+          /^[A-Za-z0-9+/=]+$/.test(c.data) &&
+          typeof c.mimeType === "string" &&
+          /^[\w.+-]+\/[\w.+-]+$/.test(c.mimeType),
+      )
+      .map((c) => ({
+        type: c.type,
+        mimeType: c.mimeType,
+        dataUrl: "data:" + c.mimeType + ";base64," + c.data,
+      }));
+    return media.length ? { media } : null;
   };
 
   // Each value is an entry { value, revision, owner }: revision powers optimistic
@@ -333,7 +379,7 @@
       prompt: llmPrompt,
     }),
     tools: Object.freeze({
-      call: callTool,
+      call: async (name, args) => unwrapToolResult(await callTool(name, args)),
       // assigned-tool descriptors embedded at serve time (already filtered to
       // what the app may call); async to allow a live listing later without an
       // API break

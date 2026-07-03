@@ -1,4 +1,4 @@
-/* dashboard overrides on top of classless PicoCSS */
+/* dashboard styling on top of classless PicoCSS */
 
 :root {
     --grade-1: #dc2626;
@@ -6,12 +6,50 @@
     --grade-3: #f59e0b;
     --grade-4: #84cc16;
     --grade-5: #10b981;
+    --accent: #6366f1;
+    --pico-spacing: 1rem;
+    --radius: 0.6rem;
 }
 
-.muted {
-    color: var(--pico-muted-color);
-    font-size: 0.9rem;
+body { background: var(--pico-background-color); }
+
+body > main {
+    max-width: 74rem;
+    padding-top: 1.5rem;
 }
+
+/* ---- top bar ---- */
+.topbar {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.7rem clamp(1rem, 4vw, 2rem);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    background: var(--pico-card-background-color);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--pico-color);
+}
+.brand-mark { color: var(--accent); font-size: 1.1rem; }
+.brand-sub { color: var(--pico-muted-color); font-size: 0.85rem; }
+
+h1 { margin-bottom: 0.25rem; }
+h2 { margin-bottom: 0.7rem; font-size: 1.25rem; }
+section { margin-bottom: 2.25rem; }
+.crumb { margin-bottom: 0.5rem; font-size: 0.9rem; }
+.crumb a { text-decoration: none; }
+.path { font-family: var(--pico-font-family-monospace); word-break: break-all; }
+
+.muted { color: var(--pico-muted-color); font-size: 0.9rem; font-weight: 400; }
+.nowrap { white-space: nowrap; }
 
 .warning {
     color: #b45309;
@@ -21,12 +59,62 @@
     border-radius: 0.25rem;
 }
 
-/* badges (run list + run header) */
+/* ---- cards ---- */
+.card {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+.card.danger { border-color: color-mix(in srgb, var(--grade-1) 45%, transparent); padding: 0.5rem 1.2rem; }
+.card.danger h2 { color: var(--grade-1); }
+.empty { padding: 1.2rem; color: var(--pico-muted-color); }
+
+/* table cards: table sits flush inside the rounded card, no double border */
+.table-card { overflow: hidden; }
+.table-card table { margin: 0; }
+.table-card table :is(th, td):first-child { padding-left: 1rem; }
+.table-card table :is(th, td):last-child { padding-right: 1rem; }
+
+/* ---- stat tiles ---- */
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
+}
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.75rem 0.9rem;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--radius);
+}
+.stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pico-muted-color); }
+.stat-value { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
+
+/* ---- outcome pills ---- */
+.pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.9rem; }
+.pill {
+    font-size: 0.8rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--pico-muted-border-color);
+}
+.pill b { font-weight: 700; }
+.pill.outcome-passed { color: var(--grade-5); border-color: color-mix(in srgb, var(--grade-5) 45%, transparent); background: color-mix(in srgb, var(--grade-5) 12%, transparent); }
+.pill.outcome-failed { color: var(--grade-1); border-color: color-mix(in srgb, var(--grade-1) 45%, transparent); background: color-mix(in srgb, var(--grade-1) 12%, transparent); }
+.pill.outcome-format_failed,
+.pill.outcome-no_submission,
+.pill.outcome-agent_error { color: var(--grade-3); border-color: color-mix(in srgb, var(--grade-3) 45%, transparent); background: color-mix(in srgb, var(--grade-3) 12%, transparent); }
+
+/* ---- badges ---- */
 .badge {
     display: inline-block;
     font-size: 0.75rem;
     font-weight: 600;
-    padding: 0.1rem 0.5rem;
+    padding: 0.1rem 0.55rem;
     border-radius: 999px;
     vertical-align: middle;
     white-space: nowrap;
@@ -35,10 +123,11 @@
 .badge-partial { background: var(--grade-3); color: #111; }
 .badge-none { background: var(--pico-muted-border-color); color: var(--pico-color); }
 
-/* grade chips: fixed hex backgrounds, so text color is chosen per background luminance
-   and stays readable in both PicoCSS light and dark modes */
+/* ---- grade chips: fixed hex backgrounds, text color chosen per luminance ---- */
 .chip {
     display: inline-block;
+    min-width: 1.6rem;
+    text-align: center;
     font-size: 0.75rem;
     font-weight: 700;
     padding: 0.05rem 0.4rem;
@@ -52,7 +141,22 @@
 .grade-5 { background: var(--grade-5); color: #fff; }
 .chip-hack { background: var(--grade-1); color: #fff; }
 
-/* outcome badges/cells */
+/* ---- report chips (run list A/C) ---- */
+.report-chip {
+    display: inline-block;
+    min-width: 1.4rem;
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.05rem 0.3rem;
+    margin-right: 0.2rem;
+    border-radius: 0.25rem;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+/* ---- outcome text colors (grid + header badges) ---- */
 .outcome-passed { color: var(--grade-5); }
 .outcome-failed { color: var(--grade-1); }
 .outcome-format_failed,
@@ -66,31 +170,65 @@
 .badge.outcome-agent_error,
 .badge.outcome-unknown { background: var(--grade-3); color: #111; }
 
-/* filters */
-.filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: end;
+/* ---- run list ---- */
+table.runs { font-size: 0.9rem; }
+.run-link { font-weight: 600; text-decoration: none; }
+.rate { display: flex; align-items: center; gap: 0.5rem; }
+.rate-bar { flex: 1; min-width: 3.5rem; height: 0.4rem; border-radius: 999px; background: var(--pico-muted-border-color); overflow: hidden; }
+.rate-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--grade-4), var(--grade-5)); }
+.rate-val { font-variant-numeric: tabular-nums; font-size: 0.85rem; white-space: nowrap; }
+
+/* ---- tables (generic) ---- */
+table { font-size: 0.9rem; }
+tbody tr:hover { background: var(--pico-table-row-stripped-background-color); }
+th.avg-col, td.avg-col {
+    border-left: 2px solid var(--pico-muted-border-color);
+    font-weight: 600;
+    text-align: center;
 }
+
+/* ---- filters ---- */
+.filters { display: flex; flex-wrap: wrap; gap: 1rem; align-items: end; margin-bottom: 1rem; }
 .filters label { margin: 0; font-size: 0.85rem; }
 .filters select { margin: 0; width: auto; }
 .filters .check { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; }
 
-/* rollout grid */
-.grid-scroll { overflow-x: auto; }
-table.grid { font-size: 0.85rem; }
+/* ---- rollout grid ---- */
+.grid-scroll { overflow-x: auto; border: 1px solid var(--pico-muted-border-color); border-radius: var(--radius); }
+table.grid { font-size: 0.85rem; margin: 0; }
+table.grid thead th { position: sticky; top: 0; background: var(--pico-card-background-color); z-index: 2; }
+table.grid tbody th {
+    position: sticky;
+    left: 0;
+    background: var(--pico-card-background-color);
+    white-space: nowrap;
+    z-index: 1;
+}
 table.grid td.cell { white-space: nowrap; }
-table.grid td.cell a { text-decoration: none; }
-table.grid td.cell-empty { color: var(--pico-muted-color); }
+table.grid td.cell a { text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem; }
+table.grid td.cell a:hover .outcome { text-decoration: underline; }
+table.grid td.cell-empty, table.grid .cell-empty { color: var(--pico-muted-color); }
 
-/* key/value tables */
+/* ---- key/value tables ---- */
 table.kv th { width: 14rem; font-weight: 600; }
 
-/* rendered trajectory */
-.trajectory {
-    max-height: 70vh;
-    overflow-y: auto;
-    padding: 1rem;
+/* ---- reward-hacking list ---- */
+.hack-list { margin: 0.3rem 0 0.6rem; }
+
+/* ---- collapsible reports + trajectory ---- */
+details.report {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--radius);
+    padding: 0 1.1rem;
+    margin-bottom: 0.9rem;
 }
+details.report > summary { padding: 0.8rem 0; cursor: pointer; font-size: 1rem; }
+details.report > summary:hover { color: var(--accent); }
+details.report > summary h2 { display: inline-block; margin: 0; font-size: 1.2rem; }
+details.report[open] > summary { border-bottom: 1px solid var(--pico-muted-border-color); margin-bottom: 0.5rem; }
+
+/* rendered trajectory / report bodies: full render, page scrolls (no inner scrollbar) */
+.trajectory { padding: 0.5rem 0 1rem; }
 .trajectory pre { white-space: pre-wrap; word-break: break-word; }
+.trajectory img { max-width: 100%; height: auto; }

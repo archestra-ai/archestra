@@ -7,6 +7,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  Github,
   MessageSquare,
   Plus,
   RotateCcw,
@@ -29,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useCreateSkill,
   useSkill,
@@ -111,6 +113,15 @@ export function SkillEditorDialog({
   );
   const createSkill = useCreateSkill();
   const updateSkill = useUpdateSkill();
+  const appName = useAppName();
+
+  // GitHub-imported skills are a one-time snapshot, not a live link: editing
+  // here never touches the repo, and the repo is never re-pulled. Surface that
+  // in edit mode so the disconnect isn't a surprise.
+  const isGithubSkill = isEdit && skill?.sourceType === "github";
+  const githubSourceRepo = isGithubSkill
+    ? (skill?.sourceRef?.split("@")[0] ?? null)
+    : null;
 
   const [manifest, setManifest] = useState("");
   const [files, setFiles] = useState<ResourceFile[]>([]);
@@ -396,6 +407,23 @@ export function SkillEditorDialog({
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-4">
+          {isGithubSkill && (
+            <div className="flex gap-2.5 rounded-md border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              <Github className="mt-0.5 size-4 shrink-0" />
+              <p>
+                Imported from{" "}
+                {githubSourceRepo ? (
+                  <code className="font-mono text-foreground">
+                    {githubSourceRepo}
+                  </code>
+                ) : (
+                  "GitHub"
+                )}{" "}
+                as a one-time copy. Saving changes here won’t update the repo,
+                and {appName} won’t pull later changes from it.
+              </p>
+            </div>
+          )}
           <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3">
             <div className="flex min-h-0 flex-col rounded-md border">
               <div className="flex-1 overflow-y-auto p-2">

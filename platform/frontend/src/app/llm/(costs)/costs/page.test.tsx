@@ -19,14 +19,19 @@ vi.mock("@/app/llm/(costs)/layout", () => ({
   useSetCostsAction: () => mockSetCostsAction,
 }));
 
+type StatisticsHookParams = {
+  timeframe: StatisticsTimeFrame;
+  enabled?: boolean;
+};
+
 vi.mock("@/lib/statistics.query", () => ({
-  useTeamStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
+  useTeamStatistics: (params: StatisticsHookParams) =>
     mockUseTeamStatistics(params),
-  useProfileStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
+  useProfileStatistics: (params: StatisticsHookParams) =>
     mockUseProfileStatistics(params),
-  useModelStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
+  useModelStatistics: (params: StatisticsHookParams) =>
     mockUseModelStatistics(params),
-  useCostSavingsStatistics: (params: { timeframe: StatisticsTimeFrame }) =>
+  useCostSavingsStatistics: (params: StatisticsHookParams) =>
     mockUseCostSavingsStatistics(params),
 }));
 
@@ -83,23 +88,55 @@ describe("StatisticsPage", () => {
     await waitFor(() => {
       expect(mockUseTeamStatistics).toHaveBeenLastCalledWith({
         timeframe: customTimeframe,
+        enabled: true,
       });
     });
 
     expect(mockUseProfileStatistics).toHaveBeenLastCalledWith({
       timeframe: customTimeframe,
+      enabled: true,
     });
     expect(mockUseModelStatistics).toHaveBeenLastCalledWith({
       timeframe: customTimeframe,
+      enabled: true,
     });
     expect(mockUseCostSavingsStatistics).toHaveBeenLastCalledWith({
       timeframe: customTimeframe,
+      enabled: true,
     });
     expect(
       mockUseTeamStatistics.mock.calls.some(
         ([params]) => params.timeframe === "all",
       ),
     ).toBe(false);
+  });
+
+  it("never enables the queries for the default timeframe when a persisted one exists", async () => {
+    localStorage.setItem("cost-statistics-timeframe", "30d");
+
+    render(<StatisticsPage />);
+
+    await waitFor(() => {
+      expect(mockUseTeamStatistics).toHaveBeenLastCalledWith({
+        timeframe: "30d",
+        enabled: true,
+      });
+    });
+
+    // A page load must not fire a throwaway round of default-timeframe
+    // requests before the persisted timeframe is resolved.
+    for (const hook of [
+      mockUseTeamStatistics,
+      mockUseProfileStatistics,
+      mockUseModelStatistics,
+      mockUseCostSavingsStatistics,
+    ]) {
+      expect(
+        hook.mock.calls.some(
+          ([params]) => params.enabled && params.timeframe !== "30d",
+        ),
+      ).toBe(false);
+    }
   });
 
   it("renders statistics tables inside capped scroll containers", () => {

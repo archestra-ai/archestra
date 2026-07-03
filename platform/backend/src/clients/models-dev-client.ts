@@ -227,6 +227,20 @@ export function modelsDevCostToPerToken(cost: ModelsDevCost | undefined): {
   };
 }
 
+/**
+ * Sanitize a models.dev output-token limit into a stored `outputLength`.
+ * Keeps only positive integers; drops 0/null/negative/non-integer garbage so a
+ * reseller's malformed row cannot poison the model's output-token budget.
+ * @public — shared by the registry client and provider model sync.
+ */
+export function sanitizeOutputLimit(
+  output: number | null | undefined,
+): number | null {
+  return typeof output === "number" && Number.isInteger(output) && output > 0
+    ? output
+    : null;
+}
+
 // ============================================================================
 // Client implementation
 // ============================================================================
@@ -330,6 +344,7 @@ class ModelsDevClient {
       modelId: model.id,
       description: model.name,
       contextLength: model.limit?.context ?? null,
+      outputLength: sanitizeOutputLimit(model.limit?.output),
       inputModalities,
       outputModalities,
       supportsToolCalling: model.tool_call ?? false,

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-use bench_dashboard::load::{RubricKey, RubricStatus, list_runs, load_run};
+use bench_dashboard::load::{ReduceSource, RubricKey, RubricStatus, list_runs, load_run};
 
 fn fixtures() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/experiments");
@@ -115,6 +115,39 @@ fn partial_rubrics_average_only_over_present_records() {
 }
 
 #[test]
+fn rubric_avg_averages_over_all_records_across_lanes() {
+    let run = load_run(&fixtures(), "run_a").unwrap().unwrap();
+    // Two records (both kimi): knowledge 4/2, reasoning 3/4, if 5/3, ergonomics 2/5.
+    assert_eq!(run.rubric_avg(RubricKey::Knowledge), Some(3.0));
+    assert_eq!(run.rubric_avg(RubricKey::Reasoning), Some(3.5));
+    assert_eq!(run.rubric_avg(RubricKey::InstructionFollowing), Some(4.0));
+    assert_eq!(run.rubric_avg(RubricKey::EnvErgonomics), Some(3.5));
+
+    // A run with no rubric records has no averages, not zeros.
+    let run_b = load_run(&fixtures(), "run_b").unwrap().unwrap();
+    assert_eq!(run_b.rubric_avg(RubricKey::Knowledge), None);
+}
+
+#[test]
+fn reduce_reports_load_latest_per_source_in_order() {
+    let run = load_run(&fixtures(), "run_a").unwrap().unwrap();
+    let sources: Vec<ReduceSource> = run.reports.iter().map(|r| r.source).collect();
+    assert_eq!(sources, [ReduceSource::Analyzer, ReduceSource::Claude]);
+    assert_eq!(
+        run.reports[0].filename,
+        "trajectory_analysis_20260701-120000.md"
+    );
+    assert_eq!(
+        run.reports[1].filename,
+        "trajectory_analysis_claude_20260701-120000.md"
+    );
+
+    // A run with no reduce report has no reports.
+    let run_b = load_run(&fixtures(), "run_b").unwrap().unwrap();
+    assert!(run_b.reports.is_empty());
+}
+
+#[test]
 fn malformed_rubric_file_degrades_to_rubric_less_with_warning() {
     let run = load_run(&fixtures(), "run_b").unwrap().unwrap();
     assert_eq!(run.rubric_status, RubricStatus::None);
@@ -163,6 +196,10 @@ async fn index_renders() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("href=\"/runs/run_a\""));
     assert!(body.contains("href=\"/runs/run_b\""));
+    // run_a has both reduce reports, so its row carries the report chips.
+    assert!(body.contains("report-chip"), "report chips on run list");
+    // A pass rate present -> a rendered rate bar.
+    assert!(body.contains("rate-fill"), "pass-rate bar on run list");
 }
 
 #[tokio::test]
@@ -171,6 +208,26 @@ async fn run_page_renders_with_opaque_rollout_links() {
     assert_eq!(status, StatusCode::OK);
     // Grid cells link to the percent-encoded opaque rollout id, `__` in the task and all.
     assert!(body.contains("/runs/run_a/rollouts/basic%2Ftricky__part__kimi"));
+}
+
+#[tokio::test]
+async fn run_page_renders_reduce_reports_and_avg_columns() {
+    let (status, body) = get("/runs/run_a").await;
+    assert_eq!(status, StatusCode::OK);
+    // Both reduce reports render as collapsible sections labelled by source.
+    assert!(body.contains("class=\"report\""), "report section present");
+    assert!(body.contains("Analyzer report"), "analyzer report labelled");
+    assert!(body.contains("Claude report"), "claude report labelled");
+    // Aggregate "avg" columns exist on the grid and the rubric-by-lane table.
+    assert!(body.contains("class=\"avg-col\""), "avg column rendered");
+}
+
+#[tokio::test]
+async fn grid_shows_per_task_average() {
+    // basic/alpha's only graded rollout (kimi) has mean grade 3.5, so the row avg is 3.5.
+    let (status, body) = get("/runs/run_a/grid?lane=kimi").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(">3.5</span>"), "per-task avg chip: {body}");
 }
 
 #[tokio::test]

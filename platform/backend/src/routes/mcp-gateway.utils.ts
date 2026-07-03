@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -36,6 +37,7 @@ import {
   filterToolNamesByPermission,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -202,12 +204,39 @@ export async function createAgentServer(
     // Fetch fresh on every request to ensure we get newly assigned tools
     const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
 
+    // An all-tools agent reaches unassigned tools dynamically (search_tools /
+    // run_tool already resolve them without an agent_tools row). A UI-providing
+    // tool reached only that way would otherwise never become a candidate below,
+    // so filterExposedTools' "keep top-level" check never runs on it — and an
+    // MCP Apps host, which renders a UI only from a tool DEFINITION listed at
+    // tools/list time (never from a run_tool call result), could never discover
+    // or render it. Widen the candidate pool with the caller's dynamically
+    // accessible UI-providing tools so they get the same top-level treatment as
+    // an assigned one. Gated strictly on accessAllTools (not toolExposureMode
+    // alone) — a search_and_run_only agent without it is deliberately scoped to
+    // its assigned set for context-window management, not dynamic reach.
+    const dynamicUiTools =
+      agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
+        ? await ToolModel.getMcpToolsAccessibleToUser({
+            userId: tokenAuth.userId,
+            organizationId: tokenAuth.organizationId,
+            environmentId: agent.environmentId,
+            isAdmin: await userHasPermission(
+              tokenAuth.userId,
+              tokenAuth.organizationId,
+              "mcpServerInstallation",
+              "admin",
+            ),
+            requireUiResource: true,
+          })
+        : [];
+
     const implicitMetaTools =
       agent.toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
     const candidateTools = dedupeToolsByName(
-      [...mcpTools, ...implicitMetaTools].map(toMcpListTool),
+      [...mcpTools, ...dynamicUiTools, ...implicitMetaTools].map(toMcpListTool),
     );
 
     // Filter Archestra tools based on user RBAC permissions
@@ -216,10 +245,27 @@ export async function createAgentServer(
       tokenAuth?.userId,
       tokenAuth?.organizationId,
     );
-    const permittedTools = filterExposedTools({
+    const exposureFiltered = filterExposedTools({
       toolExposureMode: agent.toolExposureMode ?? "full",
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
+    // render_app renders only inside Archestra's own chat (the chat frontend
+    // mounts the app from the tool result); on an external MCP host it renders
+    // nothing while its result text reads as success, so models keep picking
+    // it over the app's own __open launch tool — the only path that renders
+    // there. Only chat ("agent"-type) agents keep the tool: every other agent
+    // type (mcp_gateway, legacy profile) is an external connection surface.
+    // The rest of the authoring surface (scaffold/read/edit/validate) works
+    // from external clients and stays. The render_app handler itself steers
+    // external callers the same way, since run_tool can still dispatch it.
+    const permittedTools =
+      agent.agentType !== "agent"
+        ? exposureFiltered.filter(
+            (tool) =>
+              archestraMcpBranding.getToolShortName(tool.name) !==
+              TOOL_RENDER_APP_SHORT_NAME,
+          )
+        : exposureFiltered;
 
     // Resolve the backing catalogs of the assigned tools once: their names feed
     // both the search_tools description and the app launch-tool titles below.
@@ -374,12 +420,62 @@ export async function createAgentServer(
         const isAgentDelegationTool = isAgentTool(name);
         const contextIsTrusted = !agent.considerContextUntrusted;
 
+        // tools/list advertises an all-tools agent's dynamically-accessible
+        // UI-providing tools top-level (see the dynamicUiTools widening above),
+        // so a caller may call one directly rather than through run_tool. Two
+        // gates on this path only know assigned tools and must be told about
+        // the dynamic resolution, exactly as run_tool's own dispatch does
+        // (archestra-mcp-server/run-tool.ts): the invocation-policy evaluator
+        // (whose enabled-tools filter otherwise refuses the unassigned name as
+        // "disabled"), and executeToolCallForOwner (which only accepts an
+        // unassigned tool via a pre-resolved availableTool). A no-op for
+        // assigned tools; policies still evaluate the dynamic tool itself.
+        //
+        // Fetch the agent's assigned names once (all-tools agents only): they
+        // gate the dynamic lookup — an already-assigned name is reachable
+        // without it, so skip the heavier resolveDynamicTool — and feed the
+        // invocation-policy enabled-tools filter below, so neither path
+        // re-queries assignments.
+        const assignedToolNames =
+          !isArchestraTool &&
+          !isAgentDelegationTool &&
+          agent.accessAllTools &&
+          tokenAuth?.userId &&
+          tokenAuth.organizationId
+            ? await ToolModel.getAssignedToolNames(agent.id)
+            : null;
+        const dynamicTool =
+          assignedToolNames &&
+          !assignedToolNames.has(name) &&
+          tokenAuth?.userId &&
+          tokenAuth.organizationId
+            ? await resolveDynamicTool({
+                toolName: name,
+                agentId,
+                userId: tokenAuth.userId,
+                organizationId: tokenAuth.organizationId,
+              })
+            : null;
+        // Direct-call availability mirrors tools/list exposure: only the
+        // UI-providing subset is listed top-level, so only that subset is
+        // directly callable. A non-UI dynamic tool stays behind
+        // search_tools/run_tool — resolving it here would silently make every
+        // hidden tool name directly executable.
+        const availableTool =
+          dynamicTool && providesUiResource(dynamicTool)
+            ? dynamicTool
+            : undefined;
+
         const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
           agentId: agent.id,
           toolName: name,
           toolInput: args ?? {},
           organizationId: tokenAuth?.organizationId,
           contextIsTrusted,
+          ...(availableTool &&
+            assignedToolNames && {
+              enabledToolNames: new Set([...assignedToolNames, name]),
+            }),
         });
         if (policyBlock) {
           return {
@@ -518,6 +614,7 @@ export async function createAgentServer(
               agentOwner(agentId),
               tokenAuth,
               {
+                availableTool,
                 elicitationHandler: async (request) => {
                   try {
                     return await extra.sendRequest(request, ElicitResultSchema);
@@ -1615,9 +1712,14 @@ function filterExposedTools(params: {
   return tools.filter((tool) => {
     // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
     // but the meta tools themselves and the always-exposed skill path must stay
-    // top-level. `full` mode hides only the meta tools.
+    // top-level. UI-providing tools (app launch tools, external ext-apps tools)
+    // must too: an MCP Apps host renders a UI only from a tool DEFINITION listed
+    // at discovery time, so a tool hidden behind search/run can never render its
+    // `ui://` resource. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      ? isArchestraMetaTool(tool.name) ||
+          isAlwaysExposedTool(tool.name) ||
+          providesUiResource(tool)
       : !isArchestraMetaTool(tool.name);
   });
 }
@@ -1760,4 +1862,24 @@ function isArchestraMetaTool(toolName: string) {
 function isAlwaysExposedTool(toolName: string) {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
+}
+
+/**
+ * True when the tool carries an MCP App `ui://` resource in its definition —
+ * canonical `_meta.ui.resourceUri` or the legacy flat `ui/resourceUri` key.
+ * Mirrors {@link toolUiResourceUriSql} (models/tool.ts) so the in-memory gate and
+ * the DB-side `providesUi` predicate never drift.
+ */
+function providesUiResource(tool: {
+  meta?: McpListToolCandidate["meta"] | null;
+}): boolean {
+  const meta = tool.meta?._meta as
+    | { ui?: { resourceUri?: unknown }; "ui/resourceUri"?: unknown }
+    | undefined;
+  // Scheme-check each key independently before falling back, matching the SQL's
+  // per-key `like 'ui://%'` inside coalesce — so a non-ui:// canonical value
+  // doesn't mask a valid legacy one.
+  const isUiUri = (value: unknown): boolean =>
+    typeof value === "string" && value.startsWith("ui://");
+  return isUiUri(meta?.ui?.resourceUri) || isUiUri(meta?.["ui/resourceUri"]);
 }

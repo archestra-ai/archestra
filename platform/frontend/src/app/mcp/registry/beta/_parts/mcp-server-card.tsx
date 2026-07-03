@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Copy,
   FileSearch,
+  Globe,
   MessageSquare,
   Pencil,
   Plus,
@@ -24,7 +25,6 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import {
   Avatar,
   AvatarFallback,
@@ -601,91 +601,87 @@ export function McpServerCard({
           <div className="h-4 w-px bg-border" />
         </>
       )}
-      {!isBuiltinVariant && hasOrgConnection && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => goToItemPage("credentials")}
-                className="inline-flex items-center rounded-full"
-              >
-                <ResourceVisibilityBadge
-                  scope="org"
-                  teams={undefined}
-                  authorId={undefined}
-                  authorName={undefined}
-                  currentUserId={undefined}
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Installed organization-wide. Manage credentials to review.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
-      {!isBuiltinVariant && connectionAvatars.length > 0 && (
-        <div className="flex items-center gap-2">
-          <AvatarGroup>
-            {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
-              const connDeployment = computeDeploymentStatusSummary(
-                entry.serverIds,
-                effectiveDeploymentStatuses,
-              );
-              const borderClass = connDeployment
-                ? {
-                    running: "border-green-600 dark:border-green-800",
-                    pending: "border-yellow-500 dark:border-yellow-600",
-                    failed: "border-red-500 dark:border-red-700",
-                    degraded: "border-orange-500 dark:border-orange-600",
-                  }[connDeployment.overallState]
-                : "border-background";
-              return (
-                <TooltipProvider key={entry.key}>
+      {!isBuiltinVariant &&
+        (connectionAvatars.length > 0 || hasOrgConnection) && (
+          <div className="flex items-center gap-2">
+            <AvatarGroup>
+              {hasOrgConnection && (
+                <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Avatar className={`size-6 border-2 ${borderClass}`}>
-                        <AvatarFallback
-                          className={`text-[10px] ${entry.type === "team" ? "bg-accent" : ""}`}
-                        >
-                          {entry.label.slice(0, 2).toUpperCase()}
+                      <Avatar
+                        className="size-6 border-2 border-background cursor-pointer"
+                        onClick={() => goToItemPage("credentials")}
+                      >
+                        <AvatarFallback className="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          <Globe className="h-3 w-3" />
                         </AvatarFallback>
                       </Avatar>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {entry.type === "team"
-                        ? `Team: ${entry.label}`
-                        : entry.label}
+                      Installed organization-wide. Manage credentials to review.
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              );
-            })}
-            {extraCount > 0 && (
-              <AvatarGroupCount className="size-6 text-[10px]">
-                +{extraCount}
-              </AvatarGroupCount>
-            )}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Avatar
-                    className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
-                    onClick={() => goToItemPage("credentials")}
-                    data-testid={getManageCredentialsButtonTestId(item.name)}
-                  >
-                    <AvatarFallback className="text-muted-foreground bg-muted">
-                      <Plus className="h-3 w-3" />
-                    </AvatarFallback>
-                  </Avatar>
-                </TooltipTrigger>
-                <TooltipContent>Manage credentials</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </AvatarGroup>
-        </div>
-      )}
+              )}
+              {connectionAvatars.slice(0, MAX_AVATARS).map((entry) => {
+                const connDeployment = computeDeploymentStatusSummary(
+                  entry.serverIds,
+                  effectiveDeploymentStatuses,
+                );
+                const borderClass = connDeployment
+                  ? {
+                      running: "border-green-600 dark:border-green-800",
+                      pending: "border-yellow-500 dark:border-yellow-600",
+                      failed: "border-red-500 dark:border-red-700",
+                      degraded: "border-orange-500 dark:border-orange-600",
+                    }[connDeployment.overallState]
+                  : "border-background";
+                return (
+                  <TooltipProvider key={entry.key}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Avatar className={`size-6 border-2 ${borderClass}`}>
+                          <AvatarFallback
+                            className={`text-[10px] ${entry.type === "team" ? "bg-accent" : ""}`}
+                          >
+                            {entry.label.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {entry.type === "team"
+                          ? `Team: ${entry.label}`
+                          : entry.label}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })}
+              {extraCount > 0 && (
+                <AvatarGroupCount className="size-6 text-[10px]">
+                  +{extraCount}
+                </AvatarGroupCount>
+              )}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Avatar
+                      className="size-6 border-2 border-background cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => goToItemPage("credentials")}
+                      data-testid={getManageCredentialsButtonTestId(item.name)}
+                    >
+                      <AvatarFallback className="text-muted-foreground bg-muted">
+                        <Plus className="h-3 w-3" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent>Manage credentials</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </AvatarGroup>
+          </div>
+        )}
       {!isBuiltinVariant && oauthReauthIndicator}
     </div>
   ) : null;

@@ -406,30 +406,54 @@ function GenericAuthRow({
         ? `${selectedTeamToken.tokenStart}***`
         : placeholder;
 
+  const fetchTokenValue = async (): Promise<string | null> => {
+    if (isPersonal) {
+      const res = await fetchUserTokenMutation.mutateAsync();
+      return res?.value ?? null;
+    }
+    if (selectedTeamToken) {
+      const res = await fetchTeamTokenMutation.mutateAsync(
+        selectedTeamToken.id,
+      );
+      return res?.value ?? null;
+    }
+    return null;
+  };
+
   const handleToggleExpose = async () => {
     if (exposedValue) {
       setExposedValue(null);
       return;
     }
-    if (isPersonal) {
-      const res = await fetchUserTokenMutation.mutateAsync();
-      if (res?.value) setExposedValue(res.value);
-    } else if (selectedTeamToken) {
-      const res = await fetchTeamTokenMutation.mutateAsync(
-        selectedTeamToken.id,
-      );
-      if (res?.value) setExposedValue(res.value);
-    }
+    const value = await fetchTokenValue();
+    if (value) setExposedValue(value);
   };
 
   const hasAnyToken = !!userToken || tokens.length > 0;
   const headerValue = bare ? previewValue : `Bearer ${previewValue}`;
   const [copied, setCopied] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(headerValue);
-    setCopied(true);
-    toast.success("Copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
+    if (isCopying) return;
+    setIsCopying(true);
+    try {
+      // The on-screen value is masked once a token is selected, so resolve
+      // the real token for the clipboard instead of copying the mask.
+      const value =
+        exposedValue ??
+        (isPersonal || selectedTeamToken
+          ? await fetchTokenValue()
+          : placeholder);
+      if (!value) return; // fetch failed; the mutation already surfaced a toast
+      await navigator.clipboard.writeText(bare ? value : `Bearer ${value}`);
+      setCopied(true);
+      toast.success("Copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy token");
+    } finally {
+      setIsCopying(false);
+    }
   };
 
   const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
@@ -461,7 +485,7 @@ function GenericAuthRow({
             aria-label={exposedValue ? "Hide token" : "Reveal token"}
             className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
           >
-            {isLoading ? (
+            {isLoading && !isCopying ? (
               <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
             ) : exposedValue ? (
               <EyeOff className="size-3.5" strokeWidth={2} />
@@ -472,20 +496,26 @@ function GenericAuthRow({
           <button
             type="button"
             onClick={handleCopy}
+            disabled={isLoading || isCopying}
             aria-label="Copy to clipboard"
-            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white"
+            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
           >
-            {copied ? (
+            {isCopying ? (
+              <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
+            ) : copied ? (
               <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
             ) : (
               <Copy className="size-3.5" strokeWidth={2} />
             )}
           </button>
+          {/* Switching tokens mid-fetch would copy the old token while the
+              row already shows the new one, so lock the switcher too. */}
           <DropdownMenuTrigger asChild>
             <button
               type="button"
+              disabled={isLoading || isCopying}
               aria-label="Switch token"
-              className="flex h-7 items-center gap-1 rounded border border-[#1f2937] bg-[#0d1117] px-2 text-[11px] text-[#9ca3af] transition-colors hover:text-white"
+              className="flex h-7 items-center gap-1 rounded border border-[#1f2937] bg-[#0d1117] px-2 text-[11px] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
             >
               {selectedLabel}
               <ChevronDown className="size-3" strokeWidth={2} />

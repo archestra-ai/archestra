@@ -1,4 +1,5 @@
 import { and, count, desc, eq, isNotNull } from "drizzle-orm";
+import { CREDENTIAL_PROVIDER_ID } from "@/constants";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 
@@ -73,6 +74,101 @@ class AccountModel {
       "AccountModel.getLatestSsoAccountByUserIdAndProviderId: completed",
     );
     return account;
+  }
+
+  /**
+   * Get a user's email/password account, if they have one (SSO-only users
+   * don't).
+   */
+  static async getCredentialAccountByUserId(userId: string, tx?: Transaction) {
+    logger.debug(
+      { userId },
+      "AccountModel.getCredentialAccountByUserId: fetching account",
+    );
+    const dbOrTx = tx ?? db;
+    const [account] = await dbOrTx
+      .select()
+      .from(schema.accountsTable)
+      .where(
+        and(
+          eq(schema.accountsTable.userId, userId),
+          eq(schema.accountsTable.providerId, CREDENTIAL_PROVIDER_ID),
+        ),
+      )
+      .limit(1);
+    logger.debug(
+      { userId, found: !!account },
+      "AccountModel.getCredentialAccountByUserId: completed",
+    );
+    return account;
+  }
+
+  /**
+   * Create an email/password account for a user who doesn't have one yet
+   * (e.g. an SSO-provisioned user). Mirrors Better Auth's credential-account
+   * shape: providerId "credential" and accountId equal to the user id.
+   *
+   * `passwordHash` must be a Better Auth scrypt hash (`hashPassword` from
+   * "better-auth/crypto"), never a plaintext password.
+   */
+  static async createCredentialAccount(params: {
+    userId: string;
+    passwordHash: string;
+    tx?: Transaction;
+  }) {
+    logger.debug(
+      { userId: params.userId },
+      "AccountModel.createCredentialAccount: creating account",
+    );
+    const dbOrTx = params.tx ?? db;
+    const [account] = await dbOrTx
+      .insert(schema.accountsTable)
+      .values({
+        id: crypto.randomUUID(),
+        accountId: params.userId,
+        providerId: CREDENTIAL_PROVIDER_ID,
+        userId: params.userId,
+        password: params.passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    logger.debug(
+      { userId: params.userId, accountId: account?.id },
+      "AccountModel.createCredentialAccount: completed",
+    );
+    return account;
+  }
+
+  /**
+   * Replace the stored password hash of an account.
+   *
+   * `passwordHash` must be a Better Auth scrypt hash (`hashPassword` from
+   * "better-auth/crypto"), never a plaintext password.
+   */
+  static async setPassword(params: {
+    id: string;
+    passwordHash: string;
+    tx?: Transaction;
+  }) {
+    logger.debug(
+      { accountId: params.id },
+      "AccountModel.setPassword: updating password",
+    );
+    const dbOrTx = params.tx ?? db;
+    const [account] = await dbOrTx
+      .update(schema.accountsTable)
+      .set({
+        password: params.passwordHash,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.accountsTable.id, params.id))
+      .returning();
+    logger.debug(
+      { accountId: params.id, updated: !!account },
+      "AccountModel.setPassword: completed",
+    );
+    return account ?? null;
   }
 
   static async moveToUser(params: {

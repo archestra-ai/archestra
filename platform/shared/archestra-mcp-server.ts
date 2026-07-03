@@ -626,6 +626,19 @@ export function getArchestraAppResourceUri(appId: string): string {
   return `ui://archestra-app/${appId}`;
 }
 
+/**
+ * Inverse of {@link getArchestraAppResourceUri}: the owned-app id if `uri` is an
+ * `ui://archestra-app/<appId>` URI, else null. A chat host uses this to route an
+ * owned app's render (e.g. its `__open` launch tool) to the app-bound endpoint
+ * instead of treating it as a generic external MCP-UI render.
+ */
+export function parseArchestraAppResourceUri(uri: string): string | null {
+  const prefix = getArchestraAppResourceUri("");
+  if (!uri.startsWith(prefix)) return null;
+  const appId = uri.slice(prefix.length);
+  return appId.length > 0 && !appId.includes("/") ? appId : null;
+}
+
 export function isArchestraMcpServerTool(
   toolName: string,
   options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },

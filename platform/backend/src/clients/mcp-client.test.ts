@@ -722,6 +722,51 @@ describe("McpClient", () => {
         ),
       ).toBe(pinned.id);
     });
+
+    test("declines to bind an enterprise-managed catalog with more than one install", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "member" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({
+        catalogId: catalog.id,
+        ownerId: user.id,
+        scope: "personal",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      // Enterprise-managed credentials resolve the runtime install by their own
+      // mechanism (which run_tool honors in all-tools mode), so the own→team→org
+      // resolution here could pick a different install than execution uses.
+      await db
+        .update(schema.internalMcpCatalogTable)
+        .set({ enterpriseManagedConfig: {} })
+        .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+      const uri = "ui://excalidraw/mcp-app.html";
+      const tool = await makeTool({
+        name: "excalidraw__create_view",
+        catalogId: catalog.id,
+        meta: { _meta: { ui: { resourceUri: uri } } },
+      });
+      await makeAgentTool(agent.id, tool.id);
+
+      expect(
+        await mcpClient.resolveUiAppInstallIdForCaller(
+          uri,
+          agent.id,
+          callerAuth(user.id, org.id),
+        ),
+      ).toBeNull();
+    });
   });
 
   describe("executeToolCallForOwner", () => {

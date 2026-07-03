@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
-import { MemberModel, MessageModel } from "@/models";
+import { ConversationModel, MemberModel, MessageModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -72,8 +72,10 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       payload: { resourceUri: "ui://pm/board.html" },
     });
     expect(res.statusCode).toBe(200);
-    const { conversationId } = res.json();
+    const { conversationId, mode, prompt } = res.json();
     expect(conversationId).toBeTruthy();
+    expect(mode).toBe("render");
+    expect(prompt).toBeUndefined();
 
     const messages = await MessageModel.findByConversation(conversationId);
     // External apps are read-only from chat, so no greeting.
@@ -91,6 +93,102 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       resourceUri: "ui://pm/board.html",
       mcpServerId: install.id,
     });
+  });
+
+  test("returns prompt mode (empty conversation) when the tool has required inputs", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Atlassian",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const install = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+    });
+    // Rendering this tool with input {} cannot succeed, so opening it must go
+    // through a model turn that collects the inputs first.
+    await makeTool({
+      catalogId: catalog.id,
+      name: "createjiraissue",
+      parameters: {
+        type: "object",
+        properties: {
+          projectKey: { type: "string" },
+          summary: { type: "string" },
+        },
+        required: ["projectKey", "summary"],
+      },
+      meta: { _meta: { ui: { resourceUri: "ui://jira/create-issue.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/external/${install.id}/open-in-chat`,
+      payload: { resourceUri: "ui://jira/create-issue.html" },
+    });
+    expect(res.statusCode).toBe(200);
+    const { conversationId, mode, prompt } = res.json();
+    expect(mode).toBe("prompt");
+    // The opening prompt names the app so the agent can find and call the tool.
+    expect(prompt).toContain("Atlassian / createjiraissue");
+
+    // No seeded render: the client sends `prompt` as the first user message,
+    // which triggers the model turn.
+    const messages = await MessageModel.findByConversation(conversationId);
+    expect(messages).toHaveLength(0);
+
+    // Same conversation title as the seeded-render mode.
+    const conversation = await ConversationModel.findById({
+      id: conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(conversation?.title).toBe("Atlassian / createjiraissue");
+  });
+
+  test("seeds the render when the tool's inputs are all optional", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const install = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      parameters: {
+        type: "object",
+        properties: { filter: { type: "string" } },
+      },
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/external/${install.id}/open-in-chat`,
+      payload: { resourceUri: "ui://pm/board.html" },
+    });
+    expect(res.statusCode).toBe(200);
+    const { conversationId, mode } = res.json();
+    expect(mode).toBe("render");
+    expect(await MessageModel.findByConversation(conversationId)).toHaveLength(
+      1,
+    );
   });
 
   test("404s for an install the caller cannot access", async () => {

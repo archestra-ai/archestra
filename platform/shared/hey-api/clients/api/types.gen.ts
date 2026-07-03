@@ -16003,6 +16003,8 @@ export type OpenExternalAppInChatResponses = {
      */
     200: {
         conversationId: string;
+        mode: 'render' | 'prompt';
+        prompt?: string;
     };
 };
 
@@ -26273,6 +26275,7 @@ export type GetPublicConfigResponses = {
     200: {
         disableBasicAuth: boolean;
         disableInvitations: boolean;
+        devAutoLoginEnabled: boolean;
         maintenanceMode: string | null;
         enterpriseCoreActive: boolean;
         analytics: {

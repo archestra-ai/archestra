@@ -230,7 +230,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({
         call_456:
-          "[Content blocked by policy: Data blocked by policy: Block hacker emails]",
+          "[Content blocked by Archestra security guardrails: Data blocked by policy: Block hacker emails]",
       });
       expect(result.unsafeContextBoundary).toEqual({
         kind: "tool_result",
@@ -598,7 +598,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({
         call_002:
-          "[Content blocked by policy: Data blocked by policy: Block malicious source]",
+          "[Content blocked by Archestra security guardrails: Data blocked by policy: Block malicious source]",
       });
     });
 
@@ -834,7 +834,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({
         call_blocked:
-          "[Content blocked by policy: Data blocked by policy: Block dangerous data]",
+          "[Content blocked by Archestra security guardrails: Data blocked by policy: Block dangerous data]",
       });
     });
 

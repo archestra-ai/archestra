@@ -198,12 +198,48 @@ async function buildModelMessagesForProvider(params: {
   // placeholders survive while other providers never see an empty turn. An
   // empty assistant message has no tool-call block, so removing it cannot
   // orphan a tool result.
+  const nonEmpty = modelMessages.filter(
+    (message) => !isEmptyAssistantModelMessage(message),
+  );
+
   return {
-    modelMessages: modelMessages.filter(
-      (message) => !isEmptyAssistantModelMessage(message),
-    ),
+    modelMessages:
+      params.provider === "gemini"
+        ? ensureGeminiLeadingUserTurn(nonEmpty)
+        : nonEmpty,
     preparedMessages: providerPreparedMessages,
   };
+}
+
+// Owned-app chats are seeded with a synthetic `render_app` assistant tool-call
+// as the conversation's first message (see app-chat-conversation.ts), so their
+// history opens with an assistant turn. Gemini maps that to a `contents[0]` of
+// role `model` carrying a `functionCall`, and rejects it with 400 "function
+// call turn comes immediately after a user turn or after a function response
+// turn" — Gemini requires the first turn to be from the user. Prepend a minimal
+// user turn (after any leading system messages, which Gemini lifts into
+// `systemInstruction`) so the required leading user turn is present without
+// dropping the seed, whose tool result carries the app id the app tools need.
+// Gemini-only: other providers accept a leading assistant/tool turn.
+const GEMINI_LEADING_USER_TURN_TEXT = "Continue.";
+
+function ensureGeminiLeadingUserTurn(messages: ModelMessage[]): ModelMessage[] {
+  const firstContentIndex = messages.findIndex(
+    (message) => message.role !== "system",
+  );
+  if (firstContentIndex === -1 || messages[firstContentIndex].role === "user") {
+    return messages;
+  }
+
+  const leadingUserTurn: ModelMessage = {
+    role: "user",
+    content: [{ type: "text", text: GEMINI_LEADING_USER_TURN_TEXT }],
+  };
+  return [
+    ...messages.slice(0, firstContentIndex),
+    leadingUserTurn,
+    ...messages.slice(firstContentIndex),
+  ];
 }
 
 function isEmptyAssistantModelMessage(message: {

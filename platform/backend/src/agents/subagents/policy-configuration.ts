@@ -224,12 +224,13 @@ export class PolicyConfigurationService {
       await ToolModel.setAutoConfiguringState(toolId);
 
       // Create a 20-second timeout promise
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<{
         success: false;
         timedOut: true;
         error: string;
       }>((resolve) => {
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           resolve({
             success: false,
             timedOut: true,
@@ -245,7 +246,7 @@ export class PolicyConfigurationService {
           timedOut: false,
         })),
         timeoutPromise,
-      ]);
+      ]).finally(() => clearTimeout(timeoutId));
 
       // Handle the result and clear loading timestamp
       if (result.timedOut) {

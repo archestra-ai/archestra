@@ -36,7 +36,7 @@ import type {
   McpBuildParams,
   McpSupportedAuth,
 } from "./clients";
-import { toMcpServerSlug } from "./connection-flow.utils";
+import { deriveMcpServerName } from "./connection-flow.utils";
 import { TerminalBlock } from "./terminal-block";
 
 interface McpClientInstructionsProps {
@@ -84,9 +84,7 @@ export function McpClientInstructions({
   }
 
   const mcpUrl = `${baseUrl}/mcp/${gatewaySlug}`;
-  const serverName = gatewayName.trim()
-    ? gatewayName.trim().toLowerCase().replace(/\s+/g, "_")
-    : toMcpServerSlug(appName);
+  const serverName = deriveMcpServerName({ gatewayName, appName });
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
   return (

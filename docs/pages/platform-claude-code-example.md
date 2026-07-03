@@ -48,7 +48,7 @@ If you'd rather use an Archestra-managed credential than a subscription, switch 
 - The `claude` CLI installed and on `PATH` - the script exits otherwise.
 - Read access to the LLM proxy and, for tools, an [MCP gateway](/docs/platform-mcp-gateway).
 - Permission to create virtual keys (`llmVirtualKey:create`). Without it the passthrough script still works, just without per-user attribution; the **Virtual key** option strictly requires it.
-- The **Install shared skills** checkbox on the Connect page requires the skill admin permission (`skill:admin`); untick it if you don't need the bundle.
+- The **Install shared skills** option on the Connect page requires the skill admin permission (`skill:admin`). The review step lists every skill the command installs; deselect the ones (or all) you don't need.
 
 ## 1. Generate and run the command
 
@@ -66,7 +66,7 @@ The script is not undone automatically. To revert: restore the settings backup (
 
 ## 2. Authorize the gateway
 
-The gateway is registered but not yet authenticated. Start `claude` and run `/mcp`.
+The gateway is registered but not yet authenticated — it grants tool access per user, so each user signs in once. Run `claude /mcp` (or `/mcp` inside a running session).
 
 ![Running /mcp in Claude Code](/docs/automated_screenshots/platform-claude-code-example_mcp-command.webp)
 

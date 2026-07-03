@@ -605,6 +605,21 @@ class AnthropicStreamAdapter
   readonly state: StreamAccumulatorState;
   private toolUseBlockIndices = new Set<number>();
   private currentToolCallIndex = -1;
+  // Highest content-block index actually forwarded to the client, so a refusal
+  // block appended after a guardrail hit does not collide with (reuse) an index
+  // the client has already seen.
+  private maxStreamedBlockIndex = -1;
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal. formatEndSSE then closes the turn as end_turn instead of replaying
+  // the upstream tool_use stop reason (which would leave a text-only turn ending
+  // in a tool-use stop reason and no tool_use blocks — an inconsistent state
+  // that makes agent harnesses treat the turn as a malformed tool call and
+  // retry), and toProviderResponse persists the refusal rather than the blocked
+  // tool calls so the interaction log matches what the client received.
+  private replacedText: string | null = null;
+  private get responseReplacedWithText(): boolean {
+    return this.replacedText !== null;
+  }
 
   constructor() {
     this.state = {
@@ -669,6 +684,10 @@ class AnthropicStreamAdapter
           // unmodified. Thinking blocks in particular must reach the client:
           // it has to replay them (with signature) on the next turn or the
           // upstream API rejects the conversation.
+          this.maxStreamedBlockIndex = Math.max(
+            this.maxStreamedBlockIndex,
+            chunk.index,
+          );
           sseData = `event: content_block_start\ndata: ${JSON.stringify(chunk)}\n\n`;
         }
         break;
@@ -765,20 +784,22 @@ class AnthropicStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
+    const index = this.maxStreamedBlockIndex + 1;
     return [
       `event: content_block_start\ndata: ${JSON.stringify({
         type: "content_block_start",
-        index: 0,
+        index,
         content_block: { type: "text", text: "" },
       })}\n\n`,
       `event: content_block_delta\ndata: ${JSON.stringify({
         type: "content_block_delta",
-        index: 0,
+        index,
         delta: { type: "text_delta", text },
       })}\n\n`,
       `event: content_block_stop\ndata: ${JSON.stringify({
         type: "content_block_stop",
-        index: 0,
+        index,
       })}\n\n`,
     ];
   }
@@ -791,7 +812,9 @@ class AnthropicStreamAdapter
       `event: message_delta\ndata: ${JSON.stringify({
         type: "message_delta",
         delta: {
-          stop_reason: this.state.stopReason ?? "end_turn",
+          stop_reason: this.responseReplacedWithText
+            ? "end_turn"
+            : (this.state.stopReason ?? "end_turn"),
           stop_sequence: null,
         },
         usage: {
@@ -811,6 +834,22 @@ class AnthropicStreamAdapter
   }
 
   toProviderResponse(): AnthropicResponse {
+    if (this.replacedText !== null) {
+      return {
+        id: this.state.responseId,
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: this.replacedText, citations: null }],
+        model: this.state.model,
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: {
+          input_tokens: this.state.usage?.inputTokens ?? 0,
+          output_tokens: this.state.usage?.outputTokens ?? 0,
+        },
+      };
+    }
+
     const content: AnthropicResponse["content"] = [];
 
     // Add text block if we have text

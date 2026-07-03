@@ -120,6 +120,131 @@ describe("Apps SDK runtime", () => {
     });
   });
 
+  test("set guards on the revision last seen for the key, so a stale write conflicts instead of silently overwriting", async () => {
+    // A read establishes the key's current revision.
+    results.push({
+      structuredContent: { value: { items: [] }, revision: 4, owner: null },
+    });
+    await archestra.storage.user.get("rmw_default");
+    calls.pop();
+
+    // A later write of the same key carries that revision as expectedRevision
+    // without the app passing ifRevision — the backend then rejects it as a
+    // conflict if another instance wrote in between, rather than clobbering.
+    results.push({
+      structuredContent: { key: "rmw_default", revision: 5, owner: null },
+    });
+    await archestra.storage.user.set("rmw_default", { items: ["a"] });
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: {
+        key: "rmw_default",
+        value: { items: ["a"] },
+        scope: "user",
+        expectedRevision: 4,
+      },
+    });
+  });
+
+  test("set omits the guard for a key never read this session (a blind write stays last-writer-wins)", async () => {
+    results.push({
+      structuredContent: { key: "blind_key", revision: 1, owner: null },
+    });
+    await archestra.storage.user.set("blind_key", "v");
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: { key: "blind_key", value: "v", scope: "user" },
+    });
+  });
+
+  test("an explicit ifRevision overrides the tracked revision", async () => {
+    results.push({
+      structuredContent: { value: 1, revision: 9, owner: null },
+    });
+    await archestra.storage.user.get("explicit_key");
+    calls.pop();
+
+    results.push({
+      structuredContent: { key: "explicit_key", revision: 3, owner: null },
+    });
+    await archestra.storage.user.set("explicit_key", 2, { ifRevision: 2 });
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: {
+        key: "explicit_key",
+        value: 2,
+        scope: "user",
+        expectedRevision: 2,
+      },
+    });
+  });
+
+  test("ifRevision null opts out of the guard, forcing last-writer-wins after a read", async () => {
+    results.push({
+      structuredContent: { value: 1, revision: 9, owner: null },
+    });
+    await archestra.storage.user.get("optout_key");
+    calls.pop();
+
+    results.push({
+      structuredContent: { key: "optout_key", revision: 10, owner: null },
+    });
+    await archestra.storage.user.set("optout_key", 2, { ifRevision: null });
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: { key: "optout_key", value: 2, scope: "user" },
+    });
+  });
+
+  test("a set after get returned absent guards insert-if-absent, so a racing create conflicts", async () => {
+    results.push({
+      structuredContent: { value: null, revision: null, owner: null },
+    });
+    expect(await archestra.storage.shared.get("absent_key")).toBeNull();
+    calls.pop();
+
+    results.push({
+      structuredContent: { key: "absent_key", revision: 1, owner: null },
+    });
+    await archestra.storage.shared.set("absent_key", { first: true });
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: {
+        key: "absent_key",
+        value: { first: true },
+        scope: "app",
+        expectedRevision: 0,
+      },
+    });
+  });
+
+  test("a set after list guards on the revision list returned for the key", async () => {
+    results.push({
+      structuredContent: {
+        entries: [
+          { key: "list_a", value: 1, revision: 7, owner: null },
+          { key: "list_b", value: 2, revision: 8, owner: null },
+        ],
+      },
+    });
+    await archestra.storage.user.list();
+    calls.pop();
+
+    results.push({
+      structuredContent: { key: "list_b", revision: 9, owner: null },
+    });
+    await archestra.storage.user.set("list_b", 22);
+    expect(calls.pop()).toEqual({
+      name: "archestra__app_data_set",
+      arguments: {
+        key: "list_b",
+        value: 22,
+        scope: "user",
+        expectedRevision: 8,
+      },
+    });
+  });
+
   test("tools.call resolves with structuredContent when present, over text", async () => {
     results.push({
       content: [{ type: "text", text: '{"other": true}' }],

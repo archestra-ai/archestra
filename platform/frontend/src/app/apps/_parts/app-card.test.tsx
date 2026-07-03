@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
@@ -127,7 +128,10 @@ describe("ExternalAppCard", () => {
   });
 
   it("opens the install in chat and navigates to the seeded conversation", async () => {
-    openExternalMutate.mockResolvedValue({ conversationId: "conv-1" });
+    openExternalMutate.mockResolvedValue({
+      conversationId: "conv-1",
+      mode: "render",
+    });
     render(<AppCard app={externalApp} />);
 
     fireEvent.click(
@@ -141,6 +145,31 @@ describe("ExternalAppCard", () => {
       resourceUri: "ui://pm/board.html",
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-1"));
+    // A seeded render needs no opening prompt.
+    expect(takePendingProjectChatHandoff("conv-1")).toBeNull();
+  });
+
+  it("stashes the opening prompt for prompt-mode opens (tool needs inputs)", async () => {
+    openExternalMutate.mockResolvedValue({
+      conversationId: "conv-2",
+      mode: "prompt",
+      prompt: "Open the Archestra PM / show_board app.",
+    });
+    render(<AppCard app={externalApp} />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open Archestra PM / show_board in new chat",
+      }),
+    );
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-2"));
+    // The prompt rides the pending-chat handoff so /chat/<id> sends it as the
+    // conversation's first user message (which triggers the model turn).
+    expect(takePendingProjectChatHandoff("conv-2")).toEqual({
+      conversationId: "conv-2",
+      prompt: "Open the Archestra PM / show_board app.",
+    });
   });
 
   it("links 'Open in new tab' to the install-pinned run page and 'Manage MCP server'", () => {

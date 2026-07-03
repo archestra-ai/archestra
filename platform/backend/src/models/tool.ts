@@ -606,6 +606,11 @@ class ToolModel {
                 ),
               ),
               desc(schema.toolsTable.createdAt),
+              // Total order on ties (bulk-inserted tools share createdAt), so a
+              // duplicate assigned name resolves to the same row every time —
+              // matching getMcpToolsAccessibleToUser and keeping search_tools /
+              // app tool assignment deterministic.
+              asc(schema.toolsTable.id),
             )
         : [];
 
@@ -1756,27 +1761,23 @@ class ToolModel {
   }
 
   /**
-   * Resolve upstream tool names to rows assignable to an MCP App, scoped to
-   * the caller's organization (a tool is reachable when its catalog entry
-   * belongs to the org or is a global, org-less entry). Archestra built-ins
-   * are excluded — apps reach the data store through `archestra.storage`, and
-   * the management tools are not app-dispatchable. The catalog join also
-   * guarantees a non-null catalogId, which app dispatch requires.
+   * Of `toolIds`, the subset assignable to an MCP App in `environmentId`:
+   * catalog-backed (non-null catalogId, which app dispatch requires), org-visible
+   * (the catalog belongs to the org or is a global org-less entry), not an
+   * Archestra built-in, not a clone pending discovery, and in the environment.
+   * This is the by-id, install-agnostic gate {@link resolveAppAssignableToolRows}
+   * applies to the agent's *assigned* tools — an assigned tool is reachable
+   * through its assignment without a separate discoverable install, but must
+   * still be org-visible and in-environment.
    */
-  static async findAppAssignableToolsByNames(
+  static async filterAppAssignableToolIds(
     organizationId: string,
-    names: readonly string[],
+    toolIds: string[],
     environmentId: string | null,
-  ): Promise<
-    Array<{ id: string; name: string; clonedPendingDiscovery: boolean }>
-  > {
-    if (names.length === 0) return [];
-    return await db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
-      })
+  ): Promise<Set<string>> {
+    if (toolIds.length === 0) return new Set();
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
       .innerJoin(
         schema.internalMcpCatalogTable,
@@ -1784,10 +1785,9 @@ class ToolModel {
       )
       .where(
         and(
-          inArray(schema.toolsTable.name, [...names]),
+          inArray(schema.toolsTable.id, toolIds),
           ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
-          // Environment isolation: an app may only be assigned tools in the
-          // requesting agent's environment.
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentPredicate(environmentId),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
@@ -1795,13 +1795,17 @@ class ToolModel {
           ),
         ),
       );
+    return new Set(rows.map((row) => row.id));
   }
 
   /**
-   * By-id counterpart of {@link findAppAssignableToolsByNames}: resolves a tool
-   * only within the caller's organization (catalog-backed, org-owned or global).
-   * A tool from another org — or a non-catalog/built-in tool — returns null, so
-   * the raw-id assignment endpoint cannot attach (or probe for) foreign tools.
+   * Resolve a single app-assignable tool by id within the caller's organization
+   * (catalog-backed, org-owned or global). A tool from another org — or a
+   * non-catalog/built-in tool — returns null, so the raw-id assignment endpoint
+   * cannot attach (or probe for) foreign tools. Name-based app assignment goes
+   * through {@link resolveAppAssignableToolRows} instead, which resolves a
+   * duplicate name to the same canonical row search_tools and the app runtime
+   * pick.
    */
   static async findAppAssignableToolById(
     organizationId: string,

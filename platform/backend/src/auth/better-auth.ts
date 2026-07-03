@@ -40,6 +40,7 @@ import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
+import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -57,7 +58,12 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
+  auth: {
+    secret,
+    cookieDomain,
+    cookiePrefix,
+    trustedOrigins: staticTrustedOrigins,
+  },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -153,6 +159,8 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    // Developer-only auto-login endpoint (self-guards to non-production + env var).
+    devAutoLoginPlugin(),
     /**
      * Linked downstream identity provider auth must live inside Better Auth,
      * rather than regular Fastify routes, because completing the flow has to
@@ -305,7 +313,7 @@ export const auth = betterAuth({
   },
 
   advanced: {
-    cookiePrefix: "archestra",
+    cookiePrefix,
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
       // "lax" is required for OAuth/SSO flows because the callback is a cross-site top-level navigation

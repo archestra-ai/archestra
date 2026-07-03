@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { extractMcpToolError } from "./mcp-tool-error";
+import {
+  buildPolicyDeniedMcpToolError,
+  extractMcpToolError,
+} from "./mcp-tool-error";
 import {
   TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
 } from "./tool-invocation-policy-reasons";
+import { buildToolInvocationRefusalMessages } from "./tool-refusal";
 
 describe("extractMcpToolError", () => {
   it("extracts a direct MCP tool error object", () => {
@@ -171,13 +175,15 @@ Tool invocation blocked: sensitive data detected`),
     });
   });
 
-  it("classifies sensitive-context policy denials", () => {
+  it("classifies sensitive-context policy denials in legacy persisted refusals", () => {
+    // Hardcoded legacy wording: this is what pre-rewrite refusals persisted
+    // in interaction logs and chat history look like.
     expect(
       extractMcpToolError(`I tried to invoke the github__delete_branch tool with the following arguments: {"branch":"main"}.
 
 However, I was denied by a tool invocation policy:
 
-${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`),
+Tool call blocked: context contains sensitive data`),
     ).toEqual({
       type: "policy_denied",
       message: expect.any(String),
@@ -186,6 +192,70 @@ ${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`),
       reason: "context contains sensitive data",
       reasonType: "sensitive_context",
     });
+  });
+
+  it("extracts a policy denied error from the current Archestra-attributed refusal message (tagged)", () => {
+    const { refusalMessage } = buildToolInvocationRefusalMessages({
+      toolName: "github__delete_branch",
+      toolArguments: '{"branch":"main"}',
+      reason: '"Block always" tool call policy violated: no branch deletions',
+      surface: "mcp-gateway",
+    });
+
+    expect(extractMcpToolError(refusalMessage)).toEqual({
+      type: "policy_denied",
+      message: expect.any(String),
+      toolName: "github__delete_branch",
+      input: { branch: "main" },
+      reason: '"Block always" tool call policy violated: no branch deletions',
+      reasonType: "generic",
+    });
+  });
+
+  it("extracts a policy denied error from the current Archestra-attributed content message (untagged)", () => {
+    // The streaming proxy path and most provider adapters emit only the
+    // untagged contentMessage, so the text parse must keep working on the
+    // attributed wording — including recovering the exact reason constant so
+    // the sensitive-context classification holds.
+    const { contentMessage } = buildToolInvocationRefusalMessages({
+      toolName: "github__delete_branch",
+      toolArguments: '{"branch":"main"}',
+      reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+      surface: "llm-proxy",
+      sessionId: "session-123",
+    });
+
+    expect(extractMcpToolError(contentMessage)).toEqual({
+      type: "policy_denied",
+      message: expect.any(String),
+      toolName: "github__delete_branch",
+      input: { branch: "main" },
+      reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+      reasonType: "sensitive_context",
+    });
+  });
+
+  it("parses the untagged content message even when the white-label product name contains parser anchor words", () => {
+    // "Invoke"/"Denied" in an admin-chosen product name must not hijack the
+    // legacy heuristic anchors — the current template markers take precedence.
+    for (const productName of ["Invoke Gateway", "Denied Access Gateway"]) {
+      const { contentMessage } = buildToolInvocationRefusalMessages({
+        toolName: "github__delete_branch",
+        toolArguments: '{"branch":"main"}',
+        reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        surface: "mcp-gateway",
+        productName,
+      });
+
+      expect(extractMcpToolError(contentMessage)).toEqual({
+        type: "policy_denied",
+        message: expect.any(String),
+        toolName: "github__delete_branch",
+        input: { branch: "main" },
+        reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        reasonType: "sensitive_context",
+      });
+    }
   });
 
   it("normalizes reasonType for direct structured policy-denied errors", () => {
@@ -225,5 +295,45 @@ ${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`),
       message: "Already using agent.",
       toolName: "archestra__swap_agent",
     });
+  });
+});
+
+describe("buildPolicyDeniedMcpToolError", () => {
+  it("classifies a sensitive-context reason and round-trips through extractMcpToolError", () => {
+    const error = buildPolicyDeniedMcpToolError({
+      toolName: "archestra_pm__list_tasks",
+      input: { list: "week" },
+      reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+      message: "human-readable refusal",
+    });
+
+    expect(error).toEqual({
+      type: "policy_denied",
+      message: "human-readable refusal",
+      toolName: "archestra_pm__list_tasks",
+      input: { list: "week" },
+      reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+      reasonType: "sensitive_context",
+    });
+
+    // The structured error is preferred over any prose parsing when carried on
+    // a tool result's _meta / structuredContent.
+    expect(
+      extractMcpToolError({ structuredContent: { archestraError: error } }),
+    ).toEqual(error);
+    expect(extractMcpToolError({ _meta: { archestraError: error } })).toEqual(
+      error,
+    );
+  });
+
+  it("classifies a non-sensitive reason as generic", () => {
+    const error = buildPolicyDeniedMcpToolError({
+      toolName: "some_tool",
+      input: {},
+      reason: "some other policy reason",
+      message: "blocked",
+    });
+
+    expect(error.reasonType).toBe("generic");
   });
 });

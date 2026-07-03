@@ -85,6 +85,7 @@ def main() -> int:
 
 def iter_candidate_files(repo_root: Path):
     yield from sorted((repo_root / ".github").rglob("*.yml"))
+    yield from sorted((repo_root / ".github").rglob("*.yaml"))
     yield from sorted(repo_root.rglob("Dockerfile*"))
     docker_dir = repo_root / "platform" / "docker"
     if docker_dir.exists():
@@ -101,7 +102,12 @@ def looks_like_remote_download(line: str) -> bool:
 
 
 def is_post_only_webhook(line: str) -> bool:
-    return "curl" in line and "-X POST" in line
+    # Only the pre-comment part of the line counts: a POST flag mentioned in a
+    # trailing comment must not exempt an actual download on the same line.
+    code = re.split(r"\s#", line, maxsplit=1)[0]
+    return "curl" in code and bool(
+        re.search(r"(?:-X\s*|--request(?:=|\s+))POST\b", code, re.IGNORECASE)
+    )
 
 
 def has_local_url(line: str) -> bool:

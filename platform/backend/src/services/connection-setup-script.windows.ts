@@ -5,9 +5,10 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
-import type {
-  SetupScriptContext,
-  SetupScriptProxySection,
+import {
+  claudeCodeOAuthNextStep,
+  type SetupScriptContext,
+  type SetupScriptProxySection,
 } from "./connection-setup-script";
 
 /**
@@ -207,9 +208,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
   switch (ctx.clientId) {
     case "claude-code":
       if (ctx.mcp) {
-        steps.push(
-          `Run \`claude\` and use /mcp to finish the OAuth flow for "${ctx.mcp.serverName}".`,
-        );
+        steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
       }
       if (ctx.proxy?.provider === "bedrock" && ctx.proxy.virtualKey) {
         steps.push(

@@ -753,6 +753,12 @@ export function LlmProviderApiKeyForm({
                       id="llm-provider-api-key-value"
                       placeholder={providerConfig.placeholder}
                       disabled={isPending}
+                      // Offer the reveal toggle when adding a key so the user
+                      // can verify what they typed or pasted. Editing keeps the
+                      // "configured" check in that same corner instead, and
+                      // gating on the (constant) edit mode avoids remounting the
+                      // input mid-edit when the check would otherwise toggle.
+                      revealable={!isEditMode}
                       className={
                         showConfiguredStyling ? "border-green-500 pr-10" : ""
                       }

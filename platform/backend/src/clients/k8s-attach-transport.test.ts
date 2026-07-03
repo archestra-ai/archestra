@@ -24,7 +24,10 @@ describe("K8sAttachTransport", () => {
     // attach() is in flight; close the transport before it resolves.
     await transport.close();
     resolveAttach(fakeWs);
-    await startPromise;
+    // A canceled start must not look like a successful one.
+    await expect(startPromise).rejects.toThrow(
+      "Transport closed before attach completed",
+    );
 
     // The late-arriving websocket must be closed, not adopted.
     expect(fakeWs.close).toHaveBeenCalled();

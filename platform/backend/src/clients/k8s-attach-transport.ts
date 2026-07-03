@@ -101,10 +101,12 @@ export class K8sAttachTransport implements Transport {
         )
         .then((ws) => {
           // close() may have run while attach was in flight — the just-arrived
-          // websocket has no owner then, so shut it down instead of adopting it.
+          // websocket has no owner then, so shut it down instead of adopting
+          // it, and fail the start: callers must not treat a canceled
+          // transport as successfully started.
           if (this.closed) {
             ws.close();
-            resolve();
+            reject(new Error("Transport closed before attach completed"));
             return;
           }
 

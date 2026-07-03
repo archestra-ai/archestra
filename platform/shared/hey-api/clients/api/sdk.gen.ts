@@ -666,7 +666,7 @@ export const getAppTemplates = <ThrowOnError extends boolean = false>(options?: 
 export const openAppInChat = <ThrowOnError extends boolean = false>(options: Options<OpenAppInChatData, ThrowOnError>) => (options.client ?? client).post<OpenAppInChatResponses, OpenAppInChatErrors, ThrowOnError>({ url: '/api/apps/{appId}/open-in-chat', ...options });
 
 /**
- * Open an external (MCP-server) UI app in chat: create a conversation with the app rendered against the given install (no model turn) and return its id to navigate to.
+ * Open an external (MCP-server) UI app in chat: create a conversation and return its id to navigate to. When the tool needs no inputs the app is seeded already rendered (no model turn); when it has required inputs the conversation is created empty and the response carries an opening prompt for the client to send.
  *
  * Authentication:
  *
@@ -5372,8 +5372,8 @@ export const setProjectShare = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
+ * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and the chats inside them
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
 
@@ -5386,8 +5386,8 @@ export const getProjectFiles = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
+ * `file:manage`: List, read, write, and delete files in chats and projects
  * `project:read`: View projects and the chats inside them
- * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
  */
 export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options: Options<UploadProjectFilesData, ThrowOnError>) => (options.client ?? client).post<UploadProjectFilesResponses, UploadProjectFilesErrors, ThrowOnError>({
     url: '/api/projects/{id}/files',

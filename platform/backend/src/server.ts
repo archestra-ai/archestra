@@ -1384,7 +1384,7 @@ const startWorker = async () => {
     await enterpriseTier.start();
 
     // Sync Archestra MCP branding so the worker recognises branded tool names
-    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // (e.g. "archestra_staging__todo_write") when executing scheduled tasks.
     // Without this, isToolName() only matches the default "archestra__" prefix
     // and builtin tools fall through to mcpClient.executeToolCallForOwner() which fails
     // because they have credentialResolutionMode "static" with no mcpServerId.

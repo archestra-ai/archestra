@@ -58,6 +58,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "admin"],
+  file: ["manage"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -123,6 +124,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
+  file: ["manage"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -194,6 +196,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
+  file: ["manage"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -388,6 +391,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:delete": "Delete projects",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
+  "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -1360,18 +1364,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
-  // The file list is part of the PFS surface, so it requires the same
-  // `sandbox:execute` as the byte endpoint that serves these files
-  // (GetSkillSandboxArtifact) — otherwise a role could list files marked
-  // `downloadable` and then 403 on every fetch. Project membership is still
-  // enforced in the handler (projectService.listFiles -> requireReadable).
-  [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
-  // Uploading a project file mirrors how files are produced in a project today
-  // (a sandbox run writing a result), so it carries the same `sandbox:execute`
-  // as the list/byte surfaces. Project membership (owner/shared, not admin
-  // oversight) is enforced in the handler (projectService.uploadFile ->
-  // requireReadable).
-  [RouteId.UploadProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Project file surfaces combine project-level access with the files gate:
+  // `file:manage` covers the file operations, while project membership is
+  // still enforced in the handler (projectService.listFiles/uploadFile ->
+  // requireReadable). Note the artifact byte endpoint that serves file
+  // contents (GetSkillSandboxArtifact) stays on `sandbox:execute`.
+  [RouteId.GetProjectFiles]: { project: ["read"], file: ["manage"] },
+  [RouteId.UploadProjectFiles]: { project: ["read"], file: ["manage"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the

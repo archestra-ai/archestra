@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-02
+lastUpdated: 2026-07-03
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -61,6 +61,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
+| Files | `manage` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
@@ -102,6 +103,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete` |
+| Files | `manage` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
 | Site Notifications | `read` |
@@ -156,6 +158,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
 | `environment:admin` | Create, edit, and delete deployment environments (everyone can view them) |
 | `environment:deploy-to-restricted` | Deploy catalog items to restricted environments |
+| `file:manage` | List, read, write, and delete files in chats and projects |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |
 | `githubAppConfig:update` | Modify GitHub App configurations |

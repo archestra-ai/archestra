@@ -1666,19 +1666,17 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
     ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
     ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
     ),
   },
   secretsManager: {

@@ -131,12 +131,13 @@ archestra:
           - path: /
             port: 9000
             pathType: Prefix
-      # MCP App sandbox origins (<hash>.sandbox.archestra.dev) serve the
-      # frontend; its /_sandbox/* Next.js rewrite proxies to the backend.
+      # MCP App sandbox origins (<hash>.sandbox.archestra.dev) go straight to
+      # the backend, which serves /_sandbox/* itself and validates the Host
+      # header (routing via the frontend rewrites the Host header -> 403).
       - host: "*.sandbox.archestra.dev"
         paths:
           - path: /
-            port: 3000
+            port: 9000
             pathType: Prefix
 
     # Wildcard cert for the sandbox hosts, issued and renewed by cert-manager

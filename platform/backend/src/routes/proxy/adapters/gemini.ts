@@ -1408,7 +1408,6 @@ export const geminiAdapterFactory: LLMProvider<
         client,
         options.agent,
         options.source,
-        options.externalAgentId,
       );
     }
     return client;

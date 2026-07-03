@@ -238,12 +238,7 @@ export const azureAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): AzureClient {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "azure",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("azure", options.agent, options.source)
       : undefined;
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {

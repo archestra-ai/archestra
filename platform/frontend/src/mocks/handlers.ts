@@ -102,8 +102,8 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   ...getJson("/api/organization/mcp-preset-entries", []),
-  // Projects are GA, so the chat sidebar fetches this on every authenticated
-  // page. Empty list keeps the strict unhandled-request guard satisfied.
+  // The chat sidebar fetches this on every authenticated page. Empty list
+  // keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/projects", []),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.

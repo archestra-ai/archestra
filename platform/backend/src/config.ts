@@ -984,17 +984,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`. A single `ARCHESTRA_BETA=true` lights up every ships-dark
- * feature wired through this helper at once, while a per-feature flag keeps its
- * opt-out.
+ * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
+ * this helper while a per-feature flag keeps its own opt-out. Backs *product*
+ * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
+ * Azure/Vertex Entra).
  *
- * No product feature currently uses this — the previous beta features (Apps,
- * Projects, Agent Skills, Agent Environments, agent hooks, the code runtime)
- * have all graduated to GA. It is retained as the standard gate for the next
- * ships-dark feature. It backs *product* features only, never credential/
- * auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra).
- *
- * @public — retained for future ships-dark features; also exported for testability
+ * @public — the shared gate for a product feature that ships off by default; also exported for testability
  */
 export function betaFeatureEnabled(envValue: string | undefined): boolean {
   if (envValue === undefined || envValue === "") {
@@ -1014,8 +1009,8 @@ const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
 });
 const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
-// the Dagger runtime fronts the sandbox; the feature flag turning on lights up
-// the shared session + warm base.
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
+// shared session + warm base.
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
   skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;

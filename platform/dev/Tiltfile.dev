@@ -71,7 +71,7 @@ if code_runtime_enabled:
     backend_resource_deps.append('dagger-runtime-port-forward')
   # build the napi addon before the backend boots, so it never loads a stale .node
   backend_resource_deps.append('sandbox-rs-build')
-# MCP Apps are always-on, so their native addon is always required before boot.
+# The MCP App runtime addon must be built before the backend boots.
 backend_resource_deps.append('app-runtime-rs-build')
 
 local_resource(

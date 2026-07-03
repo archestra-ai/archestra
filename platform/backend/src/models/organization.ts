@@ -167,8 +167,8 @@ class OrganizationModel {
 
   /**
    * Turn on the Agent Skill tools for every organization that hasn't already
-   * opted in. Run at startup when the skills feature flag is enabled so the
-   * model-facing skill tools are on by default — newly created agents then
+   * opted in. Run at startup so the model-facing skill tools are on by default
+   * — newly created agents then
    * inherit them via `ToolModel.assignSkillToolsToAgent`, and the
    * slash-command toggle unlocks. Pre-existing agents are not retrofitted;
    * admins add skill tools to them via the agent tools editor if needed.

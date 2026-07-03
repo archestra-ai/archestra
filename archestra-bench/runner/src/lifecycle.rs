@@ -1006,7 +1006,7 @@ pub fn build_backend_env(
     // These two keys are always force-set (the dev default points the backend at the local Dagger
     // engine), so `/app/.env` cannot steer them — the prod image delivers them through the process
     // env instead, which this honors over the dev default. Setting the runner host is what turns the
-    // code sandbox on: the backend gates the sandbox on the host's presence, not a feature flag.
+    // code sandbox on: the backend enables the sandbox when a Dagger host is present.
     //
     // The runner host arrives already resolved (`resolve_runner_host`): explicit process-env
     // override, else the managed engine, else the k8s port-forward. The CLI-bin override still lives
@@ -1018,12 +1018,11 @@ pub fn build_backend_env(
             .unwrap_or_else(|| dagger_cli_bin.to_string()),
     );
     env.insert("ARCHESTRA_ANALYTICS".to_string(), "disabled".to_string());
-    // MCP Apps, Projects, and agent environments are GA (always on), so the bench no longer force-sets
-    // their retired feature flags. Projects still isolate per-rollout file ownership so concurrent
-    // lanes and successive tasks don't collide on artifact names; and with Apps GA the platform assigns
-    // the app authoring tools to every agent at creation time (AgentModel.create ->
-    // assignAppToolsToAgent), so under the default search_and_run_only exposure they sit behind
-    // search_tools as realistic distractors — the same as the real product.
+    // Per-rollout projects isolate file ownership so concurrent lanes and successive tasks don't
+    // collide on artifact names. The platform assigns the app authoring tools to every agent at
+    // creation time (AgentModel.create -> assignAppToolsToAgent), so under the default
+    // search_and_run_only exposure they sit behind search_tools as realistic distractors — the same
+    // as the real product.
     env
 }
 

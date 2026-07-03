@@ -706,8 +706,8 @@ export function AgentDialog({
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
-  // environment. For agents it binds the code sandbox runtime (feature-flagged);
-  // for LLM proxies / MCP gateways it is an attribution label so their
+  // environment. For agents it binds the code sandbox runtime; for LLM proxies
+  // / MCP gateways it is an attribution label so their
   // inference/usage falls under environment-scoped cost limits.
   const supportsEnvironment =
     isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
@@ -1992,8 +1992,8 @@ export function AgentDialog({
                   </div>
                 )}
 
-                {/* Hooks (internal agents only, existing agents only; gated by
-                  the agent-hooks feature flag, which requires the agent runtime) */}
+                {/* Hooks (internal agents only, existing agents only; shown when
+                  the agent runtime is available, since hooks run in its sandbox) */}
                 {agentHooksEnabled &&
                   isInternalAgent &&
                   !isBuiltIn &&

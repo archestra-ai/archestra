@@ -43,7 +43,7 @@ const ScheduleTriggerBodyFieldsSchema = z.object({
   // Optional: callers without `agent:read` (e.g. a basic-user role) omit it and
   // the handler falls back to the org's default agent.
   agentId: UuidIdSchema.optional(),
-  // Required at the handler when the projects feature is on; ignored otherwise.
+  // Required at the handler: a scheduled task is always scoped to a project.
   projectId: UuidIdSchema.optional(),
   enabled: z.boolean().optional().default(true),
   ...ScheduleTriggerConfigurationSchemaBase.shape,

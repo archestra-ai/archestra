@@ -10,9 +10,9 @@ share_backend = true
 # access-request / kanban apps wire its tools. One shared instance is safe across concurrent lanes.
 fixture_mcp = true
 
-# Archestra built-in app authoring tools, beyond the base sandbox set. MCP Apps are always-on, so the
-# platform assigns these to every agent at creation time; listing them here marks them
-# allowed/required so this env's surface assertion treats them as expected rather than a leak.
+# Archestra built-in app authoring tools, beyond the base sandbox set. The platform assigns these to
+# every agent at creation time; listing them here marks them allowed/required so this env's surface
+# assertion treats them as expected rather than a leak.
 tools = ["scaffold_app", "refine_app", "read_app", "edit_app", "validate_app", "list_apps", "render_app", "publish_app"]
 
 # DeepWiki: a public, no-auth remote MCP the repo-docs-app wires into its app. Must list tools without

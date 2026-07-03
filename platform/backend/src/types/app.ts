@@ -249,7 +249,7 @@ export const ScaffoldAppSchema = z.strictObject({
     .optional()
     .describe("Optional description."),
   scope: AppScopeSchema.optional().describe(
-    "Visibility scope. Defaults to personal (owned by the calling user).",
+    "Visibility scope, personal (default, owned by the calling user) or org. Team scope is not available here — team-scoped apps must be created in the Apps UI so teams can be assigned.",
   ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",

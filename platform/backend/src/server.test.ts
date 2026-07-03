@@ -63,6 +63,65 @@ describe("createFastifyInstance", () => {
       });
     });
 
+    test("returns Fastify's own 4xx status instead of coercing it to a 500", async () => {
+      const app = createFastifyInstance();
+      app.post("/test-media-type", async () => ({ ok: true }));
+
+      // An unsupported content type makes Fastify raise its typed 415 error
+      // before the handler runs; the error handler must preserve that status.
+      const response = await app.inject({
+        method: "POST",
+        url: "/test-media-type",
+        headers: { "content-type": "application/x-unknown" },
+        payload: "raw",
+      });
+
+      expect(response.statusCode).toBe(415);
+      expect(response.json().error.type).not.toBe("api_internal_server_error");
+    });
+
+    test("captures 500s but not upstream-fault 502/504s to error tracking", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+
+      const app = createFastifyInstance();
+      app.get("/test-upstream-502", async () => {
+        throw new ApiError(502, "Upstream provider failed");
+      });
+      app.get("/test-upstream-504", async () => {
+        throw new ApiError(504, "Upstream provider timed out");
+      });
+      app.get("/test-internal-500", async () => {
+        throw new ApiError(500, "We crashed");
+      });
+
+      const res502 = await app.inject({
+        method: "GET",
+        url: "/test-upstream-502",
+      });
+      const res504 = await app.inject({
+        method: "GET",
+        url: "/test-upstream-504",
+      });
+      expect(res502.statusCode).toBe(502);
+      expect(res504.statusCode).toBe(504);
+      expect(captureSpy).not.toHaveBeenCalled();
+
+      const res500 = await app.inject({
+        method: "GET",
+        url: "/test-internal-500",
+      });
+      expect(res500.statusCode).toBe(500);
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+
+      captureSpy.mockRestore();
+    });
+
     test("handles standard Error objects correctly", async () => {
       const app = createFastifyInstance();
 

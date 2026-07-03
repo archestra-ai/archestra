@@ -1003,13 +1003,10 @@ pub fn build_backend_env(
         "ARCHESTRA_METRICS_PORT".to_string(),
         metrics_port.to_string(),
     );
-    env.insert(
-        "ARCHESTRA_CODE_RUNTIME_ENABLED".to_string(),
-        "true".to_string(),
-    );
     // These two keys are always force-set (the dev default points the backend at the local Dagger
     // engine), so `/app/.env` cannot steer them — the prod image delivers them through the process
-    // env instead, which this honors over the dev default.
+    // env instead, which this honors over the dev default. Setting the runner host is what turns the
+    // code sandbox on: the backend enables the sandbox when a Dagger host is present.
     //
     // The runner host arrives already resolved (`resolve_runner_host`): explicit process-env
     // override, else the managed engine, else the k8s port-forward. The CLI-bin override still lives
@@ -1022,21 +1019,10 @@ pub fn build_backend_env(
     );
     env.insert("ARCHESTRA_ANALYTICS".to_string(), "disabled".to_string());
     // Per-rollout projects isolate file ownership so concurrent lanes and successive tasks don't
-    // collide on common artifact names; the feature must be on for `POST /api/projects` and
-    // project-scoped conversations.
-    env.insert("ARCHESTRA_PROJECTS_ENABLED".to_string(), "true".to_string());
-    // MCP Apps and agent environments ship dark behind these flags; the bench turns them on for every
-    // env (like the sandbox/projects flags above) so a run never depends on the operator's `.env` or
-    // `ARCHESTRA_BETA`. With Apps on, the platform assigns the app authoring tools to every agent at
-    // creation time (AgentModel.create -> assignAppToolsToAgent), independent of the bench's
-    // auto-assignment toggle, so non-apps agents carry them too. That mirrors the real product -- a
-    // user with Apps enabled has those tools -- and under the default search_and_run_only exposure
-    // they sit behind search_tools rather than in the upfront context, acting as realistic distractors.
-    env.insert("ARCHESTRA_APPS_ENABLED".to_string(), "true".to_string());
-    env.insert(
-        "ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED".to_string(),
-        "true".to_string(),
-    );
+    // collide on artifact names. The platform assigns the app authoring tools to every agent at
+    // creation time (AgentModel.create -> assignAppToolsToAgent), so under the default
+    // search_and_run_only exposure they sit behind search_tools as realistic distractors — the same
+    // as the real product.
     env
 }
 
@@ -1221,26 +1207,6 @@ mod tests {
         assert_eq!(
             env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN"),
             Some(&"/dev/dagger".to_string())
-        );
-    }
-
-    #[test]
-    fn test_build_backend_env_force_enables_apps_and_environments() {
-        // Apps + agent environments are force-on for every env so a run doesn't depend on the
-        // operator's `.env`/`ARCHESTRA_BETA`; the apps env's tools can't resolve without them.
-        let base = HashMap::new();
-        let env = build_backend_env(
-            &base,
-            "postgres://h/db",
-            "http://localhost:1",
-            2,
-            MANAGED_DAGGER_HOST,
-            "/dev/dagger",
-        );
-        assert_eq!(env.get("ARCHESTRA_APPS_ENABLED"), Some(&"true".to_string()));
-        assert_eq!(
-            env.get("ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED"),
-            Some(&"true".to_string())
         );
     }
 

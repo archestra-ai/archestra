@@ -2793,14 +2793,44 @@ export default class K8sDeployment {
   ): Promise<void> {
     const serviceName = this.constructHttpServiceName();
 
+    // System-managed identity labels shared by the service metadata and its
+    // pod selector. The service NAME is derived from the (stable) deployment
+    // name, but the selector targets `mcp-server-id`, which changes whenever
+    // the server record is recreated. A Deployment's selector is immutable, so
+    // on such a change the Deployment is deleted + recreated with the new id —
+    // but the like-named Service already exists. If we skipped it (the previous
+    // behaviour), the Service kept selecting the OLD id, matched zero pods, and
+    // was left with no endpoints, so every connect/read failed with a generic
+    // "Resource read failed". Reconcile an existing Service's selector/labels
+    // to the current id instead of skipping.
+    const identityLabels = sanitizeMetadataLabels({
+      app: "mcp-server",
+      "mcp-server-id": this.mcpServer.id,
+    });
+
     try {
-      // Check if service already exists
+      // If the service already exists, reconcile its selector + labels to the
+      // current mcp-server-id (see note above) rather than leaving it stale.
       try {
         await this.k8sApi.readNamespacedService({
           name: serviceName,
           namespace: this.namespace,
         });
-        logger.info(`Service ${serviceName} already exists`);
+        await this.k8sApi.patchNamespacedService(
+          {
+            name: serviceName,
+            namespace: this.namespace,
+            body: {
+              metadata: { labels: identityLabels },
+              spec: { selector: identityLabels },
+            },
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        );
+        logger.info(
+          { mcpServerId: this.mcpServer.id, serviceName },
+          `Service ${serviceName} already exists — reconciled selector to current mcp-server-id`,
+        );
         return;
       } catch (error: unknown) {
         // Service doesn't exist, we'll create it below
@@ -2819,16 +2849,10 @@ export default class K8sDeployment {
       const serviceSpec: k8s.V1Service = {
         metadata: {
           name: serviceName,
-          labels: sanitizeMetadataLabels({
-            app: "mcp-server",
-            "mcp-server-id": this.mcpServer.id,
-          }),
+          labels: identityLabels,
         },
         spec: {
-          selector: sanitizeMetadataLabels({
-            app: "mcp-server",
-            "mcp-server-id": this.mcpServer.id,
-          }),
+          selector: identityLabels,
           ports: [
             {
               protocol: "TCP",

@@ -12,11 +12,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
-import type {
-  AutonomyPolicyOperator,
-  GlobalToolPolicy,
-  ToolInvocation,
-} from "@/types";
+import type { AutonomyPolicyOperator, ToolInvocation } from "@/types";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -225,13 +221,7 @@ class ToolInvocationPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
     context: PolicyEvaluationContext,
-    globalToolPolicy: GlobalToolPolicy,
   ): Promise<boolean> {
-    // Permissive mode: skip all approval checks (consistent with evaluateBatch)
-    if (globalToolPolicy === "permissive") {
-      return false;
-    }
-
     // Archestra tools always bypass policies (consistent with evaluateBatch),
     // except policy-evaluated built-ins like query_knowledge_sources
     if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
@@ -416,18 +406,7 @@ class ToolInvocationPolicyModel {
     }>,
     context: PolicyEvaluationContext,
     isContextTrusted: boolean,
-    globalToolPolicy: GlobalToolPolicy,
   ): Promise<EvaluationResult & { toolCallName?: string }> {
-    logger.debug(
-      { globalToolPolicy },
-      "ToolInvocationPolicy.evaluateBatch: global policy",
-    );
-
-    // YOLO mode: allow all tool calls immediately, skip policy evaluation
-    if (globalToolPolicy === "permissive") {
-      return { isAllowed: true, reason: "" };
-    }
-
     // Filter out policy-bypassing Archestra tools and agent delegation tools
     // (always allowed). Policy-evaluated built-ins like
     // query_knowledge_sources are kept and evaluated like external tools.

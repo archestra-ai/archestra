@@ -752,8 +752,7 @@ describe("run_tool", () => {
       makeToolPolicy,
       makeUser,
     }) => {
-      // policies only evaluate outside permissive mode (evaluateBatch)
-      const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+      const org = await makeOrganization();
       const user = await makeUser();
       await makeMember(user.id, org.id, { role: "admin" });
       const agent = await makeAgent({
@@ -1268,7 +1267,7 @@ describe("run_tool", () => {
     makeToolPolicy,
     makeUser,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
@@ -1322,7 +1321,7 @@ describe("run_tool", () => {
     makeToolPolicy,
     makeUser,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
@@ -1373,7 +1372,7 @@ describe("run_tool", () => {
     makeToolPolicy,
     makeUser,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({

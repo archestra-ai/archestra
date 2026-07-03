@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -9,13 +8,6 @@ describe("POST /api/apps/:appId/screenshot", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  // Pin the apps flag per TEST, not per file: the shared setup restores the
-  // pristine config before and after every test, so a beforeAll-scoped
-  // mutation does not survive, and a file must never depend on worker state.
-  beforeEach(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();

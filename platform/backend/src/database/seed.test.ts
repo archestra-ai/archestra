@@ -225,17 +225,9 @@ Examples — one per outcome; apply the rules above to classify any tool, not ju
 - database__drop_table: invocation="block_always", result="mark_as_safe" (destructive: name dedicated to deletion)`;
 
 describe("syncBuiltInSkills", () => {
-  // These cases assert on the always-on built-in skills, so pin the apps feature
-  // off (the build-app skill is gated on it) and restore the ambient flag after.
-  let originalAppsEnabled: boolean;
-  beforeEach(() => {
-    originalAppsEnabled = config.apps.enabled;
-    config.apps.enabled = false;
-  });
   // syncBuiltInSkills syncs branding per org; reset the singleton so it never
   // leaks an app name into a later (shuffled) test.
   afterEach(() => {
-    config.apps.enabled = originalAppsEnabled;
     archestraMcpBranding.syncFromOrganization(null);
   });
 
@@ -284,10 +276,7 @@ describe("syncBuiltInSkills", () => {
     await syncBuiltInSkills();
     await syncBuiltInSkills();
 
-    // apps feature pinned off here, so the apps-gated skills do not seed.
-    const expected = BUILT_IN_SKILLS.filter(
-      (skill) => !skill.requiresAppsFeature,
-    ).length;
+    const expected = BUILT_IN_SKILLS.length;
     expect(await countBuiltInSkills(org.id)).toBe(expected);
   });
 
@@ -311,8 +300,9 @@ describe("syncBuiltInSkills", () => {
 
     await syncBuiltInSkills();
 
-    // no built-in row was created, and the squatting skill is untouched.
-    expect(await countBuiltInSkills(org.id)).toBe(0);
+    // the squatted built-in is skipped (no phantom copy); the other built-ins
+    // still seed.
+    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length - 1);
     const built = await SkillModel.findBuiltIn({
       organizationId: org.id,
       sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
@@ -436,34 +426,19 @@ describe("syncBuiltInSkills", () => {
     expect(after?.content).not.toContain("Archestra");
   });
 
-  test("seeds an apps-gated skill only when the apps feature is enabled", async ({
+  test("seeds the build-app skill for every organization", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     const buildAppRef = builtInSkillSourceRef("build-app");
 
-    const original = config.apps.enabled;
-    try {
-      config.apps.enabled = false;
-      await syncBuiltInSkills();
-      expect(
-        await SkillModel.findBuiltIn({
-          organizationId: org.id,
-          sourceRef: buildAppRef,
-        }),
-      ).toBeNull();
-
-      config.apps.enabled = true;
-      await syncBuiltInSkills();
-      const seeded = await SkillModel.findBuiltIn({
-        organizationId: org.id,
-        sourceRef: buildAppRef,
-      });
-      expect(seeded).not.toBeNull();
-      expect(seeded?.content).toContain("window.archestra");
-    } finally {
-      config.apps.enabled = original;
-    }
+    await syncBuiltInSkills();
+    const seeded = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef: buildAppRef,
+    });
+    expect(seeded).not.toBeNull();
+    expect(seeded?.content).toContain("window.archestra");
   });
 });
 

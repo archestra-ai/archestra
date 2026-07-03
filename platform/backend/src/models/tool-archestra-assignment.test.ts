@@ -19,13 +19,11 @@ import OrganizationModel from "./organization";
 import ToolModel from "./tool";
 
 describe("Archestra Tools Dynamic Assignment", () => {
-  // Pin every flag that gates create-time tool assignment. Tests below
-  // assert EXACT assigned-tool sets and toggle individual flags themselves
-  // (with try/finally); trusting the worker baseline for the others let a
-  // rare cross-file ordering surface sandbox/Projects tools in counts that
-  // expected zero — the same class #6156 pinned in tool.test.ts.
+  // Pin the sandbox flag that gates create-time tool assignment. Tests below
+  // assert EXACT assigned-tool sets and toggle the flag themselves (with
+  // try/finally); trusting the worker baseline let a rare cross-file ordering
+  // surface sandbox tools in counts that expected zero.
   beforeEach(() => {
-    (config.apps as { enabled: boolean }).enabled = false;
     (config.skillsSandbox as { enabled: boolean }).enabled = false;
   });
 
@@ -385,56 +383,24 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(names).not.toContain(TOOL_CREATE_SKILL_FULL_NAME);
   });
 
-  test("AgentModel.create assigns app tools when the apps feature is enabled", async ({
-    makeAgent,
-  }) => {
-    const appsConfig = config.apps as { enabled: boolean };
-    const originalAppsEnabled = appsConfig.enabled;
-    appsConfig.enabled = true;
-    try {
-      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-      const agent = await makeAgent({ name: "Apps Agent" });
+  test("AgentModel.create assigns app tools", async ({ makeAgent }) => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({ name: "Apps Agent" });
 
-      const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
-        (t) => t.name,
-      );
-      for (const shortName of APP_ARCHESTRA_TOOL_SHORT_NAMES) {
-        expect(names).toContain(getArchestraToolFullName(shortName));
-      }
-    } finally {
-      appsConfig.enabled = originalAppsEnabled;
+    const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
+      (t) => t.name,
+    );
+    for (const shortName of APP_ARCHESTRA_TOOL_SHORT_NAMES) {
+      expect(names).toContain(getArchestraToolFullName(shortName));
     }
   });
 
-  test("AgentModel.create assigns no app tools when the apps feature is disabled", async ({
-    makeAgent,
-  }) => {
-    const appsConfig = config.apps as { enabled: boolean };
-    const originalAppsEnabled = appsConfig.enabled;
-    // seed with the feature on so the app tools exist in the catalog — the
-    // config gate itself must prevent the assignment
-    appsConfig.enabled = true;
-    try {
-      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-      appsConfig.enabled = false;
-      const agent = await makeAgent({ name: "No Apps Agent" });
-
-      const toolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
-      expect(toolIds).toHaveLength(0);
-    } finally {
-      appsConfig.enabled = originalAppsEnabled;
-    }
-  });
-
-  test("AgentModel.create assigns sandbox runtime and Projects file tools when both features are enabled", async ({
+  test("AgentModel.create assigns sandbox runtime and file tools when the runtime is enabled", async ({
     makeAgent,
   }) => {
     const sandboxConfig = config.skillsSandbox as { enabled: boolean };
-    const projectsConfig = config.projects as { enabled: boolean };
     const originalSandbox = sandboxConfig.enabled;
-    const originalProjects = projectsConfig.enabled;
     sandboxConfig.enabled = true;
-    projectsConfig.enabled = true;
     try {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       const agent = await makeAgent({ name: "Sandbox Agent" });
@@ -454,42 +420,6 @@ describe("Archestra Tools Dynamic Assignment", () => {
       }
     } finally {
       sandboxConfig.enabled = originalSandbox;
-      projectsConfig.enabled = originalProjects;
-    }
-  });
-
-  test("AgentModel.create assigns runtime tools but not Projects file tools when Projects is disabled", async ({
-    makeAgent,
-  }) => {
-    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
-    const projectsConfig = config.projects as { enabled: boolean };
-    const originalSandbox = sandboxConfig.enabled;
-    const originalProjects = projectsConfig.enabled;
-    // Seed with both on so the file tools exist in the catalog; the config gate
-    // itself must keep them off the new agent.
-    sandboxConfig.enabled = true;
-    projectsConfig.enabled = true;
-    try {
-      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-      projectsConfig.enabled = false;
-      const agent = await makeAgent({ name: "Runtime Only Agent" });
-
-      const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
-        (t) => t.name,
-      );
-      for (const fullName of [
-        TOOL_RUN_COMMAND_FULL_NAME,
-        TOOL_UPLOAD_FILE_FULL_NAME,
-        TOOL_DOWNLOAD_FILE_FULL_NAME,
-      ]) {
-        expect(names).toContain(fullName);
-      }
-      for (const shortName of PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
-        expect(names).not.toContain(getArchestraToolFullName(shortName));
-      }
-    } finally {
-      sandboxConfig.enabled = originalSandbox;
-      projectsConfig.enabled = originalProjects;
     }
   });
 
@@ -497,13 +427,10 @@ describe("Archestra Tools Dynamic Assignment", () => {
     makeAgent,
   }) => {
     const sandboxConfig = config.skillsSandbox as { enabled: boolean };
-    const projectsConfig = config.projects as { enabled: boolean };
     const originalSandbox = sandboxConfig.enabled;
-    const originalProjects = projectsConfig.enabled;
-    // Seed with both on so the tools exist; turning the runtime off must keep
+    // Seed with the runtime on so the tools exist; turning it off must keep
     // the whole sandbox group off the new agent.
     sandboxConfig.enabled = true;
-    projectsConfig.enabled = true;
     try {
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       sandboxConfig.enabled = false;
@@ -524,7 +451,6 @@ describe("Archestra Tools Dynamic Assignment", () => {
       }
     } finally {
       sandboxConfig.enabled = originalSandbox;
-      projectsConfig.enabled = originalProjects;
     }
   });
 });

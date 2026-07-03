@@ -78,39 +78,17 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(body.authorization_servers).toEqual(["http://localhost:9000"]);
     });
 
-    test("returns app-connector metadata when the apps feature is enabled", async () => {
-      const original = config.apps.enabled;
-      (config.apps as { enabled: boolean }).enabled = true;
-      try {
-        const response = await app.inject({
-          method: "GET",
-          url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
-          headers: { host: "localhost:9000" },
-        });
+    test("returns app-connector metadata", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
+        headers: { host: "localhost:9000" },
+      });
 
-        expect(response.statusCode).toBe(200);
-        expect(response.json().resource).toBe(
-          "http://localhost:9000/api/mcp/app/11111111-1111-1111-1111-111111111111",
-        );
-      } finally {
-        (config.apps as { enabled: boolean }).enabled = original;
-      }
-    });
-
-    test("app-connector discovery is dark (404) when the apps feature is disabled", async () => {
-      const original = config.apps.enabled;
-      (config.apps as { enabled: boolean }).enabled = false;
-      try {
-        const response = await app.inject({
-          method: "GET",
-          url: "/.well-known/oauth-protected-resource/api/mcp/app/11111111-1111-1111-1111-111111111111",
-          headers: { host: "localhost:9000" },
-        });
-
-        expect(response.statusCode).toBe(404);
-      } finally {
-        (config.apps as { enabled: boolean }).enabled = original;
-      }
+      expect(response.statusCode).toBe(200);
+      expect(response.json().resource).toBe(
+        "http://localhost:9000/api/mcp/app/11111111-1111-1111-1111-111111111111",
+      );
     });
   });
 

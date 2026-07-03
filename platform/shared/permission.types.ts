@@ -160,7 +160,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
   agentSettings:
-    "Agent settings (default model, default agent, security engine, chat file uploads)",
+    "Agent settings (default model, default agent, default tool guardrails, chat file uploads)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",

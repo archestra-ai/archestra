@@ -2,7 +2,6 @@ import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   getArchestraToolFullName,
-  isProjectsFileArchestraToolShortName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
@@ -142,9 +141,9 @@ export async function resolveDynamicToolByUiResource(params: {
 
 /**
  * Whether an unassigned Archestra built-in may execute for this agent/user
- * anyway: the sandbox runtime tools when the sandbox runtime is on, the
- * persistent-files (Projects) tools when the Projects feature is on (see
- * isSandboxToolEnabled), and query_knowledge_sources when the user can access at
+ * anyway: the sandbox tools (runtime and persistent-files) when the sandbox
+ * runtime is on (see isSandboxToolEnabled), and query_knowledge_sources when
+ * the user can access at
  * least one knowledge connector. The caller (executeArchestraTool) has already
  * enforced the tool's RBAC permission; this adds the dynamic-access gates on
  * top. Every other built-in stays assignment-gated.
@@ -181,7 +180,7 @@ export async function isDynamicallyAvailableArchestraTool(params: {
 /**
  * Tools the user can access that are not yet assigned to the agent — the widened
  * portion of the search_tools search space. Third-party MCP tools from every
- * catalog the user can access, the sandbox built-ins when the feature is on,
+ * catalog the user can access, the sandbox built-ins when the runtime is on,
  * and query_knowledge_sources when the user can access at least one knowledge
  * connector (see `isExcludedFromDiscovery`). Every other Archestra built-in
  * stays assignment-gated and is excluded.
@@ -275,17 +274,11 @@ async function userHasAccessibleKnowledgeConnectors(
 }
 
 // Whether a sandbox-group tool is enabled for discovery/dynamic dispatch under
-// the current deployment config. The runtime tools
-// (run_command/upload_file/download_file) follow the skills-sandbox runtime
-// flag; the persistent-files (Projects) tools follow the Projects flag in
-// addition to the runtime flag — they don't materialize a Dagger container, but
-// execution still requires the runtime (see sandbox.ts `ensureUsable`), so
-// exposing them only with both flags on mirrors the registration gate in
-// index.ts. Non-sandbox tools are never enabled by this predicate.
+// the current deployment config. Both the runtime tools
+// (run_command/upload_file/download_file) and the persistent-files tools
+// (search_files/read_file/…) follow the skills-sandbox runtime flag. Non-sandbox
+// tools are never enabled by this predicate.
 function isSandboxToolEnabled(shortName: string): boolean {
-  if (isProjectsFileArchestraToolShortName(shortName)) {
-    return config.skillsSandbox.enabled && config.projects.enabled;
-  }
   return (
     config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
   );
@@ -298,10 +291,10 @@ function isSandboxToolEnabled(shortName: string): boolean {
 //
 // EXCEPTIONS riding the relaxation:
 // - the sandbox runtime tools (run_command/upload_file/download_file) when the
-//   sandbox runtime is on, and the persistent-files tools
-//   (search_files/read_file/save_file/edit_file/delete_file) when the
-//   Projects feature is on, so a user with sandbox:execute can discover and run
-//   them without a manual assignment (see isSandboxToolEnabled);
+//   sandbox runtime is on, together with the persistent-files tools
+//   (search_files/read_file/save_file/edit_file/delete_file), so a user with
+//   sandbox:execute can discover and run them without a manual assignment (see
+//   isSandboxToolEnabled);
 // - query_knowledge_sources when the user can access a knowledge connector
 //   (the discovery path passes `hasKnowledgeConnectors` it already computed;
 //   the single-tool path checks it in isDynamicallyAvailableArchestraTool).

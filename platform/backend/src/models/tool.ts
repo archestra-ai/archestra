@@ -251,21 +251,23 @@ class ToolModel {
       return existingTool;
     }
 
-    // Create default policies for new tools
+    // Create default policies for new tools. This is a test-only path (see the
+    // TODO above), so it intentionally uses the hardcoded fallbacks rather than
+    // the org's configured defaults — the production paths
+    // (bulkCreateToolsIfNotExists / syncToolsForCatalog / proxy discovery) are
+    // the ones that honor getDefaultToolPolicies().
     await ToolModel.createDefaultPolicies(createdTool.id);
 
     return createdTool;
   }
 
   /**
-   * Create default policies for a newly created tool:
-   * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
-   * - Default result policy: mark_as_untrusted (empty conditions)
-   *
-   * `options.invocationAction` / `options.resultAction` override those defaults —
-   * used by the LLM proxy discovery path to honor the org's configured defaults.
-   * When omitted, the original hardcoded defaults are used (MCP/catalog tools are
-   * unaffected).
+   * Create default policies for a newly created tool. Callers pass the org's
+   * configured "Default Guardrails for MCP Tools" via
+   * `options.invocationAction` / `options.resultAction` so every new tool —
+   * proxy-discovered and MCP-catalog alike — starts with the admin-chosen
+   * defaults. When omitted, the safe hardcoded fallbacks apply
+   * (block_when_context_is_untrusted / mark_as_untrusted).
    */
   static async createDefaultPolicies(
     toolId: string,
@@ -289,6 +291,27 @@ class ToolModel {
       action: options?.resultAction ?? "mark_as_untrusted",
       description: null,
     });
+  }
+
+  /**
+   * The org-configured default guardrail policies applied to every newly
+   * created tool ("Default Guardrails for MCP Tools" in Agent Settings). Tools
+   * are org-agnostic shared rows, so this reads the deployment's organization;
+   * it falls back to the safe hardcoded defaults only when no organization
+   * exists.
+   */
+  static async getDefaultToolPolicies(): Promise<{
+    invocationAction: ToolInvocation.ToolInvocationPolicyAction;
+    resultAction: TrustedData.TrustedDataPolicyAction;
+  }> {
+    const organization = await OrganizationModel.getFirst();
+    return {
+      invocationAction:
+        organization?.defaultDiscoveredToolInvocationPolicy ??
+        "block_when_context_is_untrusted",
+      resultAction:
+        organization?.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
+    };
   }
 
   static async findById(
@@ -819,9 +842,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
-      // Create default policies for newly inserted tools
+      // Create default policies for newly inserted tools, honoring the org's
+      // configured "Default Guardrails for MCP Tools".
+      const defaultPolicies = await ToolModel.getDefaultToolPolicies();
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaultPolicies);
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)
@@ -1220,12 +1245,14 @@ class ToolModel {
 
     // Remove stale tools that no longer exist in the Archestra tool definitions.
     // FK constraints use onDelete: "cascade" so related records are cleaned up
-    // automatically — which is also why a feature-flagged-off built-in must NOT
-    // be treated as stale: `archestraToolNames` only lists the tools enabled
-    // this boot, so deleting rows missing from it would wipe a disabled
-    // feature's tools (apps, sandbox) and cascade away every agent/conversation
-    // assignment. A built-in is stale only when its short name is gone from the
-    // full registry; flag-gating governs visibility, not catalog reconciliation.
+    // automatically — which is also why a built-in that is inactive this boot
+    // (e.g. the sandbox tools when no Dagger host is configured) must NOT be
+    // treated as stale: `archestraToolNames` only lists the tools active this
+    // boot, so deleting rows missing from it would wipe an inactive tool
+    // group's rows (e.g. the sandbox tools) and cascade away every
+    // agent/conversation assignment. A built-in is stale only when its short
+    // name is gone from the full registry; whether a tool is active this boot
+    // governs visibility, not catalog reconciliation.
     const knownBuiltInShortNames = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
     const allCatalogTools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
@@ -1383,18 +1410,15 @@ class ToolModel {
    *
    * New agents inherit the app toolset via {@link assignAppToolsToAgent}, but
    * agents that predate a tool's introduction (e.g. existing agents when
-   * read_app/edit_app are added) would otherwise never receive it. Apps are a
-   * global feature (`ARCHESTRA_APPS_ENABLED`), not a per-org opt-in, so this
-   * spans all orgs. Idempotent: only the newly-created short names are assigned,
-   * via `createManyIfNotExists`.
+   * read_app/edit_app are added) would otherwise never receive it. The app
+   * tools apply to every org, so this spans all orgs. Idempotent: only the
+   * newly-created short names are assigned, via `createManyIfNotExists`.
    *
    * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
    */
   static async backfillNewAppToolsToEnabledOrgs(
     newlyCreatedToolNames: string[],
   ): Promise<void> {
-    if (!config.apps.enabled) return;
-
     const createdShortNames = new Set(
       newlyCreatedToolNames
         .map(extractArchestraBuiltInShortName)
@@ -1452,19 +1476,15 @@ class ToolModel {
   }
 
   /**
-   * Assign the MCP App management tools to a single agent when the apps
-   * feature is enabled. No-op otherwise.
+   * Assign the MCP App management tools to a single agent.
    *
    * Called from `AgentModel.create` so new agents can build and use apps by
-   * default. With the feature dark the app tools are not even seeded, so
-   * there is nothing to assign.
+   * default.
    */
   static async assignAppToolsToAgent(
     agentId: string,
     organizationId: string,
   ): Promise<void> {
-    if (!config.apps.enabled) return;
-
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
       organizationId,
       APP_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1475,16 +1495,11 @@ class ToolModel {
   }
 
   /**
-   * Assign the code-execution sandbox tools to a single agent based on the
-   * deployment's runtime/Projects flags. No-op when the sandbox runtime is off.
-   *
-   * - Runtime tools (run_command/upload_file/download_file): assigned when the
-   *   skills-sandbox runtime is on (`config.skillsSandbox.enabled`).
-   * - Persistent-files (Projects) tools (search_files/read_file/save_file/
-   *   edit_file/delete_file): also require the Projects flag
-   *   (`config.projects.enabled`) — they need the runtime to run AND Projects to
-   *   be exposed (see `isSandboxToolEnabled`), so gating assignment on both
-   *   avoids assigned-but-hidden rows.
+   * Assign the code-execution sandbox tools to a single agent when the
+   * skills-sandbox runtime is on (`config.skillsSandbox.enabled`). No-op
+   * otherwise. Covers both the runtime tools
+   * (run_command/upload_file/download_file) and the persistent-files tools
+   * (search_files/read_file/save_file/edit_file/delete_file).
    *
    * Called from `AgentModel.create` so new agents inherit the sandbox surface.
    * With the runtime dark the sandbox tools are not even seeded, so there is
@@ -1498,10 +1513,8 @@ class ToolModel {
 
     const shortNames: ArchestraToolShortName[] = [
       ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
-    if (config.projects.enabled) {
-      shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
-    }
 
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
       organizationId,
@@ -1587,9 +1600,9 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
-    // The sandbox runtime + Projects file tools are auto-assigned separately by
-    // `assignSandboxToolsToAgent` (flag-gated), not here. This default set is the
-    // always-on baseline only.
+    // Sandbox and persistent-files tools are assigned separately by
+    // `assignSandboxToolsToAgent` (only when the sandbox runtime is on); this
+    // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
@@ -2347,9 +2360,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
-      // Create default policies for newly inserted tools
+      // Create default policies for newly inserted tools, honoring the org's
+      // configured "Default Guardrails for MCP Tools".
+      const defaultPolicies = await ToolModel.getDefaultToolPolicies();
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaultPolicies);
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)

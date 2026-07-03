@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import { AppModel, AppPinModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -11,12 +10,6 @@ describe("PUT/DELETE /api/apps pin routes", () => {
   let organizationId: string;
   let user: User;
   let actingUser: User;
-
-  // Pin the apps flag per TEST, not per file: the shared setup restores the
-  // pristine config before and after every test.
-  beforeEach(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     organizationId = (await makeOrganization()).id;

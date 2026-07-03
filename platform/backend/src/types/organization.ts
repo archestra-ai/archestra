@@ -293,7 +293,6 @@ export const OrganizationCompressionScopeSchema = z.enum([
   "team",
 ]);
 
-export const GlobalToolPolicySchema = z.enum(["permissive", "restrictive"]);
 export const OAuthAccessTokenLifetimeSecondsSchema = z
   .number()
   .int()
@@ -304,7 +303,6 @@ const extendedFields = {
   theme: OrganizationThemeSchema,
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
-  globalToolPolicy: GlobalToolPolicySchema,
   defaultDiscoveredToolInvocationPolicy:
     ToolInvocation.ToolInvocationPolicyActionSchema,
   defaultDiscoveredToolResultPolicy: TrustedData.TrustedDataPolicyActionSchema,
@@ -347,6 +345,10 @@ const InternalSelectOrganizationSchema = createSelectSchema(
 export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   analyticsInstanceStartedAt: true,
   analyticsInstanceLastHeartbeatAt: true,
+  // Deprecated "security engine on/off" toggle (see schema). The security engine
+  // is always enabled now; the inert column is retained in the DB for rollout
+  // safety but never exposed via the API.
+  globalToolPolicy: true,
   // Deprecated leftover column from the reverted PR #6027 (see schema). Retained
   // in the DB for backward-compatibility but never exposed via the API.
   discoveredToolPolicy: true,
@@ -361,6 +363,9 @@ export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
 ).omit({
+  // Deprecated "security engine on/off" toggle (see schema). Inert column,
+  // retained for rollout safety but never accepted by the API.
+  globalToolPolicy: true,
   // Deprecated leftover column from the reverted PR #6027 (see schema). Retained
   // in the DB for backward-compatibility but never accepted by the API.
   discoveredToolPolicy: true,
@@ -391,7 +396,6 @@ export const UpdateAppearanceSettingsSchema = z.object({
 });
 
 export const UpdateSecuritySettingsSchema = z.object({
-  globalToolPolicy: GlobalToolPolicySchema.optional(),
   defaultDiscoveredToolInvocationPolicy:
     ToolInvocation.ToolInvocationPolicyActionSchema.optional(),
   defaultDiscoveredToolResultPolicy:
@@ -496,7 +500,6 @@ export const CompleteOnboardingSchema = z.object({
 export type OrganizationCompressionScope = z.infer<
   typeof OrganizationCompressionScopeSchema
 >;
-export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
 export type OrganizationAnalyticsState = Pick<
   z.infer<typeof InternalSelectOrganizationSchema>,

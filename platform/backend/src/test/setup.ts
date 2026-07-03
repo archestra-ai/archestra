@@ -33,16 +33,6 @@ process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING = "true";
 // PGlite-backed tests do not provide a session-stable pg.Client connection for
 // LISTEN/NOTIFY, so use the polling compatibility notifier by default in tests.
 process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
-// Projects + My Files ship dark behind a flag; force it on by default so the
-// branch's project / My-Files / PFS-tool tests run. The gating ("OFF") tests
-// flip config.projects.enabled to false locally.
-process.env.ARCHESTRA_PROJECTS_ENABLED = "true";
-// Same for Apps: app route/tool tests exercise the enabled paths, and the
-// gating ("OFF") tests flip config.apps.enabled to false in their own
-// beforeEach. Before the per-test config restore existed, these tests rode a
-// cross-file config.apps.enabled leak (or the developer's .env) — make the
-// default explicit so CI and local agree.
-process.env.ARCHESTRA_APPS_ENABLED = "true";
 // Pin "My Files" byte storage to the inline (db) provider for hermetic tests,
 // independent of the dev .env. The filesystem-specific suites opt in by
 // overriding config.fileStorage at runtime against a temp root.
@@ -215,8 +205,8 @@ afterEach(() => {
   // beforeEach restore alone leaves a gap: mutations made by a file's LAST
   // test survive until the NEXT file's first beforeEach — which is after
   // that file's beforeAll has already run. Route tests build their Fastify
-  // server in beforeAll, so a leaked flag (apps.enabled=false, a polling
-  // toggle, ...) could shape another file's server for its entire lifetime.
+  // server in beforeAll, so a leaked flag (a polling toggle, a feature flag,
+  // ...) could shape another file's server for its entire lifetime.
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }

@@ -17,7 +17,6 @@ import {
 import type {
   ConnectionBaseUrl,
   ConnectionDefaultProviderKeys,
-  GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
   OnboardingWizard,
@@ -55,8 +54,15 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
+  /**
+   * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
+   * removed — the security engine is always enabled now. This column is inert:
+   * no code reads or writes it, and it is omitted from the API schemas. Retained
+   * (not dropped) for rollout safety — dropping a column older app versions may
+   * still read is not deploy-safe. Safe to drop in a future expand/contract
+   * migration once every supported version no longer references it.
+   */
   globalToolPolicy: varchar("global_tool_policy")
-    .$type<GlobalToolPolicy>()
     .notNull()
     .default("permissive"),
   /**

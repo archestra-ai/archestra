@@ -68,7 +68,11 @@ import {
   ScaffoldAppSchema,
 } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
-import { ARCHESTRA_APP_SDK_SUMMARY } from "./app-authoring-guidance";
+import {
+  ARCHESTRA_APP_SDK_SUMMARY,
+  BUILD_APP_SKILL_POINTER,
+  NO_RENDER_PROCEED,
+} from "./app-authoring-guidance";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -77,6 +81,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import type { ArchestraContext } from "./types";
 
 const toolsField = z
   .array(z.string().min(1))
@@ -239,7 +244,7 @@ const PublishAppSchema = z.strictObject({
 const PublishAppOutputSchema = z.object({
   id: z.string(),
   scope: AppScopeSchema,
-  runUrl: z.string().describe("Standalone run page for the published app."),
+  runUrl: z.string().describe("Standalone page for the published app."),
 });
 
 const ValidateAppOutputSchema = z.object({
@@ -324,14 +329,16 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SCAFFOLD_APP_SHORT_NAME,
     title: "Scaffold App",
-    description:
-      'Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML plus the condensed window.archestra SDK surface; build it up with edit_app. For tool-calling apps (the assign→preview→diagnostics build loop), the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.',
+    description: `Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML plus the condensed window.archestra SDK surface; build it up with edit_app. ${BUILD_APP_SKILL_POINTER}`,
     schema: ScaffoldAppToolSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required to create an app.");
-      }
+      const auth = requireAuthed(
+        context,
+        "Authentication required to create an app.",
+      );
+      if ("error" in auth) return auth.error;
+      const { userId, organizationId } = auth;
 
       const scope = args.scope ?? "personal";
       // Team scope needs explicit team assignment, which these chat tools can't
@@ -348,10 +355,10 @@ const registry = defineArchestraTools([
         // Creating a shared (org) app needs the matching authority; a plain
         // member may only create personal apps they author.
         await assertCallerMayModifyApp({
-          userId: context.userId,
-          organizationId: context.organizationId,
+          userId,
+          organizationId,
           scope,
-          authorId: context.userId,
+          authorId: userId,
           resourceTeamIds: [],
         });
         // Scaffold always seeds the single default template.
@@ -374,8 +381,8 @@ const registry = defineArchestraTools([
       // authoring agent's — keeping assignments consistent with the app's env.
       const toolsResolution = await resolveToolsParam({
         agentId: context.agent.id,
-        userId: context.userId,
-        organizationId: context.organizationId,
+        userId,
+        organizationId,
         tools: args.tools,
         environmentId: null,
       });
@@ -384,9 +391,7 @@ const registry = defineArchestraTools([
 
       // Like the REST path: create the app, then its backing; on backing failure
       // delete the app so it is never left unbacked. scaffold_app defers team +
-      // environment selection to the REST/UI path, so no teams here. (Hoist
-      // narrowed values — closures lose property narrowing.)
-      const { userId, organizationId } = context;
+      // environment selection to the REST/UI path, so no teams here.
       const appName = args.name;
       let app: App | null;
       // App names are unique per author (apps_org_author_name_uidx); a duplicate
@@ -457,10 +462,7 @@ const registry = defineArchestraTools([
       // Return the seeded html so the model can build it up with edit_app
       // without a read-back round-trip.
       const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${payload.html}`;
-      const warningsNote =
-        warnings.length > 0
-          ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
-          : "";
+      const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
         {
@@ -472,39 +474,31 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: /a/${app.id}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
   defineArchestraTool({
     shortName: TOOL_REFINE_APP_SHORT_NAME,
     title: "Refine App",
-    description:
-      'Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass `questions` (up to 3) to ask the user clarifying questions, and/or `spec` to persist the consolidated requirements. The result returns the user\'s real assignable MCP tools to ground the spec in plus the condensed window.archestra SDK surface; once a spec is persisted, build the HTML with edit_app. For tool-calling apps, the CDN allowlist, or platform theming, load the "Build App" skill (in your available skills) for the full authoring playbook.',
+    description: `Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. Pass \`questions\` (up to 3) to ask the user clarifying questions, and/or \`spec\` to persist the consolidated requirements. The result returns the user's real assignable MCP tools to ground the spec in plus the condensed window.archestra SDK surface; once a spec is persisted, build the HTML with edit_app. ${BUILD_APP_SKILL_POINTER}`,
     schema: RefineAppToolSchema,
     outputSchema: RefineAppOutputSchema,
     async handler({ args, context, toolName }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required to refine an app.");
-      }
-      if (args.questions && args.questions.length > 3) {
-        return errorResult("refine_app accepts at most 3 questions.");
-      }
-
-      const { userId, organizationId } = context;
-      const loaded = await loadAppForCaller({
+      const auth = requireAuthed(
+        context,
+        "Authentication required to refine an app.",
+      );
+      if ("error" in auth) return auth.error;
+      const { userId, organizationId } = auth;
+      const gate = await loadApp({
         userId,
         organizationId,
         appId: args.appId,
+        modify: true,
       });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
-      const authError = await authorizeModifyApp({
-        userId,
-        organizationId,
-        app,
-      });
-      if (authError) return errorResult(authError.error);
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
 
       const capability = await buildAppCapabilityContext({
         userId,
@@ -607,15 +601,14 @@ const registry = defineArchestraTools([
     schema: ListAppsSchema,
     outputSchema: z.object({ apps: z.array(AppSummaryOutputSchema) }),
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
-        organizationId: context.organizationId,
-        userId: context.userId,
+        organizationId: auth.organizationId,
+        userId: auth.userId,
       });
       const apps = await AppModel.findByOrganization({
-        organizationId: context.organizationId,
+        organizationId: auth.organizationId,
         accessibleAppIds,
         ...(args.name ? { search: args.name } : {}),
         limit: Math.min(args.limit ?? 20, 100),
@@ -639,9 +632,8 @@ const registry = defineArchestraTools([
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
       // render_app's effect exists only in Archestra's chat frontend, which
       // mounts the app from this result; an external MCP host displays nothing
       // while the result text reads as success. tools/list already hides the
@@ -667,14 +659,9 @@ const registry = defineArchestraTools([
           );
         }
       }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
-      return buildAppRenderResult(app);
+      const gate = await loadApp({ ...auth, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      return buildAppRenderResult(gate.app);
     },
   }),
   defineArchestraTool({
@@ -685,16 +672,11 @@ const registry = defineArchestraTools([
     schema: ReadAppSchema,
     outputSchema: ReadAppOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
       const version = args.version ?? app.latestVersion;
       const row = await AppVersionModel.findByAppAndVersion(app.id, version);
       if (!row) {
@@ -717,14 +699,12 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description:
-      "The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface; for tool-calling apps, the CDN allowlist, or platform theming, load the \"Build App\" skill (in your available skills) for the full authoring playbook.",
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
-    outputSchema: AppMutationOutputSchema,
+    outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
       // Exactly one edit mode, checked before any loading so a malformed call
       // fails fast with the fix spelled out.
       if (args.edits !== undefined && args.replacementHtml !== undefined) {
@@ -743,20 +723,9 @@ const registry = defineArchestraTools([
           "Pass either edits (str_replace changes to the current HTML) or replacementHtml (the complete new document); neither was provided.",
         );
       }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
-
-      const authError = await authorizeModifyApp({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        app,
-      });
-      if (authError) return errorResult(authError.error);
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
 
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
@@ -842,10 +811,7 @@ const registry = defineArchestraTools([
       const summary = forked
         ? `Applied ${editLabel} to app "${updated.name}" (now at version ${updated.latestVersion}).`
         : `Applied ${editLabel} to app "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
-      const warningsNote =
-        warnings.length > 0
-          ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
-          : "";
+      const warningsNote = formatWarningsNote(warnings);
       // The context block lets the model verify str_replace edits landed
       // without a follow-up read_app. A replacement carries no news (the model
       // just wrote the document), and an unforked result saved nothing new.
@@ -862,7 +828,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary} Rendered inline when viewed in chat; standalone page: /a/${updated.id}${warningsNote}${excerptsNote}`,
+        `${summary} Rendered inline when viewed in chat; standalone page: ${appRunUrl(updated.id)}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -874,30 +840,18 @@ const registry = defineArchestraTools([
     schema: SetAppToolsSchema,
     outputSchema: SetAppToolsOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
-      const { userId, organizationId } = context;
-      const loaded = await loadAppForCaller({
-        userId,
-        organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
-      const authError = await authorizeModifyApp({
-        userId,
-        organizationId,
-        app,
-      });
-      if (authError) return errorResult(authError.error);
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
 
       // Fence resolution against the app's bound environment (not the org
       // default scaffold_app uses), so a tool only valid elsewhere is rejected.
       const resolution = await resolveToolsParam({
         agentId: context.agent.id,
-        userId,
-        organizationId,
+        userId: auth.userId,
+        organizationId: auth.organizationId,
         tools: args.tools,
         environmentId: app.environmentId,
       });
@@ -930,16 +884,11 @@ const registry = defineArchestraTools([
     schema: ValidateAppSchema,
     outputSchema: ValidateAppOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
       const head = await AppVersionModel.findByAppAndVersion(
         app.id,
         app.latestVersion,
@@ -954,13 +903,11 @@ const registry = defineArchestraTools([
       const staticHasError = findings.some(
         (finding) => finding.severity === "error",
       );
-      const safeName = (await escapeAngleBrackets(app.name))
-        .replace(/\s+/g, " ")
-        .trim();
+      const safeName = await safeAppName(app.name);
 
       const snapshot = await waitForHeadRenderSnapshot({
         appId: app.id,
-        userId: context.userId,
+        userId: auth.userId,
         head: app.latestVersion,
         abortSignal: context.abortSignal,
       });
@@ -977,7 +924,8 @@ const registry = defineArchestraTools([
         : live.status === "errors"
           ? `App "${safeName}" version ${app.latestVersion} is structurally sound but its live render reported errors to fix with edit_app.`
           : live.status === "no_render_observed"
-            ? `App "${safeName}" version ${app.latestVersion} passed static checks${warns}. No live render has been observed yet — live diagnostics are captured only when the app renders for a viewer, so this is the normal state right after authoring and the clean static pass is enough to proceed; render diagnostics surface later, on the next render.`
+            ? // The live-render section (below) carries the no_render guidance.
+              `App "${safeName}" version ${app.latestVersion} passed static checks${warns}.`
             : `App "${safeName}" version ${app.latestVersion} passed validation${warns}: static checks and the live render are both clean.`;
       const findingLines = findings.length
         ? `\n${findings
@@ -994,14 +942,16 @@ const registry = defineArchestraTools([
     shortName: TOOL_PUBLISH_APP_SHORT_NAME,
     title: "Publish App",
     description:
-      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teams — team names or ids) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone run page.",
+      "Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, with teams — team names or ids) or the whole organization (scope: org). Publishing is gated by the caller's role: org-wide needs an app admin, a team needs a team admin who belongs to that team. Publishing changes only the app's sharing scope: it does not modify the HTML or re-run validation, so confirm the current version is sound with validate_app (or get_app_diagnostics) beforehand if you need to. Returns the app's standalone page.",
     schema: PublishAppSchema,
     outputSchema: PublishAppOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required to publish an app.");
-      }
-      const { userId, organizationId } = context;
+      const auth = requireAuthed(
+        context,
+        "Authentication required to publish an app.",
+      );
+      if ("error" in auth) return auth.error;
+      const { userId, organizationId } = auth;
       if (args.scope === "team" && (args.teams?.length ?? 0) === 0) {
         return errorResult(
           "Publishing to a team requires at least one team in teams — pass the team name (or id) the user wants to share with; use list_teams to discover teams if needed.",
@@ -1012,13 +962,9 @@ const registry = defineArchestraTools([
           "teams is only valid when publishing to a team; omit it for org scope.",
         );
       }
-      const loaded = await loadAppForCaller({
-        userId,
-        organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
+      const gate = await loadApp({ userId, organizationId, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
 
       let teamIds: string[];
       try {
@@ -1066,7 +1012,7 @@ const registry = defineArchestraTools([
       // would expose the app under its old scope.
       await syncAppBacking(updated);
 
-      const runUrl = `/a/${updated.id}`;
+      const runUrl = appRunUrl(updated.id);
       const audience =
         updated.scope === "org"
           ? "the whole organization"
@@ -1085,9 +1031,9 @@ const registry = defineArchestraTools([
     schema: PreviewAppToolSchema,
     outputSchema: PreviewAppToolOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const { userId, organizationId } = auth;
       // Server-side approval backstop. The underlying tool was granted to the
       // app, not the agent, so a preview may run only when the chat harness has
       // presented the approval gate (it sets approvalRequiredPoliciesHandled
@@ -1099,19 +1045,14 @@ const registry = defineArchestraTools([
           "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
         );
       }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
+      const gate = await loadApp({
+        userId,
+        organizationId,
         appId: args.appId,
+        modify: true,
       });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
-      const authError = await authorizeModifyApp({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        app,
-      });
-      if (authError) return errorResult(authError.error);
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
 
       // Preview is for the app's assigned upstream MCP tools — the data store
       // and other built-ins are not run through here.
@@ -1128,8 +1069,8 @@ const registry = defineArchestraTools([
       // policy still fires on this authoring path.
       const decision = await gateAppToolCall({
         appId: app.id,
-        organizationId: context.organizationId,
-        userId: context.userId,
+        organizationId,
+        userId,
         toolName: args.toolName,
         toolInput: args.args ?? {},
         isContextTrusted: context.contextIsTrusted ?? true,
@@ -1149,16 +1090,16 @@ const registry = defineArchestraTools([
       // mirroring the runtime's dynamic resolution — the audit row is recorded
       // against the app by executeToolCallForOwner.
       const tokenAuth: TokenAuthContext = {
-        tokenId: `session:${context.userId}`,
+        tokenId: `session:${userId}`,
         teamId: null,
         isOrganizationToken: false,
         isSessionAuth: true,
-        userId: context.userId,
-        organizationId: context.organizationId,
+        userId,
+        organizationId,
       };
       const result = await mcpClient.executeToolCallForOwner(
         {
-          id: `preview-${context.userId}-${app.id}-${Date.now()}`,
+          id: `preview-${userId}-${app.id}-${Date.now()}`,
           name: resolvedToolName,
           arguments: args.args ?? {},
         },
@@ -1172,30 +1113,21 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
     title: "Get App Diagnostics",
     description:
-      "Check how the app's current version rendered for you. After an edit_app whose result was shown in chat (or a render_app), call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its run page; the call waits briefly for an in-flight render to settle but never triggers one, so calling it repeatedly cannot produce a render. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — proceed on a clean validate_app static pass; runtime diagnostics instead arrive on the user's next message).",
+      "Check how the app's current version rendered for you. After an edit_app whose result was shown in chat (or a render_app), call this to get the runtime errors and CSP violations the sandboxed render reported, or confirmation it rendered clean. It returns the diagnostics recorded the last time the current version was rendered for you — a render happens when the app is shown inline in chat or at its standalone page; the call waits briefly for an in-flight render to settle but never triggers one, so calling it repeatedly cannot produce a render. Returns status `clean` (rendered, no problems), `errors` (captured diagnostics, framed as untrusted data), or `no_render_observed` (no render of the current version has happened for you yet — proceed on a clean validate_app static pass; runtime diagnostics instead arrive on the user's next message).",
     schema: GetAppDiagnosticsSchema,
     outputSchema: GetAppDiagnosticsOutputSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
 
       const head = app.latestVersion;
-      // The app name is author-set; collapse whitespace and escape angle
-      // brackets so it can't break the diagnostics framing in the text below.
-      const safeName = (await escapeAngleBrackets(app.name))
-        .replace(/\s+/g, " ")
-        .trim();
+      const safeName = await safeAppName(app.name);
       const snapshot = await waitForHeadRenderSnapshot({
         appId: app.id,
-        userId: context.userId,
+        userId: auth.userId,
         head,
         abortSignal: context.abortSignal,
       });
@@ -1209,7 +1141,7 @@ const registry = defineArchestraTools([
             renderedAt: null,
             screenshot: false,
           },
-          `No render of app "${safeName}" version ${head} has been observed for you yet. A render happens only when the app is shown to a viewer (inline in chat or at its run page) — calling this tool again does not trigger one, so do not poll. If validate_app's static pass is clean, proceed; runtime diagnostics arrive on their own once the app next renders.`,
+          `No render of app "${safeName}" version ${head} has been observed for you yet. ${NO_RENDER_PROCEED}`,
         );
       }
 
@@ -1230,7 +1162,7 @@ const registry = defineArchestraTools([
       // it threw. Only the current version's capture is relevant.
       const shot = await AppRenderScreenshotModel.getForUser(
         app.id,
-        context.userId,
+        auth.userId,
       );
       const screenshot = shot && shot.version >= snapshot.version ? shot : null;
       const diagnosticLines = await formatDiagnosticEntryLines(
@@ -1267,29 +1199,18 @@ const registry = defineArchestraTools([
       "Soft-delete an app the caller owns or administers, and remove its MCP backing so it is no longer served. Soft delete retains the record, but this is not an authoring undo — to roll back a change, edit_app back to the wanted HTML instead.",
     schema: DeleteAppSchema,
     async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("Authentication required.");
-      }
-      const loaded = await loadAppForCaller({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        appId: args.appId,
-      });
-      if ("error" in loaded) return errorResult(loaded.error);
-      const { app } = loaded;
-      const authError = await authorizeModifyApp({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        app,
-      });
-      if (authError) return errorResult(authError.error);
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
       const deleted = await AppModel.delete(args.appId);
       if (!deleted) {
         return errorResult(`Failed to delete app ${args.appId}.`);
       }
       await deleteAppBacking(app);
       logger.info(
-        { appId: args.appId, userId: context.userId },
+        { appId: args.appId, userId: auth.userId },
         "App deleted via Archestra tool",
       );
       return successResult(`Deleted app "${app.name}".`);
@@ -1304,16 +1225,38 @@ export const tools = registry.tools;
 // Internal helpers
 // =============================================================================
 
+// Tool spine — every app tool opens by narrowing the caller to an authed context
+// and (for id-scoped tools) loading and authorizing the target app. These two
+// helpers hold that spine in one place; a handler runs any argument guard inline
+// between them, keeping the narrow → guard → load → authorize order. Both return
+// a ready error result on failure.
+
+type AuthedCaller = { userId: string; organizationId: string };
+
+/** Narrow the caller to userId + organizationId, or a ready auth-required error. */
+function requireAuthed(
+  context: ArchestraContext,
+  authMessage = "Authentication required.",
+): AuthedCaller | { error: CallToolResult } {
+  if (!context.userId || !context.organizationId) {
+    return { error: errorResult(authMessage) };
+  }
+  return { userId: context.userId, organizationId: context.organizationId };
+}
+
 /**
- * Load an app the caller may see, resolving app-admin standing for visibility.
- * Returns the app, or a ready error result text when no visible app matches —
- * the not-found shape every app tool returns before acting on an id.
+ * Load an app the caller may see (resolving app-admin standing for visibility)
+ * and, when `modify` is set, authorize them to change it — mirroring the REST
+ * modify gate (scope + author + the app's teams). Returns the app, or the ready
+ * not-found / policy-denied error every id-scoped app tool surfaces before
+ * acting. Non-ApiError faults propagate.
  */
-async function loadAppForCaller(params: {
+async function loadApp(params: {
   userId: string;
   organizationId: string;
   appId: string;
-}): Promise<{ app: App } | { error: string }> {
+  modify?: boolean;
+}): Promise<{ app: App } | { error: CallToolResult }> {
   const app = await AppModel.findByIdForCaller({
     id: params.appId,
     organizationId: params.organizationId,
@@ -1321,35 +1264,43 @@ async function loadAppForCaller(params: {
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
   if (!app) {
-    return { error: `No app found with id ${params.appId}.` };
+    return { error: errorResult(`No app found with id ${params.appId}.`) };
+  }
+  if (params.modify) {
+    try {
+      await assertCallerMayModifyApp({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        scope: app.scope,
+        authorId: app.authorId,
+        resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
+      });
+    } catch (error) {
+      if (error instanceof ApiError)
+        return { error: errorResult(error.message) };
+      throw error;
+    }
   }
   return { app };
 }
 
-/**
- * Authorize the caller to modify an already-loaded app, mirroring the REST
- * modify gate (scope + author + the app's teams). Returns an error result text
- * on a policy denial (ApiError) and null when allowed; non-ApiError faults
- * propagate.
- */
-async function authorizeModifyApp(params: {
-  userId: string;
-  organizationId: string;
-  app: App;
-}): Promise<{ error: string } | null> {
-  try {
-    await assertCallerMayModifyApp({
-      userId: params.userId,
-      organizationId: params.organizationId,
-      scope: params.app.scope,
-      authorId: params.app.authorId,
-      resourceTeamIds: await AppAccessModel.getTeamsForApp(params.app.id),
-    });
-    return null;
-  } catch (error) {
-    if (error instanceof ApiError) return { error: error.message };
-    throw error;
-  }
+// An app's standalone page.
+function appRunUrl(appId: string): string {
+  return `/a/${appId}`;
+}
+
+// Collapse whitespace and escape angle brackets in an author-set app name so it
+// cannot break the diagnostics/validation framing it is interpolated into.
+async function safeAppName(name: string): Promise<string> {
+  return (await escapeAngleBrackets(name)).replace(/\s+/g, " ").trim();
+}
+
+// The soft save-time validation-warnings note appended to a mutation's result
+// text (empty when there are none).
+function formatWarningsNote(warnings: string[]): string {
+  return warnings.length > 0
+    ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
+    : "";
 }
 
 /**
@@ -1731,7 +1682,7 @@ async function buildLiveValidation(params: {
         entries: [],
         renderedAt: null,
       },
-      section: `\nLive render: no render of version ${head} has been observed for you yet. Runtime diagnostics are captured only when the app renders for a viewer (in chat or its run page), so this is the normal state right after authoring — re-running validate_app will not change it on its own, and a clean static pass is enough to proceed.`,
+      section: `\nLive render: no render of version ${head} has been observed for you yet. ${NO_RENDER_PROCEED}`,
     };
   }
   const renderedAt = snapshot.renderedAt.toISOString();

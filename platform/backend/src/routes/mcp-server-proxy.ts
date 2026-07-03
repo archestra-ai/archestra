@@ -79,7 +79,6 @@ const mcpServerProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body,
           reply,
           userId,
-          organizationId,
         );
         if (denied) return denied;
       }
@@ -153,7 +152,6 @@ async function rejectDisallowedToolCall(
   body: Record<string, unknown>,
   reply: StatusReply,
   userId: string,
-  organizationId: string,
 ): Promise<object | null> {
   const callParams =
     body.params && typeof body.params === "object"
@@ -210,7 +208,6 @@ async function rejectDisallowedToolCall(
       callParams?.arguments && typeof callParams.arguments === "object"
         ? (callParams.arguments as Record<string, unknown>)
         : {},
-    organizationId,
     userId,
     isContextTrusted: true,
     treatRequireApprovalAsBlock: true,

@@ -91,12 +91,15 @@ local_resource(
 # owned app is served. Mirrors sandbox-rs-build.
 local_resource(
   'app-runtime-rs-build',
-  cmd='pnpm --filter @archestra/app-runtime-rs build',
+  # build:dev = the release-fast profile (no LTO, incremental) for fast in-loop
+  # rebuilds; CI/Docker still build the optimized --release binary.
+  cmd='pnpm --filter @archestra/app-runtime-rs build:dev',
   deps=[
     '../archestra-rs/app-runtime-rs/src',
     '../archestra-rs/app-runtime-core/src',
     '../archestra-rs/app-runtime-rs/Cargo.toml',
     '../archestra-rs/app-runtime-core/Cargo.toml',
+    '../archestra-rs/Cargo.toml',
     '../archestra-rs/Cargo.lock',
   ],
   resource_deps=['pnpm-install'],

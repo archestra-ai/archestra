@@ -94966,13 +94966,6 @@
                         "geminiVertexAiEnabled": {
                           "type": "boolean"
                         },
-                        "globalToolPolicy": {
-                          "type": "string",
-                          "enum": [
-                            "permissive",
-                            "restrictive"
-                          ]
-                        },
                         "incomingEmail": {
                           "type": "object",
                           "properties": {
@@ -95044,7 +95037,6 @@
                         "anthropicWifEnabled",
                         "bedrockIamAuthEnabled",
                         "geminiVertexAiEnabled",
-                        "globalToolPolicy",
                         "incomingEmail",
                         "mcpServerBaseImage",
                         "orchestratorK8sNamespace",
@@ -207493,13 +207485,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -207898,7 +207883,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -208455,13 +208439,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -208860,7 +208837,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -209570,7 +209546,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (global tool policy, chat file uploads, tool auto-assignment)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update security settings (default tool guardrails, chat file uploads)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -209578,13 +209554,6 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "globalToolPolicy": {
-                    "type": "string",
-                    "enum": [
-                      "permissive",
-                      "restrictive"
-                    ]
-                  },
                   "defaultDiscoveredToolInvocationPolicy": {
                     "type": "string",
                     "enum": [
@@ -209708,13 +209677,6 @@
                       "enum": [
                         "organization",
                         "team"
-                      ]
-                    },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
                       ]
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -210115,7 +210077,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -210530,13 +210491,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -210935,7 +210889,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -211231,7 +211184,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update agent settings (default model, default agent, skill slash commands)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -211356,13 +211309,6 @@
                       "enum": [
                         "organization",
                         "team"
-                      ]
-                    },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
                       ]
                     },
                     "defaultDiscoveredToolInvocationPolicy": {
@@ -211763,7 +211709,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -212261,13 +212206,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -212666,7 +212604,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -213145,13 +213082,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -213550,7 +213480,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -213963,13 +213892,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -214368,7 +214290,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -214794,13 +214715,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -215199,7 +215113,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -215592,13 +215505,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -215997,7 +215903,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
@@ -216703,13 +216608,6 @@
                         "team"
                       ]
                     },
-                    "globalToolPolicy": {
-                      "type": "string",
-                      "enum": [
-                        "permissive",
-                        "restrictive"
-                      ]
-                    },
                     "defaultDiscoveredToolInvocationPolicy": {
                       "type": "string",
                       "enum": [
@@ -217108,7 +217006,6 @@
                     "customFont",
                     "convertToolResultsToToon",
                     "compressionScope",
-                    "globalToolPolicy",
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",

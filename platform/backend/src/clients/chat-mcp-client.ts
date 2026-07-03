@@ -30,14 +30,12 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
-  OrganizationModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import type { GlobalToolPolicy } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -909,17 +907,13 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch globalToolPolicy for approval checks (needed for both chat and
-    // autonomous contexts) and the agent's + user's teams (for trace span
-    // attributes).
-    const [org, agent, teams, userTeams] = await Promise.all([
-      OrganizationModel.getById(organizationId),
+    // Fetch the agent (for its trust config) and the agent's + user's teams
+    // (for trace span attributes).
+    const [agent, teams, userTeams] = await Promise.all([
       AgentModel.findById(agentId),
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const globalToolPolicy: GlobalToolPolicy =
-      org?.globalToolPolicy ?? "permissive";
     const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
@@ -942,7 +936,6 @@ export async function getChatMcpTools({
       hookRunCollector,
       subagentToolStream,
       mcpGwToken,
-      globalToolPolicy,
       considerContextUntrusted,
       teams,
       userTeams,

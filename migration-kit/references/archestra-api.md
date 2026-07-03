@@ -7,6 +7,7 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
 `ArchestraApiError` (carrying the full response body) on any non-2xx — no silent failures.
 
 ## Entities & create endpoints
+
 | Entity | Create | List (for idempotency) |
 |---|---|---|
 | Agent | `POST /api/agents` | `GET /api/agents?name=&scope=` |
@@ -19,6 +20,7 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
 | Enable skill tools | `POST /api/skills/enable-defaults` (idempotent) | — |
 
 ## Payload notes (what the builder relies on)
+
 - **Agent** (`agentType:"agent"`): `name`, `scope`, optional `systemPrompt`, `description`, `teams[]`
   for `scope:"team"`. Leave
   `modelId`/`llmApiKeyId` BOTH unset → the agent inherits the org default model. Setting only one is a 400.
@@ -36,7 +38,6 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
   optional `baseUrl`, optional `isPrimary`, and `teamId` for `scope:"team"`.
 - **Tool policy**: `toolId` (must be a tool that exists in Archestra), `conditions[]` of
   `{key, operator, value}` (operators incl. `regex`), `action` (`block_always` etc.), optional `reason`.
-  Policies only enforce when the org `globalToolPolicy` is `restrictive` — surface that to the user.
 - **Lifecycle hook**: `agentId` (the agent it attaches to), `event`
   (`session_start`|`pre_tool_use`|`post_tool_use` — Claude's other events have no equivalent),
   `fileName` (a plain basename matching `^[A-Za-z0-9][A-Za-z0-9._-]*\.(py|sh)$`, ≤255), `content`
@@ -47,6 +48,7 @@ The `archestra_client.py` module wraps every call with typed payloads and raises
   (`2` = block with stderr as the reason; `0` = proceed with stdout injected; errors/timeout fail open).
 
 ## Idempotency contract
+
 `apply.py` checks existence by (name, scope) before each create and records `skipped(exists)` on a hit,
 so re-running a plan is safe. Catalog/mcp_server have no name filter, so they are listed and matched
 client-side. Hooks are matched by `(agentId, event, fileName)` — the server's unique key — against

@@ -36,7 +36,6 @@ export function makeConfig(
       anthropicWifEnabled: false,
       bedrockIamAuthEnabled: false,
       geminiVertexAiEnabled: false,
-      globalToolPolicy: "permissive",
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",

@@ -251,21 +251,23 @@ class ToolModel {
       return existingTool;
     }
 
-    // Create default policies for new tools
+    // Create default policies for new tools. This is a test-only path (see the
+    // TODO above), so it intentionally uses the hardcoded fallbacks rather than
+    // the org's configured defaults — the production paths
+    // (bulkCreateToolsIfNotExists / syncToolsForCatalog / proxy discovery) are
+    // the ones that honor getDefaultToolPolicies().
     await ToolModel.createDefaultPolicies(createdTool.id);
 
     return createdTool;
   }
 
   /**
-   * Create default policies for a newly created tool:
-   * - Default invocation policy: block_when_context_is_untrusted (empty conditions)
-   * - Default result policy: mark_as_untrusted (empty conditions)
-   *
-   * `options.invocationAction` / `options.resultAction` override those defaults —
-   * used by the LLM proxy discovery path to honor the org's configured defaults.
-   * When omitted, the original hardcoded defaults are used (MCP/catalog tools are
-   * unaffected).
+   * Create default policies for a newly created tool. Callers pass the org's
+   * configured "Default Guardrails for MCP Tools" via
+   * `options.invocationAction` / `options.resultAction` so every new tool —
+   * proxy-discovered and MCP-catalog alike — starts with the admin-chosen
+   * defaults. When omitted, the safe hardcoded fallbacks apply
+   * (block_when_context_is_untrusted / mark_as_untrusted).
    */
   static async createDefaultPolicies(
     toolId: string,
@@ -289,6 +291,27 @@ class ToolModel {
       action: options?.resultAction ?? "mark_as_untrusted",
       description: null,
     });
+  }
+
+  /**
+   * The org-configured default guardrail policies applied to every newly
+   * created tool ("Default Guardrails for MCP Tools" in Agent Settings). Tools
+   * are org-agnostic shared rows, so this reads the deployment's organization;
+   * it falls back to the safe hardcoded defaults only when no organization
+   * exists.
+   */
+  static async getDefaultToolPolicies(): Promise<{
+    invocationAction: ToolInvocation.ToolInvocationPolicyAction;
+    resultAction: TrustedData.TrustedDataPolicyAction;
+  }> {
+    const organization = await OrganizationModel.getFirst();
+    return {
+      invocationAction:
+        organization?.defaultDiscoveredToolInvocationPolicy ??
+        "block_when_context_is_untrusted",
+      resultAction:
+        organization?.defaultDiscoveredToolResultPolicy ?? "mark_as_untrusted",
+    };
   }
 
   static async findById(
@@ -819,9 +842,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
-      // Create default policies for newly inserted tools
+      // Create default policies for newly inserted tools, honoring the org's
+      // configured "Default Guardrails for MCP Tools".
+      const defaultPolicies = await ToolModel.getDefaultToolPolicies();
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaultPolicies);
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)
@@ -2335,9 +2360,11 @@ class ToolModel {
         .onConflictDoNothing()
         .returning();
 
-      // Create default policies for newly inserted tools
+      // Create default policies for newly inserted tools, honoring the org's
+      // configured "Default Guardrails for MCP Tools".
+      const defaultPolicies = await ToolModel.getDefaultToolPolicies();
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id);
+        await ToolModel.createDefaultPolicies(tool.id, defaultPolicies);
       }
 
       // Auto-configure policies via LLM if enabled (fire-and-forget)

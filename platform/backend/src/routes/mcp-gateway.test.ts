@@ -674,7 +674,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -719,7 +719,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -768,7 +768,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -812,7 +812,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -859,7 +859,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
     makeTool,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -899,7 +899,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
     makeTool,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       catalogId: catalog.id,
@@ -947,7 +947,7 @@ describe("MCP Gateway (stateless mode)", () => {
     makeToolPolicy,
     makeUser,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id);
     const team = await makeTeam(org.id, user.id);

@@ -8,8 +8,6 @@ lastUpdated: 2026-05-07
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Six top-level sections, in order:
 1. Register Entra App for SSO          (minimum app reg for sign-in)
 2. Configure SSO in Archestra          (paste values into IdP form)
@@ -19,8 +17,7 @@ Six top-level sections, in order:
 6. Connect MCP Server                  (Multitenant Authorization, Resolve at call time)
 
 Keep it short. No "Best Practices" or "Future Considerations". Replace the
-[screenshot: ...] markers with real screenshots from the running platform per
-docs_writer_prompt.md.
+[screenshot: ...] markers with real screenshots captured from the running platform.
 -->
 
 This guide configures Microsoft Entra ID with Archestra end-to-end. After you finish, your users will sign in once with their work Microsoft account and the agents and MCP servers they use will act on their own behalf — reading their mailbox, calendar, files, or any Entra-protected API as them, not as a shared service account.

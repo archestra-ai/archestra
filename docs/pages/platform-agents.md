@@ -6,10 +6,6 @@ description: Agent overview, invocation paths, knowledge sources, and prompt tem
 lastUpdated: 2026-06-18
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 Agents are reusable AI workers with instructions, tool access, and optional knowledge retrieval. You can invoke the same agent from chat, external integrations, or automation without rebuilding the workflow each time.
 
 An agent can include:

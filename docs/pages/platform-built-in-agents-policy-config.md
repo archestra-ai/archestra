@@ -6,10 +6,6 @@ order: 4
 description: Built-in agent that auto-configures tool call policies and tool result policies
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 The Tool Policy Configuration Agent analyzes tool metadata and automatically determines appropriate [AI tool guardrails](/docs/platform-ai-tool-guardrails). Instead of manually configuring tool call policies and tool result policies for each tool, this built-in agent uses LLM structured output to generate both settings in a single call.
 
 ## How It Works

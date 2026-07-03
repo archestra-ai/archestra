@@ -7,8 +7,6 @@ lastUpdated: 2026-07-02
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Walkthrough for the /connection_beta?clientId=claude-code flow: connecting
 Claude Code to Archestra with the one-time setup script, in passthrough mode so
 an existing Claude Pro/Max subscription keeps paying for inference. Cover:

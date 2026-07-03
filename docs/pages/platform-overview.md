@@ -6,10 +6,6 @@ description: High-level architecture overview of Archestra Platform components
 lastUpdated: 2026-04-01
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 ## The Full AI Stack for Everyone
 
 Archestra is a centralized AI Platform designed for organizations where software engineers, and non-technical teams all need to work with AI agents. While a non-technical user may enjoy simple ChatGPT-like UI and get immediate results, a technical user may build agents using LangChain, N8N, pure Python or other stack of choice leveraging MCP orchestrator, guardrails and observability. Archestra will reduce friction and increase AI adoption in all cases.

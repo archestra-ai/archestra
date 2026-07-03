@@ -6,8 +6,6 @@ description: Archestra's context-aware security model for agentic tool use
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This is the parent page for the Security Concepts section. It exists to give an overview and link to the child pages. Keep it short.
 -->
 

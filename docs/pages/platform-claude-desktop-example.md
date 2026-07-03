@@ -7,8 +7,6 @@ lastUpdated: 2026-07-02
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Walkthrough for the /connection_beta?clientId=claude-desktop flow: connecting
 Anthropic's Claude Desktop (Cowork) to Archestra with a single downloadable
 configuration profile. Cover:

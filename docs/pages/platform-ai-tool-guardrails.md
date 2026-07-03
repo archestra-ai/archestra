@@ -5,15 +5,6 @@ subcategory: Security Concepts
 order: 3
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
-
-Exception:
-- Screenshot
--->
-
 AI tool guardrails address the "lethal trifecta" by enforcing deterministic rules around tool use and tool outputs. Agents can still read sensitive internal data and process untrusted content, but Archestra can dynamically block risky follow-up actions when the context is no longer safe.
 
 This gives you a middle ground between two extremes:

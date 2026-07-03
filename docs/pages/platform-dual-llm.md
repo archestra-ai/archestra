@@ -6,15 +6,6 @@ order: 5
 description: Built-in agents that quarantine untrusted tool output before it reaches the main agent
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
-
-Exception:
-- Screenshot
--->
-
 Dual LLM is a built-in security workflow for tools that return untrusted content. It is one strategy Archestra uses to reduce [lethal trifecta](/docs/platform-lethal-trifecta) risk. Instead of letting the main agent read raw output from sources like web pages, email, or user-generated files, Archestra routes that output through two built-in agents with different responsibilities.
 
 For a deeper explanation of the security pattern itself, see the [Dual LLM overview](https://archestra.ai/blog/dual-llm).

@@ -6,11 +6,6 @@ description: Built-in RAG Knowledge Base to give your agents access to your data
 lastUpdated: 2026-06-01
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
--->
-
 Plug your agents straight into your company's knowledge across Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, Salesforce, and more, so they can answer from your own data.
 
 The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra. No external vector database or separate retrieval service required.

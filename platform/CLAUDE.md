@@ -10,7 +10,7 @@
 
 1. **Use pnpm** for package management
 2. **Use Tilt for development** - `tilt up` to start the full environment
-4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
+4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the `archestra-docs-writer` skill for all docs writing and editing.
 5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default
 6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: docs/pages/platform-pricing-model.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
 7. **Commit Freely, Push With Approval** - Committing locally as you land reviewable slices is fine. Never push, open, or update a PR without explicit user approval, and never amend commits
@@ -22,7 +22,7 @@
 ## Docs
 
 Docs are stored at ./docs
-Check ./docs/docs_writer_prompt.md before changing docs files.
+Use the `archestra-docs-writer` skill before changing any docs files.
 
 ## Project Skills
 
@@ -35,6 +35,7 @@ Load these project skills when the task matches their domain:
 - `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
 - `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
 - `archestra-dev-override-sweep` - use for sweeping pnpm `overrides` and `minimumReleaseAge` exclusions in `pnpm-workspace.yaml` — unwinding matured CVE pins and removing overrides the dependency graph has made redundant.
+- `archestra-docs-writer` - use for writing or editing docs pages under `../docs/pages`: new feature docs, page rewrites, tone/copy fixes, and screenshots.
 
 ## Key URLs
 

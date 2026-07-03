@@ -4,12 +4,6 @@ category: Archestra Platform
 order: 4
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
-
 # Observability
 
 ![Archestra Logs Viewer](/docs/observability.webp)

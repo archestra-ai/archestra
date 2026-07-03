@@ -6,11 +6,6 @@ description: Built-in Chat interface for working with agents and MCP tools
 lastUpdated: 2026-06-11
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
--->
-
 Archestra includes a built-in Chat interface for working with agents, MCP tools, files, browser actions, and model selection in one place.
 
 ![Agent Platform Swarm](/docs/platform-chat.webp)

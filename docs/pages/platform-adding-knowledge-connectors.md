@@ -7,8 +7,6 @@ lastUpdated: 2026-05-05
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This is a development guide for adding new Knowledge Base connectors to Archestra.
 -->
 

@@ -4,12 +4,6 @@ category: Examples
 order: 8
 ---
 
-<!-- 
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
-
 Why probabilistic guardrails are not secure enough to stop prompt injections. With a real example.
 
 Microsoft Foundry (Azure AI Foundry) is Microsoft's enterprise AI development platform that provides a suite of tools within Azure for creating and managing AI Agents and Workflows using including hosted models, pre-built connectors, prompt builder and LLM guardrails.

@@ -6,10 +6,6 @@ description: Authentication methods for the LLM Proxy
 lastUpdated: 2026-07-01
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 The LLM Proxy supports direct provider API keys, virtual API keys, passthrough virtual keys, OAuth access tokens, and JWKS via an external identity provider.
 
 | Method | Best for | Model Router | Notes |

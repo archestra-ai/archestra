@@ -7,8 +7,6 @@ lastUpdated: 2026-06-21
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)
 - Who can view vs. manage environments (environment:admin), Settings > Environments

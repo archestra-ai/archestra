@@ -6,13 +6,6 @@ description: Get started with Archestra Platform using Docker
 lastUpdated: 2025-10-08
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
-
--->
-
 ## Run it locally to try!
 
 The fact that you're reading this means that you're willing to give it a try. First of all, thank you! We've prepared an all-in-one Docker image and hope it will make the first meeting with Archestra simple and pleasant ☺️ 

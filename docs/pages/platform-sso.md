@@ -8,8 +8,6 @@ lastUpdated: 2026-07-03
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Provider-agnostic SSO concept page. Covers what SSO is in Archestra, how the
 flow works, callback URL formats, supported protocols, allowed-domain
 boundary, basic-auth/invitation toggles, user provisioning, account linking,

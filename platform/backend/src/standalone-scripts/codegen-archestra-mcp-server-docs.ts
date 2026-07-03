@@ -378,7 +378,7 @@ ${formatToolLink("query_knowledge_sources")} is an exception: its output is trea
 
 ## Auth
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
 
 ${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
 

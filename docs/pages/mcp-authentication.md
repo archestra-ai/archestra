@@ -6,10 +6,6 @@ description: "How authentication works for MCP clients and upstream MCP servers"
 lastUpdated: 2026-06-30
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
 
 This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Copilot CLI, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.

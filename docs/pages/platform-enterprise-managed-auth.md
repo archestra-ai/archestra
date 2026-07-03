@@ -8,8 +8,6 @@ lastUpdated: 2026-06-09
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Provider-agnostic concept page covering downstream-credential strategies:
 - Microsoft Entra OBO
 - Okta-managed token exchange

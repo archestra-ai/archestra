@@ -6,11 +6,6 @@ description: How ingestion and querying work in the built-in RAG stack
 lastUpdated: 2026-04-30
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
--->
-
 The RAG stack runs entirely within PostgreSQL — no external vector database required. See [Platform Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for full configuration reference.
 
 ## Ingestion

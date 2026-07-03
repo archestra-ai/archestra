@@ -6,11 +6,6 @@ description: Supported connector types, configuration, and management
 lastUpdated: 2026-06-11
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
--->
-
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
 
 ## Visibility

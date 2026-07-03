@@ -164,18 +164,27 @@ test("the render lint flags a hidden element an app override left visible", asyn
   });
   const app = (await createRes.json()) as { id: string };
 
+  // The SDK scans twice by design (at DOMContentLoaded and again after `ready`),
+  // so the raw postMessage stream carries the same diagnostic more than once; the
+  // host store dedups on type+message before it reaches the model. This probe
+  // reads the raw stream, so dedup by message here to assert on the distinct
+  // offender set the store would keep.
   const hiddenOverridden = () =>
-    page.evaluate(() =>
-      (
+    page.evaluate(() => {
+      const seen = new Set<string>();
+      return (
         window as unknown as {
           __appDiagnostics: { errorType?: string; message?: string }[];
         }
-      ).__appDiagnostics.filter(
-        (d) =>
-          d.errorType === "render-check" &&
-          (d.message ?? "").includes("[hidden-overridden]"),
-      ),
-    );
+      ).__appDiagnostics.filter((d) => {
+        if (d.errorType !== "render-check") return false;
+        const message = d.message ?? "";
+        if (!message.includes("[hidden-overridden]")) return false;
+        if (seen.has(message)) return false;
+        seen.add(message);
+        return true;
+      });
+    });
 
   try {
     const patchRes = await makeApiRequest({

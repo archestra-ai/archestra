@@ -5,3 +5,16 @@ resolver = "2"
 [profile.release]
 lto = "thin"
 strip = "symbols"
+
+# Local dev default is debug=2 — heavy debuginfo we don't use in a native addon.
+[profile.dev]
+debug = "line-tables-only"
+
+# Fast local build of the NAPI addons: optimized enough to run, but no LTO and
+# more codegen units so rebuilds parallelize across cores instead of serializing
+# in the LTO link. Used by `pnpm build:dev`; CI/publish still use `release`.
+[profile.release-fast]
+inherits = "release"
+lto = false
+codegen-units = 256
+incremental = true

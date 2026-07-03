@@ -215,14 +215,18 @@
   // validate_app. The two rAFs let layout settle before getBoundingClientRect.
   const scheduleHiddenCheck = () =>
     requestAnimationFrame(() => requestAnimationFrame(reportHiddenOverridden));
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", scheduleHiddenCheck, {
-      once: true,
-    });
-  } else {
-    scheduleHiddenCheck();
+  // Guarded for non-browser hosts (e.g. the SDK's own Node unit tests run it
+  // against a minimal window with no `document`).
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleHiddenCheck, {
+        once: true,
+      });
+    } else {
+      scheduleHiddenCheck();
+    }
+    ready.then(scheduleHiddenCheck).catch(() => {});
   }
-  ready.then(scheduleHiddenCheck).catch(() => {});
 
   // A connect that neither resolves nor rejects means the host accepted our
   // postMessage but never answered ui/initialize — its sandbox doesn't relay to

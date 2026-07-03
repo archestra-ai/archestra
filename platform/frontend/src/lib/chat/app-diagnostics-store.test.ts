@@ -36,6 +36,20 @@ describe("parseForwardedDiagnostic", () => {
     expect(entry).toEqual({ type: errorType, message: "hello from the app" });
   });
 
+  it("accepts the hidden-overridden render lint over the runtime-error lane", () => {
+    const entry = parseForwardedDiagnostic({
+      type: "mcp-apps:runtime-error",
+      errorType: "hidden-overridden",
+      message:
+        "Element(s) with the `hidden` attribute are still rendered: #modal",
+    });
+    expect(entry).toEqual({
+      type: "hidden-overridden",
+      message:
+        "Element(s) with the `hidden` attribute are still rendered: #modal",
+    });
+  });
+
   it("maps a CSP violation to a readable message", () => {
     const entry = parseForwardedDiagnostic({
       type: "mcp-apps:csp-violation",
@@ -109,6 +123,14 @@ describe("diagnostics store", () => {
     reportAppDiagnostic(APP, 1, { type: "console.warn", message: "careful" });
     reportAppDiagnostic(APP, 1, { type: "console.info", message: "fyi" });
     expect(getAppDiagnosticCounts().get(APP)).toEqual({ errors: 2, logs: 3 });
+  });
+
+  it("counts the hidden-overridden render lint as an error, not a log", () => {
+    reportAppDiagnostic(APP, 1, {
+      type: "hidden-overridden",
+      message: "stuck modal: #confirm-modal",
+    });
+    expect(getAppDiagnosticCounts().get(APP)).toEqual({ errors: 1, logs: 0 });
   });
 
   it("a newer version resets the collection; a stale mount is ignored", () => {

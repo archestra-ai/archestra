@@ -165,6 +165,44 @@
   // app never awaits ready
   ready.catch(() => {});
 
+  // Render lint: an element carrying the `hidden` attribute that still paints
+  // means an app CSS rule is overriding the UA `[hidden] { display: none }` (the
+  // base sheet's `!important` reset normally prevents this) — a modal or toggled
+  // element stuck visible. It throws nothing and violates no CSP, so only a DOM
+  // check catches it. One pass after the handshake + a paint beat, mirroring the
+  // screenshot timing, so async-first-render apps are covered too.
+  const reportHiddenOverridden = () => {
+    try {
+      const offenders = [];
+      for (const el of document.querySelectorAll("[hidden]")) {
+        // `hidden="until-found"` is intentionally in the layout (find-in-page),
+        // so it is not an override; only the boolean form should stay unpainted.
+        if (el.getAttribute("hidden") === "until-found") continue;
+        if (el.getClientRects().length === 0) continue;
+        const id = el.id ? "#" + el.id : "";
+        const cls = el.classList.length ? "." + [...el.classList].join(".") : "";
+        offenders.push(el.tagName.toLowerCase() + id + cls);
+        if (offenders.length >= 5) break;
+      }
+      if (offenders.length > 0) {
+        postDiagnostic(
+          "hidden-overridden",
+          "Element(s) with the `hidden` attribute are still rendered — a CSS rule " +
+            "(e.g. `display:` on the element) is overriding `hidden`, leaving them " +
+            "stuck visible: " +
+            offenders.join(", "),
+        );
+      }
+    } catch {
+      // render lint is best-effort; never surface a failure to the app
+    }
+  };
+  ready
+    .then(() => {
+      setTimeout(reportHiddenOverridden, 1500);
+    })
+    .catch(() => {});
+
   // A connect that neither resolves nor rejects means the host accepted our
   // postMessage but never answered ui/initialize — its sandbox doesn't relay to
   // an MCP-Apps bridge (a wrapper/proxy frame, or a non-conformant host). That

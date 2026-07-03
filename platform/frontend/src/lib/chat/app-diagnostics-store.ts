@@ -14,17 +14,21 @@ export type AppDiagnosticType =
   | "unhandledrejection"
   | "console.error"
   | "csp-violation"
+  | "hidden-overridden"
   | "console.log"
   | "console.warn"
   | "console.info";
 
 // Error-class diagnostics signal an actual failure (rendered prominently);
 // the remaining console.{log,warn,info} types are ordinary log output.
+// `hidden-overridden` is the SDK render lint (an element's `hidden` attribute is
+// overridden by app CSS) — a broken render that throws nothing, so it counts.
 const ERROR_DIAGNOSTIC_TYPES: ReadonlySet<AppDiagnosticType> = new Set([
   "error",
   "unhandledrejection",
   "console.error",
   "csp-violation",
+  "hidden-overridden",
 ]);
 
 export function isErrorDiagnostic(type: AppDiagnosticType): boolean {
@@ -53,6 +57,7 @@ const DIAGNOSTIC_TYPES: readonly AppDiagnosticType[] = [
   "unhandledrejection",
   "console.error",
   "csp-violation",
+  "hidden-overridden",
   "console.log",
   "console.warn",
   "console.info",

@@ -142,10 +142,18 @@ runs:
         path: /tmp/mcp-jwks-server.tar
         key: mcp-jwks-server-0.0.3-${{ runner.arch }}
 
-    # Fetch both MCP dependency images concurrently. On a cache hit we
+    - name: Cache MCP ID-JAG server image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-id-jag-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/mcp-id-jag-server.tar
+        key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
+
+    # Fetch all three MCP dependency images concurrently. On a cache hit we
     # `docker load` the tarball; on a miss we pull from the registry and save the
     # tarball for the actions/cache post-job upload. These pulls previously ran as
-    # serial steps (~45s wall-clock on a cold cache); doing them in parallel
+    # three serial steps (~45s wall-clock on a cold cache); doing them in parallel
     # collapses that to the slowest single image (~25s).
     - name: Fetch MCP dependency images (parallel)
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
@@ -153,9 +161,11 @@ runs:
       env:
         OAUTH_CACHE_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
         JWKS_CACHE_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
+        ID_JAG_CACHE_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
       run: |
         MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
         MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
 
         # fetch_image <cache-hit> <image-ref> <tarball-path>
         # Loads from the cached tarball on a hit, otherwise pulls and re-saves it.
@@ -175,6 +185,8 @@ runs:
         fetch_image "${OAUTH_CACHE_HIT}" "${MCP_OAUTH_IMAGE}" /tmp/mcp-oauth-server.tar &
         PIDS+=($!)
         fetch_image "${JWKS_CACHE_HIT}" "${MCP_JWKS_IMAGE}" /tmp/mcp-jwks-server.tar &
+        PIDS+=($!)
+        fetch_image "${ID_JAG_CACHE_HIT}" "${MCP_ID_JAG_IMAGE}" /tmp/mcp-id-jag-server.tar &
         PIDS+=($!)
 
         echo "Waiting for all MCP dependency image fetches to complete..."
@@ -269,6 +281,7 @@ runs:
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
 
           echo "Loading MCP example OAuth server image into Kind..."
           kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
@@ -276,6 +289,10 @@ runs:
 
           echo "Loading MCP JWKS server image into Kind..."
           kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP ID-JAG server image into Kind..."
+          kind load docker-image "${MCP_ID_JAG_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
           PIDS+=($!)
         fi
 
@@ -436,6 +453,15 @@ runs:
           fi
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=keycloak --timeout=180s
           kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=wiremock --timeout=60s
+          if ! kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=mcp-server-id-jag --timeout=60s; then
+            echo "=== MCP Server ID-JAG Pod Describe ==="
+            kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || true
+            echo "=== MCP Server ID-JAG Logs ==="
+            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || true
+            echo "=== MCP Server ID-JAG Previous Logs ==="
+            kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || true
+            exit 1
+          fi
 
           echo "Starting local port-forwards for dependency health checks..."
           kubectl port-forward service/e2e-tests-wiremock 30080:8080 >/tmp/wiremock-port-forward.log 2>&1 &
@@ -543,6 +569,15 @@ runs:
 
         echo "=== Describe MCP Server JWKS Pod ==="
         kubectl describe pod -l app.kubernetes.io/name=mcp-server-jwks || echo "No MCP Server JWKS pod"
+
+        echo "=== MCP Server ID-JAG Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --tail=200 || echo "No ID-JAG logs"
+
+        echo "=== MCP Server ID-JAG Previous Logs ==="
+        kubectl logs -l app.kubernetes.io/name=mcp-server-id-jag --previous --tail=200 || echo "No previous ID-JAG logs"
+
+        echo "=== Describe MCP Server ID-JAG Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=mcp-server-id-jag || echo "No ID-JAG pod"
 
         echo "=== Describe Archestra Platform Pod ==="
         kubectl describe pod -l app.kubernetes.io/name=archestra-platform

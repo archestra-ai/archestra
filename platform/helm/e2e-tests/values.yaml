@@ -144,6 +144,28 @@ mcpExampleOAuth:
       cpu: 500m
       memory: 512Mi
 
+# MCP Server with ID-JAG authentication for protected-resource exchange testing
+mcpServerIdJag:
+  enabled: true
+  image:
+    repository: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag
+    tag: "0.0.4"
+    pullPolicy: IfNotPresent
+  gatewayAudience: "id-jag-gateway-client"
+  resourceClientId: "id-jag-resource-client"
+  resourceClientSecret: "id-jag-resource-secret"
+  service:
+    type: NodePort
+    port: 3458
+    nodePort: 30084
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
 # HashiCorp Vault configuration for BYOS (Bring Your Own Secrets) testing
 vault:
   enabled: true

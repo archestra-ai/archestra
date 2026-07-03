@@ -89,6 +89,8 @@ mcpExampleOAuth:
   enabled: false
 mcpServerJwks:
   enabled: false
+mcpServerIdJag:
+  enabled: false
 
 # ============================================================
 # Consumed by ./helm/archestra (archestra release)

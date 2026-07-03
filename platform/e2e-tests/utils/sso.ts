@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for retry logging in this file
 import type { Page } from "@playwright/test";
 import {
+  KC_MEMBER_USER,
   KC_TEST_USER,
   KEYCLOAK_EXTERNAL_URL,
   KEYCLOAK_OIDC,
@@ -11,6 +12,14 @@ import { clickButton } from "./dialogs";
 
 export async function getKeycloakJwt(): Promise<string> {
   return getKeycloakJwtForUser(KC_TEST_USER);
+}
+
+export async function getAdminKeycloakJwt(): Promise<string> {
+  return getKeycloakJwtForUser(KC_TEST_USER);
+}
+
+export async function getMemberKeycloakJwt(): Promise<string> {
+  return getKeycloakJwtForUser(KC_MEMBER_USER);
 }
 
 export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {

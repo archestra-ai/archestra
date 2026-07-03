@@ -64,6 +64,7 @@ helm_resource(
     '--set', 'keycloak.enabled=false',
     '--set', 'mcpExampleOAuth.enabled=false',
     '--set', 'mcpServerJwks.enabled=false',
+    '--set', 'mcpServerIdJag.enabled=false',
   ],
   port_forwards=['8200:8200'],
   labels=['integrations'],

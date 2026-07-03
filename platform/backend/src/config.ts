@@ -999,10 +999,10 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host. it is always on when a
-// host is configured and off otherwise — presence of the host is the switch.
-// it is independent of the skills *read* feature — skills can be
-// listed/activated/read with the sandbox off.
+// skill activation-mounts) needs a Dagger runner host: it runs when a host is
+// configured and stays off otherwise — presence of the host is the switch. it
+// is independent of the skills *read* feature — skills can be listed/activated/
+// read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: true,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,

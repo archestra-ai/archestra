@@ -1738,6 +1738,32 @@ describe("scaffold_app tools param", () => {
     expect(structured(listed).apps).toEqual([]);
   });
 
+  test("scaffold with an ambiguous tool name (two installs) fails and leaves no app behind", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const ambiguousName = `dup__tool_${crypto.randomUUID().slice(0, 8)}`;
+    const catalogA = await makeInternalMcpCatalog({ organizationId });
+    const catalogB = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({ name: ambiguousName, catalogId: catalogA.id });
+    await makeTool({ name: ambiguousName, catalogId: catalogB.id });
+
+    const created = await scaffold({ name: "Dup", tools: [ambiguousName] });
+    expect(created.isError).toBe(true);
+    // ambiguous branch (not the unknown-name branch), with the offender listed
+    expect((created.content[0] as any).text).toContain(
+      "more than one installed tool",
+    );
+    expect((created.content[0] as any).text).toContain(ambiguousName);
+
+    const listed = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      { name: "Dup" },
+      context,
+    );
+    expect(structured(listed).apps).toEqual([]);
+  });
+
   test("built-in tool names are rejected", async () => {
     const created = await scaffold({
       name: "Builtin",

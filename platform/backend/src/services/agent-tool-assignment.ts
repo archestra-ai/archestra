@@ -218,7 +218,7 @@ export async function resolveAppToolsByName(params: {
   );
   if (ambiguous.length > 0) {
     return appToolsValidationError(
-      `Tool name(s) match more than one installed tool and cannot be assigned by name: ${ambiguous.join(", ")}.`,
+      `Tool name(s) match more than one installed tool, so they cannot be assigned to the app by name (app tools are assigned by name only): ${ambiguous.join(", ")}. The app will not be able to call them — tell the user the duplicate install(s) must be resolved before the tool can be connected, and do not build the app as if the tool were assigned.`,
     );
   }
   const pendingDiscovery = rows.filter((row) => row.clonedPendingDiscovery);

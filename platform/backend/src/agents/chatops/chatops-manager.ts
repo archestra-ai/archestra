@@ -1622,9 +1622,9 @@ export class ChatOpsManager {
           "Sorry, I couldn't process your request — the LLM provider rejected the API key.",
           "",
           usedLlm ??
-            "I use the same model and API key selected in Archestra chat (or the key configured on this agent).",
+            "Check the API key configured for this agent (or your organization's LLM settings).",
           "",
-          `Update the key or select a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
+          `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
         ].join("\n"),
         footer: errorDetail,
         conversationReference: message.metadata?.conversationReference,
@@ -1678,7 +1678,7 @@ export class ChatOpsManager {
       const keyDescription = key
         ? `the ${LLM_KEY_SCOPE_LABELS[key.scope] ?? key.scope} ${providerLabel} API key "${key.name}"`
         : `the ${providerLabel} API key from the server environment`;
-      return `This request used ${keyDescription} with model \`${selectedModel}\` — I use the same model and API key selected in Archestra chat (or the key configured on this agent).`;
+      return `This request used ${keyDescription} with model \`${selectedModel}\`.`;
     } catch (error) {
       logger.warn(
         { error: errorMessage(error) },

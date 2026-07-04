@@ -495,12 +495,7 @@ describe("ChatOpsManager security validation", () => {
         text: expect.stringContaining("claude-test-model"),
       }),
     );
-    // It explains where the key comes from and where to fix it.
-    expect(sendReplySpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: expect.stringContaining("selected in Archestra chat"),
-      }),
-    );
+    // It points the user at where to fix the key.
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining("/llm/model-providers"),

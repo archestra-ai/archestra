@@ -148,7 +148,3 @@ Files exceeding these limits are silently skipped.
 
 **"Slack is configured for Socket Mode" error on webhooks**
 - This means Slack is configured to use socket mode but events are arriving via webhooks. Check that your Slack app has `socket_mode_enabled: true` in its settings, or switch Archestra to webhook mode.
-
-**"The LLM provider rejected the API key"**
-- The bot resolves its model and API key the same way in-app chat does: the key selected in chat, then the agent's configured key, then personal → team → organization keys. The error reply names the key and model that were used.
-- Update or replace that key on the Model Providers page (`/llm/model-providers`), or select a different key in chat, then retry.

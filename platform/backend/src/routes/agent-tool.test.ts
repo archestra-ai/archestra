@@ -19,6 +19,7 @@ function fakeTool(overrides: { id: string; catalogId?: string | null }): Tool {
     id: overrides.id,
     catalogId: overrides.catalogId ?? null,
     name: "test-tool",
+    rawName: null,
     description: null,
     parameters: undefined,
     agentId: null,

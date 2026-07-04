@@ -57,6 +57,96 @@ describe("fetchBedrockModels", () => {
     ]);
   });
 
+  test("excludes non-chat models (embeddings, image, rerank) from the chat picker", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "global.anthropic.claude-opus-4-8",
+              inferenceProfileName: "Claude Opus 4.8",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "global.cohere.embed-v4:0",
+              inferenceProfileName: "Cohere Embed v4",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.twelvelabs.marengo-embed-3-0-v1:0",
+              inferenceProfileName: "Marengo Embed 3.0",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.stability.stable-image-inpaint-v1:0",
+              inferenceProfileName: "Stable Image Inpaint",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.nova-canvas-v1:0",
+              inferenceProfileName: "Nova Canvas",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.nova-reel-v1:1",
+              inferenceProfileName: "Nova Reel",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "cohere.rerank-v3-5:0",
+              inferenceProfileName: "Cohere Rerank 3.5",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    // Only the text-generation model survives; embeddings, image/video
+    // generators, and rerank are dropped so a member can't pick one and break
+    // chat. Chat families that merely resemble excluded ones (e.g. nova-lite)
+    // must NOT be filtered.
+    expect(models.map((model) => model.id)).toEqual([
+      "global.anthropic.claude-opus-4-8",
+    ]);
+  });
+
+  test("keeps text-generation models whose names resemble non-chat families", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          inferenceProfileSummaries: [
+            {
+              inferenceProfileId: "us.amazon.nova-lite-v1:0",
+              inferenceProfileName: "Nova Lite",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.amazon.titan-text-express-v1",
+              inferenceProfileName: "Titan Text Express",
+              status: "ACTIVE",
+            },
+            {
+              inferenceProfileId: "us.cohere.command-r-plus-v1:0",
+              inferenceProfileName: "Command R+",
+              status: "ACTIVE",
+            },
+          ],
+        }),
+    });
+
+    const models = await fetchBedrockModels("test-api-key");
+
+    expect(models.map((model) => model.id)).toEqual([
+      "us.amazon.nova-lite-v1:0",
+      "us.amazon.titan-text-express-v1",
+      "us.cohere.command-r-plus-v1:0",
+    ]);
+  });
+
   test("captures the foundation-model id from the profile's model ARN for pricing", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

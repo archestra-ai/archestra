@@ -1225,7 +1225,14 @@ describe("AgentToolModel.findAll", () => {
           fullWhiteLabeling: true,
         },
       );
+      // Create the agent first: AgentModel.create assigns the default
+      // built-ins, which re-syncs the branding singleton from the first org
+      // (unbranded here) and would wipe a manually-set branding.
       const agent = await makeAgent();
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
       const regularTool = await makeTool({ name: "regular-tool" });
       const kbTool = await makeTool({ name: brandedKbToolName });
       await makeAgentTool(agent.id, regularTool.id);

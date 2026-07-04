@@ -4,7 +4,7 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
-export type EmbeddingDimensionsInput = 3072 | 1536 | 768;
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -5318,7 +5318,7 @@ export type UserConfigFieldInput = {
     valuePrefix?: string;
 };
 
-export type EmbeddingDimensions = 3072 | 1536 | 768;
+export type EmbeddingDimensions = 3072 | 1536 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -12942,6 +12942,187 @@ export type ExportAgentResponses = {
 };
 
 export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
+
+export type GetAgentToolExclusionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-exclusions';
+};
+
+export type GetAgentToolExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentToolExclusionsError = GetAgentToolExclusionsErrors[keyof GetAgentToolExclusionsErrors];
+
+export type GetAgentToolExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Individual tool IDs excluded from the agent's surface
+         */
+        excludedToolIds: Array<string>;
+    };
+};
+
+export type GetAgentToolExclusionsResponse = GetAgentToolExclusionsResponses[keyof GetAgentToolExclusionsResponses];
+
+export type UpdateAgentToolExclusionsData = {
+    body: {
+        /**
+         * Individual tool IDs excluded from the agent's surface
+         */
+        excludedToolIds: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/tool-exclusions';
+};
+
+export type UpdateAgentToolExclusionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAgentToolExclusionsError = UpdateAgentToolExclusionsErrors[keyof UpdateAgentToolExclusionsErrors];
+
+export type UpdateAgentToolExclusionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        /**
+         * Individual tool IDs excluded from the agent's surface
+         */
+        excludedToolIds: Array<string>;
+    };
+};
+
+export type UpdateAgentToolExclusionsResponse = UpdateAgentToolExclusionsResponses[keyof UpdateAgentToolExclusionsResponses];
 
 export type RestoreAgentData = {
     body?: never;
@@ -44879,6 +45060,9 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        defaultParameters: {
+            [key: string]: string | number | Array<string>;
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -45012,6 +45196,9 @@ export type UpdateModelResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        defaultParameters: {
+            [key: string]: string | number | Array<string>;
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -51815,6 +52002,428 @@ export type OllamaChatCompletionsWithAgentResponses = {
 
 export type OllamaChatCompletionsWithAgentResponse = OllamaChatCompletionsWithAgentResponses[keyof OllamaChatCompletionsWithAgentResponses];
 
+export type GetOnboardingSeenNavItemsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/seen-nav-items';
+};
+
+export type GetOnboardingSeenNavItemsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOnboardingSeenNavItemsError = GetOnboardingSeenNavItemsErrors[keyof GetOnboardingSeenNavItemsErrors];
+
+export type GetOnboardingSeenNavItemsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        items: Array<string>;
+    };
+};
+
+export type GetOnboardingSeenNavItemsResponse = GetOnboardingSeenNavItemsResponses[keyof GetOnboardingSeenNavItemsResponses];
+
+export type MarkOnboardingNavItemsSeenData = {
+    body: {
+        items: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/seen-nav-items';
+};
+
+export type MarkOnboardingNavItemsSeenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MarkOnboardingNavItemsSeenError = MarkOnboardingNavItemsSeenErrors[keyof MarkOnboardingNavItemsSeenErrors];
+
+export type MarkOnboardingNavItemsSeenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        items: Array<string>;
+    };
+};
+
+export type MarkOnboardingNavItemsSeenResponse = MarkOnboardingNavItemsSeenResponses[keyof MarkOnboardingNavItemsSeenResponses];
+
+export type GetOnboardingSurveyEligibilityData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/survey-eligibility';
+};
+
+export type GetOnboardingSurveyEligibilityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOnboardingSurveyEligibilityError = GetOnboardingSurveyEligibilityErrors[keyof GetOnboardingSurveyEligibilityErrors];
+
+export type GetOnboardingSurveyEligibilityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        eligible: boolean;
+    };
+};
+
+export type GetOnboardingSurveyEligibilityResponse = GetOnboardingSurveyEligibilityResponses[keyof GetOnboardingSurveyEligibilityResponses];
+
+export type SubmitOnboardingSurveyData = {
+    body: {
+        role: string;
+        workEnvironment: string;
+        referralSource: string;
+        workEmail?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/survey';
+};
+
+export type SubmitOnboardingSurveyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SubmitOnboardingSurveyError = SubmitOnboardingSurveyErrors[keyof SubmitOnboardingSurveyErrors];
+
+export type SubmitOnboardingSurveyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: true;
+    };
+};
+
+export type SubmitOnboardingSurveyResponse = SubmitOnboardingSurveyResponses[keyof SubmitOnboardingSurveyResponses];
+
+export type GetFeedbackPopupActivationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/onboarding/feedback-popup-activation';
+};
+
+export type GetFeedbackPopupActivationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetFeedbackPopupActivationError = GetFeedbackPopupActivationErrors[keyof GetFeedbackPopupActivationErrors];
+
+export type GetFeedbackPopupActivationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        activatedAt: string | null;
+    };
+};
+
+export type GetFeedbackPopupActivationResponse = GetFeedbackPopupActivationResponses[keyof GetFeedbackPopupActivationResponses];
+
 export type OpenAiEmbeddingsWithDefaultAgentData = {
     body: {
         model: string;
@@ -54006,6 +54615,7 @@ export type GetOrganizationResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -54300,6 +54910,7 @@ export type UpdateAppearanceSettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -54467,6 +55078,7 @@ export type UpdateSecuritySettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -54632,6 +55244,7 @@ export type UpdateLlmSettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -54798,6 +55411,7 @@ export type UpdateAgentSettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -54975,6 +55589,7 @@ export type UpdateConnectionSettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -55150,6 +55765,7 @@ export type UpdateDefaultEnvironmentResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -55315,6 +55931,7 @@ export type UpdateAuthSettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -55482,6 +56099,7 @@ export type UpdateKnowledgeSettingsResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -55644,6 +56262,7 @@ export type DropEmbeddingConfigResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -55895,6 +56514,7 @@ export type CompleteOnboardingResponses = {
         createdAt: string;
         metadata: string | null;
         onboardingComplete: boolean;
+        onboardingSurveyCompletedAt: string | null;
         theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
         customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
         convertToolResultsToToon: boolean;
@@ -65217,6 +65837,107 @@ export type DeleteToolResponses = {
 };
 
 export type DeleteToolResponse = DeleteToolResponses[keyof DeleteToolResponses];
+
+export type GetToolData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tools/{id}';
+};
+
+export type GetToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetToolError = GetToolErrors[keyof GetToolErrors];
+
+export type GetToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type GetToolResponse = GetToolResponses[keyof GetToolResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

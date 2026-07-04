@@ -6,7 +6,9 @@ export type EmbeddingModel = string;
 /** Maximum number of chunks to embed per embedding API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
-export const SUPPORTED_EMBEDDING_DIMENSIONS = [3072, 1536, 768] as const;
+export const SUPPORTED_EMBEDDING_DIMENSIONS = [
+  3072, 1536, 1024, 768, 384,
+] as const;
 export type SupportedEmbeddingDimension =
   (typeof SUPPORTED_EMBEDDING_DIMENSIONS)[number];
 
@@ -42,7 +44,7 @@ export const SupportedEmbeddingDimensionsSchema =
 /**
  * Maps a dimension size to its database column name.
  * - 1536 → "embedding" (original column, kept for backward compatibility)
- * - 768  → "embedding_768"
+ * - every other supported size → "embedding_<dimensions>" (e.g. "embedding_768")
  */
 export function getEmbeddingColumnName(dimensions: number): string {
   if (dimensions === 1536) return "embedding";

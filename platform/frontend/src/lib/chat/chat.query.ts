@@ -499,16 +499,54 @@ export function useCompactConversation() {
 /**
  * Clear a conversation's recorded chat errors. Used by the chat session's
  * regenerate flow ("Try again" on the error card, the regenerate action on a
- * user message, edited resends): after wiping the error rows we invalidate the
- * conversation so the stale inline error card disappears.
+ * user message, edited resends) and the silent auto-retry success path.
+ *
+ * Optimistically drops the persisted error rows from the conversation cache and
+ * cancels any in-flight conversation refetch *before* the delete. The regenerate
+ * flow persists the (edited) user message just before calling this, which kicks
+ * off a conversation refetch that reads the error rows while they still exist —
+ * without the cancel + optimistic write, that refetch lands last and resurrects
+ * the stale error card above the freshly regenerated answer. Mirrors the
+ * optimistic-removal pattern in useDeleteConversation.
  */
 export function useClearChatErrors() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id }: { id: string }) =>
-      callApi(() => clearChatConversationErrors({ path: { id } }), null),
-    onSuccess: (_data, variables) => {
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await clearChatConversationErrors({
+        path: { id },
+      });
+      if (error) {
+        handleApiError(error);
+        // Throw to trigger onError rollback for the optimistic cache removal.
+        throw error;
+      }
+      return data;
+    },
+    onMutate: async ({ id }) => {
+      const queryKey = ["conversation", id];
+      // Cancel in-flight refetches so they can't overwrite the optimistic clear.
+      await queryClient.cancelQueries({ queryKey });
+      const previous =
+        queryClient.getQueryData<
+          archestraApiTypes.GetChatConversationResponses["200"]
+        >(queryKey);
+      // Drop the error rows immediately so the inline card disappears at once.
+      queryClient.setQueryData<
+        archestraApiTypes.GetChatConversationResponses["200"]
+      >(queryKey, (old) => (old ? { ...old, chatErrors: [] } : old));
+      return { previous, queryKey };
+    },
+    onError: (_error, _variables, context) => {
+      // The delete failed — restore the rows so the user still sees the error.
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSettled: (_data, _error, variables) => {
+      // Reconcile with the server: confirms the rows are gone on success, or
+      // brings them back if the delete never took.
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
       });

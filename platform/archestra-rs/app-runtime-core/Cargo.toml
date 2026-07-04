@@ -7,3 +7,4 @@ publish = false
 [dependencies]
 regex = "1"
 tl = "0.7"
+url = "2"

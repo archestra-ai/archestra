@@ -86,6 +86,7 @@ export function PolicyDeniedTool({
           onOpenChange={setIsModalOpen}
           toolName={toolName}
           profileId={profileId}
+          toolId={policyDenied.toolId}
         />
       )}
     </>

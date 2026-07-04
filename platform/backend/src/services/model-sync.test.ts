@@ -637,4 +637,73 @@ describe("ModelSyncService", () => {
       selectableEmbeddingModels.map((model) => model.modelId).sort(),
     ).toEqual(["nomic-ai/nomic-embed-text", "openai/text-embedding-3-small"]);
   });
+
+  test("uses an authoritative fetched embedding dimension over the name heuristic", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "mxbai-embed-large",
+          capabilities: { embeddingDimensions: 1024 },
+        },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBe(1024);
+  });
+
+  test("drops an authoritative embedding dimension the KB cannot store", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        { id: "exotic-embed", capabilities: { embeddingDimensions: 999 } },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBeNull();
+  });
+
+  test("does not tag an authoritatively-generative model as embedding even if its id matches an embed name", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      // capabilities present with embeddingDimensions null ⇒ authoritative chat model.
+      models: [
+        {
+          id: "mxbai-embed-large",
+          capabilities: { embeddingDimensions: null },
+        },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBeNull();
+  });
+
+  test("falls back to the name heuristic for Ollama when capabilities are absent", () => {
+    const [mxbai, minilm] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [{ id: "mxbai-embed-large:335m" }, { id: "all-minilm" }],
+      modelsDevData: {},
+    });
+    expect(mxbai.embeddingDimensions).toBe(1024);
+    expect(minilm.embeddingDimensions).toBe(384);
+  });
+
+  test("persists fetched default parameters", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "llama3",
+          capabilities: {
+            defaultParameters: { num_ctx: 4096, stop: ["<|eot_id|>"] },
+          },
+        },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.defaultParameters).toEqual({
+      num_ctx: 4096,
+      stop: ["<|eot_id|>"],
+    });
+  });
 });

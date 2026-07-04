@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  providerDisplayNames,
+  type ResourceVisibilityScope,
+} from "@archestra/shared";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
@@ -13,7 +17,9 @@ import {
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
   ChatOpsThreadAgentOverrideModel,
+  LlmProviderApiKeyModel,
   OrganizationModel,
+  TeamModel,
   UserModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
@@ -27,6 +33,7 @@ import type {
   SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
 import type { InteractionSource } from "../../../../shared";
 import {
@@ -57,9 +64,11 @@ import {
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
 import {
+  buildAgentFooter,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   errorMessage,
+  isLlmProviderAuthError,
   isSlackDmChannel,
 } from "./utils";
 
@@ -1557,29 +1566,139 @@ export class ChatOpsManager {
       );
 
       if (sendReply) {
-        // A per-user provider the user hasn't linked yet → a friendly prompt
-        // with a link to connect (chatops can't render the interactive flow).
-        if (error instanceof LlmProviderAuthRequiredError) {
-          await provider.sendReply({
-            originalMessage: message,
-            text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
-            conversationReference: message.metadata?.conversationReference,
-          });
-          return { success: false, error: errorMessage(error) };
-        }
-        const errMsg = errorMessage(error);
-        // Show truncated error details as a subtle footer (max 500 chars)
-        const errorDetail =
-          errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
-        await provider.sendReply({
-          originalMessage: message,
-          text: "Sorry, I encountered an error processing your request.",
-          footer: errorDetail,
-          conversationReference: message.metadata?.conversationReference,
+        await this.sendExecutionErrorReply({
+          provider,
+          message,
+          error,
+          agentName: agent.name,
+          llmContext: {
+            organizationId: binding.organizationId,
+            userId,
+            agentId: agent.id,
+          },
         });
       }
 
       return { success: false, error: errorMessage(error) };
+    }
+  }
+
+  /**
+   * Reply to a failed execution. Known error shapes get actionable replies;
+   * anything else falls back to the generic apology with the raw error as a
+   * subtle footer.
+   */
+  private async sendExecutionErrorReply(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    error: unknown;
+    /** The responding agent's name, so error replies carry the same footer. */
+    agentName?: string;
+    /** When present, used to name the API key/model the failed run resolved to. */
+    llmContext?: { organizationId: string; userId: string; agentId: string };
+  }): Promise<void> {
+    const { provider, message, error, agentName, llmContext } = params;
+
+    // Every reply — success or failure — leads with the agent footer; error
+    // details, when present, trail after the agent name.
+    const footer = (extra?: string): string | undefined =>
+      agentName ? buildAgentFooter(agentName, extra) : extra;
+
+    // A per-user provider the user hasn't linked yet → a friendly prompt
+    // with a link to connect (chatops can't render the interactive flow).
+    if (error instanceof LlmProviderAuthRequiredError) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+        footer: footer(),
+        conversationReference: message.metadata?.conversationReference,
+      });
+      return;
+    }
+
+    const errMsg = errorMessage(error);
+    // Show truncated error details as a subtle footer (max 500 chars)
+    const errorDetail =
+      errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
+
+    // The LLM provider rejected the API key (e.g. Anthropic's "invalid
+    // x-api-key"). Users rarely realize the bot resolves its model/key the
+    // same way in-app chat does, so name the key that was used and where to
+    // fix it instead of leaving only the provider's cryptic one-liner.
+    if (isLlmProviderAuthError(errMsg)) {
+      const usedLlm = llmContext
+        ? await this.describeLlmUsedForRun(llmContext)
+        : null;
+      await provider.sendReply({
+        originalMessage: message,
+        text: [
+          "Sorry, I couldn't process your request — the LLM provider rejected the API key.",
+          "",
+          usedLlm ??
+            "Check the API key configured for this agent (or your organization's LLM settings).",
+          "",
+          `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
+        ].join("\n"),
+        footer: footer(errorDetail),
+        conversationReference: message.metadata?.conversationReference,
+      });
+      return;
+    }
+
+    await provider.sendReply({
+      originalMessage: message,
+      text: "Sorry, I encountered an error processing your request.",
+      footer: footer(errorDetail),
+      conversationReference: message.metadata?.conversationReference,
+    });
+  }
+
+  /**
+   * Best-effort description of the model/API key a chatops run resolved to,
+   * re-running the same deterministic resolution the execution used (agent's
+   * configured model/key → org default → best-available; the acting user's
+   * /chat default is deliberately excluded, matching the A2A executor). Returns
+   * null when anything fails — this runs on an error path and must never throw.
+   */
+  private async describeLlmUsedForRun(params: {
+    organizationId: string;
+    userId: string;
+    agentId: string;
+  }): Promise<string | null> {
+    try {
+      const agent = await AgentModel.findById(params.agentId);
+      if (!agent) return null;
+
+      const { selectedModel, selectedProvider } =
+        await resolveConversationLlmSelectionForAgent({
+          agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+          organizationId: params.organizationId,
+          userId: params.userId,
+          includeMemberChatDefault: false,
+        });
+
+      const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
+      const key = await LlmProviderApiKeyModel.getCurrentApiKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        userTeamIds,
+        provider: selectedProvider,
+        conversationId: null,
+        agentLlmApiKeyId: agent.llmApiKeyId,
+      });
+
+      const providerLabel =
+        providerDisplayNames[selectedProvider] ?? selectedProvider;
+      const keyDescription = key
+        ? `the ${LLM_KEY_SCOPE_LABELS[key.scope]} ${providerLabel} API key "${key.name}"`
+        : `the ${providerLabel} API key from the server environment`;
+      return `This request used ${keyDescription} with model \`${selectedModel}\`.`;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to describe the LLM selection for an error reply",
+      );
+      return null;
     }
   }
 
@@ -1633,7 +1752,7 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: agentResponse,
-        footer: `🤖 ${agent.name}`,
+        footer: buildAgentFooter(agent.name),
         // Teach the off switch once per channel thread: sticky auto-reply only
         // applies in channels, so the hint rides the bot's first reply there.
         ...((await this.shouldHintThreadMute(provider, message)) && {
@@ -1738,7 +1857,7 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: `Pending approval requests: ${unresolvedCount}`,
-        footer: `🤖 ${agent.name}`,
+        footer: buildAgentFooter(agent.name),
         conversationReference: message.metadata?.conversationReference,
       });
       return {
@@ -1758,7 +1877,7 @@ export class ChatOpsManager {
         text:
           agentResponse ||
           "Approval required before I can continue with this action.",
-        footer: `🤖 ${agent.name}`,
+        footer: buildAgentFooter(agent.name),
         conversationReference: message.metadata?.conversationReference,
       });
 
@@ -2035,16 +2154,10 @@ export class ChatOpsManager {
         "[ChatOps] Failed to execute approval decision",
       );
 
-      const errMsg = errorMessage(error);
-      // Show truncated error details as a subtle footer (max 500 chars)
-      const errorDetail =
-        errMsg.length > 500 ? `${errMsg.slice(0, 500)}…` : errMsg;
-      await provider.sendReply({
-        originalMessage: decision.originalMessage,
-        text: "Sorry, I encountered an error processing your request.",
-        footer: errorDetail,
-        conversationReference:
-          decision.originalMessage.metadata?.conversationReference,
+      await this.sendExecutionErrorReply({
+        provider,
+        message: decision.originalMessage,
+        error,
       });
     }
   }
@@ -2055,6 +2168,13 @@ export const chatOpsManager = new ChatOpsManager();
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+/** User-facing label for an LLM provider API key's visibility scope. */
+const LLM_KEY_SCOPE_LABELS: Record<ResourceVisibilityScope, string> = {
+  personal: "personal",
+  team: "team",
+  org: "organization-wide",
+};
 
 async function getDefaultOrganizationId(): Promise<string> {
   const org = await OrganizationModel.getFirst();

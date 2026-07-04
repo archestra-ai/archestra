@@ -82,6 +82,51 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toContain("Tool 1 blocked");
     });
 
+    test("prefers the agent's assigned row when a duplicate name exists", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeTool,
+      makeToolPolicy,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+      const assigned = await makeTool({
+        catalogId: catalog.id,
+        name: "dup-tool",
+      });
+      await makeAgentTool(agent.id, assigned.id);
+      await makeToolPolicy(assigned.id, {
+        action: "block_always",
+        reason: "assigned dup blocked",
+        conditions: [],
+      });
+
+      // An unassigned same-name row in another catalog with no policy. A global
+      // name lookup could resolve this row and wrongly allow the call; the
+      // assigned row must win.
+      const otherCatalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+      });
+      await makeTool({ catalogId: otherCatalog.id, name: "dup-tool" });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "dup-tool", toolInput: {} }],
+        mockContext,
+        true,
+      );
+
+      expect(result.isAllowed).toBe(false);
+      expect(result.reason).toContain("assigned dup blocked");
+      expect(result.toolId).toBe(assigned.id);
+    });
+
     test("returns success when only white-labeled built-in tools are in the batch", async ({
       makeAgent,
       seedAndAssignArchestraTools,

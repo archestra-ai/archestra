@@ -78,6 +78,7 @@ import {
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
+import { trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
   clearOAuthPendingChatResume,
@@ -1402,6 +1403,20 @@ export function ChatPageContent({
           : {}),
       },
     });
+
+    trackEvent("message_sent", {
+      conversationId,
+      agentId: conversation.agentId ?? undefined,
+      messageLength: promptToSend?.length ?? 0,
+      fileCount: filesToSend.length,
+      hasSkill: !!skillToSend,
+    });
+    for (const file of filesToSend) {
+      trackEvent("file_uploaded", {
+        mediaType: file.mediaType,
+        conversationId,
+      });
+    }
   }, [
     conversation,
     conversationId,
@@ -1573,6 +1588,20 @@ export function ChatPageContent({
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
+
+    trackEvent("message_sent", {
+      conversationId,
+      agentId: conversation?.agentId ?? undefined,
+      messageLength: message.text?.length ?? 0,
+      fileCount: message.files?.length ?? 0,
+      hasSkill: !!skillToAttach,
+    });
+    for (const file of message.files ?? []) {
+      trackEvent("file_uploaded", {
+        mediaType: file.mediaType ?? "unknown",
+        conversationId,
+      });
+    }
   };
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
@@ -2547,12 +2576,16 @@ export function ChatPageContent({
                               <Suggestion
                                 key={`${sp.summaryTitle}-${sp.prompt}`}
                                 suggestion={sp.summaryTitle}
-                                onClick={() =>
+                                onClick={() => {
+                                  trackEvent("prompt_selected", {
+                                    agentId: initialAgentId ?? undefined,
+                                    promptLength: sp.prompt.length,
+                                  });
                                   submitInitialMessage({
                                     text: sp.prompt,
                                     files: [],
-                                  })
-                                }
+                                  });
+                                }}
                               />
                             ))}
                           </div>

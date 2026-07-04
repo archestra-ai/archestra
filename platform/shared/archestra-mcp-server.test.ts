@@ -1,14 +1,20 @@
 import { describe, expect, expectTypeOf, test } from "vitest";
 import { AGENT_TOOL_PREFIX, isAgentTool } from "./agents";
 import {
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
+  DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraAppResourceUri,
   getArchestraMcpServerName,
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
+  getCreationDefaultArchestraToolShortNames,
   isAlwaysExposedArchestraToolShortName,
   isArchestraMcpServerTool,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
+  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_CREATE_AGENT_FULL_NAME,
 } from "./archestra-mcp-server";
 
@@ -116,6 +122,62 @@ describe("archestra MCP tool names", () => {
     expect(
       shortName !== null && isAlwaysExposedArchestraToolShortName(shortName),
     ).toBe(true);
+  });
+
+  describe("getCreationDefaultArchestraToolShortNames", () => {
+    const allOff = {
+      skillsEnabled: false,
+      sandboxEnabled: false,
+    };
+
+    test("all flags off yields the always-on defaults plus the app tools", () => {
+      expect(getCreationDefaultArchestraToolShortNames(allOff)).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+
+    test("skillsEnabled adds the skill tools", () => {
+      expect(
+        getCreationDefaultArchestraToolShortNames({
+          ...allOff,
+          skillsEnabled: true,
+        }),
+      ).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+
+    test("sandboxEnabled adds the runtime and persistent-files tools", () => {
+      expect(
+        getCreationDefaultArchestraToolShortNames({
+          ...allOff,
+          sandboxEnabled: true,
+        }),
+      ).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
+
+    test("all flags on composes every group in order", () => {
+      expect(
+        getCreationDefaultArchestraToolShortNames({
+          skillsEnabled: true,
+          sandboxEnabled: true,
+        }),
+      ).toEqual([
+        ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+        ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+      ]);
+    });
   });
 
   test("does not flag skill-authoring or unrelated tools", () => {

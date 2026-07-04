@@ -535,6 +535,63 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
 }
 
 /**
+ * The built-in tool set assigned to a new agent at creation, composed from
+ * the deployment/org feature flags:
+ * - the always-on defaults (todo_write, query_knowledge_sources),
+ * - the MCP App management tools (the apps feature is always on),
+ * - the skill tools when the org opted in (`organization.skillToolsEnabled`),
+ * - the sandbox runtime + persistent-files tools when the skills-sandbox
+ *   runtime is on (`config.skillsSandbox.enabled`) — mirroring
+ *   `assignSandboxToolsToAgent`.
+ *
+ * Single source of truth for creation defaults: the backend assigns exactly
+ * this set in `AgentModel.create`, and the frontend create form pre-selects
+ * it, so the two cannot drift.
+ */
+export function getCreationDefaultArchestraToolShortNames(params: {
+  skillsEnabled: boolean;
+  sandboxEnabled: boolean;
+}): ArchestraToolShortName[] {
+  const { skillsEnabled, sandboxEnabled } = params;
+
+  const shortNames: ArchestraToolShortName[] = [
+    ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  ];
+  if (skillsEnabled) {
+    shortNames.push(...SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
+  }
+  shortNames.push(...APP_ARCHESTRA_TOOL_SHORT_NAMES);
+  if (sandboxEnabled) {
+    shortNames.push(...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES);
+    shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
+  }
+  return shortNames;
+}
+
+/**
+ * Built-in tools exempt from the "All tools" exclusion pre-fill. When an
+ * agent is created in (or switched to) All-tools mode, every unassigned
+ * built-in tool is pre-added to its exclusion list EXCEPT this set: the
+ * search_tools/run_tool dispatch surface that All-tools mode runs on, the
+ * sandbox runtime + persistent-files tools, and query_knowledge_sources.
+ */
+const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES);
+
+export function isPrefillExemptArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
  * tools that stay top-level in `tools/list` regardless of an agent's
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run

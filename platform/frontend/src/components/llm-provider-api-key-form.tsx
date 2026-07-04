@@ -510,17 +510,27 @@ export function LlmProviderApiKeyForm({
         teamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onSecretPathChange={(value) => form.setValue("vaultSecretPath", value)}
-        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+        onSecretPathChange={(value) =>
+          form.setValue("vaultSecretPath", value, { shouldDirty: true })
+        }
+        onSecretKeyChange={(value) =>
+          form.setValue("vaultSecretKey", value, { shouldDirty: true })
+        }
       />
     ) : (
       <ExternalSecretSelector
         selectedTeamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onTeamChange={(value) => form.setValue("teamId", value)}
-        onSecretChange={(value) => form.setValue("vaultSecretPath", value)}
-        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+        onTeamChange={(value) =>
+          form.setValue("teamId", value, { shouldDirty: true })
+        }
+        onSecretChange={(value) =>
+          form.setValue("vaultSecretPath", value, { shouldDirty: true })
+        }
+        onSecretKeyChange={(value) =>
+          form.setValue("vaultSecretKey", value, { shouldDirty: true })
+        }
       />
     );
 
@@ -621,6 +631,7 @@ export function LlmProviderApiKeyForm({
                   form.setValue(
                     "bedrockAuthMethod",
                     value as "api-key" | "sigv4" | "iam",
+                    { shouldDirty: true },
                   )
                 }
               >
@@ -848,9 +859,9 @@ export function LlmProviderApiKeyForm({
               value={scope}
               options={visibilityOptions}
               onValueChange={(nextScope) => {
-                form.setValue("scope", nextScope);
+                form.setValue("scope", nextScope, { shouldDirty: true });
                 if (nextScope !== "team") {
-                  form.setValue("teamId", null);
+                  form.setValue("teamId", null, { shouldDirty: true });
                 }
               }}
             >
@@ -875,7 +886,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-api-key-team">Team</Label>
                   <Select
                     value={teamId ?? undefined}
-                    onValueChange={(value) => form.setValue("teamId", value)}
+                    onValueChange={(value) =>
+                      form.setValue("teamId", value, { shouldDirty: true })
+                    }
                     disabled={isPending || !canReadTeams || teams.length === 0}
                   >
                     <SelectTrigger
@@ -911,7 +924,7 @@ export function LlmProviderApiKeyForm({
                 id="llm-provider-api-key-is-primary"
                 checked={form.watch("isPrimary")}
                 onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked)
+                  form.setValue("isPrimary", checked, { shouldDirty: true })
                 }
                 disabled={isPending || Boolean(existingPrimaryKey)}
               />

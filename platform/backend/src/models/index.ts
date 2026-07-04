@@ -5,6 +5,7 @@ export { default as A2ATaskApprovalRequestModel } from "./a2a-task-approval-requ
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
+export { default as AgentExcludedToolModel } from "./agent-excluded-tool";
 export { default as AgentKnowledgeBaseModel } from "./agent-knowledge-base";
 export { default as AgentLabelModel } from "./agent-label";
 export { default as AgentTeamModel } from "./agent-team";
@@ -104,6 +105,7 @@ export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";
+export { default as UserOnboardingSeenItemModel } from "./user-onboarding-seen-item";
 export { default as UserTokenModel } from "./user-token";
 export { default as VerificationModel } from "./verification";
 export { default as VirtualApiKeyModel } from "./virtual-api-key";

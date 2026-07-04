@@ -318,6 +318,10 @@ class ModelModel {
           cacheReadPricePerToken: data.cacheReadPricePerToken,
           cacheWritePricePerToken: data.cacheWritePricePerToken,
           embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
+          // Display-only provider metadata (not user-editable): prefer the fresh
+          // synced value so changed Ollama defaults show up, keeping the last
+          // known value only when a sync omits it (e.g. a transient /api/show miss).
+          defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
           lastSyncedAt: new Date(),
           updatedAt: new Date(),
           // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -385,6 +389,10 @@ class ModelModel {
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
               cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`COALESCE(${schema.modelsTable.embeddingDimensions}, excluded.embedding_dimensions)`,
+              // Display-only provider metadata (not user-editable): prefer the
+              // fresh synced value so changed Ollama defaults show up, keeping
+              // the last known value only when a sync omits it.
+              defaultParameters: sql`COALESCE(excluded.default_parameters, ${schema.modelsTable.defaultParameters})`,
               lastSyncedAt: sql`excluded.last_synced_at`,
               updatedAt: sql`NOW()`,
               // NOTE: custom price overrides (input/output/cache) intentionally NOT updated
@@ -455,6 +463,7 @@ class ModelModel {
               cacheReadPricePerToken: sql`excluded.cache_read_price_per_token`,
               cacheWritePricePerToken: sql`excluded.cache_write_price_per_token`,
               embeddingDimensions: sql`excluded.embedding_dimensions`,
+              defaultParameters: sql`excluded.default_parameters`,
               customPricePerMillionInput: sql`NULL`,
               customPricePerMillionOutput: sql`NULL`,
               customPricePerMillionCacheRead: sql`NULL`,

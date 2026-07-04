@@ -6,6 +6,7 @@ import {
   isVaultReference,
   parseVaultReference,
 } from "@archestra/shared";
+import { parseArgumentsInput } from "./arguments-parser";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
@@ -34,13 +35,8 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    // Parse arguments string into array (supports one-per-line or JSON array)
+    const argumentsArray = parseArgumentsInput(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

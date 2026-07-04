@@ -968,6 +968,7 @@ describe("model router proxy routes", () => {
     });
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -1045,6 +1046,7 @@ describe("model router proxy routes", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Disabled Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],
@@ -1104,6 +1106,7 @@ describe("model router proxy routes", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: user.id,
       name: "Revoked Token Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [{ provider, providerApiKeyId: chatApiKey.id }],

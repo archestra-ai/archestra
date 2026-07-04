@@ -1,6 +1,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
+  asc,
   eq,
   ilike,
   inArray,
@@ -21,6 +22,7 @@ import type {
   InsertMcpServer,
   McpServer,
   ResourceVisibilityScope,
+  ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
@@ -202,6 +204,19 @@ class McpServerModel {
     return result.length > 0;
   }
 
+  /**
+   * When the first MCP server was connected; null when none exist. An
+   * activation signal for the feedback pop-up.
+   */
+  static async getFirstCreatedAt(): Promise<Date | null> {
+    const [row] = await db
+      .select({ createdAt: schema.mcpServersTable.createdAt })
+      .from(schema.mcpServersTable)
+      .orderBy(asc(schema.mcpServersTable.createdAt))
+      .limit(1);
+    return row?.createdAt ?? null;
+  }
+
   static async findAll(
     userId?: string,
     isMcpServerAdmin?: boolean,
@@ -352,6 +367,7 @@ class McpServerModel {
       mcpServerId: string;
       scope: ResourceVisibilityScope;
       serverName: string;
+      serverIcon: string | null;
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
@@ -387,6 +403,7 @@ class McpServerModel {
         mcpServerId: install.mcpServerId,
         scope: install.scope,
         serverName: app.serverName,
+        serverIcon: app.serverIcon,
         toolName: app.toolName,
         toolDescription: app.toolDescription,
         resourceUri: app.resourceUri,
@@ -397,10 +414,12 @@ class McpServerModel {
   /**
    * Validate that `mcpServerId` is an install the caller can reach and that it
    * exposes a `ui://` resource matching `resourceUri`, returning the catalog +
-   * label parts (server/tool names) for that resource. Backs external
-   * open-in-chat (a card's `(mcpServerId, resourceUri)` must resolve to a real,
-   * accessible UI resource before a conversation is seeded). Returns null when
-   * the install is not accessible or exposes no such resource.
+   * label parts (server/tool names) and the tool's input schema for that
+   * resource. Backs external open-in-chat (a card's `(mcpServerId,
+   * resourceUri)` must resolve to a real, accessible UI resource before a
+   * conversation is seeded; the input schema decides render-vs-prompt mode).
+   * Returns null when the install is not accessible or exposes no such
+   * resource.
    */
   static async findInstalledUiResourceForCaller(params: {
     userId: string;
@@ -411,6 +430,7 @@ class McpServerModel {
     serverName: string;
     toolName: string;
     resourceUri: string;
+    toolParameters: ToolParametersContent;
   } | null> {
     const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
       params.userId,
@@ -431,6 +451,7 @@ class McpServerModel {
       serverName: match.serverName,
       toolName: match.toolName,
       resourceUri: match.resourceUri,
+      toolParameters: match.toolParameters,
     };
   }
 
@@ -555,9 +576,11 @@ class McpServerModel {
     Array<{
       catalogId: string;
       serverName: string;
+      serverIcon: string | null;
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
+      toolParameters: ToolParametersContent;
     }>
   > {
     const { catalogIds, search } = params;
@@ -568,9 +591,11 @@ class McpServerModel {
       .select({
         catalogId: schema.internalMcpCatalogTable.id,
         serverName: schema.internalMcpCatalogTable.name,
+        serverIcon: schema.internalMcpCatalogTable.icon,
         toolName: schema.toolsTable.name,
         toolDescription: schema.toolsTable.description,
         resourceUri: uiResourceUri,
+        toolParameters: schema.toolsTable.parameters,
       })
       .from(schema.internalMcpCatalogTable)
       .innerJoin(
@@ -606,11 +631,13 @@ class McpServerModel {
               {
                 catalogId: row.catalogId,
                 serverName: row.serverName,
+                serverIcon: row.serverIcon,
                 // Strip the server prefix: catalog tools are stored as
                 // `<server>__<tool>`, but the card shows just the tool.
                 toolName: parseFullToolName(row.toolName).toolName,
                 toolDescription: row.toolDescription,
                 resourceUri: row.resourceUri,
+                toolParameters: row.toolParameters,
               },
             ]
           : [],

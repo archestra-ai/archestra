@@ -29,7 +29,7 @@ Open **Settings > Knowledge**. Both an embedding and a reranking model must be s
 
 Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
 
-- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 768, 1536, 3072.
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
 - **Model** — any embedding-capable model exposed by the selected key.
 
 To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync.

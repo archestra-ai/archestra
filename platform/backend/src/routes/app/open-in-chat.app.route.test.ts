@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import { MemberModel, MessageModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -10,13 +9,6 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  // Pin the apps flag per TEST, not per file: the shared setup restores the
-  // pristine config before and after every test, so a beforeAll-scoped
-  // mutation does not survive, and a file must never depend on worker state.
-  beforeEach(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
     const organization = await makeOrganization();
@@ -57,7 +49,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     return created.json().id;
   }
 
-  // Forks a new version (latestVersion 1 → 2), so the open-in-chat greeting fires.
+  // Forks a new version (latestVersion 1 → 2).
   async function editApp(appId: string): Promise<void> {
     const edited = await app.inject({
       method: "PATCH",
@@ -97,9 +89,10 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const part = message.content.parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
     expect(part.text).toContain(appName);
-    expect(part.text).toContain("Your connected MCP tools & servers");
-    expect(part.text).toContain("A private + shared data store");
-    expect(part.text).toContain("Built-in AI to summarize & generate");
+    expect(part.text).toContain("Want to change the app? Tell me how!");
+    expect(part.text).toContain(
+      "Want to use the app? Use the UI 👉, or ask me to!",
+    );
     return part.text;
   }
 
@@ -121,7 +114,7 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expectSeededGreeting(messages[1], "Notes");
   });
 
-  test("seeds only the render (no greeting) for a brand-new scaffold app", async () => {
+  test("seeds a render plus a greeting for a brand-new scaffold app", async () => {
     const appId = await createApp("Fresh");
 
     const res = await app.inject({
@@ -131,11 +124,12 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const { conversationId } = res.json();
 
     const messages = await MessageModel.findByConversation(conversationId);
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(expectSeededRender(messages[0])).toBe(appId);
+    expectSeededGreeting(messages[1], "Fresh");
   });
 
-  test("create with openInChat seeds only the render (still the scaffold)", async () => {
+  test("create with openInChat seeds a render plus a greeting", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -146,8 +140,9 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(conversationId).toBeTruthy();
 
     const messages = await MessageModel.findByConversation(conversationId);
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(expectSeededRender(messages[0])).toBe(id);
+    expectSeededGreeting(messages[1], "Inline");
   });
 
   test("the seeded greeting omits the app description", async () => {

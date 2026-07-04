@@ -30,6 +30,7 @@ import {
   createAnthropicTestClient,
   createGeminiTestClient,
   createOpenAiTestClient,
+  type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
 import { ApiError } from "@/types";
@@ -58,8 +59,7 @@ vi.mock("prom-client", () => ({
 
 // Mock tool-invocation to control policy evaluation results.
 // Default: evaluatePolicies → null (allow), matching the real behavior when no
-// policies exist in the DB. The global tool policy is read from the real
-// organization record (via OrganizationModel), so it is not mocked here.
+// policies exist in the DB.
 const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
 
 vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
@@ -110,7 +110,7 @@ import openAiProxyRoutes from "./routes/openai";
 describe("LLM Proxy Handler Prometheus Metrics", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: OpenAiStubOptions;
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -369,6 +369,40 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         }),
       );
     });
+
+    test("streaming failure before any usage persists an error interaction", async () => {
+      // A provider 400 (e.g. context length exceeded) rejects the stream before
+      // any chunk — the failure must still land in the interactions log so it
+      // shows up in LLM logs / session history.
+      openAiStubOptions.failStreamWithError =
+        "This endpoint's maximum context length is 262144 tokens. However, you requested about 285869 tokens";
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response).toMatchObject({
+        error: expect.stringContaining("maximum context length"),
+      });
+      expect(rows[0].inputTokens).toBe(0);
+      expect(rows[0].outputTokens).toBe(0);
+    });
   });
 
   describe("Anthropic", () => {
@@ -623,7 +657,7 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
 describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
-  let openAiStubOptions: { interruptAtChunk?: number };
+  let openAiStubOptions: OpenAiStubOptions;
   let anthropicStubOptions: {
     includeToolUse?: boolean;
     interruptAtChunk?: number;
@@ -682,6 +716,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool list_files was blocked",
         reason: "Tool invocation blocked: policy is configured to always block",
         blockedToolName: "list_files",
+        toolInput: {},
         allToolCallNames: ["list_files"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);
@@ -745,6 +780,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool list_files was blocked",
         reason: "blocked by policy",
         blockedToolName: "list_files",
+        toolInput: {},
         allToolCallNames: ["list_files"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);
@@ -797,6 +833,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         contentMessage: "Tool get_weather was blocked",
         reason: "Tool invocation blocked: always block",
         blockedToolName: "get_weather",
+        toolInput: {},
         allToolCallNames: ["get_weather"],
       };
       mockEvaluatePolicies.mockResolvedValue(blockResult);

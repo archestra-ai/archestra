@@ -2651,38 +2651,15 @@ describe("edit_file / delete_file", () => {
   });
 });
 
-describe("projects feature gating (search_files / save_file / my_file)", () => {
+describe("persistent-files tools follow the sandbox runtime flag", () => {
   const originalSandbox = config.skillsSandbox.enabled;
-  const originalProjects = config.projects.enabled;
-
-  beforeEach(() => {
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-  });
   afterAll(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = originalSandbox;
-    (config.projects as { enabled: boolean }).enabled = originalProjects;
   });
 
-  afterEach(() => {
-    (config.projects as { enabled: boolean }).enabled = originalProjects;
-    vi.restoreAllMocks();
-  });
-
-  test("tools/list hides the PFS tools when projects is off, keeps the rest", () => {
-    (config.projects as { enabled: boolean }).enabled = false;
-    const off = getArchestraMcpTools().map((tool) => tool.name);
-    expect(off).not.toContain(TOOL_SEARCH_FILES_FULL_NAME);
-    expect(off).not.toContain(TOOL_READ_FILE_FULL_NAME);
-    expect(off).not.toContain(TOOL_SAVE_FILE_FULL_NAME);
-    expect(off).not.toContain(TOOL_EDIT_FILE_FULL_NAME);
-    expect(off).not.toContain(TOOL_DELETE_FILE_FULL_NAME);
-    // the non-gated sandbox surface is still advertised
-    expect(off).toContain(TOOL_RUN_COMMAND_FULL_NAME);
-    expect(off).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
-    expect(off).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
-
-    (config.projects as { enabled: boolean }).enabled = true;
-    const on = getArchestraMcpTools().map((tool) => tool.name);
+  test("advertises the PFS tools alongside the runtime tools when the sandbox runtime is on", () => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    const names = getArchestraMcpTools().map((tool) => tool.name);
     for (const name of [
       TOOL_SEARCH_FILES_FULL_NAME,
       TOOL_READ_FILE_FULL_NAME,
@@ -2693,128 +2670,24 @@ describe("projects feature gating (search_files / save_file / my_file)", () => {
       TOOL_DOWNLOAD_FILE_FULL_NAME,
       TOOL_UPLOAD_FILE_FULL_NAME,
     ]) {
-      expect(on).toContain(name);
+      expect(names).toContain(name);
     }
   });
 
-  describe("with the runtime active", () => {
-    let context: ArchestraContext;
-    let userId: string;
-    let organizationId: string;
-    let agentId: string;
-
-    beforeEach(
-      async ({
-        makeAgent,
-        makeUser,
-        makeMember,
-        seedAndAssignArchestraTools,
-      }) => {
-        const agent = await makeAgent({ name: "Gate Agent" });
-        organizationId = agent.organizationId;
-        agentId = agent.id;
-        const user = await makeUser();
-        await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
-        userId = user.id;
-        await seedAndAssignArchestraTools(agent.id);
-        context = {
-          agent: { id: agent.id, name: agent.name },
-          agentId: agent.id,
-          organizationId,
-          userId,
-        };
-      },
-    );
-
-    test("execute refuses search_files / save_file with -32601 when off", async () => {
-      (config.projects as { enabled: boolean }).enabled = false;
-
-      await expect(
-        executeArchestraTool(TOOL_SEARCH_FILES_FULL_NAME, {}, context),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: expect.stringContaining(
-          `No tool named "${TOOL_SEARCH_FILES_FULL_NAME}" exists`,
-        ),
-      });
-
-      await expect(
-        executeArchestraTool(
-          TOOL_SAVE_FILE_FULL_NAME,
-          { filename: "x.txt", content: "hi" },
-          context,
-        ),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: expect.stringContaining(
-          `No tool named "${TOOL_SAVE_FILE_FULL_NAME}" exists`,
-        ),
-      });
-
-      await expect(
-        executeArchestraTool(
-          TOOL_EDIT_FILE_FULL_NAME,
-          {
-            id: "00000000-0000-0000-0000-000000000000",
-            old_string: "x",
-            new_string: "y",
-          },
-          context,
-        ),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: expect.stringContaining(
-          `No tool named "${TOOL_EDIT_FILE_FULL_NAME}" exists`,
-        ),
-      });
-
-      await expect(
-        executeArchestraTool(
-          TOOL_DELETE_FILE_FULL_NAME,
-          { id: "00000000-0000-0000-0000-000000000000" },
-          context,
-        ),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: expect.stringContaining(
-          `No tool named "${TOOL_DELETE_FILE_FULL_NAME}" exists`,
-        ),
-      });
-
-      await expect(
-        executeArchestraTool(
-          TOOL_READ_FILE_FULL_NAME,
-          { id: "00000000-0000-0000-0000-000000000000" },
-          context,
-        ),
-      ).rejects.toMatchObject({
-        code: -32601,
-        message: expect.stringContaining(
-          `No tool named "${TOOL_READ_FILE_FULL_NAME}" exists`,
-        ),
-      });
-    });
-
-    test("upload_file rejects the my_file source when projects is off", async () => {
-      (config.projects as { enabled: boolean }).enabled = false;
-      const conversation = await ConversationModel.create({
-        userId,
-        organizationId,
-        agentId,
-        title: "gate",
-      });
-      const spy = vi.spyOn(skillSandboxRuntimeService, "uploadFile");
-
-      const result = await executeArchestraTool(
-        TOOL_UPLOAD_FILE_FULL_NAME,
-        {
-          path: "x.txt",
-          source: { type: "my_file", filename: "anything.txt" },
-        },
-        { ...context, conversationId: conversation.id },
-      );
-      expect(result.isError).toBe(true);
-      expect(spy).not.toHaveBeenCalled();
-    });
+  test("hides every sandbox tool when the runtime is off", () => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    const names = getArchestraMcpTools().map((tool) => tool.name);
+    for (const name of [
+      TOOL_SEARCH_FILES_FULL_NAME,
+      TOOL_READ_FILE_FULL_NAME,
+      TOOL_SAVE_FILE_FULL_NAME,
+      TOOL_EDIT_FILE_FULL_NAME,
+      TOOL_DELETE_FILE_FULL_NAME,
+      TOOL_RUN_COMMAND_FULL_NAME,
+      TOOL_DOWNLOAD_FILE_FULL_NAME,
+      TOOL_UPLOAD_FILE_FULL_NAME,
+    ]) {
+      expect(names).not.toContain(name);
+    }
   });
 });

@@ -7,9 +7,13 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import {
+  evaluateSingleMcpToolInvocationPolicy,
+  policyBlockToToolError,
+} from "@/guardrails/tool-invocation";
 import logger from "@/logging";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import { ConversationEnabledToolModel } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
@@ -23,6 +27,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredToolErrorResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import {
@@ -189,12 +194,17 @@ async function visibleCandidates(params: {
     userId: context.userId,
     organizationId: context.organizationId,
   };
-  const assigned = await ToolModel.getMcpToolsByAgent(agentId);
+  // Per-agent exclusions (Auto-tool mode): an excluded tool must not be
+  // recovered from a short name, nor disclosed as a "did you mean" candidate.
+  // Loaded once and applied to the assigned + discoverable contributions.
+  const { tools: assigned, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
   const names = assigned.map((tool) => tool.name);
   if (await dynamicAccessContext(accessParams)) {
     const discoverable = await getUnassignedDiscoverableTools({
       ...accessParams,
       assignedToolNames: new Set(names),
+      exclusionSets,
     });
     names.push(...discoverable.map((tool) => tool.name));
   }
@@ -331,7 +341,13 @@ async function dispatchTool({
   // nothing is written to the agent. A miss on both means the tool does
   // not exist for this user: steer the model at search_tools. The set is
   // reused by the policy gate below so it is fetched only once.
-  const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  // Per-agent exclusions (Auto-tool mode, loaded once per dispatch): an
+  // assigned-but-excluded tool drops out of the assigned set here and the
+  // dynamic fallback refuses it too, so it resolves to "unavailable".
+  const { tools: assignedTools, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(
+      context.agentId,
+    );
   const assignedToolNames = new Set(assignedTools.map((tool) => tool.name));
   let availableTool: Tool | null = null;
   if (!assignedToolNames.has(resolvedName)) {
@@ -346,6 +362,7 @@ async function dispatchTool({
       agentId: context.agentId,
       userId: context.userId,
       organizationId: context.organizationId,
+      exclusionSets,
     });
     logger.info(
       {
@@ -379,9 +396,19 @@ async function dispatchTool({
     enabledToolNames: availableTool
       ? new Set([...assignedToolNames, resolvedName])
       : assignedToolNames,
+    // The dynamically-resolved All-mode row that will execute. The assigned case
+    // is resolved centrally via the execution resolver, so only the dynamic id
+    // is passed here. The id rides along on a block for the "Edit policy" modal
+    // (All-mode tools have no agent_tools row for the modal's lookup to find).
+    resolvedToolId: availableTool?.id,
   });
   if (policyBlock) {
-    return errorResult(policyBlock.refusalMessage);
+    // Attach the structured policy_denied error (in _meta + structuredContent)
+    // so clients parse the block without scraping the prose.
+    return structuredToolErrorResult({
+      error: policyBlockToToolError(policyBlock),
+      text: `Error: ${policyBlock.refusalMessage}`,
+    });
   }
 
   // Cheap structural pre-check against the target's stored schema. Runs only

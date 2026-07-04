@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { PassThrough } from "node:stream";
 import type { LocalConfigSchema } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -3392,6 +3393,166 @@ describe("K8sDeployment.deleteK8sService", () => {
   });
 });
 
+describe("K8sDeployment.createServiceForHttpServer (selector reconciliation)", () => {
+  function createK8sDeploymentWithMockedApi(
+    mockK8sApi: Partial<k8s.CoreV1Api>,
+  ): K8sDeployment {
+    const mockMcpServer = {
+      id: "new-server-id",
+      name: "test-server",
+      catalogId: "test-catalog-id",
+      secretId: null,
+      ownerId: null,
+      reinstallRequired: false,
+      localInstallationStatus: "idle",
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: mockK8sApi as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  type PrivateCreateService = {
+    createServiceForHttpServer: (
+      httpPort: number,
+      nodePort?: number,
+    ) => Promise<void>;
+  };
+
+  // Regression: a service whose selector still targets a stale mcp-server-id
+  // (left over after the server record was recreated with a new id) selects
+  // zero pods and gets no endpoints, so every read/connect fails. An existing
+  // service must be reconciled to the current id, not skipped.
+  test("reconciles an existing service's selector to the current mcp-server-id", async () => {
+    const mockRead = vi.fn().mockResolvedValue({}); // service already exists
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      readNamespacedService: mockRead,
+      patchNamespacedService: mockPatch,
+      createNamespacedService: mockCreate,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await (
+      k8sDeployment as unknown as PrivateCreateService
+    ).createServiceForHttpServer(8080);
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockPatch).toHaveBeenCalledTimes(1);
+    const patchArg = mockPatch.mock.calls[0][0] as {
+      name: string;
+      namespace: string;
+      body: {
+        metadata: { labels: Record<string, string> };
+        spec: { selector: Record<string, string> };
+      };
+    };
+    expect(patchArg.name).toBe("mcp-test-server-service");
+    expect(patchArg.namespace).toBe("default");
+    expect(patchArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+    expect(patchArg.body.metadata.labels["mcp-server-id"]).toBe(
+      "new-server-id",
+    );
+  });
+
+  test("creates the service when it does not yet exist", async () => {
+    const notFound = { statusCode: 404, message: "Service not found" };
+    const mockRead = vi.fn().mockRejectedValue(notFound);
+    const mockPatch = vi.fn().mockResolvedValue({});
+    const mockCreate = vi.fn().mockResolvedValue({});
+    const mockK8sApi = {
+      readNamespacedService: mockRead,
+      patchNamespacedService: mockPatch,
+      createNamespacedService: mockCreate,
+    };
+
+    const k8sDeployment = createK8sDeploymentWithMockedApi(mockK8sApi);
+    await (
+      k8sDeployment as unknown as PrivateCreateService
+    ).createServiceForHttpServer(8080);
+
+    expect(mockPatch).not.toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    const createArg = mockCreate.mock.calls[0][0] as {
+      body: { spec: { selector: Record<string, string> } };
+    };
+    expect(createArg.body.spec.selector["mcp-server-id"]).toBe("new-server-id");
+  });
+});
+
+describe("K8sDeployment multitenant selector stability", () => {
+  function make(
+    // biome-ignore lint/suspicious/noExplicitAny: minimal catalog mock for tests
+    catalogItem: any,
+  ): K8sDeployment {
+    const mcpServer = {
+      id: "install-abc-123",
+      name: "archestra-pm",
+      catalogId: "cat9999-0000-0000-0000-000000000000",
+      // biome-ignore lint/suspicious/noExplicitAny: mock server for tests
+    } as any as McpServer;
+    return new K8sDeployment({
+      mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem,
+    });
+  }
+  const localConfig: z.infer<typeof LocalConfigSchema> = {
+    command: "node",
+    arguments: ["server.js"],
+  };
+
+  // Multitenant catalogs share ONE catalog-named Deployment + Service across all
+  // installs. If the selector used the per-install id, two installs would fight
+  // over the shared resource and leave the Service with zero endpoints. The
+  // selector must be catalog-stable so every install reconciles to the same one.
+  test("multitenant: deployment selector + pod labels use the catalog id (not the per-install id)", () => {
+    const catalogItem = { multitenant: true, name: "Archestra PM" };
+    const spec = make(catalogItem).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    expect(spec.spec?.template.metadata?.labels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    // The name is catalog-derived too, so name and selector stay in lockstep.
+    expect(spec.metadata?.name).toContain("mcp-mt-cat9999-");
+  });
+
+  test("single-tenant (no catalog item): selector keeps the per-install id", () => {
+    const spec = make(null).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "install-abc-123",
+    );
+  });
+});
+
 describe("K8sDeployment.constructHttpServiceName", () => {
   function createK8sDeploymentForServiceName(
     serverName: string,
@@ -5950,6 +6111,113 @@ describe("K8sDeployment.streamLogs", () => {
     }
 
     expect(k8sLogMock).not.toHaveBeenCalled();
+  });
+
+  test("ready-poll does not accumulate abort listeners on the signal across iterations", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const ac = new AbortController();
+
+    // Pod never becomes Ready, so every 2s iteration takes the timeout path.
+    vi.spyOn(
+      deployment as unknown as {
+        findAnyPodForDeployment: () => Promise<k8s.V1Pod | undefined>;
+      },
+      "findAnyPodForDeployment",
+    ).mockResolvedValue(makePendingPod());
+
+    const out = new PassThrough();
+
+    vi.useFakeTimers();
+    try {
+      const done = (
+        deployment as unknown as {
+          pollAndStreamLogsWhenReady(
+            stream: NodeJS.WritableStream,
+            lines: number,
+            abortSignal?: AbortSignal,
+          ): Promise<void>;
+        }
+      ).pollAndStreamLogsWhenReady(out, 100, ac.signal);
+
+      const listenerCounts: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(2000);
+        listenerCounts.push(getEventListeners(ac.signal, "abort").length);
+      }
+      // Only the in-flight iteration may hold a listener; finished
+      // iterations must have removed theirs.
+      expect(Math.max(...listenerCounts)).toBeLessThanOrEqual(1);
+
+      ac.abort();
+      await vi.advanceTimersByTimeAsync(2000);
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(getEventListeners(ac.signal, "abort")).toHaveLength(0);
+  });
+});
+
+describe("K8sDeployment pod lookup fallbacks", () => {
+  test("findPodForDeployment fallback lists only app=mcp-server pods", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const deploymentName = (deployment as unknown as { deploymentName: string })
+      .deploymentName;
+
+    const listNamespacedPod = vi
+      .fn()
+      // lookup by mcp-server-id label finds no running pod
+      .mockResolvedValueOnce({ items: [] })
+      // multi-tenant fallback list
+      .mockResolvedValueOnce({
+        items: [
+          {
+            metadata: { name: `${deploymentName}-abc12` },
+            status: { phase: "Running" },
+          },
+        ],
+      });
+    (deployment as unknown as { k8sApi: k8s.CoreV1Api }).k8sApi = {
+      listNamespacedPod,
+    } as unknown as k8s.CoreV1Api;
+
+    await expect(deployment.hasRunningPod()).resolves.toBe(true);
+
+    expect(listNamespacedPod).toHaveBeenNthCalledWith(2, {
+      namespace: "default",
+      labelSelector: "app=mcp-server",
+    });
+  });
+
+  test("findAnyPodForDeployment fallback lists only app=mcp-server pods", async () => {
+    const deployment = createK8sDeploymentInstance();
+    const deploymentName = (deployment as unknown as { deploymentName: string })
+      .deploymentName;
+
+    const ownPod = {
+      metadata: { name: `${deploymentName}-xyz99` },
+      status: { phase: "Pending" },
+    };
+    const listNamespacedPod = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({ items: [ownPod] });
+    (deployment as unknown as { k8sApi: k8s.CoreV1Api }).k8sApi = {
+      listNamespacedPod,
+    } as unknown as k8s.CoreV1Api;
+
+    const pod = await (
+      deployment as unknown as {
+        findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined>;
+      }
+    ).findAnyPodForDeployment();
+
+    expect(pod?.metadata?.name).toBe(`${deploymentName}-xyz99`);
+    expect(listNamespacedPod).toHaveBeenNthCalledWith(2, {
+      namespace: "default",
+      labelSelector: "app=mcp-server",
+    });
   });
 });
 

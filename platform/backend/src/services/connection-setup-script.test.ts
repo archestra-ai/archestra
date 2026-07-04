@@ -205,6 +205,15 @@ describe("renderSetupScript", () => {
     expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.
     expect(script).toContain("python3 not found");
+    // Next steps name the exact command and server for the OAuth handshake.
+    expect(script).toContain("claude /mcp");
+    expect(script).toContain(`select "${MCP.serverName}"`);
+  });
+
+  test("claude-code (windows): next steps carry the same OAuth guidance", () => {
+    const script = renderSetupScript(fullContext("claude-code", "windows"));
+    expect(script).toContain("claude /mcp");
+    expect(script).toContain(`select "${MCP.serverName}"`);
   });
 
   test("claude-code bedrock: keeps the bearer token out of settings.json", () => {

@@ -23,12 +23,12 @@ import {
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
+import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import {
   type ChatMcpElicitationWriter,
   createChatMcpElicitationBridge,
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
-import config from "@/config";
 import {
   AppAccessModel,
   AppModel,
@@ -59,14 +59,6 @@ import {
 // with the canonical Map-backed fake from src/__mocks__/cache-manager.ts. The
 // bridge and refine_app (the SUT) are real.
 vi.mock("@/cache-manager");
-
-// App tools are only dispatchable when the feature is enabled.
-// Pin the apps flag per TEST, not per file: the shared setup restores the
-// pristine config before and after every test, so a beforeAll-scoped
-// mutation does not survive, and a file must never depend on worker state.
-beforeEach(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
 
 function structured(result: { structuredContent?: unknown }): any {
   return result.structuredContent;
@@ -1138,9 +1130,13 @@ describe("preview_app_tool", () => {
       makeUser,
       makeMember,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
-      const agent = await makeAgent({ name: "Preview Agent" });
+      const agent = await makeAgent({
+        name: "Preview Agent",
+        accessAllTools: true,
+      });
       organizationId = agent.organizationId;
       const user = await makeUser();
       await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -1153,6 +1149,7 @@ describe("preview_app_tool", () => {
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       toolName = `hf__search_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: toolName, catalogId: catalog.id });
 
@@ -1681,9 +1678,16 @@ describe("scaffold_app tools param", () => {
       makeUser,
       makeMember,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
-      const agent = await makeAgent({ name: "Tools Agent" });
+      // Dynamic access on: an unassigned tool is only assignable-by-name when the
+      // agent can discover it (mirrors search_tools), which needs the setting on
+      // and an accessible install of its catalog.
+      const agent = await makeAgent({
+        name: "Tools Agent",
+        accessAllTools: true,
+      });
       organizationId = agent.organizationId;
       const user = await makeUser();
       await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -1694,6 +1698,7 @@ describe("scaffold_app tools param", () => {
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       paperSearchName = `hf__paper_search_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: paperSearchName, catalogId: catalog.id });
     },
@@ -1759,6 +1764,123 @@ describe("scaffold_app tools param", () => {
     expect(created.isError).toBe(true);
     expect((created.content[0] as any).text).toContain("Unknown tool name");
   });
+
+  test("a duplicate tool name resolves to the canonical row, not an ambiguity error", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // A second installed catalog carries a tool with the SAME name — tools.name
+    // is unique only per catalog. The old path rejected this as "matches more
+    // than one installed tool"; it must now resolve to the one row discovery and
+    // the app runtime pick.
+    const catalog2 = await makeInternalMcpCatalog({ organizationId });
+    await makeMcpServer({ catalogId: catalog2.id, scope: "org" });
+    await makeTool({ name: paperSearchName, catalogId: catalog2.id });
+
+    const canonical = await resolveDynamicTool({
+      toolName: paperSearchName,
+      agentId: context.agent.id,
+      userId: context.userId,
+      organizationId,
+    });
+    expect(canonical).not.toBeNull();
+
+    const created = await scaffold({ name: "Dupes", tools: [paperSearchName] });
+    expect(created.isError).toBe(false);
+
+    const assignments = await AppToolModel.getAssignmentsForApp(
+      structured(created).id as string,
+    );
+    expect(assignments.map((a) => a.tool.id)).toEqual([canonical?.id]);
+  });
+
+  test("an assigned duplicate wins over a newer installed one, matching search_tools", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const dupName = `dup__tool_${crypto.randomUUID().slice(0, 8)}`;
+    // Assigned row, created first so it is the OLDER of the two duplicates.
+    const assignedCatalog = await makeInternalMcpCatalog({ organizationId });
+    await makeMcpServer({ catalogId: assignedCatalog.id, scope: "org" });
+    const assignedRow = await makeTool({
+      name: dupName,
+      catalogId: assignedCatalog.id,
+    });
+    await makeAgentTool(context.agent.id, assignedRow.id);
+    // Newer, unassigned duplicate in another installed catalog.
+    const newerCatalog = await makeInternalMcpCatalog({ organizationId });
+    await makeMcpServer({ catalogId: newerCatalog.id, scope: "org" });
+    await makeTool({ name: dupName, catalogId: newerCatalog.id });
+
+    const created = await scaffold({ name: "Assigned", tools: [dupName] });
+    expect(created.isError).toBe(false);
+    const assignments = await AppToolModel.getAssignmentsForApp(
+      structured(created).id as string,
+    );
+    // The assigned (older) row wins: search_tools ranks assigned before
+    // discoverable, and the app runtime executes the app-assigned row.
+    expect(assignments.map((a) => a.tool.id)).toEqual([assignedRow.id]);
+  });
+
+  test("a tool in a catalog with no accessible install is not assignable by name", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    // No install → not discoverable via search_tools, so not assignable by name
+    // either (the resolver matches what the user can actually reach and run).
+    const uninstalled = await makeInternalMcpCatalog({ organizationId });
+    const orphanName = `orphan__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: orphanName, catalogId: uninstalled.id });
+
+    const created = await scaffold({ name: "Orphan", tools: [orphanName] });
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
+
+  test("an unassigned, installed tool is not assignable when the agent lacks dynamic access", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Assignable-by-name == discoverable-by-this-agent: with "access all tools"
+    // off, an unassigned tool is invisible to search_tools, so it must not be
+    // assignable by name — even though its catalog is installed. (The by-id REST
+    // path stays as the unrestricted programmatic escape hatch.)
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      accessAllTools: false,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, strictAgent.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const strictContext = {
+      agent: { id: strictAgent.id, name: strictAgent.name },
+      organizationId: strictAgent.organizationId,
+      userId: user.id,
+    };
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: strictAgent.organizationId,
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    const gatedName = `gated__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: gatedName, catalogId: catalog.id });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Gated", tools: [gatedName] },
+      strictContext,
+    );
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
 });
 
 describe("set_app_tools", () => {
@@ -1773,9 +1895,13 @@ describe("set_app_tools", () => {
       makeUser,
       makeMember,
       makeInternalMcpCatalog,
+      makeMcpServer,
       makeTool,
     }) => {
-      const agent = await makeAgent({ name: "Set Tools Agent" });
+      const agent = await makeAgent({
+        name: "Set Tools Agent",
+        accessAllTools: true,
+      });
       organizationId = agent.organizationId;
       const user = await makeUser();
       userId = user.id;
@@ -1787,6 +1913,7 @@ describe("set_app_tools", () => {
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
       toolName = `acme__search_${crypto.randomUUID().slice(0, 8)}`;
       await makeTool({ name: toolName, catalogId: catalog.id });
     },
@@ -1843,6 +1970,7 @@ describe("set_app_tools", () => {
 
   test("resolves tools in the app's bound environment, not the org default", async ({
     makeInternalMcpCatalog,
+    makeMcpServer,
     makeTool,
     makeApp,
   }) => {
@@ -1854,6 +1982,7 @@ describe("set_app_tools", () => {
       organizationId,
       environmentId: env.id,
     });
+    await makeMcpServer({ catalogId: envCatalog.id, scope: "org" });
     const envToolName = `acme__env_${crypto.randomUUID().slice(0, 8)}`;
     await makeTool({ name: envToolName, catalogId: envCatalog.id });
 
@@ -2314,7 +2443,7 @@ describe("publish_app", () => {
     expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
-  test("publishing to a team requires teamIds", async ({
+  test("publishing to a team requires teams", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -2336,7 +2465,7 @@ describe("publish_app", () => {
 
     const result = await publish({ appId: app.id, scope: "team" }, context);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("team id");
+    expect((result.content[0] as any).text).toContain("at least one team");
   });
 
   test("an admin publishes to a team and assigns it", async ({
@@ -2364,12 +2493,172 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("team");
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an admin publishes to a team by its name instead of its id", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamName" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Growth Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Growth Team"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(structured(result).scope).toBe("team");
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("team names match case-insensitively when unambiguous", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamNameCI" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Platform",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["platform"] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("a name and the id of the same team dedupe to one assignment", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamDedupe" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(agent.organizationId, user.id, {
+      name: "Dedupe Team",
+    });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["Dedupe Team", team.id] },
+      context,
+    );
+    expect(result.isError).toBe(false);
+    expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([team.id]);
+  });
+
+  test("an ambiguous case-insensitive team name is rejected", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+    makeTeam,
+  }) => {
+    const agent = await makeAgent({ name: "Publish TeamAmbiguous" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    await makeTeam(orgId, user.id, { name: "Design" });
+    await makeTeam(orgId, user.id, { name: "design" });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["DESIGN"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("ambiguous");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
+  });
+
+  test("rejects a team name that does not exist in the org", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish UnknownName" });
+    const orgId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, orgId, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: orgId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: orgId,
+      userId: user.id,
+    };
+
+    const result = await publish(
+      { appId: app.id, scope: "team", teams: ["No Such Team"] },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Unknown team");
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
   // The source-scope gate: a team admin (editor) can see every org app but must
@@ -2396,7 +2685,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [team.id] },
+      { appId: app.id, scope: "team", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2405,7 +2694,7 @@ describe("publish_app", () => {
     expect(await AppAccessModel.getTeamsForApp(app.id)).toEqual([]);
   });
 
-  test("rejects teamIds when publishing to org scope", async ({
+  test("rejects teams when publishing to org scope", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -2429,7 +2718,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "org", teamIds: [team.id] },
+      { appId: app.id, scope: "org", teams: [team.id] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2457,7 +2746,7 @@ describe("publish_app", () => {
     };
 
     const result = await publish(
-      { appId: app.id, scope: "team", teamIds: [crypto.randomUUID()] },
+      { appId: app.id, scope: "team", teams: [crypto.randomUUID()] },
       context,
     );
     expect(result.isError).toBe(true);
@@ -2480,5 +2769,118 @@ describe("scaffoldPartialToolFailureResult", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).id).toBe(app.id);
     expect(structured(result).status).toBe("partial");
+  });
+});
+
+// Four handlers run an argument/context guard BEFORE loading the app. Pinning
+// that precedence: a missing appId paired with a bad secondary input must
+// surface the secondary guard's error, not "No app found" — so the guard keeps
+// its pre-load position.
+describe("pre-load guard precedence", () => {
+  const MISSING_APP_ID = "00000000-0000-4000-8000-000000000000";
+
+  async function adminContext(
+    makeAgent: any,
+    makeUser: any,
+    makeMember: any,
+  ): Promise<ArchestraContext> {
+    const agent = await makeAgent({ name: "Precedence Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    return {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+  }
+
+  test("edit_app: both edit modes on a missing app returns the mode error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const ctx = await adminContext(makeAgent, makeUser, makeMember);
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId: MISSING_APP_ID,
+        baseVersion: 1,
+        edits: [{ old_str: "a", new_str: "b" }],
+        replacementHtml: "<html><head></head></html>",
+      },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("either edits or replacementHtml");
+    expect(text).not.toContain("No app found");
+  });
+
+  test("publish_app: teams on org scope for a missing app returns the scope error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const ctx = await adminContext(makeAgent, makeUser, makeMember);
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      { appId: MISSING_APP_ID, scope: "org", teams: ["Whatever"] },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("teams is only valid");
+    expect(text).not.toContain("No app found");
+  });
+
+  test("preview_app_tool: no approval on a missing app returns the approval error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // The context deliberately omits approvalRequiredPoliciesHandled so the
+    // server-side approval backstop fires before the app is ever loaded.
+    const ctx = await adminContext(makeAgent, makeUser, makeMember);
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PREVIEW_APP_TOOL_SHORT_NAME),
+      { appId: MISSING_APP_ID, toolName: "some__tool" },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("requires human approval");
+    expect(text).not.toContain("No app found");
+  });
+
+  test("render_app: non-chat agent on a missing app returns the steer error", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    // A gateway dispatch carries an agentId; a non-"agent" type hits render_app's
+    // steer guard, which must win over the missing-app load.
+    const agent = await makeAgent({
+      name: "Gateway Agent",
+      agentType: "profile",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    };
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
+      { appId: MISSING_APP_ID },
+      ctx,
+    );
+    expect(res.isError).toBe(true);
+    const text = (res.content[0] as any).text as string;
+    expect(text).toContain("renders nothing");
+    expect(text).not.toContain("No app found");
   });
 });

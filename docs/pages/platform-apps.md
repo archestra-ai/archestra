@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-02
+lastUpdated: 2026-07-03
 ---
 
 <!--
@@ -13,8 +13,6 @@ Check ../docs_writer_prompt.md before changing this file.
 MCP Apps are interactive interfaces authored inside Archestra. An app is an HTML document that runs in a hardened sandbox iframe and talks to the host only through tools. Apps are first-class, scoped entities — created from chat or the `/apps` page, versioned on every edit, runnable standalone or inside a conversation, and governed by the same personal/team/org RBAC as agents and skills.
 
 Archestra already hosts and renders MCP Apps served by external MCP servers. This feature adds the authoring side: apps you own, backed by a data store and your own assignable tools, deliberately decoupled from agents.
-
-Ships behind `ARCHESTRA_APPS_ENABLED` (off by default). See [Deployment](./platform-deployment).
 
 ## Authoring and running
 
@@ -82,6 +80,10 @@ Tool calls run **as the viewing user**: the platform resolves the MCP server and
 ## Network lockdown
 
 Apps are MCP wrappers, and their CSP is not author-controlled: every owned app renders under one platform-pinned policy. Direct network access is blocked entirely (`connect-src 'none'`) — `fetch`, XHR, and WebSockets to external APIs fail, so assigned MCP tools (governed, authed, audited) are the only data egress. The single external allowance is static assets: scripts, styles, fonts, and images may load from a hardcoded CDN allowlist (`cdn.jsdelivr.net`, `unpkg.com`, `cdnjs.cloudflare.com`, `fonts.googleapis.com`, `fonts.gstatic.com`) so apps can use client-side libraries. Note the trust implication: a CDN-loaded script runs inside the app and can call its assigned tools as the viewer — prefer pinned versions of well-known packages. A future release may make the allowlist configurable per organization.
+
+## Device permissions
+
+An app can declare `camera`, `microphone`, `geolocation`, or `clipboardWrite` in its UI permissions to reach the matching browser API; each is delegated to the sandbox via Permissions-Policy and still prompts the viewer for consent at first use. These features require the sandbox to run on a dedicated origin (a configured sandbox domain, or the `localhost`/`127.0.0.1` split in local dev). On the same-origin fallback the sandbox is an opaque origin, which browsers cannot grant powerful features to, so these requests are blocked regardless of the declaration.
 
 ## Shared-app trust boundary
 

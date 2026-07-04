@@ -21,6 +21,7 @@ import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
@@ -45,6 +46,10 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  stripThinkingBlocks,
+  THINKING_ONLY_NOTICE,
+} from "@/utils/strip-thinking-blocks";
 import {
   type StageResult,
   stageAttachmentsIntoSandbox,
@@ -120,7 +125,7 @@ export interface A2AExecuteParams {
   chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
   /** Whether to block execution when an approval-required tool is called (defaults to true) */
@@ -380,6 +385,18 @@ export async function executeA2AMessage(
         outputLength: modelRow?.outputLength ?? null,
         ceiling: config.chat.maxOutputTokensCeiling,
       }),
+      // Per-step context guard: cap oversized tool results and keep the
+      // accumulated step history inside the model's context window, compacting
+      // the older prefix into an LLM summary when it overflows. Overrides only
+      // what each step sends to the model — the loop's own state (and the
+      // persisted/streamed UIMessage) keeps the full tool outputs.
+      prepareStep: createStepContextGuard({
+        model,
+        contextLength: modelRow?.contextLength ?? null,
+        systemPrompt,
+        abortSignal,
+        logContext: { agentId: agent.id, sessionId },
+      }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null
@@ -468,6 +485,24 @@ export async function executeA2AMessage(
         );
       }
 
+      // Strip inline `<thinking>...</thinking>` text from the model's output at
+      // this single A2A boundary, so every consumer (protocol reply, delegation
+      // tool result, email, scheduled-run persistence) shares the invariant.
+      // Text parts are stripped in place — an emptied part is kept (not removed)
+      // so a thinking-only turn never collapses to a zero-part assistant message,
+      // which some providers reject when the persisted history is replayed.
+      // Structured `reasoning` parts are left untouched: the A2A protocol reply
+      // excludes them (only text parts survive), and where they are surfaced
+      // (the scheduled-run chat view) they render via the chat's reasoning UI,
+      // exactly as interactive chat does — stripping them is out of scope here.
+      const hadTextBeforeStrip = finalText.trim() !== "";
+      finalText = stripThinkingBlocks(finalText);
+      for (const part of responseUiMessage.parts) {
+        if (part.type === "text") {
+          part.text = stripThinkingBlocks(part.text);
+        }
+      }
+
       // Surface this run's tool calls on the caller's conversation, attributed
       // to the delegation call that invoked this agent. Nested delegations'
       // tool calls are emitted by their own runs (which share this bridge), so
@@ -489,6 +524,22 @@ export async function executeA2AMessage(
         repeatTracker.hasReachedTerminationCeiling()
       ) {
         finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      } else if (hadTextBeforeStrip && finalText.trim() === "") {
+        // The whole textual answer was `<thinking>` and stripped to nothing.
+        // Substitute the notice in both the headless `text` and the message so
+        // the protocol reply / persistence (built from text parts) carries it.
+        finalText = THINKING_ONLY_NOTICE;
+        const firstTextPart = responseUiMessage.parts.find(
+          (p) => p.type === "text",
+        );
+        if (firstTextPart?.type === "text") {
+          firstTextPart.text = THINKING_ONLY_NOTICE;
+        } else {
+          responseUiMessage.parts.push({
+            type: "text",
+            text: THINKING_ONLY_NOTICE,
+          });
+        }
       }
     } catch (streamError) {
       const capturedStreamError = getCapturedStreamError();

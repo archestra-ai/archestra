@@ -144,6 +144,22 @@ vi.mock("@/components/chat/mcp-app-container", () => ({
       data-uri={props.uiResourceUri}
     />
   ),
+  McpAppEntryPill: (props: { appId?: string; toolName: string }) => (
+    <div
+      data-testid="mcp-app-pill"
+      data-app-id={props.appId ?? ""}
+      data-tool-name={props.toolName}
+    />
+  ),
+  // The content half carries the app-binding contract (uri + appId), so it
+  // keeps the mcp-app-section testid the binding assertions target.
+  McpAppEntryContent: (props: { uiResourceUri: string; appId?: string }) => (
+    <div
+      data-testid="mcp-app-section"
+      data-app-id={props.appId ?? ""}
+      data-uri={props.uiResourceUri}
+    />
+  ),
   McpToolOutput: null,
 }));
 
@@ -1596,6 +1612,70 @@ describe("owned-app inline rendering", () => {
       },
     });
     expect(screen.queryByTestId("mcp-app-section")).not.toBeInTheDocument();
+  });
+
+  it("app-binds an owned app opened via its __open launch tool (ui://archestra-app URI)", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-simple_todo__open",
+            toolCallId: "call-open-1",
+            state: "output-available",
+            input: {},
+            output: {
+              _meta: { ui: { resourceUri: `ui://archestra-app/${APP_ID}` } },
+            },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const section = screen.getByTestId("mcp-app-section");
+    expect(section).toHaveAttribute("data-app-id", APP_ID);
+    expect(section).toHaveAttribute("data-uri", `ui://archestra-app/${APP_ID}`);
+  });
+
+  it("does not app-bind an external MCP-UI render (non-owned-app URI)", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-excalidraw__draw",
+            toolCallId: "call-ext-1",
+            state: "output-available",
+            input: {},
+            output: { _meta: { ui: { resourceUri: "ui://excalidraw" } } },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        agentId="agent-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    const section = screen.getByTestId("mcp-app-section");
+    expect(section).toHaveAttribute("data-app-id", "");
+    expect(section).toHaveAttribute("data-uri", "ui://excalidraw");
   });
 
   // refine_app/validate_app return an app id but are not rendering tools: they

@@ -36,7 +36,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
-  llmOauthClient: ["read", "create", "update", "delete", "admin"],
+  llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -44,7 +44,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
-  mcpOauthClient: ["read", "create", "update", "delete", "admin"],
+  mcpOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
@@ -58,6 +58,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "admin"],
+  file: ["manage"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -101,7 +102,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
   llmProviderApiKey: ["read", "create", "update", "delete"],
   llmVirtualKey: ["read", "create", "update", "delete"],
-  llmOauthClient: ["read", "create", "update", "delete"],
+  llmOauthClient: ["read", "create", "update", "delete", "team-admin"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -109,7 +110,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
-  mcpOauthClient: ["read", "create", "update", "delete"],
+  mcpOauthClient: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
@@ -123,6 +124,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
+  file: ["manage"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -194,6 +196,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Other
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete"],
+  file: ["manage"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -292,7 +295,10 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
   "mcpOauthClient:update": "Modify MCP OAuth client registrations",
   "mcpOauthClient:delete": "Delete MCP OAuth client registrations",
-  "mcpOauthClient:admin": "Manage all MCP OAuth client registrations",
+  "mcpOauthClient:team-admin":
+    "Manage team assignments for MCP OAuth client registrations",
+  "mcpOauthClient:admin":
+    "Manage all MCP OAuth client registrations, bypassing team restrictions",
   "mcpGateway:admin":
     "Full administrative control over all MCP gateways, bypassing team restrictions",
   "toolPolicy:read":
@@ -352,7 +358,10 @@ export const permissionDescriptions: Record<string, string> = {
   "llmOauthClient:create": "Create LLM OAuth client registrations",
   "llmOauthClient:update": "Modify LLM OAuth client registrations",
   "llmOauthClient:delete": "Delete LLM OAuth client registrations",
-  "llmOauthClient:admin": "Manage all LLM OAuth client registrations",
+  "llmOauthClient:team-admin":
+    "Manage team assignments for LLM OAuth client registrations",
+  "llmOauthClient:admin":
+    "Manage all LLM OAuth client registrations, bypassing team restrictions",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update": "Modify LLM model pricing and modality settings",
   "llmLimit:read": "View token usage limits",
@@ -366,9 +375,9 @@ export const permissionDescriptions: Record<string, string> = {
   "llmSettings:read": "View LLM settings (compression, cleanup interval)",
   "llmSettings:update": "Modify LLM settings",
   "agentSettings:read":
-    "View agent settings (default model, default agent, security engine, file uploads)",
+    "View agent settings (default model, default agent, default tool guardrails, file uploads)",
   "agentSettings:update":
-    "Modify agent settings (default model, default agent, security engine, file uploads)",
+    "Modify agent settings (default model, default agent, default tool guardrails, file uploads)",
   "llmCost:read": "View LLM usage cost statistics and analytics",
 
   // Other
@@ -382,6 +391,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:delete": "Delete projects",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
+  "file:manage": "List, read, write, and delete files in chats and projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -486,6 +496,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
+  // Tool exclusions: agent-type read/update permission checked dynamically in handler
+  [RouteId.GetAgentToolExclusions]: {},
+  [RouteId.UpdateAgentToolExclusions]: {},
   [RouteId.GetDefaultMcpGateway]: {
     mcpGateway: ["read"],
   },
@@ -525,6 +538,9 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.RotateToken]: {
     team: ["read"],
+  },
+  [RouteId.GetTool]: {
+    toolPolicy: ["read"],
   },
   [RouteId.GetTools]: {
     toolPolicy: ["read"],
@@ -1156,6 +1172,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviderIdpLogoutUrl]: {},
 
   [RouteId.GetOnboardingStatus]: {}, // Onboarding status route - available to all authenticated users (no specific permissions required)
+  [RouteId.GetOnboardingSeenNavItems]: {}, // Per-user onboarding red-dot state - available to all authenticated users
+  [RouteId.MarkOnboardingNavItemsSeen]: {}, // Per-user onboarding red-dot state - available to all authenticated users
+  [RouteId.GetOnboardingSurveyEligibility]: {
+    organizationSettings: ["update"],
+  }, // First-login survey - admins only (same gate as appearance settings)
+  [RouteId.SubmitOnboardingSurvey]: { organizationSettings: ["update"] }, // First-login survey - admins only
+  [RouteId.GetFeedbackPopupActivation]: { organizationSettings: ["update"] }, // Feedback pop-up activation signal - admins only (the pop-up is admin-only)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
   [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
@@ -1354,18 +1377,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
-  // The file list is part of the PFS surface, so it requires the same
-  // `sandbox:execute` as the byte endpoint that serves these files
-  // (GetSkillSandboxArtifact) — otherwise a role could list files marked
-  // `downloadable` and then 403 on every fetch. Project membership is still
-  // enforced in the handler (projectService.listFiles -> requireReadable).
-  [RouteId.GetProjectFiles]: { project: ["read"], sandbox: ["execute"] },
-  // Uploading a project file mirrors how files are produced in a project today
-  // (a sandbox run writing a result), so it carries the same `sandbox:execute`
-  // as the list/byte surfaces. Project membership (owner/shared, not admin
-  // oversight) is enforced in the handler (projectService.uploadFile ->
-  // requireReadable).
-  [RouteId.UploadProjectFiles]: { project: ["read"], sandbox: ["execute"] },
+  // Project file surfaces combine project-level access with the files gate:
+  // `file:manage` covers the file operations, while project membership is
+  // still enforced in the handler (projectService.listFiles/uploadFile ->
+  // requireReadable). Note the artifact byte endpoint that serves file
+  // contents (GetSkillSandboxArtifact) stays on `sandbox:execute`.
+  [RouteId.GetProjectFiles]: { project: ["read"], file: ["manage"] },
+  [RouteId.UploadProjectFiles]: { project: ["read"], file: ["manage"] },
   // Instructions are plain project metadata (not a sandbox byte surface), so the
   // GET needs only project read — every project reader can see the instructions
   // that steer the project's chats. Editing is owner-only, enforced in the
@@ -1408,6 +1426,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },
+  // Per-user app pins (mirrors PinProject/UnpinProject): any viewer may pin —
+  // the handlers gate per-instance visibility; unpin is intentionally
+  // unchecked there so stale pins can always be cleared.
+  [RouteId.PinApp]: { app: ["read"] },
+  [RouteId.UnpinApp]: { app: ["read"] },
+  [RouteId.PinExternalApp]: { app: ["read"] },
+  [RouteId.UnpinExternalApp]: { app: ["read"] },
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
   [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },

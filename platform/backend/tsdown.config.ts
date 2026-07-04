@@ -144,6 +144,7 @@ export default defineConfig((options: UserConfig) => {
     // Bundle server and standalone scripts that need to run in production
     entry: [
       "src/server.ts",
+      "src/standalone-scripts/reset-user-password.ts",
       "src/standalone-scripts/vault-env-injector.ee.ts",
       "src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts",
     ],

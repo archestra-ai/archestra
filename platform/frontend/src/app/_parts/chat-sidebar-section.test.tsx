@@ -69,6 +69,16 @@ let mockProjects: Array<{
   pinnedAt: string | null;
 }> = [];
 
+// Apps-surface items (owned or external) for the sidebar's Pinned section.
+let mockApps: Array<{
+  source: "owned" | "external";
+  id?: string;
+  mcpServerId?: string;
+  resourceUri?: string;
+  name: string;
+  pinnedAt: string | null;
+}> = [];
+
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
     data: mockConversations,
@@ -96,6 +106,13 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  useApps: () => ({ data: { data: mockApps } }),
+  usePinApp: () => ({ mutate: vi.fn() }),
+  useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
+  useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("@/components/agent-icon", () => ({
@@ -265,6 +282,7 @@ describe("ChatSidebarSection", () => {
     vi.clearAllMocks();
     mockConversations = [];
     mockProjects = [];
+    mockApps = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });
@@ -425,6 +443,37 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
   });
 
+  it("shows pinned apps (owned and external) in the Pinned section", () => {
+    mockApps = [
+      {
+        source: "owned",
+        id: "app-1",
+        name: "Sprint Board",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        source: "external",
+        mcpServerId: "server-1",
+        resourceUri: "ui://pm/board.html",
+        name: "Archestra PM / show_board",
+        pinnedAt: "2026-01-04T00:00:00Z",
+      },
+      {
+        source: "owned",
+        id: "app-2",
+        name: "Unpinned App",
+        pinnedAt: null,
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("Sprint Board")).toBeInTheDocument();
+    expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
+    expect(screen.queryByText("Unpinned App")).not.toBeInTheDocument();
+  });
+
   it("shows a chat's project emoji and name when its project has an emoji", () => {
     mockConversations = [
       {
@@ -472,6 +521,7 @@ describe("ChatSidebarSection status indicators", () => {
     vi.clearAllMocks();
     mockConversations = [];
     mockProjects = [];
+    mockApps = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });

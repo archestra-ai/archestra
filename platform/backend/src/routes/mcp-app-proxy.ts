@@ -7,7 +7,6 @@ import QuickLRU from "quick-lru";
 import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
-import config from "@/config";
 import { AppModel } from "@/models";
 import {
   buildConnectorResourceUri,
@@ -57,11 +56,6 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // Ships dark: the endpoint does not exist until the feature is enabled.
-      if (!config.apps.enabled) {
-        throw new ApiError(404, "Not found");
-      }
-
       const { appId } = request.params as { appId: string };
       const body = request.body as Record<string, unknown>;
 

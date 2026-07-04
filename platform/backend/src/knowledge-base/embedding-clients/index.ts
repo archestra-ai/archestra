@@ -49,6 +49,13 @@ export async function callEmbedding(params: {
     return callAzureEmbedding(rest);
   }
 
+  if (provider === "ollama") {
+    // Ollama serves embedding models at their fixed native dimension and does
+    // not support the OpenAI `dimensions` truncation parameter; sending it is a
+    // no-op at best and can be rejected, so drop it for Ollama.
+    return callOpenAIEmbedding({ ...rest, dimensions: undefined });
+  }
+
   return callOpenAIEmbedding(rest);
 }
 

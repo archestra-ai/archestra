@@ -252,6 +252,58 @@ describe("normalizeJsonSchema", () => {
     expect(normalizeJsonSchema(schema)).toEqual({ type: "string" });
   });
 
+  test("gives untyped nodes an explicit type (Gemini/Vertex rejects untyped schema nodes)", () => {
+    // posthog__cohorts-partial-update shape: `query` is zod.unknown().nullable(),
+    // which serializes to a bare {} branch that Vertex 400s on — even behind
+    // OpenRouter when it routes the model to a Google-hosted deployment.
+    const schema = {
+      type: "object",
+      properties: {
+        query: { anyOf: [{}, { type: "null" }] },
+        payload: {},
+        config: { properties: { a: { type: "string" } } },
+        tags: { items: { type: "string" } },
+        mode: { enum: ["fast", "slow"] },
+        count: { enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+    };
+    expect(normalizeJsonSchema(schema)).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          anyOf: [
+            { type: "object", additionalProperties: true },
+            { type: "null" },
+          ],
+        },
+        payload: { type: "object", additionalProperties: true },
+        config: {
+          type: "object",
+          properties: { a: { type: "string" } },
+          additionalProperties: false,
+        },
+        tags: { type: "array", items: { type: "string" } },
+        mode: { type: "string", enum: ["fast", "slow"] },
+        count: { type: "integer", enum: [1, 2] },
+        linked: { $ref: "#/$defs/Thing" },
+      },
+      $defs: { Thing: { type: "string" } },
+      additionalProperties: false,
+    });
+  });
+
+  test("keeps a bare any-node open instead of clamping it with additionalProperties: false", () => {
+    const result = normalizeJsonSchema({
+      type: "object",
+      properties: { anything: {} },
+    });
+    expect(
+      (result.properties as Record<string, Record<string, unknown>>).anything,
+    ).toEqual({ type: "object", additionalProperties: true });
+  });
+
   test("does not mutate the original schema", () => {
     const schema = {
       type: "object",
@@ -428,6 +480,19 @@ describe("chat-mcp-client health check", () => {
     await chatClient.__test.clearToolCache(cacheKey);
   });
 
+  test("clears the ping timeout timer once ping settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const before = vi.getTimerCount();
+      await chatClient.__test.pingClientWithTimeout({
+        ping: () => Promise.resolve({}),
+      });
+      expect(vi.getTimerCount()).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("discards cached client when ping hangs past timeout", async ({
     makeAgent,
     makeUser,
@@ -545,7 +610,6 @@ describe("executeMcpTool error handling", () => {
     organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
-    globalToolPolicy: "permissive" as const,
     considerContextUntrusted: false,
   };
 
@@ -725,7 +789,6 @@ describe("executeMcpTool error handling", () => {
     const result = await toolBuilderTest.executeMcpTool({
       ...baseCtx,
       agentId: agent.id,
-      globalToolPolicy: "restrictive",
     });
 
     expect(result.unsafeContextBoundary).toMatchObject({
@@ -867,7 +930,7 @@ describe("chat-mcp-client tool caching", () => {
     makeToolPolicy,
     makeConversation,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
@@ -2425,12 +2488,6 @@ describe("throwIfApprovalRequired", () => {
   const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
     toolBuilderTest;
 
-  test("does not throw when globalToolPolicy is permissive", async () => {
-    await expect(
-      throwIfApprovalRequired("some-tool", {}, "permissive"),
-    ).resolves.toBeUndefined();
-  });
-
   test("does not throw when tool has no require_approval policy", async ({
     makeTool,
     makeToolPolicy,
@@ -2442,7 +2499,7 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired("allowed-tool", {}, "restrictive"),
+      throwIfApprovalRequired("allowed-tool", {}),
     ).resolves.toBeUndefined();
   });
 
@@ -2457,7 +2514,7 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired("restricted-tool", {}, "restrictive"),
+      throwIfApprovalRequired("restricted-tool", {}),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
@@ -2474,20 +2531,16 @@ describe("throwIfApprovalRequired", () => {
     });
 
     await expect(
-      throwIfApprovalRequired(
-        getArchestraToolFullName("run_tool"),
-        {
-          tool_name: tool.name,
-          tool_args: { destination: "external" },
-        },
-        "restrictive",
-      ),
+      throwIfApprovalRequired(getArchestraToolFullName("run_tool"), {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      }),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
   test("does not throw when tool is not found in DB", async () => {
     await expect(
-      throwIfApprovalRequired("nonexistent-tool", {}, "restrictive"),
+      throwIfApprovalRequired("nonexistent-tool", {}),
     ).resolves.toBeUndefined();
   });
 

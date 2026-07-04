@@ -21,6 +21,7 @@ export const actions = [
   "query",
   "execute",
   "deploy-to-restricted",
+  "manage",
 ] as const;
 
 export const resources = [
@@ -43,6 +44,7 @@ export const resources = [
   "githubAppConfig",
   "chat",
   "project",
+  "file",
   "llmCost",
   "llmLimit",
   "optimizationRule",
@@ -110,6 +112,7 @@ export const resourceLabels: Record<Resource, string> = {
   ac: "Roles",
   chat: "Chats",
   project: "Projects",
+  file: "Files",
   llmCost: "LLM Costs",
   llmLimit: "LLM Limits",
   optimizationRule: "Optimization Rules",
@@ -147,6 +150,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   log: "LLM proxy and MCP tool call logs",
   chat: "Chat conversations",
   project: "Projects — shared collections of chats with a result folder",
+  file: "Files produced and used in chats and projects",
   agentTrigger: "Agent triggers (Slack, MS Teams, incoming emails)",
   scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
@@ -156,7 +160,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmLimit: "LLM usage limits",
   llmSettings: "LLM settings (compression, cleanup interval)",
   agentSettings:
-    "Agent settings (default model, default agent, security engine, chat file uploads)",
+    "Agent settings (default model, default agent, default tool guardrails, chat file uploads)",
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
@@ -235,6 +239,7 @@ export const resourceCategories: Record<string, Resource[]> = {
   Other: [
     "chat",
     "project",
+    "file",
     "log",
     "simpleView",
     "chatAgentPicker",

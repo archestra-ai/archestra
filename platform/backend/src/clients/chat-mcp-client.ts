@@ -30,14 +30,13 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
-  OrganizationModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import type { GlobalToolPolicy } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -214,6 +213,7 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   filterToolsByEnabledIds,
+  pingClientWithTimeout,
 };
 
 /**
@@ -392,15 +392,31 @@ export function clearChatMcpClient(agentId: string): void {
     toolClearedCount++;
   }
 
+  // Clear cached MCP App UI resources for this agentId (keys are
+  // `${agentId}:${userId}:${uri}`) — e.g. a tool newly excluded from the
+  // agent's surface must not keep serving its cached app HTML until TTL.
+  let uiResourceClearedCount = 0;
+  const uiResourceKeysToDelete: string[] = [];
+  for (const key of uiResourceCache.keys()) {
+    if (key.startsWith(`${agentId}:`)) {
+      uiResourceKeysToDelete.push(key);
+    }
+  }
+  for (const key of uiResourceKeysToDelete) {
+    uiResourceCache.delete(key);
+    uiResourceClearedCount++;
+  }
+
   logger.info(
     {
       agentId,
       clientClearedCount,
       toolClearedCount,
+      uiResourceClearedCount,
       remainingCachedClients: clientCache.size,
       remainingCachedTools: toolCache.size,
     },
-    "Cleared MCP client and tool cache entries for agent",
+    "Cleared MCP client, tool, and UI resource cache entries for agent",
   );
 }
 
@@ -696,15 +712,20 @@ async function pingClientWithTimeout(
   client: Pick<Client, "ping">,
   timeoutMs = CLIENT_PING_TIMEOUT_MS,
 ): Promise<void> {
-  await Promise.race([
-    client.ping(),
-    new Promise<never>((_, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error(`Ping timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      timeout.unref?.();
-    }),
-  ]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.ping(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Ping timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+        timeout.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function shouldValidateCachedClient(cacheKey: string): boolean {
@@ -777,7 +798,7 @@ export async function getChatMcpTools({
   user?: { id: string; email?: string; name?: string };
   /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
   blockOnApprovalRequired?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
@@ -903,17 +924,13 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch globalToolPolicy for approval checks (needed for both chat and
-    // autonomous contexts) and the agent's + user's teams (for trace span
-    // attributes).
-    const [org, agent, teams, userTeams] = await Promise.all([
-      OrganizationModel.getById(organizationId),
+    // Fetch the agent (for its trust config) and the agent's + user's teams
+    // (for trace span attributes).
+    const [agent, teams, userTeams] = await Promise.all([
       AgentModel.findById(agentId),
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const globalToolPolicy: GlobalToolPolicy =
-      org?.globalToolPolicy ?? "permissive";
     const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
@@ -936,7 +953,6 @@ export async function getChatMcpTools({
       hookRunCollector,
       subagentToolStream,
       mcpGwToken,
-      globalToolPolicy,
       considerContextUntrusted,
       teams,
       userTeams,
@@ -1049,7 +1065,11 @@ export async function getChatMcpToolUiResourceUris(
   agentId: string,
 ): Promise<Record<string, string>> {
   try {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    // Per-agent exclusions (Auto-tool mode): an excluded tool must not emit a
+    // UI hint that would mount its app iframe. Empty (no-op) unless the
+    // agent's accessAllTools setting is on.
+    const { tools } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
     const result: Record<string, string> = {};
     for (const tool of tools) {
       const uriFromMeta = (

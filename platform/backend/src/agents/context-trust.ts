@@ -2,11 +2,7 @@ import type { ToolExecutionOptions } from "ai";
 import { evaluateIfContextIsTrusted } from "@/guardrails/trusted-data";
 import { AgentTeamModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
-import type {
-  CommonMessage,
-  GlobalToolPolicy,
-  UnsafeContextBoundary,
-} from "@/types";
+import type { CommonMessage, UnsafeContextBoundary } from "@/types";
 
 // === Exports ===
 
@@ -16,7 +12,6 @@ export async function evaluateToolExecutionContextTrust(params: {
   organizationId: string;
   userId: string;
   considerContextUntrusted: boolean;
-  globalToolPolicy: GlobalToolPolicy;
   policyContext: Omit<PolicyEvaluationContext, "teamIds">;
 }): Promise<{
   contextIsTrusted: boolean;
@@ -30,7 +25,6 @@ export async function evaluateToolExecutionContextTrust(params: {
     params.organizationId,
     params.userId,
     params.considerContextUntrusted,
-    params.globalToolPolicy,
     {
       ...params.policyContext,
       teamIds,

@@ -31,7 +31,7 @@ jobs:
 
       - name: Generate a token
         id: generate-token
-        uses: ./.github/actions/generate-release-token
+        uses: ./.github/actions/github-app-token
         with:
           app-id: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASE_FREEZE_CHECKER_GITHUB_APP_PRIVATE_KEY }}
@@ -43,16 +43,8 @@ jobs:
         run: |
           echo "Setting RELEASE_FREEZE to: $RELEASE_FREEZE_VALUE"
 
-          # Check if variable exists
-          if gh variable list | grep -q "^RELEASE_FREEZE"; then
-            # Update existing variable
-            gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
-            echo "✅ Updated RELEASE_FREEZE variable to: $RELEASE_FREEZE_VALUE"
-          else
-            # Create new variable
-            gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
-            echo "✅ Created RELEASE_FREEZE variable with value: $RELEASE_FREEZE_VALUE"
-          fi
+          gh variable set RELEASE_FREEZE --body "$RELEASE_FREEZE_VALUE"
+          echo "✅ RELEASE_FREEZE variable set to: $RELEASE_FREEZE_VALUE"
 
           if [ "$RELEASE_FREEZE_VALUE" = "true" ]; then
             echo ""

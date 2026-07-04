@@ -1415,7 +1415,7 @@ async function readAll(stream: ReadableStream<unknown>): Promise<unknown[]> {
 }
 
 // streamText result whose fullStream throws a context-length error on first read,
-// matching parseMaxInputTokens. Used to exercise the bounded context-trim retry.
+// matching parseContextLengthError. Used to exercise the bounded context-trim retry.
 function fakeContextLengthErrorResult() {
   return {
     fullStream: {

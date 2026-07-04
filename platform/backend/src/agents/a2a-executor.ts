@@ -228,6 +228,10 @@ export async function executeA2AMessage(
       },
       organizationId,
       userId,
+      // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
+      // the user driving the /chat model selector, so they resolve from the
+      // agent's own configuration rather than the caller's personal chat default.
+      includeMemberChatDefault: false,
     });
 
   // Track subagent execution so the browser preview can skip screenshots

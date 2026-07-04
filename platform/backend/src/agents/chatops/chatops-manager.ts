@@ -1642,10 +1642,10 @@ export class ChatOpsManager {
 
   /**
    * Best-effort description of the model/API key a chatops run resolved to,
-   * re-running the same deterministic resolution the execution used (chat
-   * selection defaults → agent's configured key → personal → team → org →
-   * environment). Returns null when anything fails — this runs on an error
-   * path and must never throw.
+   * re-running the same deterministic resolution the execution used (agent's
+   * configured model/key → org default → best-available; the acting user's
+   * /chat default is deliberately excluded, matching the A2A executor). Returns
+   * null when anything fails — this runs on an error path and must never throw.
    */
   private async describeLlmUsedForRun(params: {
     organizationId: string;
@@ -1661,6 +1661,7 @@ export class ChatOpsManager {
           agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
           organizationId: params.organizationId,
           userId: params.userId,
+          includeMemberChatDefault: false,
         });
 
       const userTeamIds = await TeamModel.getUserTeamIds(params.userId);

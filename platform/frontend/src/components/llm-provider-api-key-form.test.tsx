@@ -77,6 +77,12 @@ describe("LlmProviderApiKeyForm", () => {
     act(() => {
       form.setValue("apiKey", "sk-openai-secret");
       form.setValue("baseUrl", "https://openai.example");
+      form.setValue("inferenceBaseUrl", "https://openai.example/infer");
+      form.setValue("vaultSecretPath", "secret/openai");
+      form.setValue("vaultSecretKey", "api_key");
+      form.setValue("awsAccessKeyId", "AKIA-openai");
+      form.setValue("awsSecretAccessKey", "aws-secret");
+      form.setValue("awsSessionToken", "aws-session");
     });
     expect(form.getValues("apiKey")).toBe("sk-openai-secret");
 
@@ -86,8 +92,16 @@ describe("LlmProviderApiKeyForm", () => {
     });
 
     await waitFor(() => {
+      // Every provider-specific credential field must be cleared, not just the
+      // API key — the AWS/vault fields are the most sensitive to leak across.
       expect(form.getValues("apiKey")).toBeNull();
       expect(form.getValues("baseUrl")).toBeNull();
+      expect(form.getValues("inferenceBaseUrl")).toBeNull();
+      expect(form.getValues("vaultSecretPath")).toBeNull();
+      expect(form.getValues("vaultSecretKey")).toBeNull();
+      expect(form.getValues("awsAccessKeyId")).toBeNull();
+      expect(form.getValues("awsSecretAccessKey")).toBeNull();
+      expect(form.getValues("awsSessionToken")).toBeNull();
     });
   });
 

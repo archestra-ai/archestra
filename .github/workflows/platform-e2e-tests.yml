@@ -183,6 +183,34 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
+  # Fast-cancel the run when an image build fails. The shards deliberately have
+  # no `needs: [platform-e2e-build]` so they can set up in parallel with the
+  # build (see the shards job), and then poll the registry for the pushed image
+  # up to image-pull-timeout-seconds (900s). That overlap is a win when the build
+  # succeeds, but when it FAILS the shards would otherwise burn the full ~15-min
+  # poll deadline on a 16vcpu runner for an image that will never arrive. The
+  # merge is already blocked by the failed required "Build ... Image" check, so
+  # cancelling the run here only reclaims that wasted shard time — it changes no
+  # merge outcome. (quickstart already fast-fails: it `needs` the build and is
+  # skipped on failure. Only the poll-based shards need this.)
+  platform-e2e-cancel-on-build-failure:
+    name: Cancel E2E on build failure
+    needs: [platform-e2e-build]
+    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      actions: write # Required to cancel this workflow run.
+    steps:
+      - name: Cancel run so shards stop polling for an image that will never arrive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "An image build failed; cancelling run ${RUN_ID} so the e2e shards stop burning the image-pull deadline."
+          gh api --method POST "repos/${REPO}/actions/runs/${RUN_ID}/cancel"
+
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.

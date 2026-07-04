@@ -164,9 +164,14 @@ describe("ToolModel", () => {
       expect(a.length).toBeLessThanOrEqual(64);
     });
 
-    test("hard-caps at 64 when the raw tool name alone exceeds the limit", () => {
-      const result = ToolModel.slugifyName("srv", "z".repeat(70));
-      expect(result).toHaveLength(64);
+    test("hard-caps at 64 and keeps distinct over-long raw names unique", () => {
+      // Raw names longer than the cap can't fit in the slug; a hash suffix keeps
+      // two distinct ones from colliding (the real name lives in raw_name).
+      const a = ToolModel.slugifyName("srv", `${"z".repeat(65)}_alpha`);
+      const b = ToolModel.slugifyName("srv", `${"z".repeat(65)}_beta`);
+      expect(a).toHaveLength(64);
+      expect(b).toHaveLength(64);
+      expect(a).not.toBe(b);
     });
   });
 

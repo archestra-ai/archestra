@@ -47,10 +47,12 @@ const toolsTable = pgTable(
      * Archestra namespaces it into `name` (`<catalogName>__<rawName>`). Stored
      * so the exact upstream name is recovered at dispatch/re-sync without
      * splitting the (potentially truncated) slug — a raw name may itself contain
-     * "__", and long names truncate the slug's server-prefix. Null only for
-     * legacy rows created before this column and not yet re-synced, and for
-     * non-MCP rows (proxy-sniffed, delegation, built-ins); callers fall back to
-     * splitting `name` when null.
+     * "__", and long names truncate the slug's server-prefix. Populated on every
+     * write path going forward and backfilled for existing rows whose `name`
+     * contains "__" (including `agent__`/`archestra__` rows, where it is inert —
+     * only the upstream-MCP-call path reads it). Null for rows whose `name` has
+     * no separator or that predate the column and have not re-synced; dispatch
+     * and sync fall back to splitting `name` when null.
      */
     rawName: text("raw_name"),
     parameters: jsonb("parameters")

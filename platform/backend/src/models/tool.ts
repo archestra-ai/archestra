@@ -80,6 +80,19 @@ import TrustedDataPolicyModel from "./trusted-data-policy";
  */
 const MCP_TOOL_NAME_MAX_LENGTH = 64;
 
+/**
+ * Small deterministic hash (djb2, 8 hex chars) used only to disambiguate slugs
+ * that must be hard-truncated because the raw tool name alone exceeds the
+ * 64-char cap. Not security-sensitive.
+ */
+function shortSlugHash(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = (Math.imul(hash, 33) + value.charCodeAt(i)) | 0;
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 class ToolModel {
   /**
    * Slugify a tool name to get a unique name for the MCP server's tool.
@@ -115,13 +128,16 @@ class ToolModel {
     const prefixBudget = MCP_TOOL_NAME_MAX_LENGTH - suffix.length;
     if (prefixBudget < 1) {
       // The raw tool name alone exceeds the limit (an upstream name longer than
-      // the provider cap). It cannot be preserved within 64 chars; hard-cap and
-      // warn — such a tool may not round-trip to the upstream server.
+      // the provider cap). It cannot be kept in the slug — the exact name is
+      // still recovered from tools.raw_name at dispatch — so append a
+      // deterministic hash so two distinct over-long names on the same server
+      // can't collide on the (catalog_id, name) unique constraint.
       logger.warn(
         { mcpServerName, toolName, slugLength: slug.length },
-        "Tool name exceeds the 64-char limit and its raw name cannot be preserved; truncating",
+        "Tool name exceeds the 64-char limit; truncating (raw name preserved in raw_name)",
       );
-      return slug.slice(0, MCP_TOOL_NAME_MAX_LENGTH);
+      const hash = shortSlugHash(slug);
+      return `${slug.slice(0, MCP_TOOL_NAME_MAX_LENGTH - hash.length - 1)}-${hash}`;
     }
     return `${serverSlug.slice(0, prefixBudget)}${suffix}`;
   }

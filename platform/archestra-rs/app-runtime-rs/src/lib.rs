@@ -73,8 +73,7 @@ pub fn scan_app_html(html: String) -> napi::Result<AppHtmlScanResult> {
 /// Authoring-time lint of app HTML for the `validate_app` tool: hosts the
 /// pinned CSP would block, browser storage APIs the sandbox breaks, and
 /// `window.archestra` members the injected SDK does not expose. The caller
-/// owns the policy inputs (`config`) and composes the user-facing messages
-/// from the returned structured lists.
+/// owns the policy inputs and composes the user-facing messages.
 #[napi(js_name = "lintAppHtml")]
 pub fn lint_app_html(html: String, config: AppHtmlLintConfig) -> napi::Result<AppHtmlLintFindings> {
     std::panic::catch_unwind(move || {
@@ -196,15 +195,14 @@ pub struct AppHtmlScanResult {
 pub struct AppHtmlLintConfig {
     /// Bare hostnames `<script src>`/`<link href>` may point at (exact match).
     pub resource_host_allowlist: Vec<String>,
-    /// Members the injected `window.archestra` exposes at the top level.
+    /// Top-level members of the injected `window.archestra`.
     pub sdk_top_level_members: Vec<String>,
     /// Partitions of `archestra.storage`.
     pub sdk_storage_partitions: Vec<String>,
 }
 
-/// Structured lint findings; every list is deduplicated in first-seen
-/// document order. Empty when the HTML does not parse (the scan's
-/// `unparseable` rejection covers that case).
+/// Structured lint findings, deduplicated in first-seen document order.
+/// Empty when the HTML does not parse (the scan rejects that fail-closed).
 #[napi(object)]
 pub struct AppHtmlLintFindings {
     pub off_allowlist_hosts: Vec<String>,

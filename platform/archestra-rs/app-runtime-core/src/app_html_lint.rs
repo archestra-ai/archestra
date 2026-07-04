@@ -1,29 +1,15 @@
-//! Authoring-time lint of an owned app's HTML for the `validate_app` MCP tool.
-//! Ported from the regex helpers in `services/apps/app-ui-policy.ts`; the
-//! companion save-gate scan lives in `app_html`.
+//! Authoring-time lint of an owned app's HTML for the `validate_app` MCP tool
+//! (the save-gate scan lives in `app_html`). Soft hints only, never a
+//! rejection; the caller supplies the policy inputs and composes the
+//! user-facing messages. Deliberately lexical inside script text: aliasing,
+//! computed access, and dynamic names are out of scope.
 //!
-//! Everything here is a soft hint for the author, never a rejection: hosts the
-//! pinned CSP will block at render time, browser storage APIs the sandbox's
-//! opaque origin breaks, and `window.archestra` members the injected SDK does
-//! not expose. The caller supplies the policy inputs (CDN allowlist, SDK
-//! surface) and composes the user-facing messages; this module only reports
-//! structured findings. The lint stays lexical inside script text: aliasing
-//! (`const s = archestra.storage; s.get()`), computed access
-//! (`archestra["storage"]`), and dynamic names are out of scope by design.
-//!
-//! Resource refs are read from the same `tl` DOM the scan parses (unlike the
-//! TS predecessor's raw-text regexes): `src` is read on `<script>` and `href`
-//! on `<link>` as real attributes, and markup inside HTML comments is not
-//! scanned — matching what the browser resolves at render time. Unquoted URL
-//! attribute values stay a blind spot (`tl` drops such tags; the TS regex
-//! required quotes). Script TEXT, in contrast, is extracted lexically from
-//! the raw input, exactly as the TS predecessor did: browsers treat script
-//! content as raw text until the next `</script>`, while `tl` has no RAWTEXT
-//! mode — a bare `<` in ordinary JS (a comparison, a for-loop) would splinter
-//! the element in the DOM, both hiding real script text and leaking the rest
-//! of the document into it. If the HTML does not parse, the findings are
-//! empty: the scan already fails closed with an `unparseable` rejection, and
-//! lexical hints on unparseable input are noise.
+//! Resource refs come from the `tl` DOM (real `src`/`href` attributes; HTML
+//! comments not scanned), so unquoted URL values stay a blind spot — `tl`
+//! drops such tags. Script text comes from a raw-input extraction instead:
+//! `tl` has no RAWTEXT mode, so a bare `<` in ordinary JS would splinter the
+//! element in its DOM. Unparseable HTML yields empty findings; the scan
+//! already rejects it fail-closed.
 
 use std::sync::LazyLock;
 
@@ -32,20 +18,19 @@ use url::Url;
 
 use crate::app_html::{SCRIPT_BLOCK, resource_ref, tag_is};
 
-/// Policy inputs for the lint, owned by the TypeScript caller (single source of
-/// truth for the CDN allowlist and the injected-SDK surface lives there).
+/// Policy inputs for the lint; the TypeScript caller is the single source of
+/// truth for the CDN allowlist and the injected-SDK surface.
 #[derive(Clone, Debug)]
 pub struct LintConfig {
-    /// Bare hostnames `<script src>`/`<link href>` may point at (exact match,
-    /// mirroring CSP host-source semantics).
+    /// Bare hostnames `<script src>`/`<link href>` may point at (exact match).
     pub resource_host_allowlist: Vec<String>,
-    /// Members the injected `window.archestra` exposes at the top level.
+    /// Top-level members of the injected `window.archestra`.
     pub sdk_top_level_members: Vec<String>,
-    /// Partitions of `archestra.storage` (methods hang off a partition).
+    /// Partitions of `archestra.storage`.
     pub sdk_storage_partitions: Vec<String>,
 }
 
-/// Structured lint findings. Every list is deduplicated in first-seen document
+/// Structured lint findings, each list deduplicated in first-seen document
 /// order; the caller turns each non-empty list into one user-facing warning.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LintFindings {
@@ -53,11 +38,10 @@ pub struct LintFindings {
     pub off_allowlist_hosts: Vec<String>,
     /// Browser storage APIs (`localStorage`, …) referenced in script text.
     pub browser_storage_apis: Vec<String>,
-    /// `archestra.storage.<member>` accesses where `<member>` is no partition,
-    /// as full references (`archestra.storage.get`).
+    /// Full `archestra.storage.<member>` references where `<member>` is no
+    /// partition.
     pub storage_misuse: Vec<String>,
-    /// `archestra.<member>` accesses the SDK does not expose, as full
-    /// references (`archestra.tool`).
+    /// Full `archestra.<member>` references the SDK does not expose.
     pub unknown_top_level: Vec<String>,
 }
 
@@ -68,13 +52,10 @@ pub fn lint_app_html(html: &str, config: &LintConfig) -> LintFindings {
     };
     let mut findings = LintFindings::default();
 
-    // Script text: lexical raw-input extraction (see module docs on RAWTEXT).
     for block in SCRIPT_BLOCK.captures_iter(html) {
         lint_script_text(&block[1], config, &mut findings);
     }
 
-    // Resource refs: real DOM attributes, solidus-fused shapes recovered (see
-    // `tag_is`/`resource_ref` in `app_html`).
     for tag in dom.nodes().iter().filter_map(|node| node.as_tag()) {
         if tag_is(tag, "script") {
             if let Some(src) = resource_ref(tag, "src") {
@@ -89,11 +70,8 @@ pub fn lint_app_html(html: &str, config: &LintConfig) -> LintFindings {
     findings
 }
 
-// `\b`-anchored so `myarchestra.x` is not matched; `window.archestra.<member>`
-// still matches via its `archestra.<member>` substring. Member names use the
-// ASCII identifier class the TS predecessor used. (Rust `\b` is Unicode-aware
-// where JS's is ASCII, so a non-ASCII letter abutting `archestra` no longer
-// counts as a boundary — strictly fewer false positives.)
+// `\b`-anchored so `myarchestra.x` is not matched while `window.archestra.x`
+// still is (via its `archestra.x` substring).
 static ARCHESTRA_TOP_LEVEL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\barchestra\.([A-Za-z_$][0-9A-Za-z_$]*)").expect("static archestra member regex")
 });
@@ -110,11 +88,9 @@ static JS_BLOCK_COMMENT: LazyLock<Regex> =
 static JS_LINE_COMMENT: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"//[^\n]*").expect("static line comment regex"));
 
-// One script block's text against the storage-API and SDK-member lints. The
-// storage scan sees the raw text (a commented-out `localStorage` still warns,
-// as in the TS predecessor); the SDK-member scan is comment-stripped so a
-// documented counter-example (`// use archestra.storage.user.get, not .get`)
-// does not warn.
+// The storage scan sees raw script text (a commented-out `localStorage` still
+// warns); the SDK-member scan is comment-stripped so a documented
+// counter-example (`// not archestra.storage.get`) does not warn.
 fn lint_script_text(script: &str, config: &LintConfig, findings: &mut LintFindings) {
     for capture in BROWSER_STORAGE_API.captures_iter(script) {
         push_unique(&mut findings.browser_storage_apis, &capture[1]);
@@ -140,11 +116,9 @@ fn lint_script_text(script: &str, config: &LintConfig, findings: &mut LintFindin
     }
 }
 
-// Drop // line and /* */ block comments. Block comments collapse to a space so
-// a comment between tokens can never fuse two identifiers into a spurious
-// `archestra.*`. Only ever deletes spans, so it can miss a call literally
-// inside a comment-shaped string, never invent one; string literals are left
-// as-is (lexically unsafe to strip).
+// Block comments collapse to a space so a comment between tokens can never
+// fuse two identifiers; string literals are left as-is (lexically unsafe to
+// strip), so this can miss but never invent a reference.
 fn strip_js_comments(script: &str) -> String {
     let without_blocks = JS_BLOCK_COMMENT.replace_all(script, " ");
     JS_LINE_COMMENT
@@ -162,9 +136,8 @@ fn flag_off_allowlist_host(reference: &str, config: &LintConfig, findings: &mut 
 }
 
 // The host of an absolute or protocol-relative http(s) URL; `None` for
-// relative, data:, blob:, or otherwise host-less refs (which the resource CSP
-// ignores). The scheme is checked before parsing because `Url::parse` would
-// also accept slashless forms (`https:foo`) the CSP lint never meant to cover.
+// host-less refs the resource CSP ignores. The scheme prefix is checked before
+// parsing because `Url::parse` also accepts slashless forms (`https:foo`).
 fn external_host(reference: &str) -> Option<String> {
     let normalized = if reference.starts_with("//") {
         format!("https:{reference}")
@@ -183,7 +156,6 @@ fn external_host(reference: &str) -> Option<String> {
     Url::parse(&normalized).ok()?.host_str().map(str::to_owned)
 }
 
-// Findings lists are tiny (a handful of entries), so a linear scan beats a set.
 fn push_unique(list: &mut Vec<String>, value: &str) {
     if !list.iter().any(|existing| existing == value) {
         list.push(value.to_string());
@@ -263,9 +235,8 @@ mod tests {
 
     #[test]
     fn solidus_fused_attribute_is_recovered() {
-        // Browsers read `<script/src=…>`/`<link/href=…>` as ordinary elements
-        // (the solidus acts as attribute-separator whitespace); `tl` fuses the
-        // attribute name into the tag name. The lint must still see the ref.
+        // `<script/src=…>` is a script element to the browser; `tl` fuses the
+        // attribute into the tag name.
         let findings = lint(
             r#"<html><head><script/src="https://evil.example.com/a.js"></script><link/href="https://other.example.com/a.css"></head></html>"#,
         );
@@ -277,9 +248,8 @@ mod tests {
 
     #[test]
     fn bare_less_than_in_script_does_not_hide_script_text() {
-        // `tl` has no RAWTEXT mode, so in its DOM a `<` comparison splinters
-        // the script element; the lexical script-text extraction must still
-        // see everything up to `</script>`.
+        // A `<` comparison splinters the script element in `tl`'s DOM; the
+        // lexical extraction must still see everything up to `</script>`.
         let findings = lint(
             r#"<html><head><script>async function main() {
                 const items = await archestra.tools.call("x", {});
@@ -292,8 +262,7 @@ mod tests {
 
     #[test]
     fn bare_less_than_in_script_does_not_leak_following_prose_into_it() {
-        // The same `tl` misparse swallows the rest of the document as script
-        // children; prose after the script must still not warn.
+        // The same misparse swallows the rest of the document as script children.
         let findings = lint(
             "<html><head><script>if (a < b) { run(); }</script></head><body><p>This app does not use sessionStorage or archestra.storage.get.</p></body></html>",
         );
@@ -302,10 +271,8 @@ mod tests {
 
     #[test]
     fn unquoted_url_attribute_is_a_shared_blind_spot() {
-        // `tl` drops a tag whose unquoted attribute value contains `/`, so an
-        // unquoted URL ref is not seen — the same blind spot the TS regex had
-        // (it required a quoted value). Pinned so a `tl` upgrade that starts
-        // parsing these shows up as a deliberate behavior change.
+        // `tl` drops tags whose unquoted attribute value contains `/` (the TS
+        // regex required quotes too); pinned so a `tl` upgrade surfaces here.
         let findings =
             lint("<html><head><script src=https://evil.example.com/a.js></script></head></html>");
         assert_eq!(findings.off_allowlist_hosts, Vec::<String>::new());
@@ -313,8 +280,7 @@ mod tests {
 
     #[test]
     fn refs_inside_html_comments_are_not_scanned() {
-        // Behavior delta vs the TS regex: a commented-out tag never loads, so
-        // it does not warn.
+        // Delta vs the TS regex: a commented-out tag never loads.
         let findings = lint(
             r#"<html><head><!-- <script src="https://evil.example.com/a.js"></script> --></head></html>"#,
         );
@@ -323,8 +289,8 @@ mod tests {
 
     #[test]
     fn src_on_link_and_href_on_script_do_not_match() {
-        // Behavior delta vs the tag-agnostic TS regex: only the attribute the
-        // browser reads on each tag counts.
+        // Delta vs the tag-agnostic TS regex: only the attribute the browser
+        // reads on each tag counts.
         let findings = lint(
             r#"<html><head><link src="https://evil.example.com/a.css"><script href="https://evil.example.com/b.js"></script></head></html>"#,
         );
@@ -333,10 +299,8 @@ mod tests {
 
     #[test]
     fn host_comparison_uses_url_normalization() {
-        // Mixed-case hosts normalize to lowercase (so the allowlist matches);
-        // IDNA hosts normalize to punycode; IPv6 literals keep their brackets
-        // and a trailing-dot host stays distinct — none of those three match a
-        // bare-hostname allowlist.
+        // Case folds, IDNA → punycode; IPv6 brackets and trailing dots stay,
+        // so none of those match a bare-hostname allowlist.
         let findings = lint(
             r#"<html><head>
                 <script src="https://CDN.JSDELIVR.NET/npm/x.js"></script>
@@ -382,8 +346,7 @@ mod tests {
 
     #[test]
     fn browser_storage_scan_does_not_strip_js_comments() {
-        // Parity with the TS predecessor: the storage hint fires even on
-        // commented-out usage (only the SDK-member lint strips comments).
+        // TS parity: only the SDK-member lint strips comments.
         let findings = lint(
             "<html><head><script>// localStorage.getItem\nconst x = 1;</script></head></html>",
         );

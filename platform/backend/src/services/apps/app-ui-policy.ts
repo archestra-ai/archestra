@@ -134,17 +134,13 @@ type AppValidationFinding = {
 
 /**
  * Static, headless validation of an app's stored HTML for the `validate_app`
- * MCP tool. Reuses the save-time Rust scan (SDK self-bootstrap, platform-asset
- * self-loads, missing document root) — surfaced here as findings rather than a
- * thrown rejection so authoring tools can report them — and adds the authoring
- * lint, also Rust-backed (`lintAppHtml` in the app_runtime_core crate):
- * `<script src>`/`<link href>` hosts outside
- * {@link APP_PLATFORM_CSP_RESOURCE_DOMAINS} (which the served CSP blocks at
- * render time), browser storage APIs the sandbox breaks, and window.archestra
- * members the injected SDK does not expose. This module stays the single
- * source of truth for the policy inputs and the warning text; Rust returns
- * structured lists. It cannot exercise runtime behaviour; that gap is what the
- * live diagnostics round-trip covers.
+ * MCP tool: the save-time Rust scan (surfaced as findings rather than a thrown
+ * rejection) plus the Rust-backed authoring lint — off-allowlist
+ * `<script src>`/`<link href>` hosts, browser storage APIs the sandbox breaks,
+ * and window.archestra members the injected SDK does not expose. This module
+ * stays the single source of truth for the policy inputs and the warning text;
+ * Rust returns structured lists. It cannot exercise runtime behaviour; that
+ * gap is what the live diagnostics round-trip covers.
  */
 export async function validateAppHtmlStatic(
   html: string,

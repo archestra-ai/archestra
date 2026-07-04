@@ -12,16 +12,15 @@ export interface AppDiagnosticEntry {
 export interface AppHtmlLintConfig {
   /** Bare hostnames `<script src>`/`<link href>` may point at (exact match). */
   resourceHostAllowlist: Array<string>
-  /** Members the injected `window.archestra` exposes at the top level. */
+  /** Top-level members of the injected `window.archestra`. */
   sdkTopLevelMembers: Array<string>
   /** Partitions of `archestra.storage`. */
   sdkStoragePartitions: Array<string>
 }
 
 /**
- * Structured lint findings; every list is deduplicated in first-seen
- * document order. Empty when the HTML does not parse (the scan's
- * `unparseable` rejection covers that case).
+ * Structured lint findings, deduplicated in first-seen document order.
+ * Empty when the HTML does not parse (the scan rejects that fail-closed).
  */
 export interface AppHtmlLintFindings {
   offAllowlistHosts: Array<string>
@@ -81,8 +80,7 @@ export interface InlineAssets {
  * Authoring-time lint of app HTML for the `validate_app` tool: hosts the
  * pinned CSP would block, browser storage APIs the sandbox breaks, and
  * `window.archestra` members the injected SDK does not expose. The caller
- * owns the policy inputs (`config`) and composes the user-facing messages
- * from the returned structured lists.
+ * owns the policy inputs and composes the user-facing messages.
  */
 export declare function lintAppHtml(html: string, config: AppHtmlLintConfig): AppHtmlLintFindings
 

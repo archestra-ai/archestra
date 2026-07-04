@@ -7,15 +7,11 @@
 //! reports the first disqualifying construct (rejection) plus soft warnings.
 //! Parsing failures fail closed (a rejection), never a silent pass.
 //!
-//! Script TEXT is extracted lexically from the raw input, not from the `tl`
-//! DOM: browsers treat script content as raw text until the next `</script>`,
-//! while `tl` has no RAWTEXT mode — a bare `<` in ordinary JS would splinter
-//! the element and let a bootstrap marker slip past the gate. The lexical
-//! extraction also reads script blocks inside HTML comments; for a security
-//! gate that is the fail-closed direction (dead markup is trivially deleted).
-//! Attribute refs are read from the DOM, tolerant of `tl`'s solidus fusing
-//! (see `resource_ref`), with a lexical fallback pass for tag shapes `tl`
-//! drops outright.
+//! Script text is extracted lexically from the raw input, not the `tl` DOM
+//! (`tl` has no RAWTEXT mode; a bare `<` in ordinary JS would hide a marker
+//! from the gate). This also reads script blocks inside HTML comments —
+//! fail-closed for a gate. Attribute refs come from the DOM (see
+//! `resource_ref`), with a lexical fallback for tag shapes `tl` drops.
 
 use std::sync::LazyLock;
 
@@ -41,14 +37,11 @@ static HEAD_OR_HTML: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<(head|html)[\s>]").expect("static head/html probe regex"));
 
 // Raw-text src/href refs on script/link open tags, quoted (group 3) or
-// unquoted (group 4). Backstops the DOM loops in `scan_app_html` for tag
-// shapes `tl` drops; see the fallback step there. The attribute name must
-// follow a whitespace/solidus/quote boundary so `data-src` and friends do not
-// count. Deliberately regex-grade, not tokenizer-grade: markup crafted to
-// confuse it (a decoy `src=` inside another attribute's value, mixed quotes,
-// entity-spliced markers) can still slip this backstop — evading the gate only
-// breaks the author's own app, and the render-time CSP stays the real
-// security boundary.
+// unquoted (group 4); backstops the DOM loops for tag shapes `tl` drops. The
+// attribute name must follow a whitespace/solidus/quote boundary so `data-src`
+// does not count. Deliberately regex-grade: crafted markup (decoy `src=` in
+// another attribute's value, mixed quotes, entity-spliced markers) can still
+// slip it — the render-time CSP stays the real security boundary.
 static RESOURCE_REF_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?is)<(script|link)\b[^>]*?[\s/"'](src|href)\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#,
@@ -98,9 +91,8 @@ pub fn scan_app_html(html: &str) -> ScanResult {
 
     let tags = || dom.nodes().iter().filter_map(|node| node.as_tag());
 
-    // 1. SDK self-bootstrap inside <script> text — lexical raw-input
-    //    extraction (see module docs on RAWTEXT). Concatenate all script text,
-    //    then test markers in list order (mirrors the TS precedence).
+    // 1. SDK self-bootstrap inside <script> text. Markers are tested in list
+    //    order over the concatenated blocks (mirrors the TS precedence).
     let script_text: String = SCRIPT_BLOCK
         .captures_iter(html)
         .map(|block| block[1].to_string())
@@ -139,13 +131,9 @@ pub fn scan_app_html(html: &str) -> ScanResult {
         }
     }
 
-    // 4. Lexical fallback for self-load refs: `tl` drops some browser-loadable
-    //    tag shapes entirely (space-before-solidus `<script /src=…>`, unquoted
-    //    URL values containing `/`), so the DOM loops above cannot be the only
-    //    line of defence. Reads any src/href attribute (quoted or unquoted) on
-    //    a raw script/link open tag, honouring the browser's tag/attribute
-    //    pairing; extra matches this can add (e.g. inside HTML comments) are
-    //    fail-closed for a rejection gate.
+    // 4. Lexical fallback for self-load refs in tag shapes `tl` drops
+    //    entirely (`<script /src=…>`, unquoted URL values with `/`). Extra
+    //    matches this can add (e.g. inside HTML comments) are fail-closed.
     for capture in RESOURCE_REF_FALLBACK.captures_iter(html) {
         let tag_name = &capture[1];
         let attr_name = &capture[2];
@@ -183,18 +171,16 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     }
 }
 
-// A `<script>` block's raw text: everything between the open tag and the next
-// `</script>`, the same extraction the TS predecessor used and the closest
-// lexical approximation of the browser's RAWTEXT tokenization. Shared with the
-// authoring lint (`app_html_lint`), like the tag helpers below.
+// A `<script>` block's raw text, up to the next `</script>` — the closest
+// lexical approximation of the browser's RAWTEXT tokenization. Shared with
+// the authoring lint (`app_html_lint`), like the tag helpers below.
 pub(crate) static SCRIPT_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?is)<script\b[^>]*>(.*?)</script>").expect("static script block regex")
 });
 
-// Tag-name match tolerant of `tl`'s solidus fusing: browsers treat a solidus
-// inside a tag as attribute-separator whitespace (`<script/src=…>` is a script
-// element), while `tl` fuses it into the tag name (`script/src`) — compare only
-// the part before the first solidus.
+// Tag-name match tolerant of `tl`'s solidus fusing: `<script/src=…>` is a
+// script element to the browser, but `tl` parses the name as `script/src` —
+// compare only the part before the first solidus.
 pub(crate) fn tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
     let name = tag.name().as_utf8_str();
     name.split('/')
@@ -203,13 +189,10 @@ pub(crate) fn tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
         .eq_ignore_ascii_case(expected)
 }
 
-// An attribute ref, recovering the solidus-fused shape `tag_is` matches on:
-// `tl` parses `<script/src="u">` as tag `script/src` with the value under an
-// empty attribute key. A solidus after a space (`<script /src=…>`) makes `tl`
-// drop the tag entirely — the save gate backstops that with its lexical
-// fallback pass; for the authoring lint it stays a deliberate blind spot
-// alongside unquoted URL values (a soft hint keeps the comment-excluding DOM
-// semantics instead).
+// An attribute ref, recovering the solidus-fused shape `tag_is` matches on
+// (`tl` leaves the value under an empty attribute key there). `<script /src=…>`
+// makes `tl` drop the tag entirely — the save gate's lexical fallback covers
+// that; the authoring lint deliberately leaves it a blind spot.
 pub(crate) fn resource_ref(tag: &tl::HTMLTag, attr_name: &str) -> Option<String> {
     if let Some(value) = attr(tag, attr_name) {
         return Some(value);
@@ -353,9 +336,8 @@ mod tests {
 
     #[test]
     fn bare_less_than_before_a_marker_cannot_evade_the_bootstrap_rejection() {
-        // `tl` has no RAWTEXT mode, so in its DOM a `<` comparison splinters
-        // the script element and hides what follows; the lexical script-text
-        // extraction must still see the marker.
+        // A `<` comparison splinters the script element in `tl`'s DOM; the
+        // lexical extraction must still see the marker.
         let html = "<html><head><script>if (a < b) { const u = window.__ARCHESTRA_APP_SDK_URL__; }</script></head></html>";
         assert_eq!(
             scan_app_html(html).rejection.expect("should reject").kind,
@@ -365,8 +347,7 @@ mod tests {
 
     #[test]
     fn commented_out_bootstrap_script_fails_closed() {
-        // The lexical extraction reads script blocks inside HTML comments too;
-        // rejecting dead markup is the fail-closed direction for the gate.
+        // The lexical extraction reads script blocks inside HTML comments too.
         let html = "<html><head><!-- <script>PostMessageTransport</script> --></head></html>";
         assert_eq!(
             scan_app_html(html).rejection.expect("should reject").kind,
@@ -376,8 +357,6 @@ mod tests {
 
     #[test]
     fn solidus_fused_platform_self_loads_are_rejected() {
-        // Browsers read `<script/src=…>`/`<link/href=…>` as ordinary elements;
-        // the fused-name recovery must keep the gate closed to them.
         let script =
             r#"<html><head><script/src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
         let rejection = scan_app_html(script).rejection.expect("should reject");
@@ -392,9 +371,7 @@ mod tests {
 
     #[test]
     fn space_solidus_self_loads_are_rejected_via_the_lexical_fallback() {
-        // `tl` drops `<script /src=…>`/`<link /href=…>` tags entirely, while
-        // browsers read them as ordinary elements — the raw-text fallback must
-        // keep the gate closed to them.
+        // `tl` drops these tags entirely; browsers load them.
         let script =
             r#"<html><head><script /src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
         let rejection = scan_app_html(script).rejection.expect("should reject");
@@ -419,21 +396,17 @@ mod tests {
 
     #[test]
     fn data_src_metadata_is_not_treated_as_a_self_load() {
-        // `data-src` is authored metadata the browser never loads; the
-        // fallback's attribute-boundary requirement must not read its value as
-        // a real `src`.
+        // The browser never loads `data-src`; the fallback's attribute
+        // boundary must not read it as a real `src`.
         let html = r#"<html><head><script data-src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
         assert_eq!(scan_app_html(html).rejection, None);
     }
 
     #[test]
     fn marker_after_a_gt_inside_a_script_attribute_fails_closed() {
-        // The lexical script-text extraction ends the open tag at the first
-        // `>`, even inside a quoted attribute, so a marker written after it is
-        // read as script text and rejects — although the browser sees an empty
-        // script body. Deliberate: a quote-aware pattern would go fail-open on
-        // unterminated quotes, and marker strings inside attribute values do
-        // not occur in legitimate apps.
+        // The lexical extraction ends the open tag at the first `>` even
+        // inside a quoted attribute. Deliberate: a quote-aware pattern would
+        // go fail-open on unterminated quotes, which is worse for a gate.
         let html =
             r#"<html><head><script data-note=">PostMessageTransport"></script></head></html>"#;
         assert_eq!(

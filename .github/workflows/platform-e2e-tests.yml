@@ -148,16 +148,23 @@ jobs:
           TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
           echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          # Default to a build; only skip it if we actually land the reused image
+          # on the SHA tag. A missing/just-pruned tree tag or a transient registry
+          # error then falls back to building instead of failing the required gate.
+          REUSE=false
           if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1; then
-            echo "Reusing cached platform image for tree ${TREE_HASH}"
+            echo "Found cached platform image for tree ${TREE_HASH}; copying to ${SHA_TAG}"
             # Registry-side manifest copy (no layer pull/push) onto the SHA tag
             # the shards pull. Seconds, versus the ~85-226s build it replaces.
-            docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"
-            echo "reuse=true" >> "${GITHUB_OUTPUT}"
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"; then
+              REUSE=true
+            else
+              echo "::warning::reuse retag failed (tree tag may have just been pruned); building instead"
+            fi
           else
             echo "No cached image for platform tree ${TREE_HASH}; building."
-            echo "reuse=false" >> "${GITHUB_OUTPUT}"
           fi
+          echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
       - name: Build Platform image and push to Artifact Registry
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}

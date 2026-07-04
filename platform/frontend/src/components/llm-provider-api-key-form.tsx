@@ -631,6 +631,7 @@ export function LlmProviderApiKeyForm({
                   form.setValue(
                     "bedrockAuthMethod",
                     value as "api-key" | "sigv4" | "iam",
+                    { shouldDirty: true },
                   )
                 }
               >

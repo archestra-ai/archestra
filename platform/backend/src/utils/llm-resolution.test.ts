@@ -369,6 +369,75 @@ describe("resolveConversationLlmSelectionForAgent", () => {
     });
   });
 
+  test("uses the member's /chat default over the agent's model by default", async () => {
+    vi.spyOn(MemberModel, "getByUserId").mockResolvedValue({
+      defaultModelId: "m-member",
+      defaultChatApiKeyId: "key-member",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-member") {
+        return mockModel({
+          id: "m-member",
+          modelId: "gpt-4o",
+          provider: "openai",
+        });
+      }
+      if (id === "m-agent") {
+        return mockModel({
+          id: "m-agent",
+          modelId: "claude-3-5-sonnet",
+          provider: "anthropic",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "key-anthropic", modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    expect(result.modelId).toBe("m-member");
+    expect(result.chatApiKeyId).toBe("key-member");
+    expect(result.selectedModel).toBe("gpt-4o");
+  });
+
+  test("includeMemberChatDefault:false skips the member /chat default and falls to the agent's model", async () => {
+    vi.spyOn(MemberModel, "getByUserId").mockResolvedValue({
+      defaultModelId: "m-member",
+      defaultChatApiKeyId: "key-member",
+    } as never);
+    vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
+      if (id === "m-member") {
+        return mockModel({
+          id: "m-member",
+          modelId: "gpt-4o",
+          provider: "openai",
+        });
+      }
+      if (id === "m-agent") {
+        return mockModel({
+          id: "m-agent",
+          modelId: "claude-3-5-sonnet",
+          provider: "anthropic",
+        });
+      }
+      return null;
+    });
+
+    const result = await resolveConversationLlmSelectionForAgent({
+      agent: { llmApiKeyId: "key-anthropic", modelId: "m-agent" },
+      organizationId: "org-1",
+      userId: "user-1",
+      includeMemberChatDefault: false,
+    });
+
+    expect(result.modelId).toBe("m-agent");
+    expect(result.chatApiKeyId).toBe("key-anthropic");
+    expect(result.selectedModel).toBe("claude-3-5-sonnet");
+  });
+
   test("an explicit (model, key) pick overrides the agent model", async () => {
     vi.spyOn(ModelModel, "findById").mockImplementation(async (id) => {
       if (id === "m-explicit") {

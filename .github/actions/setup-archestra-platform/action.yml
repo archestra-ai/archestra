@@ -181,9 +181,78 @@ runs:
         fi
         echo "All MCP dependency images fetched successfully"
 
-    # Deliberately placed AFTER the Kind cluster and MCP dependency image setup:
-    # everything above is independent of the platform image, so when the caller
-    # starts this action while the platform image build is still running (see
+    # Deploy the platform-image-INDEPENDENT e2e dependency stack (Vault,
+    # Keycloak, WireMock, MCP servers) HERE — before the platform image wait
+    # below — so it comes up while the image build is still running instead of
+    # adding to the merge-queue critical path after. The dependency images were
+    # just pulled into the daemon above, so load them into Kind and install the
+    # chart now. Vault in particular gates the platform pod (its vault-secrets
+    # init container), so having it Ready before the platform chart installs
+    # shortens the post-build path.
+    #
+    # Only the foreground+deps path (the merge-queue shards) takes this branch;
+    # the "background" install mode keeps deploying inside "Deploy with Helm"
+    # (see below), and "Load all images into Kind" / "Deploy with Helm" both
+    # skip the dependency work they would otherwise repeat for this path.
+    - name: Deploy e2e dependencies (overlaps platform image build)
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
+      shell: bash
+      env:
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        E2E_DEPS_EXTRA_HELM_SET: ${{ inputs.e2e-dependencies-extra-helm-set }}
+        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
+      run: |
+        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+
+        echo "Loading MCP dependency images into Kind (parallel)..."
+        PIDS=()
+        for img in "${MCP_OAUTH_IMAGE}" "${MCP_JWKS_IMAGE}" "${MCP_ID_JAG_IMAGE}"; do
+          kind load docker-image "${img}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        done
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then FAILED=1; fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more MCP dependency image loads into Kind failed"
+          exit 1
+        fi
+
+        # Build --set flags from comma-separated pairs (mirrors "Deploy with Helm").
+        E2E_DEPS_SET_FLAGS=""
+        if [ -n "${E2E_DEPS_EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${E2E_DEPS_EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            E2E_DEPS_SET_FLAGS="${E2E_DEPS_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
+        echo "Installing e2e-tests chart (overlapping the platform image build)..."
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
+
+        if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+          echo "Waiting for Vault pod before platform deploy..."
+          if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+            echo "=== Vault Pod Status ==="
+            kubectl get pods -l app=vault -o wide || true
+            echo "=== Vault Pod Describe ==="
+            kubectl describe pod -l app=vault || true
+            echo "=== Vault Pod Logs ==="
+            kubectl logs -l app=vault --tail=200 || true
+            echo "=== Vault Pod Previous Logs ==="
+            kubectl logs -l app=vault --previous --tail=200 || true
+            exit 1
+          fi
+        fi
+
+    # Deliberately placed AFTER the Kind cluster, MCP dependency image setup, and
+    # (for the merge-queue shards) the e2e dependency deploy above: everything
+    # there is independent of the platform image, so when the caller starts this
+    # action while the platform image build is still running (see
     # image-pull-timeout-seconds), that work overlaps with the build and the
     # wait below only covers whatever build time is actually left.
     - name: Wait for and pull images (if not already present)
@@ -243,6 +312,7 @@ runs:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_INSTALL_MODE: ${{ inputs.e2e-dependencies-install-mode }}
       run: |
         PIDS=()
 
@@ -256,7 +326,10 @@ runs:
           PIDS+=($!)
         fi
 
-        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+        # The foreground path already loaded the MCP dependency images into Kind
+        # in "Deploy e2e dependencies (overlaps platform image build)" above, so
+        # only the background path needs to load them here.
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ] && [ "${E2E_DEPS_INSTALL_MODE}" != "foreground" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
           MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
@@ -339,15 +412,10 @@ runs:
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           if [ "${E2E_DEPS_INSTALL_MODE}" = "foreground" ]; then
-            echo "Installing e2e-tests chart before platform deploy..."
-            install_e2e_dependencies
-            if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
-              echo "Waiting for Vault pod before platform deploy..."
-              if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
-                show_vault_diagnostics
-                exit 1
-              fi
-            fi
+            # Already installed (and Vault already waited on) in the earlier
+            # "Deploy e2e dependencies (overlaps platform image build)" step, so
+            # the release exists before we get here — nothing to do.
+            echo "e2e-tests chart already deployed earlier (overlapped the image build); skipping."
           else
             echo "Starting e2e-tests Helm install in background..."
             install_e2e_dependencies &

@@ -521,6 +521,9 @@ export function LlmProviderApiKeyForm({
     form.setValue("awsAccessKeyId", null);
     form.setValue("awsSecretAccessKey", null);
     form.setValue("awsSessionToken", null);
+    // Reset the Bedrock auth method too: a stale "iam" would otherwise keep the
+    // API key input hidden after switching to a non-Bedrock provider.
+    form.setValue("bedrockAuthMethod", "api-key");
   }, [form, isEditMode, provider]);
 
   const vaultSecretSelector =

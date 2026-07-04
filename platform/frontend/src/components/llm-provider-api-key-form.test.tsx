@@ -91,6 +91,30 @@ describe("LlmProviderApiKeyForm", () => {
     });
   });
 
+  it("resets a stale Bedrock auth method when leaving Bedrock", async () => {
+    renderForm();
+
+    act(() => {
+      form.setValue("provider", "bedrock");
+    });
+    // Set IAM only after the bedrock switch settles, so the switch effect
+    // doesn't clobber it first.
+    act(() => {
+      form.setValue("bedrockAuthMethod", "iam");
+    });
+    expect(form.getValues("bedrockAuthMethod")).toBe("iam");
+
+    // A stale "iam" would hide the API key input on the next provider, so
+    // leaving Bedrock must restore the default auth method.
+    act(() => {
+      form.setValue("provider", "anthropic");
+    });
+
+    await waitFor(() => {
+      expect(form.getValues("bedrockAuthMethod")).toBe("api-key");
+    });
+  });
+
   it("keeps the credential when the provider is unchanged", async () => {
     renderForm();
 

@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { providerDisplayNames } from "@archestra/shared";
+import {
+  providerDisplayNames,
+  type ResourceVisibilityScope,
+} from "@archestra/shared";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
@@ -1687,7 +1690,7 @@ export class ChatOpsManager {
       const providerLabel =
         providerDisplayNames[selectedProvider] ?? selectedProvider;
       const keyDescription = key
-        ? `the ${LLM_KEY_SCOPE_LABELS[key.scope] ?? key.scope} ${providerLabel} API key "${key.name}"`
+        ? `the ${LLM_KEY_SCOPE_LABELS[key.scope]} ${providerLabel} API key "${key.name}"`
         : `the ${providerLabel} API key from the server environment`;
       return `This request used ${keyDescription} with model \`${selectedModel}\`.`;
     } catch (error) {
@@ -2167,7 +2170,7 @@ export const chatOpsManager = new ChatOpsManager();
 // =============================================================================
 
 /** User-facing label for an LLM provider API key's visibility scope. */
-const LLM_KEY_SCOPE_LABELS: Record<string, string> = {
+const LLM_KEY_SCOPE_LABELS: Record<ResourceVisibilityScope, string> = {
   personal: "personal",
   team: "team",
   org: "organization-wide",

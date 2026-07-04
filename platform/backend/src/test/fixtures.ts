@@ -368,12 +368,22 @@ async function makeTool(
   overrides: Partial<
     Pick<
       Tool,
-      "name" | "description" | "parameters" | "catalogId" | "agentId" | "meta"
+      | "name"
+      | "rawName"
+      | "description"
+      | "parameters"
+      | "catalogId"
+      | "agentId"
+      | "meta"
     >
   > = {},
 ): Promise<Tool> {
+  const name =
+    overrides.name ?? `test-tool-${crypto.randomUUID().substring(0, 8)}`;
   const toolData = {
-    name: `test-tool-${crypto.randomUUID().substring(0, 8)}`,
+    name,
+    // Mirror production: catalog-backed tools carry the raw upstream name.
+    rawName: ToolModel.unslugifyName(name),
     description: "Test tool description",
     parameters: {},
     ...overrides,

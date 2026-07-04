@@ -173,7 +173,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
     title: "Bulk Remove Tools from Agents",
     description:
-      "Remove multiple tools from multiple agents in bulk. For Custom-mode agents this deletes the tool assignment; for agents in Auto-tool (\"access all tools\") mode it adds the tool to the agent's exclusions, since those agents reach unassigned tools dynamically.",
+      'Remove multiple tools from multiple agents in bulk. For Custom-mode agents this deletes the tool assignment; for agents in Auto-tool ("access all tools") mode it adds the tool to the agent\'s exclusions, since those agents reach unassigned tools dynamically.',
     schema: z
       .object({
         removals: z
@@ -393,11 +393,17 @@ async function handleBulkRemoveTool(params: {
           });
           return "removed" as const;
         }
-        const deleted = await AgentToolModel.delete(
+        // Check existence rather than trusting delete's affected-row count,
+        // which some drivers do not report reliably.
+        const wasAssigned = await AgentToolModel.exists(
           removal.agentId,
           removal.toolId,
         );
-        return deleted ? ("removed" as const) : ("not_assigned" as const);
+        if (!wasAssigned) {
+          return "not_assigned" as const;
+        }
+        await AgentToolModel.delete(removal.agentId, removal.toolId);
+        return "removed" as const;
       }),
     );
 

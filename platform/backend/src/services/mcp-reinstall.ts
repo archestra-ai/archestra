@@ -448,8 +448,8 @@ async function syncToolsForServer(
  * Updates changed schemas/descriptions/raw names, inserts newly-advertised
  * tools, and removes tools the server no longer exposes. Like any tool sync
  * it operates per-catalog, so it cascades to every install sharing the
- * catalog. Throws if the server has no catalog or its catalog item is missing;
- * propagates the connection error if the live server is unreachable.
+ * catalog. Throws if the catalog item is missing; propagates the connection
+ * error if the live server is unreachable.
  */
 export async function reloadToolsForServer(server: McpServer): Promise<{
   created: number;
@@ -457,11 +457,6 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
   unchanged: number;
   deleted: number;
 }> {
-  if (!server.catalogId) {
-    throw new Error(
-      `MCP server ${server.id} has no catalog to reload tools for`,
-    );
-  }
   const catalogItem = await InternalMcpCatalogModel.findById(server.catalogId, {
     expandSecrets: false,
   });

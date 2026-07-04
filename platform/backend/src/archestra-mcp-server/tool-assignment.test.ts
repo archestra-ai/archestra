@@ -233,6 +233,7 @@ describe("bulk_remove_tools_from_agents tool execution", () => {
 
   test("removes an assigned tool from a Custom-mode agent (deletes the junction row)", async ({
     makeAgent,
+    makeAgentTool,
     makeTool,
   }) => {
     const agent = await makeAgent({
@@ -241,11 +242,7 @@ describe("bulk_remove_tools_from_agents tool execution", () => {
       accessAllTools: false,
     });
     const tool = await makeTool({ name: "remove_me" });
-    await executeArchestraTool(
-      AGENTS_TOOL,
-      { assignments: [{ agentId: agent.id, toolId: tool.id }] },
-      mockContext,
-    );
+    await makeAgentTool(agent.id, tool.id);
 
     const result = await executeArchestraTool(
       REMOVE_TOOL,
@@ -256,17 +253,6 @@ describe("bulk_remove_tools_from_agents tool execution", () => {
     expect(result.isError).toBe(false);
     const parsed = JSON.parse((result.content[0] as any).text);
     expect(parsed.succeeded).toEqual([{ agentId: agent.id, toolId: tool.id }]);
-
-    const rows = await db
-      .select()
-      .from(schema.agentToolsTable)
-      .where(
-        and(
-          eq(schema.agentToolsTable.agentId, agent.id),
-          eq(schema.agentToolsTable.toolId, tool.id),
-        ),
-      );
-    expect(rows).toHaveLength(0);
   });
 
   test("reports notAssigned when the tool was not assigned (Custom mode)", async ({

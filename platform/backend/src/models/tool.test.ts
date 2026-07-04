@@ -134,9 +134,9 @@ describe("ToolModel", () => {
       const result = ToolModel.slugifyName("a".repeat(80), tool);
       expect(result).toHaveLength(64);
       // The full raw tool name (and its separator) is preserved verbatim...
-      expect(
-        result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`),
-      ).toBe(true);
+      expect(result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`)).toBe(
+        true,
+      );
       // ...so it still round-trips to the raw upstream name.
       expect(ToolModel.unslugifyName(result)).toBe(tool);
     });
@@ -145,9 +145,9 @@ describe("ToolModel", () => {
       const tool = "get__user";
       const result = ToolModel.slugifyName("s".repeat(80), tool);
       expect(result).toHaveLength(64);
-      expect(
-        result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`),
-      ).toBe(true);
+      expect(result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`)).toBe(
+        true,
+      );
     });
 
     test("does not collide two distinct tools on the same long-named server", () => {
@@ -491,6 +491,7 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
+        rawName: "list_issues",
         mcpServerId: null,
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",

@@ -1467,11 +1467,6 @@ async function handleReloadMcpServerTools(
     if (!server) {
       return errorResult("MCP server not found or you don't have access.");
     }
-    if (!server.catalogId) {
-      return errorResult(
-        "This MCP server has no catalog and its tools cannot be reloaded.",
-      );
-    }
 
     const result = await reloadToolsForServer(server);
 

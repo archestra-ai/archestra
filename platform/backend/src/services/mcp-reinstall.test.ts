@@ -1547,17 +1547,6 @@ describe("mcp-reinstall", () => {
         properties: { b: { type: "number" } },
       });
     });
-
-    test("throws when the server has no catalog", async ({
-      makeInternalMcpCatalog,
-      makeMcpServer,
-    }) => {
-      const catalog = await makeInternalMcpCatalog();
-      const server = await makeMcpServer({ catalogId: catalog.id });
-      await expect(
-        reloadToolsForServer({ ...server, catalogId: null }),
-      ).rejects.toThrow(/no catalog/);
-    });
   });
 
   describe("reinstallMultitenantCatalog", () => {

@@ -175,7 +175,11 @@ class AgentToolExclusionsService {
     clearChatMcpClient(agentId);
 
     logger.info(
-      { agentId, addedCount: toAdd.length, excludedToolCount: excludedToolIds.length },
+      {
+        agentId,
+        addedCount: toAdd.length,
+        excludedToolCount: excludedToolIds.length,
+      },
       "Added agent tool exclusions",
     );
 

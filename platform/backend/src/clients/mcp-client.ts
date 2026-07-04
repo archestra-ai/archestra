@@ -621,7 +621,10 @@ class McpClient {
 
           if (targetToolName === toolCall.name) {
             // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-            targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
+            targetToolName = this.stripServerPrefix(
+              toolCall.name,
+              mcpServerName,
+            );
           }
 
           if (targetToolName === toolCall.name) {

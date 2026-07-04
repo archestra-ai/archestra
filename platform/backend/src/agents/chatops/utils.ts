@@ -157,6 +157,17 @@ export function isLlmProviderAuthError(message: string): boolean {
 }
 
 /**
+ * The footer that stamps a chatops reply with the responding agent's identity.
+ * Every reply leads with "🤖 <agent name>"; any extra detail (e.g. a truncated
+ * provider error on a failure) trails after a separator so the agent name stays
+ * the constant anchor across normal and error replies alike.
+ */
+export function buildAgentFooter(agentName: string, extra?: string): string {
+  const base = `🤖 ${agentName}`;
+  return extra ? `${base} · ${extra}` : base;
+}
+
+/**
  * Extract a human-readable error message from an unknown error value.
  */
 export function errorMessage(error: unknown): string {

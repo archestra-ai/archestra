@@ -1,11 +1,24 @@
 import { describe, expect, test } from "vitest";
 import {
+  buildAgentFooter,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   formatApprovalToolArgs,
   isLlmProviderAuthError,
   Semaphore,
 } from "./utils";
+
+describe("buildAgentFooter", () => {
+  test("is just the agent identity when there is no extra detail", () => {
+    expect(buildAgentFooter("Sales Bot")).toBe("🤖 Sales Bot");
+  });
+
+  test("trails extra detail after the agent identity", () => {
+    expect(buildAgentFooter("Sales Bot", "invalid x-api-key")).toBe(
+      "🤖 Sales Bot · invalid x-api-key",
+    );
+  });
+});
 
 describe("isLlmProviderAuthError", () => {
   test.each([

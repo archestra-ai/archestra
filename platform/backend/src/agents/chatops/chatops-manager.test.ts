@@ -404,6 +404,12 @@ describe("ChatOpsManager security validation", () => {
         text: expect.stringContaining("/settings"),
       }),
     );
+    // Even the connect-prompt reply carries the agent footer.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        footer: `🤖 ${agent.name}`,
+      }),
+    );
   });
 
   test("LLM provider rejected the API key - names the key/model used and links to model providers", async ({
@@ -480,14 +486,14 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect(result.success).toBe(false);
-    // The reply names the exact key and model the failed run used, and keeps
-    // the provider's raw error as the subtle footer.
+    // The reply names the exact key and model the failed run used, and the
+    // footer leads with the agent identity and trails the raw provider error.
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining(
           'organization-wide Anthropic API key "Work Anthropic"',
         ),
-        footer: "invalid x-api-key",
+        footer: `🤖 ${agent.name} · invalid x-api-key`,
       }),
     );
     expect(sendReplySpy).toHaveBeenCalledWith(
@@ -552,7 +558,7 @@ describe("ChatOpsManager security validation", () => {
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: "Sorry, I encountered an error processing your request.",
-        footer: "upstream exploded",
+        footer: `🤖 ${agent.name} · upstream exploded`,
       }),
     );
   });

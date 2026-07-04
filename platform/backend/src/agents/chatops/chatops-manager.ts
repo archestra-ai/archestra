@@ -61,6 +61,7 @@ import {
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
 import {
+  buildAgentFooter,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   errorMessage,
@@ -1566,6 +1567,7 @@ export class ChatOpsManager {
           provider,
           message,
           error,
+          agentName: agent.name,
           llmContext: {
             organizationId: binding.organizationId,
             userId,
@@ -1587,10 +1589,17 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     message: IncomingChatMessage;
     error: unknown;
+    /** The responding agent's name, so error replies carry the same footer. */
+    agentName?: string;
     /** When present, used to name the API key/model the failed run resolved to. */
     llmContext?: { organizationId: string; userId: string; agentId: string };
   }): Promise<void> {
-    const { provider, message, error, llmContext } = params;
+    const { provider, message, error, agentName, llmContext } = params;
+
+    // Every reply — success or failure — leads with the agent footer; error
+    // details, when present, trail after the agent name.
+    const footer = (extra?: string): string | undefined =>
+      agentName ? buildAgentFooter(agentName, extra) : extra;
 
     // A per-user provider the user hasn't linked yet → a friendly prompt
     // with a link to connect (chatops can't render the interactive flow).
@@ -1598,6 +1607,7 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+        footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });
       return;
@@ -1626,7 +1636,7 @@ export class ChatOpsManager {
           "",
           `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
         ].join("\n"),
-        footer: errorDetail,
+        footer: footer(errorDetail),
         conversationReference: message.metadata?.conversationReference,
       });
       return;
@@ -1635,7 +1645,7 @@ export class ChatOpsManager {
     await provider.sendReply({
       originalMessage: message,
       text: "Sorry, I encountered an error processing your request.",
-      footer: errorDetail,
+      footer: footer(errorDetail),
       conversationReference: message.metadata?.conversationReference,
     });
   }
@@ -1739,7 +1749,7 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: agentResponse,
-        footer: `🤖 ${agent.name}`,
+        footer: buildAgentFooter(agent.name),
         // Teach the off switch once per channel thread: sticky auto-reply only
         // applies in channels, so the hint rides the bot's first reply there.
         ...((await this.shouldHintThreadMute(provider, message)) && {
@@ -1844,7 +1854,7 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: `Pending approval requests: ${unresolvedCount}`,
-        footer: `🤖 ${agent.name}`,
+        footer: buildAgentFooter(agent.name),
         conversationReference: message.metadata?.conversationReference,
       });
       return {
@@ -1864,7 +1874,7 @@ export class ChatOpsManager {
         text:
           agentResponse ||
           "Approval required before I can continue with this action.",
-        footer: `🤖 ${agent.name}`,
+        footer: buildAgentFooter(agent.name),
         conversationReference: message.metadata?.conversationReference,
       });
 

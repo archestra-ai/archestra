@@ -165,6 +165,15 @@ describe("validateAppHtmlStatic", () => {
     expect(hostWarnings).toHaveLength(1);
   });
 
+  test("a resource ref inside an HTML comment does not warn", async () => {
+    // The lint reads real DOM attributes (Rust `tl` walk), so a commented-out
+    // tag — which the browser never loads — no longer counts as a reference.
+    const findings = await validateAppHtmlStatic(
+      '<html><head><!-- <script src="https://evil.example.com/a.js"></script> --></head><body/></html>',
+    );
+    expect(findings).toEqual([]);
+  });
+
   test("allowlisted CDN hosts and relative refs are not flagged", async () => {
     const findings = await validateAppHtmlStatic(
       '<html><head><script src="https://cdn.jsdelivr.net/npm/x.js"></script><link rel="stylesheet" href="https://fonts.googleapis.com/css"><script src="/local.js"></script></head><body/></html>',

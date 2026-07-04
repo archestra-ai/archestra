@@ -88,13 +88,12 @@ pub fn scan_app_html(html: &str) -> ScanResult {
 
     // 2. Platform script self-load via <script src>, document order.
     for tag in tags().filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("script")) {
-        if let Some(src) = attr(tag, "src") {
-            if PLATFORM_SCRIPT_SRC_MARKERS
+        if let Some(src) = attr(tag, "src")
+            && PLATFORM_SCRIPT_SRC_MARKERS
                 .iter()
                 .any(|marker| src.contains(marker))
-            {
-                return reject(RejectionKind::PlatformScriptSrc, src);
-            }
+        {
+            return reject(RejectionKind::PlatformScriptSrc, src);
         }
     }
 
@@ -129,8 +128,8 @@ pub fn scan_app_html(html: &str) -> ScanResult {
 // HTML attribute names are case-insensitive, but `tl`'s `Attributes::get` is an
 // exact-case lookup — so we iterate and compare keys with `eq_ignore_ascii_case`
 // (cheerio's `.attr()` matched `SRC`/`HREF` too). A valueless attribute yields
-// `None`, i.e. nothing to scan.
-fn attr(tag: &tl::HTMLTag, name: &str) -> Option<String> {
+// `None`, i.e. nothing to scan. Shared with the authoring lint (`app_html_lint`).
+pub(crate) fn attr(tag: &tl::HTMLTag, name: &str) -> Option<String> {
     tag.attributes()
         .iter()
         .find(|(key, _)| key.eq_ignore_ascii_case(name))

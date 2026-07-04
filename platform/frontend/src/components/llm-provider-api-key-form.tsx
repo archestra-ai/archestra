@@ -753,6 +753,7 @@ export function LlmProviderApiKeyForm({
                       id="llm-provider-api-key-value"
                       placeholder={providerConfig.placeholder}
                       disabled={isPending}
+                      masked={true}
                       // Offer the reveal toggle when adding a key so the user
                       // can verify what they typed or pasted. Editing keeps the
                       // "configured" check in that same corner instead, and
@@ -794,6 +795,8 @@ export function LlmProviderApiKeyForm({
                     id="llm-provider-aws-access-key-id"
                     placeholder="AKIA..."
                     disabled={isPending}
+                    masked={true}
+                    revealable
                     {...form.register("awsAccessKeyId")}
                   />
                 </div>
@@ -805,6 +808,8 @@ export function LlmProviderApiKeyForm({
                     id="llm-provider-aws-secret-access-key"
                     placeholder="••••••••"
                     disabled={isPending}
+                    masked={true}
+                    revealable
                     {...form.register("awsSecretAccessKey")}
                   />
                 </div>
@@ -819,6 +824,8 @@ export function LlmProviderApiKeyForm({
                     id="llm-provider-aws-session-token"
                     placeholder="Required for temporary credentials (STS / AssumeRole)"
                     disabled={isPending}
+                    masked={true}
+                    revealable
                     {...form.register("awsSessionToken")}
                   />
                 </div>

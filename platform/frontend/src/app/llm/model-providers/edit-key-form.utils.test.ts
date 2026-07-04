@@ -51,4 +51,58 @@ describe("isEditApiKeyFormValid", () => {
       isEditApiKeyFormValid(makeValues({ scope: "personal", apiKey: null })),
     ).toBe(true);
   });
+
+  it("requires AWS credentials when Bedrock SigV4 is selected", () => {
+    expect(
+      isEditApiKeyFormValid(
+        makeValues({
+          provider: "bedrock",
+          bedrockAuthMethod: "sigv4",
+          awsAccessKeyId: null,
+          awsSecretAccessKey: null,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts Bedrock SigV4 once both AWS keys are provided", () => {
+    expect(
+      isEditApiKeyFormValid(
+        makeValues({
+          provider: "bedrock",
+          bedrockAuthMethod: "sigv4",
+          awsAccessKeyId: "AKIA...",
+          awsSecretAccessKey: "secret",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not require AWS credentials for Bedrock IAM or API-key auth", () => {
+    expect(
+      isEditApiKeyFormValid(
+        makeValues({ provider: "bedrock", bedrockAuthMethod: "iam" }),
+      ),
+    ).toBe(true);
+    expect(
+      isEditApiKeyFormValid(
+        makeValues({ provider: "bedrock", bedrockAuthMethod: "api-key" }),
+      ),
+    ).toBe(true);
+  });
+
+  it("still enforces team scope for Bedrock SigV4", () => {
+    expect(
+      isEditApiKeyFormValid(
+        makeValues({
+          provider: "bedrock",
+          bedrockAuthMethod: "sigv4",
+          awsAccessKeyId: "AKIA...",
+          awsSecretAccessKey: "secret",
+          scope: "team",
+          teamId: null,
+        }),
+      ),
+    ).toBe(false);
+  });
 });

@@ -14,7 +14,8 @@
 //! extraction also reads script blocks inside HTML comments; for a security
 //! gate that is the fail-closed direction (dead markup is trivially deleted).
 //! Attribute refs are read from the DOM, tolerant of `tl`'s solidus fusing
-//! (see `resource_ref`).
+//! (see `resource_ref`), with a lexical fallback pass for tag shapes `tl`
+//! drops outright.
 
 use std::sync::LazyLock;
 
@@ -38,6 +39,14 @@ const NO_DOCUMENT_ROOT_WARNING: &str = "html has no <head> or <html> element; pr
 
 static HEAD_OR_HTML: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<(head|html)[\s>]").expect("static head/html probe regex"));
+
+// Raw-text src/href refs on script/link open tags, quoted (group 3) or
+// unquoted (group 4). Backstops the DOM loops in `scan_app_html` for tag
+// shapes `tl` drops; see the fallback step there.
+static RESOURCE_REF_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<(script|link)\b[^>]*?\b(src|href)\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#)
+        .expect("static resource ref fallback regex")
+});
 
 /// Why a scan disqualified the HTML. Carries the offending value so the caller
 /// can build a precise user-facing message (kept on the TypeScript side).
@@ -122,7 +131,39 @@ pub fn scan_app_html(html: &str) -> ScanResult {
         }
     }
 
-    // 4. Soft warning: no document root. Probed on the raw input (a parser
+    // 4. Lexical fallback for self-load refs: `tl` drops some browser-loadable
+    //    tag shapes entirely (space-before-solidus `<script /src=…>`, unquoted
+    //    URL values containing `/`), so the DOM loops above cannot be the only
+    //    line of defence. Reads any src/href attribute (quoted or unquoted) on
+    //    a raw script/link open tag, honouring the browser's tag/attribute
+    //    pairing; extra matches this can add (e.g. inside HTML comments) are
+    //    fail-closed for a rejection gate.
+    for capture in RESOURCE_REF_FALLBACK.captures_iter(html) {
+        let tag_name = &capture[1];
+        let attr_name = &capture[2];
+        let value = capture
+            .get(3)
+            .or_else(|| capture.get(4))
+            .map_or("", |m| m.as_str());
+        if tag_name.eq_ignore_ascii_case("script") && attr_name.eq_ignore_ascii_case("src") {
+            if PLATFORM_SCRIPT_SRC_MARKERS
+                .iter()
+                .any(|marker| value.contains(marker))
+            {
+                return reject(RejectionKind::PlatformScriptSrc, value.to_string());
+            }
+        } else if tag_name.eq_ignore_ascii_case("link") && attr_name.eq_ignore_ascii_case("href") {
+            let collapsed: String = value
+                .chars()
+                .filter(|c| !c.is_whitespace() && *c != '\u{feff}')
+                .collect();
+            if collapsed.contains(PLATFORM_BASE_CSS_MARKER) {
+                return reject(RejectionKind::PlatformBaseCss, value.to_string());
+            }
+        }
+    }
+
+    // 5. Soft warning: no document root. Probed on the raw input (a parser
     //    normalizes fragments away), mirroring the TS regex.
     let mut warnings = Vec::new();
     if !HEAD_OR_HTML.is_match(html) {
@@ -157,7 +198,10 @@ pub(crate) fn tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
 // An attribute ref, recovering the solidus-fused shape `tag_is` matches on:
 // `tl` parses `<script/src="u">` as tag `script/src` with the value under an
 // empty attribute key. A solidus after a space (`<script /src=…>`) makes `tl`
-// drop the tag entirely; that stays a blind spot alongside unquoted URL values.
+// drop the tag entirely — the save gate backstops that with its lexical
+// fallback pass; for the authoring lint it stays a deliberate blind spot
+// alongside unquoted URL values (a soft hint keeps the comment-excluding DOM
+// semantics instead).
 pub(crate) fn resource_ref(tag: &tl::HTMLTag, attr_name: &str) -> Option<String> {
     if let Some(value) = attr(tag, attr_name) {
         return Some(value);
@@ -335,6 +379,49 @@ mod tests {
         assert_eq!(
             scan_app_html(link).rejection.expect("should reject").kind,
             RejectionKind::PlatformBaseCss
+        );
+    }
+
+    #[test]
+    fn space_solidus_self_loads_are_rejected_via_the_lexical_fallback() {
+        // `tl` drops `<script /src=…>`/`<link /href=…>` tags entirely, while
+        // browsers read them as ordinary elements — the raw-text fallback must
+        // keep the gate closed to them.
+        let script =
+            r#"<html><head><script /src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
+        let rejection = scan_app_html(script).rejection.expect("should reject");
+        assert_eq!(rejection.kind, RejectionKind::PlatformScriptSrc);
+        assert_eq!(rejection.offender, "/_sandbox/archestra-app-sdk.js");
+        let link = r#"<html><head><link /href="/_sandbox/archestra-app-base.css"></head></html>"#;
+        assert_eq!(
+            scan_app_html(link).rejection.expect("should reject").kind,
+            RejectionKind::PlatformBaseCss
+        );
+    }
+
+    #[test]
+    fn unquoted_self_load_src_is_rejected_via_the_lexical_fallback() {
+        // Unquoted URL values containing `/` also make `tl` drop the tag.
+        let html = "<html><head><script src=/_sandbox/archestra-app-sdk.js></script></head></html>";
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::PlatformScriptSrc
+        );
+    }
+
+    #[test]
+    fn marker_after_a_gt_inside_a_script_attribute_fails_closed() {
+        // The lexical script-text extraction ends the open tag at the first
+        // `>`, even inside a quoted attribute, so a marker written after it is
+        // read as script text and rejects — although the browser sees an empty
+        // script body. Deliberate: a quote-aware pattern would go fail-open on
+        // unterminated quotes, and marker strings inside attribute values do
+        // not occur in legitimate apps.
+        let html =
+            r#"<html><head><script data-note=">PostMessageTransport"></script></head></html>"#;
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::SdkBootstrap
         );
     }
 

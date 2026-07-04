@@ -12,6 +12,7 @@ const nativeBinding = loadNativeBinding({
 // named ESM export (consumers do `import { prepareAppEnvelope } from ...`)
 module.exports.prepareAppEnvelope = wrapSync(nativeBinding, "prepareAppEnvelope");
 module.exports.scanAppHtml = wrapSync(nativeBinding, "scanAppHtml");
+module.exports.lintAppHtml = wrapSync(nativeBinding, "lintAppHtml");
 module.exports.escapeAngleBrackets = wrapSync(nativeBinding, "escapeAngleBrackets");
 module.exports.capDiagnosticEntries = wrapSync(nativeBinding, "capDiagnosticEntries");
 module.exports.mergeDiagnosticEntries = wrapSync(nativeBinding, "mergeDiagnosticEntries");

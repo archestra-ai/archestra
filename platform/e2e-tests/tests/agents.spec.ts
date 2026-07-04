@@ -38,8 +38,25 @@ test(
 
     const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
     await waitForElementWithReload(page, createButton);
-    await createButton.click();
-    await page.getByRole("textbox", { name: "Name" }).fill(AGENT_NAME);
+
+    // The Create-Agent button is server-rendered, so a click that lands before
+    // React hydration attaches its onClick handler is silently lost: Playwright
+    // reports the click as successful (the SSR button is visible/enabled), but
+    // the create dialog never opens and its "Name" field never mounts, so the
+    // fill below times out for the life of the page — no retry recovers it.
+    // (This was the top remaining merge-queue flake on shard 1; the same
+    // pre-hydration lost-click race was fixed for the skills marketplace step
+    // in #6339.) Retry the click until the dialog's Name field appears. Opening
+    // the dialog is NOT idempotent (a second click would land on the modal
+    // overlay), so guard the re-click on the field not already being visible.
+    const nameField = page.getByRole("textbox", { name: "Name" });
+    await expect(async () => {
+      if (!(await nameField.isVisible())) {
+        await createButton.click();
+      }
+      await expect(nameField).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 20_000 });
+    await nameField.fill(AGENT_NAME);
 
     // Wait for the POST /api/agents response before polling the table.
     // On webkit, clicking submit and immediately continuing leaves a window

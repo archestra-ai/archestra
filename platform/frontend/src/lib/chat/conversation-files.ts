@@ -80,7 +80,8 @@ export function assembleFileSections(params: {
  * Header label + persistence-scope subtitle for the chat panel's group of
  * persistent files (this chat's saved outputs, plus the project's shared files
  * in a project chat). A project chat's files live with the project and are seen
- * by everyone with access; a personal chat's files stay with the conversation.
+ * by everyone with access; a personal chat's files carry into a project if you
+ * create one.
  * Attachments are labeled separately — see {@link ATTACHMENTS_SECTION}.
  */
 export function persistentFilesSection(projectId: string | null | undefined): {
@@ -88,14 +89,17 @@ export function persistentFilesSection(projectId: string | null | undefined): {
   description: string;
 } {
   return projectId != null
-    ? { title: "Project files", description: "Shared with the project" }
-    : { title: "Chat files", description: "Created in this chat" };
+    ? { title: "Project files", description: "shared with the whole project" }
+    : {
+        title: "Chat files",
+        description: "saved to a project if you create one from this chat",
+      };
 }
 
 /** Header label + subtitle for the user's uploaded inputs to a chat. */
 export const ATTACHMENTS_SECTION = {
   title: "Attachments",
-  description: "Your uploads",
+  description: "stay in this chat",
 } as const;
 
 /**

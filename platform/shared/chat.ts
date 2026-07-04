@@ -174,6 +174,42 @@ export type ChatMessage = {
  */
 export const HOOK_RUN_PART_TYPE = "data-hook-run";
 
+/**
+ * Type of the inline subagent-tool-call part. A `data-*` part: persisted and
+ * rendered in the chat thread (nested under the delegation call that spawned
+ * it), but dropped from the model conversion (`convertToModelMessages`), so the
+ * parent model never sees its subagent's internal tool calls — same class as
+ * `data-hook-run`. Shared so the backend (emit) and frontend (render) agree on
+ * the wire string.
+ */
+export const SUBAGENT_TOOL_CALL_PART_TYPE = "data-subagent-tool-call";
+
+/**
+ * The `data` payload of a {@link SUBAGENT_TOOL_CALL_PART_TYPE} part: one tool
+ * call a delegated child agent made during its run. `parentToolCallId` links it
+ * to the delegation tool call (`agent__<slug>`) that spawned the child; for a
+ * deeper descendant it is the delegation call one level up, so the client
+ * rebuilds an arbitrary-depth tree purely by `toolCallId`→`parentToolCallId`
+ * linkage. `input`/`output` are capped before persistence so a large child
+ * result can't bloat the parent message row.
+ */
+export interface SubagentToolCallPartData {
+  /** The delegation tool call id (`agent__<slug>`) this child call hangs under. */
+  parentToolCallId: string;
+  /** The child tool call's own id (unique — generated per child run). */
+  toolCallId: string;
+  /** The tool the child invoked (e.g. `web_search`, or `agent__<slug>` for a nested delegation). */
+  toolName: string;
+  /** Request arguments, capped. */
+  input?: unknown;
+  /** Terminal tool state, e.g. `output-available` / `output-error`. */
+  state?: string;
+  /** Result, capped. Absent on error. */
+  output?: unknown;
+  /** Error text when the child call failed. */
+  errorText?: string;
+}
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.
@@ -289,6 +325,13 @@ export function hasPersistableAssistantContent(message: {
       return true;
     }
 
+    // a subagent tool-call chip is standalone renderable content (rendered
+    // nested under its delegation call); like a hook-run entry it needs no
+    // pairing, so a turn carrying only subagent calls is still persistable.
+    if (part.type === SUBAGENT_TOOL_CALL_PART_TYPE) {
+      return true;
+    }
+
     if (isTerminalToolPart(part)) {
       return true;
     }
@@ -372,8 +415,32 @@ export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+    /**
+     * Marks a `!`-prefixed user message the composer submitted for direct
+     * sandbox execution (no LLM turn). A marker only — the command is always
+     * re-derived server-side from the message text via `parseSandboxCommand`,
+     * so a forged marker can never execute anything other than what the
+     * transcript shows.
+     */
+    sandboxCommand: z.literal(true).optional(),
   })
   .passthrough();
+
+/**
+ * Parse a `!`-prefixed chat message into the shell command it requests
+ * (Claude Code's `!` convention). Returns null for anything else, including a
+ * bare `!` — those submit as ordinary messages. Used by the composer to decide
+ * whether to mark a message and by the chat route to derive the command to
+ * execute; both sides must agree, which is why it lives in shared.
+ */
+export function parseSandboxCommand(text: string): { command: string } | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("!")) {
+    return null;
+  }
+  const command = trimmed.slice(1).trim();
+  return command.length > 0 ? { command } : null;
+}
 
 // ============================================================================
 // Zod Schemas for Model Modalities

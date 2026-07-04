@@ -3,7 +3,6 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
-import { afterAll, beforeAll } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import config from "@/config";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -11,15 +10,11 @@ import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 
 // these suites assert exact assigned-tool sets after agent creation; pin the
-// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
-// auto-assigned app tools into them (app-tool assignment is covered in
-// tool-archestra-assignment.test.ts)
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
-  (config.apps as { enabled: boolean }).enabled = false;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+// sandbox runtime off so its tools do not leak into the default-assignment
+// counts. App tools are seeded and auto-assigned to every agent; their
+// assignment is covered in tool-archestra-assignment.test.ts.
+beforeEach(() => {
+  (config.skillsSandbox as { enabled: boolean }).enabled = false;
 });
 
 describe("AgentToolModel.findById", () => {
@@ -709,7 +704,6 @@ describe("AgentToolModel.findAll", () => {
       expect(excludedToolNames).toContain("archestra__exclude_test_tool_2");
       expect(excludedToolNames).toContain("archestra_single_underscore_test");
       expect(excludedToolNames).toContain("archestranounderscore_test");
-      expect(excludedToolNames).not.toContain("archestra__artifact_write");
       expect(excludedToolNames).not.toContain("archestra__todo_write");
 
       // Without excludeArchestraTools - should include all tools including archestra__ ones
@@ -1224,10 +1218,6 @@ describe("AgentToolModel.findAll", () => {
       makeTool,
       makeAgentTool,
     }) => {
-      archestraMcpBranding.syncFromOrganization({
-        appName: "Acme Copilot",
-        iconLogo: null,
-      });
       const brandedKbToolName = getArchestraToolFullName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
@@ -1235,11 +1225,27 @@ describe("AgentToolModel.findAll", () => {
           fullWhiteLabeling: true,
         },
       );
+      // Create the agent first: AgentModel.create assigns the default
+      // built-ins, which re-syncs the branding singleton from the first org
+      // (unbranded here) and would wipe a manually-set branding.
       const agent = await makeAgent();
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
       const regularTool = await makeTool({ name: "regular-tool" });
       const kbTool = await makeTool({ name: brandedKbToolName });
       await makeAgentTool(agent.id, regularTool.id);
       await makeAgentTool(agent.id, kbTool.id);
+
+      // Set the branding after agent creation: creating an agent re-syncs the
+      // branding singleton to its (default-named) org, which would otherwise
+      // clobber this branded name before findAll's archestra-tool filter reads
+      // it.
+      archestraMcpBranding.syncFromOrganization({
+        appName: "Acme Copilot",
+        iconLogo: null,
+      });
 
       const result = await AgentToolModel.findAll({
         filters: { agentId: agent.id, excludeArchestraTools: true },

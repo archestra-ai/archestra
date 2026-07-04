@@ -5,8 +5,30 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
+import { usePublicConfig } from "@/lib/config/config.query";
 
 const STORAGE_PREFIX = "site-notification-dismissed:";
+
+/**
+ * Instance-wide banner driven by ARCHESTRA_SITE_NOTIFICATION_MESSAGE
+ * (surfaced via public config). The dismissal id is derived from the content,
+ * so a changed message reappears after a previous one was dismissed.
+ */
+export function EnvSiteNotificationBar() {
+  const { data: publicConfig } = usePublicConfig();
+  const message = publicConfig?.siteNotificationMessage;
+
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <SiteNotificationBar
+      content={message}
+      notificationId={`env-${contentHash(message)}`}
+    />
+  );
+}
 
 interface SiteNotificationBarProps {
   content: string;
@@ -62,4 +84,12 @@ function isNotificationDismissed(notificationId: string) {
 
 function markNotificationDismissed(notificationId: string) {
   localStorage.setItem(`${STORAGE_PREFIX}${notificationId}`, "true");
+}
+
+function contentHash(content: string) {
+  let hash = 5381;
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) + hash + content.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
 }

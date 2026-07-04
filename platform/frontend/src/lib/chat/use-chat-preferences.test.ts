@@ -236,6 +236,59 @@ describe("resolveAutoSelectedModel", () => {
       }),
     ).toBe("uuid-a");
   });
+
+  test("prefers a keyed model over an unconnected per-user 'best' model", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-deleted",
+        availableModels: [
+          {
+            id: "uuid-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: false,
+          },
+          { id: "uuid-kimi" },
+        ],
+        isLoading: false,
+      }),
+    ).toBe("uuid-kimi");
+  });
+
+  test("falls back to an unconnected per-user model when nothing else is available", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-deleted",
+        availableModels: [
+          {
+            id: "uuid-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: false,
+          },
+        ],
+        isLoading: false,
+      }),
+    ).toBe("uuid-copilot");
+  });
+
+  test("a connected per-user 'best' model stays eligible", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-deleted",
+        availableModels: [
+          {
+            id: "uuid-copilot",
+            isBest: true,
+            requiresUserConnection: true,
+            isConnected: true,
+          },
+          { id: "uuid-kimi" },
+        ],
+        isLoading: false,
+      }),
+    ).toBe("uuid-copilot");
+  });
 });
 
 describe("agentRequiresPerUserConnect", () => {

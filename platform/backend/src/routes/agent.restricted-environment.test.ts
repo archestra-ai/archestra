@@ -17,23 +17,14 @@ import type { User } from "@/types";
  * `userHasPermission` varies per test; the route ORs the admin + deploy probes
  * into `canDeployToRestricted` and feeds `assertCanAssignEnvironment`.
  */
-vi.mock("@/auth", () => ({
-  getAgentTypePermissionChecker: vi.fn(async () => ({
-    require: vi.fn(),
-    isAdmin: vi.fn(() => true),
-    isTeamAdmin: vi.fn(() => true),
-    getAgentTypesWithPermission: vi.fn(() => [
-      "agent",
-      "mcp_gateway",
-      "llm_proxy",
-    ]),
-  })),
-  hasAnyAgentTypeReadPermission: vi.fn(async () => true),
-  requireAgentModifyPermission: vi.fn(() => {}),
-  userHasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
-import { userHasPermission } from "@/auth";
+import {
+  getAgentTypePermissionChecker,
+  hasAnyAgentTypeReadPermission,
+  requireAgentModifyPermission,
+  userHasPermission,
+} from "@/auth";
 import { createEnvironment } from "@/services/environments/environment";
 
 const mockUserHasPermission = userHasPermission as Mock;
@@ -45,6 +36,19 @@ describe("Agent routes - restricted environment assignment guard", () => {
   let canDeployToRestricted: boolean;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    (getAgentTypePermissionChecker as Mock).mockImplementation(async () => ({
+      require: vi.fn(),
+      isAdmin: vi.fn(() => true),
+      isTeamAdmin: vi.fn(() => true),
+      getAgentTypesWithPermission: vi.fn(() => [
+        "agent",
+        "mcp_gateway",
+        "llm_proxy",
+      ]),
+    }));
+    (hasAnyAgentTypeReadPermission as Mock).mockResolvedValue(true);
+    (requireAgentModifyPermission as Mock).mockImplementation(() => {});
+
     canDeployToRestricted = false;
     mockUserHasPermission.mockImplementation(
       async (_userId: string, _orgId: string, resource: string) =>

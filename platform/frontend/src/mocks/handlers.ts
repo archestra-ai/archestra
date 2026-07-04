@@ -1,3 +1,11 @@
+// Import from the leaf `interactions/client` module, not the root barrel: the
+// barrel (`@archestra/shared`) transitively imports a JSON module without an
+// import attribute, which the Playwright integration-test ESM loader rejects.
+// `client.ts` depends only on zod.
+import {
+  CLAUDE_CLIENT_FILTER,
+  isClaudeClientAgentId,
+} from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
 import { agentsSeed, makeAgent } from "./data/agents";
 import {
@@ -93,7 +101,37 @@ export const handlers: HttpHandler[] = [
   ...getJson("/health", healthSeed),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
+  // Onboarding nudges: everything already seen / nothing eligible, so neither
+  // the red dots nor the survey/feedback dialogs interfere with other tests.
+  ...getJson("/api/onboarding/seen-nav-items", {
+    items: [
+      "nav:projects",
+      "nav:apps",
+      "nav:connect",
+      "nav:model-providers",
+      "nav:mcp-registry",
+      "feedback:popup",
+    ],
+  }),
+  ...postJson("/api/onboarding/seen-nav-items", { items: [] }),
+  ...getJson("/api/onboarding/survey-eligibility", { eligible: false }),
+  ...postJson("/api/onboarding/survey", { ok: true }),
+  ...getJson("/api/onboarding/feedback-popup-activation", {
+    activatedAt: null,
+  }),
   ...getJson("/api/organization/mcp-preset-entries", []),
+  ...getJson("/api/projects", []),
+  ...getJson("/api/apps", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {
@@ -217,20 +255,22 @@ export const handlers: HttpHandler[] = [
 
   // LLM proxy logs (/llm/logs list, session detail, interaction detail).
   // The sessions handler is query-aware: it filters the seed by the params the
-  // frontend actually sends (sessionId / sessionSource / source), so the
-  // Client/Source filter specs genuinely exercise the request wiring rather
-  // than asserting against a pre-baked body. Specs needing other data still
-  // override it via `mswControl.use(...)` (overrides take precedence).
+  // frontend actually sends (sessionId / client / source), so the Client/Source
+  // filter specs genuinely exercise the request wiring rather than asserting
+  // against a pre-baked body. Specs needing other data still override it via
+  // `mswControl.use(...)` (overrides take precedence).
   ...paired("/api/interactions/sessions").map((url) =>
     http.get(url, ({ request }) => {
       const params = new URL(request.url).searchParams;
       const sessionId = params.get("sessionId");
-      const sessionSource = params.get("sessionSource");
+      const client = params.get("client");
       const source = params.get("source");
       let data = llmLogsSessionsSeed;
       if (sessionId) data = data.filter((s) => s.sessionId === sessionId);
-      if (sessionSource) {
-        data = data.filter((s) => s.sessionSource === sessionSource);
+      if (client === CLAUDE_CLIENT_FILTER) {
+        data = data.filter((s) =>
+          s.externalAgentIds.some(isClaudeClientAgentId),
+        );
       }
       if (source) data = data.filter((s) => s.source === source);
       return HttpResponse.json(paginated(data));

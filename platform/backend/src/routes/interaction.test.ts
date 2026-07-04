@@ -1,4 +1,9 @@
-import { ChatErrorCode } from "@archestra/shared";
+import {
+  ChatErrorCode,
+  CLAUDE_CLIENT_FILTER,
+  CLAUDE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
+} from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
@@ -126,6 +131,40 @@ describe("interaction routes", () => {
     expect(response.json().data[0].response.choices[0].finish_reason).toBe(
       "unusual_reason",
     );
+  });
+
+  test("lists an interaction whose stored request no longer matches the provider schema", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    // Persisted gemini rows exist whose request lacks `contents` (provider-
+    // schema drift / partial delta reconstruction). The row must serialize
+    // raw on read-back instead of 500-ing the whole list.
+    await InteractionModel.create({
+      profileId: agent.id,
+      request: {
+        generationConfig: { temperature: 0 },
+      } as unknown as InsertInteraction["request"],
+      response: {
+        error: "Upstream provider returned an error response",
+      } as unknown as InteractionResponse,
+      type: "gemini:generateContent",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0&sortBy=createdAt&sortDirection=desc",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(1);
+    expect(response.json().data[0].request).toEqual({
+      generationConfig: { temperature: 0 },
+    });
   });
 
   test("lists an interaction whose response is an upstream-error object", async ({
@@ -375,7 +414,7 @@ describe("interaction routes", () => {
     await InteractionModel.create({
       profileId: agent.id,
       sessionId: "route-delta-session",
-      sessionSource: "claude_code",
+      sessionSource: "claude_metadata",
       type: "anthropic:messages",
       request: anthropicReq([m0]),
       response: anthropicResp,
@@ -383,7 +422,7 @@ describe("interaction routes", () => {
     const tip = await InteractionModel.create({
       profileId: agent.id,
       sessionId: "route-delta-session",
-      sessionSource: "claude_code",
+      sessionSource: "claude_metadata",
       type: "anthropic:messages",
       request: anthropicReq(fullMessages),
       response: anthropicResp,
@@ -419,7 +458,7 @@ describe("interaction routes", () => {
     );
   });
 
-  test("filters the sessions endpoint by sessionSource (client)", async ({
+  test("filters the sessions endpoint by client (external_agent_id)", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -435,11 +474,11 @@ describe("interaction routes", () => {
       model: "gpt-4",
       choices: [],
     } as unknown as InsertInteraction["response"];
-    const make = (sessionId: string, sessionSource: string) =>
+    const make = (sessionId: string, externalAgentId: string | null) =>
       InteractionModel.create({
         profileId: agent.id,
         sessionId,
-        sessionSource,
+        externalAgentId,
         source: "api",
         request: {
           model: "gpt-4",
@@ -449,18 +488,17 @@ describe("interaction routes", () => {
         type: "openai:chatCompletions",
       });
 
-    await make("cc", "claude_code");
-    await make("cd", "claude_desktop");
-    await make("hdr", "header");
+    await make("auto", CLAUDE_CLIENT_ID);
+    await make("desktop", CLAUDE_DESKTOP_CLIENT_ID);
+    await make("customer", "my-custom-agent");
 
-    // Filtered to claude_code → only the claude_code session.
+    // The Claude filter expands to every Claude client id → both Claude sessions.
     const filtered = await app.inject({
       method: "GET",
-      url: "/api/interactions/sessions?limit=50&offset=0&sessionSource=claude_code",
+      url: `/api/interactions/sessions?limit=50&offset=0&client=${CLAUDE_CLIENT_FILTER}`,
     });
     expect(filtered.statusCode).toBe(200);
-    expect(filtered.json().data).toHaveLength(1);
-    expect(filtered.json().data[0].sessionSource).toBe("claude_code");
+    expect(filtered.json().data).toHaveLength(2);
 
     // No filter → all three sessions.
     const all = await app.inject({
@@ -469,5 +507,51 @@ describe("interaction routes", () => {
     });
     expect(all.statusCode).toBe(200);
     expect(all.json().data).toHaveLength(3);
+  });
+
+  test("counts distinct sessions plus sessionless interactions in the sessions total", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+
+    const make = (sessionId: string | null) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        source: "api",
+        request: {
+          model: "gpt-4",
+          messages: [],
+        } as unknown as InsertInteraction["request"],
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        } as unknown as InsertInteraction["response"],
+        type: "openai:chatCompletions",
+      });
+
+    // Two interactions in the same session, one in another session, and two
+    // sessionless interactions (each counts as its own "session").
+    await make("shared-session");
+    await make("shared-session");
+    await make("other-session");
+    await make(null);
+    await make(null);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=2&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toHaveLength(2);
+    expect(response.json().pagination.total).toBe(4);
   });
 });

@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetConnectorRuns, mockToastError } = vi.hoisted(() => ({
+const { mockGetConnectorRuns } = vi.hoisted(() => ({
   mockGetConnectorRuns: vi.fn(),
-  mockToastError: vi.fn(),
 }));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
@@ -19,9 +19,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 
-vi.mock("sonner", () => ({
-  toast: { error: mockToastError, success: vi.fn() },
-}));
+vi.mock("sonner");
 
 import { useConnectorRuns } from "./connector.query";
 
@@ -54,7 +52,7 @@ describe("useConnectorRuns — missing parent (404)", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
     expect(result.current.isError).toBe(false);
-    expect(mockToastError).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("still surfaces a non-404 failure as an error", async () => {

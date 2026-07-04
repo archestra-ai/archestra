@@ -42,7 +42,11 @@ export const SKILL_MANIFEST_FILENAME = "SKILL.md";
  * the required `name`/`description` fields.
  */
 export function parseSkillManifest(raw: string): ParsedSkill {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
+  // A SKILL.md authored on Windows can carry a leading UTF-8 BOM, which
+  // github-import preserves (it decodes with ignoreBOM). Strip it so the
+  // frontmatter block, anchored at the start of the string, still matches.
+  const text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
   if (!match) {
     throw new SkillParseError(
       "SKILL.md must start with a YAML frontmatter block delimited by ---",
@@ -78,7 +82,7 @@ export function parseSkillManifest(raw: string): ParsedSkill {
   return {
     name,
     description,
-    content: raw.slice(match[0].length).trim(),
+    content: text.slice(match[0].length).trim(),
     license: readString(fields.license) || null,
     compatibility: readString(fields.compatibility) || null,
     allowedTools: readAllowedTools(fields["allowed-tools"]),

@@ -14,9 +14,7 @@ import { ApiError, type User } from "@/types";
 // permission map wiring (and a genuine 403 for a non-permitted member), the hook
 // replicates the middleware's authorization gate using the actual
 // requiredEndpointPermissionsMap.
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 // Keep the K8s runtime ENABLED but stub the actual cluster calls, so the route
 // exercises its real namespace-validation branch without depending on whether

@@ -1,36 +1,26 @@
 import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
-import { AppWindow } from "lucide-react";
+import { PanelRight } from "lucide-react";
 import type React from "react";
 import {
   Component,
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
-import { createPortal } from "react-dom";
+import { AppDiagnosticsPanel } from "@/components/chat/app-diagnostics-panel";
 import { useApps } from "@/components/chat/apps-context";
-import {
-  getAppRenderVerb,
-  isSupersededRender,
-  mcpToolLabel,
-} from "@/components/chat/chat-messages.utils";
+import { mcpToolLabel } from "@/components/chat/chat-messages.utils";
 import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
-import { AppSettingsForm } from "@/components/mcp-app/app-settings-form";
+import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { McpAppCard } from "@/components/mcp-app/mcp-app-card";
 import {
-  McpAppAddressPill,
-  McpAppBackButton,
-  McpAppChangelogPill,
   McpAppFullscreenExitButton,
-  McpAppPanelButton,
+  McpAppPill,
   McpAppRefreshButton,
-  McpAppSaveButton,
   McpAppSettingsButton,
   McpAppStandaloneButton,
-  McpAppSwitcher,
   McpAppTopBar,
 } from "@/components/mcp-app/mcp-app-chrome";
 import {
@@ -40,16 +30,12 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-controls";
+import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/app.query";
 import {
   getAppDiagnosticCounts,
   subscribeAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
-
-// Ties the settings form to its top-bar save button via the HTML `form` attr.
-// Only the selected panel app shows settings (one at a time), so a single id is
-// safe.
-const APP_SETTINGS_FORM_ID = "app-settings-form";
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -121,26 +107,15 @@ function useInlineHeightCap() {
   return cap;
 }
 
-/**
- * Self-contained MCP App section for use inside a Tool collapsible.
- * Owns display-mode / size state and the rawToolResult derivation so the
- * parent only needs to forward the raw output from the tool part.
- */
-export function McpAppSection({
-  uiResourceUri,
-  agentId,
-  appId,
-  appName,
-  appVersion,
-  toolName,
-  toolCallId,
-  toolInput,
-  rawOutput,
-  preloadedResource,
-  onSendMessage,
-}: {
+type McpAppSectionProps = {
   uiResourceUri: string;
   agentId: string;
+  /**
+   * Where this render lives. "inline" (default) is the chat-stream render: a pill
+   * plus the app under it when open. "panel" is the right-panel host: the fill
+   * card only (no pill), rendered directly — no portal.
+   */
+  surface?: "inline" | "panel";
   /**
    * Owned-app render: drive the app-bound endpoint (`/api/mcp/app/:appId`)
    * instead of the agent gateway. Set for Archestra-authored apps surfaced by
@@ -148,6 +123,12 @@ export function McpAppSection({
    * forwarded into the iframe (they are not app data).
    */
   appId?: string;
+  /**
+   * External app render against a concrete install: drive the server endpoint
+   * (`/api/mcp/server/:id`) instead of the agent gateway. Set for the apps-page
+   * open-in-chat deep link (the conversation's agent need not have the server).
+   */
+  mcpServerId?: string | null;
   appName?: string | null;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
@@ -160,21 +141,159 @@ export function McpAppSection({
   rawOutput?: McpToolOutput;
   /** HTML pre-fetched by the backend and delivered via SSE — skips the in-browser HTTP fetch */
   preloadedResource?: AppResourceMeta;
+  /**
+   * Expanded tool-call details (input/output) from the host tool card. Rendered
+   * at the top of the column below the marker, so it sits above the inline app.
+   */
+  toolDetails?: React.ReactNode;
   /** Called when the MCP App sends a ui/message request to inject a user message into the conversation */
   onSendMessage?: (text: string) => void;
+};
+
+/**
+ * Self-contained MCP App section for use inside a Tool collapsible or the
+ * right panel. On the inline surface it composes the app pill (row element)
+ * with the app content below; the compact tool row renders those two halves
+ * separately via {@link McpAppEntryPill} and {@link McpAppEntryContent} so
+ * consecutive pills share one line.
+ */
+export function McpAppSection(props: McpAppSectionProps) {
+  if (props.surface === "panel") {
+    return <McpAppEntryContent {...props} />;
+  }
+  return (
+    <>
+      <McpAppEntryPill
+        appId={props.appId}
+        appName={props.appName}
+        toolName={props.toolName}
+        toolCallId={props.toolCallId}
+      />
+      <McpAppEntryContent {...props} />
+    </>
+  );
+}
+
+/**
+ * The app pill in the compact tool-call row: app icon + name, pressed while
+ * the app's inline render is expanded. Clicking toggles the inline render, or
+ * selects/collapses the panel-hosted copy while the right panel is open.
+ * State is shared with {@link McpAppEntryContent} through the apps context
+ * (keyed by toolCallId), so the two halves can live in different DOM slots.
+ */
+export function McpAppEntryPill({
+  appId,
+  appName,
+  toolName,
+  toolCallId,
+  icon,
+  state,
+  onClick,
+}: {
+  appId?: string;
+  appName?: string | null;
+  /** Full prefixed tool name — fallback label when no app name is known. */
+  toolName: string;
+  toolCallId?: string;
+  /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
+  icon?: React.ReactNode;
+  /** Tool-call state for the status dot, matching the tool-call circles. */
+  state?: "running" | "completed" | "error";
+  /** Runs on every pill click, before the app toggle (e.g. to collapse an
+   * expanded tool-call card so only one thing opens under the row). */
+  onClick?: () => void;
 }) {
+  const {
+    isAppOpen,
+    toggleAppOpen,
+    focusAppRender,
+    panelToolCallId,
+    setPanelApp,
+    canonicalToolCallId,
+    closePanel,
+    portalTarget,
+  } = useApps();
+  // Owned apps can be renamed from settings; read the live app so the label
+  // stays in sync after an edit (the appName prop is captured at render time).
+  const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
+  const ownedAppUnavailable = !!appId && ownedAppResolved && ownedApp === null;
+  const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
+
+  const standalone = !toolCallId;
+  const canonicalId = toolCallId ? canonicalToolCallId(toolCallId) : undefined;
+  const isPanelFocused =
+    !!portalTarget && !!canonicalId && panelToolCallId === canonicalId;
+  const pressed =
+    !portalTarget && (standalone || (!!toolCallId && isAppOpen(toolCallId)));
+
+  // Runtime-error count for the pill's status dot (owned apps only).
+  const diagnosticCounts = useSyncExternalStore(
+    subscribeAppDiagnostics,
+    getAppDiagnosticCounts,
+    getAppDiagnosticCounts,
+  );
+  const hasRuntimeError = appId
+    ? (diagnosticCounts.get(appId)?.errors ?? 0) > 0
+    : false;
+
+  return (
+    <McpAppPill
+      label={headerName}
+      icon={icon}
+      state={state}
+      pressed={pressed}
+      hasError={hasRuntimeError || ownedAppUnavailable}
+      onClick={() => {
+        onClick?.();
+        if (!toolCallId) return;
+        // With the panel open, pills select the hosted app; otherwise they toggle
+        // this app's inline render, leaving other open apps alone.
+        if (portalTarget) {
+          if (isPanelFocused) {
+            // Dismissing the panel via a pill expands the app inline under
+            // THIS pill — not wherever the app was last expanded.
+            closePanel();
+            focusAppRender(toolCallId);
+          } else {
+            setPanelApp(toolCallId);
+          }
+        } else {
+          toggleAppOpen(toolCallId);
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * The app's content below the tool-call row: the inline app card (while
+ * expanded), its panel/diagnostics affordances, or the panel-surface fill
+ * card. Owns display-mode / size state and the rawToolResult derivation so
+ * the parent only needs to forward the raw output from the tool part.
+ * Renders nothing while the app is collapsed inline.
+ */
+export function McpAppEntryContent({
+  uiResourceUri,
+  agentId,
+  appId,
+  mcpServerId,
+  appName,
+  appVersion,
+  toolName,
+  toolCallId,
+  toolInput,
+  rawOutput,
+  preloadedResource,
+  toolDetails,
+  onSendMessage,
+  surface = "inline",
+}: McpAppSectionProps) {
   const resourceKey = `${agentId}:${uiResourceUri}`;
   const { displayMode, setDisplayMode, toggleFullscreen, reloadNonce, reload } =
     useAppRuntimeControls();
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
-  // Mirrors the settings form's save state so the top bar's save button (which
-  // lives outside that form) can disable / show a spinner.
-  const [settingsSaveStatus, setSettingsSaveStatus] = useState({
-    saving: false,
-    disabled: false,
-  });
   const [resourceState, setResourceState] = useState<{
     key: string;
     state: "unknown" | "renderable" | "empty";
@@ -190,19 +309,17 @@ export function McpAppSection({
     resourceState.key === resourceKey ? resourceState.state : "unknown";
 
   const {
-    apps,
-    selectedToolCallId,
-    select,
-    showInPanel,
-    closePanel,
+    isAppOpen,
+    setPanelApp,
+    openRightPanel,
     portalTarget,
     settingsOpen,
     setSettingsOpen,
   } = useApps();
 
-  // Owned apps can be renamed/re-described from the address bar. Read the live
-  // app so the title stays in sync after an edit (the appName prop is captured
-  // at render time) and to seed the edit dialog.
+  // Owned apps can be renamed/re-described from settings. Read the live app so
+  // the title stays in sync after an edit (the appName prop is captured at
+  // render time) and to seed the settings dialog.
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
   // A deleted (or no-longer-accessible) owned app: the fetch settled but
@@ -211,20 +328,14 @@ export function McpAppSection({
   const ownedAppUnavailable = !!appId && ownedAppResolved && ownedApp === null;
 
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
-  const isSelected = !!toolCallId && selectedToolCallId === toolCallId;
-  const panelHostingActive = portalTarget !== null;
-  // Only the *selected* app moves to the panel: its iframe is portaled into
-  // the panel and its inline spot becomes a placeholder. Every other inline app
-  // keeps rendering live in the chat.
-  const renderInPanel = panelHostingActive && isSelected;
-
-  // Track the last inline body height while the app shows inline; once it moves
-  // to the panel we stop updating, so the chat placeholder keeps that frozen
-  // footprint and messages below it don't reflow.
-  const lastInlineHeightRef = useRef(INITIAL_INLINE_HEIGHT);
-  if (!renderInPanel) {
-    lastInlineHeightRef.current = size?.height ?? INITIAL_INLINE_HEIGHT;
-  }
+  const isPanelSurface = surface === "panel";
+  const standalone = !toolCallId;
+  // Expanded inline when the panel isn't hosting and this render is standalone or
+  // the open canonical one. Multiple apps can be expanded at once.
+  const expandedInline =
+    !isPanelSurface &&
+    !portalTarget &&
+    (standalone || (!!toolCallId && isAppOpen(toolCallId)));
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
   // management tool's result is not app data.
@@ -243,7 +354,8 @@ export function McpAppSection({
   const handleShowInPanel = () => {
     if (!toolCallId) return;
     setDisplayMode("inline"); // panel is the app's frame — never fullscreen there
-    showInPanel(toolCallId);
+    setPanelApp(toolCallId);
+    openRightPanel();
   };
 
   const handleResourceStateChange = useCallback(
@@ -253,94 +365,38 @@ export function McpAppSection({
     [resourceKey],
   );
 
-  // Error badge: runtime errors / CSP violations captured from this app's
-  // sandboxed render (owned apps only).
-  const diagnosticCounts = useSyncExternalStore(
-    subscribeAppDiagnostics,
-    getAppDiagnosticCounts,
-    getAppDiagnosticCounts,
-  );
-  const appDiagnosticCounts = appId ? diagnosticCounts.get(appId) : undefined;
-  const errorCount = appDiagnosticCounts?.errors ?? 0;
-  const logCount = appDiagnosticCounts?.logs ?? 0;
-
   if (effectiveResourceState === "empty") {
-    return null;
-  }
-
-  // A superseded render (a newer render of the same app — keyed by
-  // uiResourceUri — exists in the conversation) collapses to a static changelog
-  // pill instead of mounting the live runtime, so only the latest render of each
-  // app stays live. Applies to both owned apps and external MCP-UI calls; the
-  // pill degrades to just the label for non-owned renders (no version/verb).
-  if (isSupersededRender({ apps, toolCallId, appId })) {
-    return (
-      <McpAppChangelogPill
-        appName={appName ?? mcpToolLabel(toolName)}
-        version={appVersion ?? null}
-        verb={getAppRenderVerb(toolName)}
-      />
-    );
+    // A blank app document reserves no canvas (a blank render is usually a bug).
+    // In the panel — which the user opened deliberately and which passes no tool
+    // details — show an explicit empty state rather than a blank panel; inline,
+    // keep the tool-call details inspectable (while the pill is expanded)
+    // instead of dropping the section.
+    if (surface === "panel") {
+      return (
+        <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+          This app rendered nothing to display.
+        </div>
+      );
+    }
+    return expandedInline && toolDetails ? (
+      <div className="mt-2 w-full">{toolDetails}</div>
+    ) : null;
   }
 
   // A deleted (or no-longer-accessible) owned app: it's already dropped from the
-  // panel, so this only shows in the chat stream. Degrade to a small, light pill
-  // instead of mounting the runtime (which would 404) behind browser-like chrome.
+  // panel, so this only shows in the chat stream. Its pill carries a red error
+  // dot; while expanded, show the unavailable message styled as an error instead
+  // of mounting the runtime (which would 404).
   if (ownedAppUnavailable) {
+    if (!expandedInline) return null;
     return (
-      <div className="flex w-fit items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
-        <AppWindow className="h-3.5 w-3.5 shrink-0" />
-        <span>{headerName} app is no longer available</span>
+      <div className="mt-2 flex w-full flex-col items-start gap-2">
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {headerName} app is no longer available
+        </div>
       </div>
     );
   }
-
-  const diagnosticsBadge =
-    errorCount > 0 || logCount > 0 ? (
-      <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
-        {errorCount > 0 && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
-            {errorCount === 1
-              ? "1 runtime error"
-              : `${errorCount} runtime errors`}{" "}
-            in this app
-          </div>
-        )}
-        {logCount > 0 && (
-          <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
-            {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
-          </div>
-        )}
-      </div>
-    ) : null;
-
-  // The address bar every surface shares: refresh as the leading icon and
-  // open-in-new-tab as the trailing in-pill action (matching the side panel).
-  // The switcher only applies in the single panel slot; inline renders are each
-  // their own card, so they always get the static pill.
-  const refreshLeading = <McpAppRefreshButton onClick={reload} />;
-  const standaloneAction = appId ? (
-    <McpAppStandaloneButton appId={appId} />
-  ) : null;
-  const addressBar =
-    renderInPanel && apps.length > 1 ? (
-      <McpAppSwitcher
-        value={selectedToolCallId}
-        options={apps.map((app) => ({
-          value: app.toolCallId,
-          label: app.label,
-        }))}
-        onChange={select}
-        leading={refreshLeading}
-        actions={standaloneAction}
-      />
-    ) : (
-      <McpAppAddressPill
-        label={headerName}
-        leading={refreshLeading}
-        actions={standaloneAction}
-      />
-    );
 
   const runtimeNode = (
     <McpAppRuntime
@@ -348,26 +404,28 @@ export function McpAppSection({
       endpoint={
         appId
           ? { kind: "app", appId }
-          : {
-              kind: "agent",
-              agentId,
-              serverPrefix: parseFullToolName(toolName).serverName ?? toolName,
-            }
+          : mcpServerId
+            ? { kind: "server", mcpServerId }
+            : {
+                kind: "agent",
+                agentId,
+                serverPrefix:
+                  parseFullToolName(toolName).serverName ?? toolName,
+              }
       }
       displayMode={displayMode}
       onDisplayModeChange={setDisplayMode}
-      // While portaled into the panel (fill mode), don't report size: that
-      // would overwrite the last inline size and make the card return at the
-      // panel's height when the panel closes.
-      onSizeChange={renderInPanel ? noopSizeChange : setSize}
+      // On the panel surface (fill mode) don't report size: that would overwrite
+      // the inline instance's last size.
+      onSizeChange={isPanelSurface ? noopSizeChange : setSize}
       // Seed the iframe + loading box at the last measured inline height so a
-      // reload (e.g. closing the panel re-mounts it) doesn't collapse then grow.
+      // fresh mount doesn't collapse then grow.
       inlineInitialHeight={size?.height ?? INITIAL_INLINE_HEIGHT}
       // Cap the inline chat surface at the card's visual ceiling so a
       // viewport-relative app can't inflate the iframe without bound. Panel
       // (fill) and fullscreen stay uncapped.
       containerDimensions={
-        !renderInPanel && displayMode !== "fullscreen"
+        !isPanelSurface && displayMode !== "fullscreen"
           ? { maxHeight: inlineHeightCap }
           : undefined
       }
@@ -376,99 +434,115 @@ export function McpAppSection({
       preloadedResource={preloadedResource}
       onResourceStateChange={handleResourceStateChange}
       onSendMessage={onSendMessage}
-      appVersion={appVersion}
+      // Fall back to the resolved app's head version so a render bound only by
+      // appId (e.g. an `__open` launch) still persists diagnostics/screenshots,
+      // which the runtime gates on a non-null version.
+      appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
     />
   );
 
-  // Every surface shows the same centered address bar. The owned-app side panel
-  // adds a single settings gear on the right that swaps the body for the inline
-  // settings form; in settings mode the bar becomes cancel/save — a back arrow
-  // (left, discards edits) and a save action (right, submits the form). The
-  // inline chat surface adds the fullscreen-exit (only while fullscreen) and
-  // show-in-panel controls.
-  let topBar: React.ReactNode;
-  let body: React.ReactNode;
-  if (renderInPanel && appId && ownedApp && settingsOpen) {
-    topBar = (
-      <McpAppTopBar
-        left={<McpAppBackButton onClick={() => setSettingsOpen(false)} />}
-        right={
-          <McpAppSaveButton
-            formId={APP_SETTINGS_FORM_ID}
-            disabled={settingsSaveStatus.disabled}
-            saving={settingsSaveStatus.saving}
-          />
-        }
-      >
-        <span className="px-1 text-xs font-medium text-muted-foreground">
-          Settings
-        </span>
-      </McpAppTopBar>
-    );
-    body = (
-      <AppSettingsForm
-        app={ownedApp}
-        onBack={() => setSettingsOpen(false)}
-        formId={APP_SETTINGS_FORM_ID}
-        onStatusChange={setSettingsSaveStatus}
-        onDeleted={closePanel}
-      />
-    );
-  } else {
-    const right =
-      renderInPanel && appId && ownedApp ? (
-        <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
-      ) : (
+  // Side-panel header: Refresh sits ahead of the plainly left-aligned app name;
+  // Settings (owned apps) and Open-in-tab (owned apps) are labeled buttons on the
+  // right. App selection lives in the chat pills, so there's no switcher here.
+  const isOwnedInPanel = isPanelSurface && !!appId && !!ownedApp;
+  const panelTopBar = (
+    <McpAppTopBar
+      left={
         <>
-          {displayMode === "fullscreen" && (
-            <McpAppFullscreenExitButton onClick={toggleFullscreen} />
-          )}
-          {toolCallId && !renderInPanel && (
-            <McpAppPanelButton onClick={handleShowInPanel} />
-          )}
+          <McpAppRefreshButton onClick={reload} size="bar" />
+          <span className="min-w-0 truncate px-1 text-sm font-medium">
+            {headerName}
+          </span>
         </>
-      );
-    topBar = <McpAppTopBar right={right}>{addressBar}</McpAppTopBar>;
-    body = runtimeNode;
-  }
+      }
+      right={
+        <>
+          {appId ? <McpAppStandaloneButton appId={appId} /> : null}
+          {isOwnedInPanel ? (
+            <McpAppSettingsButton onClick={() => setSettingsOpen(true)} />
+          ) : null}
+        </>
+      }
+    />
+  );
+
+  // Frameless inline (item 4): no top bar — chat context identifies the app.
+  // Only fullscreen-exit floats as a hover overlay (while fullscreen). The
+  // open-in-right-panel control is a labeled button below the app instead.
+  const inlineOverlay =
+    displayMode === "fullscreen" ? (
+      <McpAppFullscreenExitButton onClick={toggleFullscreen} />
+    ) : null;
 
   const liveSurface = (
     <McpAppErrorBoundary>
       <McpAppCard
         displayMode={displayMode}
         onToggleFullscreen={toggleFullscreen}
-        diagnostics={diagnosticsBadge}
-        fillContainer={renderInPanel}
+        fillContainer={isPanelSurface}
         capInlineHeight
-        topBar={topBar}
+        topBar={isPanelSurface ? panelTopBar : undefined}
+        overlay={isPanelSurface ? undefined : inlineOverlay}
       >
-        {body}
+        {runtimeNode}
       </McpAppCard>
     </McpAppErrorBoundary>
   );
 
-  const surface = renderInPanel ? (
-    <>
-      <McpAppCard
-        displayMode="inline"
-        onToggleFullscreen={toggleFullscreen}
-        frozenHeight={lastInlineHeightRef.current}
-        capInlineHeight
-        topBar={
-          <McpAppTopBar>
-            <McpAppAddressPill label={headerName} />
-          </McpAppTopBar>
-        }
-        placeholder={
-          <span className="text-muted-foreground">Showing in panel</span>
-        }
-      />
-      {portalTarget && createPortal(liveSurface, portalTarget)}
-    </>
-  ) : (
-    liveSurface
-  );
+  // The panel surface is the right-panel host: just the fill card (with its top
+  // bar) plus the owned-app settings modal. No pill, no diagnostics — the inline
+  // instance owns those in the chat stream.
+  if (isPanelSurface) {
+    return (
+      <>
+        {liveSurface}
+        {isOwnedInPanel ? (
+          <AppSettingsDialog
+            appId={appId}
+            open={settingsOpen}
+            onOpenChange={setSettingsOpen}
+          />
+        ) : null}
+      </>
+    );
+  }
 
-  return surface;
+  // Nothing below the row while the app is collapsed inline (or hosted in the
+  // right panel). The component stays mounted so the last measured size
+  // survives a collapse/expand cycle.
+  if (!expandedInline) {
+    return null;
+  }
+
+  // Runtime-error / log summary lives below the app in the chat stream, never
+  // inside the height-constrained panel (item 3).
+  const diagnostics = appId ? <AppDiagnosticsPanel appId={appId} /> : null;
+
+  // The app card, its "Open in right panel" button, and the diagnostics
+  // summary. mt-2 matches the row → expanded-tool-card gap so every panel
+  // opening under the pill row sits 8px below it.
+  return (
+    <div className="mt-2 flex w-full flex-col items-start gap-2">
+      {liveSurface}
+      {toolCallId && displayMode !== "fullscreen" ? (
+        // Match the card's 80% width and right-justify so the buttons line
+        // up with the app's right edge, not the full chat width.
+        <div className="flex w-full max-w-[80%] justify-end gap-1">
+          {appId ? <McpAppStandaloneButton appId={appId} /> : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleShowInPanel}
+          >
+            <PanelRight className="h-3.5 w-3.5" />
+            Open in right panel
+          </Button>
+        </div>
+      ) : null}
+      {diagnostics}
+    </div>
+  );
 }

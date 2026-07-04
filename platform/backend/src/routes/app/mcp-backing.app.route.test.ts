@@ -1,6 +1,5 @@
 import { ADMIN_ROLE_NAME, getArchestraAppResourceUri } from "@archestra/shared";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
 import {
   AgentModel,
   AppModel,
@@ -10,29 +9,13 @@ import {
 } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("MCP backing for apps", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();

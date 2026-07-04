@@ -24,8 +24,10 @@ import type {
   ChatOpsProvider,
   ChatOpsProviderType,
   IncomingChatMessage,
+  SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
 import type { InteractionSource } from "../../../../shared";
 import {
   buildApprovalDecisionSendMessageRequest,
@@ -54,7 +56,12 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
-import { errorMessage, isSlackDmChannel } from "./utils";
+import {
+  buildHistorySkippedAttachmentsNote,
+  buildSkippedAttachmentsNote,
+  errorMessage,
+  isSlackDmChannel,
+} from "./utils";
 
 /**
  * ChatOps Manager - handles chatops provider lifecycle and message processing
@@ -801,6 +808,13 @@ export class ChatOpsManager {
       fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
     }
 
+    // Tell the model about files that were attached but not delivered (e.g. too
+    // large), so it doesn't deny they exist. History drops get per-turn notes
+    // in fetchThreadHistory; this covers the current message.
+    fullMessage += buildSkippedAttachmentsNote(
+      message.skippedAttachments ?? [],
+    );
+
     // Merge history attachments with current message attachments
     const mergedAttachments = [
       ...(historyAttachments || []),
@@ -1125,21 +1139,37 @@ export class ChatOpsManager {
       const contextMessages = history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
         const sender = msg.isFromBot ? "You (Archestra)" : msg.senderName;
+        // A file-only turn has no text; name its attachments so the turn is
+        // meaningful (the file arrives separately or gets a skip note below).
+        if (!text.trim() && msg.files?.length) {
+          const names = msg.files
+            .map((f) => (f.name ? `"${f.name}"` : "an unnamed file"))
+            .join(", ");
+          return `${sender}: [sent ${msg.files.length === 1 ? "an attachment" : "attachments"}: ${names}]`;
+        }
         return `${sender}: ${text}`;
       });
 
-      // Collect files from non-bot user messages in history
-      const historyFiles = history
-        .filter((msg) => !msg.isFromBot && msg.files && msg.files.length > 0)
-        .flatMap((msg) => msg.files ?? []);
+      // Collect files from non-bot user messages, remembering the turn each
+      // file came from so drops can be surfaced on that turn.
+      const fileRefs = history.flatMap((msg, turnIndex) =>
+        !msg.isFromBot && msg.files
+          ? msg.files.map((file) => ({ file, turnIndex }))
+          : [],
+      );
 
-      const historyAttachments: Array<{
-        contentType: string;
-        contentBase64: string;
-        name?: string;
-      }> = [];
+      const historyAttachments: A2AAttachment[] = [];
+      const skippedByTurn = new Map<number, SkippedAttachment[]>();
+      const addSkip = (turnIndex: number, skipped: SkippedAttachment): void => {
+        const existing = skippedByTurn.get(turnIndex);
+        if (existing) {
+          existing.push(skipped);
+        } else {
+          skippedByTurn.set(turnIndex, [skipped]);
+        }
+      };
 
-      if (historyFiles.length > 0) {
+      if (fileRefs.length > 0) {
         // Calculate how much budget the current message attachments already use
         const currentAttachmentSize =
           message.attachments?.reduce(
@@ -1150,29 +1180,51 @@ export class ChatOpsManager {
           CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE -
           currentAttachmentSize;
 
-        if (remainingBudget > 0) {
-          // Limit files to download based on remaining budget
-          const filesToDownload = historyFiles.filter(
-            (f) =>
-              !f.size ||
-              f.size <= CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
-          );
-
+        if (remainingBudget <= 0) {
+          for (const { file, turnIndex } of fileRefs) {
+            addSkip(turnIndex, {
+              name: file.name,
+              sizeBytes: file.size,
+              reason: "total_limit_reached",
+            });
+          }
+        } else {
           try {
-            const downloaded = await provider.downloadFiles(filesToDownload);
-            // Trim to remaining budget
+            const outcomes = await provider.downloadFiles(
+              fileRefs.map((ref) => ref.file),
+            );
+            // Trim delivered files to the remaining budget; once it overflows,
+            // every later delivery is surfaced as skipped (mirrors the
+            // provider-side budget semantics).
             let totalSize = 0;
-            for (const attachment of downloaded) {
-              const size = Math.ceil((attachment.contentBase64.length * 3) / 4);
-              if (totalSize + size > remainingBudget) break;
+            let budgetExhausted = false;
+            outcomes.forEach((outcome, index) => {
+              const ref = fileRefs[index];
+              if (!ref) return;
+              if (outcome.status === "skipped") {
+                addSkip(ref.turnIndex, outcome.skipped);
+                return;
+              }
+              const size = Math.ceil(
+                (outcome.attachment.contentBase64.length * 3) / 4,
+              );
+              if (budgetExhausted || totalSize + size > remainingBudget) {
+                budgetExhausted = true;
+                addSkip(ref.turnIndex, {
+                  name: ref.file.name,
+                  sizeBytes: size,
+                  reason: "total_limit_reached",
+                });
+                return;
+              }
               totalSize += size;
-              historyAttachments.push(attachment);
-            }
+              historyAttachments.push(outcome.attachment);
+            });
             if (historyAttachments.length > 0) {
               logger.info(
                 {
                   downloadedCount: historyAttachments.length,
-                  totalHistoryFiles: historyFiles.length,
+                  totalHistoryFiles: fileRefs.length,
                 },
                 "[ChatOps] Downloaded attachments from thread history",
               );
@@ -1183,6 +1235,16 @@ export class ChatOpsManager {
               "[ChatOps] Failed to download history attachments",
             );
           }
+        }
+      }
+
+      // Surface drops on the turn they belong to, so "use the screenshot
+      // above" gets an explanation instead of a denial.
+      for (const [turnIndex, skips] of skippedByTurn) {
+        const line = contextMessages[turnIndex];
+        if (line !== undefined) {
+          contextMessages[turnIndex] =
+            line + buildHistorySkippedAttachmentsNote(skips);
         }
       }
 
@@ -2003,15 +2065,6 @@ async function getDefaultOrganizationId(): Promise<string> {
 }
 
 /**
- * Strip `<thinking>...</thinking>` blocks from LLM responses.
- * These are internal reasoning blocks that should not be shown to users.
- *
- * Uses non-greedy matching (`*?`) so multiple separate thinking blocks are
- * stripped independently without eating content between them. This assumes
- * blocks are not nested — nested `<thinking>` tags would leave the tail
- * visible, but LLMs do not produce nested thinking blocks in practice.
- */
-/**
  * Build a deterministic session ID for chatops messages.
  * Uses the thread ID when available (threaded conversations), otherwise
  * falls back to the channel ID (non-threaded DMs/channels).
@@ -2039,10 +2092,6 @@ export function buildChatOpsSessionId(
 // Prometheus exemplar labels allow 128 UTF-8 chars total (keys + values).
 // traceID (7+32) + spanID (6+16) = 61; remaining for sessionID key (9) + value = 58.
 const MAX_SESSION_ID_LENGTH = 58;
-
-function stripThinkingBlocks(text: string): string {
-  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
-}
 
 /**
  * Strip bot footer from message text to avoid the LLM repeating it.

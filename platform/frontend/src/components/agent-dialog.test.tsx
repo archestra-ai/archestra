@@ -2,6 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useEnterpriseFeature,
+  useFeature,
+  useSmallTeamTier,
+} from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { AgentDialog } from "./agent-dialog";
 
 global.ResizeObserver = class ResizeObserver {
@@ -14,7 +21,6 @@ const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,
   useAgentDelegationsMock,
-  useHasPermissionsMock,
   useInternalAgentsMock,
   useLlmModelsByProviderMock,
   useProfileMock,
@@ -33,7 +39,6 @@ const {
   ),
   useAvailableLlmProviderApiKeysMock: vi.fn(() => ({ data: [] })),
   useLlmModelsByProviderMock: vi.fn(() => ({ modelsByProvider: {} })),
-  useHasPermissionsMock: vi.fn((..._args: unknown[]) => ({ data: true })),
   useUpdateProfileMock: vi.fn(() => ({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -77,19 +82,13 @@ vi.mock("@/lib/agent-tools.query", () => ({
   useSyncAgentDelegations: useSyncAgentDelegationsMock,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: useHasPermissionsMock,
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useChatProfileMcpTools: () => ({ data: [], isLoading: false }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
-  useEnterpriseFeature: () => false,
-  useSmallTeamTier: () => undefined,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
   useConnectors: () => ({ data: [] }),
@@ -108,9 +107,7 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: useAvailableLlmProviderApiKeysMock,
 }));
 
-vi.mock("@/lib/hooks/use-app-name", () => ({
-  useAppName: () => "Archestra",
-}));
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/docs/docs", () => ({
   getFrontendDocsUrl: () => "/docs",
@@ -136,6 +133,16 @@ vi.mock("@/components/agent-tools-editor", () => ({
     }));
 
     return <div>Mock Tools Editor</div>;
+  }),
+}));
+
+vi.mock("@/components/agent-tool-exclusions-editor", () => ({
+  AgentToolExclusionsEditor: forwardRef((_props, ref) => {
+    useImperativeHandle(ref, () => ({
+      saveChanges: vi.fn(),
+    }));
+
+    return <div>Mock Tool Exclusions Editor</div>;
   }),
 }));
 
@@ -172,6 +179,10 @@ vi.mock("@/components/visibility-selector", () => ({
   VisibilitySelector: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
+}));
+
+vi.mock("@/components/environment-selector", () => ({
+  EnvironmentSelector: () => <div />,
 }));
 
 vi.mock("@/components/ui/alert", () => ({
@@ -239,6 +250,9 @@ vi.mock("@/components/ui/dialog", () => ({
   ),
   DialogContent: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
+  ),
+  DialogDescription: ({ children }: { children?: React.ReactNode }) => (
+    <p>{children}</p>
   ),
   DialogForm: ({
     children,
@@ -335,6 +349,15 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
+beforeEach(() => {
+  vi.mocked(useFeature).mockReturnValue(
+    false as unknown as ReturnType<typeof useFeature>,
+  );
+  vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+  vi.mocked(useSmallTeamTier).mockReturnValue(undefined);
+  vi.mocked(useAppName).mockReturnValue("Archestra");
+});
+
 const baseAgent = {
   id: "00000000-0000-4000-8000-000000000001",
   organizationId: "00000000-0000-4000-8000-000000000010",
@@ -384,7 +407,9 @@ const targetAgent = {
 describe("AgentDialog delegation state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useHasPermissionsMock.mockImplementation(() => ({ data: true }));
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
     useProfileMock.mockReturnValue({ data: null, refetch: vi.fn() });
     useInternalAgentsMock.mockReturnValue({ data: [targetAgent] });
     useAgentDelegationsMock.mockReturnValue({
@@ -428,7 +453,9 @@ describe("AgentDialog delegation state", () => {
 describe.skip("AgentDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useHasPermissionsMock.mockImplementation(() => ({ data: true }));
+    vi.mocked(useHasPermissions).mockImplementation(
+      () => ({ data: true }) as unknown as ReturnType<typeof useHasPermissions>,
+    );
   });
 
   it("does not eagerly enable agent-only queries for a closed MCP gateway dialog", () => {
@@ -512,13 +539,13 @@ describe.skip("AgentDialog", () => {
   });
 
   it("does not enable LLM queries when the user lacks LLM read permissions", () => {
-    useHasPermissionsMock.mockImplementation((...args: unknown[]) => {
+    vi.mocked(useHasPermissions).mockImplementation(((...args: unknown[]) => {
       const permissions = (args[0] ?? {}) as Record<string, unknown>;
       if ("llmProviderApiKey" in permissions || "llmModel" in permissions) {
         return { data: false };
       }
       return { data: true };
-    });
+    }) as unknown as typeof useHasPermissions);
 
     render(
       <AgentDialog open={true} onOpenChange={vi.fn()} agentType="agent" />,
@@ -534,13 +561,13 @@ describe.skip("AgentDialog", () => {
   });
 
   it("shows org default model message when the user cannot read keys or models", () => {
-    useHasPermissionsMock.mockImplementation((...args: unknown[]) => {
+    vi.mocked(useHasPermissions).mockImplementation(((...args: unknown[]) => {
       const permissions = (args[0] ?? {}) as Record<string, unknown>;
       if ("llmProviderApiKey" in permissions || "llmModel" in permissions) {
         return { data: false };
       }
       return { data: true };
-    });
+    }) as unknown as typeof useHasPermissions);
 
     render(
       <AgentDialog open={true} onOpenChange={vi.fn()} agentType="agent" />,

@@ -104,6 +104,11 @@ export function useForkSharedConversation() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (data.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["projects", data.projectId, "conversations"],
+        });
+      }
     },
   });
 }
@@ -130,6 +135,11 @@ export function useForkConversation() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      if (data.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["projects", data.projectId, "conversations"],
+        });
+      }
     },
   });
 }

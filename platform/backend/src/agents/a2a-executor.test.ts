@@ -1,12 +1,14 @@
 import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
-import { NoSuchToolError } from "ai";
+import { NoSuchToolError, type UIMessage } from "ai";
 import { describe, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import ModelModel from "@/models/model";
 import { expect, test } from "@/test";
 import type { StageResult } from "./a2a/stage-attachments";
 import {
   type A2AAttachment,
   buildUserContent,
+  emitSubagentToolCalls,
   executeA2AMessage,
 } from "./a2a-executor";
 import { TOOL_DENIAL_INSTRUCTION } from "./agent-system-prompt";
@@ -614,6 +616,68 @@ describe("executeA2AMessage current turn assembly", () => {
     const config = mockStreamText.mock.calls[0]?.[0];
     expect(config.messages).toEqual(history);
   });
+
+  test("caps output tokens at the model's real ceiling, clamped by the operator ceiling", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    await ModelModel.upsert({
+      externalId: "anthropic/claude-sonnet-4-6",
+      provider: "anthropic",
+      modelId: "claude-sonnet-4-6",
+      description: "Claude Sonnet 4.6",
+      contextLength: 200000,
+      outputLength: 64000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.maxOutputTokens).toBe(32768);
+  });
+
+  test("falls back to the unknown-model output budget when no model row exists", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+    });
+    primeStreamMocks();
+
+    await executeA2AMessage({
+      agentId: agent.id,
+      message: "current question",
+      organizationId: org.id,
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const config = mockStreamText.mock.calls[0]?.[0];
+    expect(config.maxOutputTokens).toBe(8192);
+  });
 });
 
 describe("executeA2AMessage model selection", () => {
@@ -1013,5 +1077,193 @@ describe("executeA2AMessage skill catalog", () => {
     expect(system).toContain("Handle the task.");
     expect(system).not.toContain("<available_skills>");
     expect(system).toContain(TOOL_DENIAL_INSTRUCTION);
+  });
+});
+
+describe("emitSubagentToolCalls", () => {
+  type Emitted = {
+    parentToolCallId: string;
+    toolCallId: string;
+    toolName: string;
+    input?: unknown;
+    output?: unknown;
+    state?: string;
+    errorText?: string;
+  };
+  const fakeBridge = () => {
+    const emitted: Emitted[] = [];
+    return {
+      bridge: {
+        setWriter: () => {},
+        emit: (d: Emitted) => emitted.push(d),
+        collected: () => [],
+      },
+      emitted,
+    };
+  };
+
+  test("emits one call per tool part, attributed to the delegation call", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "thinking" },
+          {
+            type: "tool-web_search",
+            toolCallId: "C1",
+            state: "output-available",
+            input: { q: "x" },
+            output: { hits: 1 },
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "fetch",
+            toolCallId: "C2",
+            state: "output-error",
+            errorText: "boom",
+          },
+        ],
+      } as unknown as UIMessage,
+    });
+
+    expect(emitted).toHaveLength(2);
+    expect(emitted[0]).toMatchObject({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "web_search",
+      input: { q: "x" },
+      output: { hits: 1 },
+    });
+    expect(emitted[1]).toMatchObject({
+      parentToolCallId: "P1",
+      toolCallId: "C2",
+      toolName: "fetch",
+      errorText: "boom",
+    });
+  });
+
+  test("a nested delegation call surfaces as a tool part (its children come from its own run)", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-agent__grandchild",
+            toolCallId: "C2",
+            state: "output-available",
+            input: { message: "do" },
+          },
+        ],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toEqual([
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C2",
+        toolName: "agent__grandchild",
+        input: { message: "do" },
+        state: "output-available",
+      },
+    ]);
+  });
+
+  test("skips parts that are not tool calls", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "hi" },
+          { type: "reasoning", text: "hmm" },
+          { type: "step-start" },
+        ],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(0);
+  });
+
+  test("collapses input-available then output-available for the same id (last wins)", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-web_search",
+            toolCallId: "C1",
+            state: "input-available",
+            input: { q: "x" },
+          },
+          {
+            type: "tool-web_search",
+            toolCallId: "C1",
+            state: "output-available",
+            input: { q: "x" },
+            output: { hits: 1 },
+          },
+        ],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      toolCallId: "C1",
+      state: "output-available",
+      output: { hits: 1 },
+    });
+  });
+
+  test("falls back to 'unknown' for a dynamic-tool part with no toolName", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [
+          { type: "dynamic-tool", toolCallId: "C1", state: "output-available" },
+        ],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].toolName).toBe("unknown");
+  });
+
+  test("skips a tool part that has no toolCallId", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: {
+        id: "m",
+        role: "assistant",
+        parts: [{ type: "tool-web_search", state: "output-available" }],
+      } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(0);
+  });
+
+  test("emits nothing for a message with no parts", () => {
+    const { bridge, emitted } = fakeBridge();
+    emitSubagentToolCalls({
+      bridge,
+      parentToolCallId: "P1",
+      message: { id: "m", role: "assistant" } as unknown as UIMessage,
+    });
+    expect(emitted).toHaveLength(0);
   });
 });

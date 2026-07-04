@@ -3,6 +3,7 @@ import {
   buildCronFromSchedule,
   buildScheduleTriggerPayload,
   DEFAULT_FORM_STATE,
+  getScheduledRunChatState,
   isValidCronExpression,
   parseCronToMode,
 } from "./schedule-trigger.utils";
@@ -96,6 +97,53 @@ describe("isValidCronExpression", () => {
     "99 99 * * *",
   ])("rejects the invalid expression %j", (expression) => {
     expect(isValidCronExpression(expression)).toBe(false);
+  });
+});
+
+describe("getScheduledRunChatState", () => {
+  it("treats a non-scheduled chat as neither scheduled nor in progress", () => {
+    expect(
+      getScheduledRunChatState({ context: null, runStatus: "running" }),
+    ).toEqual({ isScheduledRunChat: false, isRunInProgress: false });
+  });
+
+  it("is a scheduled-run chat but not in progress when no run is pinned", () => {
+    expect(
+      getScheduledRunChatState({
+        context: { triggerId: "t1", runId: null },
+        runStatus: undefined,
+      }),
+    ).toEqual({ isScheduledRunChat: true, isRunInProgress: false });
+  });
+
+  it("is in progress while the pinned run is running", () => {
+    expect(
+      getScheduledRunChatState({
+        context: { triggerId: "t1", runId: "r1" },
+        runStatus: "running",
+      }),
+    ).toEqual({ isScheduledRunChat: true, isRunInProgress: true });
+  });
+
+  it.each([
+    "success",
+    "failed",
+  ] as const)("is not in progress once the run is %s", (runStatus) => {
+    expect(
+      getScheduledRunChatState({
+        context: { triggerId: "t1", runId: "r1" },
+        runStatus,
+      }),
+    ).toEqual({ isScheduledRunChat: true, isRunInProgress: false });
+  });
+
+  it("is not in progress while the run status is still loading", () => {
+    expect(
+      getScheduledRunChatState({
+        context: { triggerId: "t1", runId: "r1" },
+        runStatus: undefined,
+      }),
+    ).toEqual({ isScheduledRunChat: true, isRunInProgress: false });
   });
 });
 

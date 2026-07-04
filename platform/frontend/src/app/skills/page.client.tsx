@@ -6,6 +6,7 @@ import {
   BookOpen,
   Braces,
   Info,
+  MessageSquare,
   Pencil,
   Plus,
   RotateCcw,
@@ -27,7 +28,6 @@ import {
 } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -36,26 +36,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
-  useOrganization,
-  useUpdateAgentSettings,
-} from "@/lib/organization.query";
-import {
   useDeleteSkill,
-  useEnableSkillToolDefaults,
   useResetSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
+import {
+  withEditorClosed,
+  withEditorOpen,
+  withOpenEditRewritten,
+} from "./_parts/editor-url";
 import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
@@ -113,7 +112,12 @@ function SkillsList() {
     [pathname, router, searchParams],
   );
 
-  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  // The open editor is driven by the `edit=<skillId>` search param. It stays
+  // in the URL while the dialog is open so the link is copyable at any moment
+  // (deliberate divergence from pages that strip it after opening). The dialog
+  // fetches the skill by id itself, so deep links work regardless of the
+  // current page/search of the table.
+  const editingSkillId = searchParams.get("edit");
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
   const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
@@ -121,18 +125,37 @@ function SkillsList() {
 
   const items = skills?.data ?? [];
 
+  const openEditor = useCallback(
+    (skillId: string) => {
+      const params = withEditorOpen(
+        new URLSearchParams(searchParams.toString()),
+        skillId,
+      );
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const closeEditor = useCallback(() => {
+    const params = withEditorClosed(
+      new URLSearchParams(searchParams.toString()),
+    );
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   // Deep-link support: /skills?openEdit=<name> auto-opens the skill editor for
-  // the matching skill (e.g. from the chat SkillPill). The query param is
-  // stripped after we open the dialog so the URL doesn't keep re-triggering
-  // on refresh or back-navigation.
+  // the matching skill (e.g. from the chat SkillPill). Once the name resolves
+  // to an id from the loaded items, the URL is rewritten to the durable
+  // `edit=<skillId>` form so it keeps working on refresh and stays copyable.
   const openEdit = searchParams.get("openEdit");
   useEffect(() => {
     if (!openEdit || items.length === 0) return;
     const match = items.find((s) => s.name === openEdit);
     if (!match) return;
-    setEditingSkillId(match.id);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("openEdit");
+    const params = withOpenEditRewritten(
+      new URLSearchParams(searchParams.toString()),
+      match.id,
+    );
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [openEdit, items, searchParams, pathname, router]);
   const pagination = skills?.pagination;
@@ -244,7 +267,13 @@ function SkillsList() {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
             permissions: { skill: ["update"] },
-            onClick: () => setEditingSkillId(skill.id),
+            onClick: () => openEditor(skill.id),
+          },
+          {
+            icon: <MessageSquare className="h-4 w-4" />,
+            label: "Chat",
+            permissions: { chat: ["read", "create"] },
+            href: `/chat/new?skill_id=${skill.id}`,
           },
           ...(isBuiltIn
             ? [
@@ -327,7 +356,6 @@ function SkillsList() {
                   ))}
                 </SelectContent>
               </Select>
-              <SkillSlashCommandToggle />
             </div>
 
             <DataTable
@@ -353,7 +381,7 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={(row) => setEditingSkillId(row.id)}
+              onRowClick={(row) => openEditor(row.id)}
               isLoading={isFetching}
             />
           </>
@@ -364,7 +392,7 @@ function SkillsList() {
         <SkillEditorDialog
           skillId={editingSkillId}
           open={!!editingSkillId}
-          onOpenChange={(open) => !open && setEditingSkillId(null)}
+          onOpenChange={(open) => !open && closeEditor()}
         />
       )}
 
@@ -387,57 +415,6 @@ function SkillsList() {
   );
 }
 
-/**
- * Org-level toggle exposing skills as `/skill-name` slash commands in chat.
- * Independent of `skillToolsEnabled` (the model-facing `load_skill` tool).
- */
-function SkillSlashCommandToggle() {
-  const { data: organization } = useOrganization();
-  const { data: canUpdate } = useHasPermissions({ agent: ["update"] });
-  const updateAgentSettings = useUpdateAgentSettings(
-    "Skill slash commands updated",
-    "Failed to update skill slash commands",
-  );
-  const enabled = organization?.skillSlashCommandsEnabled ?? false;
-  // Slash commands depend on skill tools — the toggle stays locked until skills
-  // are enabled for the organization (the empty-state "Enable" button).
-  const skillToolsEnabled = organization?.skillToolsEnabled ?? false;
-  const disabled =
-    !canUpdate || updateAgentSettings.isPending || !skillToolsEnabled;
-
-  return (
-    <div className="ml-auto flex items-center gap-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">
-            <Switch
-              id="skill-slash-commands"
-              checked={enabled}
-              disabled={disabled}
-              onCheckedChange={(checked) =>
-                updateAgentSettings.mutate({
-                  skillSlashCommandsEnabled: checked,
-                })
-              }
-            />
-          </span>
-        </TooltipTrigger>
-        {!skillToolsEnabled && (
-          <TooltipContent>
-            Enable skills for this organization first.
-          </TooltipContent>
-        )}
-      </Tooltip>
-      <Label
-        htmlFor="skill-slash-commands"
-        className="text-sm text-muted-foreground"
-      >
-        Use skills as slash commands in chat
-      </Label>
-    </div>
-  );
-}
-
 /** Extract `owner/repo` from a `source_ref` shaped like `owner/repo@ref:path`. */
 function parseRepoFromSourceRef(sourceRef: string | null): string | null {
   if (!sourceRef) return null;
@@ -451,18 +428,6 @@ function parseRepoFromSourceRef(sourceRef: string | null): string | null {
 }
 
 function SkillsEmptyState() {
-  const router = useRouter();
-  const { data: organization } = useOrganization();
-  const enableDefaults = useEnableSkillToolDefaults();
-  const alreadyEnabled = organization?.skillToolsEnabled === true;
-
-  const handleEnableAndCreate = useCallback(async () => {
-    const result = await enableDefaults.mutateAsync();
-    if (result) {
-      router.push("/skills/new");
-    }
-  }, [enableDefaults, router]);
-
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="max-w-md text-center">
@@ -470,36 +435,17 @@ function SkillsEmptyState() {
           <BookOpen className="h-7 w-7 text-primary" />
         </div>
         <h2 className="mb-2 text-xl font-semibold">No skills yet</h2>
-        <p className="mb-2 text-sm text-muted-foreground">
+        <p className="mb-6 text-sm text-muted-foreground">
           A skill is a set of instructions and files. Agents pick the right one
           by name and follow it on demand.
         </p>
-        {!alreadyEnabled && (
-          <p className="mb-6 text-sm text-muted-foreground">
-            Turning skills on makes them available to every agent in this
-            organization.
-          </p>
-        )}
         <div className="flex items-center justify-center">
-          {alreadyEnabled ? (
-            <PermissionButton permissions={{ skill: ["create"] }} asChild>
-              <Link href="/skills/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Add your first skill
-              </Link>
-            </PermissionButton>
-          ) : (
-            <PermissionButton
-              permissions={{ skill: ["admin"] }}
-              onClick={handleEnableAndCreate}
-              disabled={enableDefaults.isPending}
-            >
+          <PermissionButton permissions={{ skill: ["create"] }} asChild>
+            <Link href="/skills/new">
               <Plus className="mr-2 h-4 w-4" />
-              {enableDefaults.isPending
-                ? "Enabling…"
-                : "Enable and create a new skill"}
-            </PermissionButton>
-          )}
+              Add your first skill
+            </Link>
+          </PermissionButton>
         </div>
       </div>
     </div>

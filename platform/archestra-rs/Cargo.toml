@@ -1,7 +1,20 @@
 [workspace]
-members = ["app-runtime-core", "app-runtime-rs", "sandbox-core", "sandbox-rs"]
+members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs"]
 resolver = "2"
 
+# No LTO: for these NAPI shims it measured slower to build AND a larger binary
+# (little cross-crate hot code to inline), so it was pure cost.
 [profile.release]
-lto = "thin"
 strip = "symbols"
+
+# Local dev default is debug=2 — heavy debuginfo we don't use in a native addon.
+[profile.dev]
+debug = "line-tables-only"
+
+# Fast local build of the NAPI addons: inherits release (which carries no LTO)
+# but adds codegen units so rebuilds parallelize across cores, plus incremental
+# for quick edit->rebuild. Used by `pnpm build:dev`; CI/publish still use `release`.
+[profile.release-fast]
+inherits = "release"
+codegen-units = 256
+incremental = true

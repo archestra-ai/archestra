@@ -8,6 +8,7 @@ import {
   CalendarClock,
   Download,
   Eye,
+  Loader2,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -25,6 +26,7 @@ import {
   formatScheduledRecentRow,
 } from "@/app/projects/[id]/project-chats.utils";
 import { ProjectSchedulesSection } from "@/app/projects/[id]/project-schedules-section";
+import { runChatHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentIcon } from "@/components/agent-icon";
 import { FileDetailHeader } from "@/components/chat/file-detail-header";
 import type { FileListItem } from "@/components/chat/file-list-section";
@@ -41,6 +43,7 @@ import { FileDropZone } from "@/components/files/file-drop-zone";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,8 +53,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useCreateConversation } from "@/lib/chat/chat.query";
+import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
-import { buildProjectChatHandoffUrl } from "@/lib/projects/project-chat-handoff";
 import { canManageProject } from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
@@ -62,6 +67,7 @@ import {
   useProjectFiles,
   useUploadProjectFiles,
 } from "@/lib/projects/projects.query";
+import { useScheduleTriggerRuns } from "@/lib/schedule-trigger.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -252,25 +258,133 @@ function ProjectDetail() {
 // === internal components ===
 
 /**
- * The real /chat composer; submitting hands off to /chat, which creates the
- * project chat (via ?project=) and sends the prompt (via ?user_prompt=).
+ * The real /chat composer. Rather than route through an empty `/chat` (which
+ * flashes the New Chat splash, then blanks again while it creates the chat over
+ * the network and remounts at /chat/<id>), it creates the project chat up front
+ * — the project page stays on screen during the request, and `useCreateConversation`
+ * seeds the conversation cache so `/chat/<id>` renders without a load. The opening
+ * message rides {@link setPendingProjectChatHandoff} across the single navigation,
+ * where `/chat/<id>` sends it as the conversation's first message.
  */
 function ProjectChatInput({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const createConversation = useCreateConversation();
+  const { data: projectFiles } = useProjectFiles(projectId);
+  const projectHasFiles = (projectFiles?.length ?? 0) > 0;
 
   return (
     <NewChatComposer
-      onSubmitPrompt={(text, agentId, hasAttachments) =>
-        router.push(
-          buildProjectChatHandoffUrl({
-            projectId,
-            prompt: text,
+      onSubmit={({ text, agentId, modelId, apiKeyId }) => {
+        // Ignore a second submit while the first create is still in flight.
+        if (createConversation.isPending) return;
+        createConversation.mutate(
+          {
             agentId,
-            hasAttachments,
-          }),
-        )
-      }
+            modelId: modelId || undefined,
+            chatApiKeyId: apiKeyId ?? undefined,
+            projectId,
+          },
+          {
+            onSuccess: (conversation) => {
+              if (!conversation) return;
+              // The opening prompt travels to /chat/<id>, which sends it (with
+              // any attachments the composer stashed) as the first message.
+              setPendingProjectChatHandoff({
+                conversationId: conversation.id,
+                prompt: text,
+              });
+              // Continuity with the project page: when the project already has
+              // files, open the new chat with its Files panel showing. Persisted
+              // per conversation, since /chat reads this on mount.
+              if (projectHasFiles) {
+                const keys = conversationStorageKeys(conversation.id);
+                localStorage.setItem(keys.rightPanelOpen, "true");
+                localStorage.setItem(keys.rightPanelTab, "files");
+              }
+              router.push(`/chat/${conversation.id}`);
+            },
+          },
+        );
+      }}
     />
+  );
+}
+
+// A Recents row for a schedule: keyed on the schedule's LATEST run (not the
+// possibly-stale run this collapsed conversation was built from), so it stays in
+// lockstep with the SCHEDULES section — a spinner while that run is running, and
+// clicking it opens the current run's chat rather than the last completed one.
+function ScheduledRecentRow({
+  conv,
+  scheduled,
+}: {
+  conv: {
+    id: string;
+    scheduleTriggerId: string | null;
+    scheduleRunId: string | null;
+    lastMessageAt: string;
+  };
+  scheduled: { title: string; meta: string };
+}) {
+  const router = useRouter();
+  const { resolve, isResolving } = useResolveRunChat();
+  const triggerId = conv.scheduleTriggerId;
+  const { data: runsResponse } = useScheduleTriggerRuns(triggerId, {
+    limit: 1,
+    refetchInterval: (query) =>
+      query.state.data?.data?.[0]?.status === "running" ? 3_000 : false,
+  });
+  const latestRun = runsResponse?.data?.[0];
+  const isRunning = latestRun?.status === "running";
+
+  const openLatestRun = () => {
+    if (!triggerId) {
+      router.push(`/chat/${conv.id}`);
+      return;
+    }
+    const href = latestRun ? runChatHref({ triggerId, run: latestRun }) : null;
+    if (href) {
+      router.push(href);
+    } else if (latestRun) {
+      // Legacy run without a conversation: mint one, then open it.
+      resolve(triggerId, latestRun.id);
+    } else {
+      // Runs not loaded yet — fall back to this row's own conversation.
+      router.push(
+        `/chat/${conv.id}?scheduleTriggerId=${triggerId}&scheduleRunId=${conv.scheduleRunId}`,
+      );
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={openLatestRun}
+      disabled={isResolving}
+      className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/50"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+        {isRunning ? (
+          <Loader2
+            className="h-4 w-4 animate-spin text-amber-500"
+            aria-hidden
+          />
+        ) : (
+          <CalendarClock className="h-4 w-4 text-primary" aria-hidden />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="truncate block text-sm font-medium">
+          {scheduled.title}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {scheduled.meta}
+        </span>
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatRelativeTimeFromNow(conv.lastMessageAt)}
+      </span>
+    </button>
   );
 }
 
@@ -305,46 +419,35 @@ function ChatsList({
       ) : (
         <div className="space-y-2">
           {chats.map((conv) => {
-            const isScheduled = conv.origin === "schedule_trigger";
-            const scheduled = isScheduled
-              ? formatScheduledRecentRow({
-                  scheduleName: conv.scheduleName,
-                  prompt: conv.title,
-                  runCount: conv.scheduleTriggerId
-                    ? (runCounts.get(conv.scheduleTriggerId) ?? 0)
-                    : 0,
-                })
-              : null;
-            // A scheduled row opens its latest run's chat WITH the schedule
-            // context, so the chat sidebar shows the runs navigator for the rest.
-            const href = isScheduled
-              ? `/chat/${conv.id}?scheduleTriggerId=${conv.scheduleTriggerId}&scheduleRunId=${conv.scheduleRunId}`
-              : `/chat/${conv.id}`;
+            if (conv.origin === "schedule_trigger") {
+              const scheduled = formatScheduledRecentRow({
+                scheduleName: conv.scheduleName,
+                prompt: conv.title,
+                runCount: conv.scheduleTriggerId
+                  ? (runCounts.get(conv.scheduleTriggerId) ?? 0)
+                  : 0,
+              });
+              return (
+                <ScheduledRecentRow
+                  key={conv.id}
+                  conv={conv}
+                  scheduled={scheduled}
+                />
+              );
+            }
             return (
               <Link
                 key={conv.id}
-                href={href}
+                href={`/chat/${conv.id}`}
                 className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  {isScheduled ? (
-                    <CalendarClock
-                      className="h-4 w-4 text-primary"
-                      aria-hidden
-                    />
-                  ) : (
-                    <MessageCircle
-                      className="h-4 w-4 text-primary"
-                      aria-hidden
-                    />
-                  )}
+                  <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium">
-                      {scheduled
-                        ? scheduled.title
-                        : (conv.title ?? "Untitled chat")}
+                      {conv.title ?? "Untitled chat"}
                     </span>
                     {conv.readOnly && (
                       <Badge variant="outline" className="shrink-0 gap-1">
@@ -354,11 +457,9 @@ function ChatsList({
                     )}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {scheduled
-                      ? scheduled.meta
-                      : conv.readOnly
-                        ? `by ${conv.authorName ?? "someone else"}`
-                        : "by you"}
+                    {conv.readOnly
+                      ? `by ${conv.authorName ?? "someone else"}`
+                      : "by you"}
                   </span>
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -471,7 +572,7 @@ function ProjectFilesSidebar({
     <ResizableRightPanel>
       <FileDropZone
         onDropFiles={(droppedFiles) => uploadProjectFiles.mutate(droppedFiles)}
-        disabled={uploadProjectFiles.isPending}
+        uploading={uploadProjectFiles.isPending}
         className="flex-1 min-h-0 flex flex-col gap-0"
       >
         <div className="flex-1 min-h-0 overflow-hidden relative">

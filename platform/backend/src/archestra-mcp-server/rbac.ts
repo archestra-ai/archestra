@@ -52,6 +52,22 @@ export const TOOL_PERMISSIONS: Record<
     action: "create",
   },
 
+  // Teams
+  create_team: { resource: "team", action: "create" },
+  get_team: { resource: "team", action: "read" },
+  list_teams: { resource: "team", action: "read" },
+  edit_team: { resource: "team", action: "update" },
+  delete_team: { resource: "team", action: "delete" },
+  list_team_members: { resource: "team", action: "read" },
+  // Membership mutations use team:read as the coarse gate and then enforce a
+  // finer check in the handler (org-level team manager OR admin of that
+  // specific team), mirroring the REST route's `assertCanManageTeam`. Gating
+  // these on team:update here would lock out team admins who are only org
+  // members (they hold team:read, not team:update).
+  add_team_member: { resource: "team", action: "read" },
+  update_team_member_role: { resource: "team", action: "read" },
+  remove_team_member: { resource: "team", action: "read" },
+
   // Limits
   create_limit: { resource: "llmLimit", action: "create" },
   get_limits: { resource: "llmLimit", action: "read" },
@@ -119,7 +135,6 @@ export const TOOL_PERMISSIONS: Record<
 
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
-  artifact_write: null,
   swap_agent: { resource: "agent", action: "read" },
   swap_to_default_agent: null,
   create_project_from_conversation: { resource: "project", action: "create" },
@@ -142,11 +157,14 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
-  search_files: { resource: "sandbox", action: "execute" },
-  read_file: { resource: "sandbox", action: "execute" },
-  save_file: { resource: "sandbox", action: "execute" },
-  edit_file: { resource: "sandbox", action: "execute" },
-  delete_file: { resource: "sandbox", action: "execute" },
+  // Persistent file store — these operate on `skill_sandbox_files`, not the
+  // sandbox itself, so they gate on `file:manage`. Per-file authorization
+  // (authorship, project membership) stays in the handlers.
+  search_files: { resource: "file", action: "manage" },
+  read_file: { resource: "file", action: "manage" },
+  save_file: { resource: "file", action: "manage" },
+  edit_file: { resource: "file", action: "manage" },
+  delete_file: { resource: "file", action: "manage" },
 
   // MCP Apps. The data-store tools gate on app:read/update; the running app's
   // appId is route-bound (set by the app MCP proxy), so the permission check

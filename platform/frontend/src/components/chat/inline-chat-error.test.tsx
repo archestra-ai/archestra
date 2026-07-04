@@ -1,16 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
-vi.mock("sonner", () => ({
-  toast: {
-    success: vi.fn(),
-  },
-}));
+vi.mock("sonner");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useCreateLlmProviderApiKey: () => ({
@@ -33,6 +29,9 @@ import { InlineChatError } from "./inline-chat-error";
 describe("InlineChatError", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
   });
 
   it("shows only the support message and correlation IDs in slim mode", () => {
@@ -259,6 +258,42 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not claim success when the clipboard write fails", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+    render(
+      <InlineChatError error={new Error("Failed to fetch")} slimChatErrorUi />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy error details" }),
+    );
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("toasts success once the clipboard write resolves", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    render(
+      <InlineChatError error={new Error("Failed to fetch")} slimChatErrorUi />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy error details" }),
+    );
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it("auto-resends the original prompt after connecting the provider", async () => {
     const onProviderConnected = vi.fn();
     const user = userEvent.setup();
@@ -286,5 +321,72 @@ describe("InlineChatError", () => {
     );
 
     await waitFor(() => expect(onProviderConnected).toHaveBeenCalledTimes(1));
+  });
+
+  const retryableError = () =>
+    new Error(
+      JSON.stringify({
+        code: "network_error",
+        message: "Connection error. Please check your network and try again.",
+        isRetryable: true,
+      }),
+    );
+
+  const nonRetryableError = () =>
+    new Error(
+      JSON.stringify({
+        code: "authentication",
+        message: "Authentication failed.",
+        isRetryable: false,
+      }),
+    );
+
+  it("shows a Try again button for a retryable error and calls onRetry", async () => {
+    const onRetry = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(<InlineChatError error={retryableError()} onRetry={onRetry} />);
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides Try again for a non-retryable error even when onRetry is provided", () => {
+    render(<InlineChatError error={nonRetryableError()} onRetry={vi.fn()} />);
+
+    expect(
+      screen.queryByRole("button", { name: "Try again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides Try again for a retryable error when no onRetry is provided", () => {
+    render(<InlineChatError error={retryableError()} />);
+
+    expect(
+      screen.queryByRole("button", { name: "Try again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("disables Try again while a retry is in flight so it cannot double-fire", async () => {
+    let resolveRetry: (() => void) | undefined;
+    const onRetry = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRetry = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    render(<InlineChatError error={retryableError()} onRetry={onRetry} />);
+
+    const button = screen.getByRole("button", { name: "Try again" });
+    await user.click(button);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(button).toBeDisabled());
+
+    await user.click(button);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    resolveRetry?.();
+    await waitFor(() => expect(button).not.toBeDisabled());
   });
 });

@@ -18,8 +18,8 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CallPolicyToggle } from "@/app/mcp/tool-guardrails/_parts/call-policy-toggle";
 import { ToolDetailsDialog } from "@/app/mcp/tool-guardrails/_parts/tool-details-dialog";
+import { CallPolicyToggle } from "@/components/call-policy-toggle";
 import { LoadingSpinner } from "@/components/loading";
 import {
   OAuthConfirmationDialog,
@@ -55,6 +55,7 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   setOAuthCatalogId,
+  setOAuthReturnUrl,
   setOAuthScope,
   setOAuthServerType,
   setOAuthState,
@@ -299,9 +300,15 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
       if (item.serverType === "local") {
         setOAuthServerType("local");
       }
+      // Remember where the install started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
       window.location.href = authorizationUrl;
-    } catch {
-      toast.error("Failed to initiate OAuth flow");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate OAuth flow",
+      );
     }
   };
 

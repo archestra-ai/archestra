@@ -34,6 +34,7 @@ export const oauthConfigSchema = z
     resource: z.string().optional().or(z.literal("")),
     redirect_uris: z.string().optional().or(z.literal("")),
     scopes: z.string().optional().or(z.literal("")),
+    additional_scopes: z.string().optional().or(z.literal("")),
     supports_resource_metadata: z.boolean(),
     authServerUrl: z
       .string()
@@ -241,6 +242,9 @@ export const formSchema = z
     teams: z.array(z.string()).optional(),
     // Deployment environment assignment (null = the default environment)
     environmentId: z.string().uuid().nullable().optional(),
+    // Read-only setup instructions (markdown) surfaced from the catalog item.
+    // Rendered at the top of the form; not part of the submitted payload.
+    instructions: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     const normalizedHeaders = new Set<string>();

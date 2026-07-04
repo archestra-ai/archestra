@@ -796,33 +796,53 @@ ${formattedHistory}
   // userId is determined by security mode:
   // - private: actual user ID from email lookup
   // - internal/public: "system" (anonymous)
-  const result = await startActiveChatSpan({
-    agentName: agent.name,
-    agentId,
-    teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
-    userTeams: emailUser
-      ? await TeamModel.getTeamLabelInfoForUser({
-          userId: emailUser.id,
+  // The email was optimistically marked as processed above for cross-pod
+  // dedup. If the agent run fails for a transient reason (provider 429/5xx,
+  // timeout), release that claim so a provider redelivery is reprocessed
+  // instead of being deduplicated away and lost forever. Validation failures
+  // (missing/disabled agent, etc.) throw earlier and stay marked, since
+  // retrying them won't help.
+  let result: Awaited<ReturnType<typeof executeA2AMessage>>;
+  try {
+    result = await startActiveChatSpan({
+      agentName: agent.name,
+      agentId,
+      teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+      userTeams: emailUser
+        ? await TeamModel.getTeamLabelInfoForUser({
+            userId: emailUser.id,
+            organizationId: organization,
+          })
+        : [],
+      routeCategory: RouteCategory.EMAIL,
+      triggerSource: "email",
+      user: emailUser
+        ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
+        : null,
+      callback: async () => {
+        return executeA2AMessage({
+          agentId,
+          message,
           organizationId: organization,
-        })
-      : [],
-    routeCategory: RouteCategory.EMAIL,
-    triggerSource: "email",
-    user: emailUser
-      ? { id: emailUser.id, email: emailUser.email, name: emailUser.name }
-      : null,
-    callback: async () => {
-      return executeA2AMessage({
+          userId,
+          sessionId: buildEmailSessionId(email.conversationId),
+          source: "email",
+          attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
+        });
+      },
+    });
+  } catch (error) {
+    await ProcessedEmailModel.deleteByMessageId(email.messageId);
+    logger.warn(
+      {
+        messageId: email.messageId,
         agentId,
-        message,
-        organizationId: organization,
-        userId,
-        sessionId: buildEmailSessionId(email.conversationId),
-        source: "email",
-        attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
-      });
-    },
-  });
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "[IncomingEmail] Agent execution failed; released processed marker so a redelivery can retry",
+    );
+    throw error;
+  }
 
   logger.info(
     {

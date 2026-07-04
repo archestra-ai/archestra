@@ -13,7 +13,6 @@ import {
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   stripDanglingToolCalls,
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
@@ -42,11 +41,16 @@ import {
   McpElicitationDialog,
 } from "@/components/chat/mcp-elicitation-dialog";
 import {
+  useClearChatErrors,
   useConversationUpdatedCacheSync,
   useGenerateConversationTitle,
   useResolveChatMcpElicitation,
 } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
+import {
+  isRetryableError,
+  parseStructuredChatError,
+} from "@/lib/chat/chat-retry.utils";
 import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
@@ -70,13 +74,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
-/** Network-level errors that never reach the backend */
-const RETRYABLE_CLIENT_ERRORS = [
-  "Failed to fetch",
-  "NetworkError",
-  "No output generated",
-  "network",
-];
 
 export type ContextCompactionState = {
   isCompacting: boolean;
@@ -94,20 +91,6 @@ type ContextCompactionRecord = NonNullable<
 > & {
   updateContextTokens?: boolean;
 };
-
-function isRetryableError(error: Error): boolean {
-  const msg = error.message;
-  // Structured backend chat errors already reached the server and should render
-  // once. Retrying here creates duplicate LLM requests and changes trace IDs.
-  try {
-    JSON.parse(msg);
-    return false;
-  } catch {
-    // not JSON
-  }
-
-  return RETRYABLE_CLIENT_ERRORS.some((p) => msg.includes(p));
-}
 
 function isDuplicateActiveRunError(error: Error): boolean {
   // Match the backend's exact duplicate-run message rather than a bare "409",
@@ -479,6 +462,11 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Set while auto-retrying a *structured* (backend-persisted) error, so a
+  // successful retry can wipe the now-stale persisted error card the backend
+  // never clears on its own.
+  const recoveredPersistedErrorRef = useRef(false);
+  const clearChatErrors = useClearChatErrors();
   // Monotonically counts onError invocations. The duplicate-run reattach uses
   // it to detect that nothing happened between calling resumeStream() and its
   // promise resolving — the "run already finished" case, where the reconnect
@@ -582,6 +570,20 @@ function ChatSessionHook({
       // errors.
       if (!isError) {
         setIsRecovering(false);
+        // A structured error we silently auto-retried just succeeded — clear the
+        // stale persisted error card the backend leaves behind (it never clears it
+        // on a new run). Reset the flag first so a re-entrant finish can't double-fire.
+        if (recoveredPersistedErrorRef.current) {
+          recoveredPersistedErrorRef.current = false;
+          try {
+            await clearChatErrors.mutateAsync({ id: conversationId });
+          } catch (error) {
+            console.error(
+              "[ChatSession] Failed to clear stale chat error after retry",
+              error,
+            );
+          }
+        }
       }
 
       // When the user stops mid-tool-call, the assistant message is left with a
@@ -747,6 +749,10 @@ function ChatSessionHook({
             errorSeqRef.current === reattachErrorSeq
           ) {
             setIsRecovering(false);
+            // This reattach ends the recovery without an onFinish/onError, so
+            // drop any pending "clear the persisted error on success" intent —
+            // otherwise it leaks into a later unrelated success.
+            recoveredPersistedErrorRef.current = false;
             // Drop the stale duplicate-run error so the SDK returns to
             // "ready" instead of idling in the suppressed error state.
             clearErrorRef.current?.();
@@ -763,6 +769,10 @@ function ChatSessionHook({
         retryCountRef.current < MAX_AUTO_RETRIES
       ) {
         retryCountRef.current++;
+        // A structured error was persisted by the backend; a successful retry must
+        // clear that stale card (onFinish). Unstructured client errors leave no row.
+        recoveredPersistedErrorRef.current =
+          parseStructuredChatError(chatError.message) !== null;
         console.info(
           `[ChatSession] Auto-retrying (${retryCountRef.current}/${MAX_AUTO_RETRIES})...`,
         );
@@ -783,7 +793,9 @@ function ChatSessionHook({
         return;
       }
 
-      // Terminal: no recovery in flight — surface the error.
+      // Terminal: no recovery in flight — surface the error (and keep its
+      // persisted card, so drop any pending "clear on successful retry" intent).
+      recoveredPersistedErrorRef.current = false;
       setPendingMcpElicitation(null);
       setIsRecovering(false);
     },
@@ -841,16 +853,6 @@ function ChatSessionHook({
       // agent selector may not reflect a newly created/swapped-to agent yet.
       if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {
         queryClient.invalidateQueries({ queryKey: ["agents"] });
-      }
-
-      // Detect artifact_write tool and invalidate conversation to fetch updated artifact
-      if (toolShortName === TOOL_ARTIFACT_WRITE_SHORT_NAME) {
-        // Small delay to ensure backend has saved the artifact
-        setTimeout(() => {
-          queryClient.invalidateQueries({
-            queryKey: ["conversation", conversationId],
-          });
-        }, 500);
       }
     },
     onData: (dataPart) => {
@@ -998,6 +1000,9 @@ function ChatSessionHook({
   ) {
     lastUserMessageIdRef.current = lastStableUserMessage.id;
     retryCountRef.current = 0;
+    // A new turn: any pending "clear the prior turn's persisted error on a
+    // successful retry" intent no longer applies to this turn.
+    recoveredPersistedErrorRef.current = false;
   }
 
   useEffect(() => {
@@ -1009,6 +1014,28 @@ function ChatSessionHook({
       filterOptimisticToolCalls(stableMessages, current),
     );
   }, [stableMessages, optimisticToolCalls.length]);
+
+  // A regenerate replaces the failed turn, so any persisted chat-error rows
+  // are now stale — the backend never clears them on its own, and left behind
+  // they keep rendering an error card above the regenerated answer (also after
+  // a reload). Clear them only once the re-run is genuinely issued (clearing
+  // before would wipe the card even when the resend never starts). Fire the
+  // delete unconditionally rather than gating on the cached rows: the failed
+  // turn persists its error row asynchronously, so the client cache often has
+  // not loaded it yet at regenerate time — gating on it would skip the clear
+  // and let the next conversation refetch resurrect the card. The delete is
+  // idempotent and optimistically drops the rows from the cache. Destructure
+  // the stable mutateAsync like updateChatMessageAsync above so
+  // regenerateUserMessage stays referentially stable.
+  const { mutateAsync: clearChatErrorsAsync } = clearChatErrors;
+  const clearStalePersistedChatErrors = useCallback(() => {
+    clearChatErrorsAsync({ id: conversationId }).catch((error) => {
+      console.error(
+        "[ChatSession] Failed to clear stale chat errors after regenerate",
+        error,
+      );
+    });
+  }, [clearChatErrorsAsync, conversationId]);
 
   // Save the user message's text, then re-run the assistant turn from it.
   const regenerateUserMessage = useCallback(
@@ -1056,6 +1083,7 @@ function ChatSessionHook({
         // regenerate from it. The server replaces the turn atomically.
         setMessages(canonical);
         void regenerate({ messageId: anchorId });
+        clearStalePersistedChatErrors();
         return;
       }
 
@@ -1075,8 +1103,14 @@ function ChatSessionHook({
         }),
       );
       void regenerate({ messageId });
+      clearStalePersistedChatErrors();
     },
-    [updateChatMessageAsync, setMessages, regenerate],
+    [
+      updateChatMessageAsync,
+      setMessages,
+      regenerate,
+      clearStalePersistedChatErrors,
+    ],
   );
 
   // Always keep the session ref up-to-date with the latest values (including

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isSensitiveContextPolicyDeniedReason } from "./tool-invocation-policy-reasons";
 import { parseArchestraToolRefusal } from "./tool-refusal";
+import { ResourceVisibilityScopeSchema } from "./visibility";
 
 export const McpToolErrorTypeSchema = z.enum([
   "auth_required",
@@ -44,6 +45,13 @@ export const AuthExpiredMcpToolErrorSchema = z
     catalogName: z.string(),
     serverId: z.string(),
     reauthUrl: z.string().url(),
+    // Which credential the runtime resolved for this call (personal / team /
+    // org) so the chat card can tell the user whose credential expired.
+    // Optional so errors persisted in chat history before this field existed
+    // still parse and render (they fall back to generic copy).
+    credentialScope: ResourceVisibilityScopeSchema.optional(),
+    // Owning team's display name, present only for team-scoped credentials.
+    credentialTeamName: z.string().nullable().optional(),
   })
   .strict();
 
@@ -66,6 +74,11 @@ export const PolicyDeniedMcpToolErrorSchema = z
     type: z.literal("policy_denied"),
     message: z.string(),
     toolName: z.string(),
+    // The id of the tool row the policy was actually evaluated against. Lets the
+    // chat "Edit policy" modal resolve the tool directly by id, which the
+    // assignment-based lookup cannot for All-mode tools that have no agent_tools
+    // row. Optional so denials persisted before this field still parse.
+    toolId: z.string().optional(),
     input: z.record(z.string(), z.unknown()),
     reason: z.string(),
     reasonType: PolicyDeniedReasonTypeSchema.optional(),
@@ -122,6 +135,30 @@ export function classifyPolicyDeniedReason(
   }
 
   return "generic";
+}
+
+/**
+ * Build the structured tool error a blocked tool call carries alongside its
+ * prose. Attaching this to a tool result's `_meta.archestraError` /
+ * `structuredContent.archestraError` lets clients render the block without
+ * re-parsing the prose (extractMcpToolError finds it before any heuristic).
+ */
+export function buildPolicyDeniedMcpToolError(params: {
+  toolName: string;
+  toolId?: string;
+  input: Record<string, unknown>;
+  reason: string;
+  message: string;
+}): PolicyDeniedMcpToolError {
+  return {
+    type: "policy_denied",
+    message: params.message,
+    toolName: params.toolName,
+    toolId: params.toolId,
+    input: params.input,
+    reason: params.reason,
+    reasonType: classifyPolicyDeniedReason(params.reason),
+  };
 }
 
 function extractMcpToolErrorRecursive(
@@ -225,7 +262,28 @@ function normalizeMcpToolError(error: McpToolError): McpToolError {
   };
 }
 
+// Anchor phrases of the current refusal template (tool-refusal.ts). Parsing
+// them first keeps the extraction exact regardless of what surrounds them
+// (e.g. a white-label product name containing words like "invoke"/"denied"
+// that the legacy heuristics below key on).
+const CURRENT_POLICY_DENIED_HEADER_MARKER = "blocked unsafe tool call: ";
+const CURRENT_POLICY_DENIED_ARGS_MARKER = " with arguments:";
+
 function extractToolNameFromPolicyDeniedMessage(input: string): string | null {
+  const headerIndex = input.indexOf(CURRENT_POLICY_DENIED_HEADER_MARKER);
+  if (headerIndex >= 0) {
+    const candidate = input.slice(
+      headerIndex + CURRENT_POLICY_DENIED_HEADER_MARKER.length,
+    );
+    const argsIndex = candidate.indexOf(CURRENT_POLICY_DENIED_ARGS_MARKER);
+    if (argsIndex > 0) {
+      const toolName = candidate.slice(0, argsIndex).trim();
+      if (toolName.length > 0) {
+        return toolName;
+      }
+    }
+  }
+
   const lowered = input.toLowerCase();
   const invokedIndex = lowered.indexOf("invoked ");
   const invokeIndex = lowered.indexOf("invoke ");
@@ -252,15 +310,24 @@ function extractToolNameFromPolicyDeniedMessage(input: string): string | null {
 function extractToolArgumentsFromPolicyDeniedMessage(
   input: string,
 ): string | null {
-  const marker = "tool with the following arguments:";
   const lowered = input.toLowerCase();
-  const markerIndex = lowered.indexOf(marker);
+  const legacyMarker = "tool with the following arguments:";
+  const legacyIndex = lowered.indexOf(legacyMarker);
+  const currentIndex =
+    legacyIndex >= 0
+      ? -1
+      : input.indexOf(CURRENT_POLICY_DENIED_ARGS_MARKER.trimEnd());
+  const markerIndex = legacyIndex >= 0 ? legacyIndex : currentIndex;
+  const markerLength =
+    legacyIndex >= 0
+      ? legacyMarker.length
+      : CURRENT_POLICY_DENIED_ARGS_MARKER.trimEnd().length;
 
   if (markerIndex < 0) {
     return null;
   }
 
-  const remainder = input.slice(markerIndex + marker.length).trimStart();
+  const remainder = input.slice(markerIndex + markerLength).trimStart();
   if (!remainder.startsWith("{")) {
     return null;
   }
@@ -274,6 +341,29 @@ function extractToolArgumentsFromPolicyDeniedMessage(
 }
 
 function extractReasonFromPolicyDeniedMessage(input: string): string | null {
+  // Current template: the reason is the paragraph immediately after the
+  // "blocked unsafe tool call: …" header, bounded by the next blank line (the
+  // explainer paragraph — or, in messages persisted before it was removed, the
+  // "Do not retry:" line; either way the reason ends at that blank line).
+  const headerIndex = input.indexOf(CURRENT_POLICY_DENIED_HEADER_MARKER);
+  if (headerIndex >= 0) {
+    const reasonStart = input.indexOf("\n\n", headerIndex);
+    const reasonEnd =
+      reasonStart >= 0 ? input.indexOf("\n\n", reasonStart + 2) : -1;
+    if (reasonStart >= 0 && reasonEnd > reasonStart) {
+      // The template adds a closing period to the rendered line; strip it so
+      // the extracted reason matches the raw constants (and the sensitive-
+      // context classification sets).
+      const reason = input
+        .slice(reasonStart, reasonEnd)
+        .trim()
+        .replace(/\.$/, "");
+      if (reason.length > 0) {
+        return reason;
+      }
+    }
+  }
+
   const lowered = input.toLowerCase();
   const deniedIndex = lowered.indexOf("denied");
   const blockedIndex = lowered.indexOf("blocked");

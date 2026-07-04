@@ -22,10 +22,14 @@ describe("getLlmUpstreamDispatcher", () => {
 describe("undici Agent headersTimeout enforcement", () => {
   let server: Server;
   let url = "";
-  let headerDelayMs = 0;
+  let headerDelayMs: number | undefined = 0;
 
   beforeEach(async () => {
     server = createServer((_req, res) => {
+      if (headerDelayMs === undefined) {
+        return;
+      }
+
       setTimeout(() => {
         res.writeHead(200, { "content-type": "text/plain" });
         res.end("ok");
@@ -45,11 +49,14 @@ describe("undici Agent headersTimeout enforcement", () => {
   });
 
   test("aborts with UND_ERR_HEADERS_TIMEOUT when headers arrive after the timeout", async () => {
-    headerDelayMs = 1000;
+    headerDelayMs = undefined;
     const dispatcher = new Agent({ headersTimeout: 150, bodyTimeout: 150 });
     try {
       await expect(
-        globalThis.fetch(url, { dispatcher } as RequestInit),
+        globalThis.fetch(url, {
+          dispatcher,
+          signal: AbortSignal.timeout(5000),
+        } as RequestInit),
       ).rejects.toMatchObject({ cause: { code: "UND_ERR_HEADERS_TIMEOUT" } });
     } finally {
       await dispatcher.close();

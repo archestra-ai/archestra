@@ -13,14 +13,7 @@ import * as authUtils from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 
 // Mock the auth client and SDK
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    getSession: vi.fn(),
-    organization: {
-      listMembers: vi.fn(),
-    },
-  },
-}));
+vi.mock("@/lib/clients/auth/auth-client");
 
 vi.mock("@archestra/shared", async () => {
   const actual = await vi.importActual("@archestra/shared");

@@ -1,5 +1,6 @@
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { TokenAuthContext } from "@/clients/mcp-client";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 
 /**
  * Context for the Archestra MCP server
@@ -48,7 +49,7 @@ export interface ArchestraContext {
    * E.g., "agentA:agentB" means agentA delegated to agentB.
    */
   delegationChain?: string;
-  /** Schedule trigger run ID — when set, artifact_write targets the run instead of a conversation */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Optional cancellation signal from parent chat/tool execution */
   abortSignal?: AbortSignal;
@@ -61,6 +62,19 @@ export interface ArchestraContext {
   elicitation?: ChatMcpElicitationBridge;
   /** Whether the current caller context is still trusted/safe */
   contextIsTrusted?: boolean;
+  /**
+   * Bridge that surfaces a delegated child agent's tool calls on the caller's
+   * conversation surface. Present only when a chat stream is driving the call;
+   * absent in headless executions (no conversation surface to render onto). One
+   * instance is shared down the delegation chain so nested calls surface too.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
+  /**
+   * The id of the tool call currently executing. Set on the delegation path so
+   * the child's surfaced tool calls can be attributed to the delegation call
+   * (`agent__<slug>`) that spawned them.
+   */
+  currentToolCallId?: string;
   /**
    * Chat can pause before execution for user approval. When true, tools that
    * require approval are allowed to continue because the chat harness already

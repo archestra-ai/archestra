@@ -1,19 +1,20 @@
 "use client";
 
 import { act, renderHook } from "@testing-library/react";
+import { useRouter } from "next/navigation";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversationSearch } from "@/lib/chat/conversation-search.hook";
 
-const mockPush = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
+vi.mock("next/navigation");
 
 describe("useConversationSearch", () => {
   let originalPlatform: string;
 
   beforeEach(() => {
     originalPlatform = navigator.platform;
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
   });
 
   afterEach(() => {

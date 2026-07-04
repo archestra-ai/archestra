@@ -1,9 +1,7 @@
 import type AnthropicProvider from "@anthropic-ai/sdk";
 import { describe, expect, test, vi } from "vitest";
 
-vi.mock("@/observability", () => ({
-  metrics: { llm: { getObservableFetch: vi.fn() } },
-}));
+vi.mock("@/observability");
 
 vi.mock("@/clients/azure-openai-credentials", () => ({
   getAzureAiFoundryBearerTokenProvider: vi.fn(

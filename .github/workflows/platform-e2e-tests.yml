@@ -32,9 +32,21 @@ env:
   MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
 
 jobs:
-  # Required-check placeholders for ordinary PR updates. These let a single
-  # ruleset require merge-queue-only checks without forcing the full E2E suite
-  # to run on every PR push.
+  # NOTE: there are deliberately NO same-named "placeholder" jobs for the
+  # NON-MATRIX checks below. GitHub treats a SKIPPED check run as satisfying a
+  # required status check, so on plain PR pushes the real jobs (whose `if` is
+  # false) report skipped under their own names and the ruleset is satisfied
+  # without running e2e. Placeholder twins would ALSO report skipped on
+  # merge_group runs — and that skipped twin satisfies the required check even
+  # when the real job FAILS, which let the merge queue merge past days of red
+  # e2e. Do not re-add them.
+  #
+  # The MATRIX build job is the one exception: a skipped matrix job never
+  # expands, so it reports as the literal "Build ${{ matrix.name }} Image" —
+  # the required "Build Platform Image" / "Build MCP Server Base Image"
+  # contexts would wait forever on ordinary PR pushes. Its placeholder is safe
+  # precisely for the same reason: skipped on merge_group, it reports under
+  # the unexpanded name, which cannot mask a real matrix job's failure.
   platform-e2e-build-placeholder:
     name: Build ${{ matrix.name }} Image
     runs-on: ubuntu-latest
@@ -85,11 +97,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Setup environment
-        if: ${{ matrix.use-build-action }}
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
+      # NOTE: the Platform image build is fully self-contained inside Docker, so it does
+      # not need a host-side `pnpm install` / node toolchain. (The MCP Server Base leg
+      # sets use-build-action: false and never ran this step.)
 
       - name: Build Platform image
         if: ${{ matrix.use-build-action && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -98,6 +108,10 @@ jobs:
           context: ${{ matrix.context }}
           load: "true"
           tags: ${{ matrix.local-tag-prefix }}:${{ github.sha }}
+          # E2E image consumed only by CI shards — skip SLSA provenance attestation to
+          # trim export time and keep a plain single-manifest image. (Published release
+          # images keep provenance via build-native-multi-arch-image.yml's default.)
+          provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
@@ -115,6 +129,10 @@ jobs:
           context: ${{ matrix.context }}
           push: "true"
           tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+          # E2E image consumed only by CI shards — skip SLSA provenance attestation to
+          # trim export time and keep a plain single-manifest image. (Published release
+          # images keep provenance via build-native-multi-arch-image.yml's default.)
+          provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
@@ -140,19 +158,24 @@ jobs:
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
-      # Export as artifact for fast co-located downloads in E2E jobs
+      # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
+      # only: they are the sole consumer (shards use source=artifact for forks,
+      # registry otherwise), and only the fork path loads a local tag to save.
       - name: Export Docker image as tarball
-        if: ${{ !matrix.use-build-action || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         env:
           GIT_SHA: ${{ github.sha }}
           LOCAL_TAG_PREFIX: ${{ matrix.local-tag-prefix }}
           TARBALL_NAME: ${{ matrix.tarball-name }}
+        # Explicit bash turns on pipefail so a failed docker save cannot be
+        # masked by gzip succeeding on empty input.
+        shell: bash
         run: |
           docker save "${LOCAL_TAG_PREFIX}:${GIT_SHA}" | gzip > "/tmp/${TARBALL_NAME}"
           ls -lh "/tmp/${TARBALL_NAME}"
 
       - name: Upload Docker image artifact
-        if: ${{ !matrix.use-build-action || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/github-upload-artifact
         with:
           name: ${{ matrix.artifact-name }}
@@ -160,20 +183,20 @@ jobs:
           retention-days: 1
           compression-level: 0 # Already gzipped
 
-  platform-e2e-tests-placeholder:
-    name: Platform E2E Tests
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip full non-quickstart E2E job on ordinary PR updates
-        run: echo "Full non-quickstart E2E runs on merge queue or when the run-e2e label is added."
-
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
   platform-e2e-tests-shards:
     name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
-    needs: [platform-e2e-build]
+    # Deliberately NO `needs: [platform-e2e-build]`: the shards start alongside
+    # the image build and do all image-independent setup (checkout, pnpm, Kind
+    # cluster, MCP dependency images) while the build runs. Setup Archestra
+    # Platform then polls the registry (image-pull-timeout-seconds) until the
+    # freshly pushed image appears; fork PRs poll for the build artifact in the
+    # load steps below. This overlap takes ~2.5 min off the merge-queue critical
+    # path. Trade-off: if the build fails, the shards burn the poll deadline
+    # instead of being skipped — the merge is still blocked either way by the
+    # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # Observed worst-case shard wall-clock is ~10 min (setup + tests); 30 caps a
@@ -188,6 +211,7 @@ jobs:
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
+      actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -200,19 +224,25 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Load platform image
-        id: load-platform-image
+      # Fork PRs only: the platform image travels as a workflow artifact (forks
+      # get no OIDC-backed registry access), so wait for the build job to upload
+      # it. Trusted runs skip these steps entirely — Setup Archestra Platform
+      # pulls from the registry itself, after the image-independent setup.
+      - name: Load platform image (fork PRs, from artifact)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/load-platform-image
         with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          source: artifact
+          image-tag: archestra-platform:${{ github.sha }}
+          wait-timeout-seconds: "900"
 
-      - name: Load MCP server base image
-        id: load-mcp-server-base-image
+      - name: Load MCP server base image (fork PRs, from artifact)
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true }}
         uses: ./.github/actions/load-mcp-server-base-image
         with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          source: artifact
+          image-tag: mcp-server-base:${{ github.sha }}
+          wait-timeout-seconds: "900"
 
       - name: Prepare blob report workspace
         run: |
@@ -231,9 +261,10 @@ jobs:
           e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
           e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
-          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
+          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
-          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
+          mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+          image-pull-timeout-seconds: "900"
 
       - name: Run all non-quickstart E2E tests
         id: e2e
@@ -328,185 +359,12 @@ jobs:
           echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
           exit 1
 
-  # Fan-in gate that carries the "Platform E2E Tests" required status check.
-  # The sharded matrix above emits per-shard check names, which never match the
-  # required context, so this job reproduces the exact name and is green only
-  # when every shard succeeded. !cancelled() keeps it from being skipped — a
-  # skipped required check stalls the merge queue just like a missing one.
-  platform-e2e-tests:
-    name: Platform E2E Tests
-    needs: [platform-e2e-tests-shards]
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check shard results
-        env:
-          SHARDS_RESULT: ${{ needs.platform-e2e-tests-shards.result }}
-        run: |
-          echo "Aggregated shard result: ${SHARDS_RESULT}"
-          if [ "${SHARDS_RESULT}" != "success" ]; then
-            echo "One or more non-quickstart E2E shards did not succeed."
-            exit 1
-          fi
-          echo "All non-quickstart E2E shards passed."
-
-  platform-readonly-vault-e2e-tests-placeholder:
-    name: Platform E2E Tests (Readonly Vault)
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip readonly-vault E2E on ordinary PR updates
-        run: echo "Readonly-vault E2E runs on merge queue or when the run-e2e label is added."
-
-  # Dedicated readonly-vault coverage. These tests need BYOS/readonly-vault runtime
-  # behavior, which conflicts with the generic suite's manual secret entry flows.
-  platform-readonly-vault-e2e-tests:
-    name: Platform E2E Tests (Readonly Vault)
-    needs: [platform-e2e-build]
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 30
-    permissions:
-      contents: read # Required to checkout the repository and read test assets.
-      id-token: write # Required for Workload Identity Federation in setup actions.
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-env
-        with:
-          working-directory: ./platform
-
-      - name: Load platform image
-        id: load-platform-image
-        uses: ./.github/actions/load-platform-image
-        with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
-
-      - name: Load MCP server base image
-        id: load-mcp-server-base-image
-        uses: ./.github/actions/load-mcp-server-base-image
-        with:
-          source: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'artifact' || 'registry' }}
-          image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-
-      - name: Setup Archestra Platform
-        id: setup-platform
-        uses: ./.github/actions/setup-archestra-platform
-        with:
-          kind-config-path: .github/kind.yaml
-          kind-cluster-name: archestra-ci-cluster
-          helm-values-path: .github/values-ci.yaml
-          deploy-e2e-dependencies: "true"
-          e2e-dependencies-install-mode: "foreground"
-          e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default,vault.secrets[0].path=secret/data/archestra/config,vault.secrets[0].data.dburl=postgresql://archestra:vault_e2e_custom_pw@archestra-platform-postgresql:5432/archestra_dev,vault.secrets[0].data.dummy_var=hello-from-vault"
-          e2e-dependencies-wait-for-vault: "true"
-          build-platform-image: "false"
-          platform-image-tag: ${{ steps.load-platform-image.outputs.image-tag }}
-          platform-context: ./platform
-          mcp-server-base-image-tag: ${{ steps.load-mcp-server-base-image.outputs.image-tag }}
-          extra-helm-set: "archestra.env.ARCHESTRA_SECRETS_MANAGER=READONLY_VAULT,archestra.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION=2,archestra.initContainers.vaultSecrets.secrets[0].path=secret/data/archestra/config,archestra.initContainers.vaultSecrets.secrets[1].path=secret/data/archestra/config"
-
-      - name: Run readonly-vault E2E tests
-        id: e2e
-        continue-on-error: true
-        uses: ./.github/actions/run-e2e-tests
-        with:
-          projects: credentials-with-vault
-          timeout: "20"
-
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        uses: ./.github/actions/github-upload-artifact
-        with:
-          name: blob-report-readonly-vault
-          path: platform/e2e-tests/blob-report/
-          retention-days: 1
-
-      - name: Show logs on failure or flaky tests
-        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
-        run: |
-          echo "=== Kubernetes Pods ==="
-          kubectl get pods -o wide || true
-
-          echo "=== Kubernetes Services ==="
-          kubectl get services || true
-
-          echo "=== Archestra Platform Logs (main container) ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
-
-          # The external-IdP validation logs (validateExternalIdpToken /
-          # "JWKS JWT validation failed") fire mid-run, well before this dump,
-          # so the --tail=200 above misses them. Grep the full backend log so a
-          # flaky JWKS-gateway 401 can be traced to the branch that rejected
-          # the token. --tail=-1 is required: with a label selector, kubectl
-          # logs otherwise caps output at the last 10 lines.
-          echo "=== External IdP validation (full-log grep) ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform \
-            -c archestra-platform --tail=-1 2>/dev/null \
-            | grep -iE 'validateExternalIdpToken|JWKS JWT validation failed|Invalid token for this profile' \
-            || echo "(no external-IdP validation log found)"
-
-          echo "=== Platform Init Container: vault-secrets ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true
-
-          echo "=== Platform Init Container: setup-postgres-extensions ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform -c setup-postgres-extensions --tail=200 2>/dev/null || true
-
-          echo "=== Platform Init Container: wait-for-postgres ==="
-          kubectl logs -l app.kubernetes.io/name=archestra-platform -c wait-for-postgres --tail=200 2>/dev/null || true
-
-          echo "=== PostgreSQL Logs ==="
-          kubectl logs -l app.kubernetes.io/name=postgresql --tail=200 || true
-
-          echo "=== WireMock Logs ==="
-          kubectl logs -l app=e2e-tests-wiremock --tail=200 2>/dev/null || true
-
-          echo "=== Keycloak Logs ==="
-          kubectl logs -l app.kubernetes.io/name=keycloak --tail=200 2>/dev/null || true
-
-          echo "=== Vault Logs ==="
-          kubectl logs -l app.kubernetes.io/name=vault --tail=200 2>/dev/null || true
-
-          echo "=== MCP Example OAuth Server Logs ==="
-          kubectl logs -l app.kubernetes.io/name=mcp-example-oauth --tail=200 2>/dev/null || true
-
-          echo "=== Describe Platform Pod ==="
-          kubectl describe pod -l app.kubernetes.io/name=archestra-platform || true
-
-          echo "=== Describe PostgreSQL Pod ==="
-          kubectl describe pod -l app.kubernetes.io/name=postgresql || true
-
-          echo "=== PostgreSQL StatefulSet & PVCs ==="
-          kubectl get statefulset,pvc -l app.kubernetes.io/name=postgresql -o wide || true
-
-          echo "=== Recent Cluster Events ==="
-          kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true
-
-      - name: Cleanup Kind cluster
-        if: always()
-        run: kind delete cluster --name archestra-ci-cluster || true
-
-      - name: Fail if readonly-vault E2E tests failed
-        if: ${{ always() && steps.e2e.outcome == 'failure' }}
-        run: |
-          echo "The readonly-vault E2E run failed."
-          exit 1
-
-  # Quickstart E2E tests - validates docker run quickstart instructions work correctly
-  # Runs the mcp-install.spec.ts test against the platform started via docker run
-  platform-quickstart-e2e-tests-placeholder:
-    name: Platform E2E Tests (Quickstart)
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip quickstart E2E on ordinary PR updates
-        run: echo "Quickstart E2E runs on merge queue or when the run-e2e label is added."
+  # NOTE: there is deliberately no separate "Platform E2E Tests" fan-in job. The
+  # shard results are already gated by "Merge E2E Test Reports" below (its "Fail
+  # if any e2e job failed" step fails when any shard or the quickstart leg is not
+  # green), and that is the required status check for the merge queue. A second
+  # fan-in job checking the same shard result was redundant and not referenced by
+  # the branch ruleset, so it was removed.
 
   platform-quickstart-e2e-tests:
     name: Platform E2E Tests (Quickstart)
@@ -594,6 +452,7 @@ jobs:
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
+            -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \
             -e ARCHESTRA_ANTHROPIC_BASE_URL=http://archestra-wiremock:8080 \
             -e ARCHESTRA_GEMINI_BASE_URL=http://archestra-wiremock:8080 \
@@ -738,19 +597,66 @@ jobs:
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
 
-  # Merge all Playwright reports into a single HTML report
-  platform-e2e-merge-reports-placeholder:
-    name: Merge E2E Test Reports
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name != 'run-e2e') }}
-    steps:
-      - name: Skip report merge on ordinary PR updates
-        run: echo "Merged E2E reports are generated on merge queue or when the run-e2e label is added."
-
+  # The merge queue's e2e gate. This is the required "Merge E2E Test Reports"
+  # status check — the per-shard jobs are NOT required, so this job is the only
+  # thing standing between a red shard and main.
+  #
+  # It deliberately does NOTHING but read the shard/quickstart results: no
+  # checkout, no pnpm install, no artifact download. Report MERGING (which needs
+  # all of that) moved to the separate, non-required `platform-e2e-report` job
+  # below so it runs OFF the merge-queue critical path. Merging the report used
+  # to cost ~40-50s of checkout + `pnpm install` + blob download here, and this
+  # job is the LAST required check to go green (it needs the shards), so every
+  # one of those seconds delayed the merge. Stripped down, the gate reports
+  # green within runner-spinup time of the last shard finishing.
+  #
+  # Keep the job `name:` EXACTLY "Merge E2E Test Reports" — it is the context
+  # named in the branch ruleset's required status checks. Renaming it silently
+  # un-gates the queue.
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
-    needs: [platform-e2e-tests-shards, platform-readonly-vault-e2e-tests, platform-quickstart-e2e-tests]
+    needs: [platform-e2e-tests-shards, platform-quickstart-e2e-tests]
+    # `!cancelled()` (not `always()`) so a cancelled upstream still cancels the
+    # gate; the event guard keeps it running on merge_group / on-demand runs but
+    # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    # No permissions needed: this job only inspects `needs.*.result`.
+    permissions: {}
+    steps:
+      # Without this the job would succeed whenever it starts, so red shards
+      # would ride through the queue unnoticed — which is exactly how a broken
+      # production image (MODULE_NOT_FOUND on @archestra/napi-loader) once
+      # shipped while apps.spec.ts failed every queue run.
+      - name: Fail if any e2e job failed
+        env:
+          SHARDS_RESULT: ${{ needs.platform-e2e-tests-shards.result }}
+          QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
+        run: |
+          failed=0
+          for pair in "shards:$SHARDS_RESULT" "quickstart:$QUICKSTART_RESULT"; do
+            name="${pair%%:*}"; result="${pair##*:}"
+            echo "$name: $result"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              failed=1
+            fi
+          done
+          if [ "$failed" = "1" ]; then
+            echo "::error::One or more e2e jobs failed - failing the merge-queue gate."
+            exit 1
+          fi
+          echo "All e2e jobs green."
+
+  # Merges the per-shard Playwright blob reports into a single HTML/JSON report
+  # and writes the job summary. NOT a required check and NOT on the merge-queue
+  # critical path — it runs in parallel with the gate above so the queue never
+  # waits on report generation. `always()` so a failed run still publishes its
+  # (more valuable) report artifact for debugging.
+  platform-e2e-report:
+    name: Publish E2E Report
+    needs: [platform-e2e-tests-shards, platform-quickstart-e2e-tests]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:
@@ -803,3 +709,4 @@ jobs:
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
+

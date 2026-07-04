@@ -15,7 +15,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import type { ModelInputModality, ModelOutputModality } from "@/types";
+import type {
+  ModelDefaultParameters,
+  ModelInputModality,
+  ModelOutputModality,
+} from "@/types";
 
 /**
  * Models table - stores capability and pricing metadata fetched from models.dev API.
@@ -42,6 +46,9 @@ const modelsTable = pgTable(
 
     /** Maximum context window size in tokens */
     contextLength: integer("context_length"),
+
+    /** Maximum output size in tokens (from the model source's output limit) */
+    outputLength: integer("output_length"),
 
     /** Supported input modalities */
     inputModalities: jsonb("input_modalities").$type<ModelInputModality[]>(),
@@ -124,6 +131,13 @@ const modelsTable = pgTable(
     embeddingDimensions: integer(
       "embedding_dimensions",
     ).$type<SupportedEmbeddingDimension>(),
+
+    /**
+     * Provider-reported default generation parameters (Ollama `/api/show`).
+     * Display-only metadata; nothing applies these at request time.
+     */
+    defaultParameters:
+      jsonb("default_parameters").$type<ModelDefaultParameters>(),
 
     /** Whether this model was discovered via an LLM Proxy request (ensureModelExists).
      * Models with this flag are preserved even without API key links,

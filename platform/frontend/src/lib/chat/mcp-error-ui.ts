@@ -4,6 +4,8 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
+  type PolicyDeniedMcpToolError,
+  type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { PolicyDeniedPart } from "@/components/message-thread";
 
@@ -44,7 +46,27 @@ export type ToolAuthState =
       reauthUrl: string;
       catalogId: string | null;
       serverId: string | null;
+      // Which credential expired (personal / team / org) and, for team
+      // credentials, the owning team's name. Absent for text-parsed errors and
+      // for chat history predating the structured field, in which case the card
+      // falls back to generic "Your credentials …" copy.
+      credentialScope?: ResourceVisibilityScope;
+      credentialTeamName?: string | null;
     };
+
+function policyDeniedPartFromError(
+  error: PolicyDeniedMcpToolError,
+): PolicyDeniedPart {
+  return {
+    type: `tool-${error.toolName}`,
+    toolCallId: "",
+    state: "output-denied",
+    input: error.input,
+    unsafeContextActiveAtRequestStart: error.reasonType === "sensitive_context",
+    errorText: JSON.stringify({ reason: error.reason }),
+    toolId: error.toolId,
+  };
+}
 
 export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
   const policyDenied = extractMcpToolError(text);
@@ -52,15 +74,7 @@ export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
     return null;
   }
 
-  return {
-    type: `tool-${policyDenied.toolName}`,
-    toolCallId: "",
-    state: "output-denied",
-    input: policyDenied.input,
-    unsafeContextActiveAtRequestStart:
-      policyDenied.reasonType === "sensitive_context",
-    errorText: JSON.stringify({ reason: policyDenied.reason }),
-  };
+  return policyDeniedPartFromError(policyDenied);
 }
 
 export function parseAuthRequired(
@@ -148,6 +162,13 @@ export function resolveToolAuthState(params: {
 }): ToolAuthState | null {
   const structuredError = extractMcpToolError(params.rawOutput);
 
+  if (structuredError?.type === "policy_denied") {
+    return {
+      kind: "policy-denied",
+      policyDenied: policyDeniedPartFromError(structuredError),
+    };
+  }
+
   if (structuredError?.type === "auth_expired") {
     return {
       kind: "auth-expired",
@@ -155,6 +176,8 @@ export function resolveToolAuthState(params: {
       reauthUrl: structuredError.reauthUrl,
       catalogId: structuredError.catalogId,
       serverId: structuredError.serverId,
+      credentialScope: structuredError.credentialScope,
+      credentialTeamName: structuredError.credentialTeamName,
     };
   }
 
@@ -245,6 +268,55 @@ export function resolveToolAuthState(params: {
   }
 
   return null;
+}
+
+export type ConnectableAuthState = Extract<
+  ToolAuthState,
+  { kind: "auth-required" | "auth-expired" }
+>;
+
+/**
+ * Auth state of a `tools/call` result proxied for an MCP App. Reads the
+ * structured `archestraError` the gateway attaches (`_meta` /
+ * `structuredContent`) and falls back to parsing the result's text blocks, so
+ * the host can offer a connect affordance outside the iframe even when the app
+ * itself only prints the error prose. Returns only the kinds a user can act on
+ * with a URL (connect / re-authenticate); everything else is null.
+ */
+export function resolveMcpAppToolCallAuthState(
+  result: unknown,
+): ConnectableAuthState | null {
+  if (typeof result !== "object" || result === null) {
+    return null;
+  }
+
+  const envelope = result as { isError?: unknown; content?: unknown };
+  if (envelope.isError !== true) {
+    return null;
+  }
+
+  const errorText = Array.isArray(envelope.content)
+    ? envelope.content
+        .filter(
+          (block): block is { type: "text"; text: string } =>
+            typeof block === "object" &&
+            block !== null &&
+            (block as { type?: unknown }).type === "text" &&
+            typeof (block as { text?: unknown }).text === "string",
+        )
+        .map((block) => block.text)
+        .join("\n")
+    : "";
+
+  const authState = resolveToolAuthState({
+    errorText: errorText || undefined,
+    rawOutput: result,
+  });
+
+  return authState?.kind === "auth-required" ||
+    authState?.kind === "auth-expired"
+    ? authState
+    : null;
 }
 
 export function resolveAssistantTextAuthState(

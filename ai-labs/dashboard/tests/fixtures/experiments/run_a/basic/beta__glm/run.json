@@ -1,0 +1,16 @@
+{
+  "env_id": "basic",
+  "task_id": "beta",
+  "lane": "glm",
+  "provider": "anthropic",
+  "model": "glm-5.2",
+  "outcome": "failed",
+  "finish_reason": "stop",
+  "turn_count": 8,
+  "tool_call_count": 14,
+  "total_tokens": 23456,
+  "stage_count": 2,
+  "format_attempts": 1,
+  "verifier_exit_code": 1,
+  "verifier_timed_out": false
+}

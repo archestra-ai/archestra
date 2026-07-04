@@ -10,13 +10,16 @@ import {
   parseExpiredAuth,
   parsePolicyDenied,
   resolveAssistantTextAuthState,
+  resolveMcpAppToolCallAuthState,
   resolveToolAuthState,
   type ToolAuthState,
 } from "./mcp-error-ui";
 
 describe("parsePolicyDenied", () => {
-  it("parses a plain-text policy denial with tool name, args, and reason", () => {
-    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`;
+  it("parses a legacy plain-text policy denial with tool name, args, and reason", () => {
+    // Hardcoded legacy wording: this is what pre-rewrite refusals persisted
+    // in chat history look like.
+    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool call blocked: context contains sensitive data`;
     const result = parsePolicyDenied(text);
     expect(result).not.toBeNull();
     expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
@@ -26,6 +29,20 @@ describe("parsePolicyDenied", () => {
     });
     const errorInfo = JSON.parse(result?.errorText ?? "");
     expect(errorInfo.reason).toContain("context contains sensitive data");
+    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
+  });
+
+  it("parses a current-format plain-text policy denial with tool name, args, and reason", () => {
+    const text = `\nArchestra MCP Gateway blocked unsafe tool call: upstash__context7__get-library-docs with arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}.\n\nDo not retry: the same tool call will be blocked again.\n\nArchestra MCP Gateway monitors agentic traffic and blocks unsafe tool calls according to the configured guardrails. If you believe this is a misconfiguration, contact your administrator.`;
+    const result = parsePolicyDenied(text);
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
+    expect(result?.state).toBe("output-denied");
+    expect(result?.input).toEqual({
+      context7CompatibleLibraryID: "/websites/p5js_reference",
+    });
+    const errorInfo = JSON.parse(result?.errorText ?? "");
+    expect(errorInfo.reason).toBe(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
     expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
   });
 
@@ -374,6 +391,70 @@ describe("resolveToolAuthState", () => {
     });
   });
 
+  it("propagates a personal credential scope for structured auth-expired errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_1",
+            serverId: "s_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+            credentialScope: "personal",
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "auth-expired",
+      catalogName: "GitHub",
+      reauthUrl: "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+      catalogId: "cat_1",
+      serverId: "s_1",
+      credentialScope: "personal",
+    });
+  });
+
+  it("carries the owning team name for team-scoped auth-expired errors", () => {
+    expect(
+      resolveToolAuthState({
+        rawOutput: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_1",
+            serverId: "s_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+            credentialScope: "team",
+            credentialTeamName: "Platform Team",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "auth-expired",
+      credentialScope: "team",
+      credentialTeamName: "Platform Team",
+    });
+  });
+
+  it("leaves scope undefined for text-parsed expired-auth errors", () => {
+    const authState = resolveToolAuthState({
+      errorText: [
+        'Expired or invalid authentication for "GitHub".',
+        "To re-authenticate, please visit: http://localhost:3000/mcp/registry?reauth=cat_1&server=s_1",
+      ].join("\n"),
+    });
+
+    expect(authState?.kind).toBe("auth-expired");
+    expect(
+      (authState as { credentialScope?: string }).credentialScope,
+    ).toBeUndefined();
+  });
+
   it("parses policy-denied tool errors from errorText", () => {
     const authState = resolveToolAuthState({
       errorText:
@@ -381,6 +462,37 @@ describe("resolveToolAuthState", () => {
     });
 
     expect(authState?.kind).toBe("policy-denied");
+  });
+
+  it("prefers the structured policy_denied error on rawOutput over prose parsing", () => {
+    const authState = resolveToolAuthState({
+      rawOutput: {
+        structuredContent: {
+          archestraError: {
+            type: "policy_denied",
+            message: "blocked",
+            toolName: "archestra_pm__list_tasks",
+            input: { list: "week" },
+            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+            reasonType: "sensitive_context",
+          },
+        },
+      },
+    });
+
+    expect(authState).toEqual({
+      kind: "policy-denied",
+      policyDenied: {
+        type: "tool-archestra_pm__list_tasks",
+        toolCallId: "",
+        state: "output-denied",
+        input: { list: "week" },
+        unsafeContextActiveAtRequestStart: true,
+        errorText: JSON.stringify({
+          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+        }),
+      },
+    });
   });
 
   it("parses auth-required fallbacks from raw string output", () => {
@@ -397,6 +509,137 @@ describe("resolveToolAuthState", () => {
       providerId: null,
       catalogId: "cat_123",
     });
+  });
+});
+
+describe("resolveMcpAppToolCallAuthState", () => {
+  const authRequiredError = {
+    type: "auth_required",
+    message: 'Authentication required for "Slack"',
+    catalogName: "Slack",
+    catalogId: "cat_slack",
+    action: "install_mcp_credentials",
+    actionUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+  };
+
+  it("detects the structured auth-required error in _meta on an isError result", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: authRequiredError.message }],
+        _meta: { archestraError: authRequiredError },
+      }),
+    ).toMatchObject({
+      kind: "auth-required",
+      catalogName: "Slack",
+      actionUrl: authRequiredError.actionUrl,
+      catalogId: "cat_slack",
+    });
+  });
+
+  it("detects the structured error mirrored only in structuredContent", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: authRequiredError.message }],
+        structuredContent: { archestraError: authRequiredError },
+      }),
+    ).toMatchObject({
+      kind: "auth-required",
+      actionUrl: authRequiredError.actionUrl,
+    });
+  });
+
+  it("detects structured auth-expired errors with the reauth URL", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: "Expired credentials" }],
+        _meta: {
+          archestraError: {
+            type: "auth_expired",
+            message: "Expired",
+            catalogName: "GitHub",
+            catalogId: "cat_github",
+            serverId: "srv_1",
+            reauthUrl:
+              "http://localhost:3000/mcp/registry?reauth=cat_github&server=srv_1",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "auth-expired",
+      catalogName: "GitHub",
+      reauthUrl:
+        "http://localhost:3000/mcp/registry?reauth=cat_github&server=srv_1",
+    });
+  });
+
+  it("falls back to parsing the auth prose in text content blocks", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: 'Authentication required for "Slack"\n\nNo credentials were found for your account.\nTo set up your credentials, visit this URL: http://localhost:3000/mcp/registry?install=cat_slack\nOnce you have completed authentication, retry this tool call.',
+          },
+        ],
+      }),
+    ).toMatchObject({
+      kind: "auth-required",
+      catalogName: "Slack",
+      actionUrl: "http://localhost:3000/mcp/registry?install=cat_slack",
+      catalogId: "cat_slack",
+    });
+  });
+
+  it("ignores successful results even when they carry auth-like content", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: false,
+        content: [{ type: "text", text: authRequiredError.message }],
+        _meta: { archestraError: authRequiredError },
+      }),
+    ).toBeNull();
+    expect(
+      resolveMcpAppToolCallAuthState({
+        content: [{ type: "text", text: authRequiredError.message }],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for non-auth tool errors", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: "Upstream server returned 500" }],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for policy-denied errors (no connect affordance)", () => {
+    expect(
+      resolveMcpAppToolCallAuthState({
+        isError: true,
+        content: [{ type: "text", text: "blocked" }],
+        _meta: {
+          archestraError: {
+            type: "policy_denied",
+            message: "blocked",
+            toolName: "some-tool",
+            input: {},
+            reason: "blocked by policy",
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for non-object results", () => {
+    expect(resolveMcpAppToolCallAuthState(null)).toBeNull();
+    expect(resolveMcpAppToolCallAuthState("error text")).toBeNull();
+    expect(resolveMcpAppToolCallAuthState(undefined)).toBeNull();
   });
 });
 

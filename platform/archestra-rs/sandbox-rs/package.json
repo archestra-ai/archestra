@@ -7,6 +7,7 @@
   "types": "index.d.ts",
   "scripts": {
     "build": "napi build --release --platform",
+    "build:dev": "napi build --profile release-fast --platform",
     "build:test-helpers": "napi build --release --platform --features test-helpers",
     "check:ci": "cargo fmt --check --all && cargo check --workspace --locked && cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic && pnpm build",
     "check:musl": "cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic",
@@ -15,6 +16,9 @@
     "smoke:panic": "node panic-smoke.test.cjs",
     "test": "cargo test --workspace --locked",
     "type-check": "cargo check --workspace --locked"
+  },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.4.0"

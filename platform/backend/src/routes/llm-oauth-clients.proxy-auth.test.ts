@@ -49,6 +49,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
 
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -75,6 +76,59 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     expect(result?.authenticatedApp?.clientId).toBe(oauthClient.clientId);
   });
 
+  test("authorizes an allowed proxy for a TEAM-visibility-scoped client_credentials client (scoping is management-plane only)", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    const team = await makeTeam(org.id, author.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-svc-openai" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: org.id,
+      authorId: author.id,
+      name: "team-scoped service",
+      allowedLlmProxyIds: [proxy.id],
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+      scope: "team",
+      teams: [team.id],
+    });
+
+    // client_credentials tokens carry no user.
+    const accessToken = randomBytes(32).toString("base64url");
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(accessToken),
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 3_600_000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+    });
+
+    const result = await validateLlmOAuthAccessToken({
+      tokenValue: accessToken,
+      expectedProvider: "openai",
+      agent: proxy,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.authMethod).toBe("oauth_client_credentials");
+    expect(result?.apiKey).toBe("sk-svc-openai");
+    expect(result?.authenticatedApp?.clientId).toBe(oauthClient.clientId);
+  });
+
   test("rejects a token whose user cannot access the proxy", async ({
     makeOrganization,
     makeUser,
@@ -89,6 +143,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: outsider.id,
       name: "Agentic Chat Server",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -139,6 +194,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
 
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],
@@ -187,6 +243,7 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     });
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: org.id,
+      authorId: user.id,
       name: "Chat Interface",
       grantType: "authorization_code",
       redirectUris: ["https://chat.example.com/oauth/callback"],

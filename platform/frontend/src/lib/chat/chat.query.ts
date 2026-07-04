@@ -497,17 +497,56 @@ export function useCompactConversation() {
 }
 
 /**
- * Clear a conversation's recorded chat errors. Used by the scheduled-run
- * "Try again" affordance: after wiping the error rows we invalidate the
- * conversation so the inline error card disappears before the prompt is resent.
+ * Clear a conversation's recorded chat errors. Used by the chat session's
+ * regenerate flow ("Try again" on the error card, the regenerate action on a
+ * user message, edited resends) and the silent auto-retry success path.
+ *
+ * Optimistically drops the persisted error rows from the conversation cache and
+ * cancels any in-flight conversation refetch *before* the delete. The regenerate
+ * flow persists the (edited) user message just before calling this, which kicks
+ * off a conversation refetch that reads the error rows while they still exist —
+ * without the cancel + optimistic write, that refetch lands last and resurrects
+ * the stale error card above the freshly regenerated answer. Mirrors the
+ * optimistic-removal pattern in useDeleteConversation.
  */
 export function useClearChatErrors() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id }: { id: string }) =>
-      callApi(() => clearChatConversationErrors({ path: { id } }), null),
-    onSuccess: (_data, variables) => {
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await clearChatConversationErrors({
+        path: { id },
+      });
+      if (error) {
+        handleApiError(error);
+        // Throw to trigger onError rollback for the optimistic cache removal.
+        throw error;
+      }
+      return data;
+    },
+    onMutate: async ({ id }) => {
+      const queryKey = ["conversation", id];
+      // Cancel in-flight refetches so they can't overwrite the optimistic clear.
+      await queryClient.cancelQueries({ queryKey });
+      const previous =
+        queryClient.getQueryData<
+          archestraApiTypes.GetChatConversationResponses["200"]
+        >(queryKey);
+      // Drop the error rows immediately so the inline card disappears at once.
+      queryClient.setQueryData<
+        archestraApiTypes.GetChatConversationResponses["200"]
+      >(queryKey, (old) => (old ? { ...old, chatErrors: [] } : old));
+      return { previous, queryKey };
+    },
+    onError: (_error, _variables, context) => {
+      // The delete failed — restore the rows so the user still sees the error.
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSettled: (_data, _error, variables) => {
+      // Reconcile with the server: confirms the rows are gone on success, or
+      // brings them back if the delete never took.
       queryClient.invalidateQueries({
         queryKey: ["conversation", variables.id],
       });
@@ -570,6 +609,12 @@ export function useDeleteConversation() {
         queryKey: ["conversations"],
       });
 
+      // Capture the deleted conversation's project (if any) so onSettled can
+      // also refresh the project page's own conversation list.
+      const projectId = previousQueries
+        .flatMap(([, data]) => data ?? [])
+        .find((c) => c.id === deletedId)?.projectId;
+
       // Optimistically remove the conversation from every cached list
       queryClient.setQueriesData<
         archestraApiTypes.GetChatConversationsResponses["200"]
@@ -577,7 +622,7 @@ export function useDeleteConversation() {
         old ? old.filter((c) => c.id !== deletedId) : old,
       );
 
-      return { previousQueries };
+      return { previousQueries, projectId };
     },
     onError: (_error, _deletedId, context) => {
       // Roll back optimistic removal on failure
@@ -600,9 +645,16 @@ export function useDeleteConversation() {
 
       toast.success("Conversation deleted");
     },
-    onSettled: () => {
+    onSettled: (_data, _error, _deletedId, context) => {
       // Always refetch to ensure server state is in sync
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      // A project chat is also listed on its project page under a separate
+      // query key, which the sidebar invalidation above does not cover.
+      if (context?.projectId) {
+        queryClient.invalidateQueries({
+          queryKey: ["projects", context.projectId, "conversations"],
+        });
+      }
     },
   });
 }

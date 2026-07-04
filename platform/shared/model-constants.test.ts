@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
+  isSelfHostedProvider,
   requiresOpenAiResponsesApi,
 } from "./model-constants";
 
@@ -41,10 +42,38 @@ describe("provider API key optional helpers", () => {
     ).toBe(true);
   });
 
+  test("treats Anthropic as optional only when Workload Identity Federation is enabled", () => {
+    expect(isProviderApiKeyOptional({ provider: "anthropic" })).toBe(false);
+    expect(
+      isProviderApiKeyOptional({
+        provider: "anthropic",
+        anthropicWifEnabled: true,
+      }),
+    ).toBe(true);
+  });
+
   test("lists providers with optional API keys", () => {
     expect(getProvidersWithOptionalApiKey()).toEqual(["ollama", "vllm"]);
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
     ).toEqual(["ollama", "vllm", "azure"]);
+    expect(
+      getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
+    ).toEqual(["ollama", "vllm", "anthropic"]);
+  });
+});
+
+describe("isSelfHostedProvider", () => {
+  test("matches only the self-hosted providers", () => {
+    expect(isSelfHostedProvider("ollama")).toBe(true);
+    expect(isSelfHostedProvider("vllm")).toBe(true);
+  });
+
+  test("excludes cloud keyless providers (no per-provider denylist needed)", () => {
+    // These are optional-key via runtime flags but are NOT self-hosted, so the
+    // Docker-localhost hint must not apply to them.
+    expect(isSelfHostedProvider("azure")).toBe(false);
+    expect(isSelfHostedProvider("anthropic")).toBe(false);
+    expect(isSelfHostedProvider("openai")).toBe(false);
   });
 });

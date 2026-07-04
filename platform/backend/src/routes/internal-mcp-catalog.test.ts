@@ -1,9 +1,9 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_TODO_WRITE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -18,9 +18,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
-vi.mock("@/auth", () => ({
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -90,7 +88,7 @@ describe("internal MCP catalog routes", () => {
     expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     expect(toolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(toolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
-    expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+    expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
   test("DELETE /api/internal_mcp_catalog refuses an app-backing catalog (managed via the Apps lifecycle)", async ({

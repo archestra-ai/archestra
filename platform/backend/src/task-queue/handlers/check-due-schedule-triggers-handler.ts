@@ -9,15 +9,17 @@ import { taskQueueService } from "@/task-queue";
 export async function handleCheckDueScheduleTriggers(): Promise<void> {
   const now = new Date();
   const dueTriggers = await ScheduleTriggerModel.findDueTriggers(now);
+  if (dueTriggers.length === 0) return;
+
+  // One query instead of a per-trigger EXISTS check.
+  const activeTriggerIds = await TaskModel.findActivePayloadValues(
+    "schedule_trigger_run_execute",
+    "triggerId",
+  );
 
   for (const trigger of dueTriggers) {
     try {
-      const exists = await TaskModel.hasPendingOrProcessingForTrigger(
-        "schedule_trigger_run_execute",
-        trigger.id,
-      );
-
-      if (exists) {
+      if (activeTriggerIds.has(trigger.id)) {
         logger.debug(
           { triggerId: trigger.id, triggerName: trigger.name },
           "Skipping due trigger, task already in flight",

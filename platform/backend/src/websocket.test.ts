@@ -8,27 +8,12 @@ import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { WebSocket as WS } from "ws";
 import { betterAuth } from "@/auth";
-import type * as originalConfigModule from "@/config";
 import db, { schema } from "@/database";
+import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-    },
-  };
-});
-
-const { browserStreamFeature } = await import(
-  "@/features/browser-stream/services/browser-stream.feature"
-);
-const { default: websocketService } = await import("@/websocket");
-const { default: McpServerRuntimeManager } = await import(
-  "@/k8s/mcp-server-runtime/manager"
-);
+import websocketService from "@/websocket";
 
 interface WebSocketClientContext {
   userId: string;
@@ -56,8 +41,10 @@ interface McpExecSubscription {
 }
 
 interface McpDeploymentStatusSubscription {
-  interval: NodeJS.Timeout;
-  lastStatuses: Record<string, McpDeploymentStatusEntry>;
+  buildStatuses: (
+    summary: typeof McpServerRuntimeManager.statusSummary,
+  ) => Record<string, McpDeploymentStatusEntry>;
+  lastStatusesJson: string;
 }
 
 const service = websocketService as unknown as {
@@ -74,11 +61,12 @@ const service = websocketService as unknown as {
   mcpLogsSubscriptions: Map<WS, McpLogsSubscription>;
   mcpExecSubscriptions: Map<WS, McpExecSubscription>;
   mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
+  mcpDeploymentStatusPollInterval: NodeJS.Timeout | null;
   initBrowserStreamContextForTesting: () => void;
   wss: { clients: Set<WS> } | null;
 };
 
-// Initialize browser stream context once for all tests (config mock is already applied)
+// Initialize browser stream context once for all tests
 service.initBrowserStreamContextForTesting();
 
 describe("websocket authentication", () => {
@@ -586,10 +574,11 @@ describe("websocket MCP deployment statuses", () => {
   });
 
   afterEach(() => {
-    for (const subscription of service.mcpDeploymentStatusSubscriptions.values()) {
-      clearInterval(subscription.interval);
-    }
     service.mcpDeploymentStatusSubscriptions.clear();
+    if (service.mcpDeploymentStatusPollInterval) {
+      clearInterval(service.mcpDeploymentStatusPollInterval);
+      service.mcpDeploymentStatusPollInterval = null;
+    }
   });
 
   test("sends initial deployment statuses for accessible local servers", async ({
@@ -820,7 +809,7 @@ describe("websocket MCP deployment statuses", () => {
     );
   });
 
-  test("unsubscribes and clears interval on unsubscribe message", async ({
+  test("unsubscribes and stops the shared poller on unsubscribe message", async ({
     makeOrganization,
     makeUser,
     makeMcpServer,
@@ -865,8 +854,7 @@ describe("websocket MCP deployment statuses", () => {
     );
 
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(true);
-    const subscription = service.mcpDeploymentStatusSubscriptions.get(ws);
-    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    expect(service.mcpDeploymentStatusPollInterval).not.toBeNull();
 
     // Now unsubscribe
     await service.handleMessage(
@@ -878,7 +866,8 @@ describe("websocket MCP deployment statuses", () => {
     );
 
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
-    expect(clearIntervalSpy).toHaveBeenCalledWith(subscription?.interval);
+    // Last subscriber gone: the shared poller must be stopped
+    expect(service.mcpDeploymentStatusPollInterval).toBeNull();
   });
 
   test("cleans up previous subscription when subscribing again", async ({
@@ -927,10 +916,8 @@ describe("websocket MCP deployment statuses", () => {
 
     const firstSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(firstSubscription).toBeDefined();
-    const firstInterval = firstSubscription?.interval;
-    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
 
-    // Subscribe again - should clean up the first subscription
+    // Subscribe again - should replace the first subscription
     await service.handleMessage(
       {
         type: "subscribe_mcp_deployment_statuses",
@@ -939,13 +926,459 @@ describe("websocket MCP deployment statuses", () => {
       ws,
     );
 
-    // First interval should have been cleared
-    expect(clearIntervalSpy).toHaveBeenCalledWith(firstInterval);
-
-    // A new subscription should exist
     const secondSubscription = service.mcpDeploymentStatusSubscriptions.get(ws);
     expect(secondSubscription).toBeDefined();
-    expect(secondSubscription?.interval).not.toBe(firstInterval);
+    expect(secondSubscription).not.toBe(firstSubscription);
+    expect(service.mcpDeploymentStatusSubscriptions.size).toBe(1);
+    expect(service.mcpDeploymentStatusPollInterval).not.toBeNull();
+  });
+});
+
+describe("websocket MCP deployment statuses shared poller", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // Only fake interval timers: real timeouts stay real so DB access keeps working
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    service.clientContexts.clear();
+    service.mcpDeploymentStatusSubscriptions.clear();
+  });
+
+  afterEach(() => {
+    service.mcpDeploymentStatusSubscriptions.clear();
+    if (service.mcpDeploymentStatusPollInterval) {
+      clearInterval(service.mcpDeploymentStatusPollInterval);
+      service.mcpDeploymentStatusPollInterval = null;
+    }
+    vi.useRealTimers();
+  });
+
+  const makeWs = () =>
+    ({
+      readyState: WS.OPEN,
+      send: vi.fn(),
+      close: vi.fn(),
+    }) as unknown as WS;
+
+  const subscribe = (ws: WS) =>
+    service.handleMessage(
+      { type: "subscribe_mcp_deployment_statuses", payload: {} },
+      ws,
+    );
+
+  test("one tick triggers a single shared refresh for multiple subscribers", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockResolvedValue(undefined);
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws1 = makeWs();
+    const ws2 = makeWs();
+    const context = {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    };
+    service.clientContexts.set(ws1, context);
+    service.clientContexts.set(ws2, context);
+
+    await subscribe(ws1);
+    await subscribe(ws2);
+    expect(service.mcpDeploymentStatusSubscriptions.size).toBe(2);
+
+    refreshSpy.mockClear();
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("sends per-subscriber updates scoped to each subscriber's accessible servers", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const org = await makeOrganization();
+    const userA = await makeUser();
+    const userB = await makeUser();
+    const teamA = await makeTeam(org.id, userA.id);
+    const teamB = await makeTeam(org.id, userB.id);
+    await makeTeamMember(teamA.id, userA.id);
+    await makeTeamMember(teamB.id, userB.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const serverA = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: userA.id,
+      teamId: teamA.id,
+    });
+    const serverB = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: userB.id,
+      teamId: teamB.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+      undefined,
+    );
+    let summary: typeof McpServerRuntimeManager.statusSummary = {
+      status: "running",
+      mcpServers: {},
+    };
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "statusSummary",
+      "get",
+    ).mockImplementation(() => summary);
+
+    const wsA = makeWs();
+    const wsB = makeWs();
+    service.clientContexts.set(wsA, {
+      userId: userA.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: false,
+    });
+    service.clientContexts.set(wsB, {
+      userId: userB.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: false,
+    });
+
+    await subscribe(wsA);
+    await subscribe(wsB);
+    (wsA.send as ReturnType<typeof vi.fn>).mockClear();
+    (wsB.send as ReturnType<typeof vi.fn>).mockClear();
+
+    // Both deployments transition to running
+    summary = {
+      status: "running",
+      mcpServers: {
+        [serverA.id]: {
+          state: "running",
+          message: "Deployment is running",
+          error: null,
+          serverName: "server-a",
+          deploymentName: `mcp-${serverA.id}`,
+          namespace: "default",
+        },
+        [serverB.id]: {
+          state: "running",
+          message: "Deployment is running",
+          error: null,
+          serverName: "server-b",
+          deploymentName: `mcp-${serverB.id}`,
+          namespace: "default",
+        },
+      },
+    };
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(wsA.send).toHaveBeenCalledTimes(1);
+    const messageA = JSON.parse(
+      (wsA.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string,
+    );
+    expect(messageA.type).toBe("mcp_deployment_statuses");
+    expect(Object.keys(messageA.payload.statuses)).toEqual([serverA.id]);
+    expect(messageA.payload.statuses[serverA.id].state).toBe("running");
+
+    expect(wsB.send).toHaveBeenCalledTimes(1);
+    const messageB = JSON.parse(
+      (wsB.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string,
+    );
+    expect(messageB.type).toBe("mcp_deployment_statuses");
+    expect(Object.keys(messageB.payload.statuses)).toEqual([serverB.id]);
+    expect(messageB.payload.statuses[serverB.id].state).toBe("running");
+  });
+
+  test("does not resend when statuses are unchanged", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await subscribe(ws);
+    (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  test("unsubscribing the last subscriber stops polling", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockResolvedValue(undefined);
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await subscribe(ws);
+    await service.handleMessage(
+      { type: "unsubscribe_mcp_deployment_statuses", payload: {} },
+      ws,
+    );
+
+    refreshSpy.mockClear();
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(refreshSpy).not.toHaveBeenCalled();
+    expect(service.mcpDeploymentStatusPollInterval).toBeNull();
+  });
+
+  test("a hung refresh does not freeze the poller past the refresh bound", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    // The refresh bound uses setTimeout: fake it too, for this test only
+    vi.useFakeTimers({
+      toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"],
+    });
+
+    // Second call (first tick) hangs forever; all others resolve
+    let refreshCalls = 0;
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockImplementation(() => {
+        refreshCalls++;
+        return refreshCalls === 2
+          ? new Promise<void>(() => {})
+          : Promise.resolve();
+      });
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await subscribe(ws);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+
+    // First tick starts the hung refresh
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(refreshSpy).toHaveBeenCalledTimes(2);
+
+    // Advance well past the refresh bound: the guard must be released and a
+    // later tick must run a fresh refresh instead of being frozen forever
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(refreshSpy.mock.calls.length).toBeGreaterThan(2);
+  });
+
+  test("a failed send is retried on the next tick", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+      undefined,
+    );
+    let summary: typeof McpServerRuntimeManager.statusSummary = {
+      status: "running",
+      mcpServers: {},
+    };
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "statusSummary",
+      "get",
+    ).mockImplementation(() => summary);
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    await subscribe(ws);
+    const sendMock = ws.send as ReturnType<typeof vi.fn>;
+    sendMock.mockClear();
+
+    summary = {
+      status: "running",
+      mcpServers: {
+        [mcpServer.id]: {
+          state: "running",
+          message: "Deployment is running",
+          error: null,
+          serverName: "test-server",
+          deploymentName: `mcp-${mcpServer.id}`,
+          namespace: "default",
+        },
+      },
+    };
+
+    // Tick N: send blows up — the update must not be marked as delivered
+    sendMock.mockImplementationOnce(() => {
+      throw new Error("socket write failed");
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+
+    // Tick N+1: the same (still-changed) payload is retried and delivered
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sendMock).toHaveBeenCalledTimes(2);
+    const retried = JSON.parse(sendMock.mock.calls[1][0] as string);
+    expect(retried.type).toBe("mcp_deployment_statuses");
+    expect(retried.payload.statuses[mcpServer.id].state).toBe("running");
+  });
+
+  test("socket closed during subscribe awaits is not registered and poller stays off", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    let resolveRefresh: (() => void) | undefined;
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    const subscribePromise = subscribe(ws);
+    // setTimeout is real in this describe, so waitFor can poll
+    await vi.waitFor(() => expect(refreshSpy).toHaveBeenCalled());
+
+    // Socket closes while subscribe is still awaiting the refresh
+    (ws as { readyState: number }).readyState = WS.CLOSED;
+    resolveRefresh?.();
+    await subscribePromise;
+
+    expect(ws.send).not.toHaveBeenCalled();
+    expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
+    expect(service.mcpDeploymentStatusPollInterval).toBeNull();
   });
 });
 

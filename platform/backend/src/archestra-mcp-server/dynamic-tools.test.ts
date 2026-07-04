@@ -1,27 +1,25 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
+  TOOL_LIST_AGENTS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
+  TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
 import { KnowledgeBaseConnectorModel, ToolModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import {
   getUnassignedDiscoverableTools,
   isDynamicallyAvailableArchestraTool,
   resolveDynamicTool,
+  resolveDynamicToolByUiResource,
 } from "./dynamic-tools";
 
 const QUERY_KNOWLEDGE_SOURCES_FULL_NAME = getArchestraToolFullName(
@@ -29,9 +27,10 @@ const QUERY_KNOWLEDGE_SOURCES_FULL_NAME = getArchestraToolFullName(
 );
 
 // Dynamic tool access: with the agent's "access all tools" setting on, run_tool
-// executes user-accessible tools directly (resolveDynamicTool) and a narrow set
-// of unassigned built-ins becomes executable (isDynamicallyAvailableArchestraTool).
-// Nothing is written to the agent in any of these paths.
+// executes user-accessible tools directly (resolveDynamicTool) and unassigned
+// built-ins become executable (isDynamicallyAvailableArchestraTool) — gated by
+// feature flags, per-agent exclusions, and the query_knowledge_sources
+// connector check. Nothing is written to the agent in any of these paths.
 
 function makeTestConnector(params: {
   organizationId: string;
@@ -250,6 +249,151 @@ describe("resolveDynamicTool", () => {
   });
 });
 
+describe("resolveDynamicToolByUiResource", () => {
+  const RESOURCE_URI = "ui://excalidraw/mcp-app.html";
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+
+  beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
+    const org = await makeOrganization();
+    organizationId = org.id;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, org.id, { role: "admin" });
+    agent = await makeAgent({
+      name: "Dynamic Agent",
+      organizationId: org.id,
+      accessAllTools: true,
+    });
+  });
+
+  test("resolves each ui:// resource to its own tool, keyed on the exact resourceUri", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    // Two UI tools in the same catalog: resolving each URI must return that
+    // tool, not the other. Asserting BOTH directions discriminates the exact
+    // resourceUri match regardless of row ordering — if the filter ignored the
+    // URI, both resolutions would return the same first-ordered row and one of
+    // these assertions would fail.
+    await makeTool({
+      name: "excalidraw__other_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/other.html" } } },
+    });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const target = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+    expect(target?.name).toBe("excalidraw__create_view");
+    expect(target?.catalogId).toBe(catalog.id);
+
+    const other = await resolveDynamicToolByUiResource({
+      resourceUri: "ui://excalidraw/other.html",
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+    expect(other?.name).toBe("excalidraw__other_view");
+  });
+
+  test("null when the agent's access-all-tools setting is off", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      organizationId,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const tool = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: strictAgent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
+  });
+
+  test("null when the backing tool is not accessible to the user", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    // No install (makeMcpServer) → the catalog is not reachable for the user.
+
+    const tool = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
+  });
+
+  test("null (fail closed) when the same ui:// resource is claimed by two accessible catalogs", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Two reachable catalogs both advertise the SAME ui:// URI. A resource read
+    // carries only the URI, so the resolver cannot know which server ran the
+    // tool — it must refuse rather than serve HTML from the wrong backend.
+    const catalogA = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalogA.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalogA.id, scope: "org" });
+
+    const catalogB = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "impostor__create_view",
+      catalogId: catalogB.id,
+      meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
+    });
+    await makeMcpServer({ catalogId: catalogB.id, scope: "org" });
+
+    const tool = await resolveDynamicToolByUiResource({
+      resourceUri: RESOURCE_URI,
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tool).toBeNull();
+  });
+});
+
 describe("isDynamicallyAvailableArchestraTool", () => {
   let agent: Agent;
   let organizationId: string;
@@ -270,7 +414,7 @@ describe("isDynamicallyAvailableArchestraTool", () => {
 
   describe("sandbox built-ins", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
-    beforeAll(() => {
+    beforeEach(() => {
       (config.skillsSandbox as { enabled: boolean }).enabled = true;
     });
     afterAll(() => {
@@ -307,7 +451,7 @@ describe("isDynamicallyAvailableArchestraTool", () => {
       expect(available).toBe(false);
     });
 
-    test("a persistent-files tool is available when both the runtime and Projects features are on", async () => {
+    test("a persistent-files tool is available when the sandbox runtime is on", async () => {
       const available = await isDynamicallyAvailableArchestraTool({
         toolName: TOOL_READ_FILE_FULL_NAME,
         agentId: agent.id,
@@ -316,38 +460,6 @@ describe("isDynamicallyAvailableArchestraTool", () => {
       });
 
       expect(available).toBe(true);
-    });
-
-    test("a persistent-files tool is unavailable when the Projects feature is off, even with the runtime on", async () => {
-      const originalProjects = config.projects.enabled;
-      (config.projects as { enabled: boolean }).enabled = false;
-      try {
-        const available = await isDynamicallyAvailableArchestraTool({
-          toolName: TOOL_READ_FILE_FULL_NAME,
-          agentId: agent.id,
-          userId,
-          organizationId,
-        });
-        expect(available).toBe(false);
-      } finally {
-        (config.projects as { enabled: boolean }).enabled = originalProjects;
-      }
-    });
-
-    test("a sandbox runtime tool stays available when the Projects feature is off", async () => {
-      const originalProjects = config.projects.enabled;
-      (config.projects as { enabled: boolean }).enabled = false;
-      try {
-        const available = await isDynamicallyAvailableArchestraTool({
-          toolName: TOOL_RUN_COMMAND_FULL_NAME,
-          agentId: agent.id,
-          userId,
-          organizationId,
-        });
-        expect(available).toBe(true);
-      } finally {
-        (config.projects as { enabled: boolean }).enabled = originalProjects;
-      }
     });
   });
 
@@ -421,9 +533,54 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     expect(available).toBe(false);
   });
 
-  test("other archestra built-ins stay assignment-gated", async () => {
+  test("other archestra built-ins are dynamically available in All mode", async () => {
+    // identity tool and a management tool — no feature gate, so the only
+    // requirements are the dynamic-access context and no exclusion
+    for (const toolName of [
+      getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
+      TOOL_LIST_AGENTS_FULL_NAME,
+    ]) {
+      const available = await isDynamicallyAvailableArchestraTool({
+        toolName,
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
+      expect(available).toBe(true);
+    }
+  });
+
+  test("other archestra built-ins stay assignment-gated when access-all-tools is off", async ({
+    makeAgent,
+  }) => {
+    const strictAgent = await makeAgent({
+      name: "Strict Agent",
+      organizationId,
+    });
+
     const available = await isDynamicallyAvailableArchestraTool({
       toolName: getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
+      agentId: strictAgent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(available).toBe(false);
+  });
+
+  test("an excluded built-in is not dynamically available", async () => {
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const whoamiFullName = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME);
+    const whoami = await ToolModel.findByName(whoamiFullName);
+    if (!whoami) throw new Error("whoami row missing");
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId,
+      excludedToolIds: [whoami.id],
+    });
+
+    const available = await isDynamicallyAvailableArchestraTool({
+      toolName: whoamiFullName,
       agentId: agent.id,
       userId,
       organizationId,
@@ -527,7 +684,7 @@ describe("getUnassignedDiscoverableTools", () => {
     );
   });
 
-  test("excludes other archestra built-ins and agent__ rows", async ({
+  test("includes other archestra built-ins but never agent__ rows or the meta tools", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -543,10 +700,14 @@ describe("getUnassignedDiscoverableTools", () => {
     });
 
     const names = tools.map((tool) => tool.name);
-    expect(names).not.toContain(
-      getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
-    );
+    // built-ins are discoverable in All mode
+    expect(names).toContain(getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME));
+    expect(names).toContain(TOOL_LIST_AGENTS_FULL_NAME);
+    // proxy-discovered delegation artifacts stay out
     expect(names).not.toContain("agent__leaked_artifact");
+    // the meta tools are the dispatch surface itself — never in this set
+    expect(names).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+    expect(names).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
   });
 });
 

@@ -21,10 +21,14 @@ describe("WebCrawlerConnector", () => {
   });
 
   test("validates crawl scope and regular expression config", async () => {
-    const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
+    const connector = new WebCrawlerConnector();
+    // The crawl-scope assertions target an unresolvable test domain, so opt into
+    // private-network access to skip the DNS/SSRF gate and reach scope checks.
+    const base = { allowPrivateNetwork: true };
 
     await expect(
       connector.validateConfig({
+        ...base,
         startUrl: "https://docs.example.test/guide/",
         includePathPrefixes: ["/guide/"],
         excludePathPatterns: ["/search"],
@@ -32,6 +36,7 @@ describe("WebCrawlerConnector", () => {
     ).resolves.toEqual({ valid: true });
 
     const invalidPattern = await connector.validateConfig({
+      ...base,
       startUrl: "https://docs.example.test/guide/",
       excludePathPatterns: ["["],
     });
@@ -41,6 +46,7 @@ describe("WebCrawlerConnector", () => {
     });
 
     const unsafePattern = await connector.validateConfig({
+      ...base,
       startUrl: "https://docs.example.test/guide/",
       excludePathPatterns: ["(a+)+$"],
     });
@@ -51,12 +57,14 @@ describe("WebCrawlerConnector", () => {
 
     await expect(
       connector.validateConfig({
+        ...base,
         startUrl: "https://docs.example.test/guide/",
         includePathPrefixes: ["https://docs.example.test/guide/"],
       }),
     ).resolves.toEqual({ valid: true });
 
     const crossOriginPrefix = await connector.validateConfig({
+      ...base,
       startUrl: "https://docs.example.test/guide/",
       includePathPrefixes: ["https://other.example.test/guide/"],
     });
@@ -67,6 +75,7 @@ describe("WebCrawlerConnector", () => {
     });
 
     const invalidUrl = await connector.validateConfig({
+      ...base,
       startUrl: "not a url",
     });
     expect(invalidUrl).toEqual({
@@ -75,6 +84,7 @@ describe("WebCrawlerConnector", () => {
     });
 
     const excludedStartUrl = await connector.validateConfig({
+      ...base,
       startUrl: "https://docs.example.test/guide/",
       includePathPrefixes: ["/api/"],
     });
@@ -95,6 +105,17 @@ describe("WebCrawlerConnector", () => {
       valid: false,
       error: "Host 127.0.0.1 resolves to a private or internal network address",
     });
+  });
+
+  test("allows private network start URLs when the config opts in", async () => {
+    const connector = new WebCrawlerConnector();
+
+    const result = await connector.validateConfig({
+      startUrl: "http://127.0.0.1/docs/",
+      allowPrivateNetwork: true,
+    });
+
+    expect(result).toEqual({ valid: true });
   });
 
   test("crawls same-host HTML pages within include/exclude scope and extracts main content", async () => {
@@ -424,17 +445,17 @@ describe("WebCrawlerConnector", () => {
         res.end(JSON.stringify({ ok: true }));
       },
     });
-    const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
+    const connector = new WebCrawlerConnector();
 
     await expect(
       connector.testConnection({
-        config: { startUrl: `${site.url}/docs/` },
+        config: { startUrl: `${site.url}/docs/`, allowPrivateNetwork: true },
         credentials: { apiToken: "" },
       }),
     ).resolves.toEqual({ success: true });
 
     const notHtml = await connector.testConnection({
-      config: { startUrl: `${site.url}/not-html` },
+      config: { startUrl: `${site.url}/not-html`, allowPrivateNetwork: true },
       credentials: { apiToken: "" },
     });
     expect(notHtml.success).toBe(false);
@@ -442,7 +463,7 @@ describe("WebCrawlerConnector", () => {
   });
 
   test("testConnection reports invalid configuration", async () => {
-    const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
+    const connector = new WebCrawlerConnector();
 
     const result = await connector.testConnection({
       config: { startUrl: "not a url" },
@@ -470,7 +491,7 @@ describe("WebCrawlerConnector", () => {
   });
 
   test("sync throws on invalid configuration", async () => {
-    const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
+    const connector = new WebCrawlerConnector();
 
     await expect(
       firstSync(connector, { startUrl: "not a url" }),
@@ -705,11 +726,12 @@ function firstSync(
 async function collectBatches(
   config: Record<string, unknown>,
 ): Promise<ConnectorSyncBatch[]> {
-  const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
+  const connector = new WebCrawlerConnector();
   const batches: ConnectorSyncBatch[] = [];
 
   for await (const batch of connector.sync({
-    config,
+    // Tests crawl a loopback test server, so opt into private-network access.
+    config: { allowPrivateNetwork: true, ...config },
     credentials: { apiToken: "" },
     checkpoint: null,
   })) {

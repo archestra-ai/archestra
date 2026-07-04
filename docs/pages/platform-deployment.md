@@ -818,33 +818,11 @@ The following environment variables can be used to configure Archestra Platform.
   - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
   - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
-- **`ARCHESTRA_GLOBAL_TOOL_POLICY`** - Controls how tool invocation is treated across the LLM proxy.
-  - Default: `permissive`
-  - Values: `permissive` or `restrictive`
-  - `permissive`: Tools are allowed, unless a specific policy is set for them.
-  - `restrictive`: Tools are forbidden, unless a specific policy is set for them.
-
-- **`ARCHESTRA_BETA`** - Master switch for ships-dark preview features. When `true`, every `ARCHESTRA_*_ENABLED` product-feature gate below defaults on at once — Agent Skills, Agent Environments, agent hooks, the code runtime, MCP Apps, and Projects. An explicit per-flag value always wins, so `ARCHESTRA_BETA=true` with `ARCHESTRA_APPS_ENABLED=false` keeps Apps off. Beta only flips intent — the sandbox and agent hooks still need a Dagger runner host to run. Does not touch credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), enterprise-licensed features, or always-on defaults (DCR, chat secret scanning, knowledge-base hybrid search).
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_AGENTS_SKILLS_ENABLED`** - Enables Agent Skills — reusable `SKILL.md` instruction sets that agents load on demand. When off, the Skills page and its sidebar link are hidden and the feature cannot be enabled for an organization.
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED`** - Shows the per-environment sandbox binding selector on the agent form, letting an agent's code sandbox run on a deployment environment's dedicated Dagger engine under that environment's egress policy. When off, the selector is hidden. Requires the code runtime and Kubernetes.
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
+- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`). Its only product effect is selecting the beta Connect and MCP Registry page variants (`/connection_beta`, `/mcp/registry/beta`). The code sandbox and agent hooks are enabled whenever a Dagger runner host is configured (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`).
   - Default: `false`
   - Values: `true`, `false`
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
-  - Default: `false`
-  - Values: `true`, `false`
-
-- **`ARCHESTRA_APPS_ENABLED`** - Enables user-authored MCP Apps — apps created inside Archestra (from chat or the `/apps` page) with their own data store and assignable tools. When off, the `/apps` page and its sidebar link are hidden, the app tools and routes are not registered, and the feature cannot be used.
   - Default: `false`
   - Values: `true`, `false`
 
@@ -892,8 +870,8 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Example: `archestra-prod/`
 
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
-  - Default: `enabled`
-  - Set to `disabled` to opt-out of analytics
+  - Default: `enabled` in production builds (`NODE_ENV=production`, which includes the released Docker images); disabled in development/test environments
+  - Set to `disabled` to opt-out of analytics, or `enabled` to force it on regardless of environment
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
   - Default: Archestra's hosted PostHog project key
@@ -926,10 +904,21 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `password`
   - Note: Change this to a secure password for production deployments
 
+- **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Developer-only convenience that skips the login screen by minting a real session for the user with this email when the app loads unauthenticated.
+  - Default: None (disabled)
+  - Ignored in production (`NODE_ENV=production` or `prod`); only takes effect in development builds
+  - The session is an ordinary one for that user — role-based access control is unchanged
+  - Example: `admin@example.com`
+
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
   - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
   - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
   - Required when using different domains or subdomains for frontend and backend
+
+- **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
+  - Default: `archestra`
+  - Browsers scope cookies to the host without the port, so multiple Archestra instances on different ports of the same host overwrite each other's session cookies. Give each instance a unique prefix to keep their sessions independent.
+  - Mainly useful for local development with parallel stacks; single-instance deployments can leave the default
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`
@@ -1006,6 +995,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set `ARCHESTRA_ANTHROPIC_BASE_URL=https://<resource-name>.services.ai.azure.com/anthropic`
   - Uses Azure Identity `DefaultAzureCredential` with token scope `https://ai.azure.com/.default`
   - Claude deployments must already exist in the Azure resource. Microsoft lists additional Claude prerequisites: paid eligible subscription, supported region, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group. Azure also requires Anthropic deployment metadata: `industry`, `organizationName`, and `countryCode`.
+
+- **`ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID`**, **`ARCHESTRA_ANTHROPIC_ORGANIZATION_ID`**, **`ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID`** - Enable keyless Anthropic authentication via [Workload Identity Federation](https://platform.claude.com/docs/en/manage-claude/workload-identity-federation).
+  - All three are required, plus one identity token source (below). A partial configuration logs a warning at startup and disables WIF.
+  - Values come from the federation rule (`fdrl_...`), organization ID, and service account (`svac_...`) created in the Claude Console under **Settings → Workload identity**.
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`** - Path to the OIDC identity token file issued by your identity provider (e.g. a Kubernetes projected service-account token).
+  - Example: `/var/run/secrets/anthropic.com/token`
+  - Re-read on every token exchange, so rotated tokens are picked up automatically. Prefer this over the inline variant in production.
+
+- **`ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN`** - Inline OIDC identity token; alternative to `ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE`.
+  - Identity tokens are short-lived, so this is mainly useful for testing. The file variant takes precedence when both are set.
+
+- **`ARCHESTRA_ANTHROPIC_WORKSPACE_ID`** - Anthropic workspace ID (`wrkspc_...`) for Workload Identity Federation.
+  - Optional; required only when the federation rule covers more than one workspace.
 
 - **`ARCHESTRA_GEMINI_BASE_URL`** - Override the Google Gemini API base URL.
   - Default: `https://generativelanguage.googleapis.com`
@@ -1172,6 +1175,11 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
 
+- **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
+  - Default: `32768`
+  - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
+  - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
+
 ### MCP Apps Sandbox
 
 MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.
@@ -1205,6 +1213,7 @@ Set `ARCHESTRA_MCP_SANDBOX_DOMAIN` when MCP Apps need persistent state or origin
 4. Configure the reverse proxy (nginx, Caddy, etc.) to route `*.mcp.example.com` to the backend (port 9000), applying the wildcard certificate
 
 5. Set the environment variable:
+
    ```yaml
    ARCHESTRA_MCP_SANDBOX_DOMAIN: mcp.example.com
    ```
@@ -1396,6 +1405,13 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
 
+#### Attachment processing
+
+- **`ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS`** - Per-process cap on concurrent chatops attachment downloads and image shrinking.
+  - Default: `4`
+  - Bounds the transient memory a burst of attachment-heavy messages can hold; lower it on memory-constrained deployments
+  - Currently applies to Slack downloads only; MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap instead
+
 ### Knowledge Base Configuration
 
 These environment variables configure the [Knowledge Base](/docs/platform-knowledge-bases). Knowledge Bases use a built-in RAG stack powered by pgvector for document chunking, embedding, and hybrid search.
@@ -1427,7 +1443,14 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
   - Default: Not set (maintenance mode disabled)
   - When set, all users are shown a full-screen maintenance overlay with the message instead of the normal application interface.
 
+### Site Notification Banner
+
+- **`ARCHESTRA_SITE_NOTIFICATION_MESSAGE`** - Displays an instance-wide banner at the top of the UI, including the login screen.
+  - Default: Not set (no banner)
+  - Supports markdown. Users can dismiss the banner; a changed message reappears for everyone.
+  - Unlike maintenance mode, the platform stays fully functional. Useful for labeling non-production instances or announcing upcoming maintenance.
+  - Shown alongside (above) any organization-level site notification configured in Settings → Organization.
+
 ### Enterprise Licensing
 
 To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).
-

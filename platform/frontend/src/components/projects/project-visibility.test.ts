@@ -1,39 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { describeProjectVisibility } from "./project-visibility";
+import { projectVisibilityToScope } from "./project-visibility";
 
-describe("describeProjectVisibility", () => {
+describe("projectVisibilityToScope", () => {
   it("treats null visibility as a personal scope", () => {
-    expect(describeProjectVisibility(null)).toEqual({
-      scope: "personal",
-      label: "Personal",
-    });
+    expect(projectVisibilityToScope(null)).toBe("personal");
   });
 
   it("maps organization visibility to the org scope", () => {
-    expect(describeProjectVisibility("organization")).toEqual({
-      scope: "org",
-      label: "Organization",
-    });
+    expect(projectVisibilityToScope("organization")).toBe("org");
   });
 
-  it("labels a team-shared project with its team names when known", () => {
-    expect(
-      describeProjectVisibility("team", ["Design", "Engineering"]),
-    ).toEqual({
-      scope: "team",
-      label: "Team: Design, Engineering",
-    });
-  });
-
-  it("falls back to a bare Team label when names are unknown", () => {
-    // Non-owners never receive shareTeamNames, so the pill still reads "Team".
-    expect(describeProjectVisibility("team", null)).toEqual({
-      scope: "team",
-      label: "Team",
-    });
-    expect(describeProjectVisibility("team", [])).toEqual({
-      scope: "team",
-      label: "Team",
-    });
+  it("maps team visibility to the team scope", () => {
+    expect(projectVisibilityToScope("team")).toBe("team");
   });
 });

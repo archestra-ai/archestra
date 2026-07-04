@@ -8,12 +8,9 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth", () => ({
-  hasAnyAgentTypeAdminPermission: vi.fn().mockResolvedValue(false),
-  hasPermission: vi.fn(),
-}));
+vi.mock("@/auth");
 
-import { hasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 
 const mockHasPermission = hasPermission as Mock;
 
@@ -24,6 +21,7 @@ describe("schedule trigger routes", () => {
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
 
     adminUser = await makeUser();
     const organization = await makeOrganization();
@@ -151,7 +149,7 @@ describe("schedule trigger routes", () => {
     );
   });
 
-  test("POST create requires a project when the projects feature is on", async ({
+  test("POST create rejects a payload without a project", async ({
     makeInternalAgent,
   }) => {
     const agent = await makeInternalAgent({
@@ -171,9 +169,7 @@ describe("schedule trigger routes", () => {
       },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain(
-      "A project is required for scheduled tasks",
-    );
+    expect(response.json().error.message).toContain("projectId");
   });
 
   test("POST create associates the trigger with its project", async ({

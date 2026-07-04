@@ -3,11 +3,9 @@ import type {
   ModelInputModality,
   SupportedProvider,
 } from "@archestra/shared";
-import {
-  DEFAULT_PROVIDER_BASE_URLS,
-  providerRequiresPerUserCredential,
-} from "@archestra/shared";
+import { providerRequiresPerUserCredential } from "@archestra/shared";
 import { createDirectLLMModel, type LLMModel } from "@/clients/llm-client";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModel,
@@ -145,11 +143,13 @@ export async function resolveApiKeyFromChatApiKey(
   // token belongs to one person. (Copilot also exposes no embeddings.)
   if (providerRequiresPerUserCredential(chatApiKey.provider)) return null;
 
-  // Fall back to the provider's default base URL when none is configured on the key
+  // Fall back to the provider's configured (env-aware) base URL when none is set
+  // on the key — the same source chat and model-sync use, so self-hosted
+  // providers (Ollama/vLLM) resolve the deployment's host, not a hardcoded default.
   const baseUrl =
     chatApiKey.inferenceBaseUrl ||
     chatApiKey.baseUrl ||
-    DEFAULT_PROVIDER_BASE_URLS[chatApiKey.provider] ||
+    getProviderConfiguredBaseUrl(chatApiKey.provider) ||
     null;
 
   // Providers like Ollama don't require an API key — use a placeholder

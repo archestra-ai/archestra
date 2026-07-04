@@ -58,6 +58,13 @@ interface RepeatRecord {
 export class ToolCallRepeatTracker {
   private lastFingerprint: string | null = null;
   private consecutiveCount = 0;
+  /**
+   * Fingerprint of the most recent call that returned a deterministic
+   * (state-independent) error. Compared by value in {@link record}, so an
+   * intervening different call or a non-consecutive re-issue never trips the
+   * fast nudge — only a consecutive identical repeat of the exact failing call.
+   */
+  private lastErroredFingerprint: string | null = null;
 
   /**
    * Records one tool call. Increments the consecutive count when the call
@@ -67,19 +74,46 @@ export class ToolCallRepeatTracker {
     toolName: string,
     args: Record<string, unknown> | undefined,
   ): RepeatRecord {
-    const fingerprint = `${toolName}\0${stableStringify(args)}`;
+    const fingerprint = this.fingerprint(toolName, args);
     if (fingerprint === this.lastFingerprint) {
       this.consecutiveCount += 1;
     } else {
       this.lastFingerprint = fingerprint;
       this.consecutiveCount = 1;
     }
-    const severity = severityFor(this.consecutiveCount);
+    const afterDeterministicError = fingerprint === this.lastErroredFingerprint;
+    const severity = severityFor(
+      this.consecutiveCount,
+      afterDeterministicError,
+    );
     return {
       count: this.consecutiveCount,
       shouldNudge: severity !== "none",
       severity,
     };
+  }
+
+  /**
+   * Marks that `(toolName, args)` just returned an args-deterministic tool error
+   * — the looping authoring failures (schema/validation, not-found, policy,
+   * stale-version) that an identical re-issue cannot resolve. A later consecutive
+   * identical call is then nudged a step sooner than the standard threshold (see
+   * {@link severityFor}); the first retry still executes, so a one-off transient
+   * error is not blocked, and the nudge is advisory regardless. Call this only
+   * for errors that are a function of the arguments, not remote/transient ones.
+   */
+  noteDeterministicError(
+    toolName: string,
+    args: Record<string, unknown> | undefined,
+  ): void {
+    this.lastErroredFingerprint = this.fingerprint(toolName, args);
+  }
+
+  private fingerprint(
+    toolName: string,
+    args: Record<string, unknown> | undefined,
+  ): string {
+    return `${toolName}\0${stableStringify(args)}`;
   }
 
   /**
@@ -104,9 +138,17 @@ export function repeatCeilingStopCondition(
   return () => tracker.hasReachedTerminationCeiling();
 }
 
-function severityFor(count: number): RepeatSeverity {
+function severityFor(
+  count: number,
+  afterDeterministicError: boolean,
+): RepeatSeverity {
   if (count >= REPEAT_CALL_TERMINATION_CEILING) return "terminate";
   if (count > MAX_IDENTICAL_TOOL_CALLS) return "nudge";
+  // An args-deterministic error (schema/validation/not-found/policy/stale) will
+  // repeat identically, so nudge it sooner than the standard threshold — but
+  // only on the second consecutive re-issue, so the first retry still executes
+  // and a one-off transient error is not blocked.
+  if (afterDeterministicError && count >= 3) return "nudge";
   return "none";
 }
 

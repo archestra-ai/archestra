@@ -140,6 +140,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "trustedDataPolicy.updated": "Trusted data policy updated",
   "trustedDataPolicy.deleted": "Trusted data policy deleted",
   "trustedDataPolicy.bulk_defaulted": "Trusted data policies bulk defaulted",
+  // User
+  "user.password_reset": "Password reset",
   // User token
   "userToken.rotated": "Personal token rotated",
   // Virtual API key
@@ -269,6 +271,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "tool",
   "toolInvocationPolicy",
   "trustedDataPolicy",
+  "user",
   "userToken",
   "virtualApiKey",
 ];

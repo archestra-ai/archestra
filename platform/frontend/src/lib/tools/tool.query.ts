@@ -2,7 +2,24 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils";
 
-const { getTools, getToolsWithAssignments } = archestraApiSdk;
+const { getTool, getTools, getToolsWithAssignments } = archestraApiSdk;
+
+/**
+ * Fetch a single tool's policy-editor fields by id, scoped to what the caller
+ * can access. Unlike the assignment-based listing this resolves All-mode tools
+ * that have no agent_tools row. `enabled` gates the request.
+ */
+export function useTool(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["tool", id],
+    queryFn: async () => {
+      const { data, error } = await getTool({ path: { id: id as string } });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled: enabled && !!id,
+  });
+}
 
 type GetToolsWithAssignmentsQueryParams = NonNullable<
   archestraApiTypes.GetToolsWithAssignmentsData["query"]
@@ -50,6 +67,7 @@ export function useToolsWithAssignments({
     search?: string;
     origin?: string;
     excludeArchestraTools?: boolean;
+    includeKnowledgeSourcesTool?: boolean;
   };
 }) {
   return useQuery({
@@ -63,6 +81,7 @@ export function useToolsWithAssignments({
         search: filters?.search,
         origin: filters?.origin,
         excludeArchestraTools: filters?.excludeArchestraTools,
+        includeKnowledgeSourcesTool: filters?.includeKnowledgeSourcesTool,
       },
     ],
     queryFn: async () => {
@@ -75,6 +94,7 @@ export function useToolsWithAssignments({
           search: filters?.search,
           origin: filters?.origin,
           excludeArchestraTools: filters?.excludeArchestraTools,
+          includeKnowledgeSourcesTool: filters?.includeKnowledgeSourcesTool,
         },
       });
       throwOnApiError(result.error, { toastOnError: false });

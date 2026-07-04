@@ -4,7 +4,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleApiError } from "@/lib/utils";
-import { useConversationShare } from "./chat-share.query";
+import {
+  useConversationShare,
+  useForkConversation,
+  useForkSharedConversation,
+} from "./chat-share.query";
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
@@ -79,5 +83,59 @@ describe("useConversationShare", () => {
 
     await waitFor(() => expect(result.current.data).toBeNull());
     expect(mockedHandleApiError).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fork project-list invalidation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const renderWithClient = <T,>(hook: () => T) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    return { invalidateSpy, ...renderHook(hook, { wrapper }) };
+  };
+
+  it("useForkConversation invalidates the project's conversation list when the fork lands in a project", async () => {
+    vi.mocked(archestraApiSdk.forkChatConversation).mockResolvedValue({
+      data: { id: "forked", projectId: "p1" },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.forkChatConversation>>);
+
+    const { invalidateSpy, result } = renderWithClient(() =>
+      useForkConversation(),
+    );
+
+    await result.current.mutateAsync({ conversationId: "c1", agentId: "a1" });
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["projects", "p1", "conversations"],
+      }),
+    );
+  });
+
+  it("useForkSharedConversation leaves project queries untouched for a non-project fork", async () => {
+    vi.mocked(archestraApiSdk.forkSharedConversation).mockResolvedValue({
+      data: { id: "forked", projectId: null },
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.forkSharedConversation>>);
+
+    const { invalidateSpy, result } = renderWithClient(() =>
+      useForkSharedConversation(),
+    );
+
+    await result.current.mutateAsync({ shareId: "s1", agentId: "a1" });
+
+    const touchedProjects = invalidateSpy.mock.calls.some(
+      ([arg]) => Array.isArray(arg?.queryKey) && arg.queryKey[0] === "projects",
+    );
+    expect(touchedProjects).toBe(false);
   });
 });

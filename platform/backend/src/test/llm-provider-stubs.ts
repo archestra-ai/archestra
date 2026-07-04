@@ -8,6 +8,8 @@ export interface OpenAiStubOptions {
   throwOnReturnAfterUsage?: boolean;
   throwOnNextAfterFinalChunk?: boolean;
   usageOnlyStream?: boolean;
+  /** Reject streaming requests with this error message before any chunk arrives (e.g. a provider 400). */
+  failStreamWithError?: string;
 }
 
 export interface AnthropicStubOptions {
@@ -33,6 +35,9 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
           params: OpenAI.Chat.Completions.ChatCompletionCreateParams,
         ) => {
           if (params.stream) {
+            if (options.failStreamWithError) {
+              throw new Error(options.failStreamWithError);
+            }
             return createOpenAiStream(options);
           }
 
@@ -163,6 +168,14 @@ export function createGeminiTestClient(options: GeminiStubOptions = {}) {
           responseId: "gemini-test",
         }) as unknown as GenerateContentResponse,
       generateContentStream: async () => createGeminiStream(options),
+      embedContent: async (params: { contents: unknown }) => {
+        const contents = Array.isArray(params.contents)
+          ? params.contents
+          : [params.contents];
+        return {
+          embeddings: contents.map(() => ({ values: [0.1, 0.2, 0.3] })),
+        };
+      },
     },
   };
 }

@@ -1,5 +1,4 @@
 import { vi } from "vitest";
-import type * as originalConfigModule from "@/config";
 import { describe, expect, test } from "@/test";
 
 vi.mock("@kubernetes/client-node", () => {
@@ -28,21 +27,17 @@ vi.mock("@kubernetes/client-node", () => {
   };
 });
 
-vi.mock("@/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof originalConfigModule>();
-  return {
-    default: {
-      ...actual.default,
-      orchestrator: {
-        kubernetes: {
-          namespace: "",
-          kubeconfig: undefined,
-          loadKubeconfigFromCurrentCluster: false,
-        },
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    orchestrator: {
+      kubernetes: {
+        namespace: "",
+        kubeconfig: undefined,
+        loadKubeconfigFromCurrentCluster: false,
       },
     },
-  };
-});
+  }),
+);
 
 describe("shared K8s utilities", () => {
   describe("sanitizeLabelValue", () => {
@@ -172,7 +167,7 @@ describe("shared K8s utilities", () => {
     test("returns false when no K8s env vars are set", async () => {
       vi.resetModules();
       vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
+        const actual = await importOriginal<typeof import("@/config")>();
         return {
           default: {
             ...actual.default,
@@ -193,7 +188,7 @@ describe("shared K8s utilities", () => {
     test("returns true when kubeconfig is set", async () => {
       vi.resetModules();
       vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
+        const actual = await importOriginal<typeof import("@/config")>();
         return {
           default: {
             ...actual.default,
@@ -214,7 +209,7 @@ describe("shared K8s utilities", () => {
     test("returns true when loadKubeconfigFromCurrentCluster is true", async () => {
       vi.resetModules();
       vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
+        const actual = await importOriginal<typeof import("@/config")>();
         return {
           default: {
             ...actual.default,
@@ -235,7 +230,7 @@ describe("shared K8s utilities", () => {
     test("returns false when kubeconfig is empty string", async () => {
       vi.resetModules();
       vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
+        const actual = await importOriginal<typeof import("@/config")>();
         return {
           default: {
             ...actual.default,
@@ -258,7 +253,7 @@ describe("shared K8s utilities", () => {
     test("returns configured namespace when set", async () => {
       vi.resetModules();
       vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
+        const actual = await importOriginal<typeof import("@/config")>();
         return {
           default: {
             ...actual.default,
@@ -279,7 +274,7 @@ describe("shared K8s utilities", () => {
     test("returns 'default' when namespace is not set", async () => {
       vi.resetModules();
       vi.doMock("@/config", async (importOriginal) => {
-        const actual = await importOriginal<typeof originalConfigModule>();
+        const actual = await importOriginal<typeof import("@/config")>();
         return {
           default: {
             ...actual.default,

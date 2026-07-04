@@ -4,24 +4,8 @@ import {
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
 } from "@archestra/shared";
-import config from "@/config";
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { type ArchestraContext, executeArchestraTool } from ".";
-
-const originalAppsEnabled = config.apps.enabled;
-beforeAll(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
-});
 
 function archestraError(result: { structuredContent?: unknown }): any {
   return (result.structuredContent as any)?.archestraError;

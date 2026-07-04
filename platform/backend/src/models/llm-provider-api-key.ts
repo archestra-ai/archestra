@@ -5,9 +5,10 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
 import type {
   InsertLlmProviderApiKey,
@@ -24,16 +25,33 @@ import ConversationModel from "./conversation";
 class LlmProviderApiKeyModel {
   /**
    * Create a new LLM provider API key.
+   *
+   * "Primary" is exclusive per (organization, provider, scope[, user/team]) —
+   * enforced by partial unique indexes. Creating a new primary demotes the
+   * current one in the same transaction, so callers can mark a key primary
+   * without first hunting down and unsetting the old one.
    */
   static async create(
     data: InsertLlmProviderApiKey,
   ): Promise<LlmProviderApiKey> {
-    const [apiKey] = await db
-      .insert(schema.llmProviderApiKeysTable)
-      .values(data)
-      .returning();
+    return await db.transaction(async (tx) => {
+      if (data.isPrimary) {
+        await demoteCurrentPrimary(tx, {
+          organizationId: data.organizationId,
+          provider: data.provider,
+          scope: data.scope,
+          userId: data.userId ?? null,
+          teamId: data.teamId ?? null,
+        });
+      }
 
-    return apiKey;
+      const [apiKey] = await tx
+        .insert(schema.llmProviderApiKeysTable)
+        .values(data)
+        .returning();
+
+      return apiKey;
+    });
   }
 
   /**
@@ -275,6 +293,7 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         }),
       ),
     );
@@ -444,6 +463,7 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         }),
       ),
     );
@@ -524,6 +544,7 @@ class LlmProviderApiKeyModel {
         schema.llmProviderApiKeysTable.provider,
         getProvidersWithOptionalApiKey({
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         }),
       ),
     );
@@ -617,13 +638,34 @@ class LlmProviderApiKeyModel {
     id: string,
     data: UpdateLlmProviderApiKey,
   ): Promise<LlmProviderApiKey | null> {
-    const [updated] = await db
-      .update(schema.llmProviderApiKeysTable)
-      .set(data)
-      .where(eq(schema.llmProviderApiKeysTable.id, id))
-      .returning();
+    return await db.transaction(async (tx) => {
+      // Promoting a key to primary demotes the current primary in its
+      // (post-update) partition — see create() for the exclusivity rules.
+      if (data.isPrimary) {
+        const [existing] = await tx
+          .select()
+          .from(schema.llmProviderApiKeysTable)
+          .where(eq(schema.llmProviderApiKeysTable.id, id));
+        if (existing) {
+          await demoteCurrentPrimary(tx, {
+            organizationId: existing.organizationId,
+            provider: existing.provider as SupportedProvider,
+            scope: (data.scope ?? existing.scope) as ResourceVisibilityScope,
+            userId: data.userId !== undefined ? data.userId : existing.userId,
+            teamId: data.teamId !== undefined ? data.teamId : existing.teamId,
+            excludeId: id,
+          });
+        }
+      }
 
-    return updated ?? null;
+      const [updated] = await tx
+        .update(schema.llmProviderApiKeysTable)
+        .set(data)
+        .where(eq(schema.llmProviderApiKeysTable.id, id))
+        .returning();
+
+      return updated ?? null;
+    });
   }
 
   /**
@@ -814,6 +856,49 @@ function parseVaultReferenceFromSecret(
   return null;
 }
 
+/**
+ * Unset is_primary on the current primary key of the given partition, matching
+ * the partial unique indexes (chat_api_keys_primary_{org,personal,team}_unique):
+ * org scope is exclusive per (organization, provider); personal and team scopes
+ * additionally key on the user / team.
+ */
+async function demoteCurrentPrimary(
+  tx: Transaction,
+  partition: {
+    organizationId: string;
+    provider: SupportedProvider;
+    scope: ResourceVisibilityScope;
+    userId: string | null;
+    teamId: string | null;
+    excludeId?: string;
+  },
+): Promise<void> {
+  const conditions = [
+    eq(schema.llmProviderApiKeysTable.organizationId, partition.organizationId),
+    eq(schema.llmProviderApiKeysTable.provider, partition.provider),
+    eq(schema.llmProviderApiKeysTable.scope, partition.scope),
+    eq(schema.llmProviderApiKeysTable.isPrimary, true),
+  ];
+  if (partition.scope === "personal" && partition.userId) {
+    conditions.push(
+      eq(schema.llmProviderApiKeysTable.userId, partition.userId),
+    );
+  }
+  if (partition.scope === "team" && partition.teamId) {
+    conditions.push(
+      eq(schema.llmProviderApiKeysTable.teamId, partition.teamId),
+    );
+  }
+  if (partition.excludeId) {
+    conditions.push(ne(schema.llmProviderApiKeysTable.id, partition.excludeId));
+  }
+
+  await tx
+    .update(schema.llmProviderApiKeysTable)
+    .set({ isPrimary: false })
+    .where(and(...conditions));
+}
+
 function canUseProviderApiKey(
   apiKey: Pick<LlmProviderApiKey, "provider" | "secretId">,
 ): boolean {
@@ -823,6 +908,7 @@ function canUseProviderApiKey(
 
   return getProvidersWithOptionalApiKey({
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
   }).includes(apiKey.provider);
 }
 

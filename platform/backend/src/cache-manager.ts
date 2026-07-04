@@ -301,24 +301,6 @@ class CacheManager {
   }
 
   /**
-   * Wrap a function with caching. If the key exists and hasn't expired,
-   * return the cached value. Otherwise, call the function and cache the result.
-   */
-  async wrap<T>(
-    key: AllowedCacheKey,
-    fnc: () => Promise<T>,
-    { ttl }: { ttl?: number; refreshThreshold?: number } = {},
-  ): Promise<T> {
-    const cached = await this.get<T>(key);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const result = await fnc();
-    await this.set(key, result, ttl);
-    return result;
-  }
-
-  /**
    * Stop the cache manager and close connections.
    * Should be called during graceful shutdown.
    */
@@ -437,7 +419,9 @@ export class LRUCacheManager<T = unknown> {
    * Check if a key exists in the cache (and is not expired).
    */
   has(key: string): boolean {
-    const entry = this.lruStore.get(key);
+    // peek, not get: a pure existence check must not promote the entry's
+    // recency, or has()-only keys outlive keys that are actually read.
+    const entry = this.lruStore.peek(key);
     if (!entry) {
       return false;
     }

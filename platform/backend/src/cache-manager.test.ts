@@ -356,43 +356,6 @@ describe("CacheManager", () => {
     });
   });
 
-  describe("wrap", () => {
-    test("returns cached value if it exists", async () => {
-      cacheManager.start();
-      mockKeyv.get.mockResolvedValue("cached-result");
-
-      const fnc = vi.fn().mockResolvedValue("fresh-result");
-      const result = await cacheManager.wrap(
-        "test-key" as AllowedCacheKey,
-        fnc,
-      );
-
-      expect(result).toBe("cached-result");
-      expect(fnc).not.toHaveBeenCalled();
-      expect(mockKeyv.set).not.toHaveBeenCalled();
-    });
-
-    test("calls function and caches result on cache miss", async () => {
-      cacheManager.start();
-      mockKeyv.get.mockResolvedValue(undefined);
-      mockKeyv.set.mockResolvedValue(true);
-
-      const fnc = vi.fn().mockResolvedValue("fresh-result");
-      const result = await cacheManager.wrap(
-        "test-key" as AllowedCacheKey,
-        fnc,
-      );
-
-      expect(result).toBe("fresh-result");
-      expect(fnc).toHaveBeenCalled();
-      expect(mockKeyv.set).toHaveBeenCalledWith(
-        "test-key",
-        "fresh-result",
-        3600000,
-      );
-    });
-  });
-
   describe("shutdown", () => {
     test("disconnects Keyv and clears state", () => {
       cacheManager.start();
@@ -451,5 +414,22 @@ describe("LRUCacheManager", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("has() does not promote an entry's LRU recency", () => {
+    const cache = new LRUCacheManager<string>({ maxSize: 2 });
+
+    cache.set("A", "a");
+    cache.set("B", "b");
+    // A pure existence check — must not count as a use of A.
+    expect(cache.has("A")).toBe(true);
+    cache.set("C", "c");
+    cache.set("D", "d");
+
+    // With get-based has(), A would have been promoted and survived both
+    // rotations; with peek it ages out like any untouched entry.
+    expect(cache.has("A")).toBe(false);
+    expect(cache.has("C")).toBe(true);
+    expect(cache.has("D")).toBe(true);
   });
 });

@@ -27,6 +27,7 @@ import {
 import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
+import { trace } from "@opentelemetry/api";
 import * as Sentry from "@sentry/node";
 import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
@@ -72,6 +73,7 @@ import {
   APP_BASE_CSS_PATH,
   APP_SDK_PATH,
 } from "@/services/apps/app-sdk-injection";
+import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -339,6 +341,57 @@ function buildRequestErrorContext(request: FastifyRequest) {
   };
 }
 
+/**
+ * Read the PostHog session/distinct id that posthog-js injects into browser
+ * requests (via its `tracing_headers` config). These let a captured backend
+ * exception be cross-referenced with the originating session replay and person.
+ */
+function getPostHogTraceContext(request: FastifyRequest): {
+  distinctId?: string;
+  sessionId?: string;
+} {
+  return {
+    distinctId: firstHeaderValue(request.headers["x-posthog-distinct-id"]),
+    sessionId: firstHeaderValue(request.headers["x-posthog-session-id"]),
+  };
+}
+
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+/**
+ * Forward an unexpected server-side error (5xx) to PostHog Error Tracking,
+ * scoped to the failing request's session/trace. Never throws — capture is
+ * best-effort and must not disturb the error response.
+ */
+function captureServerException(
+  request: FastifyRequest,
+  error: unknown,
+  extraProperties?: Record<string, unknown>,
+): void {
+  const { distinctId, sessionId } = getPostHogTraceContext(request);
+  posthogErrorTrackingService.captureException({
+    error,
+    distinctId,
+    sessionId,
+    traceId: trace.getActiveSpan()?.spanContext().traceId,
+    properties: {
+      method: request.method,
+      url: request.url,
+      route: request.routeOptions?.url,
+      // The requested host (from the Host header) — identifies which
+      // deployment hit the error, used by the PostHog Slack alert template.
+      hostname: request.host,
+      reqId: request.id,
+      ...extraProperties,
+    },
+  });
+}
+
 function parseContentLength(request: FastifyRequest): number | undefined {
   const raw = request.headers["content-length"];
   if (typeof raw !== "string") return undefined;
@@ -420,6 +473,11 @@ export const createFastifyInstance = () =>
           },
         });
 
+        captureServerException(request, error, {
+          error_type: "response_serialization",
+          validation_errors: validationErrors,
+        });
+
         return reply.status(500).send({
           error: {
             message: "Response doesn't match the schema",
@@ -472,6 +530,34 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // Fastify's own typed errors (unsupported media type, malformed
+      // content-type, …) carry the intended 4xx status. Without this branch
+      // they fall through to the generic handler below, which miscodes a
+      // client mistake as a 500 and captures it as a server exception.
+      const errorStatusCode = (error as { statusCode?: unknown }).statusCode;
+      if (
+        !(error instanceof ApiError) &&
+        typeof errorStatusCode === "number" &&
+        errorStatusCode >= 400 &&
+        errorStatusCode < 500
+      ) {
+        const coerced = new ApiError(
+          errorStatusCode,
+          error.message || "Bad Request",
+        );
+        this.log.info(
+          {
+            ...requestContext,
+            error: coerced.message,
+            statusCode: coerced.statusCode,
+          },
+          "HTTP 40x request error occurred",
+        );
+        return reply.status(coerced.statusCode).send({
+          error: { message: coerced.message, type: coerced.type },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
@@ -484,6 +570,16 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
+          // 502/504 report an upstream's failure (a user-configured provider
+          // or external server), not a crash of ours — log them, but keep
+          // them out of exception tracking.
+          if (statusCode !== 502 && statusCode !== 504) {
+            captureServerException(request, error, {
+              error_type: "api_error",
+              status_code: statusCode,
+              ...(internalCode && { internal_code: internalCode }),
+            });
+          }
         } else if (statusCode >= 400) {
           this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {
@@ -514,6 +610,12 @@ export const createFastifyInstance = () =>
         },
         "HTTP 50x request error occurred",
       );
+
+      captureServerException(request, error, {
+        error_type: "unhandled_error",
+        status_code: statusCode,
+        ...(errorCode && { code: errorCode }),
+      });
 
       return reply.status(statusCode).send({
         error: {
@@ -997,6 +1099,13 @@ const startWebServer = async () => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
+    posthogErrorTrackingService.init().catch((error) => {
+      logger.warn(
+        { err: error },
+        "Failed to initialize PostHog error tracking",
+      );
+    });
+
     startMcpServerRuntime(fastify);
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
@@ -1237,6 +1346,9 @@ function registerWebServerShutdown(
 
       cacheManager.shutdown();
 
+      // Flush any buffered exceptions before exit (internally time-bounded).
+      await posthogErrorTrackingService.shutdown();
+
       // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
 
@@ -1305,7 +1417,7 @@ const startWorker = async () => {
     await enterpriseTier.start();
 
     // Sync Archestra MCP branding so the worker recognises branded tool names
-    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // (e.g. "archestra_staging__todo_write") when executing scheduled tasks.
     // Without this, isToolName() only matches the default "archestra__" prefix
     // and builtin tools fall through to mcpClient.executeToolCallForOwner() which fails
     // because they have credentialResolutionMode "static" with no mcpServerId.
@@ -1327,6 +1439,13 @@ const startWorker = async () => {
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();
     taskQueueService.startWorker();
+
+    posthogErrorTrackingService.init().catch((error) => {
+      logger.warn(
+        { err: error },
+        "Failed to initialize PostHog error tracking",
+      );
+    });
 
     // Pre-warm the code runtime so scheduled agents avoid a cold first run.
     skillSandboxRuntimeService.init().catch((error) => {
@@ -1389,6 +1508,7 @@ const startWorker = async () => {
       try {
         await healthServer.close();
         cacheManager.shutdown();
+        await posthogErrorTrackingService.shutdown();
         await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
@@ -1413,6 +1533,10 @@ const startWorker = async () => {
 // This handler logs those leaks and keeps the server alive.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
+  posthogErrorTrackingService.captureException({
+    error: reason,
+    properties: { error_type: "unhandled_rejection" },
+  });
 });
 
 /**

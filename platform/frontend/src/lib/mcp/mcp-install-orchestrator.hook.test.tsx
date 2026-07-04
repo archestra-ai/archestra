@@ -1,5 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
 import { useMcpInstallOrchestrator } from "./mcp-install-orchestrator.hook";
 
 const {
@@ -44,9 +46,9 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useSession: () => ({ data: { user: { id: "test-user" } } }),
-}));
+vi.mock("@/lib/auth/auth.query");
+
+vi.mock("sonner");
 
 vi.mock("@/lib/auth/oauth.query", () => ({
   useInitiateOAuth: () => ({
@@ -85,6 +87,9 @@ vi.mock("@/lib/auth/oauth-session", () => ({
 describe("useMcpInstallOrchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "test-user" } },
+    } as unknown as ReturnType<typeof useSession>);
     mutateAsyncMock.mockResolvedValue({
       authorizationUrl: "https://posthog.example.com/oauth/authorize",
       state: "oauth-state-123",
@@ -148,5 +153,23 @@ describe("useMcpInstallOrchestrator", () => {
     expect(redirectBrowserToUrlMock).toHaveBeenCalledWith(
       "https://posthog.example.com/oauth/authorize",
     );
+  });
+
+  it("surfaces the backend error message when initiating OAuth fails", async () => {
+    mutateAsyncMock.mockRejectedValue(new Error("No client ID available"));
+
+    const { result } = renderHook(() => useMcpInstallOrchestrator());
+
+    act(() => {
+      result.current.triggerReauthByCatalogIdAndServerId(
+        "catalog-posthog",
+        "server-123",
+      );
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("No client ID available");
+    });
+    expect(redirectBrowserToUrlMock).not.toHaveBeenCalled();
   });
 });

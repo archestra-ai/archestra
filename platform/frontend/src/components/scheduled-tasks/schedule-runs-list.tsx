@@ -36,9 +36,12 @@ export function ScheduleRunsList({
 }) {
   const [hasActiveRun, setHasActiveRun] = useState(false);
 
+  // Poll while the panel is mounted so a newly-created run (or a status change)
+  // appears on its own — 3s while a run is active, a slower idle tick otherwise
+  // so a freshly-queued run still shows up without a manual page refresh.
   const { data: runsResponse, isLoading } = useScheduleTriggerRuns(triggerId, {
     limit: 50,
-    refetchInterval: hasActiveRun ? 3_000 : false,
+    refetchInterval: hasActiveRun ? 3_000 : 5_000,
   });
   const runs = runsResponse?.data ?? [];
 

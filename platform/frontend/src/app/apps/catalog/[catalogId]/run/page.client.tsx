@@ -39,6 +39,7 @@ export default function CatalogAppRunPage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedInstall = searchParams.get("install");
+  const requestedResource = searchParams.get("resource");
   const { data, isPending } = useExternalApp(catalogId);
 
   const installs = data?.installs ?? [];
@@ -47,6 +48,15 @@ export default function CatalogAppRunPage({
     installs.some((i) => i.mcpServerId === requestedInstall)
       ? requestedInstall
       : data?.defaultMcpServerId) ?? null;
+
+  // A server may expose several UI resources; render the requested one, falling
+  // back to the default (and its composed "<server> / <tool>" label for the header).
+  const resources = data?.resources ?? [];
+  const activeResource =
+    resources.find((r) => r.resourceUri === requestedResource) ??
+    resources.find((r) => r.resourceUri === data?.resourceUri) ??
+    resources[0] ??
+    null;
 
   // A catalog the caller can see but has no accessible install for is listable
   // but not runnable: send them to install rather than render (FR-31).
@@ -88,7 +98,7 @@ export default function CatalogAppRunPage({
           </Link>
         </Button>
         <span className="truncate text-sm font-medium">
-          {data?.name ?? "App"}
+          {activeResource?.name ?? data?.name ?? "App"}
         </span>
         {installs.length > 1 && activeInstallId ? (
           <div className="ml-auto">
@@ -111,10 +121,10 @@ export default function CatalogAppRunPage({
         ) : null}
       </header>
       <main className="min-h-0 flex-1 overflow-auto">
-        {data && activeInstallId ? (
+        {data && activeInstallId && activeResource ? (
           <AppFrame
             endpoint={{ kind: "server", mcpServerId: activeInstallId }}
-            resourceUri={data.resourceUri}
+            resourceUri={activeResource.resourceUri}
           />
         ) : null}
       </main>

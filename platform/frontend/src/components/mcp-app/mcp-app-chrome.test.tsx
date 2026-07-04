@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  McpAppChangelogPill,
   McpAppFullscreenExitButton,
+  McpAppPill,
   McpAppStandaloneButton,
 } from "./mcp-app-chrome";
 
@@ -35,19 +35,26 @@ describe("address-pill action buttons", () => {
   });
 });
 
-describe("McpAppChangelogPill", () => {
-  it("shows the app name, version, and verb without mounting an iframe", () => {
+describe("McpAppPill", () => {
+  it("shows the app name inline without mounting an iframe", () => {
     const { container } = render(
-      <McpAppChangelogPill appName="Dashboard" version={2} verb="Updated" />,
+      <McpAppPill label="Dashboard" onClick={() => {}} />,
     );
 
-    expect(screen.getByText(/Dashboard · v2 · Updated/)).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Dashboard" });
+    // The name is visible pill text, not just a tooltip/aria label.
+    expect(button).toHaveTextContent("Dashboard");
     expect(container.querySelector("iframe")).not.toBeInTheDocument();
   });
 
-  it("falls back to a generic label when name and verb are missing", () => {
-    render(<McpAppChangelogPill appName={null} version={1} verb={null} />);
+  it("toggles on click and reflects its pressed state", async () => {
+    const onClick = vi.fn();
+    render(<McpAppPill label="Dashboard" pressed onClick={onClick} />);
 
-    expect(screen.getByText(/App · v1/)).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Dashboard" });
+    expect(button).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(button);
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });

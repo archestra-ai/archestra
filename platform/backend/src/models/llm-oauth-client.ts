@@ -6,20 +6,30 @@ import {
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import {
   LLM_OAUTH_CLIENT_METADATA_TYPE,
   type LlmOauthClientGrantType,
   LlmOauthClientMetadataSchema,
   type LlmOauthClientProviderKey,
 } from "@/types/llm-oauth-client";
+import type { ResourceVisibilityScope } from "@/types/visibility";
 import { escapeLikePattern } from "@/utils/sql-search";
+import OauthClientTeamModel from "./oauth-client-team";
+import UserModel from "./user";
 
 class LlmOauthClientModel {
   static async findAllByOrganization(params: {
     organizationId: string;
     search?: string;
     providerApiKeyId?: string;
+    /**
+     * Restricts results to clients the user may see (org-scoped, own personal,
+     * teams they belong to). Omit only for internal callers that must see
+     * everything (e.g. the provider-API-key delete guard); admin viewers are
+     * unfiltered.
+     */
+    viewer?: { userId: string; isAdmin: boolean };
   }) {
     const rows = await db
       .select()
@@ -37,6 +47,11 @@ class LlmOauthClientModel {
           params.providerApiKeyId
             ? sql`${schema.oauthClientsTable.metadata}->'providerApiKeys' @> ${JSON.stringify([{ providerApiKeyId: params.providerApiKeyId }])}::jsonb`
             : undefined,
+          params.viewer && !params.viewer.isAdmin
+            ? OauthClientTeamModel.accessibleScopeCondition(
+                params.viewer.userId,
+              )
+            : undefined,
         ),
       )
       .orderBy(schema.oauthClientsTable.createdAt);
@@ -51,6 +66,9 @@ class LlmOauthClientModel {
     allowedLlmProxyIds?: string[];
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
+    scope?: ResourceVisibilityScope;
+    teams?: string[];
+    authorId: string;
   }) {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
@@ -76,35 +94,45 @@ class LlmOauthClientModel {
       providerApiKeys: isAuthorizationCode
         ? []
         : (params.providerApiKeys ?? []),
+      scope: params.scope ?? "personal",
+      authorId: params.authorId,
     };
+    const teams = params.teams ?? [];
 
-    const [client] = await db
-      .insert(schema.oauthClientsTable)
-      .values({
-        id: crypto.randomUUID(),
-        clientId: `llm_oauth_${randomBytes(18).toString("base64url")}`,
-        clientSecret: clientSecretHash,
-        name: params.name,
-        // authorization_code is a confidential client (client_secret_post) that
-        // additionally requires PKCE; its tokens flow through better-auth's
-        // standard authorize→token exchange and are user-bound.
-        redirectUris: isAuthorizationCode ? (params.redirectUris ?? []) : [],
-        tokenEndpointAuthMethod: "client_secret_post",
-        grantTypes: isAuthorizationCode
-          ? ["authorization_code", "refresh_token"]
-          : ["client_credentials"],
-        responseTypes: isAuthorizationCode ? ["code"] : [],
-        requirePKCE: isAuthorizationCode,
-        public: false,
-        scopes: isAuthorizationCode
-          ? [LLM_PROXY_OAUTH_SCOPE, OFFLINE_ACCESS_OAUTH_SCOPE]
-          : [LLM_PROXY_OAUTH_SCOPE],
-        type: "service",
-        metadata,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+    const client = await withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .insert(schema.oauthClientsTable)
+        .values({
+          id: crypto.randomUUID(),
+          clientId: `llm_oauth_${randomBytes(18).toString("base64url")}`,
+          clientSecret: clientSecretHash,
+          name: params.name,
+          // authorization_code is a confidential client (client_secret_post) that
+          // additionally requires PKCE; its tokens flow through better-auth's
+          // standard authorize→token exchange and are user-bound.
+          redirectUris: isAuthorizationCode ? (params.redirectUris ?? []) : [],
+          tokenEndpointAuthMethod: "client_secret_post",
+          grantTypes: isAuthorizationCode
+            ? ["authorization_code", "refresh_token"]
+            : ["client_credentials"],
+          responseTypes: isAuthorizationCode ? ["code"] : [],
+          requirePKCE: isAuthorizationCode,
+          public: false,
+          scopes: isAuthorizationCode
+            ? [LLM_PROXY_OAUTH_SCOPE, OFFLINE_ACCESS_OAUTH_SCOPE]
+            : [LLM_PROXY_OAUTH_SCOPE],
+          type: "service",
+          metadata,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      if (teams.length > 0) {
+        await OauthClientTeamModel.syncTeams(row.id, teams, tx);
+      }
+      return row;
+    });
 
     return {
       oauthClient: (await hydrateOauthClients([client]))[0],
@@ -125,7 +153,7 @@ class LlmOauthClientModel {
       )
       .limit(1);
 
-    return client ? (await hydrateOauthClients([client]))[0] : null;
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async findByClientId(clientId: string) {
@@ -140,13 +168,17 @@ class LlmOauthClientModel {
       )
       .limit(1);
 
-    return client ? (await hydrateOauthClients([client]))[0] : null;
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async findByProviderApiKeyId(params: {
     providerApiKeyId: string;
     organizationId: string;
   }) {
+    // Deliberately unfiltered (no viewer): the provider-API-key delete guard
+    // must see every client that still maps to the key — including personal
+    // and team-scoped clients the acting admin cannot see in lists — or a
+    // deletion would silently break those clients' runtime routing.
     return LlmOauthClientModel.findAllByOrganization({
       organizationId: params.organizationId,
       providerApiKeyId: params.providerApiKeyId,
@@ -218,6 +250,9 @@ class LlmOauthClientModel {
     allowedLlmProxyIds?: string[];
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
+    scope?: ResourceVisibilityScope;
+    /** `undefined` leaves team assignments untouched; `[]` clears them. */
+    teams?: string[];
   }) {
     // The grant type is fixed at creation; reload the client to preserve it and
     // to apply only the fields that grant type actually uses.
@@ -230,6 +265,7 @@ class LlmOauthClientModel {
 
     // allowedLlmProxyIds applies to both grant types (see create()); update it
     // for either. providerApiKeys never apply to authorization_code clients.
+    // The author is fixed at creation; scope falls back to the existing value.
     const metadata = {
       type: LLM_OAUTH_CLIENT_METADATA_TYPE,
       organizationId: params.organizationId,
@@ -243,28 +279,37 @@ class LlmOauthClientModel {
             provider: key.provider,
             providerApiKeyId: key.providerApiKeyId,
           }))),
+      scope: params.scope ?? existing.scope,
+      authorId: existing.authorId,
     };
 
-    const [client] = await db
-      .update(schema.oauthClientsTable)
-      .set({
-        name: params.name,
-        metadata,
-        ...(isAuthorizationCode
-          ? { redirectUris: params.redirectUris ?? existing.redirectUris }
-          : {}),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.oauthClientsTable.id, params.id),
-          sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
-          sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
-        ),
-      )
-      .returning();
+    const client = await withDbTransaction(async (tx) => {
+      const [row] = await tx
+        .update(schema.oauthClientsTable)
+        .set({
+          name: params.name,
+          metadata,
+          ...(isAuthorizationCode
+            ? { redirectUris: params.redirectUris ?? existing.redirectUris }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(schema.oauthClientsTable.id, params.id),
+            sql`${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}`,
+            sql`${schema.oauthClientsTable.metadata}->>'organizationId' = ${params.organizationId}`,
+          ),
+        )
+        .returning();
 
-    return client ? (await hydrateOauthClients([client]))[0] : null;
+      if (row && params.teams !== undefined) {
+        await OauthClientTeamModel.syncTeams(row.id, params.teams, tx);
+      }
+      return row;
+    });
+
+    return client ? ((await hydrateOauthClients([client]))[0] ?? null) : null;
   }
 
   static async delete(params: { id: string; organizationId: string }) {
@@ -307,6 +352,9 @@ class LlmOauthClientModel {
         })),
       redirectUris: [...client.redirectUris].sort(),
       disabled: client.disabled,
+      scope: client.scope,
+      authorId: client.authorId,
+      teamIds: client.teams.map((team) => team.id).sort(),
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
     };
@@ -330,22 +378,35 @@ function compareClientSecret(secret: string, storedHash: string) {
 async function hydrateOauthClients(
   clients: Array<typeof schema.oauthClientsTable.$inferSelect>,
 ) {
+  const parsed = clients.map((client) => ({
+    client,
+    metadata: LlmOauthClientMetadataSchema.safeParse(client.metadata).data,
+  }));
+
   const providerApiKeyIds = [
     ...new Set(
-      clients.flatMap((client) => {
-        const metadata = LlmOauthClientMetadataSchema.safeParse(
-          client.metadata,
-        ).data;
-        if (!metadata) return [];
-        return metadata.providerApiKeys.map(
-          (mapping) => mapping.providerApiKeyId,
-        );
-      }),
+      parsed.flatMap(({ metadata }) =>
+        metadata
+          ? metadata.providerApiKeys.map((mapping) => mapping.providerApiKeyId)
+          : [],
+      ),
     ),
   ];
-  const apiKeyRows =
+  // Only fetch what the rows actually reference so the runtime token paths
+  // (org-scoped, authorless clients) stay free of extra queries.
+  const teamScopedIds = parsed
+    .filter(({ metadata }) => metadata?.scope === "team")
+    .map(({ client }) => client.id);
+  const authorIds = [
+    ...new Set(
+      parsed.flatMap(({ metadata }) =>
+        metadata?.authorId ? [metadata.authorId] : [],
+      ),
+    ),
+  ];
+  const [apiKeyRows, teamsMap, authorNames] = await Promise.all([
     providerApiKeyIds.length > 0
-      ? await db
+      ? db
           .select({
             id: schema.llmProviderApiKeysTable.id,
             name: schema.llmProviderApiKeysTable.name,
@@ -353,13 +414,13 @@ async function hydrateOauthClients(
           })
           .from(schema.llmProviderApiKeysTable)
           .where(inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds))
-      : [];
+      : [],
+    OauthClientTeamModel.getTeamDetailsForClients(teamScopedIds),
+    UserModel.getNamesByIds(authorIds),
+  ]);
   const apiKeyNames = new Map(apiKeyRows.map((row) => [row.id, row.name]));
 
-  return clients.flatMap((client) => {
-    const metadata = LlmOauthClientMetadataSchema.safeParse(
-      client.metadata,
-    ).data;
+  return parsed.flatMap(({ client, metadata }) => {
     if (!metadata) return [];
     return [
       {
@@ -377,6 +438,12 @@ async function hydrateOauthClients(
         })),
         redirectUris: client.redirectUris ?? [],
         disabled: client.disabled ?? false,
+        scope: metadata.scope,
+        authorId: metadata.authorId,
+        authorName: metadata.authorId
+          ? (authorNames.get(metadata.authorId) ?? null)
+          : null,
+        teams: teamsMap.get(client.id) ?? [],
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,
       },

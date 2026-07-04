@@ -30,7 +30,7 @@ runs:
   using: composite
   steps:
     - name: Docker Scout CVE Check
-      uses: docker/scout-action@f8c776824083494ab0d56b8105ba2ca85c86e4de # v1.18.2
+      uses: docker/scout-action@7520205ff60037fdc436b40b6a1d1e55a839ec2d # v1.22.0
       with:
         command: cves
         image: ${{ inputs.image }}

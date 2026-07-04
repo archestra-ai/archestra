@@ -161,9 +161,7 @@ include the exact policy JSON to paste once it does. For hooks migrated as nativ
 the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv), and whether
 the agent-hooks feature is on: `apply.py` records a warning op when it is off, in which case migrated
 hooks are saved but never fire until an admin enables it.
-Tool-invocation policies only enforce when the org `globalToolPolicy` is `restrictive`;
-the scripts don't read that setting, so tell the user to verify it in Archestra settings. Also surface
-any `warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the
+Also surface any `warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the
 user what migrated, what to test first, and what still needs hands-on work.
 
 ## Contributor tooling (not needed to *run* the skill)

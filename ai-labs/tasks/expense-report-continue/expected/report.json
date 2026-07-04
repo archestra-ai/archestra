@@ -1,0 +1,75 @@
+{
+  "line_items": [
+    {
+      "date": "2026-03-02",
+      "vendor": "Quill & Co",
+      "description": "Printer paper and toner",
+      "category": "Office Supplies",
+      "amount": 62.1,
+      "reimbursable": false
+    },
+    {
+      "date": "2026-03-05",
+      "vendor": "Redline Rail",
+      "description": "Train fare to client site",
+      "category": "Travel",
+      "amount": 88.0,
+      "reimbursable": true
+    },
+    {
+      "date": "2026-03-09",
+      "vendor": "The Copper Kettle",
+      "description": "Lunch with client",
+      "category": "Meals",
+      "amount": 45.3,
+      "reimbursable": true
+    },
+    {
+      "date": "2026-03-14",
+      "vendor": "Summit Software",
+      "description": "Design tool seat (monthly)",
+      "category": "Software",
+      "amount": 120.0,
+      "reimbursable": false
+    },
+    {
+      "date": "2026-03-06",
+      "vendor": "Metro Cab",
+      "description": "Taxi to airport",
+      "category": "Travel",
+      "amount": 27.5,
+      "reimbursable": true
+    },
+    {
+      "date": "2026-03-12",
+      "vendor": "Deskworks",
+      "description": "Ergonomic chair",
+      "category": "Office Supplies",
+      "amount": 149.99,
+      "reimbursable": false
+    },
+    {
+      "date": "2026-03-18",
+      "vendor": "Brightline Bistro",
+      "description": "Team dinner",
+      "category": "Meals",
+      "amount": 76.4,
+      "reimbursable": true
+    },
+    {
+      "date": "2026-03-27",
+      "vendor": "Cloudstore",
+      "description": "Cloud storage (monthly)",
+      "category": "Software",
+      "amount": 30.0,
+      "reimbursable": false
+    }
+  ],
+  "category_totals": {
+    "Office Supplies": 212.09,
+    "Travel": 115.5,
+    "Meals": 121.7,
+    "Software": 150.0
+  },
+  "reimbursable_total": 237.2
+}

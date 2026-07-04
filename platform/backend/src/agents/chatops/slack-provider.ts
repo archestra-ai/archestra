@@ -14,6 +14,7 @@ import {
   cacheManager,
   LRUCacheManager,
 } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -32,10 +33,13 @@ import type {
   ChatThreadMessageFile,
   DiscoveredChannel,
   IncomingChatMessage,
+  SkippedAttachment,
   SlackDbConfig,
+  ThreadFileOutcome,
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
+import { shrinkImageForModel } from "@/utils/image-conversion";
 import {
   buildWelcomeMessage,
   ensureProvisionedUser,
@@ -61,6 +65,7 @@ import {
   errorMessage,
   formatApprovalToolArgs,
   isSlackDmChannel,
+  Semaphore,
 } from "./utils";
 
 /**
@@ -358,14 +363,22 @@ class SlackProvider implements ChatOpsProvider {
 
     // Download file attachments first (we're already in an addressed context —
     // DM, mention, or active thread — gated above). A file-only message (empty
-    // text) is kept only when a file actually survived download: oversized,
-    // expired, or failed downloads must not leave the bot answering an empty
-    // turn. Genuinely empty, attachment-less messages are dropped here.
-    const attachments = await this.downloadSlackFiles(event.files);
+    // text) is kept when a file survived download OR was recorded as skipped —
+    // a dropped file (too large, expired, failed) carries a model-visible note
+    // so the bot can explain it rather than answering a blank turn. Only a
+    // genuinely empty, attachment-less message is dropped here.
+    const outcomes = await this.downloadSlackFiles(event.files);
+    const attachments = outcomes.flatMap((o) =>
+      o.status === "delivered" ? [o.attachment] : [],
+    );
+    const skipped = outcomes.flatMap((o) =>
+      o.status === "skipped" ? [o.skipped] : [],
+    );
     if (
       !cleanedText &&
       event.type !== "app_mention" &&
-      attachments.length === 0
+      attachments.length === 0 &&
+      skipped.length === 0
     ) {
       return null;
     }
@@ -425,6 +438,7 @@ class SlackProvider implements ChatOpsProvider {
         ...(mentionedOthers.length > 0 && { mentionedOthers }),
       },
       ...(attachments.length > 0 && { attachments }),
+      ...(skipped.length > 0 && { skippedAttachments: skipped }),
     };
   }
 
@@ -755,8 +769,22 @@ class SlackProvider implements ChatOpsProvider {
       // Trim to the requested limit
       const trimmedMessages = allMessages.slice(0, limit);
 
+      // Keep text-less USER messages that carry downloadable files: a
+      // screenshot posted alone is a turn the model must know about — its
+      // file is either delivered or surfaced as skipped by the manager. Bot
+      // file-only messages stay filtered: the manager never downloads bot
+      // files, so retaining them would render a turn with no file and no
+      // skip note.
       const filtered = trimmedMessages.filter(
-        (msg) => msg.ts && msg.ts !== params.excludeMessageId && msg.text,
+        (msg) =>
+          msg.ts &&
+          msg.ts !== params.excludeMessageId &&
+          (msg.text ||
+            (!msg.bot_id &&
+              msg.user !== this.botUserId &&
+              (msg.files as SlackFile[] | undefined)?.some(
+                (f) => f.url_private_download || f.url_private,
+              ))),
       );
 
       // Batch-resolve unique non-bot user IDs to display names
@@ -1331,9 +1359,20 @@ class SlackProvider implements ChatOpsProvider {
 
   async downloadFiles(
     files: ChatThreadMessageFile[],
-  ): Promise<
-    Array<{ contentType: string; contentBase64: string; name?: string }>
-  > {
+  ): Promise<ThreadFileOutcome[]> {
+    if (files.length === 0) return [];
+    // Report every file as failed rather than silently returning nothing —
+    // the positional contract promises one outcome per input file.
+    if (!this.client) {
+      return files.map((f) => ({
+        status: "skipped",
+        skipped: {
+          name: f.name,
+          sizeBytes: f.size,
+          reason: "download_failed",
+        },
+      }));
+    }
     // Convert ChatThreadMessageFile[] to SlackFile[] and reuse existing download logic
     const slackFiles: SlackFile[] = files.map((f) => ({
       id: f.name || "unknown",
@@ -1703,54 +1742,97 @@ class SlackProvider implements ChatOpsProvider {
    * Download files attached to a Slack message and convert to A2AAttachment format.
    * Uses the bot token to authenticate downloads from Slack's private URLs.
    * Enforces size limits to prevent excessive memory usage.
+   *
+   * Returns exactly one outcome per input file, positionally aligned with
+   * `files` — delivered attachment or the reason it was dropped — so callers
+   * can tell the model a file existed instead of denying it. Exception: when
+   * the provider is uninitialized this returns `[]`; `downloadFiles` maps that
+   * case for history callers, and the current-message path treats it as
+   * "no attachments" exactly as before.
    */
   private async downloadSlackFiles(
     files?: SlackFile[],
-  ): Promise<
-    Array<{ contentType: string; contentBase64: string; name?: string }>
-  > {
+  ): Promise<ThreadFileOutcome[]> {
     if (!files || files.length === 0 || !this.client) return [];
 
-    const filesToProcess = files.slice(
-      0,
-      CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE,
-    );
-    const results: Array<{
-      contentType: string;
-      contentBase64: string;
-      name?: string;
-    }> = [];
+    const outcomes: ThreadFileOutcome[] = [];
+    const skip = (skipped: SkippedAttachment): void => {
+      outcomes.push({ status: "skipped", skipped });
+    };
     let totalSize = 0;
+    let deliveredCount = 0;
+    // Once the combined budget is spent, every remaining file is recorded as
+    // over-budget rather than silently skipped (the old code `break`-ed here).
+    let budgetExhausted = false;
 
-    for (const file of filesToProcess) {
+    for (const [index, file] of files.entries()) {
+      // Anything past the per-message cap is dropped from processing; record
+      // it rather than letting it vanish silently.
+      if (index >= CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENTS_PER_MESSAGE) {
+        skip({
+          name: file.name,
+          sizeBytes: file.size,
+          reason: "too_many",
+        });
+        continue;
+      }
+
+      if (budgetExhausted) {
+        skip({
+          name: file.name,
+          sizeBytes: file.size,
+          reason: "total_limit_reached",
+        });
+        continue;
+      }
+
       const downloadUrl = file.url_private_download || file.url_private;
       if (!downloadUrl) {
         logger.debug(
           { fileId: file.id, fileName: file.name },
           "[SlackProvider] Skipping file without download URL",
         );
+        skip({
+          name: file.name,
+          sizeBytes: file.size,
+          reason: "download_failed",
+        });
         continue;
       }
 
+      // Oversized images are downloaded (up to the convertible ceiling) and
+      // shrunk to fit the model's inline-image limit; everything else keeps the
+      // flat per-file limit.
+      const isImage = (file.mimetype || "").startsWith("image/");
+      const perFileLimit = isImage
+        ? CHATOPS_ATTACHMENT_LIMITS.MAX_CONVERTIBLE_IMAGE_SIZE
+        : CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE;
+
       // Skip files that exceed individual size limit
-      if (
-        file.size &&
-        file.size > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
-      ) {
+      if (file.size && file.size > perFileLimit) {
         logger.info(
           {
             fileId: file.id,
             fileName: file.name,
             size: file.size,
-            maxSize: CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE,
+            maxSize: perFileLimit,
           },
           "[SlackProvider] Skipping file exceeding size limit",
         );
+        skip({
+          name: file.name,
+          sizeBytes: file.size,
+          reason: "too_large",
+        });
         continue;
       }
 
-      // Skip if total size would exceed limit
+      // Skip if total size would exceed limit. Images are exempt from this
+      // pre-download check because their delivered size is the post-shrink
+      // size (unknown until downloaded); they defer to the post-download total
+      // check below on their final bytes.
       if (
+        !isImage &&
         file.size &&
         totalSize + file.size >
           CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
@@ -1764,7 +1846,13 @@ class SlackProvider implements ChatOpsProvider {
           },
           "[SlackProvider] Skipping file - total attachments size limit reached",
         );
-        break;
+        skip({
+          name: file.name,
+          sizeBytes: file.size,
+          reason: "total_limit_reached",
+        });
+        budgetExhausted = true;
+        continue;
       }
 
       try {
@@ -1774,116 +1862,195 @@ class SlackProvider implements ChatOpsProvider {
             { fileId: file.id, url: downloadUrl },
             "[SlackProvider] Skipping file from non-Slack domain",
           );
+          skip({
+            name: file.name,
+            sizeBytes: file.size,
+            reason: "download_failed",
+          });
           continue;
         }
 
-        // Slack redirects files.slack.com → files-origin.slack.com.
-        // Node's fetch strips the Authorization header on cross-origin redirects,
-        // so we follow redirects manually to re-attach the token.
-        const response = await fetchSlackFile(
-          downloadUrl,
-          this.config.botToken,
-        );
+        // The download + shrink below is the memory-heavy section (response
+        // buffer, native copy, decode allocation). Chatops messages are
+        // processed fire-and-forget after the provider ack, so a burst of
+        // attachment-heavy messages is only bounded by this per-process
+        // semaphore.
+        await slackFileTransferSemaphore.acquire();
+        try {
+          // Slack redirects files.slack.com → files-origin.slack.com.
+          // Node's fetch strips the Authorization header on cross-origin redirects,
+          // so we follow redirects manually to re-attach the token.
+          const response = await fetchSlackFile(
+            downloadUrl,
+            this.config.botToken,
+          );
 
-        if (!response.ok) {
-          logger.warn(
+          if (!response.ok) {
+            logger.warn(
+              {
+                fileId: file.id,
+                fileName: file.name,
+                status: response.status,
+              },
+              "[SlackProvider] Failed to download file",
+            );
+            skip({
+              name: file.name,
+              sizeBytes: file.size,
+              reason: "download_failed",
+            });
+            continue;
+          }
+
+          // Verify we got a file, not an HTML error/login page
+          const responseContentType =
+            response.headers.get("content-type") || "";
+          if (responseContentType.includes("text/html")) {
+            logger.warn(
+              {
+                fileId: file.id,
+                fileName: file.name,
+                contentType: responseContentType,
+              },
+              "[SlackProvider] Received HTML instead of file — bot may be missing files:read scope",
+            );
+            skip({
+              name: file.name,
+              sizeBytes: file.size,
+              reason: "download_failed",
+            });
+            continue;
+          }
+
+          // Pre-check Content-Length to avoid buffering oversized files
+          const contentLength = Number.parseInt(
+            response.headers.get("content-length") || "0",
+            10,
+          );
+          if (contentLength > 0 && contentLength > perFileLimit) {
+            logger.info(
+              { fileId: file.id, contentLength },
+              "[SlackProvider] Skipping oversized attachment (Content-Length)",
+            );
+            skip({
+              name: file.name,
+              sizeBytes: file.size || contentLength,
+              reason: "too_large",
+            });
+            continue;
+          }
+
+          let buffer: Buffer = Buffer.from(await response.arrayBuffer());
+          let contentType = file.mimetype || "application/octet-stream";
+
+          // Double-check actual size against individual limit
+          if (buffer.length > perFileLimit) {
+            logger.info(
+              { fileId: file.id, actualSize: buffer.length },
+              "[SlackProvider] Downloaded file exceeds size limit, skipping",
+            );
+            skip({
+              name: file.name,
+              sizeBytes: buffer.length,
+              reason: "too_large",
+            });
+            continue;
+          }
+
+          // Shrink an image that is too large for the model's inline limit
+          // (covers both >10 MB images downloaded for conversion and images in
+          // the 3.75–10 MB band). If it can't be brought under the limit, report
+          // it rather than sending an image the provider will reject.
+          if (
+            isImage &&
+            buffer.length >
+              CHATOPS_ATTACHMENT_LIMITS.MAX_MODEL_INLINE_IMAGE_SIZE
+          ) {
+            const shrunk = await shrinkImageForModel(buffer, {
+              maxBytes: CHATOPS_ATTACHMENT_LIMITS.MAX_MODEL_INLINE_IMAGE_SIZE,
+              maxDimension:
+                CHATOPS_ATTACHMENT_LIMITS.MAX_MODEL_INLINE_IMAGE_DIMENSION,
+            });
+            if (!shrunk) {
+              logger.info(
+                { fileId: file.id, fileName: file.name, size: buffer.length },
+                "[SlackProvider] Could not shrink oversized image, skipping",
+              );
+              skip({
+                name: file.name,
+                sizeBytes: buffer.length,
+                reason: "too_large",
+              });
+              continue;
+            }
+            buffer = shrunk.buffer;
+            contentType = shrunk.contentType;
+          }
+
+          // Post-download total size check (handles case where file.size was missing/zero)
+          if (
+            totalSize + buffer.length >
+            CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
+          ) {
+            logger.info(
+              {
+                fileId: file.id,
+                fileName: file.name,
+                totalSize,
+                maxTotalSize:
+                  CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
+              },
+              "[SlackProvider] Total attachments size limit reached (post-download)",
+            );
+            skip({
+              name: file.name,
+              sizeBytes: buffer.length,
+              reason: "total_limit_reached",
+            });
+            budgetExhausted = true;
+            continue;
+          }
+
+          totalSize += buffer.length;
+          deliveredCount++;
+          outcomes.push({
+            status: "delivered",
+            attachment: {
+              contentType,
+              contentBase64: buffer.toString("base64"),
+              name: file.name,
+            },
+          });
+
+          logger.debug(
             {
               fileId: file.id,
               fileName: file.name,
-              status: response.status,
+              contentType: file.mimetype,
+              size: buffer.length,
             },
-            "[SlackProvider] Failed to download file",
+            "[SlackProvider] Downloaded file attachment",
           );
-          continue;
+        } finally {
+          slackFileTransferSemaphore.release();
         }
-
-        // Verify we got a file, not an HTML error/login page
-        const responseContentType = response.headers.get("content-type") || "";
-        if (responseContentType.includes("text/html")) {
-          logger.warn(
-            {
-              fileId: file.id,
-              fileName: file.name,
-              contentType: responseContentType,
-            },
-            "[SlackProvider] Received HTML instead of file — bot may be missing files:read scope",
-          );
-          continue;
-        }
-
-        // Pre-check Content-Length to avoid buffering oversized files
-        const contentLength = Number.parseInt(
-          response.headers.get("content-length") || "0",
-          10,
-        );
-        if (
-          contentLength > 0 &&
-          contentLength > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE
-        ) {
-          logger.info(
-            { fileId: file.id, contentLength },
-            "[SlackProvider] Skipping oversized attachment (Content-Length)",
-          );
-          continue;
-        }
-
-        const buffer = Buffer.from(await response.arrayBuffer());
-
-        // Double-check actual size against individual limit
-        if (buffer.length > CHATOPS_ATTACHMENT_LIMITS.MAX_ATTACHMENT_SIZE) {
-          logger.info(
-            { fileId: file.id, actualSize: buffer.length },
-            "[SlackProvider] Downloaded file exceeds size limit, skipping",
-          );
-          continue;
-        }
-
-        // Post-download total size check (handles case where file.size was missing/zero)
-        if (
-          totalSize + buffer.length >
-          CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE
-        ) {
-          logger.info(
-            {
-              fileId: file.id,
-              fileName: file.name,
-              totalSize,
-              maxTotalSize:
-                CHATOPS_ATTACHMENT_LIMITS.MAX_TOTAL_ATTACHMENTS_SIZE,
-            },
-            "[SlackProvider] Total attachments size limit reached (post-download)",
-          );
-          break;
-        }
-
-        totalSize += buffer.length;
-        results.push({
-          contentType: file.mimetype || "application/octet-stream",
-          contentBase64: buffer.toString("base64"),
-          name: file.name,
-        });
-
-        logger.debug(
-          {
-            fileId: file.id,
-            fileName: file.name,
-            contentType: file.mimetype,
-            size: buffer.length,
-          },
-          "[SlackProvider] Downloaded file attachment",
-        );
       } catch (error) {
         logger.warn(
           { fileId: file.id, fileName: file.name, error: errorMessage(error) },
           "[SlackProvider] Error downloading file",
         );
+        skip({
+          name: file.name,
+          sizeBytes: file.size,
+          reason: "download_failed",
+        });
       }
     }
 
-    if (results.length > 0) {
+    if (deliveredCount > 0) {
       logger.info(
         {
-          fileCount: results.length,
+          fileCount: deliveredCount,
           totalSize,
           originalFileCount: files.length,
         },
@@ -1891,7 +2058,7 @@ class SlackProvider implements ChatOpsProvider {
       );
     }
 
-    return results;
+    return outcomes;
   }
 
   /**
@@ -2195,6 +2362,15 @@ function hardSplitOversizedParagraph(text: string): string[] {
   }
   return chunks;
 }
+
+/**
+ * Per-process (deliberately not per provider instance) bound on concurrent
+ * Slack file downloads + image shrinks — the memory-heavy section of
+ * attachment processing. See config.chatops.maxConcurrentFileTransfers.
+ */
+const slackFileTransferSemaphore = new Semaphore(
+  config.chatops.maxConcurrentFileTransfers,
+);
 
 /**
  * Check whether a URL points to a known Slack file-hosting domain.

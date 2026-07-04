@@ -1,8 +1,8 @@
 import {
+  buildBlockAlwaysPolicyReason,
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
   isAgentTool,
-  TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
   TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
 } from "@archestra/shared";
@@ -12,13 +12,8 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
-import type {
-  AutonomyPolicyOperator,
-  DiscoveredToolPolicy,
-  GlobalToolPolicy,
-  ToolInvocation,
-} from "@/types";
-import { defaultDiscoveredToolPolicy } from "@/types";
+import type { AutonomyPolicyOperator, ToolInvocation } from "@/types";
+import ToolModel from "./tool";
 
 type EvaluationResult = {
   isAllowed: boolean;
@@ -227,59 +222,47 @@ class ToolInvocationPolicyModel {
     // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
     toolInput: Record<string, any>,
     context: PolicyEvaluationContext,
-    globalToolPolicy: GlobalToolPolicy,
-    // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
-    // that don't distinguish discovered tools keep single-policy behavior;
-    // production passes it explicitly.
-    discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
-      globalToolPolicy,
-    ),
+    // The exact row the caller resolved for execution, when known. Skips the
+    // name lookup so approval is decided against the row that actually runs.
+    resolvedToolId?: string,
   ): Promise<boolean> {
-    // Archestra tools always bypass policies (consistent with evaluateBatch)
-    if (archestraMcpBranding.isToolName(toolName)) {
+    // Archestra tools always bypass policies (consistent with evaluateBatch),
+    // except policy-evaluated built-ins like query_knowledge_sources
+    if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
       return false;
     }
 
-    // Find tool by name. Origin columns decide which policy governs it: a
-    // shared "llm-proxy" discovered tool has all three NULL.
-    const [tool] = await db
-      .select({
-        id: schema.toolsTable.id,
-        catalogId: schema.toolsTable.catalogId,
-        agentId: schema.toolsTable.agentId,
-        delegateToAgentId: schema.toolsTable.delegateToAgentId,
-      })
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, toolName));
+    let toolId = resolvedToolId;
+    if (!toolId) {
+      // Find tool by name. Order deterministically so a duplicated name resolves
+      // the same row every time rather than an arbitrary one.
+      const [tool] = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.name, toolName))
+        .orderBy(desc(schema.toolsTable.createdAt), schema.toolsTable.id)
+        .limit(1);
 
-    if (!tool) {
-      logger.debug({ toolName }, "checkApprovalRequired: tool not found in DB");
-      return false;
-    }
-
-    // Permissive effective policy: skip all approval checks (consistent with
-    // evaluateBatch). Discovered tools follow discoveredToolPolicy.
-    const isDiscovered =
-      tool.catalogId === null &&
-      tool.agentId === null &&
-      tool.delegateToAgentId === null;
-    const effectiveAllows = isDiscovered
-      ? discoveredToolPolicy === "relaxed"
-      : globalToolPolicy === "permissive";
-    if (effectiveAllows) {
-      return false;
+      if (!tool) {
+        logger.debug(
+          { toolName },
+          "checkApprovalRequired: tool not found in DB",
+        );
+        return false;
+      }
+      toolId = tool.id;
     }
 
     // Fetch policies for this tool
     const policies = await db
       .select()
       .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, toolId));
 
     logger.debug(
       {
         toolName,
-        toolId: tool.id,
+        toolId,
         policyCount: policies.length,
         actions: policies.map((p) => p.action),
       },
@@ -429,7 +412,7 @@ class ToolInvocationPolicyModel {
    * Returns the first blocked tool call (refusal message) or null if all are allowed.
    */
   static async evaluateBatch(
-    _agentId: string,
+    agentId: string,
     toolCalls: Array<{
       toolCallName: string;
       // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
@@ -437,33 +420,14 @@ class ToolInvocationPolicyModel {
     }>,
     context: PolicyEvaluationContext,
     isContextTrusted: boolean,
-    globalToolPolicy: GlobalToolPolicy,
-    // Defaults to the discovered-tool equivalent of globalToolPolicy so callers
-    // that don't distinguish discovered tools keep single-policy behavior;
-    // production passes it explicitly.
-    discoveredToolPolicy: DiscoveredToolPolicy = defaultDiscoveredToolPolicy(
-      globalToolPolicy,
-    ),
-  ): Promise<EvaluationResult & { toolCallName?: string }> {
-    logger.debug(
-      { globalToolPolicy, discoveredToolPolicy },
-      "ToolInvocationPolicy.evaluateBatch: global policy",
-    );
-
-    // YOLO mode: when neither policy enforces (global permissive AND discovered
-    // relaxed) there is nothing to evaluate. When they differ, the per-tool
-    // effective-policy check below decides which one applies to each tool.
-    if (
-      globalToolPolicy === "permissive" &&
-      discoveredToolPolicy === "relaxed"
-    ) {
-      return { isAllowed: true, reason: "" };
-    }
-
-    // Filter out Archestra tools and agent delegation tools (always allowed)
+    resolvedToolIdByName?: Map<string, string>,
+  ): Promise<EvaluationResult & { toolCallName?: string; toolId?: string }> {
+    // Filter out policy-bypassing Archestra tools and agent delegation tools
+    // (always allowed). Policy-evaluated built-ins like
+    // query_knowledge_sources are kept and evaluated like external tools.
     const externalToolCalls = toolCalls.filter(
       (tc) =>
-        !archestraMcpBranding.isToolName(tc.toolCallName) &&
+        !archestraMcpBranding.isPolicyBypassedToolName(tc.toolCallName) &&
         !isAgentTool(tc.toolCallName),
     );
 
@@ -473,30 +437,65 @@ class ToolInvocationPolicyModel {
 
     const toolNames = externalToolCalls.map((tc) => tc.toolCallName);
 
-    // Fetch tool IDs for the tool names. The origin columns decide which policy
-    // (global vs discovered) governs each tool: a shared "llm-proxy" discovered
-    // tool has all three NULL.
-    const tools = await db
-      .select({
-        id: schema.toolsTable.id,
-        name: schema.toolsTable.name,
-        catalogId: schema.toolsTable.catalogId,
-        agentId: schema.toolsTable.agentId,
-        delegateToAgentId: schema.toolsTable.delegateToAgentId,
-      })
-      .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, toolNames));
+    // Names whose resolved tool row the caller already knows (e.g. the MCP
+    // gateway resolved the exact row it will execute) bypass the name lookup,
+    // so the policy is evaluated against the row that actually runs rather than
+    // an arbitrary same-named row.
+    const namesNeedingLookup = resolvedToolIdByName
+      ? toolNames.filter((name) => !resolvedToolIdByName.has(name))
+      : [...toolNames];
 
-    const toolIdsByName = new Map(tools.map((t) => [t.name, t.id]));
-    const isDiscoveredByName = new Map(
-      tools.map((t) => [
-        t.name,
-        t.catalogId === null &&
-          t.agentId === null &&
-          t.delegateToAgentId === null,
-      ]),
-    );
-    const toolIds = tools.map((t) => t.id);
+    const toolIdsByName = new Map<string, string>();
+    if (resolvedToolIdByName) {
+      for (const name of toolNames) {
+        const resolvedId = resolvedToolIdByName.get(name);
+        if (resolvedId) {
+          toolIdsByName.set(name, resolvedId);
+        }
+      }
+    }
+
+    if (namesNeedingLookup.length > 0) {
+      const namesToResolve = new Set(namesNeedingLookup);
+
+      // Prefer the agent's assigned row, resolved with the same order execution
+      // uses, so a duplicated name evaluates the policy against the row that
+      // will actually run. Skipped for the app-runtime caller (empty agentId).
+      if (agentId) {
+        const assignedIds = await ToolModel.getAssignedToolIdsByName(
+          [...namesToResolve],
+          agentId,
+        );
+        for (const [name, id] of assignedIds) {
+          if (!toolIdsByName.has(name)) {
+            toolIdsByName.set(name, id);
+          }
+        }
+      }
+
+      // Names the agent has no assignment for (e.g. All-mode tools reached on
+      // the proxy path) fall back to a deterministically-ordered global lookup.
+      const unresolvedNames = [...namesToResolve].filter(
+        (name) => !toolIdsByName.has(name),
+      );
+      if (unresolvedNames.length > 0) {
+        const tools = await db
+          .select({
+            id: schema.toolsTable.id,
+            name: schema.toolsTable.name,
+          })
+          .from(schema.toolsTable)
+          .where(inArray(schema.toolsTable.name, unresolvedNames))
+          .orderBy(desc(schema.toolsTable.createdAt), schema.toolsTable.id);
+        for (const tool of tools) {
+          if (!toolIdsByName.has(tool.name)) {
+            toolIdsByName.set(tool.name, tool.id);
+          }
+        }
+      }
+    }
+
+    const toolIds = [...new Set(toolIdsByName.values())];
 
     if (toolIds.length === 0) {
       // No tools found, allow all
@@ -530,16 +529,12 @@ class ToolInvocationPolicyModel {
       const toolId = toolIdsByName.get(toolCallName);
       if (!toolId) continue;
 
-      // Discovered (llm-proxy) tools follow the discovered-tool policy; all
-      // others follow the global tool policy. When the effective policy does
-      // not enforce (discovered=relaxed / global=permissive) the tool is
-      // allowed without consulting its policy rows.
-      const effectiveAllows = isDiscoveredByName.get(toolCallName)
-        ? discoveredToolPolicy === "relaxed"
-        : globalToolPolicy === "permissive";
-      if (effectiveAllows) {
-        continue;
-      }
+      const blocked = (reason: string) => ({
+        isAllowed: false as const,
+        reason,
+        toolCallName,
+        toolId,
+      });
 
       const policies = policiesByToolId.get(toolId) || [];
 
@@ -578,21 +573,13 @@ class ToolInvocationPolicyModel {
         hasMatchingSpecificPolicy = true;
 
         if (policy.action === "block_always") {
-          return {
-            isAllowed: false,
-            reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
-            toolCallName,
-          };
+          return blocked(buildBlockAlwaysPolicyReason(policy.reason));
         }
 
         if (policy.action === "block_when_context_is_untrusted") {
           // Allow when context is trusted, block when untrusted
           if (!isContextTrusted) {
-            return {
-              isAllowed: false,
-              reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-              toolCallName,
-            };
+            return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
           }
           // Context is trusted, tool is allowed - continue to next tool
           continue;
@@ -609,11 +596,7 @@ class ToolInvocationPolicyModel {
       // If a specific policy matched, use its result (ignore default policies)
       if (hasMatchingSpecificPolicy) {
         if (!isContextTrusted && !specificAllowsUntrusted) {
-          return {
-            isAllowed: false,
-            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-            toolCallName,
-          };
+          return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
         }
         continue; // Tool is allowed, move to next tool
       }
@@ -624,21 +607,13 @@ class ToolInvocationPolicyModel {
 
         for (const policy of defaultPolicies) {
           if (policy.action === "block_always") {
-            return {
-              isAllowed: false,
-              reason: policy.reason || TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
-              toolCallName,
-            };
+            return blocked(buildBlockAlwaysPolicyReason(policy.reason));
           }
 
           if (policy.action === "block_when_context_is_untrusted") {
             // Allow when context is trusted, block when untrusted
             if (!isContextTrusted) {
-              return {
-                isAllowed: false,
-                reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-                toolCallName,
-              };
+              return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
             }
             // Context is trusted, tool is allowed
             continue;
@@ -653,22 +628,14 @@ class ToolInvocationPolicyModel {
         }
         // Check if tool is allowed when context is untrusted
         if (!isContextTrusted && !defaultAllowsUntrusted) {
-          return {
-            isAllowed: false,
-            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-            toolCallName,
-          };
+          return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
         }
         continue; // Tool is allowed by default policy, skip global policy check
       }
 
       // No policies exist - block in untrusted context (restrictive mode only reaches here)
       if (!isContextTrusted) {
-        return {
-          isAllowed: false,
-          reason: TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
-          toolCallName,
-        };
+        return blocked(TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON);
       }
     }
 

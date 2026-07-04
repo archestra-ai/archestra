@@ -1,31 +1,14 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import config from "@/config";
 import { MemberModel, MessageModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 describe("POST /api/apps/:appId/open-in-chat", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let user: User;
-
-  const appsEnabled = config.apps.enabled;
-  beforeAll(() => {
-    (config.apps as { enabled: boolean }).enabled = true;
-  });
-  afterAll(() => {
-    (config.apps as { enabled: boolean }).enabled = appsEnabled;
-  });
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
     const organization = await makeOrganization();
@@ -53,14 +36,27 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     await app.close();
   });
 
-  async function createApp(name: string): Promise<string> {
+  async function createApp(
+    name: string,
+    extra: Record<string, unknown> = {},
+  ): Promise<string> {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
-      payload: { name },
+      payload: { name, ...extra },
     });
     expect(created.statusCode).toBe(200);
     return created.json().id;
+  }
+
+  // Forks a new version (latestVersion 1 → 2).
+  async function editApp(appId: string): Promise<void> {
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${appId}`,
+      payload: { html: "<h1>edited</h1>" },
+    });
+    expect(edited.statusCode).toBe(200);
   }
 
   // The seeded message is what makes the app render inline with no model turn —
@@ -82,8 +78,27 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     return part.output.structuredContent.id;
   }
 
-  test("seeds a conversation with the app rendered and returns its id", async () => {
+  function expectSeededGreeting(
+    message: {
+      role: string;
+      content: { parts: Array<Record<string, unknown>> };
+    },
+    appName: string,
+  ): string {
+    expect(message.role).toBe("assistant");
+    const part = message.content.parts[0] as { type: string; text: string };
+    expect(part.type).toBe("text");
+    expect(part.text).toContain(appName);
+    expect(part.text).toContain("Want to change the app? Tell me how!");
+    expect(part.text).toContain(
+      "Want to use the app? Use the UI 👉, or ask me to!",
+    );
+    return part.text;
+  }
+
+  test("seeds a render plus a greeting for an app built past the scaffold", async () => {
     const appId = await createApp("Notes");
+    await editApp(appId);
 
     const res = await app.inject({
       method: "POST",
@@ -94,11 +109,27 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(conversationId).toBeTruthy();
 
     const messages = await MessageModel.findByConversation(conversationId);
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(expectSeededRender(messages[0])).toBe(appId);
+    expectSeededGreeting(messages[1], "Notes");
   });
 
-  test("create with openInChat returns the seeded conversation id", async () => {
+  test("seeds a render plus a greeting for a brand-new scaffold app", async () => {
+    const appId = await createApp("Fresh");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/open-in-chat`,
+    });
+    const { conversationId } = res.json();
+
+    const messages = await MessageModel.findByConversation(conversationId);
+    expect(messages).toHaveLength(2);
+    expect(expectSeededRender(messages[0])).toBe(appId);
+    expectSeededGreeting(messages[1], "Fresh");
+  });
+
+  test("create with openInChat seeds a render plus a greeting", async () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -109,8 +140,25 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     expect(conversationId).toBeTruthy();
 
     const messages = await MessageModel.findByConversation(conversationId);
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(expectSeededRender(messages[0])).toBe(id);
+    expectSeededGreeting(messages[1], "Inline");
+  });
+
+  test("the seeded greeting omits the app description", async () => {
+    const id = await createApp("Tracker", { description: "Track team spend." });
+    await editApp(id);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/${id}/open-in-chat`,
+    });
+    const { conversationId } = res.json();
+
+    const messages = await MessageModel.findByConversation(conversationId);
+    expect(messages).toHaveLength(2);
+    const greeting = expectSeededGreeting(messages[1], "Tracker");
+    expect(greeting).not.toContain("Track team spend.");
   });
 
   test("404s for an app the caller cannot view", async () => {

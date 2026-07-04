@@ -21,6 +21,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
   type ProfileLabel,
@@ -54,6 +57,7 @@ import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -80,10 +84,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
-import {
-  MCP_CONFIG_AUTOCOMPLETE,
-  MCP_SECRET_AUTOCOMPLETE,
-} from "@/lib/mcp/mcp-form-autocomplete";
+import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -109,6 +110,50 @@ const ExternalSecretSelector = lazy(
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
+
+// Markdown renderer for catalog-supplied setup instructions shown atop the form.
+const INSTRUCTIONS_MARKDOWN_COMPONENTS: Components = {
+  p: ({ node, ...props }) => (
+    <p className="mb-2 text-muted-foreground" {...props} />
+  ),
+  strong: ({ node, ...props }) => (
+    <strong className="font-semibold text-foreground" {...props} />
+  ),
+  ol: ({ node, ...props }) => (
+    <ol
+      className="mb-2 list-decimal space-y-1 pl-5 text-muted-foreground"
+      {...props}
+    />
+  ),
+  ul: ({ node, ...props }) => (
+    <ul
+      className="mb-2 list-disc space-y-1 pl-5 text-muted-foreground"
+      {...props}
+    />
+  ),
+  a: ({ node, children, ...props }) => (
+    <a
+      className="text-primary underline"
+      target="_blank"
+      rel="noreferrer"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  pre: ({ node, ...props }) => (
+    <pre
+      className="my-2 overflow-x-auto rounded-md bg-muted p-3 text-xs"
+      {...props}
+    />
+  ),
+  code: ({ node, ...props }) => (
+    <code
+      className="rounded bg-muted px-1 py-0.5 font-mono text-xs"
+      {...props}
+    />
+  ),
+};
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -238,6 +283,7 @@ export function McpCatalogForm({
                 ? `${window.location.origin}/oauth-callback`
                 : "",
             scopes: "read, write",
+            additional_scopes: "offline_access",
             supports_resource_metadata: true,
             grantType: "authorization_code",
             authServerUrl: "",
@@ -277,6 +323,7 @@ export function McpCatalogForm({
   }, [submitRef, form, onSubmit]);
 
   const authMethod = form.watch("authMethod");
+  const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
@@ -889,6 +936,16 @@ export function McpCatalogForm({
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
           >
             {notice}
+            {instructions ? (
+              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={INSTRUCTIONS_MARKDOWN_COMPONENTS}
+                >
+                  {instructions}
+                </ReactMarkdown>
+              </div>
+            ) : null}
             {catalogButton}
 
             <div className="space-y-4">
@@ -1539,9 +1596,7 @@ export function McpCatalogForm({
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Password</Label>
-                              <Input
-                                type="password"
-                                autoComplete={MCP_SECRET_AUTOCOMPLETE}
+                              <SecretInput
                                 placeholder={
                                   mode === "edit" && !watchField("password")
                                     ? "Saved — leave blank to keep"
@@ -1895,13 +1950,9 @@ export function McpCatalogForm({
                                       <FormItem>
                                         <FormLabel>Client Secret</FormLabel>
                                         <FormControl>
-                                          <Input
-                                            type="password"
+                                          <SecretInput
                                             placeholder="your-client-secret (optional)"
                                             className="font-mono"
-                                            autoComplete={
-                                              MCP_SECRET_AUTOCOMPLETE
-                                            }
                                             {...field}
                                           />
                                         </FormControl>
@@ -1984,6 +2035,31 @@ export function McpCatalogForm({
                                       </FormControl>
                                       <FormDescription>
                                         Comma-separated list of OAuth scopes.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.additional_scopes"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Additional scopes</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="offline_access"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Always appended on top of the requested
+                                        scopes. offline_access is added by
+                                        default so the provider returns a
+                                        refresh token; clear it for providers
+                                        that reject it (e.g. Google).
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

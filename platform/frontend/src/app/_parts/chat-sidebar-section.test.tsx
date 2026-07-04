@@ -25,21 +25,13 @@ const mockChatState: {
   sessionStatusById: {},
 };
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
-  usePathname: () => mockChatState.pathname,
-  useSearchParams: () => ({
-    get: () => null,
-  }),
-}));
+vi.mock("next/navigation");
 
 vi.mock("@/lib/auth/auth.hook", () => ({
   useIsAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true }),
-}));
+vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/chat/chat-utils", () => ({
   getConversationDisplayTitle: (title: string | null) =>
@@ -77,6 +69,16 @@ let mockProjects: Array<{
   pinnedAt: string | null;
 }> = [];
 
+// Apps-surface items (owned or external) for the sidebar's Pinned section.
+let mockApps: Array<{
+  source: "owned" | "external";
+  id?: string;
+  mcpServerId?: string;
+  resourceUri?: string;
+  name: string;
+  pinnedAt: string | null;
+}> = [];
+
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
     data: mockConversations,
@@ -95,9 +97,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
   usePinConversation: () => ({ mutate: vi.fn() }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => true,
-}));
+vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects }),
@@ -106,6 +106,13 @@ vi.mock("@/lib/projects/projects.query", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  useApps: () => ({ data: { data: mockApps } }),
+  usePinApp: () => ({ mutate: vi.fn() }),
+  useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
+  useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("@/components/agent-icon", () => ({
@@ -230,8 +237,25 @@ vi.mock("lucide-react", async (importOriginal) => {
   };
 });
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 // Import after mocks
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import { ChatSidebarSection } from "./chat-sidebar-section";
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    push: mockRouterPush,
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(usePathname).mockImplementation(() => mockChatState.pathname);
+  vi.mocked(useSearchParams).mockReturnValue({
+    get: () => null,
+  } as unknown as ReturnType<typeof useSearchParams>);
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useFeature).mockReturnValue(true);
+});
 
 function makeConv(
   id: string,
@@ -258,6 +282,7 @@ describe("ChatSidebarSection", () => {
     vi.clearAllMocks();
     mockConversations = [];
     mockProjects = [];
+    mockApps = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });
@@ -418,6 +443,37 @@ describe("ChatSidebarSection", () => {
     expect(screen.queryByTestId("project-emoji")).not.toBeInTheDocument();
   });
 
+  it("shows pinned apps (owned and external) in the Pinned section", () => {
+    mockApps = [
+      {
+        source: "owned",
+        id: "app-1",
+        name: "Sprint Board",
+        pinnedAt: "2026-01-05T00:00:00Z",
+      },
+      {
+        source: "external",
+        mcpServerId: "server-1",
+        resourceUri: "ui://pm/board.html",
+        name: "Archestra PM / show_board",
+        pinnedAt: "2026-01-04T00:00:00Z",
+      },
+      {
+        source: "owned",
+        id: "app-2",
+        name: "Unpinned App",
+        pinnedAt: null,
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.getByText("Sprint Board")).toBeInTheDocument();
+    expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
+    expect(screen.queryByText("Unpinned App")).not.toBeInTheDocument();
+  });
+
   it("shows a chat's project emoji and name when its project has an emoji", () => {
     mockConversations = [
       {
@@ -465,6 +521,7 @@ describe("ChatSidebarSection status indicators", () => {
     vi.clearAllMocks();
     mockConversations = [];
     mockProjects = [];
+    mockApps = [];
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });

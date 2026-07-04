@@ -69,6 +69,7 @@
       "versioning": "always-bump-patch",
       "prerelease": false,
       "initial-version": "0.0.1",
+      "draft": true,
       "extra-files": [
         {
           "type": "json",

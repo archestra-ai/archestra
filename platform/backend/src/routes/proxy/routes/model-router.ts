@@ -7,6 +7,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -34,7 +35,9 @@ import {
   azureAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
+  geminiEmbeddingsAdapterFactory,
   groqAdapterFactory,
+  makeOpenAiCompatibleEmbeddingsAdapterFactory,
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
@@ -79,6 +82,14 @@ type OpenAiWireProvider = LLMProvider<
   unknown,
   unknown,
   unknown,
+  OpenAi.Types.ChatCompletionsHeaders
+>;
+
+type EmbeddingsModelRouterProvider = LLMProvider<
+  OpenAi.Types.EmbeddingRequest,
+  OpenAi.Types.EmbeddingResponse,
+  OpenAi.Types.ChatCompletionsRequest["messages"],
+  never,
   OpenAi.Types.ChatCompletionsHeaders
 >;
 
@@ -496,12 +507,10 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
-  if (resolution.provider !== "openai") {
-    throw new ApiError(
-      501,
-      `Provider "${resolution.provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
-    );
-  }
+
+  const embeddingsProvider = getModelRouterEmbeddingsProvider(
+    resolution.provider,
+  );
 
   const routedBody = {
     ...body,
@@ -514,11 +523,39 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
     provider: resolution.provider,
   });
 
-  return handleLLMProxy(
-    routedBody,
-    request,
-    reply,
-    openAiEmbeddingsAdapterFactory,
+  return handleLLMProxy(routedBody, request, reply, embeddingsProvider);
+}
+
+/**
+ * Resolve the embeddings adapter for a routed provider.
+ *
+ * - Gemini uses its native embedding API via a translation adapter.
+ * - Every OpenAI-wire provider (openai, mistral, azure, ollama, vllm, zhipuai, …)
+ *   exposes an OpenAI-compatible `/embeddings` endpoint, so they share the
+ *   OpenAI-compatible embeddings adapter (only the provider name and default
+ *   base URL differ; the effective base URL still comes from the mapped key).
+ *
+ * Providers reach this dispatch only when the model router resolved a
+ * provider-qualified embedding model registered for them, so unsupported
+ * providers surface a clear 501 rather than a misrouted request.
+ */
+function getModelRouterEmbeddingsProvider(
+  provider: SupportedProvider,
+): EmbeddingsModelRouterProvider {
+  if (provider === "gemini") {
+    return geminiEmbeddingsAdapterFactory;
+  }
+  if (provider === "openai") {
+    return openAiEmbeddingsAdapterFactory;
+  }
+  if (provider in openAiWireProviders) {
+    return makeOpenAiCompatibleEmbeddingsAdapterFactory(provider, () =>
+      getProviderConfiguredBaseUrl(provider),
+    );
+  }
+  throw new ApiError(
+    501,
+    `Provider "${provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
   );
 }
 

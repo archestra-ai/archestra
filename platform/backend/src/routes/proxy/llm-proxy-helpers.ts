@@ -357,7 +357,6 @@ export function recordBlockedToolCallMetrics(params: {
   toolCallCount: number;
   actualModel: string;
   source: InteractionSource;
-  externalAgentId?: string;
 }): void {
   utils.tracing.recordBlockedToolSpans({
     toolCallNames: params.allToolCallNames,
@@ -377,7 +376,6 @@ export function recordBlockedToolCallMetrics(params: {
       params.toolCallCount,
       params.actualModel,
       params.source,
-      params.externalAgentId,
     ),
   );
 }

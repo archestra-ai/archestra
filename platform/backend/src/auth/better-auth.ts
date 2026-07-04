@@ -40,6 +40,7 @@ import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import type { AuditEventName } from "@/types/audit-log";
+import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -57,7 +58,12 @@ const APP_NAME = DEFAULT_APP_NAME;
 const {
   api: { apiKeyAuthorizationHeaderName },
   frontendBaseUrl,
-  auth: { secret, cookieDomain, trustedOrigins: staticTrustedOrigins },
+  auth: {
+    secret,
+    cookieDomain,
+    cookiePrefix,
+    trustedOrigins: staticTrustedOrigins,
+  },
 } = config;
 
 const ac = createAccessControl(allAvailableActions);
@@ -153,6 +159,8 @@ export const auth = betterAuth({
       },
     }),
     admin(),
+    // Developer-only auto-login endpoint (self-guards to non-production + env var).
+    devAutoLoginPlugin(),
     /**
      * Linked downstream identity provider auth must live inside Better Auth,
      * rather than regular Fastify routes, because completing the flow has to
@@ -203,6 +211,12 @@ export const auth = betterAuth({
       jwks: {
         keyPairConfig: { alg: "RS256", modulusLength: 2048 },
       },
+      // Without this, the plugin's /get-session after-hook mints a JWT — a
+      // jwks table read plus an RS256 signature — on EVERY authenticated
+      // request (the auth middleware calls getSession per request) just to
+      // set a `set-auth-jwt` response header nothing consumes. The /token
+      // and /jwks endpoints (used by the OAuth/OIDC flows) are unaffected.
+      disableSettingJwtHeader: true,
     }),
     oauthProvider({
       loginPage: OAUTH_PAGES.login,
@@ -305,7 +319,7 @@ export const auth = betterAuth({
   },
 
   advanced: {
-    cookiePrefix: "archestra",
+    cookiePrefix,
     defaultCookieAttributes: {
       ...(cookieDomain ? { domain: cookieDomain } : {}),
       // "lax" is required for OAuth/SSO flows because the callback is a cross-site top-level navigation

@@ -10,6 +10,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   type BedrockSigV4Credentials,
@@ -45,6 +46,7 @@ import {
   SelectLlmProviderApiKeySchema,
   type SelectSecret,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 import { dockerLocalhostConnectionHint } from "@/utils/docker-localhost-hint";
 
 async function testApiKeyOrThrow(
@@ -301,6 +303,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 isProviderApiKeyOptional({
                   provider: data.provider,
                   azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+                  anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
                 }) || data.apiKey
               );
             },
@@ -454,6 +457,19 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       } else if (
+        body.provider === "anthropic" &&
+        !actualApiKeyValue &&
+        anthropicWorkloadIdentity.isEnabled()
+      ) {
+        // Keyless Anthropic key backed by Workload Identity Federation —
+        // exercises the token exchange and model listing end to end.
+        await testApiKeyOrThrow(
+          body.provider,
+          "",
+          runtimeTestBaseUrl,
+          body.extraHeaders,
+        );
+      } else if (
         !actualApiKeyValue &&
         isProviderApiKeyOptional({
           provider: body.provider,
@@ -477,6 +493,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         })
       ) {
         throw new ApiError(
@@ -485,20 +502,35 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Create the API key record
-      const createdApiKey = await LlmProviderApiKeyModel.create({
-        organizationId,
-        name: body.name,
-        provider: body.provider,
-        secretId: secret?.id ?? null,
-        baseUrl: body.baseUrl ?? null,
-        inferenceBaseUrl: body.inferenceBaseUrl ?? null,
-        extraHeaders: body.extraHeaders ?? null,
-        scope: body.scope,
-        userId: body.scope === "personal" ? user.id : null,
-        teamId: body.scope === "team" ? body.teamId : null,
-        isPrimary: body.isPrimary ?? false,
-      });
+      // Create the API key record. The model demotes the current primary in
+      // the same transaction; a unique violation here means a concurrent
+      // writer won the race — surface it as a conflict, not a 500.
+      let createdApiKey: Awaited<
+        ReturnType<typeof LlmProviderApiKeyModel.create>
+      >;
+      try {
+        createdApiKey = await LlmProviderApiKeyModel.create({
+          organizationId,
+          name: body.name,
+          provider: body.provider,
+          secretId: secret?.id ?? null,
+          baseUrl: body.baseUrl ?? null,
+          inferenceBaseUrl: body.inferenceBaseUrl ?? null,
+          extraHeaders: body.extraHeaders ?? null,
+          scope: body.scope,
+          userId: body.scope === "personal" ? user.id : null,
+          teamId: body.scope === "team" ? body.teamId : null,
+          isPrimary: body.isPrimary ?? false,
+        });
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new ApiError(
+            409,
+            "Another primary key for this provider and scope was set concurrently. Please retry.",
+          );
+        }
+        throw error;
+      }
 
       // Sync models for the new API key before returning so the frontend
       // can immediately show available models after creation.
@@ -508,6 +540,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isProviderApiKeyOptional({
           provider: body.provider,
           azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
         });
       if (canSync) {
         try {
@@ -834,6 +867,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             testExtraHeaders,
           );
         } else if (
+          apiKeyFromDB.provider === "anthropic" &&
+          anthropicWorkloadIdentity.isEnabled()
+        ) {
+          // Keyless Anthropic WIF key — re-test with the updated runtime settings.
+          await testApiKeyOrThrow(
+            apiKeyFromDB.provider,
+            "",
+            testBaseUrl,
+            testExtraHeaders,
+          );
+        } else if (
           isProviderApiKeyOptional({
             provider: apiKeyFromDB.provider,
             // azure is handled above; only self-hosted Ollama/vLLM fall here.
@@ -904,7 +948,17 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       if (Object.keys(updateData).length > 0) {
-        await LlmProviderApiKeyModel.update(params.id, updateData);
+        try {
+          await LlmProviderApiKeyModel.update(params.id, updateData);
+        } catch (error) {
+          if (isUniqueConstraintError(error)) {
+            throw new ApiError(
+              409,
+              "Another primary key for this provider and scope was set concurrently. Please retry.",
+            );
+          }
+          throw error;
+        }
       }
 
       const updated = await LlmProviderApiKeyModel.findById(params.id);

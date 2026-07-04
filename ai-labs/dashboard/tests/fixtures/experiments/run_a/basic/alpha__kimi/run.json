@@ -1,0 +1,16 @@
+{
+  "env_id": "basic",
+  "task_id": "alpha",
+  "lane": "kimi",
+  "provider": "anthropic",
+  "model": "kimi-for-coding",
+  "outcome": "passed",
+  "finish_reason": "stop",
+  "turn_count": 5,
+  "tool_call_count": 9,
+  "total_tokens": 12345,
+  "stage_count": 1,
+  "format_attempts": 0,
+  "verifier_exit_code": 0,
+  "verifier_timed_out": false
+}

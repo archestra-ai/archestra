@@ -23,6 +23,7 @@ const config: KnipConfig = {
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",
     "@archestra/app-runtime-rs",
+    "@archestra/image-rs",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

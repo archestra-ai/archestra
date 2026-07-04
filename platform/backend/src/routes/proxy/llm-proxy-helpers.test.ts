@@ -72,23 +72,10 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
 });
 
 // Mock metrics
-const mockReportBlockedTools = vi.fn();
-vi.mock("@/observability", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/observability")>();
-  return {
-    ...original,
-    metrics: {
-      ...original.metrics,
-      llm: {
-        ...original.metrics.llm,
-        reportBlockedTools: (...args: unknown[]) =>
-          mockReportBlockedTools(...args),
-      },
-    },
-  };
-});
+vi.mock("@/observability");
 
 // Import after mocks
+import { metrics } from "@/observability";
 import {
   buildInteractionRecord,
   calculateInteractionCosts,
@@ -404,7 +391,6 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 2,
       actualModel: "gpt-4",
       source: "api",
-      externalAgentId: "ext-1",
     });
 
     expect(mockRecordBlockedToolSpans).toHaveBeenCalledWith({
@@ -430,16 +416,14 @@ describe("recordBlockedToolCallMetrics", () => {
       toolCallCount: 1,
       actualModel: "claude-3-opus",
       source: "api",
-      externalAgentId: "ext-2",
     });
 
-    expect(mockReportBlockedTools).toHaveBeenCalledWith(
+    expect(vi.mocked(metrics.llm.reportBlockedTools)).toHaveBeenCalledWith(
       "anthropic",
       agent,
       1,
       "claude-3-opus",
       "api",
-      "ext-2",
     );
   });
 

@@ -8,6 +8,18 @@
       "outputs": [".next/**", "!.next/cache/**", "dist/**", "*.node"],
       "env": ["VERSION"]
     },
+    "@archestra/app-runtime-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@archestra/sandbox-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@archestra/image-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "dev": {
       "persistent": true,
       "cache": false,

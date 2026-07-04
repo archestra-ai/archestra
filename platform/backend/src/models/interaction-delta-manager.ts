@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { TimeInMs } from "@archestra/shared";
+import { isClaudeSessionSource, TimeInMs } from "@archestra/shared";
 import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
@@ -291,10 +291,7 @@ class InteractionDeltaManager {
 
   private static isEligible(data: InsertInteraction): boolean {
     if (data.sessionId == null) return false;
-    if (
-      data.sessionSource !== "claude_code" &&
-      data.sessionSource !== "claude_desktop"
-    ) {
+    if (!isClaudeSessionSource(data.sessionSource ?? null)) {
       return false;
     }
     if (data.type !== "anthropic:messages") return false;
@@ -346,7 +343,14 @@ class InteractionDeltaManager {
           ),
         ),
       )
-      .orderBy(desc(schema.interactionsTable.createdAt))
+      // desc(id) tiebreak: same-instant interactions are common under load,
+      // and new ids are monotonic UUIDv7 — so "most recent candidate" stays
+      // deterministic (and, for fresh rows, truly means insertion order)
+      // instead of flapping between ties across queries.
+      .orderBy(
+        desc(schema.interactionsTable.createdAt),
+        desc(schema.interactionsTable.id),
+      )
       .limit(16);
 
     const chosen = candidates.find(

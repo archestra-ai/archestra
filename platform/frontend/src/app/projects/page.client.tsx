@@ -26,8 +26,9 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { ProjectVisibilityBadge } from "@/components/projects/project-visibility-badge";
+import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -309,8 +311,8 @@ function ProjectCard({
               added only on another member's PERSONAL project (admin oversight),
               where the personal pill alone can't say whose it is — for team/org
               the scope pill already conveys the sharing. */}
-          <ProjectVisibilityBadge
-            visibility={project.visibility}
+          <ScopeBadge
+            scope={projectVisibilityToScope(project.visibility)}
             teamNames={project.shareTeamNames}
           />
           {project.viewerRole === "admin" && project.visibility === null && (
@@ -435,16 +437,11 @@ function CreateProjectDialog({
       title="New project"
       description="Files the agent saves in this project are kept together and show up in your files."
       size="small"
+      isDirty={form.formState.isDirty}
       onSubmit={onSubmit}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button
             type="submit"
             disabled={
@@ -459,7 +456,9 @@ function CreateProjectDialog({
       <div className="flex items-start gap-3">
         <AgentIconPicker
           value={icon}
-          onChange={(next) => form.setValue("icon", next)}
+          onChange={(next) =>
+            form.setValue("icon", next, { shouldDirty: true })
+          }
           fallbackType="project"
         />
         <div className="flex-1 space-y-3 min-w-0">

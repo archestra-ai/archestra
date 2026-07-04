@@ -10,19 +10,15 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
   useKnowledgeBaseConfigStatus: () => mockConfigStatus,
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
-  usePathname: () => "/knowledge/knowledge-bases",
-  useSearchParams: () => new URLSearchParams(),
-}));
+vi.mock("next/navigation");
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
 import { KnowledgePageLayout } from "./knowledge-page-layout";
 
 function renderLayout(isPending = false) {
@@ -45,6 +41,18 @@ function renderLayout(isPending = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue({});
+  vi.mocked(useRouter).mockReturnValue({
+    push: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(usePathname).mockReturnValue("/knowledge/knowledge-bases");
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+  );
   mockIsKnowledgeBaseConfigured = false;
   mockConfigStatus = { embedding: false, reranker: false };
 });

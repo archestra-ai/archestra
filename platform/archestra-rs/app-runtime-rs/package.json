@@ -7,6 +7,7 @@
   "types": "index.d.ts",
   "scripts": {
     "build": "napi build --release --platform",
+    "build:dev": "napi build --profile release-fast --platform",
     "check:ci": "cargo fmt --check --all && cargo check -p app_runtime_core -p app_runtime_rs --locked && cargo test -p app_runtime_core --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
     "check:musl": "cargo test -p app_runtime_core --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
     "lint": "cargo fmt --check --all",
@@ -14,6 +15,9 @@
     "smoke:esm": "node smoke.esm.test.mjs",
     "test": "cargo test -p app_runtime_core --locked",
     "type-check": "cargo check -p app_runtime_core -p app_runtime_rs --locked"
+  },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.4.0"

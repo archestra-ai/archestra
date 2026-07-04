@@ -95,7 +95,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     ).toBe("personal");
 
     // by default non-destructive: the skill persisted, the agent is untouched.
-    const stored = await SkillModel.findByName(
+    const [stored] = await SkillModel.findAllByName(
       organizationId,
       "support-helper",
     );

@@ -48,6 +48,42 @@ export function buildSkillCommands(
   });
 }
 
+/** What the chat page should do with a skill resolved from a `?skillId=` deep link. */
+export type UrlSkillAction =
+  | { kind: "prefill"; text: string }
+  | { kind: "none"; reason: "not_found" | "error" | "unavailable" };
+
+/**
+ * Decide how a `?skillId=` deep link reaches the composer: prefill it with the
+ * skill's slash command (the visible text is the single source of truth —
+ * deleting it detaches the skill).
+ *
+ * The prefill token is looked up in `skillCommands` — the same
+ * collision-disambiguated table submit parsing uses — never re-derived from
+ * the name: "PDF Tools" and "pdf-tools" both slugify to `/pdf-tools`, so a
+ * re-derived token could activate the wrong skill. A skill absent from the
+ * table (skill tools disabled for the org, or beyond the command list's page
+ * size) is "unavailable" — submit parsing could not resolve its token either.
+ */
+export function resolveUrlSkillAction(params: {
+  skill: { id: string; name: string } | null;
+  isError: boolean;
+  skillCommands: SkillCommand[];
+}): UrlSkillAction {
+  const { skill, isError, skillCommands } = params;
+  if (isError) {
+    return { kind: "none", reason: "error" };
+  }
+  if (!skill) {
+    return { kind: "none", reason: "not_found" };
+  }
+  const command = skillCommands.find((c) => c.skill.id === skill.id);
+  if (!command) {
+    return { kind: "none", reason: "unavailable" };
+  }
+  return { kind: "prefill", text: `${command.value} ` };
+}
+
 /**
  * If `text` begins with a known skill command token, return the matched skill
  * and the prompt text that follows it. The token is the run of non-whitespace

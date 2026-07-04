@@ -1,4 +1,13 @@
 import type { archestraApiTypes } from "@archestra/shared";
+// Import runtime values from the leaf `interactions/client` module, not the root
+// barrel: the barrel (`@archestra/shared`) transitively imports a JSON module
+// without an import attribute, which the Playwright integration-test ESM loader
+// rejects. `client.ts` depends only on zod. The `archestraApiTypes` import above
+// is type-only, so it is erased and safe.
+import {
+  CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
+} from "@archestra/shared/interactions/client";
 
 type SessionSummary =
   archestraApiTypes.GetInteractionSessionsResponses["200"]["data"][number];
@@ -119,18 +128,24 @@ export function makeInteraction(
   };
 }
 
-// Seed sessions for the LLM logs list, each with a distinct client/session
-// source and identifiable title, so a query-aware handler can filter them by
-// the `sessionSource` the frontend actually sends.
+// Seed sessions for the LLM logs list. Client attribution lives in
+// `externalAgentIds`; the "Client" filter sends `client=claude` and the
+// query-aware handler matches those rows. Two Claude sessions (header-set
+// `claude code` and auto-discovered `claude`) plus a plain API session.
 export const llmLogsSessionsSeed = [
   makeSessionSummary({
     sessionId: "cc-session",
-    sessionSource: "claude_code",
+    sessionSource: "claude_metadata",
+    externalAgentIds: [CLAUDE_CODE_CLIENT_ID],
     claudeCodeTitle: "Claude Code session title",
   }),
   makeSessionSummary({
     sessionId: "cd-session",
-    sessionSource: "claude_desktop",
+    sessionSource: "claude_metadata",
+    externalAgentIds: [CLAUDE_CLIENT_ID],
+    // Non-api source so the Source + Client filter combo can isolate cc-session.
+    source: "chat",
+    sources: ["chat"],
     claudeCodeTitle: "Claude Desktop session title",
   }),
   makeSessionSummary({

@@ -109,20 +109,20 @@ jobs:
       - name: Generate full license report (on failure)
         if: failure()
         run: |
-          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "❌ License check failed. See details below:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          pnpm license-check 2>&1 | head -100 >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## License Compliance Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "❌ License check failed. See details below:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          pnpm license-check 2>&1 | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add success summary
         if: success()
         run: |
-          echo "## ✅ License Compliance Check Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ License Compliance Check Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "No GPL/AGPL/Unknown licenses found in dependencies." >> "$GITHUB_STEP_SUMMARY"
 
   supply-chain-policy:
     name: Supply Chain Policy
@@ -137,7 +137,9 @@ jobs:
           fetch-depth: 1
 
       - name: Enforce image pinning and download verification policy
-        run: python3 .github/scripts/check-supply-chain-policy.py
+        run: |
+          python3 -m unittest discover -s .github/scripts -p "test_*.py"
+          python3 .github/scripts/check-supply-chain-policy.py
 
   docs-image-policy:
     name: Docs Image Policy
@@ -245,14 +247,6 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        if: ${{ steps.check-release-please.outputs.is-release-please != 'true' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Checkout project for release-please PR
-        if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
@@ -282,38 +276,27 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Setup Rust
-        run: |
-          rustup show
-          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-
-      - name: Install Rust musl toolchain dependencies
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Verify Dagger version sync
-        run: ./scripts/check-dagger-version-sync.sh
-
-      - name: Rust musl checks
-        working-directory: ./platform/archestra-rs
-        env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
-        run: |
-          cargo check --workspace --locked --target x86_64-unknown-linux-musl
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
-
-      - name: Rust dependency policy
-        working-directory: ./platform/archestra-rs
-        run: cargo deny check --config deny.toml advisories bans licenses sources
-
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
       - name: Verify no immature dependencies
         run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
 
+      # Fork PRs run without turbo remote caching (secrets are withheld), so
+      # the Rust NAPI crate builds below actually invoke cargo. Sync the
+      # pinned toolchain (rust-toolchain.toml) serially first — otherwise
+      # turbo's parallel crate builds each trigger a concurrent rustup
+      # download of the same components, which races and fails with
+      # "could not rename downloaded file".
+      - name: Setup Rust
+        run: rustup show
+
+      # Backend unit tests run in the parallel sharded "Backend Unit Tests"
+      # jobs below; here the backend runs check:commit (same checks minus
+      # vitest) so this job stops being serialized behind the largest suite.
       - name: Type checking, linting, formatting, unit tests
-        run: pnpm check:ci
+        run: |
+          pnpm exec turbo check:ci --filter=!@backend
+          pnpm exec turbo check:commit --filter=@backend
 
       # Validates the production build (turbo build: next build + backend build +
       # Rust NAPI) compiles on every push. This replaces the per-push Docker image
@@ -324,11 +307,6 @@ jobs:
       - name: Run validation checks (drizzle-kit, codegen, db migrations)
         env:
           IS_RELEASE_PLEASE_PR: ${{ steps.check-release-please.outputs.is-release-please }}
-          # Generate the full Archestra MCP tool catalog and route surface
-          # (incl. flag-gated app tools and the Projects/My Files routes) so
-          # codegen matches the committed docs/spec; mirrors values-ci.yaml.
-          ARCHESTRA_APPS_ENABLED: "true"
-          ARCHESTRA_PROJECTS_ENABLED: "true"
         run: |
           set -e
 
@@ -396,6 +374,139 @@ jobs:
           fi
 
           echo "✅ All validation checks passed"
+
+  # Rust toolchain checks, split out of the lint job so cargo work runs in
+  # parallel with the pnpm work instead of serializing ~1.5-2 min ahead of it.
+  # Needs no pnpm/setup-env: the Dagger sync script is pure shell and cargo
+  # operates on the committed lockfile.
+  platform-rust-checks:
+    name: Platform Rust Checks
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        run: |
+          rustup show
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: Install Rust musl toolchain dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Verify Dagger version sync
+        run: ./scripts/check-dagger-version-sync.sh
+
+      - name: Rust musl checks
+        working-directory: ./platform/archestra-rs
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          cargo check --workspace --locked --target x86_64-unknown-linux-musl
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny check --config deny.toml advisories bans licenses sources
+
+  # Backend unit tests, sharded across parallel runners. Vitest's --shard
+  # slices the file list deterministically (SHA1 of each path), so the four
+  # jobs partition the suite exactly once. Splitting this out of the lint job
+  # takes the suite off the workflow's critical path.
+  backend-unit-tests:
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # A full local suite run is ~4 min on comparable hardware; a shard is a
+    # quarter of that plus setup. 15 minutes means something is hung.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    strategy:
+      # A failing shard must not cancel its siblings; we want the full
+      # failure picture in one pass.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      # Tests load the Rust NAPI bindings (@archestra/app-runtime-rs etc.),
+      # which `turbo check:ci` builds implicitly via the task graph. Running
+      # vitest directly skips that, so build backend's workspace deps here —
+      # turbo remote caching makes this seconds on a cache hit, and on a hit
+      # no cargo runs, so the pinned Rust toolchain isn't needed at all
+      # (an unconditional `rustup show` cost ~10s per shard). On a miss
+      # (fork PRs run without cache secrets, so cargo really builds), turbo's
+      # parallel crate builds each trigger a concurrent rustup download of
+      # the same toolchain, which races and fails with "could not rename
+      # downloaded file" — so on failure, sync the toolchain serially and
+      # retry once.
+      - name: Build backend workspace dependencies
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
+
+      # --no-memory-protection-keys: V8's PKU-backed JIT-page tracking
+      # (ThreadIsolation) intermittently dies with a fatal
+      # "Check failed: jit_page.has_value()" when WASM (PGlite) runs across
+      # vitest worker threads. The hardware feature only exists on these
+      # Linux runners' CPUs — dev machines never hit it. PKU is a
+      # defense-in-depth hardening for JIT pages, not a correctness feature,
+      # so disabling it for the test run is safe. NODE_OPTIONS disallows the
+      # flag, hence invoking the vitest entry through node directly.
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
+        working-directory: ./platform/backend
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node --no-memory-protection-keys node_modules/vitest/vitest.mjs run --shard="${SHARD}/4"
+
+  # Stable-named gate over the shard matrix so branch protection / merge queue
+  # can require a single check ("Backend Unit Tests") regardless of shard count.
+  backend-unit-tests-gate:
+    name: Backend Unit Tests
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    if: always()
+    needs: [backend-unit-tests]
+    permissions: {}
+    steps:
+      - name: Check shard results
+        env:
+          SHARDS_RESULT: ${{ needs.backend-unit-tests.result }}
+        run: |
+          if [ "$SHARDS_RESULT" != "success" ]; then
+            echo "::error::One or more backend unit test shards failed (result: $SHARDS_RESULT)."
+            exit 1
+          fi
+          echo "✅ All backend unit test shards passed."
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)

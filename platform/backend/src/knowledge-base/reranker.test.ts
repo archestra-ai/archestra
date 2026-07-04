@@ -1,17 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
+import { createOpenAI } from "@ai-sdk/openai";
+import { HttpResponse, http } from "msw";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VectorSearchResult } from "@/models/kb-chunk";
+import { useMswServer } from "@/test/msw";
 import rerank from "./reranker";
+
+const TEST_BASE_URL = "https://llm.test/v1";
 
 const mockResolveRerankerConfig = vi.hoisted(() => vi.fn());
 vi.mock("./kb-llm-client", () => ({
   resolveRerankerConfig: mockResolveRerankerConfig,
 }));
 
-const mockGenerateObject = vi.hoisted(() => vi.fn());
+let server: ReturnType<typeof useMswServer>;
 
-vi.mock("ai", () => ({
-  generateObject: mockGenerateObject,
-}));
+// Tracks how many chat/completions requests the real AI SDK actually made, so
+// the "no LLM call" cases can assert the boundary was never hit (MSW would also
+// fail the test loudly on any unhandled request).
+let chatCompletionCalls = 0;
 
 function makeChunk(id: string, content: string): VectorSearchResult {
   return {
@@ -27,14 +33,59 @@ function makeChunk(id: string, content: string): VectorSearchResult {
   };
 }
 
+function chatCompletion(content: string) {
+  return HttpResponse.json({
+    id: "chatcmpl-test",
+    object: "chat.completion",
+    created: 0,
+    model: "gpt-4o",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+  });
+}
+
+// Serve the reranker's structured-output call. Pass a JSON string for the
+// object the SDK should surface, or `{ fail: true }` to make the provider
+// return a non-retryable error (replaces the old rejected generateObject mock).
+function serveScores(content: string | { fail: true }) {
+  server.use(
+    http.post(`${TEST_BASE_URL}/chat/completions`, () => {
+      chatCompletionCalls++;
+      if (typeof content !== "string") {
+        return HttpResponse.json(
+          { error: { message: "API error" } },
+          { status: 400 },
+        );
+      }
+      return chatCompletion(content);
+    }),
+  );
+}
+
 function setupRerankerConfig() {
   mockResolveRerankerConfig.mockResolvedValue({
-    llmModel: "mock-model",
+    llmModel: createOpenAI({
+      baseURL: TEST_BASE_URL,
+      apiKey: "test-key",
+    }).chat("gpt-4o"),
     modelName: "gpt-4o",
+    provider: "openai",
   });
 }
 
 describe("rerank", () => {
+  server = useMswServer();
+
+  beforeEach(() => {
+    chatCompletionCalls = 0;
+  });
+
   it("reorders chunks based on LLM scores", async () => {
     setupRerankerConfig();
     const chunks = [
@@ -43,15 +94,15 @@ describe("rerank", () => {
       makeChunk("c", "medium relevance"),
     ];
 
-    mockGenerateObject.mockResolvedValueOnce({
-      object: {
+    serveScores(
+      JSON.stringify({
         scores: [
           { index: 0, score: 4 },
           { index: 1, score: 9 },
           { index: 2, score: 5 },
         ],
-      },
-    });
+      }),
+    );
 
     const result = await rerank({
       queryText: "test query",
@@ -70,15 +121,15 @@ describe("rerank", () => {
       makeChunk("c", "also irrelevant"),
     ];
 
-    mockGenerateObject.mockResolvedValueOnce({
-      object: {
+    serveScores(
+      JSON.stringify({
         scores: [
           { index: 0, score: 1 },
           { index: 1, score: 8 },
           { index: 2, score: 2 },
         ],
-      },
-    });
+      }),
+    );
 
     const result = await rerank({
       queryText: "test query",
@@ -93,7 +144,7 @@ describe("rerank", () => {
     setupRerankerConfig();
     const chunks = [makeChunk("a", "first"), makeChunk("b", "second")];
 
-    mockGenerateObject.mockRejectedValueOnce(new Error("API error"));
+    serveScores({ fail: true });
 
     const result = await rerank({
       queryText: "test query",
@@ -112,7 +163,7 @@ describe("rerank", () => {
     });
 
     expect(result).toEqual([]);
-    expect(mockGenerateObject).not.toHaveBeenCalled();
+    expect(chatCompletionCalls).toBe(0);
   });
 
   it("returns original order when no reranker config is available", async () => {
@@ -126,6 +177,6 @@ describe("rerank", () => {
     });
 
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
-    expect(mockGenerateObject).not.toHaveBeenCalled();
+    expect(chatCompletionCalls).toBe(0);
   });
 });

@@ -55,25 +55,14 @@ let mockOrganization: Record<string, unknown> | null = null;
 let mockOrgPending = false;
 let mockUpdateKnowledgeSettings = vi.fn();
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => ({
-    data: mockOrganization,
-    isPending: mockOrgPending,
-  }),
-  useUpdateKnowledgeSettings: () => ({
-    mutateAsync: mockUpdateKnowledgeSettings,
-    isPending: false,
-  }),
-  useTestEmbeddingConnection: () => ({
-    mutateAsync: vi.fn(),
-    mutate: vi.fn(),
-    isPending: false,
-  }),
-  useDropEmbeddingConfig: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
+vi.mock("@/lib/organization.query");
+
+import {
+  useDropEmbeddingConfig,
+  useOrganization,
+  useTestEmbeddingConnection,
+  useUpdateKnowledgeSettings,
+} from "@/lib/organization.query";
 
 let mockApiKeys: Array<{
   id: string;
@@ -128,14 +117,14 @@ vi.mock("@/lib/llm-models.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: () => false,
-  useEnterpriseFeature: () => false,
-  useSmallTeamTier: () => undefined,
-  useProviderBaseUrls: () => ({
-    data: {},
-  }),
-}));
+vi.mock("@/lib/config/config.query");
+
+import {
+  useEnterpriseFeature,
+  useFeature,
+  useProviderBaseUrls,
+  useSmallTeamTier,
+} from "@/lib/config/config.query";
 
 vi.mock("@/lib/team.query", () => ({
   useTeams: () => ({
@@ -144,21 +133,16 @@ vi.mock("@/lib/team.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => ({ data: true, isPending: false }),
-  useMissingPermissions: () => [],
-}));
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/clients/auth/auth-client", () => ({
-  authClient: {
-    useSession: vi.fn().mockReturnValue({
-      data: {
-        user: { id: "test-user", email: "test@example.com" },
-        session: { id: "test-session" },
-      },
-    }),
-  },
-}));
+import {
+  useHasPermissions,
+  useMissingPermissions,
+} from "@/lib/auth/auth.query";
+
+vi.mock("@/lib/clients/auth/auth-client");
+
+import { authClient } from "@/lib/clients/auth/auth-client";
 
 // Need to import after mocks are set up
 import KnowledgeSettingsPage from "./page";
@@ -200,6 +184,54 @@ beforeEach(() => {
       embeddingDimensions: 1536,
     },
   ];
+
+  vi.mocked(useOrganization).mockImplementation(
+    () =>
+      ({
+        data: mockOrganization,
+        isPending: mockOrgPending,
+      }) as unknown as ReturnType<typeof useOrganization>,
+  );
+  vi.mocked(useUpdateKnowledgeSettings).mockImplementation(
+    () =>
+      ({
+        mutateAsync: mockUpdateKnowledgeSettings,
+        isPending: false,
+      }) as unknown as ReturnType<typeof useUpdateKnowledgeSettings>,
+  );
+  vi.mocked(useTestEmbeddingConnection).mockReturnValue({
+    mutateAsync: vi.fn(),
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useTestEmbeddingConnection>);
+  vi.mocked(useDropEmbeddingConfig).mockReturnValue({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useDropEmbeddingConfig>);
+
+  vi.mocked(useFeature).mockReturnValue(
+    false as unknown as ReturnType<typeof useFeature>,
+  );
+  vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+  vi.mocked(useSmallTeamTier).mockReturnValue(undefined);
+  vi.mocked(useProviderBaseUrls).mockReturnValue({
+    data: {},
+  } as unknown as ReturnType<typeof useProviderBaseUrls>);
+
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: true,
+    isPending: false,
+  } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useMissingPermissions).mockReturnValue(
+    [] as unknown as ReturnType<typeof useMissingPermissions>,
+  );
+
+  vi.mocked(authClient.useSession).mockReturnValue({
+    data: {
+      user: { id: "test-user", email: "test@example.com" },
+      session: { id: "test-session" },
+    },
+  } as unknown as ReturnType<typeof authClient.useSession>);
 });
 
 describe("KnowledgeSettingsPage", () => {

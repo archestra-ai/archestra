@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import {
   AlertTriangle,
   ChevronDown,
+  Info,
   KeyRound,
   PlugZap,
   Plus,
@@ -49,6 +50,11 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -74,6 +80,7 @@ import { useInitiateOAuth } from "@/lib/auth/oauth.query";
 import {
   setOAuthCatalogId,
   setOAuthMcpServerId,
+  setOAuthReturnUrl,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
 import {
@@ -297,11 +304,18 @@ export function ManageUsersContent({
       setOAuthState(state);
       setOAuthCatalogId(catalogItem.id);
 
+      // Remember where re-authentication started so the callback returns here
+      setOAuthReturnUrl(window.location.href);
+
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
-    } catch {
+    } catch (error) {
       setOAuthMcpServerId(null);
-      toast.error("Failed to initiate re-authentication");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to initiate re-authentication",
+      );
     }
   };
 
@@ -898,15 +912,39 @@ function UnifiedConnectionsTable({
                   </TooltipProvider>
                 )}
                 {isOAuthServer && server.oauthRefreshError && (
-                  <p
-                    className="mb-2 break-words text-[11px] leading-tight text-destructive"
+                  <div
+                    className="mb-2 flex items-start gap-1 text-[11px] leading-tight text-destructive"
                     data-testid="oauth-reauth-detail"
                   >
-                    {formatOAuthFailureDetail(
-                      server.oauthRefreshErrorMessage,
-                      server.oauthRefreshFailedAt,
+                    <p className="min-w-0 break-words">
+                      {formatOAuthFailureDetail(
+                        server.oauthRefreshErrorMessage,
+                        server.oauthRefreshFailedAt,
+                      )}
+                    </p>
+                    {server.oauthRefreshErrorDescription && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
+                            aria-label="Show OAuth error details"
+                            data-testid="oauth-reauth-detail-info"
+                          >
+                            <Info className="h-3 w-3" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-80 whitespace-pre-wrap break-words text-xs"
+                        >
+                          {server.oauthRefreshErrorDescription}
+                        </PopoverContent>
+                      </Popover>
                     )}
-                  </p>
+                  </div>
                 )}
                 <TooltipProvider>
                   <Tooltip>

@@ -24,6 +24,7 @@ import {
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
+import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import config from "@/config";
 import logger from "@/logging";
@@ -33,6 +34,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
@@ -120,8 +122,6 @@ export interface LLMProxyContext<TRequest> {
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
-  globalToolPolicy: "permissive" | "restrictive";
-  discoveredToolPolicy: "relaxed" | "apply_policies";
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -179,6 +179,20 @@ function getProviderMessagesCount(messages: unknown): number | null {
 }
 
 /**
+ * The subset of a proxied request body we read for session-id and client-app
+ * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
+ * → `system`/`metadata`; `extractSessionInfo` → `metadata`/`user`), so one
+ * shared view keeps the cast in a single place.
+ */
+type RequestBodyForExtraction =
+  | {
+      system?: unknown;
+      metadata?: { user_id?: string | null };
+      user?: string | null;
+    }
+  | undefined;
+
+/**
  * Generic LLM proxy handler that works with any provider through adapters
  */
 export async function handleLLMProxy<
@@ -202,8 +216,13 @@ export async function handleLLMProxy<
     string,
     string | string[] | undefined
   >;
+  const bodyForExtraction = body as RequestBodyForExtraction;
+  // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
+  // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
+  // app from the request and record it (Claude clients → "anthropic_claude").
   const externalAgentId =
-    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction);
+    utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -229,12 +248,7 @@ export async function handleLLMProxy<
   const { sessionId, sessionSource } =
     utils.headers.sessionId.extractSessionInfo(
       headersForExtraction,
-      body as
-        | {
-            metadata?: { user_id?: string | null };
-            user?: string | null;
-          }
-        | undefined,
+      bodyForExtraction,
     );
 
   // Extract interaction source (chat, chatops, email, etc.)
@@ -602,11 +616,18 @@ export async function handleLLMProxy<
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
-      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
-      return reply.status(429).send({
+      // Preserve the proxy-compatible error envelope so chat clients can read
+      // structured limit metadata. This is Archestra budget enforcement, not the
+      // provider throttling traffic, so it must not look like a rate limit:
+      // a 429 makes every LLM SDK auto-retry a block that cannot clear on retry,
+      // and makes clients frame it as a provider limit ("not your usage limit").
+      // 402 Payment Required is non-retryable in all SDKs and semantically a
+      // budget stop. The Archestra-specific `type` plus the stable `code` keep
+      // structured detection working.
+      return reply.status(402).send({
         error: {
           message: contentMessage,
-          type: "rate_limit_exceeded",
+          type: "usage_limit_exceeded",
           code: "token_cost_limit_exceeded",
           usage_limit: limitMetadata
             ? {
@@ -622,6 +643,12 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Limit check passed`,
     );
 
+    // Resolve the agent's organization once, to apply its configured default
+    // discovered-tool guardrails to any tools persisted below.
+    const organization = await OrganizationModel.getById(
+      resolvedAgent.organizationId,
+    );
+
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
       const tools = requestAdapter.getTools();
@@ -630,6 +657,8 @@ export async function handleLLMProxy<
           { toolCount: tools.length },
           `[${providerName}Proxy] Processing tools from request`,
         );
+        // Apply the org's configured default policies to every newly
+        // discovered tool persisted below.
         await utils.tools.persistTools(
           tools.map((t) => ({
             toolName: t.name,
@@ -637,6 +666,13 @@ export async function handleLLMProxy<
             toolDescription: t.description,
           })),
           resolvedAgentId,
+          organization
+            ? {
+                invocationAction:
+                  organization.defaultDiscoveredToolInvocationPolicy,
+                resultAction: organization.defaultDiscoveredToolResultPolicy,
+              }
+            : undefined,
         );
       }
     }
@@ -703,12 +739,6 @@ export async function handleLLMProxy<
       }
     };
 
-    // Get tool policies from organization (with fallback) - globalToolPolicy is
-    // needed for both trusted data and tool invocation; discoveredToolPolicy
-    // governs llm-proxy discovered tools during tool-invocation evaluation.
-    const { globalToolPolicy, discoveredToolPolicy } =
-      await utils.toolInvocation.getToolPolicies(resolvedAgentId);
-
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.
     const teams =
@@ -729,7 +759,6 @@ export async function handleLLMProxy<
         resolvedAgentId,
         considerContextUntrusted: resolvedAgent.considerContextUntrusted,
         inheritedContextUntrusted,
-        globalToolPolicy,
       },
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
@@ -753,7 +782,6 @@ export async function handleLLMProxy<
       resolvedAgent.organizationId,
       userId,
       effectiveConsiderContextUntrusted,
-      globalToolPolicy,
       { teamIds, externalAgentId },
       // Streaming callbacks for dual LLM progress
       requestAdapter.isStreaming()
@@ -908,7 +936,6 @@ export async function handleLLMProxy<
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
       agent: resolvedAgent,
-      externalAgentId,
       source,
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
@@ -941,8 +968,6 @@ export async function handleLLMProxy<
       actualModel,
       contextIsTrusted,
       enabledToolNames,
-      globalToolPolicy,
-      discoveredToolPolicy,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -964,6 +989,10 @@ export async function handleLLMProxy<
       userTeams,
     };
 
+    // handleStreaming is self-contained: it persists its own failed-interaction
+    // record and routes errors through handleError before its promise settles,
+    // so it returns a bare promise (awaiting it here would double-persist via
+    // the catch below).
     if (requestAdapter.isStreaming()) {
       return handleStreaming(
         client,
@@ -974,9 +1003,14 @@ export async function handleLLMProxy<
         ctx,
         ensureStreamHeaders,
       );
-    } else {
-      return handleNonStreaming(client, finalRequest, reply, provider, ctx);
     }
+    // `return await`, not `return`: handleNonStreaming relies on THIS catch for
+    // provider failures. A bare `return promise` inside try/catch lets the
+    // rejection bypass the catch entirely — upstream failures then skip
+    // handleError's status mapping (clients get a generic 500 instead of the
+    // provider's 429/404/…), skip the failed-interaction record, and get
+    // captured as unhandled server exceptions.
+    return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     // Persist failed interactions so they appear in LLM logs
     try {
@@ -1049,8 +1083,6 @@ async function handleStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
-    globalToolPolicy,
-    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1128,7 +1160,6 @@ async function handleStreaming<
               actualModel,
               ttftSeconds,
               source,
-              externalAgentId,
             );
           }
 
@@ -1144,8 +1175,10 @@ async function handleStreaming<
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
           } else if (result.isToolCallChunk) {
-            // Determine if the current tool call should be streamed
-            let shouldStream = globalToolPolicy === "permissive";
+            // Determine if the current tool call should be streamed.
+            // Tools with no blocking policy stream immediately for low latency;
+            // tools with blocking policies buffer until evaluation completes.
+            let shouldStream = false;
             if (!shouldStream && !bufferAllToolCalls) {
               const currentToolCall =
                 streamAdapter.state.toolCalls[
@@ -1316,8 +1349,7 @@ async function handleStreaming<
         },
         contextIsTrusted,
         enabledToolNames,
-        globalToolPolicy,
-        discoveredToolPolicy,
+        { surface: "llm-proxy", sessionId: sessionId ?? undefined },
       );
 
       logger.info(
@@ -1352,7 +1384,6 @@ async function handleStreaming<
         toolCallCount: toolCalls.length,
         actualModel,
         source,
-        externalAgentId,
       });
     } else if (
       toolCalls.length > 0 &&
@@ -1447,7 +1478,6 @@ async function handleStreaming<
           },
           actualModel,
           source,
-          externalAgentId,
         );
 
         if (usage.outputTokens && firstChunkTime) {
@@ -1459,7 +1489,6 @@ async function handleStreaming<
             usage.outputTokens,
             totalDurationSeconds,
             source,
-            externalAgentId,
           );
         }
       });
@@ -1478,7 +1507,6 @@ async function handleStreaming<
           actualModel,
           costs.actualCost,
           source,
-          externalAgentId,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1489,7 +1517,6 @@ async function handleStreaming<
             cacheReadSavings: costs.cacheReadSavings,
           },
           source,
-          externalAgentId,
         );
       });
 
@@ -1557,8 +1584,6 @@ async function handleNonStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
-    globalToolPolicy,
-    discoveredToolPolicy,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1714,8 +1739,7 @@ async function handleNonStreaming<
       },
       contextIsTrusted,
       enabledToolNames,
-      globalToolPolicy,
-      discoveredToolPolicy,
+      { surface: "llm-proxy", sessionId: sessionId ?? undefined },
     );
 
     if (toolInvocationRefusal) {
@@ -1743,7 +1767,6 @@ async function handleNonStreaming<
         toolCallCount: toolCalls.length,
         actualModel,
         source,
-        externalAgentId,
       });
 
       // Record interaction with refusal (usage already corrected above)
@@ -1761,7 +1784,6 @@ async function handleNonStreaming<
           actualModel,
           costs.actualCost,
           source,
-          externalAgentId,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1772,7 +1794,6 @@ async function handleNonStreaming<
             cacheReadSavings: costs.cacheReadSavings,
           },
           source,
-          externalAgentId,
         );
       });
 
@@ -1821,7 +1842,6 @@ async function handleNonStreaming<
   //   { input: usage.inputTokens, output: usage.outputTokens },
   //   actualModel,
   //   source,
-  //   externalAgentId,
   // );
 
   const costs = await calculateInteractionCosts({
@@ -1838,7 +1858,6 @@ async function handleNonStreaming<
       actualModel,
       costs.actualCost,
       source,
-      externalAgentId,
     );
     metrics.llm.reportLLMCacheCost(
       providerName,
@@ -1846,7 +1865,6 @@ async function handleNonStreaming<
       actualModel,
       { cacheCost: costs.cacheCost, cacheReadSavings: costs.cacheReadSavings },
       source,
-      externalAgentId,
     );
   });
 
@@ -1930,6 +1948,7 @@ function shouldUseKeylessProviderApiKey(params: {
   return isProviderApiKeyOptional({
     provider: row.provider,
     azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
   });
 }
 

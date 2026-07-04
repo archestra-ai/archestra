@@ -30,6 +30,7 @@ Load these project skills when the task matches their domain:
 
 - `archestra-dev-frontend` - use for frontend Next.js/React work, UI components, forms, TanStack Query hooks, generated API clients, white-label copy, and docs links.
 - `archestra-dev-migrations` - use for Drizzle schema changes, generated migrations, data migrations, custom migrations, `drizzle-kit check` failures, or migration conflict resolution via its `resolve-conflicts.md` subpage.
+- `archestra-dev-backend-tests` - use for backend unit tests (`backend/src/**/*.test.ts`): module mocking rules, global stubs, DB fixtures, vitest projects/isolation, test performance.
 - `archestra-dev-e2e` - use for Playwright e2e tests, API/UI fixtures, WireMock setup, local/CI e2e behavior, and locator guidance.
 - `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
 - `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
@@ -145,6 +146,7 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
 - **Schema Files**: Auth schemas in separate files: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
+- **Dev auto-login (skip the login screen)**: For local development, set `ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL` in your `.env` (e.g. `admin@example.com`, the seeded admin) to have the app auto-mint a real session for that user on load instead of showing the sign-in form. Ignored in production (`NODE_ENV=production`/`prod`); RBAC is unchanged (ordinary session for that user). Backed by the `dev-auto-login` Better Auth plugin (`backend/src/auth/dev-auto-login.ts`) exposing `POST /api/auth/dev-auto-login`, gated behind the `devAutoLoginEnabled` public-config flag.
 
 ## Dependency Security
 
@@ -275,7 +277,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `standalone-scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
 - **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
-- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing
+- **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing. For module mocking and global stubs, load the `archestra-dev-backend-tests` skill: mock-free files run in a shared-worker fast path, `@/auth`/`@/logging` mocks go through their `__mocks__` dirs (bare `vi.mock("@/auth")`), `@/config` through `configModuleMock(overrides)`, and `vi.stubGlobal` must be (re-)applied in `beforeEach` because stubs auto-revert after every test
 - **API Response Standardization**: Use `constructResponseSchema` helper for all routes to ensure consistent error responses (400, 401, 403, 404, 500)
 - **Error Handling**: Always use `throw new ApiError(statusCode, message)` for error responses - never use manual `reply.status().send({ error: ... })`. The centralized Fastify error handler formats all errors consistently as `{ error: { message, type } }` and logs appropriately.
 - **Protected Routes & Authentication**: Routes under `/api/` are protected by the auth middleware which guarantees `request.user` and `request.organizationId` exist. Never add redundant null checks like `if (!request.organizationId) throw new ApiError(401, "Unauthorized")` - just use `request.organizationId` directly. The middleware handles authentication; routes handle authorization and business logic.
@@ -412,7 +414,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Testing**:
 
-- **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
+- **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing. Load the `archestra-dev-backend-tests` skill for mocking/stub/isolation rules — files without `vi.mock` run in a faster shared-worker vitest project, so prefer boundary mocks over module mocks
 - **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
 - **E2E Tests**: Load the `archestra-dev-e2e` skill for Playwright tests, fixtures, WireMock setup, local/CI behavior, and locator guidance.
 - **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`

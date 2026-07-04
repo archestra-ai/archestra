@@ -64,6 +64,14 @@ inputs:
     description: "Pre-built MCP server base image tag to load into Kind. If provided, skips building the image."
     required: false
     default: ""
+  image-pull-timeout-seconds:
+    description: |
+      How long to wait for the platform / MCP server base images to become pullable before failing.
+      With a value > 0, callers may start this action while the image build job is still running:
+      all image-independent setup (Kind cluster, dependency images) happens first, then the pull
+      step polls the registry until the freshly pushed image appears. 0 = single pull attempt.
+    required: false
+    default: "0"
   extra-helm-set:
     description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
     required: false
@@ -96,20 +104,6 @@ runs:
         turbo-team: ${{ inputs.turbo-team }}
         turbo-token: ${{ inputs.turbo-token }}
 
-    - name: Pull Docker image (if not already present)
-      if: ${{ inputs.build-platform-image != 'true' }}
-      shell: bash
-      env:
-        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
-      run: |
-        # Check if image already exists locally (e.g., loaded from artifact)
-        if docker image inspect "${PLATFORM_IMAGE_TAG}" > /dev/null 2>&1; then
-          echo "Image ${PLATFORM_IMAGE_TAG} already exists locally, skipping pull"
-        else
-          echo "Pulling image ${PLATFORM_IMAGE_TAG} from registry..."
-          docker pull "${PLATFORM_IMAGE_TAG}"
-        fi
-
     - name: Cache MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       id: cache-oauth-image
@@ -134,44 +128,182 @@ runs:
         path: /tmp/mcp-id-jag-server.tar
         key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
 
-    - name: Pull MCP example OAuth server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit != 'true' }}
+    # Fetch all three MCP dependency images concurrently. On a cache hit we
+    # `docker load` the tarball; on a miss we pull from the registry and save the
+    # tarball for the actions/cache post-job upload. These pulls previously ran as
+    # three serial steps (~45s wall-clock on a cold cache); doing them in parallel
+    # collapses that to the slowest single image (~25s).
+    - name: Fetch MCP dependency images (parallel)
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       shell: bash
+      env:
+        OAUTH_CACHE_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
+        JWKS_CACHE_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
+        ID_JAG_CACHE_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
       run: |
         MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-        docker pull "${MCP_OAUTH_IMAGE}"
-        docker save "${MCP_OAUTH_IMAGE}" > /tmp/mcp-oauth-server.tar
-
-    - name: Pull MCP JWKS server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit != 'true' }}
-      shell: bash
-      run: |
         MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-        docker pull "${MCP_JWKS_IMAGE}"
-        docker save "${MCP_JWKS_IMAGE}" > /tmp/mcp-jwks-server.tar
-
-    - name: Pull MCP ID-JAG server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit != 'true' }}
-      shell: bash
-      run: |
         MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
-        docker pull "${MCP_ID_JAG_IMAGE}"
-        docker save "${MCP_ID_JAG_IMAGE}" > /tmp/mcp-id-jag-server.tar
 
-    - name: Load cached MCP example OAuth server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-oauth-image.outputs.cache-hit == 'true' }}
-      shell: bash
-      run: docker load < /tmp/mcp-oauth-server.tar
+        # fetch_image <cache-hit> <image-ref> <tarball-path>
+        # Loads from the cached tarball on a hit, otherwise pulls and re-saves it.
+        fetch_image() {
+          local cache_hit="$1" image="$2" tarball="$3"
+          if [ "${cache_hit}" = "true" ]; then
+            echo "Loading cached image ${image} from ${tarball}..."
+            docker load < "${tarball}"
+          else
+            echo "Pulling image ${image}..."
+            docker pull "${image}"
+            docker save "${image}" > "${tarball}"
+          fi
+        }
 
-    - name: Load cached MCP JWKS server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-jwks-image.outputs.cache-hit == 'true' }}
-      shell: bash
-      run: docker load < /tmp/mcp-jwks-server.tar
+        PIDS=()
+        fetch_image "${OAUTH_CACHE_HIT}" "${MCP_OAUTH_IMAGE}" /tmp/mcp-oauth-server.tar &
+        PIDS+=($!)
+        fetch_image "${JWKS_CACHE_HIT}" "${MCP_JWKS_IMAGE}" /tmp/mcp-jwks-server.tar &
+        PIDS+=($!)
+        fetch_image "${ID_JAG_CACHE_HIT}" "${MCP_ID_JAG_IMAGE}" /tmp/mcp-id-jag-server.tar &
+        PIDS+=($!)
 
-    - name: Load cached MCP ID-JAG server image
-      if: ${{ inputs.deploy-e2e-dependencies == 'true' && steps.cache-id-jag-image.outputs.cache-hit == 'true' }}
+        echo "Waiting for all MCP dependency image fetches to complete..."
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more MCP dependency image fetches failed"
+          exit 1
+        fi
+        echo "All MCP dependency images fetched successfully"
+
+    # Deploy the platform-image-INDEPENDENT e2e dependency stack (Vault,
+    # Keycloak, WireMock, MCP servers) HERE — before the platform image wait
+    # below — so it comes up while the image build is still running instead of
+    # adding to the merge-queue critical path after. The dependency images were
+    # just pulled into the daemon above, so load them into Kind and install the
+    # chart now. Vault in particular gates the platform pod (its vault-secrets
+    # init container), so having it Ready before the platform chart installs
+    # shortens the post-build path.
+    #
+    # Only the foreground+deps path (the merge-queue shards) takes this branch;
+    # the "background" install mode keeps deploying inside "Deploy with Helm"
+    # (see below), and "Load all images into Kind" / "Deploy with Helm" both
+    # skip the dependency work they would otherwise repeat for this path.
+    - name: Deploy e2e dependencies (overlaps platform image build)
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
       shell: bash
-      run: docker load < /tmp/mcp-id-jag-server.tar
+      env:
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+        E2E_DEPS_EXTRA_HELM_SET: ${{ inputs.e2e-dependencies-extra-helm-set }}
+        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
+      run: |
+        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+
+        echo "Loading MCP dependency images into Kind (parallel)..."
+        PIDS=()
+        for img in "${MCP_OAUTH_IMAGE}" "${MCP_JWKS_IMAGE}" "${MCP_ID_JAG_IMAGE}"; do
+          kind load docker-image "${img}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        done
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then FAILED=1; fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more MCP dependency image loads into Kind failed"
+          exit 1
+        fi
+
+        # Build --set flags from comma-separated pairs (mirrors "Deploy with Helm").
+        E2E_DEPS_SET_FLAGS=""
+        if [ -n "${E2E_DEPS_EXTRA_HELM_SET}" ]; then
+          IFS=',' read -ra PAIRS <<< "${E2E_DEPS_EXTRA_HELM_SET}"
+          for pair in "${PAIRS[@]}"; do
+            E2E_DEPS_SET_FLAGS="${E2E_DEPS_SET_FLAGS} --set ${pair}"
+          done
+        fi
+
+        echo "Installing e2e-tests chart (overlapping the platform image build)..."
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
+
+        if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+          echo "Waiting for Vault pod before platform deploy..."
+          if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+            echo "=== Vault Pod Status ==="
+            kubectl get pods -l app=vault -o wide || true
+            echo "=== Vault Pod Describe ==="
+            kubectl describe pod -l app=vault || true
+            echo "=== Vault Pod Logs ==="
+            kubectl logs -l app=vault --tail=200 || true
+            echo "=== Vault Pod Previous Logs ==="
+            kubectl logs -l app=vault --previous --tail=200 || true
+            exit 1
+          fi
+        fi
+
+    # Deliberately placed AFTER the Kind cluster, MCP dependency image setup, and
+    # (for the merge-queue shards) the e2e dependency deploy above: everything
+    # there is independent of the platform image, so when the caller starts this
+    # action while the platform image build is still running (see
+    # image-pull-timeout-seconds), that work overlaps with the build and the
+    # wait below only covers whatever build time is actually left.
+    - name: Wait for and pull images (if not already present)
+      if: ${{ inputs.build-platform-image != 'true' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        PULL_TIMEOUT_SECONDS: ${{ inputs.image-pull-timeout-seconds }}
+      run: |
+        # Pull an image unless it is already in the local daemon (e.g. loaded
+        # from a build artifact on fork PRs). Retries until the deadline so the
+        # image build may still be in flight when this step starts.
+        wait_and_pull() {
+          local image="$1"
+          if docker image inspect "${image}" > /dev/null 2>&1; then
+            echo "Image ${image} already exists locally, skipping pull"
+            return 0
+          fi
+          local deadline=$(( $(date +%s) + PULL_TIMEOUT_SECONDS ))
+          while true; do
+            if docker pull "${image}"; then
+              return 0
+            fi
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for ${image} to become pullable"
+              return 1
+            fi
+            echo "Image ${image} not available yet, retrying in 10s..."
+            sleep 10
+          done
+        }
+
+        PIDS=()
+        wait_and_pull "${PLATFORM_IMAGE_TAG}" &
+        PIDS+=($!)
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          wait_and_pull "${MCP_SERVER_BASE_IMAGE_TAG}" &
+          PIDS+=($!)
+        fi
+
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more image pulls failed"
+          exit 1
+        fi
 
     - name: Load all images into Kind in parallel
       shell: bash
@@ -180,6 +312,7 @@ runs:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        E2E_DEPS_INSTALL_MODE: ${{ inputs.e2e-dependencies-install-mode }}
       run: |
         PIDS=()
 
@@ -193,7 +326,10 @@ runs:
           PIDS+=($!)
         fi
 
-        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+        # The foreground path already loaded the MCP dependency images into Kind
+        # in "Deploy e2e dependencies (overlaps platform image build)" above, so
+        # only the background path needs to load them here.
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ] && [ "${E2E_DEPS_INSTALL_MODE}" != "foreground" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
           MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
@@ -276,15 +412,10 @@ runs:
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           if [ "${E2E_DEPS_INSTALL_MODE}" = "foreground" ]; then
-            echo "Installing e2e-tests chart before platform deploy..."
-            install_e2e_dependencies
-            if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
-              echo "Waiting for Vault pod before platform deploy..."
-              if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
-                show_vault_diagnostics
-                exit 1
-              fi
-            fi
+            # Already installed (and Vault already waited on) in the earlier
+            # "Deploy e2e dependencies (overlaps platform image build)" step, so
+            # the release exists before we get here — nothing to do.
+            echo "e2e-tests chart already deployed earlier (overlapped the image build); skipping."
           else
             echo "Starting e2e-tests Helm install in background..."
             install_e2e_dependencies &
@@ -336,6 +467,19 @@ runs:
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
         E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
       run: |
+        # Redefined here: shell functions from the "Deploy with Helm" step do
+        # not survive into this step (each composite run block is its own shell).
+        show_vault_diagnostics() {
+          echo "=== Vault Pod Status ==="
+          kubectl get pods -l app=vault -o wide || true
+          echo "=== Vault Pod Describe ==="
+          kubectl describe pod -l app=vault || true
+          echo "=== Vault Pod Logs ==="
+          kubectl logs -l app=vault --tail=200 || true
+          echo "=== Vault Pod Previous Logs ==="
+          kubectl logs -l app=vault --previous --tail=200 || true
+        }
+
         echo "Waiting for platform pods to be ready..."
         kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
         echo "Platform pods are ready"

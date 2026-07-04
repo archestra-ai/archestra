@@ -3,23 +3,12 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
+import { CREDENTIAL_PROVIDER_ID } from "@/constants";
 import { enterpriseTier } from "@/enterprise-tier";
 
-// The logger is a Proxy at runtime — vi.spyOn can't intercept its properties.
-// Replace the module with a plain mock object so individual tests can assert on it.
-const logErrorFn = vi.hoisted(() => vi.fn());
-vi.mock("@/logging", () => ({
-  default: {
-    error: logErrorFn,
-    info: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-    trace: vi.fn(),
-    fatal: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  },
-}));
+vi.mock("@/logging");
 
+import logger from "@/logging";
 import {
   AccountModel,
   MemberModel,
@@ -622,7 +611,7 @@ describe("handleAfterHook", () => {
       const user = await makeUser({ email: "person@other.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
-      await makeAccount(user.id, { providerId: "credential" });
+      await makeAccount(user.id, { providerId: CREDENTIAL_PROVIDER_ID });
       await makeIdentityProvider(org.id, {
         providerId: "google-workspace",
         domain: "example.com",
@@ -2478,8 +2467,8 @@ describe("auth event audit logging", () => {
     await expect(handleAfterHook(ctx)).resolves.not.toThrow();
 
     await waitForAuditWrite();
-    // logErrorFn is the module-level mock for logger.error — verify it was called.
-    expect(logErrorFn).toHaveBeenCalled();
+    // Verify logger.error was called.
+    expect(vi.mocked(logger.error)).toHaveBeenCalled();
     createSpy.mockRestore();
   });
 

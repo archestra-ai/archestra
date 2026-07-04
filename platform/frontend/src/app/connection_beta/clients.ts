@@ -1,4 +1,15 @@
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  CLAUDE_DESKTOP_CLIENT_ID,
+  type SupportedProvider,
+} from "@archestra/shared";
+
+/**
+ * Title of the final wizard step for OAuth-gated clients. Registering the
+ * gateway only tells the client where it lives — the gateway authorizes each
+ * user individually, so a one-time browser sign-in is still needed before its
+ * tools work.
+ */
+export const FINISH_OAUTH_FLOW_TITLE = "Finish the OAuth flow";
 
 export interface ClientStep {
   title: string;
@@ -103,6 +114,13 @@ export interface ProxyStep {
    * ANTHROPIC_CUSTOM_HEADERS value for an env block (Claude Code).
    */
   passthroughKeyVariant?: "header" | "env";
+  /**
+   * When set, the passthrough-key reveal also surfaces an X-Archestra-Agent-Id
+   * client-attribution header with this value (e.g. CLAUDE_DESKTOP_CLIENT_ID),
+   * folded into the same ANTHROPIC_CUSTOM_HEADERS value (env) or as its own
+   * header row (header).
+   */
+  passthroughKeyAgentId?: string;
 }
 
 export type ProxyInstruction =
@@ -182,8 +200,8 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
           buildCommand: () => "claude /mcp",
         },
         {
-          title: "Finish the OAuth flow",
-          body: "Claude Code opens your browser. Sign in and approve the gateway.",
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Claude Code opens your browser. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
         },
       ],
     },
@@ -274,8 +292,8 @@ claude`,
           buildCommand: ({ url }) => url,
         },
         {
-          title: "Finish the OAuth flow",
-          body: "Claude Desktop opens your browser. Sign in and approve the gateway; the connector's tools then appear in chat.",
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Claude Desktop opens your browser. Sign in and approve the gateway — it grants tool access per user, so the connector's tools appear in chat only after this one-time sign-in.",
         },
       ],
     },
@@ -307,8 +325,9 @@ claude`,
           },
           {
             title: "Add your personal auth key header",
-            body: 'In the same form, expand "Custom headers" and add a header with the name and value below to authenticate on the LLM Proxy. This is in addition to the API key above, which Claude Desktop still needs.',
+            body: 'In the same form, expand "Custom headers" and add the headers below to authenticate on the LLM Proxy and attribute the client. This is in addition to the API key above, which Claude Desktop still needs.',
             showPassthroughKey: true,
+            passthroughKeyAgentId: CLAUDE_DESKTOP_CLIENT_ID,
           },
         ],
       }),

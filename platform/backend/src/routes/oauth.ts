@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  OFFLINE_ACCESS_OAUTH_SCOPE,
+  RouteId,
+} from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -8,6 +12,11 @@ import config from "@/config";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import {
+  classifyRefreshResponse,
+  classifyThrownRefreshError,
+  type OAuthRefreshOutcome,
+} from "@/services/oauth-refresh-classification";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -38,6 +47,7 @@ interface OAuthScopeConfig {
   auth_server_url?: string;
   resource_metadata_url?: string;
   well_known_url?: string;
+  additional_scopes?: string[];
 }
 
 /**
@@ -139,12 +149,30 @@ export async function resolveOAuthScopesForAuthorization(params: {
   discoveredScopes: string[];
   scopesToUse: string[];
 }> {
+  // Append the catalog item's additional scopes on top of the configured or
+  // discovered scopes, deduped. Defaults to `["offline_access"]` when unset so
+  // the provider issues a refresh token (`offline_access` is a behavioral scope
+  // that providers like Microsoft Entra omit from metadata and require to be
+  // requested). Clear it for providers that reject it (e.g. Google).
+  const additionalScopes = params.oauthConfig.additional_scopes ?? [
+    OFFLINE_ACCESS_OAUTH_SCOPE,
+  ];
+  const withAdditionalScopes = (scopes: string[]): string[] => {
+    const merged = [...scopes];
+    for (const scope of additionalScopes) {
+      if (!merged.includes(scope)) {
+        merged.push(scope);
+      }
+    }
+    return merged;
+  };
+
   const configuredScopes = params.oauthConfig.scopes ?? [];
   if (configuredScopes.length > 0) {
     return {
       configuredScopes,
       discoveredScopes: [],
-      scopesToUse: configuredScopes,
+      scopesToUse: withAdditionalScopes(configuredScopes),
     };
   }
 
@@ -164,7 +192,7 @@ export async function resolveOAuthScopesForAuthorization(params: {
   return {
     configuredScopes,
     discoveredScopes,
-    scopesToUse: discoveredScopes,
+    scopesToUse: withAdditionalScopes(discoveredScopes),
   };
 }
 
@@ -490,125 +518,7 @@ async function getAndDeleteOAuthState(
   return data ?? null;
 }
 
-/**
- * Outcome of an OAuth refresh attempt. A `terminal` failure means the grant is
- * dead (re-authentication required); a `transient` failure is a recoverable
- * transport/infrastructure blip that must not change persisted connection
- * health and is re-attempted on next use.
- */
-export type OAuthRefreshOutcome =
-  | { ok: true }
-  | {
-      ok: false;
-      kind: "terminal";
-      category: "refresh_failed" | "no_refresh_token";
-      message: string;
-    }
-  | {
-      ok: false;
-      kind: "transient";
-      reason:
-        | "network"
-        | "timeout"
-        | "server_error"
-        | "rate_limited"
-        | "unexpected_response";
-    };
-
 const OAUTH_TOKEN_REFRESH_TIMEOUT_MS = 30_000;
-
-// An OAuth `error` code is a restricted ASCII token (RFC 6749 §5.2). Anything
-// outside this shape (URLs, free text, token material) is dropped.
-const OAUTH_ERROR_CODE_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
-
-export function sanitizeOAuthErrorCode(error?: string | null): string {
-  if (typeof error === "string" && OAUTH_ERROR_CODE_PATTERN.test(error)) {
-    return error;
-  }
-  return "refresh_failed";
-}
-
-// OAuth error codes that signal a temporary server condition, not a dead grant
-// (RFC 6749 §4.1.2.1). Some authorization servers return these on a 400.
-const TRANSIENT_OAUTH_ERRORS = new Set([
-  "temporarily_unavailable",
-  "server_error",
-]);
-
-/**
- * Classify a token-endpoint response. A genuine grant rejection is a structured
- * OAuth `error` body, which is terminal — but infrastructure failures
- * (5xx, 429, or a transient OAuth error code) take precedence over the body so
- * a temporary outage is not mistaken for a revoked grant. A proxy/WAF 4xx or a
- * captive-portal 200 with no token are likewise transient, not "re-authenticate".
- */
-export function classifyRefreshResponse(params: {
-  status: number;
-  body: {
-    access_token?: string;
-    error?: string;
-    error_description?: string;
-  } | null;
-}): OAuthRefreshOutcome {
-  const { status, body } = params;
-
-  if (status >= 200 && status < 300 && body?.access_token) {
-    return { ok: true };
-  }
-
-  if (status >= 500) {
-    return { ok: false, kind: "transient", reason: "server_error" };
-  }
-  if (status === 429) {
-    return { ok: false, kind: "transient", reason: "rate_limited" };
-  }
-  if (body?.error && TRANSIENT_OAUTH_ERRORS.has(body.error)) {
-    return { ok: false, kind: "transient", reason: "server_error" };
-  }
-
-  if (body?.error) {
-    return {
-      ok: false,
-      kind: "terminal",
-      category: "refresh_failed",
-      message: sanitizeOAuthErrorCode(body.error),
-    };
-  }
-
-  return { ok: false, kind: "transient", reason: "unexpected_response" };
-}
-
-export function classifyThrownRefreshError(
-  error: unknown,
-): Extract<OAuthRefreshOutcome, { kind: "transient" }> {
-  const isTimeout =
-    error instanceof Error &&
-    (error.name === "TimeoutError" || error.name === "AbortError");
-  return {
-    ok: false,
-    kind: "transient",
-    reason: isTimeout ? "timeout" : "network",
-  };
-}
-
-/**
- * Map a refresh outcome to the `mcp_server` fields to persist. Returns `null`
- * for success and for transient failures (which must persist nothing).
- */
-export function refreshFailureToServerFields(outcome: OAuthRefreshOutcome): {
-  oauthRefreshError: "refresh_failed" | "no_refresh_token";
-  oauthRefreshErrorMessage: string;
-  oauthRefreshFailedAt: Date;
-} | null {
-  if (outcome.ok || outcome.kind !== "terminal") {
-    return null;
-  }
-  return {
-    oauthRefreshError: outcome.category,
-    oauthRefreshErrorMessage: outcome.message,
-    oauthRefreshFailedAt: new Date(),
-  };
-}
 
 /**
  * Refresh an OAuth access token using the stored refresh token, called when an
@@ -877,172 +787,201 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body: { catalogId }, organizationId }, reply) => {
-      // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
-      const catalogItem =
-        await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
+      try {
+        // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)
+        const catalogItem =
+          await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalogId);
 
-      if (!catalogItem) {
-        throw new ApiError(404, "Catalog item not found");
-      }
-
-      if (!catalogItem.oauthConfig) {
-        throw new ApiError(400, "This server does not support OAuth");
-      }
-
-      const oauthConfig = catalogItem.oauthConfig;
-
-      // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
-      // This ensures the redirect URI matches where the user initiated the OAuth flow from
-      const redirectUri = oauthConfig.redirect_uris[0];
-      if (isSsoCallbackRedirectUri(redirectUri)) {
-        throw new ApiError(
-          400,
-          "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
-        );
-      }
-
-      let clientId = oauthConfig.client_id;
-      let clientSecret = oauthConfig.client_secret;
-
-      logger.info(
-        {
-          catalogId: catalogItem.id,
-          hasClientSecret: !!clientSecret,
-        },
-        "OAuth init - using client_secret",
-      );
-
-      // Discover actual scopes from the OAuth server (like desktop app does)
-      const { configuredScopes, discoveredScopes, scopesToUse } =
-        await resolveOAuthScopesForAuthorization({
-          oauthConfig,
-        });
-
-      fastify.log.info(
-        {
-          configured: configuredScopes,
-          discovered: discoveredScopes,
-          used: scopesToUse,
-        },
-        "Resolved OAuth scopes",
-      );
-
-      // Check if dynamic registration is needed
-      if (!clientId) {
-        fastify.log.info(
-          "Client ID is empty, checking for cached credentials or performing dynamic registration",
-        );
-      }
-
-      // Discover authorization server metadata to get the correct authorization endpoint
-      let authorizationEndpoint: string;
-      let registrationEndpoint: string | undefined;
-
-      // For proxy servers, skip discovery and use the MCP server URL directly
-      if (oauthConfig.requires_proxy) {
-        fastify.log.info(
-          { serverUrl: oauthConfig.server_url },
-          "Server requires proxy, using MCP server URL as OAuth server",
-        );
-        // GitHub Copilot MCP uses /mcp/oauth/authorize
-        authorizationEndpoint = `${oauthConfig.server_url}/oauth/authorize`;
-        // Proxy servers typically don't support dynamic registration
-        registrationEndpoint = undefined;
-      } else {
-        try {
-          const endpoints = await discoverOAuthEndpoints(
-            oauthConfig,
-            fastify.log,
-          );
-          authorizationEndpoint = endpoints.authorizationEndpoint;
-          registrationEndpoint = endpoints.registrationEndpoint;
-        } catch (error) {
-          fastify.log.error({ error }, "Authorization server discovery failed");
-          throw new ApiError(500, "Failed to discover OAuth endpoints");
+        if (!catalogItem) {
+          throw new ApiError(404, "Catalog item not found");
         }
-      }
 
-      // If we don't have client credentials and registration endpoint is available, try dynamic registration
-      let registrationResult: Record<string, unknown> | undefined;
-      if (!clientId && registrationEndpoint) {
-        try {
-          fastify.log.info(
-            { registrationEndpoint },
-            "Attempting dynamic client registration",
+        if (!catalogItem.oauthConfig) {
+          throw new ApiError(400, "This server does not support OAuth");
+        }
+
+        const oauthConfig = catalogItem.oauthConfig;
+
+        // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
+        // This ensures the redirect URI matches where the user initiated the OAuth flow from
+        const redirectUri = oauthConfig.redirect_uris[0];
+        if (isSsoCallbackRedirectUri(redirectUri)) {
+          throw new ApiError(
+            400,
+            "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
           );
-          registrationResult = await registerOAuthClient(registrationEndpoint, {
-            client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
-            redirect_uris: [redirectUri],
-            grant_types: ["authorization_code", "refresh_token"],
-            response_types: ["code"],
-            scope: scopesToUse.join(" "),
+        }
+
+        let clientId = oauthConfig.client_id;
+        let clientSecret = oauthConfig.client_secret;
+
+        logger.info(
+          {
+            catalogId: catalogItem.id,
+            hasClientSecret: !!clientSecret,
+          },
+          "OAuth init - using client_secret",
+        );
+
+        // Discover actual scopes from the OAuth server (like desktop app does)
+        const { configuredScopes, discoveredScopes, scopesToUse } =
+          await resolveOAuthScopesForAuthorization({
+            oauthConfig,
           });
 
-          clientId = registrationResult?.client_id as string;
-          clientSecret = registrationResult?.client_secret as
-            | string
-            | undefined;
-
-          fastify.log.info(
-            { client_id: clientId },
-            "Dynamic registration successful",
-          );
-        } catch (error) {
-          fastify.log.warn(
-            {
-              error: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-            },
-            "Dynamic registration failed, continuing with default client_id",
-          );
-          // Continue with default client_id if registration fails
-        }
-      }
-
-      // Ensure we have a usable client ID (either static or from dynamic registration)
-      if (!clientId) {
-        throw new ApiError(
-          400,
-          "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+        fastify.log.info(
+          {
+            configured: configuredScopes,
+            discovered: discoveredScopes,
+            used: scopesToUse,
+          },
+          "Resolved OAuth scopes",
         );
+
+        // Check if dynamic registration is needed
+        if (!clientId) {
+          fastify.log.info(
+            "Client ID is empty, checking for cached credentials or performing dynamic registration",
+          );
+        }
+
+        // Discover authorization server metadata to get the correct authorization endpoint
+        let authorizationEndpoint: string;
+        let registrationEndpoint: string | undefined;
+
+        // For proxy servers, skip discovery and use the MCP server URL directly
+        if (oauthConfig.requires_proxy) {
+          fastify.log.info(
+            { serverUrl: oauthConfig.server_url },
+            "Server requires proxy, using MCP server URL as OAuth server",
+          );
+          // GitHub Copilot MCP uses /mcp/oauth/authorize
+          authorizationEndpoint = `${oauthConfig.server_url}/oauth/authorize`;
+          // Proxy servers typically don't support dynamic registration
+          registrationEndpoint = undefined;
+        } else {
+          try {
+            const endpoints = await discoverOAuthEndpoints(
+              oauthConfig,
+              fastify.log,
+            );
+            authorizationEndpoint = endpoints.authorizationEndpoint;
+            registrationEndpoint = endpoints.registrationEndpoint;
+          } catch (error) {
+            fastify.log.error(
+              { error },
+              "Authorization server discovery failed",
+            );
+            // 502, not 500: discovery failed against the user-configured
+            // external server, so surface its failure (with the cause, so the
+            // user can act on it) rather than reporting a crash of ours.
+            throw new ApiError(
+              502,
+              `Failed to discover OAuth endpoints: ${error instanceof Error ? error.message : String(error)}. Verify the server's OAuth metadata (.well-known) endpoints are reachable.`,
+            );
+          }
+        }
+
+        // If we don't have client credentials and registration endpoint is available, try dynamic registration
+        let registrationResult: Record<string, unknown> | undefined;
+        if (!clientId && registrationEndpoint) {
+          try {
+            fastify.log.info(
+              { registrationEndpoint },
+              "Attempting dynamic client registration",
+            );
+            registrationResult = await registerOAuthClient(
+              registrationEndpoint,
+              {
+                client_name: `${await resolveOAuthClientBrandName(organizationId)} - ${catalogItem.name}`,
+                redirect_uris: [redirectUri],
+                grant_types: ["authorization_code", "refresh_token"],
+                response_types: ["code"],
+                scope: scopesToUse.join(" "),
+              },
+            );
+
+            clientId = registrationResult?.client_id as string;
+            clientSecret = registrationResult?.client_secret as
+              | string
+              | undefined;
+
+            fastify.log.info(
+              { client_id: clientId },
+              "Dynamic registration successful",
+            );
+          } catch (error) {
+            fastify.log.warn(
+              {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              },
+              "Dynamic registration failed, continuing with default client_id",
+            );
+            // Continue with default client_id if registration fails
+          }
+        }
+
+        // Ensure we have a usable client ID (either static or from dynamic registration)
+        if (!clientId) {
+          throw new ApiError(
+            400,
+            "No client ID available. Configure a client_id in the catalog item or ensure the OAuth server supports dynamic client registration.",
+          );
+        }
+
+        // Generate PKCE parameters
+        const codeVerifier = generateCodeVerifier();
+        const codeChallenge = generateCodeChallenge(codeVerifier);
+        const state = randomBytes(16).toString("base64url");
+
+        // Store state temporarily (will be used in callback)
+        await setOAuthState(state, {
+          catalogId,
+          codeVerifier,
+          clientId,
+          clientSecret,
+          registrationResult,
+        });
+
+        // Build authorization URL using the discovered authorization endpoint
+        const authUrl = new URL(authorizationEndpoint);
+        authUrl.searchParams.set("response_type", "code");
+        authUrl.searchParams.set("client_id", clientId);
+        authUrl.searchParams.set("code_challenge", codeChallenge);
+        authUrl.searchParams.set("code_challenge_method", "S256");
+        authUrl.searchParams.set("state", state);
+        authUrl.searchParams.set("scope", scopesToUse.join(" "));
+        authUrl.searchParams.set("redirect_uri", redirectUri);
+
+        // RFC 8707: Include resource parameter for audience binding
+        // Required by MCP servers like Windmill that need to know which
+        // protected resource the token is intended for
+        const oauthResource = getOAuthResource(oauthConfig);
+        if (oauthResource) {
+          authUrl.searchParams.set("resource", oauthResource);
+        }
+
+        return reply.send({
+          authorizationUrl: authUrl.toString(),
+          state,
+        });
+      } catch (error) {
+        // Handled client errors (bad/missing catalog config, no client id, etc.)
+        // are formatted by the centralized error handler but filtered from Sentry,
+        // so surface them here with the catalogId for triage.
+        if (
+          error instanceof ApiError &&
+          error.statusCode >= 400 &&
+          error.statusCode < 500
+        ) {
+          logger.warn(
+            { catalogId, statusCode: error.statusCode, reason: error.message },
+            "OAuth initiate rejected (client error)",
+          );
+        }
+        throw error;
       }
-
-      // Generate PKCE parameters
-      const codeVerifier = generateCodeVerifier();
-      const codeChallenge = generateCodeChallenge(codeVerifier);
-      const state = randomBytes(16).toString("base64url");
-
-      // Store state temporarily (will be used in callback)
-      await setOAuthState(state, {
-        catalogId,
-        codeVerifier,
-        clientId,
-        clientSecret,
-        registrationResult,
-      });
-
-      // Build authorization URL using the discovered authorization endpoint
-      const authUrl = new URL(authorizationEndpoint);
-      authUrl.searchParams.set("response_type", "code");
-      authUrl.searchParams.set("client_id", clientId);
-      authUrl.searchParams.set("code_challenge", codeChallenge);
-      authUrl.searchParams.set("code_challenge_method", "S256");
-      authUrl.searchParams.set("state", state);
-      authUrl.searchParams.set("scope", scopesToUse.join(" "));
-      authUrl.searchParams.set("redirect_uri", redirectUri);
-
-      // RFC 8707: Include resource parameter for audience binding
-      // Required by MCP servers like Windmill that need to know which
-      // protected resource the token is intended for
-      const oauthResource = getOAuthResource(oauthConfig);
-      if (oauthResource) {
-        authUrl.searchParams.set("resource", oauthResource);
-      }
-
-      return reply.send({
-        authorizationUrl: authUrl.toString(),
-        state,
-      });
     },
   );
 

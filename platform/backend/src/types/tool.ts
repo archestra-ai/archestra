@@ -101,6 +101,12 @@ export const ToolFilterSchema = z.object({
     .boolean()
     .optional()
     .describe("Hide built-in Archestra tools"),
+  includeKnowledgeSourcesTool: z.coerce
+    .boolean()
+    .optional()
+    .describe(
+      "Include the built-in query_knowledge_sources tool in global listings (default: hidden)",
+    ),
 });
 
 export const ToolSortBy = [

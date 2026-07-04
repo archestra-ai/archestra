@@ -10,12 +10,10 @@ import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AppModel,
-  OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
 } from "@/models";
-import type { DiscoveredToolPolicy, GlobalToolPolicy } from "@/types";
 
 /**
  * The App Data Store tools are the ONLY Archestra built-ins an app runtime may
@@ -57,9 +55,7 @@ type AppToolGateDecision =
  * `block_when_context_is_untrusted` policy still fires on the authoring path.
  * `require_approval` is enforced by the caller: the iframe runtime has no
  * approval UI so it sets `treatRequireApprovalAsBlock`, while `preview_app_tool`
- * carries its own human-approval gate and does not. As everywhere in the policy
- * engine, a permissive (`globalToolPolicy`) org short-circuits to allow — so
- * per-tool block policies do not apply on this path in permissive orgs either.
+ * carries its own human-approval gate and does not.
  */
 export async function gateAppToolCall(params: {
   appId: string;
@@ -70,7 +66,7 @@ export async function gateAppToolCall(params: {
   isContextTrusted: boolean;
   treatRequireApprovalAsBlock: boolean;
 }): Promise<AppToolGateDecision> {
-  const { appId, organizationId, userId, toolName, toolInput } = params;
+  const { appId, userId, toolName, toolInput } = params;
 
   // Archestra built-ins: only the reserved app-runtime tools (App Data Store +
   // the LLM completion) are dispatchable from an app; they bypass invocation
@@ -135,14 +131,58 @@ export async function gateAppToolCall(params: {
   // Policy is keyed by the resolved (stored) name, so a suffix-addressed tool
   // cannot slip past a policy attached to its full name.
   const resolvedToolName = tool.toolName;
-  const organization = await OrganizationModel.getById(organizationId);
-  const globalToolPolicy: GlobalToolPolicy =
-    organization?.globalToolPolicy ?? "permissive";
-  // App tools are catalog tools, never discovered llm-proxy tools, so the
-  // discovered-tool policy never governs them — pass the org value through for
-  // signature completeness.
-  const discoveredToolPolicy: DiscoveredToolPolicy =
-    organization?.discoveredToolPolicy ?? "relaxed";
+  const refusal = await enforceAppRuntimeInvocationPolicy({
+    resolvedToolName,
+    resolvedToolId: tool.id,
+    displayName: toolName,
+    toolInput,
+    userId,
+    isContextTrusted: params.isContextTrusted,
+    treatRequireApprovalAsBlock: params.treatRequireApprovalAsBlock,
+  });
+  if (refusal) {
+    return { allowed: false, ...refusal };
+  }
+
+  return { allowed: true, kind: "upstream", resolvedToolName };
+}
+
+/**
+ * Evaluate a resolved tool's invocation policy for an app-runtime call — shared
+ * by every app-runtime entrypoint (the owned-app gate above and the
+ * server-scoped app proxy) so they cannot diverge on enforcement.
+ *
+ * `resolvedToolName` must be the stored (slugified) name the policy is keyed by.
+ * `isContextTrusted` mirrors the caller's trust: iframe runtimes pass `true`, so
+ * only `block_always`/`require_approval` gate and a no-policy tool stays
+ * callable; `preview_app_tool` forwards the chat's real trust so
+ * `block_when_context_is_untrusted` still fires. `treatRequireApprovalAsBlock`
+ * blocks `require_approval` where the caller has no way to present the prompt
+ * (the sandbox runtimes). Returns a JSON-RPC refusal `{ code, reason }`, or `null`
+ * when the call is allowed.
+ */
+export async function enforceAppRuntimeInvocationPolicy(params: {
+  resolvedToolName: string;
+  // The id of the resolved tool row the caller will execute. Policy is evaluated
+  // against this exact row instead of a name lookup, which the app-runtime path
+  // (agentId "") could otherwise resolve to a different same-named row.
+  resolvedToolId: string;
+  displayName: string;
+  toolInput: Record<string, unknown>;
+  userId: string;
+  isContextTrusted: boolean;
+  treatRequireApprovalAsBlock: boolean;
+}): Promise<{ code: number; reason: string } | null> {
+  const {
+    resolvedToolName,
+    resolvedToolId,
+    displayName,
+    toolInput,
+    userId,
+    isContextTrusted,
+    treatRequireApprovalAsBlock,
+  } = params;
+
   // The viewer is the principal executing the call (as the app owner, with the
   // viewer's credentials), so a team-scoped policy is matched against the
   // viewer's teams — not an empty set, which would silently miss them.
@@ -152,35 +192,31 @@ export async function gateAppToolCall(params: {
     "",
     [{ toolCallName: resolvedToolName, toolInput }],
     policyContext,
-    params.isContextTrusted,
-    globalToolPolicy,
-    discoveredToolPolicy,
+    isContextTrusted,
+    new Map([[resolvedToolName, resolvedToolId]]),
   );
   if (!verdict.isAllowed) {
     return {
-      allowed: false,
       code: -32601,
-      reason: `Tool "${toolName}" is blocked by a tool-invocation policy: ${verdict.reason}`,
+      reason: `Tool "${displayName}" is blocked by a tool-invocation policy — a security guardrail enforced by ${archestraMcpBranding.catalogName}, not by the tool itself: ${verdict.reason}`,
     };
   }
 
-  if (params.treatRequireApprovalAsBlock) {
+  if (treatRequireApprovalAsBlock) {
     const requiresApproval =
       await ToolInvocationPolicyModel.checkApprovalRequired(
         resolvedToolName,
         toolInput,
         policyContext,
-        globalToolPolicy,
-        discoveredToolPolicy,
+        resolvedToolId,
       );
     if (requiresApproval) {
       return {
-        allowed: false,
         code: -32601,
-        reason: `Tool "${toolName}" requires human approval, which the app sandbox cannot present; an authoring agent can exercise it via preview_app_tool.`,
+        reason: `Tool "${displayName}" requires human approval, which the app sandbox cannot present; an authoring agent can exercise it via preview_app_tool.`,
       };
     }
   }
 
-  return { allowed: true, kind: "upstream", resolvedToolName };
+  return null;
 }

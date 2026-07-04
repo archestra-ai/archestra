@@ -8,12 +8,15 @@ import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
 import { ToolModel } from "@/models";
 import {
+  ApiError,
   constructResponseSchema,
   createSortingQuerySchema,
   ExtendedSelectToolSchema,
+  SelectToolSchema,
   ToolFilterSchema,
   ToolSortBy,
   ToolWithAssignmentsSchema,
+  UuidIdSchema,
 } from "@/types";
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -63,6 +66,7 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           origin,
           excludeArchestraTools,
+          includeKnowledgeSourcesTool,
         },
         user,
         organizationId,
@@ -81,12 +85,47 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           origin,
           excludeArchestraTools,
+          includeKnowledgeSourcesTool,
         },
         userId: user.id,
         isAgentAdmin,
       });
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/tools/:id",
+    {
+      schema: {
+        operationId: RouteId.GetTool,
+        description:
+          "Get a single tool's policy-editor fields (id, name, parameters) by id, scoped to what the caller can access",
+        tags: ["Tools"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          SelectToolSchema.pick({ id: true, name: true, parameters: true }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+
+      const tool = await ToolModel.findByIdForOrg({
+        id,
+        userId: user.id,
+        organizationId,
+        isAdmin: isAgentAdmin,
+      });
+      if (!tool) {
+        throw new ApiError(404, `Tool with ID ${id} not found`);
+      }
+
+      return reply.send(tool);
     },
   );
 

@@ -4,12 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useMembersPaginated = vi.fn();
 
-vi.mock("@/lib/auth/auth.query", () => {
-  // Stable reference, like the real TanStack Query session, so the component's
-  // accumulator effect doesn't re-run every render.
-  const session = { data: { user: { id: "u-self" } } };
-  return { useSession: () => session };
-});
+// Stable reference, like the real TanStack Query session, so the component's
+// accumulator effect doesn't re-run every render.
+const mockSession = {
+  data: { user: { id: "u-self", email: "self@example.com" } },
+};
+
+vi.mock("@/lib/auth/auth.query");
+
+import { useSession } from "@/lib/auth/auth.query";
 
 vi.mock("@/lib/member.query", () => ({
   useMembersPaginated: (...args: unknown[]) => useMembersPaginated(...args),
@@ -38,6 +41,9 @@ describe("shouldShowOwnerField", () => {
 
 describe("OwnerSelectField", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue(
+      mockSession as unknown as ReturnType<typeof useSession>,
+    );
     useMembersPaginated.mockReset();
     useMembersPaginated.mockReturnValue({
       data: { data: MEMBERS },
@@ -45,12 +51,15 @@ describe("OwnerSelectField", () => {
     });
   });
 
-  it("excludes the signed-in user from the options", async () => {
+  it("lists the signed-in user as 'Yourself' instead of their member entry", async () => {
     const user = userEvent.setup();
     render(<OwnerSelectField value="" onChange={vi.fn()} />);
 
     await user.click(screen.getByRole("combobox"));
 
+    expect(
+      screen.getByRole("button", { name: /Yourself/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Alice Anderson/i }),
     ).toBeInTheDocument();
@@ -60,12 +69,19 @@ describe("OwnerSelectField", () => {
     expect(
       screen.queryByRole("button", { name: /Self Admin/i }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("self@example.com")).not.toBeInTheDocument();
   });
 
-  it("defaults to a 'Yourself' label when nothing is selected", () => {
+  it("shows 'Yourself' as the selected owner when nothing is picked", () => {
     render(<OwnerSelectField value="" onChange={vi.fn()} />);
     expect(screen.getByRole("combobox")).toHaveTextContent("Yourself");
+  });
+
+  it("explains what the field is for", () => {
+    render(<OwnerSelectField value="" onChange={vi.fn()} />);
+    expect(screen.getByText("Key owner")).toBeInTheDocument();
+    expect(
+      screen.getByText(/on behalf of another member/i),
+    ).toBeInTheDocument();
   });
 
   it("reports the picked user's id via onChange", async () => {
@@ -77,6 +93,17 @@ describe("OwnerSelectField", () => {
     await user.click(screen.getByRole("button", { name: /Bob Brown/i }));
 
     expect(onChange).toHaveBeenCalledWith("u-b");
+  });
+
+  it("resets to an empty owner when 'Yourself' is re-picked", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<OwnerSelectField value="u-b" onChange={onChange} />);
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("button", { name: /Yourself/i }));
+
+    expect(onChange).toHaveBeenCalledWith("");
   });
 
   it("drives a server-side member query as the user types", async () => {

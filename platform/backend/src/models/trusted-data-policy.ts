@@ -7,11 +7,7 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
-import type {
-  AutonomyPolicyOperator,
-  GlobalToolPolicy,
-  TrustedData,
-} from "@/types";
+import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 
 /**
  * Check if a policy is a default policy (applies to all results)
@@ -338,7 +334,7 @@ class TrustedDataPolicyModel {
   /**
    * Evaluate trusted data policies for a chat
    *
-   * KEY SECURITY PRINCIPLE: Data is UNTRUSTED by default (when globalToolPolicy is "restrictive").
+   * KEY SECURITY PRINCIPLE: Data is UNTRUSTED by default.
    * - Only data that explicitly matches a trusted data policy is considered safe
    * - If no policy matches, the data is considered untrusted
    * - This implements an allowlist approach for maximum security
@@ -350,7 +346,6 @@ class TrustedDataPolicyModel {
     toolName: string,
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolOutput: any,
-    globalToolPolicy: GlobalToolPolicy = "restrictive",
     context: PolicyEvaluationContext,
   ): Promise<{
     isTrusted: boolean;
@@ -362,7 +357,6 @@ class TrustedDataPolicyModel {
     const results = await TrustedDataPolicyModel.evaluateBulk(
       agentId,
       [{ toolName, toolOutput }],
-      globalToolPolicy,
       context,
     );
     return (
@@ -386,7 +380,6 @@ class TrustedDataPolicyModel {
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
     }>,
-    globalToolPolicy: GlobalToolPolicy = "restrictive",
     context: PolicyEvaluationContext,
   ): Promise<
     Map<
@@ -409,23 +402,13 @@ class TrustedDataPolicyModel {
       }
     >();
 
-    // YOLO mode: trust all data immediately, skip policy evaluation
-    if (globalToolPolicy === "permissive") {
-      for (let i = 0; i < toolCalls.length; i++) {
-        results.set(i.toString(), {
-          isTrusted: true,
-          isBlocked: false,
-          shouldSanitizeWithDualLlm: false,
-          reason: "Trusted by permissive global policy",
-        });
-      }
-      return results;
-    }
-
-    // Handle built-in MCP server tools
+    // Handle built-in MCP server tools. Policy-evaluated built-ins like
+    // `query_knowledge_sources` are intentionally excluded from auto-trust:
+    // they return content that can contain prompt injection, so they must be
+    // treated like external tool output for trusted-data evaluation.
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName } = toolCalls[i];
-      if (archestraMcpBranding.isToolName(toolName)) {
+      if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
         results.set(i.toString(), {
           isTrusted: true,
           isBlocked: false,
@@ -435,9 +418,11 @@ class TrustedDataPolicyModel {
       }
     }
 
-    // Get all non-built-in tool names
+    // Get all tool calls subject to policy evaluation: non-built-ins plus
+    // policy-evaluated built-ins like `query_knowledge_sources`.
     const nonArchestraToolCalls = toolCalls.filter(
-      ({ toolName }) => !archestraMcpBranding.isToolName(toolName),
+      ({ toolName }) =>
+        !archestraMcpBranding.isPolicyBypassedToolName(toolName),
     );
 
     if (nonArchestraToolCalls.length === 0) {
@@ -496,8 +481,9 @@ class TrustedDataPolicyModel {
     for (let i = 0; i < toolCalls.length; i++) {
       const { toolName, toolOutput } = toolCalls[i];
 
-      // Skip Archestra tools (already handled)
-      if (archestraMcpBranding.isToolName(toolName)) {
+      // Skip policy-bypassing Archestra tools (already handled above);
+      // policy-evaluated built-ins like `query_knowledge_sources` fall through.
+      if (archestraMcpBranding.isPolicyBypassedToolName(toolName)) {
         continue;
       }
 

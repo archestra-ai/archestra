@@ -18,8 +18,10 @@ import config, {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   parseActiveChatRunPollIntervalMs,
+  parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
+  parseChatMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -63,7 +65,9 @@ describe("getAnalyticsConfig", () => {
     process.env = originalEnv;
   });
 
-  test("uses the default PostHog analytics config", () => {
+  test("uses the default PostHog analytics config, enabled in production", () => {
+    process.env.NODE_ENV = "production";
+
     expect(getAnalyticsConfig()).toEqual({
       enabled: true,
       posthog: {
@@ -71,6 +75,26 @@ describe("getAnalyticsConfig", () => {
         host: "https://eu.i.posthog.com",
       },
     });
+  });
+
+  test("defaults to disabled outside production", () => {
+    process.env.NODE_ENV = "development";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins outside production", () => {
+    process.env.NODE_ENV = "development";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ANALYTICS = "disabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
   });
 
   test("uses custom PostHog analytics env vars", () => {
@@ -806,6 +830,48 @@ describe("parseContentMaxLength", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "-100", using default 10000',
     );
+  });
+});
+
+describe("parseChatMaxOutputTokens", () => {
+  test("should return default 32768 when no value provided", () => {
+    expect(parseChatMaxOutputTokens(undefined)).toBe(32768);
+  });
+
+  test("should return default when empty/whitespace string provided", () => {
+    expect(parseChatMaxOutputTokens("")).toBe(32768);
+    expect(parseChatMaxOutputTokens("   ")).toBe(32768);
+  });
+
+  test("should parse and trim a valid value", () => {
+    expect(parseChatMaxOutputTokens("  16000  ")).toBe(16000);
+  });
+
+  test("should accept boundary values", () => {
+    expect(parseChatMaxOutputTokens("1")).toBe(1);
+    expect(parseChatMaxOutputTokens("1000000")).toBe(1000000);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseChatMaxOutputTokens("abc")).toBe(32768);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "abc", using default 32768',
+    );
+  });
+
+  test("should reject fractional and trailing-garbage values instead of truncating", () => {
+    expect(parseChatMaxOutputTokens("1.5")).toBe(32768);
+    expect(parseChatMaxOutputTokens("32768abc")).toBe(32768);
+    expect(parseChatMaxOutputTokens("Infinity")).toBe(32768);
+  });
+
+  test("should accept scientific notation for an integer value", () => {
+    expect(parseChatMaxOutputTokens("1e6")).toBe(1000000);
+  });
+
+  test("should return default and warn for zero and out-of-range", () => {
+    expect(parseChatMaxOutputTokens("0")).toBe(32768);
+    expect(parseChatMaxOutputTokens("1000001")).toBe(32768);
   });
 });
 
@@ -1861,5 +1927,58 @@ describe("parseLogFormat", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Invalid ARCHESTRA_LOGGING_FORMAT value "xml"'),
     );
+  });
+});
+
+describe("parseAnthropicWifConfig", () => {
+  const completeEnv = {
+    federationRuleId: "fdrl_test",
+    organizationId: "00000000-0000-0000-0000-000000000000",
+    serviceAccountId: "svac_test",
+    identityTokenFile: "/var/run/secrets/anthropic.com/token",
+  };
+
+  test("returns null when nothing is set", () => {
+    expect(parseAnthropicWifConfig({})).toBeNull();
+  });
+
+  test("parses a complete configuration with a token file", () => {
+    expect(parseAnthropicWifConfig(completeEnv)).toEqual({
+      federationRuleId: "fdrl_test",
+      organizationId: "00000000-0000-0000-0000-000000000000",
+      serviceAccountId: "svac_test",
+      identityTokenFile: "/var/run/secrets/anthropic.com/token",
+    });
+  });
+
+  test("accepts an inline identity token as the token source", () => {
+    expect(
+      parseAnthropicWifConfig({
+        ...completeEnv,
+        identityTokenFile: undefined,
+        identityToken: "jwt-inline",
+      }),
+    ).toMatchObject({ identityToken: "jwt-inline" });
+  });
+
+  test("includes the optional workspace ID when set", () => {
+    expect(
+      parseAnthropicWifConfig({ ...completeEnv, workspaceId: "wrkspc_test" }),
+    ).toMatchObject({ workspaceId: "wrkspc_test" });
+  });
+
+  test.each([
+    ["federationRuleId", { ...completeEnv, federationRuleId: undefined }],
+    ["organizationId", { ...completeEnv, organizationId: undefined }],
+    ["serviceAccountId", { ...completeEnv, serviceAccountId: undefined }],
+    ["token source", { ...completeEnv, identityTokenFile: undefined }],
+  ])("disables WIF when %s is missing", (_label, env) => {
+    expect(parseAnthropicWifConfig(env)).toBeNull();
+  });
+
+  test("treats whitespace-only values as unset", () => {
+    expect(
+      parseAnthropicWifConfig({ ...completeEnv, federationRuleId: "  " }),
+    ).toBeNull();
   });
 });

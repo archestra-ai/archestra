@@ -68,6 +68,8 @@ const AppListItemBaseSchema = z.object({
   description: z.string().nullable(),
   executionModel: z.enum(["viewer-scoped", "server-scoped"]),
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
+  /** When the requesting user pinned this app; null = not pinned. */
+  pinnedAt: z.date().nullable(),
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
@@ -76,20 +78,30 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   scope: AppScopeSchema,
   authorId: z.string().nullable(),
   latestVersion: z.number().int(),
+  // Teams the app is shared with (via its backing catalog), for the card's
+  // visibility pill. Empty unless the app is team-scoped.
+  teams: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
-// An external item is keyed by its catalog item and listed once, regardless of
-// how many installs back it (mcp-apps.md FR-26). `runnable` is false when the
-// caller can see the catalog but has no accessible install (FR-31);
-// `availabilityScopes` are the scopes of the caller's accessible installs, for
-// the card's chips. The concrete installs (the run-page selector) are resolved
-// lazily via `GET /api/apps/external/:catalogId`.
+// An external item is one UI-providing tool of one *install* of an MCP server.
+// A catalog may expose several `ui://` resources and the caller may have several
+// accessible installs (personal/team/org), so the listing yields one item per
+// `(mcpServerId, resourceUri)` — installs are surfaced separately, each carrying
+// the concrete `mcpServerId` to open in chat and its `scope`. Catalogs with no
+// accessible install are omitted entirely (every listed item is runnable). To
+// reuse the owned-app card shape, `name` is `"<server> / <tool>"` (the catalog
+// display name and the short tool name, e.g. "Archestra PM / show_board" — never
+// the slug prefix) and `description` is the tool's own description.
 export const ExternalAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("external"),
   catalogId: z.string(),
+  mcpServerId: z.string(),
+  scope: AppScopeSchema,
   resourceUri: z.string(),
-  runnable: z.boolean(),
-  availabilityScopes: z.array(AppScopeSchema),
+  // The catalog's icon, exactly as the MCP registry renders it: an emoji
+  // character or a base64 image data URL. Null when the server has none (the
+  // card falls back to its generic server glyph).
+  icon: z.string().nullable(),
 });
 
 export const AppListItemSchema = z.discriminatedUnion("source", [
@@ -110,16 +122,29 @@ export const ExternalAppInstallSchema = z.object({
 });
 export type ExternalAppInstall = z.infer<typeof ExternalAppInstallSchema>;
 
+/** One UI-providing resource of an external app's catalog (a server may have several). */
+export const ExternalAppResourceSchema = z.object({
+  resourceUri: z.string(),
+  toolName: z.string(),
+  // Card/header label: "${serverName} / ${toolName}".
+  name: z.string(),
+});
+export type ExternalAppResource = z.infer<typeof ExternalAppResourceSchema>;
+
 /**
- * Run-page resolution for an external app: its UI resource plus the caller's
- * accessible installs and the default install (personal → team → org,
- * mcp-apps.md FR-31). `defaultMcpServerId` is null when none is accessible.
+ * Run-page resolution for an external app: the catalog's UI resources plus the
+ * caller's accessible installs and the default install (personal → team → org,
+ * mcp-apps.md FR-31). `resourceUri` is the default resource; `resources` lists
+ * all of them so the run page can validate `?resource=`. `defaultMcpServerId` is
+ * null when no install is accessible.
  */
 export const ExternalAppResolutionSchema = z.object({
   catalogId: z.string(),
+  // The catalog (server) display name; the run page composes per-resource labels.
   name: z.string(),
   description: z.string().nullable(),
   resourceUri: z.string(),
+  resources: z.array(ExternalAppResourceSchema),
   defaultMcpServerId: z.string().nullable(),
   installs: z.array(ExternalAppInstallSchema),
 });
@@ -224,7 +249,7 @@ export const ScaffoldAppSchema = z.strictObject({
     .optional()
     .describe("Optional description."),
   scope: AppScopeSchema.optional().describe(
-    "Visibility scope. Defaults to personal (owned by the calling user).",
+    "Visibility scope, personal (default, owned by the calling user) or org. Team scope is not available here — team-scoped apps must be created in the Apps UI so teams can be assigned.",
   ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
@@ -249,7 +274,7 @@ export const RefineAppToolSchema = z.strictObject({
           .min(1)
           .optional()
           .describe(
-            "When present, the question is single-select over these options; otherwise it is free-text.",
+            'When present, the question is single-select over these plain-string option labels, e.g. ["Light", "Dark"] — never {label, value} objects; otherwise it is free-text.',
           ),
       }),
     )

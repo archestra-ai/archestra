@@ -2,12 +2,13 @@
 
 import {
   type archestraApiTypes,
+  CLAUDE_CLIENT_LABEL,
+  CLIENT_FILTER_OPTIONS,
+  type ClientFilter,
   DynamicInteraction,
-  getSessionClientLabel,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
-  SESSION_CLIENT_SOURCE_DISPLAY,
-  type SessionClientSource,
+  isClaudeClientAgentId,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
@@ -39,6 +40,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
+  isSessionId,
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
@@ -90,9 +92,12 @@ function getSessionDisplayData(session: SessionData) {
   const conversationTitle = session.conversationTitle;
   const isArchestraChat = conversationTitle && session.sessionId;
   const claudeCodeTitle = session.claudeCodeTitle;
-  // Both Claude clients (Code and Desktop) get a source badge and a labelled
-  // placeholder; other sources fall back to the last user message.
-  const claudeSourceLabel = getSessionClientLabel(session.sessionSource);
+  // Claude clients get a source badge and a labelled placeholder; other clients
+  // fall back to the last user message. Derived from the client-attribution
+  // column (external_agent_id), not the session-id provenance.
+  const claudeSourceLabel = session.externalAgentIds.some(isClaudeClientAgentId)
+    ? CLAUDE_CLIENT_LABEL
+    : null;
 
   let lastUserMessage = "";
   if (session.lastInteractionRequest && session.lastInteractionType) {
@@ -156,14 +161,21 @@ function SessionsTable({
   const profileIdFromUrl = searchParams.get("profileId");
   const userIdFromUrl = searchParams.get("userId");
   const sourceFromUrl = searchParams.get("source");
-  const sessionSourceFromUrl = searchParams.get("sessionSource");
+  const clientFromUrl = searchParams.get("client");
   const startDateFromUrl = searchParams.get("startDate");
   const endDateFromUrl = searchParams.get("endDate");
   const searchFromUrl = searchParams.get("search");
   const profileFilter = profileIdFromUrl || "all";
   const userFilter = userIdFromUrl || "all";
   const sourceFilter = sourceFromUrl || "all";
-  const clientFilter = sessionSourceFromUrl || "all";
+  const clientFilter = clientFromUrl || "all";
+
+  // The logs search box only filters by session ID (free-text content search
+  // was removed). Translate the typed term into a sessionId filter when it is a
+  // valid session ID; otherwise it filters nothing and we surface a hint.
+  const sessionIdFromSearch =
+    searchFromUrl && isSessionId(searchFromUrl) ? searchFromUrl : undefined;
+  const searchIsNotSessionId = !!searchFromUrl && !sessionIdFromSearch;
 
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
@@ -224,7 +236,7 @@ function SessionsTable({
   const handleClientFilterChange = useCallback(
     (value: string) => {
       updateQueryParams({
-        sessionSource: value === "all" ? null : value,
+        client: value === "all" ? null : value,
         page: "1", // Reset to first page
       });
     },
@@ -243,13 +255,10 @@ function SessionsTable({
     userId: userFilter !== "all" ? userFilter : undefined,
     source:
       sourceFilter !== "all" ? (sourceFilter as InteractionSource) : undefined,
-    sessionSource:
-      clientFilter !== "all"
-        ? (clientFilter as SessionClientSource)
-        : undefined,
+    client: clientFilter !== "all" ? (clientFilter as ClientFilter) : undefined,
     startDate: dateTimePicker.startDateParam,
     endDate: dateTimePicker.endDateParam,
-    search: searchFromUrl || undefined,
+    sessionId: sessionIdFromSearch,
     toastOnError: false,
   });
 
@@ -276,7 +285,7 @@ function SessionsTable({
       profileId: null,
       userId: null,
       source: null,
-      sessionSource: null,
+      client: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -532,11 +541,21 @@ function SessionsTable({
   return (
     <div className="space-y-4">
       <TableFilters>
-        <SearchInput
-          objectNamePlural="logs"
-          searchFields={["session ID", "model", "message"]}
-          paramName="search"
-        />
+        {/* Anchor the "not a session ID" hint as a floating overlay under the
+            input so toggling it never reflows the filter bar or the table. */}
+        <div className="relative w-full sm:w-[320px] sm:max-w-[320px]">
+          <SearchInput
+            objectNamePlural="logs"
+            searchFields={["session ID"]}
+            paramName="search"
+            className="relative w-full"
+          />
+          {searchIsNotSessionId && (
+            <output className="absolute left-0 top-full z-20 mt-1 w-full rounded-md border bg-popover px-2 py-1 text-xs text-muted-foreground shadow-md">
+              Enter a valid session UUID
+            </output>
+          )}
+        </div>
 
         <SearchableSelect
           value={profileFilter}
@@ -598,14 +617,12 @@ function SessionsTable({
           placeholder="Filter by Client"
           items={[
             { value: "all", label: "All Clients" },
-            ...Object.entries(SESSION_CLIENT_SOURCE_DISPLAY).map(
-              ([value, { label }]) => ({
-                value,
-                label,
-                content: <ClientFilterOption label={label} />,
-                selectedContent: <ClientFilterOption label={label} />,
-              }),
-            ),
+            ...CLIENT_FILTER_OPTIONS.map(({ value, label }) => ({
+              value,
+              label,
+              content: <ClientFilterOption label={label} />,
+              selectedContent: <ClientFilterOption label={label} />,
+            })),
           ]}
           className="w-[200px]"
         />

@@ -1,4 +1,3 @@
-import config from "@/config";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
@@ -126,10 +125,6 @@ class ConversationFilesService {
     organizationId: string;
     requestingUserId: string;
   }): Promise<{ files: ProjectFile[]; projectName: string | null }> {
-    if (!config.projects.enabled) {
-      return { files: [], projectName: null };
-    }
-
     let scope: ProjectFileScope | null = null;
     try {
       scope = await resolveProjectFileScope({

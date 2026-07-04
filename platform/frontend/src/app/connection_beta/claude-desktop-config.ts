@@ -1,4 +1,8 @@
-import { VIRTUAL_KEY_HEADER } from "@archestra/shared";
+import {
+  CLAUDE_DESKTOP_CLIENT_ID,
+  EXTERNAL_AGENT_ID_HEADER,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
 
 /**
  * The Archestra configuration profile Claude Desktop imports from its
@@ -48,7 +52,10 @@ export function buildClaudeDesktopConfigProfile(input: {
     inference: {
       provider: "gateway",
       baseUrl: `${input.baseUrl}/anthropic/${input.llmProxyId}`,
-      customHeaders: { [VIRTUAL_KEY_HEADER]: input.passthroughKey },
+      customHeaders: {
+        [EXTERNAL_AGENT_ID_HEADER]: CLAUDE_DESKTOP_CLIENT_ID,
+        [VIRTUAL_KEY_HEADER]: input.passthroughKey,
+      },
       credential: { kind: "static", apiKey: input.virtualKey },
     },
   };
@@ -88,11 +95,15 @@ export function maskConfigSecrets(
     ...profile,
     inference: {
       ...profile.inference,
+      // Mask only the secret header(s); the agent-id attribution header is not
+      // a secret, so it stays visible in the on-screen preview.
       customHeaders: Object.fromEntries(
-        Object.keys(profile.inference.customHeaders).map((header) => [
-          header,
-          SECRET_MASK,
-        ]),
+        Object.entries(profile.inference.customHeaders).map(
+          ([header, value]) => [
+            header,
+            header === EXTERNAL_AGENT_ID_HEADER ? value : SECRET_MASK,
+          ],
+        ),
       ),
       credential: { ...profile.inference.credential, apiKey: SECRET_MASK },
     },

@@ -17,13 +17,16 @@ import {
   stepCountIs,
   type streamText,
 } from "ai";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
+import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import {
   REPEAT_CALL_TERMINATION_NOTICE,
   repeatCeilingStopCondition,
@@ -43,6 +46,10 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  stripThinkingBlocks,
+  THINKING_ONLY_NOTICE,
+} from "@/utils/strip-thinking-blocks";
 import {
   type StageResult,
   stageAttachmentsIntoSandbox,
@@ -118,7 +125,7 @@ export interface A2AExecuteParams {
   chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
   /** Whether to block execution when an approval-required tool is called (defaults to true) */
@@ -131,6 +138,20 @@ export interface A2AExecuteParams {
    *    in case of tool invocation approval.
    */
   originalUiMessages?: UIMessage[];
+
+  /**
+   * When set (chat delegation), the child's tool calls are surfaced on the
+   * caller's conversation through this bridge, attributed to
+   * `delegationToolCallId`, and the bridge is forwarded into the child's own
+   * tools so deeper descendants surface too. Absent in headless executions.
+   */
+  subagentToolStream?: SubagentToolStreamBridge;
+  /**
+   * The id of the delegation tool call (`agent__<slug>`) that invoked this
+   * agent. The child's surfaced tool calls hang under it. Set together with
+   * `subagentToolStream`.
+   */
+  delegationToolCallId?: string;
 }
 
 /** @public — exported for testability */
@@ -167,6 +188,8 @@ export async function executeA2AMessage(
     chatOpsThreadId,
     parentContextIsTrusted,
     scheduleTriggerRunId,
+    subagentToolStream,
+    delegationToolCallId,
   } = params;
 
   // Isolation key scoping per-execution state (browser tabs, MCP client
@@ -235,6 +258,9 @@ export async function executeA2AMessage(
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
+      // Forward the same bridge so a nested delegation's tool calls surface too,
+      // attributed to the nested delegation call (recursion through the chain).
+      subagentToolStream,
       repeatTracker,
     });
 
@@ -351,6 +377,26 @@ export async function executeA2AMessage(
         repeatCeilingStopCondition(repeatTracker),
       ],
       abortSignal,
+      // Request the model's real output ceiling (clamped by the operator
+      // ceiling), or a safe fallback when unknown. Without this, providers that
+      // inject a small default max (e.g. Anthropic's ~4096) truncated large
+      // tool-call payloads.
+      maxOutputTokens: resolveAgentMaxOutputTokens({
+        outputLength: modelRow?.outputLength ?? null,
+        ceiling: config.chat.maxOutputTokensCeiling,
+      }),
+      // Per-step context guard: cap oversized tool results and keep the
+      // accumulated step history inside the model's context window, compacting
+      // the older prefix into an LLM summary when it overflows. Overrides only
+      // what each step sends to the model — the loop's own state (and the
+      // persisted/streamed UIMessage) keeps the full tool outputs.
+      prepareStep: createStepContextGuard({
+        model,
+        contextLength: modelRow?.contextLength ?? null,
+        systemPrompt,
+        abortSignal,
+        logContext: { agentId: agent.id, sessionId },
+      }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
       userContent !== null
@@ -439,6 +485,37 @@ export async function executeA2AMessage(
         );
       }
 
+      // Strip inline `<thinking>...</thinking>` text from the model's output at
+      // this single A2A boundary, so every consumer (protocol reply, delegation
+      // tool result, email, scheduled-run persistence) shares the invariant.
+      // Text parts are stripped in place — an emptied part is kept (not removed)
+      // so a thinking-only turn never collapses to a zero-part assistant message,
+      // which some providers reject when the persisted history is replayed.
+      // Structured `reasoning` parts are left untouched: the A2A protocol reply
+      // excludes them (only text parts survive), and where they are surfaced
+      // (the scheduled-run chat view) they render via the chat's reasoning UI,
+      // exactly as interactive chat does — stripping them is out of scope here.
+      const hadTextBeforeStrip = finalText.trim() !== "";
+      finalText = stripThinkingBlocks(finalText);
+      for (const part of responseUiMessage.parts) {
+        if (part.type === "text") {
+          part.text = stripThinkingBlocks(part.text);
+        }
+      }
+
+      // Surface this run's tool calls on the caller's conversation, attributed
+      // to the delegation call that invoked this agent. Nested delegations'
+      // tool calls are emitted by their own runs (which share this bridge), so
+      // the whole chain surfaces. The delegation tool's result is unaffected —
+      // it stays the child's final text.
+      if (subagentToolStream && delegationToolCallId) {
+        emitSubagentToolCalls({
+          bridge: subagentToolStream,
+          parentToolCallId: delegationToolCallId,
+          message: responseUiMessage,
+        });
+      }
+
       // The repeat-call ceiling stops the loop on a tool-call step, so the model
       // never took a turn to produce assistant text and `finalText` is empty.
       // Headless callers read only `text`, so surface why the run ended.
@@ -447,6 +524,22 @@ export async function executeA2AMessage(
         repeatTracker.hasReachedTerminationCeiling()
       ) {
         finalText = REPEAT_CALL_TERMINATION_NOTICE;
+      } else if (hadTextBeforeStrip && finalText.trim() === "") {
+        // The whole textual answer was `<thinking>` and stripped to nothing.
+        // Substitute the notice in both the headless `text` and the message so
+        // the protocol reply / persistence (built from text parts) carries it.
+        finalText = THINKING_ONLY_NOTICE;
+        const firstTextPart = responseUiMessage.parts.find(
+          (p) => p.type === "text",
+        );
+        if (firstTextPart?.type === "text") {
+          firstTextPart.text = THINKING_ONLY_NOTICE;
+        } else {
+          responseUiMessage.parts.push({
+            type: "text",
+            text: THINKING_ONLY_NOTICE,
+          });
+        }
       }
     } catch (streamError) {
       const capturedStreamError = getCapturedStreamError();
@@ -517,6 +610,67 @@ export async function executeA2AMessage(
 type StageAttachmentsFn = (
   attachments: A2AAttachment[],
 ) => Promise<StageResult[]>;
+
+/**
+ * Emit one `data-subagent-tool-call` per tool part in a child run's final
+ * message, attributed to the delegation call that invoked the child. The bridge
+ * caps payloads and streams/collects each call. Skips non-tool parts (text,
+ * reasoning, step markers). A nested delegation call (`agent__<slug>`) is itself
+ * a tool part, so it surfaces here while its own children surface from the
+ * nested run — the client re-nests them by id.
+ * @public — exported for testability
+ */
+export function emitSubagentToolCalls(params: {
+  bridge: SubagentToolStreamBridge;
+  parentToolCallId: string;
+  message: UIMessage;
+}): void {
+  const { bridge, parentToolCallId, message } = params;
+  type ToolPart = {
+    type?: string;
+    toolCallId?: string;
+    toolName?: string;
+    state?: string;
+    input?: unknown;
+    output?: unknown;
+    errorText?: string;
+  };
+  // Collapse to one entry per toolCallId, last-wins: a UIMessage normally holds
+  // a single part per tool call in its terminal state, but if an earlier
+  // (input-available) part and a later (output-available) part for the same id
+  // both appear, the later terminal one must win so the surfaced card shows the
+  // result/error rather than a perpetually-pending call.
+  const byCallId = new Map<string, ToolPart>();
+  for (const rawPart of message.parts ?? []) {
+    const part = rawPart as ToolPart;
+    const type = part.type;
+    if (typeof type !== "string") {
+      continue;
+    }
+    const isToolPart = type.startsWith("tool-") || type === "dynamic-tool";
+    if (!isToolPart || typeof part.toolCallId !== "string") {
+      continue;
+    }
+    byCallId.set(part.toolCallId, part);
+  }
+
+  for (const [toolCallId, part] of byCallId) {
+    const type = part.type as string;
+    const toolName =
+      type === "dynamic-tool"
+        ? (part.toolName ?? "unknown")
+        : type.slice("tool-".length);
+    bridge.emit({
+      parentToolCallId,
+      toolCallId,
+      toolName,
+      ...(part.input !== undefined ? { input: part.input } : {}),
+      ...(part.state !== undefined ? { state: part.state } : {}),
+      ...(part.output !== undefined ? { output: part.output } : {}),
+      ...(part.errorText !== undefined ? { errorText: part.errorText } : {}),
+    });
+  }
+}
 
 /**
  * Build the current user turn's AI SDK content from a text message and optional

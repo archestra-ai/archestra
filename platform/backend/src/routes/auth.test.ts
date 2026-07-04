@@ -22,16 +22,14 @@ import {
 } from "@/services/apps/app-connector-resource";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-vi.mock("@/auth", () => ({
-  betterAuth: {
-    handler: vi.fn(),
-  },
-}));
+vi.mock("@/auth");
 
 describe("auth routes", () => {
   let app: FastifyInstanceWithZod;
 
   beforeEach(async () => {
+    // `handler` is not part of the canonical @/auth mock surface, so add it here.
+    betterAuth.handler = vi.fn();
     app = createFastifyInstance();
     const { default: authRoutes } = await import("./auth");
     await app.register(authRoutes);
@@ -139,6 +137,7 @@ describe("auth routes", () => {
     );
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -193,6 +192,7 @@ describe("auth routes", () => {
     );
     const { oauthClient } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -234,6 +234,7 @@ describe("auth routes", () => {
     );
     const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedLlmProxyIds: [agent.id],
       providerApiKeys: [
@@ -270,6 +271,7 @@ describe("auth routes", () => {
     });
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gateway.id],
     });
@@ -317,6 +319,7 @@ describe("auth routes", () => {
     const organization = await makeOrganization();
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Native Client",
       grantType: "authorization_code",
       redirectUris: ["http://127.0.0.1:53280/callback"],
@@ -375,6 +378,7 @@ describe("auth routes", () => {
     });
     const { oauthClient } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gateway.id],
     });
@@ -405,6 +409,7 @@ describe("auth routes", () => {
     });
     const { oauthClient, clientSecret } = await McpOauthClientModel.create({
       organizationId: organization.id,
+      authorId: crypto.randomUUID(),
       name: "Backend Service",
       allowedGatewayIds: [gateway.id],
     });

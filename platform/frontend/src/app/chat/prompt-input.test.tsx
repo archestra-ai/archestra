@@ -4,29 +4,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
 
 const {
-  mockUseOrganization,
   mockUseChatPlaceholder,
   mockUseSkillsPaginated,
   mockTextInputSetInput,
   mockTextInputClear,
   mockControllerState,
   mockFeatureState,
+  mockProfileState,
 } = vi.hoisted(() => ({
-  mockUseOrganization: vi.fn(),
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "", files: [] as { url: string }[] },
   mockFeatureState: { chatSecretScanEnabled: false },
+  mockProfileState: {
+    agent: null as { sandboxAvailable: boolean } | null,
+  },
 }));
 
-// Mock ResizeObserver which is used by Radix UI components
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver (used by Radix UI components and the prompt input's
+// toolbar-collapse hook). Must be a real constructor so `new ResizeObserver()`
+// works. jsdom reports 0 widths, so the hook measures nothing and leaves the
+// toolbar in its full (expanded) layout — which is what these tests exercise.
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 // Mock window.matchMedia for useIsMobile hook
 Object.defineProperty(window, "matchMedia", {
@@ -215,10 +220,10 @@ vi.mock("@/components/ui/tooltip", () => ({
   ),
 }));
 
-// Mock agent query hooks
+// Mock agent query hooks; mockProfileState.agent controls sandboxAvailable
 vi.mock("@/lib/agent.query", () => ({
   useProfile: () => ({
-    data: null,
+    data: mockProfileState.agent,
     isLoading: false,
     error: null,
   }),
@@ -243,9 +248,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
   useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
-vi.mock("@/lib/organization.query", () => ({
-  useOrganization: () => mockUseOrganization(),
-}));
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/chat/chat-placeholder.hook", () => ({
   useChatPlaceholder: (...args: unknown[]) => mockUseChatPlaceholder(...args),
@@ -255,25 +258,14 @@ vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsPaginated: () => mockUseSkillsPaginated(),
 }));
 
-// Mock for useHasPermissions - default to non-admin
-const mockUseHasPermissions = vi.fn().mockReturnValue({
-  data: false,
-  isPending: false,
-  isLoading: false,
-});
+vi.mock("@/lib/auth/auth.query");
 
-vi.mock("@/lib/auth/auth.query", () => ({
-  useHasPermissions: () => mockUseHasPermissions(),
-}));
-
-vi.mock("@/lib/config/config.query", () => ({
-  useFeature: (flag: string) =>
-    flag === "chatSecretScanEnabled"
-      ? mockFeatureState.chatSecretScanEnabled
-      : undefined,
-}));
+vi.mock("@/lib/config/config.query");
 
 // Import the component after mocks are set up
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
+import { useOrganization } from "@/lib/organization.query";
 import ArchestraPromptInput from "./prompt-input";
 
 describe("ArchestraPromptInput", () => {
@@ -288,10 +280,20 @@ describe("ArchestraPromptInput", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseOrganization.mockReturnValue({
+    vi.mocked(useOrganization).mockReturnValue({
       data: null,
       isLoading: false,
-    });
+    } as unknown as ReturnType<typeof useOrganization>);
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+      isLoading: false,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "chatSecretScanEnabled"
+        ? mockFeatureState.chatSecretScanEnabled
+        : undefined,
+    );
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
@@ -303,6 +305,7 @@ describe("ArchestraPromptInput", () => {
     mockControllerState.value = "";
     mockControllerState.files = [];
     mockFeatureState.chatSecretScanEnabled = false;
+    mockProfileState.agent = null;
     localStorage.clear();
   });
 
@@ -390,11 +393,11 @@ describe("ArchestraPromptInput", () => {
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {
       // Mock admin user with agentSettings update permission
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: true,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput
@@ -420,11 +423,11 @@ describe("ArchestraPromptInput", () => {
 
     it("should show admin message in tooltip for non-admins when file uploads disabled", () => {
       // Mock non-admin user without agentSettings update permission
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: false,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput
@@ -468,11 +471,11 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should render model selector when user has provider settings permission", () => {
-      mockUseHasPermissions.mockReturnValue({
+      vi.mocked(useHasPermissions).mockReturnValue({
         data: true,
         isPending: false,
         isLoading: false,
-      });
+      } as ReturnType<typeof useHasPermissions>);
 
       render(
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
@@ -482,13 +485,13 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should keep a single organization placeholder static", () => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: {
           chatPlaceholders: ["Ask the support agent"],
           animateChatPlaceholders: true,
         },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseChatPlaceholder.mockReturnValue({
         placeholder: "Ask the support agent",
         isAnimating: false,
@@ -511,13 +514,13 @@ describe("ArchestraPromptInput", () => {
     });
 
     it("should keep placeholders static when animation is disabled", () => {
-      mockUseOrganization.mockReturnValue({
+      vi.mocked(useOrganization).mockReturnValue({
         data: {
           chatPlaceholders: ["First placeholder", "Second placeholder"],
           animateChatPlaceholders: false,
         },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseChatPlaceholder.mockReturnValue({
         placeholder: "Second placeholder",
         isAnimating: false,
@@ -772,10 +775,10 @@ describe("ArchestraPromptInput", () => {
     };
 
     beforeEach(() => {
-      mockUseOrganization.mockReturnValue({
-        data: { skillSlashCommandsEnabled: true },
+      vi.mocked(useOrganization).mockReturnValue({
+        data: { skillToolsEnabled: true },
         isLoading: false,
-      });
+      } as unknown as ReturnType<typeof useOrganization>);
       mockUseSkillsPaginated.mockReturnValue({
         data: { data: [skill] },
         isLoading: false,
@@ -806,6 +809,84 @@ describe("ArchestraPromptInput", () => {
       const [message, , options] = onSubmit.mock.calls[0];
       expect(message.text).toBe("summarize the repo");
       expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+
+    it("keeps skill command handling with the sandbox available", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "/my-skill summarize the repo";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("summarize the repo");
+      expect(options).toEqual({ skill: { id: skill.id, name: skill.name } });
+    });
+  });
+
+  describe("sandbox commands", () => {
+    it("sandbox available: a `!` message dispatches with the sandboxCommand option and unchanged text", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "! echo hi";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("! echo hi");
+      expect(options).toEqual({ sandboxCommand: true });
+    });
+
+    it("sandbox unavailable: the same `!` message submits as a plain message", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: false };
+      mockControllerState.value = "! echo hi";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("! echo hi");
+      expect(options).toBeUndefined();
+    });
+
+    it("a bare `!` submits as a plain message even with the sandbox available", () => {
+      const onSubmit = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "!";
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const [message, , options] = onSubmit.mock.calls[0];
+      expect(message.text).toBe("!");
+      expect(options).toBeUndefined();
+    });
+
+    it("keeps /compact interception with the sandbox available", () => {
+      const onSubmit = vi.fn();
+      const onCompactConversation = vi.fn();
+      mockProfileState.agent = { sandboxAvailable: true };
+      mockControllerState.value = "/compact";
+
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          conversationId="conversation-1"
+          onCompactConversation={onCompactConversation}
+          onSubmit={onSubmit}
+        />,
+      );
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onCompactConversation).toHaveBeenCalledTimes(1);
+      expect(onSubmit).not.toHaveBeenCalled();
     });
   });
 

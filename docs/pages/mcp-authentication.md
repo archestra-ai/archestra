@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-06-18
+lastUpdated: 2026-06-30
 ---
 
 <!--
@@ -70,6 +70,8 @@ Admins can change this in **Settings > Organization > Auth**. The setting is org
 When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
 
 Create and manage these clients under **MCPs > Credentials > OAuth Clients**. Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+
+Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
 
 The client exchanges its credentials for a short-lived (1-hour) bearer token at `POST /api/auth/oauth2/token` with:
 
@@ -282,6 +284,10 @@ This is a shared connection pattern, not a per-user identity pattern:
 #### Auto-Refresh
 
 For upstream servers that use OAuth, Archestra handles the token lifecycle automatically. When the upstream server returns a 401, Archestra uses the stored refresh token to obtain a new access token and retries the request without any user intervention. Refresh failures are tracked per server and are visible in the MCP server status page.
+
+#### Troubleshooting refresh failures
+
+`no_refresh_token` means the provider issued no refresh token, so the connection breaks once its access token expires. The server's **Additional scopes** field (pre-filled with `offline_access`) is appended to every authorization request to ask for one — keep it for Microsoft Entra and other standard OIDC providers, and clear it for providers that reject the scope (e.g. Google, which uses `access_type=offline`). Reconnect after changing it; if it persists, confirm the provider grants offline access to the app, which some tenants gate behind admin consent.
 
 ### Enterprise Identity Credential Resolution
 

@@ -10,6 +10,7 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -117,7 +118,16 @@ function RuntimeDialog({
               Back
             </Button>
             {isLast ? (
-              <Button type="button" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                onClick={() => {
+                  trackEvent("onboarding_completed", {
+                    wizardLabel: wizard.label,
+                    pageCount,
+                  });
+                  onOpenChange(false);
+                }}
+              >
                 Done
               </Button>
             ) : (

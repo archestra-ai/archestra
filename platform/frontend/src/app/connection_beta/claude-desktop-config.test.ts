@@ -1,4 +1,8 @@
-import { VIRTUAL_KEY_HEADER } from "@archestra/shared";
+import {
+  CLAUDE_DESKTOP_CLIENT_ID,
+  EXTERNAL_AGENT_ID_HEADER,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildClaudeDesktopConfigProfile,
@@ -26,6 +30,10 @@ describe("buildClaudeDesktopConfigProfile", () => {
     // passthrough key → custom header
     expect(profile.inference.customHeaders[VIRTUAL_KEY_HEADER]).toBe(
       "arch_passthrough",
+    );
+    // client attribution → custom header
+    expect(profile.inference.customHeaders[EXTERNAL_AGENT_ID_HEADER]).toBe(
+      CLAUDE_DESKTOP_CLIENT_ID,
     );
     // standard virtual key → static API credential
     expect(profile.inference.credential).toEqual({
@@ -74,6 +82,10 @@ describe("maskConfigSecrets", () => {
       "arch_passthrough",
     );
     expect(masked.inference.credential.apiKey).not.toContain("arch_virtual");
+    // the client-attribution header is not a secret → stays visible
+    expect(masked.inference.customHeaders[EXTERNAL_AGENT_ID_HEADER]).toBe(
+      CLAUDE_DESKTOP_CLIENT_ID,
+    );
     // non-secret fields and the original object are untouched
     expect(masked.inference.baseUrl).toBe(profile.inference.baseUrl);
     expect(masked.mcp).toEqual(profile.mcp);

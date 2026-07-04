@@ -54,6 +54,24 @@ const isDevelopment = !isProduction;
 
 const appVersion = process.env.ARCHESTRA_VERSION || packageJson.version;
 
+/**
+ * Developer-only convenience: when set (and NOT in production), the login screen
+ * is skipped by minting a real session for the user with this email (see the
+ * dev-auto-login Better Auth plugin). Hard-disabled in production so it can never
+ * bypass authentication on a real deployment. The session is an ordinary one for
+ * that user — RBAC is unchanged.
+ */
+const devAutoAuthenticateEmail = isProduction
+  ? undefined
+  : process.env.ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL?.trim() || undefined;
+
+if (devAutoAuthenticateEmail) {
+  logger.warn(
+    { email: devAutoAuthenticateEmail },
+    "[config] ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL is set: the login screen is skipped by auto-minting a session for this user. Developer-only, ignored in production.",
+  );
+}
+
 const frontendBaseUrl =
   process.env.ARCHESTRA_FRONTEND_URL?.trim() || "http://localhost:3000";
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
@@ -292,6 +310,12 @@ const DEFAULT_BODY_LIMIT = 70 * 1024 * 1024;
 const DEFAULT_DATABASE_POOL_MAX = 50;
 const MAX_DATABASE_POOL_MAX = 500;
 
+// Upper bound applied to every agent turn's output-token budget. Defaults high
+// enough to unblock large tool-call payloads while capping cost; the real
+// per-model output ceiling still applies when it is lower.
+const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
+const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
+
 // Per-connection statement timeout (ms). Defense-in-depth: kills runaway
 // queries instead of letting them hang a connection indefinitely. 0 disables.
 const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
@@ -432,6 +456,32 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
 };
 
 /** @public — exported for testability */
+export const parseChatMaxOutputTokens = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+  }
+
+  // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
+  // ("1.5") are rejected rather than silently truncated to a tiny cap.
+  const parsed = Number(value);
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
+  ) {
+    logger.warn(
+      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+    );
+    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+  }
+
+  return parsed;
+};
+
+/** @public — exported for testability */
 export const parseDatabaseStatementTimeoutMillis = (
   envValue?: string | undefined,
 ): number => {
@@ -450,6 +500,78 @@ export const parseDatabaseStatementTimeoutMillis = (
   }
 
   return parsed;
+};
+
+/** @public — exported for testability */
+export interface AnthropicWifConfig {
+  federationRuleId: string;
+  organizationId: string;
+  serviceAccountId: string;
+  workspaceId?: string;
+  identityTokenFile?: string;
+  /**
+   * Inline identity token (a JWT). Held in the config singleton, so prefer
+   * `identityTokenFile` in production — only the path is stored, not the secret,
+   * and the file is re-read on every exchange to pick up rotation.
+   */
+  identityToken?: string;
+}
+
+/**
+ * Parse Anthropic Workload Identity Federation (keyless auth) configuration.
+ * Enabled only when the federation rule ID, organization ID, service account
+ * ID, and an identity token source are all present; a partial configuration
+ * logs a warning and disables WIF rather than failing at request time.
+ *
+ * @public — exported for testability
+ */
+export const parseAnthropicWifConfig = (env: {
+  federationRuleId?: string | undefined;
+  organizationId?: string | undefined;
+  serviceAccountId?: string | undefined;
+  workspaceId?: string | undefined;
+  identityTokenFile?: string | undefined;
+  identityToken?: string | undefined;
+}): AnthropicWifConfig | null => {
+  const federationRuleId = env.federationRuleId?.trim();
+  const organizationId = env.organizationId?.trim();
+  const serviceAccountId = env.serviceAccountId?.trim();
+  const workspaceId = env.workspaceId?.trim();
+  const identityTokenFile = env.identityTokenFile?.trim();
+  const identityToken = env.identityToken?.trim();
+
+  const anySet = Boolean(
+    federationRuleId ||
+      organizationId ||
+      serviceAccountId ||
+      workspaceId ||
+      identityTokenFile ||
+      identityToken,
+  );
+  if (!anySet) {
+    return null;
+  }
+
+  if (
+    !federationRuleId ||
+    !organizationId ||
+    !serviceAccountId ||
+    !(identityTokenFile || identityToken)
+  ) {
+    logger.warn(
+      "Anthropic Workload Identity Federation is partially configured and will be disabled. Set ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID, ARCHESTRA_ANTHROPIC_ORGANIZATION_ID, ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID, and one of ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE or ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN.",
+    );
+    return null;
+  }
+
+  return {
+    federationRuleId,
+    organizationId,
+    serviceAccountId,
+    ...(workspaceId ? { workspaceId } : {}),
+    ...(identityTokenFile ? { identityTokenFile } : {}),
+    ...(identityToken ? { identityToken } : {}),
+  };
 };
 
 /** @public — exported for testability */
@@ -809,17 +931,30 @@ export function parseCommaSeparatedList(value: string): string[] {
 }
 
 /** @public — exported for testability */
-export const getAnalyticsConfig = () => ({
-  enabled: process.env.ARCHESTRA_ANALYTICS !== "disabled",
-  posthog: {
-    key:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
-      DEFAULT_POSTHOG_KEY,
-    host:
-      process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
-      DEFAULT_POSTHOG_HOST,
-  },
-});
+export const getAnalyticsConfig = () => {
+  const analyticsEnv = process.env.ARCHESTRA_ANALYTICS?.trim();
+  // Evaluated at call time (not the module-level `isProduction`) so tests can
+  // exercise both environments.
+  const isProductionEnv = ["production", "prod"].includes(
+    process.env.NODE_ENV?.toLowerCase() ?? "",
+  );
+  return {
+    // Analytics (PostHog product analytics, instance heartbeats, and backend
+    // error tracking) defaults to on only in production builds. Local dev and
+    // test runs (bare `pnpm dev`, vitest — where NODE_ENV isn't "production")
+    // stay silent unless ARCHESTRA_ANALYTICS is explicitly set, which always
+    // wins in both directions ("disabled" → off, any other value → on).
+    enabled: analyticsEnv ? analyticsEnv !== "disabled" : isProductionEnv,
+    posthog: {
+      key:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY?.trim() ||
+        DEFAULT_POSTHOG_KEY,
+      host:
+        process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
+        DEFAULT_POSTHOG_HOST,
+    },
+  };
+};
 
 const mcpServerBaseImage =
   process.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE ||
@@ -842,13 +977,14 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
   const runnerHost = envValue?.trim();
   if (!enabled) return runnerHost || undefined;
 
+  // No host configured is the normal "this deployment runs no code sandbox"
+  // case, not a misconfiguration — stay silent and leave the sandbox off.
   if (!runnerHost) {
-    logger.error(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must be set when ARCHESTRA_CODE_RUNTIME_ENABLED=true — code runtime disabled",
-    );
     return undefined;
   }
 
+  // A host that's set but malformed is a genuine misconfiguration (unlike an
+  // absent host, which just means "no sandbox here") — surface it loudly.
   if (!isSupportedDaggerRunnerHost(runnerHost)) {
     logger.error(
       "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
@@ -866,17 +1002,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
- * ships-dark/preview feature at once while keeping per-feature opt-out intact
- * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
+ * this helper while a per-feature flag keeps its own opt-out. Backs *product*
+ * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
+ * Azure/Vertex Entra).
  *
- * This backs ships-dark *product* features only. It deliberately does NOT touch
- * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
- * deployment configuration rather than preview features. Beta only flips the
- * *intent* to enable — the sandbox and agent hooks still need a Dagger runner
- * host present to actually run.
- *
- * @public — exported for testability
+ * @public — the shared gate for a product feature that ships off by default; also exported for testability
  */
 export function betaFeatureEnabled(envValue: string | undefined): boolean {
   if (envValue === undefined || envValue === "") {
@@ -886,22 +1017,18 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host. it is independent of the
-// skills *read* feature — skills can be listed/activated/read with the sandbox
-// off.
-const skillsSandboxRequested = betaFeatureEnabled(
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
-);
+// skill activation-mounts) needs a Dagger runner host: it runs when a host is
+// configured and stays off otherwise — presence of the host is the switch. it
+// is independent of the skills *read* feature — skills can be listed/activated/
+// read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: skillsSandboxRequested,
+  enabled: true,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
-// a missing/invalid runner host disables the feature instead of crashing boot.
-const skillsSandboxEnabled =
-  skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
-// the Dagger runtime fronts the sandbox; the feature flag turning on lights up
-// the shared session + warm base.
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
+// shared session + warm base.
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
   skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
@@ -977,12 +1104,6 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    skillsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED,
-    ),
-    environmentsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED,
-    ),
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -1014,6 +1135,14 @@ const config = {
       process.env[DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME] ||
       DEFAULT_ADMIN_PASSWORD,
     cookieDomain: process.env.ARCHESTRA_AUTH_COOKIE_DOMAIN,
+    /**
+     * Prefix for auth cookie names (`<prefix>.session_token` etc.). Browsers
+     * scope cookies to the host without the port, so parallel local instances
+     * on different localhost ports clobber each other's sessions unless each
+     * uses a distinct prefix.
+     */
+    cookiePrefix:
+      process.env.ARCHESTRA_AUTH_COOKIE_PREFIX?.trim() || "archestra",
     disableBasicAuth: process.env.ARCHESTRA_AUTH_DISABLE_BASIC_AUTH === "true",
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
@@ -1026,6 +1155,7 @@ const config = {
      */
     dynamicClientRegistrationEnabled:
       process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
+    devAutoAuthenticateEmail,
   },
   analytics: getAnalyticsConfig(),
   database: {
@@ -1061,6 +1191,15 @@ const config = {
       azureFoundryEntraIdEnabled:
         process.env.ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED ===
         "true",
+      // Workload Identity Federation (keyless upstream auth); null when not configured.
+      wif: parseAnthropicWifConfig({
+        federationRuleId: process.env.ARCHESTRA_ANTHROPIC_FEDERATION_RULE_ID,
+        organizationId: process.env.ARCHESTRA_ANTHROPIC_ORGANIZATION_ID,
+        serviceAccountId: process.env.ARCHESTRA_ANTHROPIC_SERVICE_ACCOUNT_ID,
+        workspaceId: process.env.ARCHESTRA_ANTHROPIC_WORKSPACE_ID,
+        identityTokenFile: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN_FILE,
+        identityToken: process.env.ARCHESTRA_ANTHROPIC_IDENTITY_TOKEN,
+      }),
     },
     gemini: {
       baseUrl:
@@ -1270,6 +1409,9 @@ const config = {
     },
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+    maxOutputTokensCeiling: parseChatMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -1336,16 +1478,14 @@ const config = {
     ),
   },
   /**
-   * agent lifecycle hooks — user scripts run at chat lifecycle events. Gated by
-   * `ARCHESTRA_AGENT_HOOKS_ENABLED`, but only effective when the agent runtime
-   * (the code execution sandbox) is also on, since hooks execute in the
-   * conversation sandbox. This `enabled` is the fully-resolved flag — the
-   * dispatcher, the `/debug` toggle, and the chip read-gate all key off it.
+   * agent lifecycle hooks — user scripts run at chat lifecycle events.
+   * Available whenever the agent runtime (the code execution sandbox) is on,
+   * since hooks execute in the conversation sandbox; off otherwise. This
+   * `enabled` is the fully-resolved flag — the dispatcher, the `/debug` toggle,
+   * and the chip read-gate all key off it.
    */
   hooks: {
-    enabled:
-      betaFeatureEnabled(process.env.ARCHESTRA_AGENT_HOOKS_ENABLED) &&
-      skillsSandboxEnabled,
+    enabled: skillsSandboxEnabled,
   },
   /**
    * unified Dagger runtime — one shared session with a pre-warmed base
@@ -1386,24 +1526,6 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
-  },
-  /**
-   * user-authored MCP Apps — first-class apps created inside Archestra (from
-   * chat or the /apps page), backed by a per-app data store and assignable
-   * tools. Ships dark: off by default until the feature is ready to surface.
-   */
-  apps: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
-  },
-  /**
-   * Projects + the persistent "My Files" file system on top of the skill
-   * sandbox. Ships dark: off by default until ready to surface. Gates the
-   * project APIs, the My Files endpoints, the persistent-file MCP tools
-   * (search_files, read_file, save_file, edit_file, delete_file), and the
-   * my_file upload source.
-   */
-  projects: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -1510,19 +1632,17 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
     ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
     ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
     ),
   },
   secretsManager: {
@@ -1552,8 +1672,25 @@ const config = {
     // it ngrok assigns an ephemeral domain that rotates on each restart.
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
+  chatops: {
+    // Per-process cap on concurrent chatops file downloads + image shrinking.
+    // Chatops events are acked to the provider before processing, so an OOM
+    // during a burst of attachment-heavy messages means silent message loss —
+    // this bounds the transient memory (JS buffer + native copy + decode
+    // alloc) a burst can hold. 4 matches libuv's default threadpool, which
+    // already serializes the native image decodes. Currently gates Slack only:
+    // MS Teams has no image-shrink path and enforces a flat 10 MB per-file cap.
+    maxConcurrentFileTransfers: parsePositiveInt(
+      process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
+      4,
+    ),
+  },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

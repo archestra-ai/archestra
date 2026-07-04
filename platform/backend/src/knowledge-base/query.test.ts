@@ -1,20 +1,57 @@
-import { vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { beforeEach, vi } from "vitest";
+import { useMswServer } from "@/test/msw";
 
-const mockEmbeddingsCreate = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({
-    object: "list",
-    data: [{ object: "embedding", embedding: [], index: 0 }],
-    model: "text-embedding-3-small",
-    usage: { prompt_tokens: 5, total_tokens: 5 },
-  }),
+// Query embeddings are scripted per test: each embedding call dequeues the next
+// vector. Tests that mock the DB search layer don't care about the vector, so an
+// empty queue falls back to a valid non-zero embedding.
+const embeddingRequests: Array<{
+  model: string;
+  input: string[];
+  dimensions?: number;
+}> = [];
+const embeddingQueue: number[][] = [];
+
+// openai@6 requests base64 embeddings by default and decodes them client-side,
+// so the wire payload must carry Float32Array bytes, not a JSON number array.
+function encodeEmbedding(values: number[]): string {
+  const floats = new Float32Array(values);
+  return Buffer.from(
+    floats.buffer,
+    floats.byteOffset,
+    floats.byteLength,
+  ).toString("base64");
+}
+
+const embeddingHandler = http.post(
+  "https://api.openai.com/v1/embeddings",
+  async ({ request }) => {
+    const body = (await request.json()) as {
+      model: string;
+      input: string[];
+      dimensions?: number;
+    };
+    embeddingRequests.push({
+      model: body.model,
+      input: body.input,
+      dimensions: body.dimensions,
+    });
+
+    const embedding = embeddingQueue.shift() ?? new Array(1536).fill(0.001);
+    return HttpResponse.json({
+      object: "list",
+      data: [
+        {
+          object: "embedding",
+          embedding: encodeEmbedding(embedding),
+          index: 0,
+        },
+      ],
+      model: body.model,
+      usage: { prompt_tokens: 5, total_tokens: 5 },
+    });
+  },
 );
-
-vi.mock("openai", () => {
-  class MockOpenAI {
-    embeddings = { create: mockEmbeddingsCreate };
-  }
-  return { default: MockOpenAI };
-});
 
 const mockRerank = vi.hoisted(() =>
   vi.fn().mockImplementation(({ chunks }: { chunks: unknown[] }) => chunks),
@@ -36,20 +73,12 @@ vi.mock("./query-expansion", () => ({
   KEYWORD_QUERY_HYBRID_ALPHA_WEIGHT: 4.0,
 }));
 
-vi.mock("@/config", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/config")>();
-  return {
-    ...original,
-    default: {
-      ...original.default,
-      kb: {
-        hybridSearchEnabled: true,
-      },
-    },
-  };
-});
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    kb: { hybridSearchEnabled: true },
+  }),
+);
 
-import OpenAI from "openai";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { describe, expect, test } from "@/test";
@@ -61,11 +90,13 @@ function makeFakeEmbedding(seed: number): number[] {
 }
 
 function setupEmbeddingConfig() {
-  const client = new OpenAI({ apiKey: "test-key" });
   mockResolveEmbeddingConfig.mockResolvedValue({
-    client,
+    apiKey: "test-key",
+    baseUrl: null,
     model: "text-embedding-3-small",
     dimensions: 1536,
+    provider: "openai",
+    inputModalities: null,
   });
 }
 
@@ -76,6 +107,13 @@ function setupSingleQueryExpansion() {
 }
 
 describe("QueryService", () => {
+  useMswServer(embeddingHandler);
+
+  beforeEach(() => {
+    embeddingRequests.length = 0;
+    embeddingQueue.length = 0;
+  });
+
   test("returns ranked results with citations", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -125,14 +163,9 @@ describe("QueryService", () => {
       1536,
     );
 
-    // Mock query embedding - similar to emb0
+    // Query embedding - similar to emb0
     const queryEmb = makeFakeEmbedding(1.1);
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(queryEmb);
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -155,7 +188,7 @@ describe("QueryService", () => {
     // First result should have higher score (closer embedding)
     expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);
 
-    expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
+    expect(embeddingRequests[0]).toEqual({
       model: "text-embedding-3-small",
       input: ["TypeScript"],
       dimensions: 1536,
@@ -173,13 +206,7 @@ describe("QueryService", () => {
     setupEmbeddingConfig();
     setupSingleQueryExpansion();
 
-    const queryEmb = makeFakeEmbedding(1);
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(1));
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -234,13 +261,7 @@ describe("QueryService", () => {
       },
     ]);
 
-    const queryEmb = makeFakeEmbedding(1);
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(1));
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -284,13 +305,7 @@ describe("QueryService", () => {
       },
     ]);
 
-    const queryEmb = makeFakeEmbedding(1);
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(1));
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -338,13 +353,7 @@ describe("QueryService", () => {
     }));
     await KbChunkModel.updateEmbeddings(updates, 1536);
 
-    const queryEmb = makeFakeEmbedding(0);
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [{ object: "embedding", embedding: queryEmb, index: 0 }],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(0));
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -412,14 +421,7 @@ describe("QueryService", () => {
       .spyOn(KbChunkModel, "fullTextSearch")
       .mockResolvedValueOnce([fullTextOnly, { ...sharedResult, score: 3.0 }]);
 
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [
-        { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
-      ],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(1));
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -470,14 +472,7 @@ describe("QueryService", () => {
       .spyOn(KbChunkModel, "fullTextSearch")
       .mockResolvedValueOnce([]);
 
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [
-        { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
-      ],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(1));
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -536,14 +531,7 @@ describe("QueryService", () => {
       .spyOn(KbChunkModel, "fullTextSearch")
       .mockResolvedValueOnce([chunk2, chunk1]);
 
-    mockEmbeddingsCreate.mockResolvedValueOnce({
-      object: "list",
-      data: [
-        { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
-      ],
-      model: "text-embedding-3-small",
-      usage: { prompt_tokens: 5, total_tokens: 5 },
-    });
+    embeddingQueue.push(makeFakeEmbedding(1));
 
     // Reranker reverses the order
     mockRerank.mockResolvedValueOnce([chunk2, chunk1]);
@@ -589,7 +577,7 @@ describe("QueryService", () => {
 
     expect(results).toEqual([]);
     // Should not attempt to create embeddings
-    expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
+    expect(embeddingRequests).toHaveLength(0);
   });
 
   test("multi-query expansion searches each query independently and merges", async ({
@@ -659,31 +647,11 @@ describe("QueryService", () => {
       .spyOn(KbChunkModel, "fullTextSearch")
       .mockResolvedValue([]);
 
-    mockEmbeddingsCreate
-      .mockResolvedValueOnce({
-        object: "list",
-        data: [
-          { object: "embedding", embedding: makeFakeEmbedding(1), index: 0 },
-        ],
-        model: "text-embedding-3-small",
-        usage: { prompt_tokens: 5, total_tokens: 5 },
-      })
-      .mockResolvedValueOnce({
-        object: "list",
-        data: [
-          { object: "embedding", embedding: makeFakeEmbedding(2), index: 0 },
-        ],
-        model: "text-embedding-3-small",
-        usage: { prompt_tokens: 5, total_tokens: 5 },
-      })
-      .mockResolvedValueOnce({
-        object: "list",
-        data: [
-          { object: "embedding", embedding: makeFakeEmbedding(3), index: 0 },
-        ],
-        model: "text-embedding-3-small",
-        usage: { prompt_tokens: 5, total_tokens: 5 },
-      });
+    embeddingQueue.push(
+      makeFakeEmbedding(1),
+      makeFakeEmbedding(2),
+      makeFakeEmbedding(3),
+    );
 
     const results = await queryService.query({
       connectorIds: [connector.id],
@@ -703,7 +671,7 @@ describe("QueryService", () => {
     ).toBe(true);
 
     // Verify multiple embedding calls were made (one per expanded query)
-    expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
+    expect(embeddingRequests).toHaveLength(3);
 
     // Verify reranker uses original query text
     expect(mockRerank).toHaveBeenCalledWith(

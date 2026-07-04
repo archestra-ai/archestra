@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { fetchGeminiModels, fetchGeminiModelsViaVertexAi } from "./gemini";
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+// The shared test setup restores the real fetch after every test, so
+// re-apply the mock before each one.
+vi.stubGlobal("fetch", mockFetch);
+beforeEach(() => {
+  vi.stubGlobal("fetch", mockFetch);
+});
 
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),

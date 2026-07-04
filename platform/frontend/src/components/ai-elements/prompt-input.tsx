@@ -1139,7 +1139,7 @@ export const PromptInputFooter = ({
   />
 );
 
-export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
+export type PromptInputToolsProps = ComponentProps<"div">;
 
 export const PromptInputTools = ({
   className,

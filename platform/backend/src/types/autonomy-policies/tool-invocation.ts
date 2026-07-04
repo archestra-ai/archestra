@@ -3,7 +3,7 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { SupportedOperatorSchema } from "./operator";
 
-const ToolInvocationPolicyActionSchema = z.enum([
+export const ToolInvocationPolicyActionSchema = z.enum([
   "allow_when_context_is_untrusted",
   "block_when_context_is_untrusted",
   "block_always",

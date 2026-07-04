@@ -1,0 +1,30 @@
+{
+  "name": "@archestra/image-rs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "napi build --release --platform",
+    "build:dev": "napi build --profile release-fast --platform",
+    "check:ci": "cargo fmt --check --all && cargo check -p image_core -p image_rs --locked && cargo test -p image_core --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
+    "check:musl": "cargo test -p image_core --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
+    "lint": "cargo fmt --check --all",
+    "smoke": "node smoke.test.cjs",
+    "smoke:esm": "node smoke.esm.test.mjs",
+    "test": "cargo test -p image_core --locked",
+    "type-check": "cargo check -p image_core -p image_rs --locked"
+  },
+  "dependencies": {
+    "@archestra/napi-loader": "workspace:*"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.4.0"
+  },
+  "files": [
+    "index.cjs",
+    "index.d.ts",
+    "*.node"
+  ]
+}

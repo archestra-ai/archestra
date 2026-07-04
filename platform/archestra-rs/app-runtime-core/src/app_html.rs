@@ -42,10 +42,18 @@ static HEAD_OR_HTML: LazyLock<Regex> =
 
 // Raw-text src/href refs on script/link open tags, quoted (group 3) or
 // unquoted (group 4). Backstops the DOM loops in `scan_app_html` for tag
-// shapes `tl` drops; see the fallback step there.
+// shapes `tl` drops; see the fallback step there. The attribute name must
+// follow a whitespace/solidus/quote boundary so `data-src` and friends do not
+// count. Deliberately regex-grade, not tokenizer-grade: markup crafted to
+// confuse it (a decoy `src=` inside another attribute's value, mixed quotes,
+// entity-spliced markers) can still slip this backstop — evading the gate only
+// breaks the author's own app, and the render-time CSP stays the real
+// security boundary.
 static RESOURCE_REF_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?is)<(script|link)\b[^>]*?\b(src|href)\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#)
-        .expect("static resource ref fallback regex")
+    Regex::new(
+        r#"(?is)<(script|link)\b[^>]*?[\s/"'](src|href)\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#,
+    )
+    .expect("static resource ref fallback regex")
 });
 
 /// Why a scan disqualified the HTML. Carries the offending value so the caller
@@ -407,6 +415,15 @@ mod tests {
             scan_app_html(html).rejection.expect("should reject").kind,
             RejectionKind::PlatformScriptSrc
         );
+    }
+
+    #[test]
+    fn data_src_metadata_is_not_treated_as_a_self_load() {
+        // `data-src` is authored metadata the browser never loads; the
+        // fallback's attribute-boundary requirement must not read its value as
+        // a real `src`.
+        let html = r#"<html><head><script data-src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
+        assert_eq!(scan_app_html(html).rejection, None);
     }
 
     #[test]

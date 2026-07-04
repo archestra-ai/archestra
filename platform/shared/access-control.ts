@@ -464,11 +464,13 @@ export const requiredEndpointPermissionsMap: Partial<
   Record<RouteId, Permissions>
 > = {
   /**
-   * Getting basic info about the organization and marking onboarding as complete
-   * require the user to be authenticated but don't require any specific permissions.
+   * Getting basic info about the organization requires the user to be
+   * authenticated but no specific permission.
    */
   [RouteId.GetOrganization]: {},
-  [RouteId.CompleteOnboarding]: {},
+  // Completing onboarding flips an org-wide flag, so gate it on admin-level
+  // organization-settings update, like the other org-settings routes.
+  [RouteId.CompleteOnboarding]: { organizationSettings: ["update"] },
 
   // Connection setup: resource-level checks (mcpGateway/llmProxy read access,
   // skill admin) are conditional on what the setup includes and enforced in

@@ -88,6 +88,27 @@ describe("access-control", () => {
     });
   });
 
+  describe("complete-onboarding route", () => {
+    // Completing onboarding flips the org-wide onboardingComplete flag, so it
+    // must require admin-level organizationSettings:update, not merely
+    // authentication — otherwise any member could flip it.
+    test("CompleteOnboarding requires organizationSettings:update", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.CompleteOnboarding];
+      expect(required?.organizationSettings).toContain("update");
+    });
+
+    test("the member role cannot complete onboarding", () => {
+      expect(memberPermissions.organizationSettings).not.toContain("update");
+    });
+
+    test("GetOrganization stays authenticated-only", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.GetOrganization]).toEqual(
+        {},
+      );
+    });
+  });
+
   describe("sandbox artifact route", () => {
     // the download_file tool (sandbox:execute) hands out this artifact URL, so
     // the fetch route must require the same permission — otherwise a role that

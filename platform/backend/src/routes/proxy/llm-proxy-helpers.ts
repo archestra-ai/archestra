@@ -330,7 +330,7 @@ export function buildErrorInteractionRecord(params: {
       params.processedRequest === undefined
         ? null
         : (params.processedRequest as InteractionRequest),
-    response: { error: params.errorMessage } as unknown as InteractionResponse,
+    response: { error: params.errorMessage },
     dualLlmAnalyses: params.dualLlmAnalyses,
     unsafeContextBoundary: params.unsafeContextBoundary,
     model: params.actualModel,

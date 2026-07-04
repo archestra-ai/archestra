@@ -6,6 +6,15 @@
 //! the envelope module). A scan is pure: it never mutates the HTML, it only
 //! reports the first disqualifying construct (rejection) plus soft warnings.
 //! Parsing failures fail closed (a rejection), never a silent pass.
+//!
+//! Script TEXT is extracted lexically from the raw input, not from the `tl`
+//! DOM: browsers treat script content as raw text until the next `</script>`,
+//! while `tl` has no RAWTEXT mode — a bare `<` in ordinary JS would splinter
+//! the element and let a bootstrap marker slip past the gate. The lexical
+//! extraction also reads script blocks inside HTML comments; for a security
+//! gate that is the fail-closed direction (dead markup is trivially deleted).
+//! Attribute refs are read from the DOM, tolerant of `tl`'s solidus fusing
+//! (see `resource_ref`).
 
 use std::sync::LazyLock;
 
@@ -69,15 +78,15 @@ pub fn scan_app_html(html: &str) -> ScanResult {
             warnings: Vec::new(),
         };
     };
-    let parser = dom.parser();
 
     let tags = || dom.nodes().iter().filter_map(|node| node.as_tag());
 
-    // 1. SDK self-bootstrap inside <script> text. Concatenate all script text,
+    // 1. SDK self-bootstrap inside <script> text — lexical raw-input
+    //    extraction (see module docs on RAWTEXT). Concatenate all script text,
     //    then test markers in list order (mirrors the TS precedence).
-    let script_text: String = tags()
-        .filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("script"))
-        .map(|tag| tag.inner_text(parser).into_owned())
+    let script_text: String = SCRIPT_BLOCK
+        .captures_iter(html)
+        .map(|block| block[1].to_string())
         .collect::<Vec<_>>()
         .join("\n");
     for marker in SDK_BOOTSTRAP_MARKERS {
@@ -87,8 +96,8 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     }
 
     // 2. Platform script self-load via <script src>, document order.
-    for tag in tags().filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("script")) {
-        if let Some(src) = attr(tag, "src")
+    for tag in tags().filter(|tag| tag_is(tag, "script")) {
+        if let Some(src) = resource_ref(tag, "src")
             && PLATFORM_SCRIPT_SRC_MARKERS
                 .iter()
                 .any(|marker| src.contains(marker))
@@ -101,8 +110,8 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     //    browser ignores when resolving the URL so a spliced tab/newline (or a
     //    ZWNBSP, which JS `\s` strips but Rust's `is_whitespace` does not) can't
     //    sneak the marker past.
-    for tag in tags().filter(|tag| tag.name().as_utf8_str().eq_ignore_ascii_case("link")) {
-        if let Some(href) = attr(tag, "href") {
+    for tag in tags().filter(|tag| tag_is(tag, "link")) {
+        if let Some(href) = resource_ref(tag, "href") {
             let collapsed: String = href
                 .chars()
                 .filter(|c| !c.is_whitespace() && *c != '\u{feff}')
@@ -125,11 +134,50 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     }
 }
 
+// A `<script>` block's raw text: everything between the open tag and the next
+// `</script>`, the same extraction the TS predecessor used and the closest
+// lexical approximation of the browser's RAWTEXT tokenization. Shared with the
+// authoring lint (`app_html_lint`), like the tag helpers below.
+pub(crate) static SCRIPT_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<script\b[^>]*>(.*?)</script>").expect("static script block regex")
+});
+
+// Tag-name match tolerant of `tl`'s solidus fusing: browsers treat a solidus
+// inside a tag as attribute-separator whitespace (`<script/src=…>` is a script
+// element), while `tl` fuses it into the tag name (`script/src`) — compare only
+// the part before the first solidus.
+pub(crate) fn tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
+    let name = tag.name().as_utf8_str();
+    name.split('/')
+        .next()
+        .unwrap_or(&name)
+        .eq_ignore_ascii_case(expected)
+}
+
+// An attribute ref, recovering the solidus-fused shape `tag_is` matches on:
+// `tl` parses `<script/src="u">` as tag `script/src` with the value under an
+// empty attribute key. A solidus after a space (`<script /src=…>`) makes `tl`
+// drop the tag entirely; that stays a blind spot alongside unquoted URL values.
+pub(crate) fn resource_ref(tag: &tl::HTMLTag, attr_name: &str) -> Option<String> {
+    if let Some(value) = attr(tag, attr_name) {
+        return Some(value);
+    }
+    let name = tag.name().as_utf8_str();
+    let (_, fused) = name.split_once('/')?;
+    if fused
+        .trim_start_matches('/')
+        .eq_ignore_ascii_case(attr_name)
+    {
+        return attr(tag, "");
+    }
+    None
+}
+
 // HTML attribute names are case-insensitive, but `tl`'s `Attributes::get` is an
 // exact-case lookup — so we iterate and compare keys with `eq_ignore_ascii_case`
 // (cheerio's `.attr()` matched `SRC`/`HREF` too). A valueless attribute yields
-// `None`, i.e. nothing to scan. Shared with the authoring lint (`app_html_lint`).
-pub(crate) fn attr(tag: &tl::HTMLTag, name: &str) -> Option<String> {
+// `None`, i.e. nothing to scan.
+fn attr(tag: &tl::HTMLTag, name: &str) -> Option<String> {
     tag.attributes()
         .iter()
         .find(|(key, _)| key.eq_ignore_ascii_case(name))
@@ -249,6 +297,45 @@ mod tests {
         let result = scan_app_html("<p>just a fragment</p>");
         assert_eq!(result.rejection, None);
         assert_eq!(result.warnings, vec![NO_DOCUMENT_ROOT_WARNING.to_string()]);
+    }
+
+    #[test]
+    fn bare_less_than_before_a_marker_cannot_evade_the_bootstrap_rejection() {
+        // `tl` has no RAWTEXT mode, so in its DOM a `<` comparison splinters
+        // the script element and hides what follows; the lexical script-text
+        // extraction must still see the marker.
+        let html = "<html><head><script>if (a < b) { const u = window.__ARCHESTRA_APP_SDK_URL__; }</script></head></html>";
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::SdkBootstrap
+        );
+    }
+
+    #[test]
+    fn commented_out_bootstrap_script_fails_closed() {
+        // The lexical extraction reads script blocks inside HTML comments too;
+        // rejecting dead markup is the fail-closed direction for the gate.
+        let html = "<html><head><!-- <script>PostMessageTransport</script> --></head></html>";
+        assert_eq!(
+            scan_app_html(html).rejection.expect("should reject").kind,
+            RejectionKind::SdkBootstrap
+        );
+    }
+
+    #[test]
+    fn solidus_fused_platform_self_loads_are_rejected() {
+        // Browsers read `<script/src=…>`/`<link/href=…>` as ordinary elements;
+        // the fused-name recovery must keep the gate closed to them.
+        let script =
+            r#"<html><head><script/src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#;
+        let rejection = scan_app_html(script).rejection.expect("should reject");
+        assert_eq!(rejection.kind, RejectionKind::PlatformScriptSrc);
+        assert_eq!(rejection.offender, "/_sandbox/archestra-app-sdk.js");
+        let link = r#"<html><head><link/href="/_sandbox/archestra-app-base.css"></head></html>"#;
+        assert_eq!(
+            scan_app_html(link).rejection.expect("should reject").kind,
+            RejectionKind::PlatformBaseCss
+        );
     }
 
     #[test]

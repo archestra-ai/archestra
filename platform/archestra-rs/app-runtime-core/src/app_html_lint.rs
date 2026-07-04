@@ -30,7 +30,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use url::Url;
 
-use crate::app_html::attr;
+use crate::app_html::{SCRIPT_BLOCK, resource_ref, tag_is};
 
 /// Policy inputs for the lint, owned by the TypeScript caller (single source of
 /// truth for the CDN allowlist and the injected-SDK surface lives there).
@@ -73,15 +73,14 @@ pub fn lint_app_html(html: &str, config: &LintConfig) -> LintFindings {
         lint_script_text(&block[1], config, &mut findings);
     }
 
-    // Resource refs: real DOM attributes.
+    // Resource refs: real DOM attributes, solidus-fused shapes recovered (see
+    // `tag_is`/`resource_ref` in `app_html`).
     for tag in dom.nodes().iter().filter_map(|node| node.as_tag()) {
-        let name = tag.name().as_utf8_str();
-        let base_name = name.split('/').next().unwrap_or(&name);
-        if base_name.eq_ignore_ascii_case("script") {
+        if tag_is(tag, "script") {
             if let Some(src) = resource_ref(tag, "src") {
                 flag_off_allowlist_host(&src, config, &mut findings);
             }
-        } else if base_name.eq_ignore_ascii_case("link")
+        } else if tag_is(tag, "link")
             && let Some(href) = resource_ref(tag, "href")
         {
             flag_off_allowlist_host(&href, config, &mut findings);
@@ -89,35 +88,6 @@ pub fn lint_app_html(html: &str, config: &LintConfig) -> LintFindings {
     }
     findings
 }
-
-// Browsers treat a solidus inside a tag as attribute-separator whitespace, so
-// `<script/src="u">` is a script element loading `u`. `tl` instead fuses the
-// solidus and the attribute name into the tag name (`script/src`) and leaves
-// the value under an empty attribute key — recover the ref from that shape
-// (the base-name match above handles the fused tag name). A solidus after a
-// space (`<script /src=…>`) makes `tl` drop the tag entirely; that stays a
-// blind spot alongside unquoted URL values.
-fn resource_ref(tag: &tl::HTMLTag, attr_name: &str) -> Option<String> {
-    if let Some(value) = attr(tag, attr_name) {
-        return Some(value);
-    }
-    let name = tag.name().as_utf8_str();
-    let (_, fused) = name.split_once('/')?;
-    if fused
-        .trim_start_matches('/')
-        .eq_ignore_ascii_case(attr_name)
-    {
-        return attr(tag, "");
-    }
-    None
-}
-
-// A `<script>` block's raw text: everything between the open tag and the next
-// `</script>`, the same extraction the TS predecessor used and the closest
-// lexical approximation of the browser's RAWTEXT tokenization.
-static SCRIPT_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?is)<script\b[^>]*>(.*?)</script>").expect("static script block regex")
-});
 
 // `\b`-anchored so `myarchestra.x` is not matched; `window.archestra.<member>`
 // still matches via its `archestra.<member>` substring. Member names use the

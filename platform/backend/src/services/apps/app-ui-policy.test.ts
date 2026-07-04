@@ -63,6 +63,16 @@ describe("buildValidatedVersionPayload", () => {
     ).rejects.toThrow(/must not bootstrap the MCP App SDK/);
   });
 
+  test("a bare < before the marker cannot evade the bootstrap rejection", async () => {
+    // Script text is raw text to the browser; a comparison operator before the
+    // marker must not hide it from the gate.
+    await expect(
+      buildValidatedVersionPayload({
+        html: "<html><head><script>if (a < b) { const u = window.__ARCHESTRA_APP_SDK_URL__; }</script></head><body/></html>",
+      }),
+    ).rejects.toThrow(/must not bootstrap the MCP App SDK/);
+  });
+
   test("a marker mentioned outside <script> does not reject", async () => {
     const { warnings } = await buildValidatedVersionPayload({
       html: "<html><head></head><body><p>Docs about PostMessageTransport and __ARCHESTRA_APP_SDK_URL__.</p><!-- PostMessageTransport --></body></html>",

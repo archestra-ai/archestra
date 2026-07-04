@@ -76,10 +76,7 @@ pub fn scan_app_html(html: String) -> napi::Result<AppHtmlScanResult> {
 /// owns the policy inputs (`config`) and composes the user-facing messages
 /// from the returned structured lists.
 #[napi(js_name = "lintAppHtml")]
-pub fn lint_app_html(
-    html: String,
-    config: AppHtmlLintConfig,
-) -> napi::Result<AppHtmlLintFindings> {
+pub fn lint_app_html(html: String, config: AppHtmlLintConfig) -> napi::Result<AppHtmlLintFindings> {
     std::panic::catch_unwind(move || {
         let findings = core::lint_app_html(
             &html,

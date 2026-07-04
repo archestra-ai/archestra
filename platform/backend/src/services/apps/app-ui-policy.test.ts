@@ -203,6 +203,18 @@ describe("validateAppHtmlStatic", () => {
     expect(findings).toEqual([]);
   });
 
+  test("a bare < in ordinary script code does not hide the script from the lint", async () => {
+    // Script text is raw text to the browser; a comparison operator must not
+    // splinter the block and swallow what follows it.
+    const findings = await validateAppHtmlStatic(
+      '<html><head><script>if (items.length < 5) { localStorage.setItem("k", "1"); }</script></head><body/></html>',
+    );
+    expect(findings).toContainEqual({
+      severity: "warning",
+      message: expect.stringContaining("Uses browser storage (localStorage)"),
+    });
+  });
+
   test("multiple browser storage APIs are reported once, deduplicated", async () => {
     const findings = await validateAppHtmlStatic(
       "<html><head><script>localStorage.x; localStorage.y; sessionStorage.z;</script></head><body/></html>",

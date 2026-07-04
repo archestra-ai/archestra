@@ -11,14 +11,19 @@
 //! (`const s = archestra.storage; s.get()`), computed access
 //! (`archestra["storage"]`), and dynamic names are out of scope by design.
 //!
-//! Unlike the TS predecessor (raw-text regexes), tags are read from the same
-//! `tl` DOM the scan parses: `src` is read on `<script>` and `href` on
-//! `<link>` as real attributes, and markup inside HTML comments is not
+//! Resource refs are read from the same `tl` DOM the scan parses (unlike the
+//! TS predecessor's raw-text regexes): `src` is read on `<script>` and `href`
+//! on `<link>` as real attributes, and markup inside HTML comments is not
 //! scanned — matching what the browser resolves at render time. Unquoted URL
 //! attribute values stay a blind spot (`tl` drops such tags; the TS regex
-//! required quotes). If the HTML does not parse, the findings are empty: the
-//! scan already fails closed with an `unparseable` rejection, and lexical
-//! hints on unparseable input are noise.
+//! required quotes). Script TEXT, in contrast, is extracted lexically from
+//! the raw input, exactly as the TS predecessor did: browsers treat script
+//! content as raw text until the next `</script>`, while `tl` has no RAWTEXT
+//! mode — a bare `<` in ordinary JS (a comparison, a for-loop) would splinter
+//! the element in the DOM, both hiding real script text and leaking the rest
+//! of the document into it. If the HTML does not parse, the findings are
+//! empty: the scan already fails closed with an `unparseable` rejection, and
+//! lexical hints on unparseable input are noise.
 
 use std::sync::LazyLock;
 
@@ -61,18 +66,23 @@ pub fn lint_app_html(html: &str, config: &LintConfig) -> LintFindings {
     let Ok(dom) = tl::parse(html, tl::ParserOptions::default()) else {
         return LintFindings::default();
     };
-    let parser = dom.parser();
     let mut findings = LintFindings::default();
 
+    // Script text: lexical raw-input extraction (see module docs on RAWTEXT).
+    for block in SCRIPT_BLOCK.captures_iter(html) {
+        lint_script_text(&block[1], config, &mut findings);
+    }
+
+    // Resource refs: real DOM attributes.
     for tag in dom.nodes().iter().filter_map(|node| node.as_tag()) {
         let name = tag.name().as_utf8_str();
-        if name.eq_ignore_ascii_case("script") {
-            lint_script_text(&tag.inner_text(parser), config, &mut findings);
-            if let Some(src) = attr(tag, "src") {
+        let base_name = name.split('/').next().unwrap_or(&name);
+        if base_name.eq_ignore_ascii_case("script") {
+            if let Some(src) = resource_ref(tag, "src") {
                 flag_off_allowlist_host(&src, config, &mut findings);
             }
-        } else if name.eq_ignore_ascii_case("link")
-            && let Some(href) = attr(tag, "href")
+        } else if base_name.eq_ignore_ascii_case("link")
+            && let Some(href) = resource_ref(tag, "href")
         {
             flag_off_allowlist_host(&href, config, &mut findings);
         }
@@ -80,9 +90,40 @@ pub fn lint_app_html(html: &str, config: &LintConfig) -> LintFindings {
     findings
 }
 
+// Browsers treat a solidus inside a tag as attribute-separator whitespace, so
+// `<script/src="u">` is a script element loading `u`. `tl` instead fuses the
+// solidus and the attribute name into the tag name (`script/src`) and leaves
+// the value under an empty attribute key — recover the ref from that shape
+// (the base-name match above handles the fused tag name). A solidus after a
+// space (`<script /src=…>`) makes `tl` drop the tag entirely; that stays a
+// blind spot alongside unquoted URL values.
+fn resource_ref(tag: &tl::HTMLTag, attr_name: &str) -> Option<String> {
+    if let Some(value) = attr(tag, attr_name) {
+        return Some(value);
+    }
+    let name = tag.name().as_utf8_str();
+    let (_, fused) = name.split_once('/')?;
+    if fused
+        .trim_start_matches('/')
+        .eq_ignore_ascii_case(attr_name)
+    {
+        return attr(tag, "");
+    }
+    None
+}
+
+// A `<script>` block's raw text: everything between the open tag and the next
+// `</script>`, the same extraction the TS predecessor used and the closest
+// lexical approximation of the browser's RAWTEXT tokenization.
+static SCRIPT_BLOCK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<script\b[^>]*>(.*?)</script>").expect("static script block regex")
+});
+
 // `\b`-anchored so `myarchestra.x` is not matched; `window.archestra.<member>`
 // still matches via its `archestra.<member>` substring. Member names use the
-// ASCII identifier class the TS predecessor used.
+// ASCII identifier class the TS predecessor used. (Rust `\b` is Unicode-aware
+// where JS's is ASCII, so a non-ASCII letter abutting `archestra` no longer
+// counts as a boundary — strictly fewer false positives.)
 static ARCHESTRA_TOP_LEVEL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\barchestra\.([A-Za-z_$][0-9A-Za-z_$]*)").expect("static archestra member regex")
 });
@@ -248,6 +289,45 @@ mod tests {
             </head></html>"#,
         );
         assert_eq!(findings.off_allowlist_hosts, Vec::<String>::new());
+    }
+
+    #[test]
+    fn solidus_fused_attribute_is_recovered() {
+        // Browsers read `<script/src=…>`/`<link/href=…>` as ordinary elements
+        // (the solidus acts as attribute-separator whitespace); `tl` fuses the
+        // attribute name into the tag name. The lint must still see the ref.
+        let findings = lint(
+            r#"<html><head><script/src="https://evil.example.com/a.js"></script><link/href="https://other.example.com/a.css"></head></html>"#,
+        );
+        assert_eq!(
+            findings.off_allowlist_hosts,
+            vec!["evil.example.com", "other.example.com"]
+        );
+    }
+
+    #[test]
+    fn bare_less_than_in_script_does_not_hide_script_text() {
+        // `tl` has no RAWTEXT mode, so in its DOM a `<` comparison splinters
+        // the script element; the lexical script-text extraction must still
+        // see everything up to `</script>`.
+        let findings = lint(
+            r#"<html><head><script>async function main() {
+                const items = await archestra.tools.call("x", {});
+                if (items.length < 5) { localStorage.setItem("cache", "1"); archestra.storage.get("k"); }
+            }</script></head><body/></html>"#,
+        );
+        assert_eq!(findings.browser_storage_apis, vec!["localStorage"]);
+        assert_eq!(findings.storage_misuse, vec!["archestra.storage.get"]);
+    }
+
+    #[test]
+    fn bare_less_than_in_script_does_not_leak_following_prose_into_it() {
+        // The same `tl` misparse swallows the rest of the document as script
+        // children; prose after the script must still not warn.
+        let findings = lint(
+            "<html><head><script>if (a < b) { run(); }</script></head><body><p>This app does not use sessionStorage or archestra.storage.get.</p></body></html>",
+        );
+        assert_eq!(findings, LintFindings::default());
     }
 
     #[test]

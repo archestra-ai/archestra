@@ -597,10 +597,66 @@ jobs:
           docker volume rm archestra-ci-postgres-data 2>/dev/null || true
           docker volume rm archestra-ci-app-data 2>/dev/null || true
 
+  # The merge queue's e2e gate. This is the required "Merge E2E Test Reports"
+  # status check — the per-shard jobs are NOT required, so this job is the only
+  # thing standing between a red shard and main.
+  #
+  # It deliberately does NOTHING but read the shard/quickstart results: no
+  # checkout, no pnpm install, no artifact download. Report MERGING (which needs
+  # all of that) moved to the separate, non-required `platform-e2e-report` job
+  # below so it runs OFF the merge-queue critical path. Merging the report used
+  # to cost ~40-50s of checkout + `pnpm install` + blob download here, and this
+  # job is the LAST required check to go green (it needs the shards), so every
+  # one of those seconds delayed the merge. Stripped down, the gate reports
+  # green within runner-spinup time of the last shard finishing.
+  #
+  # Keep the job `name:` EXACTLY "Merge E2E Test Reports" — it is the context
+  # named in the branch ruleset's required status checks. Renaming it silently
+  # un-gates the queue.
   platform-e2e-merge-reports:
     name: Merge E2E Test Reports
     needs: [platform-e2e-tests-shards, platform-quickstart-e2e-tests]
+    # `!cancelled()` (not `always()`) so a cancelled upstream still cancels the
+    # gate; the event guard keeps it running on merge_group / on-demand runs but
+    # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    # No permissions needed: this job only inspects `needs.*.result`.
+    permissions: {}
+    steps:
+      # Without this the job would succeed whenever it starts, so red shards
+      # would ride through the queue unnoticed — which is exactly how a broken
+      # production image (MODULE_NOT_FOUND on @archestra/napi-loader) once
+      # shipped while apps.spec.ts failed every queue run.
+      - name: Fail if any e2e job failed
+        env:
+          SHARDS_RESULT: ${{ needs.platform-e2e-tests-shards.result }}
+          QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
+        run: |
+          failed=0
+          for pair in "shards:$SHARDS_RESULT" "quickstart:$QUICKSTART_RESULT"; do
+            name="${pair%%:*}"; result="${pair##*:}"
+            echo "$name: $result"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              failed=1
+            fi
+          done
+          if [ "$failed" = "1" ]; then
+            echo "::error::One or more e2e jobs failed - failing the merge-queue gate."
+            exit 1
+          fi
+          echo "All e2e jobs green."
+
+  # Merges the per-shard Playwright blob reports into a single HTML/JSON report
+  # and writes the job summary. NOT a required check and NOT on the merge-queue
+  # critical path — it runs in parallel with the gate above so the queue never
+  # waits on report generation. `always()` so a failed run still publishes its
+  # (more valuable) report artifact for debugging.
+  platform-e2e-report:
+    name: Publish E2E Report
+    needs: [platform-e2e-tests-shards, platform-quickstart-e2e-tests]
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:
@@ -653,29 +709,4 @@ jobs:
         with:
           report-file: platform/e2e-tests/results.json
           job-summary: true
-
-      # This job is the merge queue's only e2e gate ("Merge E2E Test Reports"
-      # is the required check; the per-shard jobs are not). Without this step
-      # the job succeeds whenever report-merging succeeds, so red shards ride
-      # through the queue unnoticed — which is exactly how a broken production
-      # image (MODULE_NOT_FOUND on @archestra/napi-loader) shipped while
-      # apps.spec.ts failed every queue run.
-      - name: Fail if any e2e job failed
-        env:
-          SHARDS_RESULT: ${{ needs.platform-e2e-tests-shards.result }}
-          QUICKSTART_RESULT: ${{ needs.platform-quickstart-e2e-tests.result }}
-        run: |
-          failed=0
-          for pair in "shards:$SHARDS_RESULT" "quickstart:$QUICKSTART_RESULT"; do
-            name="${pair%%:*}"; result="${pair##*:}"
-            echo "$name: $result"
-            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
-              failed=1
-            fi
-          done
-          if [ "$failed" = "1" ]; then
-            echo "::error::One or more e2e jobs failed - failing the merge-queue gate."
-            exit 1
-          fi
-          echo "All e2e jobs green."
 

@@ -39,35 +39,46 @@ test(
     const createButton = page.getByTestId(E2eTestId.CreateAgentButton);
     await waitForElementWithReload(page, createButton);
 
-    // The Create-Agent button is server-rendered, so a click that lands before
-    // React hydration attaches its onClick handler is silently lost: Playwright
-    // reports the click as successful (the SSR button is visible/enabled), but
-    // the create dialog never opens and its "Name" field never mounts, so the
-    // fill below times out for the life of the page — no retry recovers it.
-    // (This was the top remaining merge-queue flake on shard 1; the same
-    // pre-hydration lost-click race was fixed for the skills marketplace step
-    // in #6339.) Retry the click until the dialog's Name field appears. Opening
-    // the dialog is NOT idempotent (a second click would land on the modal
-    // overlay), so guard the re-click on the field not already being visible.
-    const nameField = page.getByRole("textbox", { name: "Name" });
+    // The create dialog (its trigger, the name input, and the submit button) is
+    // rendered before React finishes hydrating, so any interaction that lands
+    // in that window is silently lost — Playwright sees a visible/enabled
+    // element and reports success, but the handler never ran. This bit three
+    // controls in a row across merge-queue runs: the trigger click (dialog
+    // never opened), the name fill (the input's onChange never fired, so the
+    // form's name stayed empty and the required-name-gated Create button stayed
+    // disabled), and the submit click (no POST /api/agents dispatched). A longer
+    // timeout can't recover any of them — the dropped interaction leaves the
+    // page in a stuck state for its lifetime. So drive each step by its
+    // observable end-state and retry until that state is reached. (Same
+    // pre-hydration class as the skills marketplace fix in #6339.)
+    const dialog = page.getByRole("dialog", { name: /Create Agent/i });
+    const nameField = dialog.getByRole("textbox", { name: "Name" });
+    const submitButton = dialog.getByRole("button", { name: "Create" });
+
+    // 1. Open the dialog — retry the trigger until the name field mounts.
+    //    Guarded on visibility so a landed click is never re-sent through the
+    //    modal overlay (opening the dialog is not idempotent).
     await expect(async () => {
       if (!(await nameField.isVisible())) {
         await createButton.click();
       }
       await expect(nameField).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 20_000 });
-    await nameField.fill(AGENT_NAME);
 
-    // Submit the create form. The "Create" button has the same pre-hydration
-    // hazard as the dialog trigger above: a click that lands before React
-    // wires its submit handler is silently lost, so no POST /api/agents ever
-    // fires and the response wait below would time out for the life of the
-    // page. Retry the click until the request is actually dispatched.
-    // waitForRequest resolves the instant the handler runs, so a click that
-    // landed is detected immediately and never re-clicked — there is no window
-    // in which a second agent could be created. (Also subsumes the earlier
-    // webkit fix: waiting for the POST before polling the table.)
-    const submitButton = page.getByRole("button", { name: "Create" });
+    // 2. Fill the name — retry until the form actually registered it, which the
+    //    Create button becoming enabled confirms (it is disabled while the name
+    //    is empty). fill() is idempotent, so re-filling after the input hydrates
+    //    is safe and is what flips the button from disabled to enabled.
+    await expect(async () => {
+      await nameField.fill(AGENT_NAME);
+      await expect(submitButton).toBeEnabled({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+
+    // 3. Submit — retry the click until the POST is dispatched. waitForRequest
+    //    resolves the instant the handler runs, so a click that landed is
+    //    detected immediately and never re-clicked — there is no window in which
+    //    a second agent could be created. (Also subsumes the earlier webkit fix:
+    //    waiting for the POST before polling the table.)
     const createResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes("/api/agents") &&

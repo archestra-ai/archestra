@@ -711,4 +711,43 @@ describe("OrganizationModel", () => {
       expect(await OrganizationModel.enableSkillToolsForAllOrgs()).toBe(0);
     });
   });
+
+  describe("markOnboardingSurveyCompleted", () => {
+    test("returns true only for the call that flips the flag", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      expect(
+        await OrganizationModel.markOnboardingSurveyCompleted(org.id),
+      ).toBe(true);
+      // A second submission finds the flag already set and must not re-claim,
+      // so the route never forwards the survey to the website twice.
+      expect(
+        await OrganizationModel.markOnboardingSurveyCompleted(org.id),
+      ).toBe(false);
+
+      const [row] = await db
+        .select({ at: schema.organizationsTable.onboardingSurveyCompletedAt })
+        .from(schema.organizationsTable)
+        .where(eq(schema.organizationsTable.id, org.id));
+      expect(row?.at).not.toBeNull();
+    });
+
+    test("concurrent claims resolve to exactly one winner", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const results = await Promise.all([
+        OrganizationModel.markOnboardingSurveyCompleted(org.id),
+        OrganizationModel.markOnboardingSurveyCompleted(org.id),
+        OrganizationModel.markOnboardingSurveyCompleted(org.id),
+      ]);
+
+      // The guarded `WHERE ... IS NULL` update lets only the first committed
+      // write claim the flag; the others match zero rows.
+      expect(results.filter(Boolean)).toHaveLength(1);
+    });
+  });
 });

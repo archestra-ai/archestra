@@ -58,19 +58,34 @@ test(
     }).toPass({ timeout: 20_000 });
     await nameField.fill(AGENT_NAME);
 
-    // Wait for the POST /api/agents response before polling the table.
-    // On webkit, clicking submit and immediately continuing leaves a window
-    // where the API call hasn't fired (or response hasn't been processed)
-    // and waitForLoadState("domcontentloaded") returns instantly because
-    // there's no navigation. That made the subsequent "agent in table"
-    // poll exhaust its timeout on webkit while passing on chromium/firefox.
+    // Submit the create form. The "Create" button has the same pre-hydration
+    // hazard as the dialog trigger above: a click that lands before React
+    // wires its submit handler is silently lost, so no POST /api/agents ever
+    // fires and the response wait below would time out for the life of the
+    // page. Retry the click until the request is actually dispatched.
+    // waitForRequest resolves the instant the handler runs, so a click that
+    // landed is detected immediately and never re-clicked — there is no window
+    // in which a second agent could be created. (Also subsumes the earlier
+    // webkit fix: waiting for the POST before polling the table.)
+    const submitButton = page.getByRole("button", { name: "Create" });
     const createResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes("/api/agents") &&
         response.request().method() === "POST",
       { timeout: 30_000 },
     );
-    await page.getByRole("button", { name: "Create" }).click();
+    await expect(async () => {
+      const requestDispatched = page
+        .waitForRequest(
+          (request) =>
+            request.url().includes("/api/agents") &&
+            request.method() === "POST",
+          { timeout: 3_000 },
+        )
+        .catch(() => null);
+      await submitButton.click();
+      expect(await requestDispatched).not.toBeNull();
+    }).toPass({ timeout: 20_000 });
     await createResponsePromise;
     await page.waitForLoadState("domcontentloaded");
 

@@ -4,7 +4,6 @@ import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import type { DriveItem as GraphDriveItem } from "@microsoft/microsoft-graph-types";
 import JSZip from "jszip";
-import mammoth from "mammoth";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -19,6 +18,10 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import {
+  extractTextFromDocx,
+  isCorruptOfficeFileError,
+} from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
@@ -704,8 +707,7 @@ async function extractTextFromBinary(
 ): Promise<string> {
   switch (ext) {
     case ".docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      return extractTextFromDocx(buffer);
     }
     case ".pdf": {
       return parsePdfBuffer(buffer);
@@ -719,7 +721,15 @@ async function extractTextFromBinary(
 }
 
 async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch (err) {
+    // Mislabeled/corrupt/truncated file that is not a valid ZIP: no extractable
+    // text, so skip it rather than failing the item.
+    if (isCorruptOfficeFileError(err)) return "";
+    throw err;
+  }
   const parts: string[] = [];
 
   const slideFiles = Object.keys(zip.files)

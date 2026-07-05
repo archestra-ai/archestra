@@ -21,7 +21,10 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
-import { extractTextFromDocx } from "../docx-text-extractor";
+import {
+  extractTextFromDocx,
+  isCorruptOfficeFileError,
+} from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
@@ -1210,7 +1213,15 @@ async function extractTextFromBinary(
 }
 
 async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch (err) {
+    // Mislabeled/corrupt/truncated file that is not a valid ZIP: no extractable
+    // text, so skip it rather than failing the item.
+    if (isCorruptOfficeFileError(err)) return "";
+    throw err;
+  }
   const parts: string[] = [];
 
   // PPTX slides are stored as ppt/slides/slide1.xml, slide2.xml, etc.

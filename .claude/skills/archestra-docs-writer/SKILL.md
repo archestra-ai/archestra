@@ -59,3 +59,7 @@ Every page should open with at least one screenshot; add more where they help. C
 ## Page Frontmatter
 
 `category` and `order` place the page in the nav (categories derive from frontmatter; there is no registry). Check sibling pages for free `order` slots. Set `lastUpdated` to today. Create a worktree or branch from `main`, and open a PR when you are done.
+
+## Code References
+
+Some pages are linked from the app through `platform/shared/docs.ts` (a `DocsPage` slug map). When you rename, delete, or add a page that code links to, update that file — a stale slug there is a dead "Learn more" link in the product. The `.github/scripts/check-docs-links.py` CI job fails if a `docs.ts` slug has no matching page, and if any internal doc link or asset embed doesn't resolve.

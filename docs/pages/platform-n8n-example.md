@@ -9,7 +9,7 @@ N8N is an open-source workflow automation platform that enables users to connect
 
 ## Security Challenges with Autonomous N8N Agents
 
-N8N runs pre-defined workflows with deterministic behavior. It can also build fully autonomous AI agents, which introduces security risks. When N8N workflows incorporate LLMs that can dynamically determine actions based on user input or external data, they become vulnerable to the [lethal trifecta](/docs/platform-lethal-trifecta):
+N8N runs pre-defined workflows with deterministic behavior. It can also build fully autonomous AI agents, which introduces security risks. When N8N workflows incorporate LLMs that can dynamically determine actions based on user input or external data, they become vulnerable to the [lethal trifecta](/docs/platform-ai-tool-guardrails#the-lethal-trifecta):
 
 1. **Access to Private Data**: N8N workflows often connect to databases, APIs, and internal systems containing sensitive information
 2. **Processing Untrusted Content**: Autonomous agents may process user inputs, emails, webhooks, or data from external sources

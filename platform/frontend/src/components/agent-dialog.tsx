@@ -1313,7 +1313,7 @@ export function AgentDialog({
                     {agent.description}.{" "}
                     <ExternalDocsLink
                       href={getDocsUrl(
-                        DocsPage.PlatformBuiltInAgentsPolicyConfig,
+                        DocsPage.PlatformBuiltInSubagents,
                       )}
                       className="underline"
                       showIcon={false}

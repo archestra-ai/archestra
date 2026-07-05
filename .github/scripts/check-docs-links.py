@@ -75,6 +75,24 @@ def check_target(raw_url: str, source: Path) -> str | None:
     return None
 
 
+DOCS_TS = Path("platform/shared/docs.ts")
+# Slug string values on the right-hand side of the DocsPage map entries.
+DOCS_TS_SLUG = re.compile(r':\s*"((?:platform|mcp|security|contributing)[a-z0-9-]*)"')
+
+
+def check_docs_ts() -> list[str]:
+    """Every DocsPage slug in shared/docs.ts must resolve to a page file, so the
+    app's "Learn more" links never point at a missing page."""
+    if not DOCS_TS.is_file():
+        return []
+    text = DOCS_TS.read_text(encoding="utf-8")
+    return [
+        f"{DOCS_TS.as_posix()}: DocsPage slug has no page -> {slug} (expected docs/pages/{slug}.md)"
+        for slug in DOCS_TS_SLUG.findall(text)
+        if not (PAGES_DIR / f"{slug}.md").is_file()
+    ]
+
+
 def main() -> int:
     if not PAGES_DIR.is_dir():
         print(f"error: {PAGES_DIR} not found (run from the repo root)", file=sys.stderr)
@@ -87,6 +105,8 @@ def main() -> int:
             violation = check_target(match.group(1), page)
             if violation:
                 violations.append(violation)
+
+    violations.extend(check_docs_ts())
 
     if not violations:
         print("Docs link check passed.")

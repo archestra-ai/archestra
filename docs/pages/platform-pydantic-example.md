@@ -15,7 +15,7 @@ The full example can be found on: [https://github.com/archestra-ai/examples/tree
 
 ## Problem
 
-Without Archestra, whenever an agent is capable of fetching potentially untrusted content, it can be the source of malicious instructions that the LLM can follow. This demonstrates the [Lethal Trifecta](https://www.archestra.ai/docs/platform-lethal-trifecta) vulnerability pattern.
+Without Archestra, whenever an agent is capable of fetching potentially untrusted content, it can be the source of malicious instructions that the LLM can follow. This demonstrates the [Lethal Trifecta](https://www.archestra.ai/docs/platform-ai-tool-guardrails#the-lethal-trifecta) vulnerability pattern.
 
 In our example, the agent:
 

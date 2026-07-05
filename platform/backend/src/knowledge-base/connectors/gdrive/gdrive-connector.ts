@@ -1,7 +1,6 @@
 import type { ModelInputModality } from "@archestra/shared";
 import type { drive_v3 } from "googleapis";
 import { google } from "googleapis";
-import JSZip from "jszip";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -15,15 +14,14 @@ import {
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
-import {
-  extractTextFromDocx,
-  isCorruptOfficeFileError,
-} from "../docx-text-extractor";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
 import { parsePdfBuffer } from "../pdf-utils";
+import { extractTextFromPptx } from "../pptx-text-extractor";
+import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
@@ -535,13 +533,13 @@ export class GoogleDriveConnector extends BaseConnector {
     while (hasMore) {
       await this.rateLimit();
 
-      let query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+      let query = `'${escapeDriveQueryValue(folderId)}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
       if (syncFrom) {
-        query += ` and modifiedTime >= '${syncFrom}'`;
+        query += ` and modifiedTime >= '${escapeDriveQueryValue(syncFrom)}'`;
       }
       if (config.fileTypes && config.fileTypes.length > 0) {
         const mimeFilters = config.fileTypes
-          .map((ext) => `name contains '${ext}'`)
+          .map((ext) => `name contains '${escapeDriveQueryValue(ext)}'`)
           .join(" or ");
         query += ` and (${mimeFilters})`;
       }
@@ -655,7 +653,7 @@ export class GoogleDriveConnector extends BaseConnector {
     do {
       await this.rateLimit();
       const res = (await drive.files.list({
-        q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        q: `'${escapeDriveQueryValue(parentId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
         pageSize: 1000,
         pageToken,
         fields: "nextPageToken,files(id,name)",
@@ -793,23 +791,36 @@ function buildFileQuery(
 
   // If a folderId is set, scope to direct children of that folder
   if (config.folderId) {
-    parts.push(`'${config.folderId}' in parents`);
+    parts.push(`'${escapeDriveQueryValue(config.folderId)}' in parents`);
   }
 
   // Incremental sync filter
   if (syncFrom) {
-    parts.push(`modifiedTime >= '${syncFrom}'`);
+    parts.push(`modifiedTime >= '${escapeDriveQueryValue(syncFrom)}'`);
   }
 
   // File type filter
   if (config.fileTypes && config.fileTypes.length > 0) {
     const fileTypeFilters = config.fileTypes
-      .map((ext) => `name contains '${ext}'`)
+      .map((ext) => `name contains '${escapeDriveQueryValue(ext)}'`)
       .join(" or ");
     parts.push(`(${fileTypeFilters})`);
   }
 
   return parts.join(" and ");
+}
+
+/**
+ * Escape a value for interpolation into a Google Drive query string literal
+ * (the single-quoted operand of `'<id>' in parents`, `name contains '<ext>'`,
+ * etc.). Drive's grammar uses `\` as the in-string escape char, so backslashes
+ * and single quotes must be escaped to keep a value from breaking out of its
+ * quotes and altering the query. Folder IDs and connector config are
+ * admin-authored (not end-user input), so this is defense-in-depth rather than
+ * a known injection vector.
+ */
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 type ResolvedDriveFile =
@@ -928,86 +939,4 @@ async function extractTextFromBinary(
       return extractTextFromXlsx(buffer);
     }
   }
-}
-
-async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  let zip: JSZip;
-  try {
-    zip = await JSZip.loadAsync(buffer);
-  } catch (err) {
-    // Mislabeled/corrupt/truncated file that is not a valid ZIP: no extractable
-    // text, so skip it rather than failing the item.
-    if (isCorruptOfficeFileError(err)) return "";
-    throw err;
-  }
-  const parts: string[] = [];
-
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const numA = Number.parseInt(a.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      const numB = Number.parseInt(b.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      return numA - numB;
-    });
-
-  for (const slidePath of slideFiles) {
-    const xml = await zip.files[slidePath].async("text");
-    const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g);
-    if (texts) {
-      const slideText = texts
-        .map((text: string) => text.replace(/<[^>]*>/g, ""))
-        .join(" ");
-      if (slideText.trim()) parts.push(slideText.trim());
-    }
-  }
-
-  return parts.join("\n\n");
-}
-
-async function extractTextFromXlsx(buffer: Buffer): Promise<string> {
-  let zip: JSZip;
-  try {
-    zip = await JSZip.loadAsync(buffer);
-  } catch (err) {
-    // Mislabeled/corrupt/truncated file that is not a valid ZIP: no extractable
-    // text, so skip it rather than failing the item.
-    if (isCorruptOfficeFileError(err)) return "";
-    throw err;
-  }
-
-  // Most cell text lives in the shared-strings table, referenced by index from
-  // the worksheets; inline strings and raw values live on the cells themselves.
-  const sharedStrings: string[] = [];
-  const sharedFile = zip.file("xl/sharedStrings.xml");
-  if (sharedFile) {
-    const xml = await sharedFile.async("text");
-    for (const si of xml.match(/<si>[\s\S]*?<\/si>/g) ?? []) {
-      const runs = si.match(/<t[^>]*>([\s\S]*?)<\/t>/g) ?? [];
-      sharedStrings.push(
-        runs.map((run) => run.replace(/<[^>]*>/g, "")).join(""),
-      );
-    }
-  }
-
-  const parts: string[] = [];
-  const sheetPaths = Object.keys(zip.files)
-    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
-    .sort();
-  for (const sheetPath of sheetPaths) {
-    const xml = await zip.files[sheetPath].async("text");
-    for (const cell of xml.match(/<c\b[^>]*>[\s\S]*?<\/c>/g) ?? []) {
-      const value = cell.match(/<v>([\s\S]*?)<\/v>/)?.[1];
-      const inlineText = cell.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1];
-      if (/\bt="s"/.test(cell) && value !== undefined) {
-        const shared = sharedStrings[Number.parseInt(value, 10)];
-        if (shared) parts.push(shared);
-      } else if (inlineText !== undefined) {
-        parts.push(inlineText.replace(/<[^>]*>/g, ""));
-      } else if (value !== undefined) {
-        parts.push(value);
-      }
-    }
-  }
-
-  return parts.join(" ");
 }

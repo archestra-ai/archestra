@@ -3,7 +3,6 @@ import { ClientSecretCredential } from "@azure/identity";
 import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import type { DriveItem as GraphDriveItem } from "@microsoft/microsoft-graph-types";
-import JSZip from "jszip";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -12,21 +11,18 @@ import type {
   OneDriveConfig,
 } from "@/types";
 import { OneDriveConfigSchema } from "@/types";
-import { stripHtmlTags } from "@/utils/strip-html";
 import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
-import {
-  extractTextFromDocx,
-  isCorruptOfficeFileError,
-} from "../docx-text-extractor";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
 import { parsePdfBuffer } from "../pdf-utils";
+import { extractTextFromPptx } from "../pptx-text-extractor";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 const DEFAULT_BATCH_SIZE = 50;
@@ -718,40 +714,6 @@ async function extractTextFromBinary(
     default:
       return "";
   }
-}
-
-async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  let zip: JSZip;
-  try {
-    zip = await JSZip.loadAsync(buffer);
-  } catch (err) {
-    // Mislabeled/corrupt/truncated file that is not a valid ZIP: no extractable
-    // text, so skip it rather than failing the item.
-    if (isCorruptOfficeFileError(err)) return "";
-    throw err;
-  }
-  const parts: string[] = [];
-
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const numA = Number.parseInt(a.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      const numB = Number.parseInt(b.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      return numA - numB;
-    });
-
-  for (const slidePath of slideFiles) {
-    const xml = await zip.files[slidePath].async("text");
-    const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g);
-    if (texts) {
-      const slideText = texts
-        .map((text: string) => stripHtmlTags(text))
-        .join(" ");
-      if (slideText.trim()) parts.push(slideText.trim());
-    }
-  }
-
-  return parts.join("\n\n");
 }
 
 function driveItemToDocument(

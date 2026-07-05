@@ -10,6 +10,7 @@ import {
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -29,6 +30,7 @@ import {
   MemberModel,
   ModelModel,
   OrganizationModel,
+  TeamModel,
   ToolModel,
   UserModel,
   UserTokenModel,
@@ -913,9 +915,30 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const members = await MemberModel.findAllByOrganization(organizationId);
-      return reply.send(members);
+    async ({ organizationId, user, headers }, reply) => {
+      // member:read (admins, custom roles) sees the whole roster; everyone else
+      // sees only the users they share a team with, so a member can pick a chat
+      // share recipient without the org directory being exposed to (or scanned
+      // for) them.
+      const { success: canSeeAllMembers } = await hasPermission(
+        { member: ["read"] },
+        headers,
+      );
+      if (canSeeAllMembers) {
+        return reply.send(
+          await MemberModel.findAllByOrganization(organizationId),
+        );
+      }
+      const teammateIds = await TeamModel.getTeammateUserIdsInOrganization({
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await MemberModel.findByUserIdsInOrganization({
+          organizationId,
+          userIds: teammateIds,
+        }),
+      );
     },
   );
 

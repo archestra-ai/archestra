@@ -37,6 +37,11 @@ def strip_noise(text: str) -> str:
 def check_target(raw_url: str, source: Path) -> str | None:
     url = raw_url.strip().strip("<>")
 
+    # Links to our own docs must be relative (/docs/...): an absolute archestra.ai
+    # URL bypasses this checker and won't resolve in local dev preview.
+    if re.match(r"^https?://(?:www\.)?archestra\.ai/docs/", url):
+        return f"{source.name}: use a relative /docs/... link, not an absolute URL -> {url}"
+
     # External / protocol-relative / mailto / pure anchor: out of scope.
     if re.match(r"^[a-z][a-z0-9+.-]*://", url) or url.startswith(("mailto:", "//", "#", "tel:")):
         return None

@@ -15,7 +15,7 @@ The full example can be found on: [https://github.com/archestra-ai/examples/tree
 
 ## Problem
 
-Without Archestra, whenever an agent is capable of fetching potentially untrusted content, it can be the source of malicious instructions that the LLM can follow. This demonstrates the [Lethal Trifecta](https://www.archestra.ai/docs/platform-ai-tool-guardrails#the-lethal-trifecta) vulnerability pattern.
+Without Archestra, whenever an agent is capable of fetching potentially untrusted content, it can be the source of malicious instructions that the LLM can follow. This demonstrates the [Lethal Trifecta](/docs/platform-ai-tool-guardrails#the-lethal-trifecta) vulnerability pattern.
 
 In our example, the agent:
 
@@ -27,7 +27,7 @@ The GitHub issue ([archestra-ai/archestra#669](https://github.com/archestra-ai/a
 
 ## Step 1. Get your LLM Provider API Key
 
-This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers) for the complete list.
+This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the complete list.
 
 For OpenAI, you can get an API key from:
 

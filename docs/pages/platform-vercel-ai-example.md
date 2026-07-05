@@ -59,7 +59,7 @@ Let’s see how you can plug in Archestra when using AI SDK and how it can help 
 
 ## Step 1. Get your LLM Provider API Key
 
-This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers) for the complete list.
+This example uses OpenAI, but Archestra supports multiple LLM providers. See [Supported LLM Providers](/docs/platform-supported-llm-providers) for the complete list.
 
 For OpenAI, you can get an API key from:
 
@@ -81,7 +81,7 @@ docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
 
 ## Step 3. Integrate AI SDK with Archestra
 
-Change the baseUrl to point to Archestra's proxy. For OpenAI, this is [`http://localhost:9000/v1/openai`](http://localhost:9000/v1/openai). For other providers, see [Supported LLM Providers](https://www.archestra.ai/docs/platform-supported-llm-providers).
+Change the baseUrl to point to Archestra's proxy. For OpenAI, this is [`http://localhost:9000/v1/openai`](http://localhost:9000/v1/openai). For other providers, see [Supported LLM Providers](/docs/platform-supported-llm-providers).
 
 **Important for OpenAI**: Ensure your agent uses `/chat/completions` (not `/responses`, which Archestra doesn't support yet - [issue #720](https://github.com/archestra-ai/archestra/issues/720)). Append `.chat` to the OpenAI provider instance. See [AI SDK docs](https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models) for details.
 

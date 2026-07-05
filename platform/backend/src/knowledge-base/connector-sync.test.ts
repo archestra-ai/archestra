@@ -392,6 +392,49 @@ describe("ConnectorSyncService", () => {
     expect(updatedConnector?.checkpoint).toEqual({ page: 1 });
   });
 
+  test("executeSync strips NUL bytes from extracted text before persisting", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    // Binary text extraction (e.g. PDFs) can emit NUL bytes, which Postgres text
+    // columns reject — without sanitization the whole document insert fails and
+    // the document is lost as an item error.
+    const mockImpl = makeMockConnector([
+      {
+        id: "ext-1",
+        title: "Title\u0000With\u0000Nuls",
+        content: "Before\u0000After\u0000End",
+      },
+    ]);
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+
+    // Ingest succeeded (would be 0 ingested / 1 item error if the insert threw).
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.documentsIngested).toBe(1);
+    expect(run?.itemErrors).toBe(0);
+
+    const doc = await KbDocumentModel.findBySourceId({
+      connectorId: connector.id,
+      sourceId: "ext-1",
+    });
+    expect(doc?.content).toBe("BeforeAfterEnd");
+    expect(doc?.title).toBe("TitleWithNuls");
+    expect(doc?.content).not.toContain("\u0000");
+  });
+
   test("executeSync creates chunks for new documents", async ({
     makeOrganization,
     makeKnowledgeBase,

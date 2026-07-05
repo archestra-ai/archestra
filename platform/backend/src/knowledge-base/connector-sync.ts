@@ -509,6 +509,14 @@ class ConnectorSyncService {
     const { doc, connectorId, connectorType, organizationId, acl, log } =
       params;
 
+    // Extracted text (PDF/OOXML, or a plain-text file mis-decoded as UTF-8) can
+    // contain NUL bytes, which Postgres text columns reject — the whole document
+    // insert would otherwise fail and the document be lost. Sanitize once here so
+    // the row, its content hash, and its chunks all derive from the same clean
+    // text (and the hash stays stable, so a later clean re-sync still dedupes).
+    const content = stripNullBytes(doc.content);
+    const title = stripNullBytes(doc.title);
+
     // Include media data in hash so unchanged images are properly skipped.
     const hashInput = doc.mediaContent
       ? `${doc.mediaContent.mimeType}:${doc.mediaContent.data}` +
@@ -517,10 +525,10 @@ class ConnectorSyncService {
             JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
           : "")
       : doc.metadata
-        ? doc.content +
+        ? content +
           "\n" +
           JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
-        : doc.content;
+        : content;
     const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
     // Lookup existing document by connector + source ID
@@ -539,8 +547,8 @@ class ConnectorSyncService {
         if (existingChunkCount === 0) {
           await this.chunkAndStore({
             documentId: existing.id,
-            title: doc.title,
-            content: doc.content,
+            title,
+            content,
             mediaContent: doc.mediaContent,
             metadata: doc.metadata,
             connectorType,
@@ -574,8 +582,8 @@ class ConnectorSyncService {
 
       // Content has changed — update existing document
       await KbDocumentModel.update(existing.id, {
-        title: doc.title,
-        content: doc.content,
+        title,
+        content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
         acl,
@@ -587,8 +595,8 @@ class ConnectorSyncService {
       await KbChunkModel.deleteByDocument(existing.id);
       await this.chunkAndStore({
         documentId: existing.id,
-        title: doc.title,
-        content: doc.content,
+        title,
+        content,
         mediaContent: doc.mediaContent,
         metadata: doc.metadata,
         connectorType,
@@ -611,8 +619,8 @@ class ConnectorSyncService {
       organizationId,
       sourceId: doc.id,
       connectorId,
-      title: doc.title,
-      content: doc.content,
+      title,
+      content,
       contentHash,
       sourceUrl: doc.sourceUrl,
       acl,
@@ -621,8 +629,8 @@ class ConnectorSyncService {
 
     await this.chunkAndStore({
       documentId: created.id,
-      title: doc.title,
-      content: doc.content,
+      title,
+      content,
       mediaContent: doc.mediaContent,
       metadata: doc.metadata,
       connectorType,
@@ -713,3 +721,14 @@ class ConnectorSyncService {
 }
 
 export const connectorSyncService = new ConnectorSyncService();
+
+/**
+ * Remove NUL (U+0000) bytes from a string. Postgres `text`/`jsonb` columns
+ * cannot store NUL and node-postgres throws when a bound parameter contains one,
+ * which would fail an entire document insert. Binary text extraction (PDF, OOXML)
+ * and plain-text files mis-decoded as UTF-8 routinely emit NUL. Returns the input
+ * unchanged (same reference) when there is nothing to strip — the common case.
+ */
+function stripNullBytes(text: string): string {
+  return text.includes("\u0000") ? text.replaceAll("\u0000", "") : text;
+}

@@ -3,7 +3,7 @@ title: Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-06-11
+lastUpdated: 2026-07-05
 ---
 
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
@@ -22,7 +22,11 @@ Users with the `knowledgeSource:admin` role can view and query every connector r
 
 > **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
 
-## Jira
+## Supported Connectors
+
+Archestra ships with these built-in connector types.
+
+### Jira
 
 Sync issues and discussions from Atlassian Jira.
 
@@ -39,7 +43,7 @@ Sync issues and discussions from Atlassian Jira.
 | Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional)      |
 | Labels to Skip          | Comma-separated issue labels to exclude (optional)                 |
 
-## Confluence
+### Confluence
 
 Sync wiki pages from Atlassian Confluence.
 
@@ -57,7 +61,7 @@ Sync wiki pages from Atlassian Confluence.
 | Labels to Skip | Comma-separated labels to exclude (optional)                                  |
 | Batch Size     | Pages per batch (default: 50)                                                 |
 
-## GitHub
+### GitHub
 
 Sync issues, pull request discussions, and repository files from GitHub.
 
@@ -78,7 +82,7 @@ Sync issues, pull request discussions, and repository files from GitHub.
 | File Types            | Comma-separated file extensions to index when repository files are enabled (defaults to `.md`, `.mdx`, `.yaml`, `.yml`) |
 | Labels to Skip        | Comma-separated labels to exclude (optional)                                                    |
 
-## GitLab
+### GitLab
 
 Sync issues and merge request discussions from GitLab.
 
@@ -95,7 +99,7 @@ Sync issues and merge request discussions from GitLab.
 | Include Merge Requests | Toggle to sync merge requests and their comments (default: on)                     |
 | Labels to Skip         | Comma-separated labels to exclude (optional)                                       |
 
-## Asana
+### Asana
 
 Sync tasks and discussions from Asana projects.
 
@@ -109,7 +113,7 @@ Sync tasks and discussions from Asana projects.
 | Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
 | Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
 
-## ServiceNow
+### ServiceNow
 
 Sync ITSM records from a ServiceNow instance.
 
@@ -129,7 +133,7 @@ Sync ITSM records from a ServiceNow instance.
 | Assignment Groups             | Comma-separated assignment group sys_ids to filter by. Does not apply to business applications (optional)                     |
 | Batch Size                    | Records per batch (default: 50)                                                                                               |
 
-## Notion
+### Notion
 
 Sync pages and databases from a Notion workspace.
 
@@ -142,7 +146,7 @@ Sync pages and databases from a Notion workspace.
 | Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages) |
 | Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
 
-## SharePoint
+### SharePoint
 
 Sync documents and site pages from SharePoint Online.
 
@@ -168,7 +172,7 @@ Where to find each value:
 - **Client Secret** — the secret **Value** from **Certificates & secrets** (not the secret ID).
 - **Site URL** — the exact SharePoint site web URL, not the display name.
 
-## OneDrive
+### OneDrive
 
 Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
@@ -193,12 +197,12 @@ To configure the connector:
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 
-### Known Limitations
+#### Known Limitations
 
 - Only OneDrive for Business (work/school accounts) is supported. Consumer OneDrive is not supported.
 - Syncs the personal drive (`/drive`) of each specified user; shared libraries are not traversed.
 
-## Google Drive
+### Google Drive
 
 Sync files from Google Drive (My Drive and Shared Drives).
 
@@ -213,7 +217,7 @@ Sync files from Google Drive (My Drive and Shared Drives).
 | File Types          | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
 | Recursive Traversal | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
 
-## Dropbox
+### Dropbox
 
 Sync text and source files from a Dropbox account or team folder.
 
@@ -226,7 +230,7 @@ Sync text and source files from a Dropbox account or team folder.
 | Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
 | File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
 
-## Linear
+### Linear
 
 Sync issues, projects, and cycles from a Linear workspace.
 
@@ -245,7 +249,7 @@ Sync issues, projects, and cycles from a Linear workspace.
 | Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
 
-## Outline
+### Outline
 
 Sync published documents from an [Outline](https://www.getoutline.com/) workspace.
 
@@ -259,7 +263,7 @@ Sync published documents from an [Outline](https://www.getoutline.com/) workspac
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
 
-## Salesforce
+### Salesforce
 
 Sync CRM records from a Salesforce org.
 
@@ -291,7 +295,7 @@ Example advanced config:
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
 
-## Web Crawler
+### Web Crawler
 
 Crawl static HTML pages from a documentation site or public web property.
 
@@ -316,7 +320,7 @@ If the start URL is the site root, such as `https://example.com/`, and no includ
 | Request Delay         | Optional delay between requests, in milliseconds.                                                        |
 | User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
 
-## Perforce (Helix Core)
+### Perforce (Helix Core)
 
 Sync text files from Perforce Helix Core depot paths.
 
@@ -339,16 +343,7 @@ Each depot path and extension combination is listed in its own REST API request.
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
 
-## Managing Connectors
-
-Connectors can be managed from the **Connectors** page. Open a connector to:
-
-- **Toggle enabled/disabled** -- suspends or resumes the cron schedule
-- **Trigger sync** -- runs an immediate sync outside the schedule
-- **View indexed documents** -- search and page through the documents produced by that connector, preview source content, and delete documents that should be removed before the next sync
-- **View runs** -- see sync history with status, document counts, and errors
-
-## Environment
+## Environments
 
 A connector can be assigned a deployment environment. Only agents and gateways in the same environment can use its knowledge — a "dev" agent cannot query a "prod" connector. Unassigned connectors belong to the Default environment. See [Environments](/docs/platform-environments).
 

@@ -24,6 +24,9 @@ export async function handleConnectorSync(
 
   const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
 
+  // A run works up to ~90% of this budget, then checkpoints and enqueues a
+  // continuation (marked `partial`) that resumes from the checkpoint. Unset
+  // (disabled) means the run goes to completion in a single pass.
   const maxDurationMs = config.kb.connectorSyncMaxDurationSeconds
     ? config.kb.connectorSyncMaxDurationSeconds * 1000
     : undefined;

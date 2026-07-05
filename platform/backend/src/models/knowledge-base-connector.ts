@@ -286,6 +286,54 @@ class KnowledgeBaseConnectorModel {
     return result ?? null;
   }
 
+  /**
+   * Advance the connector's sync checkpoint, gated atomically on the given run
+   * still being `running`. If the run was reclaimed (its owner became a zombie),
+   * the EXISTS guard fails and the stale checkpoint write is dropped — a newer
+   * run's checkpoint can't be clobbered.
+   */
+  static async setCheckpointIfRunActive(params: {
+    connectorId: string;
+    runId: string;
+    checkpoint: Record<string, unknown>;
+  }): Promise<void> {
+    await db.execute(sql`
+      UPDATE knowledge_base_connectors
+      SET checkpoint = ${JSON.stringify(params.checkpoint)}::jsonb
+      WHERE id = ${params.connectorId}
+        AND EXISTS (
+          SELECT 1 FROM connector_runs
+          WHERE id = ${params.runId} AND status = 'running'
+        )
+    `);
+  }
+
+  /**
+   * Mirror a reaped run's terminal status onto its connector, but only while the
+   * connector still reflects THAT run — it is still `running` and its
+   * `last_sync_at` equals the run's `started_at` (each run stamps the connector
+   * with its own start; see Fix P in connector-sync). If a newer run has since
+   * claimed the connector, its `last_sync_at` differs and this no-ops, so the
+   * reaper can't clobber it. Compared in SQL against the run's `started_at` to
+   * preserve exact timestamp precision.
+   */
+  static async markReapedStatusIfCurrent(params: {
+    connectorId: string;
+    runId: string;
+    status: ConnectorSyncStatus;
+    error: string | null;
+  }): Promise<void> {
+    await db.execute(sql`
+      UPDATE knowledge_base_connectors
+      SET last_sync_status = ${params.status}, last_sync_error = ${params.error}
+      WHERE id = ${params.connectorId}
+        AND last_sync_status = 'running'
+        AND last_sync_at = (
+          SELECT started_at FROM connector_runs WHERE id = ${params.runId}
+        )
+    `);
+  }
+
   static async findAllEnabled(): Promise<KnowledgeBaseConnector[]> {
     return await db
       .select()

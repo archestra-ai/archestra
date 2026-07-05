@@ -190,4 +190,151 @@ describe("handleCheckDueConnectors", () => {
     const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
     expect(updated?.lastSyncStatus).toBe("running");
   });
+
+  describe("lease-based reaping", () => {
+    const EXPIRED_LEASE = () => new Date(Date.now() - 60_000);
+    const LIVE_LEASE = () => new Date(Date.now() + 60_000);
+
+    test("reaps an expired-lease run: partial, mirrors connector, resumes", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        // No schedule, so the only enqueue can come from the reaper.
+        schedule: "",
+        enabled: true,
+      });
+      // A run whose worker stopped heartbeating (crashed/hung). The connector
+      // reflects this run (Fix P: lastSyncAt = run.startedAt).
+      const startedAt = PAST();
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "running",
+        lastSyncAt: startedAt,
+      });
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt,
+        leaseExpiresAt: EXPIRED_LEASE(),
+        documentsIngested: 116,
+      });
+
+      await handleCheckDueConnectors();
+
+      const reaped = await ConnectorRunModel.findById(run.id);
+      expect(reaped?.status).toBe("partial");
+      expect(reaped?.completedAt).not.toBeNull();
+
+      const updatedConnector = await KnowledgeBaseConnectorModel.findById(
+        connector.id,
+      );
+      expect(updatedConnector?.lastSyncStatus).toBe("partial");
+
+      // Resumes from checkpoint promptly rather than waiting for the cron.
+      expect(mockEnqueue).toHaveBeenCalledWith({
+        taskType: "connector_sync",
+        payload: { connectorId: connector.id },
+      });
+    });
+
+    test("leaves a live-lease run untouched (healthy, incl. mid-drain)", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        schedule: "",
+        enabled: true,
+      });
+      // Started long ago but still heartbeating: there is no time-based
+      // hard-fail — a live run is bounded by the sync work budget (it
+      // checkpoints and continues), never aborted here on elapsed time alone.
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: new Date(Date.now() - 7 * 60 * 60 * 1000),
+        leaseExpiresAt: LIVE_LEASE(),
+      });
+
+      await handleCheckDueConnectors();
+
+      const untouched = await ConnectorRunModel.findById(run.id);
+      expect(untouched?.status).toBe("running");
+      expect(mockEnqueue).not.toHaveBeenCalled();
+    });
+
+    test("does NOT reap an expired-lease run that still has embedding work queued", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        schedule: "",
+        enabled: true,
+      });
+      // Ingest finished (lease last renewed during ingest, now lapsed) but the
+      // embedding drain is still in flight — a pending batch_embedding task is
+      // the liveness signal, so this healthy run must not be reaped.
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: PAST(),
+        leaseExpiresAt: EXPIRED_LEASE(),
+        totalBatches: 2,
+        completedBatches: 1,
+      });
+      await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { connectorRunId: run.id, documentIds: ["doc-1"] },
+        maxAttempts: 5,
+      });
+
+      await handleCheckDueConnectors();
+
+      const stillRunning = await ConnectorRunModel.findById(run.id);
+      expect(stillRunning?.status).toBe("running");
+      expect(mockEnqueue).not.toHaveBeenCalled();
+    });
+
+    test("stops auto-resuming a crash-looping connector", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        schedule: "",
+        enabled: true,
+      });
+      // 12 recent terminal runs + 1 expired-lease running run = 13 in the window,
+      // above the resume cap, so no continuation is enqueued.
+      for (let i = 0; i < 12; i++) {
+        await ConnectorRunModel.create({
+          connectorId: connector.id,
+          status: "failed",
+          startedAt: new Date(),
+        });
+      }
+      const run = await ConnectorRunModel.create({
+        connectorId: connector.id,
+        status: "running",
+        startedAt: PAST(),
+        leaseExpiresAt: EXPIRED_LEASE(),
+      });
+
+      await handleCheckDueConnectors();
+
+      const reaped = await ConnectorRunModel.findById(run.id);
+      expect(reaped?.status).toBe("partial");
+      expect(mockEnqueue).not.toHaveBeenCalled();
+    });
+  });
 });

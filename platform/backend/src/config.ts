@@ -883,7 +883,12 @@ export function parseFileStorageS3Config(params: {
   };
 }
 
-/** @public — exported for testability */
+/**
+ * Parse the per-run sync work budget (seconds). A run stops at ~90% of this,
+ * checkpoints, and a continuation resumes from there. Invalid or non-positive
+ * values disable the budget (a run then goes to completion in one pass).
+ * @public — exported for testability
+ */
 export function parseConnectorSyncMaxDuration(
   value: string | undefined,
 ): number | undefined {
@@ -1629,9 +1634,6 @@ const config = {
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
-    connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
-    ),
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,
@@ -1643,6 +1645,29 @@ const config = {
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
+    ),
+    // Liveness lease for connector sync runs. The owning worker renews the
+    // lease every `heartbeatInterval`; a run whose lease is not renewed within
+    // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times
+    // the heartbeat interval so a missed beat (GC pause, slow batch) doesn't
+    // falsely expire a live run.
+    connectorRunLeaseTtlSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS,
+      300,
+    ),
+    connectorRunHeartbeatIntervalSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS,
+      90,
+    ),
+    // Max wall-clock time a single sync run works before it checkpoints and
+    // yields; a continuation then resumes from that checkpoint. This bounds how
+    // long one run holds a worker and chunks large syncs into resumable pieces.
+    // A run stops at ~90% of this, so 3300s (55m) yields ~49m of work per run.
+    // Liveness is enforced by the lease/heartbeat, not by this budget. (Retains
+    // the older env var name so existing custom configs keep working.)
+    connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
   },
   secretsManager: {

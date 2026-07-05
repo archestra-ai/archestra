@@ -1437,10 +1437,16 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 
 - **Embedding and reranker API keys** are configured via LLM Provider Keys in **Settings > Knowledge**, not via environment variables. See [Embedding Configuration](/docs/platform-knowledge#embedding-configuration) and [Reranking Configuration](/docs/platform-knowledge#reranking-configuration) for how to pick the key and model.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Maximum duration for a single connector sync run before it stops and triggers a continuation.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS`** - Max wall-clock time a single connector sync run works before it checkpoints and yields.
   - Default: `3300` (55 minutes)
-  - Only applies to K8s CronJob runs. When a sync exceeds 90% of this budget, it stops and creates a continuation Job to resume from the last checkpoint.
-  - Set to `0` to disable time-bounded runs.
+  - Bounds how long one run holds a worker and chunks large syncs into resumable pieces. When a run exceeds ~90% of this budget it stops, is marked `partial`, and enqueues a continuation that resumes from the last checkpoint. Set to `0` to disable (a run then goes to completion in a single pass). Liveness is enforced separately by the lease/heartbeat below, not by this budget.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS`** - Liveness-lease window for a connector sync run.
+  - Default: `300` (5 minutes)
+  - The worker running a sync renews the run's lease throughout its life (ingest and embedding drain). A run whose lease is not renewed within this window is treated as crashed/hung and reclaimed — its status becomes `partial` and it resumes from its checkpoint. Keep this several times the heartbeat interval so a single missed renewal (GC pause, slow batch) does not falsely expire a healthy run.
+
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS`** - How often the owning worker renews a run's lease.
+  - Default: `90` (seconds)
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`

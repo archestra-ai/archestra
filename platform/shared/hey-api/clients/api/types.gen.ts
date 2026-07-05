@@ -42105,7 +42105,7 @@ export type GetConnectorsResponses = {
             schedule: string;
             enabled: boolean;
             lastSyncAt: string | null;
-            lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+            lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
             lastSyncError: string | null;
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
@@ -42509,7 +42509,7 @@ export type CreateConnectorResponses = {
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
@@ -42832,7 +42832,7 @@ export type GetConnectorResponses = {
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
@@ -43223,7 +43223,7 @@ export type UpdateConnectorResponses = {
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
@@ -44146,7 +44146,7 @@ export type GetConnectorRunsResponses = {
         data: Array<{
             id: string;
             connectorId: string;
-            status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+            status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
             startedAt: string;
             completedAt: string | null;
             documentsProcessed: number | null;
@@ -44257,7 +44257,7 @@ export type GetConnectorRunResponses = {
     200: {
         id: string;
         connectorId: string;
-        status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         startedAt: string;
         completedAt: string | null;
         documentsProcessed: number | null;

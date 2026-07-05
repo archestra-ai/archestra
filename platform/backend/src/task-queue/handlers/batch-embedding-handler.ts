@@ -13,6 +13,12 @@ export async function handleBatchEmbedding(
     throw new Error("Missing documentIds in batch_embedding payload");
   }
 
+  // Note: the run's lease is NOT renewed here. During the embedding-drain phase
+  // the presence of pending/processing batch_embedding tasks is itself the
+  // liveness signal — the reaper (reapExpiredRuns) skips any run that still has
+  // embedding work queued, so a healthy draining run is never reclaimed even
+  // though its lease (last renewed during ingest) has lapsed.
+
   try {
     await embeddingService.processDocuments(
       documentIds,

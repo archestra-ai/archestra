@@ -161015,7 +161015,8 @@
                               "success",
                               "completed_with_errors",
                               "failed",
-                              "partial"
+                              "partial",
+                              "superseded"
                             ]
                           },
                           "lastSyncError": {
@@ -163137,7 +163138,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "lastSyncError": {
@@ -164322,7 +164324,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "lastSyncError": {
@@ -166277,7 +166280,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "lastSyncError": {
@@ -169946,7 +169950,8 @@
                               "success",
                               "completed_with_errors",
                               "failed",
-                              "partial"
+                              "partial",
+                              "superseded"
                             ]
                           },
                           "startedAt": {
@@ -170403,7 +170408,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "startedAt": {

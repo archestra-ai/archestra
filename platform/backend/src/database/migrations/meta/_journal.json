@@ -2339,6 +2339,13 @@
       "when": 1783114944689,
       "tag": "0333_nosy_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 334,
+      "version": "7",
+      "when": 1783294065959,
+      "tag": "0334_loud_white_tiger",
+      "breakpoints": true
     }
   ]
 }

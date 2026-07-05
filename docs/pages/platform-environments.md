@@ -173,5 +173,5 @@ Cost limits and per-user default limits can be scoped to an environment. A limit
 - [Agents](/docs/platform-agents) — sandbox runtime, network egress, and visible tools/knowledge
 - [MCP Gateway](/docs/platform-mcp-gateway) — which tools and knowledge the gateway exposes
 - [LLM Proxy](/docs/platform-llm-proxy) — cost-limit attribution for inference
-- [Knowledge Connectors](/docs/platform-knowledge-connectors) — which environments can use the connector's knowledge
+- [Knowledge Connectors](/docs/platform-knowledge) — which environments can use the connector's knowledge
 - [Private Registry](/docs/platform-private-registry) — assigning MCP catalog entries to environments

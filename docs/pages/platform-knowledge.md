@@ -1,10 +1,57 @@
 ---
-title: Connectors
+title: Knowledge
 category: Knowledge
-order: 2
-description: Supported connector types, configuration, and management
+order: 1
+description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
 lastUpdated: 2026-07-05
 ---
+
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions. The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra — no external vector database or separate retrieval service required.
+
+> **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
+
+![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
+
+## Configuration
+
+Open **Settings > Knowledge**. Both an embedding and a reranking model must be set before Knowledge Bases can be used.
+
+### Embedding Configuration
+
+![Embedding Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_embedding-configuration.webp)
+
+Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
+
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
+- **Model** — any embedding-capable model exposed by the selected key.
+
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync.
+
+### Reranking Configuration
+
+![Reranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
+
+Pick the LLM that scores and reorders search results by relevance.
+
+- **Key** — any LLM provider key.
+- **Model** — any chat model from that provider.
+
+## Creating a Knowledge Base
+
+A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
+
+## Assigning to an Agent
+
+1. Go to **Agents** in the left sidebar and click the agent you want to attach knowledge to (or create a new one).
+2. In the **Edit Agent** dialog, scroll to **Knowledge Sources**.
+3. Click **Select connectors or knowledge bases** and pick one or more entries from the **Knowledge Bases** and **Connectors** lists. An agent can be assigned multiple Knowledge Bases or individual connectors.
+4. Click **Update** to save.
+
+Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
+
+The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
+
+![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
 
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
 
@@ -350,3 +397,31 @@ A connector can be assigned a deployment environment. Only agents and gateways i
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.
+
+## Architecture
+
+The RAG stack runs entirely within PostgreSQL — no external vector database. See [Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for the full configuration reference.
+
+**Ingestion.** Connectors run on a cron schedule; documents are chunked and embedded into PostgreSQL with pgvector.
+
+```mermaid
+flowchart LR
+    C[Connectors] -->|cron schedule| D[Documents]
+    D --> CH[Chunking]
+    CH -->|Embedding provider API| E[Embedding]
+    E --> PG[(PostgreSQL + pgvector)]
+```
+
+**Querying.** The agent's query is embedded, then vector and optional full-text search run in parallel. Results are fused, reranked, and ACL-filtered before being returned.
+
+```mermaid
+flowchart LR
+    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
+    QE --> VS[Vector Search]
+    QE --> FTS["Full-Text Search (configurable)"]
+    VS --> RRF[Reciprocal Rank Fusion]
+    FTS --> RRF
+    RRF --> RR[Reranking]
+    RR --> ACL[ACL Filtering]
+    ACL --> R[Results]
+```

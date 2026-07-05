@@ -42,12 +42,12 @@ A Knowledge Base is a set of connectors. Create one from the **Knowledge** page 
 
 ## Assigning to an Agent
 
-1. Go to **Agents** in the left sidebar and click the agent you want to attach knowledge to (or create a new one).
-2. In the **Edit Agent** dialog, scroll to **Knowledge Sources**.
-3. Click **Select connectors or knowledge bases** and pick one or more entries from the **Knowledge Bases** and **Connectors** lists. An agent can be assigned multiple Knowledge Bases or individual connectors.
-4. Click **Update** to save.
+An agent — or an [MCP Gateway](/docs/platform-mcp-gateway) — reaches knowledge through the **Tools & Knowledge Sources** setting in its dialog, which has two modes:
 
-Once assigned, the agent gains a `query_knowledge_sources` tool that searches across everything attached to it and pulls back the most relevant documents to answer the user's question.
+- **All** — the agent can search every Knowledge Base and connector the chatting user can access, within the agent's environment. Nothing is assigned; the reachable set follows each user's own visibility.
+- **Custom** — the agent searches only the Knowledge Bases and connectors you assign to it. Pick them under **Knowledge Sources**; the picker stays disabled until an embedding and reranking model are set (see [Configuration](#configuration)).
+
+Either mode is still filtered by the chatting user's own visibility, so an agent never surfaces a source the user could not read themselves. Once the agent has at least one reachable source, it gains a `query_knowledge_sources` tool that searches across them and returns the most relevant documents.
 
 The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
 

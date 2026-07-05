@@ -90,9 +90,11 @@ export function ConnectorRunDetailsDialog({
 
               {(run.itemsSkipped ?? 0) > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {run.itemsSkipped} file(s) were skipped: no extractable text
-                  or media (e.g. empty documents, unsupported binary formats, or
-                  password-protected files). These are not indexed.
+                  {run.itemsSkipped} file(s) were skipped and not indexed —
+                  their file type isn&apos;t supported for the knowledge base
+                  (e.g. videos, audio, archives, or other binary formats), or
+                  they had no extractable text (empty or password-protected
+                  documents).
                 </p>
               )}
 

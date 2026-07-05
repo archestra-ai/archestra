@@ -89,9 +89,16 @@ class ConnectorSyncService {
 
     // Heartbeat: renew the lease across the whole ingest phase so the reaper
     // never mistakes this live run for an orphan. Renewal is fenced by owner +
-    // epoch; a `false` result means we were reclaimed. `.unref()` so the timer
-    // can't keep the process alive on its own.
-    const heartbeat = setInterval(() => {
+    // epoch; a `false` result means we were reclaimed.
+    //
+    // Invariant: the heartbeat interval must stay well under the lease TTL
+    // (defaults 90s interval / 300s TTL, ~3.3x) so that a couple of missed
+    // beats — a GC pause or a slow batch — don't expire a live run. The sync
+    // also yields to the event loop between batches, so a CPU-heavy batch can't
+    // starve this timer for long. claim() already seeded the lease to now()+TTL,
+    // but we fire one beat immediately so the lease is refreshed from the moment
+    // ingest begins rather than only after the first interval elapses.
+    const beat = () => {
       ConnectorRunModel.renewLease({
         runId: run.id,
         owner: WORKER_ID,
@@ -107,7 +114,13 @@ class ConnectorSyncService {
             "Connector run heartbeat failed",
           );
         });
-    }, config.kb.connectorRunHeartbeatIntervalSeconds * 1000);
+    };
+    beat();
+    const heartbeat = setInterval(
+      beat,
+      config.kb.connectorRunHeartbeatIntervalSeconds * 1000,
+    );
+    // `.unref()` so the timer can't keep the process alive on its own.
     heartbeat.unref();
 
     try {

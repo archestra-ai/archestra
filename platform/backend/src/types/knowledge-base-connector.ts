@@ -139,5 +139,7 @@ export const UpdateConnectorRunSchema = createUpdateSchema(
 });
 
 export type ConnectorRun = z.infer<typeof SelectConnectorRunSchema>;
+/** A run as returned by list endpoints: no `logs`, no internal lease columns. */
+export type ConnectorRunListItem = z.infer<typeof SelectConnectorRunListSchema>;
 export type InsertConnectorRun = z.infer<typeof InsertConnectorRunSchema>;
 export type UpdateConnectorRun = z.infer<typeof UpdateConnectorRunSchema>;

@@ -2,18 +2,10 @@ import { and, count, desc, eq, inArray, sql, sum } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   ConnectorRun,
+  ConnectorRunListItem,
   InsertConnectorRun,
   UpdateConnectorRun,
 } from "@/types";
-
-/**
- * ConnectorRun without the `logs` field (large) or the internal lease columns —
- * used for list endpoints.
- */
-type ConnectorRunListItem = Omit<
-  ConnectorRun,
-  "logs" | "leaseOwner" | "leaseExpiresAt" | "leaseEpoch" | "heartbeatAt"
->;
 
 /**
  * Postgres unique-violation SQLSTATE (23505) — a losing race on the

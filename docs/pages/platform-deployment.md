@@ -766,7 +766,7 @@ For supported resources, examples, and the contributor flow, see the [Crossplane
 
 The following environment variables can be used to configure Archestra Platform.
 
-### Application & API Configuration
+### Database
 
 - **`ARCHESTRA_DATABASE_URL`** - PostgreSQL connection string for the database.
   - Format: `postgresql://user:password@host:5432/database`
@@ -782,6 +782,8 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `30000` (30s)
   - Set to `0` to disable the timeout entirely.
   - Defense-in-depth against pathological queries: any statement running longer than this is cancelled by PostgreSQL so a single slow query can't hold a connection open indefinitely. Raise it if you have legitimate long-running analytical queries.
+
+### Application & API Configuration
 
 - **`ARCHESTRA_API_BASE_URL`** - Archestra API Base URL(s) for connecting to Archestra's LLM Proxy, MCP Gateway and A2A Gateway.
 
@@ -816,6 +818,8 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+### Code Sandbox
+
 - **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enables the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. Needs a Dagger runner host (below) to run; without one the feature stays off. When off, `run_command` and the other sandbox tools are unavailable and skills cannot execute.
   - Default: `false`
   - Values: `true`, `false`
@@ -838,6 +842,8 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `262144` (256 KiB)
 - **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
   - Default: `16777216` (16 MiB)
+
+### Skills Marketplace
 
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`

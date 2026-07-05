@@ -3,7 +3,7 @@ title: Code Sandbox
 category: Agents
 order: 5
 description: A private Linux container where an agent runs code during a chat
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-05
 ---
 
 The code sandbox is a private Linux container where an agent runs code during a chat. It runs shell commands and Python, isolated from your own infrastructure — no host access, and no network beyond what the agent's [environment](./platform-environments) allows. Each conversation gets its own sandbox, created the first time the agent runs something.
@@ -26,11 +26,11 @@ When the agent loads a [skill](./platform-agent-skills), the skill's files mount
 
 ## Limits
 
-Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 seconds of wall-clock time. Command output is captured up to 256 KiB, and a file the agent exports can be up to 16 MiB. A very long chain of commands eventually reaches a history limit — the agent then starts a fresh sandbox. Admins can tune the caps; see [Deployment](./platform-deployment).
+Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 seconds of wall-clock time. Command output is captured up to 256 KiB, and a file the agent exports can be up to 16 MiB. A very long chain of commands eventually reaches a history limit — the agent then starts a fresh sandbox. Admins can tune the caps; see [Deployment](./platform-deployment#code-sandbox).
 
 ## Enabling the Sandbox
 
-The sandbox is an admin feature, off by default. It needs two settings: `ARCHESTRA_CODE_RUNTIME_ENABLED=true` and a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. See [Deployment](./platform-deployment) for the full list.
+The sandbox is an admin feature, off by default. It needs two settings: `ARCHESTRA_CODE_RUNTIME_ENABLED=true` and a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. See [Deployment](./platform-deployment#code-sandbox) for the full list.
 
 Running a command needs the `sandbox:execute` permission. See [Access Control](./platform-access-control).
 

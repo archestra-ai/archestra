@@ -198,11 +198,12 @@ runs:
     - name: Start local MCP image registry
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
       shell: bash
+      env:
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: |
         set -euo pipefail
         # registry:2 on the sticky disk, published on host :5001 and joined to the
-        # kind network as `kind-registry` (the endpoint the kind.yaml mirror maps
-        # localhost:5001 -> http://kind-registry:5000 points at).
+        # kind network as `kind-registry`.
         if [ -z "$(docker ps -q -f 'name=^kind-registry$')" ]; then
           docker run -d --restart=always \
             -p 127.0.0.1:5001:5000 \
@@ -210,6 +211,15 @@ runs:
             --name kind-registry registry:2
         fi
         docker network connect kind kind-registry 2>/dev/null || true
+
+        # Point each node's containerd at the in-network registry for the
+        # localhost:5001 host, via a hosts.toml under the certs.d dir configured
+        # in kind.yaml (the containerd 2.x-compatible mechanism).
+        for node in $(kind get nodes --name "${KIND_CLUSTER_NAME}"); do
+          docker exec "${node}" mkdir -p "/etc/containerd/certs.d/localhost:5001"
+          echo '[host."http://kind-registry:5000"]' \
+            | docker exec -i "${node}" cp /dev/stdin "/etc/containerd/certs.d/localhost:5001/hosts.toml"
+        done
 
         # Mirror the three static MCP images into the registry (the host daemon
         # already has them from the fetch step above). Idempotent — on a warm

@@ -5,13 +5,19 @@ name: archestra-ci-cluster
 # runs a registry:2 backed by a Blacksmith sticky disk, connected to the kind
 # network as `kind-registry`, pre-populated with the static MCP dependency
 # images. Those pods reference images as `localhost:5001/...` and containerd
-# resolves that to the in-network registry, so they pull from local NVMe instead
-# of being `kind load`ed. Inert on every other path: when no manifest references
-# localhost:5001 (i.e. the registry isn't set up), this mirror is never consulted.
+# resolves that to the in-network registry (via a hosts.toml the setup action
+# writes under certs.d), so they pull from local NVMe instead of being
+# `kind load`ed.
+#
+# Use config_path (not the removed inline `registry.mirrors` syntax — containerd
+# 2.x, shipped in kindest/node v1.34, rejects it and refuses to start): it just
+# points containerd at a directory of per-registry hosts.toml files. An empty
+# directory is a no-op, so this is inert on every path where the setup action
+# doesn't write a hosts.toml.
 containerdConfigPatches:
   - |-
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5001"]
-      endpoint = ["http://kind-registry:5000"]
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
 # Uses Kind's default CNI (kindnet) which has built-in NetworkPolicy enforcement
 # since Kind v0.24.0 via kubernetes-sigs/kube-network-policies.
 # https://kind.sigs.k8s.io/docs/user/configuration/#disable-default-cni

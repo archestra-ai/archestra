@@ -311,7 +311,10 @@ function extractArchestraInternalCode(
   try {
     const parsed = JSON.parse(responseBody);
     const code = parsed?.error?.internal_code;
-    if (code === ArchestraInternalErrorCode.ContextLengthExceeded) {
+    if (
+      code === ArchestraInternalErrorCode.ContextLengthExceeded ||
+      code === ArchestraInternalErrorCode.ProviderInsufficientBalance
+    ) {
       return code;
     }
   } catch {
@@ -1690,6 +1693,13 @@ export function mapProviderError(
   const normalizedCode = extractArchestraInternalCode(responseBody);
   if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
     errorCode = ChatErrorCode.ContextTooLong;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.ProviderInsufficientBalance
+  ) {
+    // Balance too low arrives as a 400/402 the per-provider mapper would call
+    // InvalidRequest (generic "please try again"). Reclassify to the dedicated,
+    // non-retryable code so the card names the real cause.
+    errorCode = ChatErrorCode.ProviderInsufficientBalance;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
   // An Archestra usage-limit block arrives over the proxy envelope as an HTTP

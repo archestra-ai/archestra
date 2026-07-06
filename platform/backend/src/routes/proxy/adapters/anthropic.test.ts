@@ -1,4 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
@@ -830,5 +831,60 @@ describe("anthropicAdapterFactory.execute", () => {
 
     expect(post).toHaveBeenCalled();
     expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
+  });
+});
+
+describe("anthropicAdapterFactory balance-too-low message", () => {
+  // The SDK nests the provider body as error.error.{type,message}.
+  function sdkError(
+    status: number,
+    type: string,
+    message: string,
+  ): { status: number; error: { error: { type: string; message: string } } } {
+    return { status, error: { error: { type, message } } };
+  }
+
+  test("returns one unified message for both out-of-credit and usage-limit blocks", () => {
+    const creditError = sdkError(
+      402,
+      "billing_error",
+      "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+    );
+    // A usage/spend cap: HTTP 400 with a non-standard `api_validation_error`
+    // type, so it's detected off the body message.
+    const limitError = sdkError(
+      400,
+      "api_validation_error",
+      "You have reached your specified API usage limits.",
+    );
+
+    for (const error of [creditError, limitError]) {
+      expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+    }
+
+    const creditMessage =
+      anthropicAdapterFactory.extractErrorMessage(creditError);
+    const limitMessage =
+      anthropicAdapterFactory.extractErrorMessage(limitError);
+
+    // Same message for both; no Anthropic raw text / Console steering.
+    expect(creditMessage).toBe(limitMessage);
+    expect(creditMessage).toMatch(/remaining usage balance is too low/i);
+    expect(creditMessage).toMatch(/please contact your administrator/i);
+    expect(creditMessage).not.toMatch(/Plans & Billing/i);
+  });
+
+  test("does not flag an ordinary error, relays its message verbatim", () => {
+    const error = sdkError(
+      400,
+      "invalid_request_error",
+      'messages: roles must alternate between "user" and "assistant"',
+    );
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBeUndefined();
+    expect(anthropicAdapterFactory.extractErrorMessage(error)).toContain(
+      "roles must alternate",
+    );
   });
 });

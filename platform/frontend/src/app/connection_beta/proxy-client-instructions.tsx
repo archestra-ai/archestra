@@ -11,6 +11,10 @@ import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ConnectionCreditWarning,
+  CreditWarningNotice,
+} from "@/components/connection/credit-warning-notice";
 import { CopyableCode } from "@/components/copyable-code";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
@@ -303,6 +307,7 @@ function GenericProxyInstructions({
   const [virtualKey, setVirtualKey] = useState<{
     value: string;
     name: string;
+    creditWarning?: ConnectionCreditWarning | null;
   } | null>(null);
 
   // A virtual key can only wrap a provider key the user can resolve. Mirror the
@@ -453,6 +458,7 @@ function GenericProxyInstructions({
                   &quot;{virtualKey.name}&quot; key on the Virtual API Keys
                   page.
                 </p>
+                <CreditWarningNotice warning={virtualKey.creditWarning} />
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">

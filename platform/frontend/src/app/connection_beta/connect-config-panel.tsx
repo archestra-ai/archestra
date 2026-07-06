@@ -6,6 +6,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { AgentSelector } from "@/components/agent-selector";
+import {
+  type ConnectionCreditWarning,
+  CreditWarningNotice,
+} from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -327,7 +331,12 @@ type EditableRow = "gateway" | "proxy" | "endpoint" | "platform";
 
 type ProvisionState =
   | { status: "loading" }
-  | { status: "ready"; passthroughKey: string; virtualKey: string }
+  | {
+      status: "ready";
+      passthroughKey: string;
+      virtualKey: string;
+      creditWarning?: ConnectionCreditWarning | null;
+    }
   | { status: "error" };
 
 /**
@@ -380,6 +389,7 @@ function ConfigDownloadStep({
                 status: "ready",
                 passthroughKey: passthrough.value,
                 virtualKey: virtual.value,
+                creditWarning: virtual.creditWarning,
               }
             : { status: "error" },
         );
@@ -481,6 +491,7 @@ function ConfigDownloadStep({
 
   return (
     <div className="flex flex-col gap-3">
+      <CreditWarningNotice warning={state.creditWarning} />
       <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-[12.5px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
         <span>

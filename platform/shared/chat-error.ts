@@ -22,6 +22,13 @@ import {
  */
 export const ArchestraInternalErrorCode = {
   ContextLengthExceeded: "context_length_exceeded",
+  /**
+   * The provider rejected the request because the key's remaining usage balance
+   * is too low — out of credit or over a usage/spend limit (e.g. Anthropic 402
+   * `billing_error`, or a 400 usage-limit message). Retrying won't help until
+   * the balance is topped up or the limit resets.
+   */
+  ProviderInsufficientBalance: "provider_insufficient_balance",
 } as const;
 
 export type ArchestraInternalErrorCode =
@@ -66,6 +73,7 @@ export const AnthropicErrorTypes = {
   RATE_LIMIT: "rate_limit_error",
   API_ERROR: "api_error",
   OVERLOADED: "overloaded_error",
+  BILLING: "billing_error",
 } as const;
 
 /**
@@ -267,6 +275,12 @@ export enum ChatErrorCode {
   PermissionDenied = "permission_denied",
   /** Malformed or invalid request */
   InvalidRequest = "invalid_request",
+  /**
+   * The provider key's remaining usage balance is too low (out of credit or over
+   * a usage/spend limit). NOT retryable — retrying re-hits the same wall until
+   * the balance is topped up or the limit resets.
+   */
+  ProviderInsufficientBalance = "provider_insufficient_balance",
   /** Model or resource not found */
   NotFound = "not_found",
   /** Input exceeds the model's context window */
@@ -311,6 +325,12 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Your API key doesn't have permission for this model.",
   [ChatErrorCode.InvalidRequest]:
     "There was an issue with your request. Please try again.",
+  // Provider-neutral: this code is emitted for any provider whose key runs out
+  // of balance or trips a usage/spend limit. Provider-specific phrasing (e.g. the
+  // Anthropic connection-page copy) is surfaced by the adapter's
+  // `extractErrorMessage`, not baked into this cross-provider table.
+  [ChatErrorCode.ProviderInsufficientBalance]:
+    "Your API key's remaining usage balance is too low. Please contact your administrator or try again later.",
   [ChatErrorCode.NotFound]:
     "The selected model is not available. Please choose a different model.",
   [ChatErrorCode.ContextTooLong]:

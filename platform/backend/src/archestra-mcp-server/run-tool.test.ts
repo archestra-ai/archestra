@@ -2423,46 +2423,80 @@ describe("run_tool", () => {
     test("suppresses the repair note when the built-in call is denied by a gate, but keeps it when the call reaches validation", async ({
       seedAndAssignArchestraTools,
     }) => {
-      // Unassigned + no dynamic access → executeArchestraTool denies at the
-      // assignment gate, before arg validation. The envelope repair still fires
-      // on appId, but the note must not ride on the denial (it would disclose a
-      // param's declared type to a caller who cannot reach the tool).
-      const denied = await executeArchestraTool(
-        TOOL_RUN_TOOL_FULL_NAME,
-        {
-          tool_name: "edit_app",
-          tool_args: {
-            appId: { value: crypto.randomUUID() },
-            baseVersion: 1,
-          },
-        },
-        mockContext,
-      );
-      expect(denied.isError).toBe(true);
-      const deniedText = denied.content
-        .map((item) => (item as any).text)
-        .join("\n");
-      expect(deniedText).not.toContain("unwrapped a single-key wrapper");
+      // appendEnvelopeRepairNote adds exactly one extra content block, so the
+      // note's presence is observable structurally (block count) without pinning
+      // its wording: the wrapped call's content matches the equivalent bare call
+      // when the note is suppressed, and has one extra block when it rides.
+      const dispatch = (appId: unknown) =>
+        executeArchestraTool(
+          TOOL_RUN_TOOL_FULL_NAME,
+          { tool_name: "edit_app", tool_args: { appId, baseVersion: 1 } },
+          mockContext,
+        );
+
+      // Unassigned + no dynamic access → denial at the assignment gate, before
+      // arg validation. The envelope repair fires on the wrapped appId, but the
+      // note must not ride on the denial (it would disclose the param's declared
+      // type to a caller who cannot reach the tool): wrapped == bare.
+      const validUuid = crypto.randomUUID();
+      const deniedWrapped = await dispatch({ value: validUuid });
+      const deniedBare = await dispatch(validUuid);
+      expect(deniedWrapped.isError).toBe(true);
+      expect(deniedBare.isError).toBe(true);
+      expect(deniedWrapped.content).toHaveLength(deniedBare.content.length);
 
       // Assigned but arg-invalid (appId is not a uuid after unwrap) → the call
-      // reaches validation, which carries archestraValidation, so the note rides.
+      // reaches validation, which carries archestraValidation, so the note rides:
+      // the wrapped call has exactly one more block than the bare one.
       await seedAndAssignArchestraTools(testAgent.id);
-      const validated = await executeArchestraTool(
+      const invalidWrapped = await dispatch({ value: "not-a-uuid" });
+      const invalidBare = await dispatch("not-a-uuid");
+      expect(invalidWrapped.isError).toBe(true);
+      expect(invalidBare.isError).toBe(true);
+      expect(invalidWrapped.content).toHaveLength(
+        invalidBare.content.length + 1,
+      );
+    });
+
+    test("coerces an envelope-wrapped numeric string end to end so the dispatched call receives the number", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__list_issues",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { perPage: { type: "integer" } },
+          required: ["perPage"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
         TOOL_RUN_TOOL_FULL_NAME,
         {
-          tool_name: "edit_app",
-          tool_args: {
-            appId: { value: "not-a-uuid" },
-            baseVersion: 1,
-          },
+          tool_name: "github__list_issues",
+          tool_args: { perPage: { $text: " 5 " } },
         },
         mockContext,
       );
-      expect(validated.isError).toBe(true);
-      const validatedText = validated.content
-        .map((item) => (item as any).text)
-        .join("\n");
-      expect(validatedText).toContain("unwrapped a single-key wrapper");
+
+      expect(result.isError).toBe(false);
+      // The wrapper's inner string is trimmed and coerced to the integer 5
+      // before dispatch — the upstream tool never sees the envelope or a string.
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ arguments: { perPage: 5 } }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
     });
   });
 });

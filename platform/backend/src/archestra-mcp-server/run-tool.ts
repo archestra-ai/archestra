@@ -838,10 +838,12 @@ function asRepairableDeclaredType(
  * The inner value coerced to the declared scalar type, or null when it does not
  * qualify. Beyond an exact JS-type match, a numeric/boolean value the model
  * carried as a *string* (the XML-text-node habit, e.g. `{"$text":"1"}` for a
- * number param) is parsed to the scalar under a strict grammar — no naive
- * `Number()`, which would accept `0x10`, `1e3`, `Infinity`, or whitespace. The
- * outer envelope object is already provably invalid against the scalar type, so
- * parsing its inner string can never rewrite a call the schema would accept.
+ * number param) is parsed to the scalar under a strict grammar: surrounding
+ * whitespace is trimmed, then a plain-decimal (or exact `"true"`/`"false"`)
+ * literal is required — unlike a naive `Number()`, which would accept `0x10`,
+ * `1e3`, `Infinity`, or an all-whitespace string. The outer envelope object is
+ * already provably invalid against the scalar type, so parsing its inner string
+ * can never rewrite a call the schema would accept.
  */
 function coerceInnerToDeclaredType(
   value: unknown,
@@ -916,6 +918,11 @@ function parseIntegerString(value: unknown): number | null {
  * the RBAC/assignment gates in executeArchestraTool. A success has no error; a
  * post-gate validation error carries the `archestraValidation` descriptor
  * (index.ts). A gate denial is a plain error with neither, so it reads false.
+ * Deliberately conservative: a handler/output error that runs *after* the gates
+ * also lacks that descriptor and so suppresses the note too. That is the safe
+ * direction — the note is only a self-correction hint, and erring toward
+ * suppression keeps any not-yet-enumerated error path from leaking a param's
+ * declared type to a caller the gates would have refused.
  */
 function reachedArgValidation(result: CallToolResult): boolean {
   if (!result.isError) {

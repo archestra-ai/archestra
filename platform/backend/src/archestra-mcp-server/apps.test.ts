@@ -984,6 +984,16 @@ describe("read_app / edit_app", () => {
     );
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
+
+    // The old_string/new_string aliases accepted at call time via preprocess
+    // must not leak into the published item schema — it stays the canonical
+    // closed object so search_tools and error feedback show only old_str/new_str.
+    const item = schema.properties.edits.items;
+    expect(Object.keys(item.properties).sort()).toEqual(["new_str", "old_str"]);
+    expect(item.additionalProperties).toBe(false);
+    expect(item.required).toEqual(
+      expect.arrayContaining(["old_str", "new_str"]),
+    );
   });
 
   test("replacementHtml replaces the whole document without old_str matching", async () => {

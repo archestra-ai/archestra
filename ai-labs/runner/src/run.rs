@@ -156,6 +156,12 @@ pub async fn run(
     let worktree = match branch {
         Some(git_ref) => {
             let source = crate::lifecycle::resolve_platform_dir(platform_dir, &repo_root());
+            // Fail fast on a broken sandbox BEFORE the multi-minute build: preflight the source
+            // platform dir (whose `.env` is what the worktree copies) so a down Docker/Dagger aborts
+            // the run now rather than after the build. Preserves preflight's "abort before spending
+            // work" property, which building first would silently defeat; the in-block preflight below
+            // then hits the warmed OnceCells.
+            crate::lifecycle::preflight(&repo_root(), Some(&source)).await?;
             Some(
                 crate::lifecycle::prepare_branch_worktree(
                     &repo_root(),
@@ -674,14 +680,8 @@ async fn seed_env_mcps(
     let fixture = FixtureMcp::start(FIXTURE_MCP_NAME)
         .await
         .map_err(|e| e.to_string())?;
-    if let Err(e) = register_remote_mcp(
-        client,
-        fixture.name(),
-        fixture.base_url(),
-        "org",
-        Some(agent_ids),
-    )
-    .await
+    if let Err(e) =
+        register_remote_mcp(client, fixture.name(), fixture.base_url(), "org", Some(agent_ids)).await
     {
         fixture.stop().await;
         return Err(e.to_string());
@@ -852,15 +852,15 @@ async fn run_isolated_lane(
         }
     };
 
-    let fixture_mcp =
-        match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await {
-            Ok(fixture) => fixture,
-            Err(e) => {
-                mcp.stop().await;
-                let _ = instance.shutdown().await;
-                return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
-            }
-        };
+    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await
+    {
+        Ok(fixture) => fixture,
+        Err(e) => {
+            mcp.stop().await;
+            let _ = instance.shutdown().await;
+            return infra_results_for_lane(&env, &tasks, &lane, &ctx, &progress, &e);
+        }
+    };
 
     let results = run_lane(
         client,
@@ -1027,10 +1027,8 @@ fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<
         .map(str::to_string)
         .ok_or_else(|| {
             RunError::Client(
-                ContractError(format!(
-                    "{what}: API response missing non-empty string `id`"
-                ))
-                .into(),
+                ContractError(format!("{what}: API response missing non-empty string `id`"))
+                    .into(),
             )
         })
 }
@@ -1607,10 +1605,7 @@ async fn grade_rollout(
         }
         nudges_sent += 1;
         artifacts
-            .append(
-                "submit_nudge",
-                serde_json::json!({ "attempt": nudges_sent }),
-            )
+            .append("submit_nudge", serde_json::json!({ "attempt": nudges_sent }))
             .await;
         let nudge = Stage {
             text: SUBMIT_NUDGE.to_string(),

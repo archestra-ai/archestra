@@ -51,9 +51,7 @@ impl Teardown {
                 kill_backend(proc).await;
                 drop_database(db_created, db_name, maint_db_url).await;
             }
-            Teardown::DaggerLogs { proc } => {
-                kill_child(proc, "managed Dagger engine log follower").await
-            }
+            Teardown::DaggerLogs { proc } => kill_child(proc, "managed Dagger engine log follower").await,
             Teardown::Worktree { repo_root, path } => remove_worktree(repo_root, path).await,
         }
     }
@@ -94,7 +92,15 @@ pub async fn shutdown_all() {
         "interrupted: tearing down {} live backend instance(s)",
         live.len()
     );
-    futures::future::join_all(live.iter().map(|t| t.run())).await;
+    // Kill process-owning teardowns (backends, the build/log process groups) before removing any
+    // worktree: a backend or build spawned from inside a worktree must be dead before its directory is
+    // deleted, else `git worktree remove` races a live `node`/`pnpm` reading from it. Within each phase
+    // the teardowns run concurrently.
+    let (worktrees, processes): (Vec<Teardown>, Vec<Teardown>) = live
+        .into_iter()
+        .partition(|t| matches!(t, Teardown::Worktree { .. }));
+    futures::future::join_all(processes.iter().map(|t| t.run())).await;
+    futures::future::join_all(worktrees.iter().map(|t| t.run())).await;
 }
 
 async fn kill_backend(proc: &Arc<Mutex<Option<Child>>>) {
@@ -587,24 +593,34 @@ pub async fn prepare_branch_worktree(
     git_ref: &str,
     slug: &str,
 ) -> Result<BranchWorktree, LifecycleError> {
-    // Sweep any worktree orphaned by a crashed prior run before adding a new one.
+    // Prune stale worktree admin records (those whose directory a prior cleanup already deleted) so a
+    // leftover registration can't trip up `worktree add`. Leftover temp *directories* from a hard crash
+    // aren't reaped here — paths are unique per run (pid + run id) so they never collide, and OS temp
+    // cleanup reclaims them.
     let _ = git(repo_root, &["worktree", "prune"]).await;
 
+    // Fetch into a run-private ref, never the shared `FETCH_HEAD`: two concurrent `--branch` runs both
+    // write `FETCH_HEAD`, so reading it back could hand this run the *other* run's commit and silently
+    // mislabel the A/B result. A per-run ref (unique by pid, dots flattened for ref-name legality) is
+    // immune. The ref is deleted once the worktree is checked out (the detached worktree HEAD then keeps
+    // the commit reachable on its own).
+    let pid = std::process::id();
+    let temp_ref = format!("refs/archestra-bench/{}-{pid}", slug.replace('.', "-"));
     info!("fetching origin {git_ref} for the backend worktree");
-    git(repo_root, &["fetch", "origin", git_ref])
-        .await
-        .map_err(|e| LifecycleError::Config(format!("git fetch origin {git_ref} failed: {e}")))?;
+    git(
+        repo_root,
+        &["fetch", "origin", &format!("{git_ref}:{temp_ref}")],
+    )
+    .await
+    .map_err(|e| LifecycleError::Config(format!("git fetch origin {git_ref} failed: {e}")))?;
 
-    // Pin the concrete commit right after the fetch: it labels the run, and checking out the sha rather
-    // than the shared `FETCH_HEAD` narrows the window a second concurrent `--branch` run could race.
-    let commit = git(repo_root, &["rev-parse", "FETCH_HEAD"])
+    let commit = git(repo_root, &["rev-parse", &temp_ref])
         .await
-        .map_err(|e| LifecycleError::Config(format!("git rev-parse FETCH_HEAD failed: {e}")))?
+        .map_err(|e| LifecycleError::Config(format!("git rev-parse {temp_ref} failed: {e}")))?
         .trim()
         .to_string();
 
-    let path =
-        std::env::temp_dir().join(format!("archestra-bench-wt-{slug}-{}", std::process::id()));
+    let path = std::env::temp_dir().join(format!("archestra-bench-wt-{slug}-{pid}"));
     if path.exists() {
         remove_worktree(repo_root, &path).await;
     }
@@ -622,12 +638,16 @@ pub async fn prepare_branch_worktree(
     .await
     .map_err(|e| LifecycleError::Config(format!("git worktree add failed: {e}")))?;
 
-    // Register teardown the instant the worktree exists, before the long build: a signal mid-build must
-    // still remove it.
+    // Register teardown the instant the worktree exists — synchronously, with no `.await` between the
+    // `worktree add` above and this call, so a cancellation can never strand an unregistered worktree.
     let teardown_id = register(Teardown::Worktree {
         repo_root: repo_root.to_path_buf(),
         path: path.clone(),
     });
+
+    // The detached worktree HEAD now pins the commit; drop the fetch ref. Ordered after registration so
+    // a signal during this await still leaves the worktree registered for teardown.
+    let _ = git(repo_root, &["update-ref", "-d", &temp_ref]).await;
 
     let wt_platform = path.join("platform");
     if let Err(e) = provision_and_build(source_platform, &wt_platform, &commit).await {
@@ -661,7 +681,14 @@ async fn provision_and_build(
             src_env.display()
         )));
     }
-    fs::copy(&src_env, wt_platform.join(".env")).await?;
+    let dst_env = wt_platform.join(".env");
+    fs::copy(&src_env, &dst_env).await.map_err(|e| {
+        LifecycleError::Config(format!(
+            "copying {} to {} failed: {e}",
+            src_env.display(),
+            dst_env.display()
+        ))
+    })?;
 
     // Dagger CLI (gitignored): `backend_env` prefers `ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN` (flows via
     // the copied `.env`/process env) and otherwise resolves `<platform>/dev/bin/dagger`. So only when
@@ -670,10 +697,18 @@ async fn provision_and_build(
     let src_dagger = source_platform.join("dev").join("bin").join("dagger");
     if src_dagger.is_file() {
         let dst_dir = wt_platform.join("dev").join("bin");
-        fs::create_dir_all(&dst_dir).await?;
+        fs::create_dir_all(&dst_dir).await.map_err(|e| {
+            LifecycleError::Config(format!("creating {} failed: {e}", dst_dir.display()))
+        })?;
         let dst = dst_dir.join("dagger");
         let _ = fs::remove_file(&dst).await;
-        fs::symlink(&src_dagger, &dst).await?;
+        fs::symlink(&src_dagger, &dst).await.map_err(|e| {
+            LifecycleError::Config(format!(
+                "symlinking dagger {} -> {} failed: {e}",
+                src_dagger.display(),
+                dst.display()
+            ))
+        })?;
     } else {
         info!(
             "{} absent; the branch backend resolves dagger via ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN",
@@ -708,21 +743,46 @@ async fn git(repo_root: &Path, args: &[&str]) -> Result<String, String> {
     }
 }
 
-/// Run a pnpm command in `dir` with inherited stdio (build progress stays visible) and
-/// `kill_on_drop`, so a signal that drops the run future kills the long build instead of orphaning it.
+/// SIGKILLs a process group on drop unless disarmed. `kill_on_drop` reaps only the direct child, but a
+/// `pnpm` build spawns a tree (turbo, tsdown, the napi `cargo` build); on cancellation those
+/// descendants must die too, or they keep writing into a worktree that is about to be removed.
+struct KillGroupOnDrop(Option<i32>);
+
+impl KillGroupOnDrop {
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for KillGroupOnDrop {
+    fn drop(&mut self) {
+        if let Some(pgid) = self.0 {
+            let _ = signal::killpg(Pid::from_raw(pgid), Signal::SIGKILL);
+        }
+    }
+}
+
+/// Run a pnpm command in `dir` with inherited stdio (build progress stays visible), in its own process
+/// group so a cancelled run (signal drops the run future) kills the whole build tree rather than
+/// orphaning `pnpm`'s descendants.
 async fn pnpm(dir: &Path, args: &[&str]) -> Result<(), LifecycleError> {
-    let status = Command::new("pnpm")
+    let mut child = Command::new("pnpm")
         .args(args)
         .current_dir(dir)
+        .process_group(0)
         .kill_on_drop(true)
-        .status()
-        .await
+        .spawn()
         .map_err(|e| {
             LifecycleError::Config(format!(
                 "failed to run `pnpm {}` (is pnpm installed?): {e}",
                 args.join(" ")
             ))
         })?;
+    let mut guard = KillGroupOnDrop(child.id().map(|p| p as i32));
+    let status = child.wait().await.map_err(|e| {
+        LifecycleError::Config(format!("`pnpm {}` failed to run: {e}", args.join(" ")))
+    })?;
+    guard.disarm();
     if !status.success() {
         return Err(LifecycleError::Config(format!(
             "`pnpm {}` failed ({status}) in {}",
@@ -734,8 +794,9 @@ async fn pnpm(dir: &Path, args: &[&str]) -> Result<(), LifecycleError> {
 }
 
 /// Remove a bench-created git worktree, best-effort. Shared by the normal-path handle and the
-/// signal-teardown registry. Failures are logged, not propagated: a leaked worktree lives in a temp
-/// dir and the next run's `worktree prune` sweeps it.
+/// signal-teardown registry. Failures are logged loudly, not propagated — same disposition as a failed
+/// benchmark-DB drop: the worktree sits in a unique temp dir, so a rare leak wastes disk until OS temp
+/// cleanup, never correctness. (`worktree prune` clears only the admin record, not a leaked directory.)
 async fn remove_worktree(repo_root: &Path, path: &Path) {
     info!("removing bench worktree {}", path.display());
     let path_str = path.to_string_lossy();
@@ -1298,20 +1359,19 @@ mod tests {
         );
     }
 
-    /// `remove_worktree` must actually detach and delete a real git worktree — the highest-risk piece
-    /// of `--branch` cleanup. Real git, real filesystem, no mocks.
-    #[tokio::test]
-    async fn test_remove_worktree_deletes_real_worktree() {
-        fn run_git(dir: &Path, args: &[&str]) {
-            let status = std::process::Command::new("git")
-                .arg("-C")
-                .arg(dir)
-                .args(args)
-                .status()
-                .expect("git runs");
-            assert!(status.success(), "git {args:?} failed");
-        }
+    fn run_git(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .status()
+            .expect("git runs");
+        assert!(status.success(), "git {args:?} failed");
+    }
 
+    /// A real git repo with one commit plus a detached worktree outside its working tree. Returns
+    /// (repo tempdir, worktree-parent tempdir, worktree path); keep both tempdirs alive for the test.
+    fn repo_with_worktree() -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
         let repo = tempfile::tempdir().unwrap();
         let repo_path = repo.path();
         run_git(repo_path, &["init", "-q"]);
@@ -1320,14 +1380,21 @@ mod tests {
         std::fs::write(repo_path.join("f.txt"), "x").unwrap();
         run_git(repo_path, &["add", "f.txt"]);
         run_git(repo_path, &["commit", "-q", "-m", "init"]);
-
-        // Add the worktree outside the repo working tree.
         let wt_parent = tempfile::tempdir().unwrap();
         let wt = wt_parent.path().join("wt");
         run_git(
             repo_path,
             &["worktree", "add", "--detach", wt.to_str().unwrap(), "HEAD"],
         );
+        (repo, wt_parent, wt)
+    }
+
+    /// `remove_worktree` must actually detach and delete a real git worktree — the highest-risk piece
+    /// of `--branch` cleanup. Real git, real filesystem, no mocks.
+    #[tokio::test]
+    async fn test_remove_worktree_deletes_real_worktree() {
+        let (repo, _wt_parent, wt) = repo_with_worktree();
+        let repo_path = repo.path();
         assert!(wt.is_dir(), "worktree created");
         // Count entries rather than match paths: `git worktree list` prints resolved real paths, which
         // differ from `wt` under macOS's /var -> /private/var symlink.
@@ -1339,6 +1406,38 @@ mod tests {
         assert!(!wt.exists(), "worktree dir removed");
         let after = git(repo_path, &["worktree", "list"]).await.unwrap();
         assert_eq!(after.lines().count(), 1, "only the main worktree remains");
+    }
+
+    /// `BranchWorktree::remove` must both delete the worktree and deregister its signal-path teardown,
+    /// so cleanup runs exactly once — no leaked registry entry that `shutdown_all` would re-run.
+    #[tokio::test]
+    async fn test_branch_worktree_remove_deletes_and_deregisters() {
+        let _guard = registry_lock().lock().await;
+        let (repo, _wt_parent, wt) = repo_with_worktree();
+        let repo_path = repo.path();
+
+        let teardown_id = register(Teardown::Worktree {
+            repo_root: repo_path.to_path_buf(),
+            path: wt.clone(),
+        });
+        let handle = BranchWorktree {
+            platform_dir: wt.join("platform"),
+            commit: "deadbeef".to_string(),
+            repo_root: repo_path.to_path_buf(),
+            path: wt.clone(),
+            teardown_id,
+        };
+
+        handle.remove().await;
+
+        assert!(!wt.exists(), "worktree removed by the handle");
+        assert!(
+            !registry()
+                .lock()
+                .expect("teardown registry")
+                .contains_key(&teardown_id),
+            "teardown deregistered"
+        );
     }
 
     #[tokio::test]
@@ -1422,10 +1521,7 @@ mod tests {
         assert_eq!(non_empty(None), None);
         assert_eq!(non_empty(Some(String::new())), None);
         assert_eq!(non_empty(Some("   ".to_string())), None);
-        assert_eq!(
-            non_empty(Some("/app".to_string())),
-            Some("/app".to_string())
-        );
+        assert_eq!(non_empty(Some("/app".to_string())), Some("/app".to_string()));
     }
 
     #[test]

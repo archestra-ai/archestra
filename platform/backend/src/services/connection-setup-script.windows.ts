@@ -712,6 +712,27 @@ function Test-ArchGhcp($arch_tok) {
   }
 }
 
+# Invoke-RestMethod throws on HTTP 400, swallowing the response body.
+# Recover the device-flow error JSON so the switch can handle slow_down and
+# terminal errors. The ErrorRecord is passed in explicitly.
+function Convert-ArchHttpErrorBodyToJson($arch_error) {
+  try {
+    $arch_err_msg = $arch_error.ErrorDetails.Message
+    if (-not [string]::IsNullOrEmpty($arch_err_msg)) {
+      return $arch_err_msg | ConvertFrom-Json
+    }
+    $arch_err_resp = $arch_error.Exception.Response
+    if ($arch_err_resp -and $arch_err_resp.GetResponseStream()) {
+      $arch_reader = New-Object System.IO.StreamReader($arch_err_resp.GetResponseStream())
+      $arch_err_body = $arch_reader.ReadToEnd()
+      if (-not [string]::IsNullOrEmpty($arch_err_body)) {
+        return $arch_err_body | ConvertFrom-Json
+      }
+    }
+  } catch { }
+  return $null
+}
+
 # 1. Reuse a GitHub token already stored by the Copilot CLI / VS Code.
 $arch_ghcp_paths = @(
   (Join-Path $env:USERPROFILE '.config\\github-copilot\\apps.json'),
@@ -776,10 +797,12 @@ if ([string]::IsNullOrEmpty($ArchGhcpToken)) {
     }
     Start-Sleep -Seconds $arch_interval
     $arch_poll_body = (@{ client_id = ${psq(gh.clientId)}; device_code = $arch_device_code; grant_type = 'urn:ietf:params:oauth:grant-type:device_code' } | ConvertTo-Json -Compress)
+    $arch_poll = $null
     try {
       $arch_poll = Invoke-RestMethod -Method Post -Uri ${psq(accessTokenUrl)} -TimeoutSec 30 -Headers @{ 'accept' = 'application/json' } -ContentType 'application/json' -Body $arch_poll_body
     } catch {
-      continue
+      $arch_poll = Convert-ArchHttpErrorBodyToJson $PSItem
+      if (-not $arch_poll) { continue }
     }
     if ($arch_poll.access_token) {
       $ArchGhcpToken = $arch_poll.access_token

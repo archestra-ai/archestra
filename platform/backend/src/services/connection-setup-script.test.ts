@@ -1063,6 +1063,28 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("$ArchGhcpToken");
   });
 
+  test("copilot-cli github-copilot passthrough: recovers HTTP 400 error body so switch handler is reachable", () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      proxy: GITHUB_COPILOT_PROXY,
+    });
+    expect(script).toContain(
+      "function Convert-ArchHttpErrorBodyToJson($arch_error)",
+    );
+    expect(script).toContain("$arch_error.ErrorDetails.Message");
+    expect(script).toContain("$arch_error.Exception.Response");
+    expect(script).toContain("GetResponseStream");
+    expect(script).toContain(
+      "$arch_poll = Convert-ArchHttpErrorBodyToJson $PSItem",
+    );
+    expect(script).toContain("if (-not $arch_poll) { continue }");
+    expect(script).toContain(
+      "'slow_down' { $arch_interval = $arch_interval + 5 }",
+    );
+    expect(script).not.toContain("GITHUB_TOKEN");
+    expect(script).toContain("$ArchGhcpToken");
+  });
+
   test("cursor: merges mcp.json and prints manual model steps", () => {
     const script = renderSetupScript(fullContext("cursor", "windows"));
     expect(script).toContain(".cursor\\mcp.json");

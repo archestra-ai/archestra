@@ -93,6 +93,7 @@ import {
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
 import {
+  fetchAgentMcpTools,
   fetchConversationEnabledTools,
   invalidateConversationFileQueries,
   useCompactConversation,
@@ -102,7 +103,6 @@ import {
   useHasPlaywrightMcpTools,
   useKeepViewedConversationRead,
   useMemberDefaultModel,
-  useProfileToolsWithIds,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
@@ -907,12 +907,6 @@ export function ChatPageContent({
 
   // Update enabled tools mutation (for applying pending actions)
   const updateEnabledToolsMutation = useUpdateConversationEnabledTools();
-
-  // The agent's full tool set — the base a pre-conversation tool selection is
-  // computed against when the first message creates the conversation.
-  const { data: initialAgentProfileTools = [] } = useProfileToolsWithIds(
-    initialAgentId ?? undefined,
-  );
 
   // Stop chat stream mutation (signals backend to abort subagents)
   const stopChatStreamMutation = useStopChatStream();
@@ -1871,18 +1865,21 @@ export function ChatPageContent({
           // Get the default enabled tools from the conversation (backend sets these)
           // We need to fetch them first to apply our pending actions on top
           try {
-            // The backend creates conversation with default enabled tools
-            // We need to apply pending actions to modify that default
-            const enabledToolsResult = await fetchConversationEnabledTools(
-              newConversation.id,
-            );
-            const allToolIds = initialAgentProfileTools.map((t) => t.id);
+            // Fetch the conversation's default enabled-tools and the CURRENT
+            // agent's tool set fresh — fetching the agent's tools here (rather
+            // than reading a keepPreviousData hook) avoids persisting a previous
+            // agent's tool IDs right after an agent switch.
+            const [enabledToolsResult, agentTools] = await Promise.all([
+              fetchConversationEnabledTools(newConversation.id),
+              fetchAgentMcpTools(initialAgentId),
+            ]);
+            const allToolIds = agentTools.map((t) => t.id);
             // A fresh conversation carries no custom selection, so the pending
             // actions must apply on top of the agent's full tool set — not the
             // GET's empty array, which would turn "disable a subset" into
-            // "enable nothing" and drop every tool. Without that set (tools not
-            // loaded yet) the base is unknown, so leave the conversation on its
-            // default rather than persist an untrusted empty allowlist.
+            // "enable nothing" and drop every tool. Without that set (agent has
+            // no tools, or the fetch failed) the base is unknown, so leave the
+            // conversation on its default rather than persist an empty allowlist.
             const canResolveBase =
               enabledToolsResult?.data?.hasCustomSelection ||
               allToolIds.length > 0;
@@ -1925,7 +1922,6 @@ export function ChatPageContent({
     [
       isPlaywrightSetupVisible,
       initialAgentId,
-      initialAgentProfileTools,
       createInitialConversation,
       updateEnabledToolsMutation,
       selectConversation,

@@ -174,7 +174,9 @@ archestra:
   # ARCHESTRA_DAGGER_RUNTIME_IMAGE through archestra.env only when required.
   codeRuntime:
     # enable or disable code execution runtime support.
-    enabled: false
+    # enabled by default, backed by the managed Dagger Engine below; set to
+    # false to deploy without a code sandbox.
+    enabled: true
 
     # runtime limits (timeouts, concurrency, output caps) are env-driven via
     # ARCHESTRA_SKILLS_SANDBOX_* / ARCHESTRA_DAGGER_RUNTIME_* in archestra.env.
@@ -186,9 +188,10 @@ archestra:
       runnerHost: ""
 
       managed:
-        # deploy a Dagger Engine as part of this Helm release. When false, point
-        # dagger.pod at an externally deployed Dagger Engine pod instead.
-        enabled: false
+        # deploy a Dagger Engine as part of this Helm release (the default).
+        # When false, point dagger.pod at an externally deployed Dagger Engine
+        # pod instead. Note the engine pod is privileged.
+        enabled: true
         serviceAccount:
           # create a tokenless service account for the privileged engine pod.
           create: true

@@ -223,19 +223,22 @@ export async function createAgentServer(
     const { tools: mcpTools, exclusionSets } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
 
-    // An all-tools agent reaches unassigned tools dynamically (search_tools /
-    // run_tool already resolve them without an agent_tools row). A UI-providing
-    // tool reached only that way would otherwise never become a candidate below,
-    // so filterExposedTools' "keep top-level" check never runs on it — and an
-    // MCP Apps host, which renders a UI only from a tool DEFINITION listed at
-    // tools/list time (never from a run_tool call result), could never discover
-    // or render it. Widen the candidate pool with the caller's dynamically
-    // accessible UI-providing tools so they get the same top-level treatment as
-    // an assigned one. Gated strictly on accessAllTools (not toolExposureMode
-    // alone) — a search_and_run_only agent without it is deliberately scoped to
-    // its assigned set for context-window management, not dynamic reach.
+    // A non-chat gateway serves external MCP clients that discover a UI-providing
+    // tool only from its tools/list DEFINITION (per the MCP Apps extension) and
+    // render it when called — so an all-tools gateway must widen its list with
+    // the caller's dynamically accessible UI-providing tools, which have no
+    // agent_tools row and would otherwise never be advertised. The internal chat
+    // is host and server both: it resolves a tool's ui:// resource from its own
+    // catalog when the model invokes it (render_app for owned apps, run_tool for
+    // any UI tool), so it needs no such widening — skipping it keeps the list
+    // compact instead of adding one entry per accessible app. Gated on
+    // accessAllTools (an agent without it is scoped to its assigned set) and
+    // skipped for the chat surface.
     const dynamicUiTools = (
-      agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
+      agent.accessAllTools &&
+      agent.agentType !== "agent" &&
+      tokenAuth?.userId &&
+      tokenAuth.organizationId
         ? await ToolModel.getMcpToolsAccessibleToUser({
             userId: tokenAuth.userId,
             organizationId: tokenAuth.organizationId,
@@ -247,10 +250,6 @@ export async function createAgentServer(
               "admin",
             ),
             requireUiResource: true,
-            // The internal chat opens owned apps via render_app, so keep their
-            // launch tools out of the dynamic widening; external UI apps
-            // (no render_app) and non-chat surfaces (the gateway) keep them.
-            excludeAppBackings: agent.agentType === "agent",
           })
         : []
     ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));

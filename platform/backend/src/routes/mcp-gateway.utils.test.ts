@@ -1774,7 +1774,7 @@ describe("createAgentServer tools/list", () => {
     expect(names.has("get_time__open")).toBe(false);
   });
 
-  test("chat agent still advertises an external UI-providing tool reached via dynamic access", async ({
+  test("external UI-providing tool is dropped in chat but kept on the gateway", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMcpServer,
@@ -1786,13 +1786,8 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      accessAllTools: true,
-      agentType: "agent",
-    });
-    // An external UI-providing app (serverType remote) has no render_app path,
-    // so its UI tool must stay advertised in chat.
+    // An external (serverType remote) UI-providing tool, reachable only via
+    // dynamic access — not assigned to any agent.
     const extCatalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       name: "maps",
@@ -1807,28 +1802,37 @@ describe("createAgentServer tools/list", () => {
       meta: { _meta: { ui: { resourceUri: "ui://maps/show" } } },
     });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
-    });
-    const listToolsHandler = (
-      server.server as unknown as {
-        _requestHandlers: Map<string, TestListToolsHandler>;
-      }
-    )._requestHandlers.get("tools/list");
-    if (!listToolsHandler) {
-      throw new Error("Expected tools/list handler to be registered");
-    }
-    const response = await listToolsHandler({
-      method: "tools/list",
-      params: {},
-    });
-    const names = new Set(response.tools.map((tool) => tool.name));
-    expect(names.has("maps__show")).toBe(true);
+    const listNames = async (agentType: "agent" | "mcp_gateway") => {
+      const agent = await makeAgent({
+        organizationId: org.id,
+        accessAllTools: true,
+        agentType,
+      });
+      const { server } = await createAgentServer(agent.id, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestListToolsHandler>;
+        }
+      )._requestHandlers.get("tools/list");
+      if (!handler)
+        throw new Error("Expected tools/list handler to be registered");
+      const response = await handler({ method: "tools/list", params: {} });
+      return new Set(response.tools.map((tool) => tool.name));
+    };
+
+    // Chat resolves any UI tool's ui:// resource from its own catalog when the
+    // model invokes it (run_tool), so it need not advertise the dynamic UI tool.
+    expect((await listNames("agent")).has("maps__show")).toBe(false);
+    // An external MCP client on the gateway discovers UI-providing tools only
+    // from tools/list, so the gateway must keep advertising it.
+    expect((await listNames("mcp_gateway")).has("maps__show")).toBe(true);
   });
 
   test("chat agent still advertises an assigned owned-app launch tool", async ({

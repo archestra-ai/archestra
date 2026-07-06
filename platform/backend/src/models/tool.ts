@@ -758,13 +758,6 @@ class ToolModel {
      * both need to hold; they are independent filters.
      */
     requireUiResource?: boolean;
-    /**
-     * Drop tools whose backing catalog is an owned app (`serverType: "app"`).
-     * The internal chat opens owned apps via `render_app`, so it excludes their
-     * launch tools from the dynamic UI-tool widening to keep the list compact;
-     * external UI apps and the gateway keep them.
-     */
-    excludeAppBackings?: boolean;
   }): Promise<Tool[]> {
     const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
       params.userId,
@@ -790,28 +783,6 @@ class ToolModel {
       return [];
     }
 
-    // The internal chat drops owned-app backings from the discovery space so it
-    // opens owned apps via render_app instead of a launch tool per app.
-    let discoverableCatalogIds = scopedCatalogIds;
-    if (params.excludeAppBackings) {
-      const appBackings = await db
-        .select({ id: schema.internalMcpCatalogTable.id })
-        .from(schema.internalMcpCatalogTable)
-        .where(
-          and(
-            inArray(schema.internalMcpCatalogTable.id, scopedCatalogIds),
-            eq(schema.internalMcpCatalogTable.serverType, "app"),
-          ),
-        );
-      const appBackingIds = new Set(appBackings.map((c) => c.id));
-      discoverableCatalogIds = scopedCatalogIds.filter(
-        (id) => !appBackingIds.has(id),
-      );
-      if (discoverableCatalogIds.length === 0) {
-        return [];
-      }
-    }
-
     // Secondary sort on id keeps the ordering deterministic when createdAt
     // ties (bulk-inserted MCP tools share a timestamp), so search_tools and
     // run_tool auto-assignment resolve a duplicate name to the same row.
@@ -820,7 +791,7 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(
         and(
-          inArray(schema.toolsTable.catalogId, discoverableCatalogIds),
+          inArray(schema.toolsTable.catalogId, scopedCatalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined

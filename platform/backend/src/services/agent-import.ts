@@ -89,7 +89,12 @@ export async function importAgentFromPayload(
     warnings,
   );
 
-  // 7. Create the agent
+  // 7. Create the agent. An All-tools agent is created in Custom mode first
+  // and flipped in step 8b: the flip's exclusion pre-fill must see the
+  // payload's tool assignments (step 8) so an assigned built-in is not
+  // pre-excluded, and creating Custom-first keeps the agent fail-closed
+  // (assigned-tools-only) if import aborts before the flip.
+  const enableAllToolsAfterImport = data.agent.accessAllTools === true;
   const agent = await AgentModel.create(
     {
       name: agentName,
@@ -100,7 +105,9 @@ export async function importAgentFromPayload(
       scope: "personal", // Always personal on import
       considerContextUntrusted: data.agent.considerContextUntrusted,
       toolExposureMode: data.agent.toolExposureMode,
-      accessAllTools: data.agent.accessAllTools,
+      accessAllTools: enableAllToolsAfterImport
+        ? false
+        : data.agent.accessAllTools,
       llmApiKeyId: null,
       identityProviderId: null,
       incomingEmailEnabled: data.agent.incomingEmailEnabled,
@@ -115,10 +122,23 @@ export async function importAgentFromPayload(
       suggestedPrompts: data.suggestedPrompts,
     },
     userId,
+    // The payload's tools (step 8) are the imported agent's authoritative
+    // assignment set; don't let create's default assignment force built-ins the
+    // payload lacked onto the imported agent.
+    { skipCreationDefaultTools: true },
   );
 
   // 8. Resolve and assign tools (after agent creation)
   await resolveAndAssignTools(data.tools, agent.id, warnings);
+
+  // 8b. Flip an All-tools agent on now that its assignments exist. The switch
+  // pre-fills the exclusion list (unassigned built-ins get pre-excluded,
+  // assigned ones stay reachable) and commits the flip + pre-fill in one
+  // transaction. Exclusions are not part of the export format, so the pre-fill
+  // is the imported agent's entire starting set.
+  if (enableAllToolsAfterImport) {
+    await AgentModel.update(agent.id, { accessAllTools: true });
+  }
 
   // 9. Resolve and assign delegations (after agent creation)
   await resolveAndAssignDelegations(

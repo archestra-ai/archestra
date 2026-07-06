@@ -739,6 +739,17 @@ describe("registerAuditLogHook", () => {
       await settle();
       expect(await getRows()).toHaveLength(0);
     });
+
+    // Read-only embedding connection test — exact denylist entry so a failed
+    // probe never records a misleading "Success" outcome.
+    test("POST /api/organization/knowledge-settings/test-embedding writes zero rows", async () => {
+      await app.inject({
+        method: "POST",
+        url: "/api/organization/knowledge-settings/test-embedding",
+      });
+      await settle();
+      expect(await getRows()).toHaveLength(0);
+    });
   });
 
   describe("denylist — /api/chatops/* must not be swallowed by /api/chat exact entry", () => {

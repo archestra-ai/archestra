@@ -721,12 +721,6 @@ const registry = defineArchestraTools([
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
-      if (!config.projects.enabled && args.source.type === "my_file") {
-        return errorResult(
-          "Copying one of the user's saved files into the sandbox is not available on this deployment.",
-        );
-      }
-
       const resolved = await resolveTarget({
         target: args.target,
         userCtx: guard.userCtx,

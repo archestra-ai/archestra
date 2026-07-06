@@ -6,11 +6,6 @@ description: Managing your organization's MCP servers in a private registry
 lastUpdated: 2026-06-18
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
--->
-
 ![MCP Registry](/docs/platform-mcp-registry-overview.webp)
 
 The Private MCP Registry is the catalog of MCP servers approved for your organization. It defines what servers exist, how they should be configured, who can see them, and what credentials are required when someone installs them.

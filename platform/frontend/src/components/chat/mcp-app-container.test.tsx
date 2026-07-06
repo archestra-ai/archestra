@@ -185,6 +185,46 @@ describe("McpAppSection", () => {
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
+  it("keeps the tool-call details inspectable when the app HTML is empty", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+          toolDetails={<div data-testid="tool-details">details</div>}
+        />,
+      );
+    });
+
+    // A blank app document reserves no canvas, but its tool-call details — the
+    // input/output a user needs to diagnose why it rendered blank — must remain.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tool-details")).toBeInTheDocument();
+  });
+
+  it("shows an explicit empty state in the panel when the app HTML is empty", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+        />,
+      );
+    });
+
+    // The panel is opened deliberately and carries no tool details, so a blank
+    // app must not leave a completely empty panel with no indication.
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("This app rendered nothing to display."),
+    ).toBeInTheDocument();
+  });
+
   it("keeps script-driven app HTML because it may render after initialization", async () => {
     await act(async () => {
       render(
@@ -717,6 +757,120 @@ describe("McpAppSection panel hosting", () => {
   });
 });
 
+describe("AppsProvider newly rendered app after manual toggles", () => {
+  // The repro: app A rendered → user closes → user opens (manual toggles) →
+  // app B rendered. B must open automatically on both surfaces.
+  const appA = {
+    toolCallId: "tc-a",
+    label: "First App",
+    uiResourceUri: "resource://test-server/ui-a",
+    createdAt: 1,
+  };
+  const appB = {
+    toolCallId: "tc-b",
+    label: "Second App",
+    uiResourceUri: "resource://test-server/ui-b",
+    createdAt: 2,
+  };
+
+  function Probe() {
+    const { panelToolCallId, isAppOpen, toggleAppOpen, setPanelApp } =
+      useApps();
+    return (
+      <div>
+        <div data-testid="panel">{panelToolCallId ?? "none"}</div>
+        <div data-testid="open-a">{String(isAppOpen("tc-a"))}</div>
+        <div data-testid="open-b">{String(isAppOpen("tc-b"))}</div>
+        <button type="button" onClick={() => toggleAppOpen("tc-a")}>
+          toggle a
+        </button>
+        <button type="button" onClick={() => setPanelApp("tc-a")}>
+          pick a
+        </button>
+      </div>
+    );
+  }
+
+  it("hosts a newly rendered app in the panel even after an explicit manual pick", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <AppsProvider apps={[appA]}>
+        <Probe />
+      </AppsProvider>,
+    );
+
+    // Step 1: the user collapses the app, reopens it, and pins it to the panel
+    // ("Open in right panel" / a pill click while the panel hosts).
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle a" }));
+      await user.click(screen.getByRole("button", { name: "toggle a" }));
+      await user.click(screen.getByRole("button", { name: "pick a" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc-a");
+
+    // Step 2: the model renders a second, different app.
+    rerender(
+      <AppsProvider apps={[appA, appB]}>
+        <Probe />
+      </AppsProvider>,
+    );
+
+    // The new render supersedes the manual pick: it takes the panel, open.
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc-b");
+    expect(screen.getByTestId("open-b")).toHaveTextContent("true");
+  });
+
+  it("keeps honoring the manual panel pick while no new render arrives", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppsProvider apps={[appA, appB]}>
+        <Probe />
+      </AppsProvider>,
+    );
+
+    // tc-b is newest and hosted by default; picking tc-a moves the panel and it
+    // stays there — supersession needs a render that postdates the pick.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "pick a" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc-a");
+
+    // An unrelated inline collapse doesn't unseat the pick either.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle a" }));
+    });
+    expect(screen.getByTestId("panel")).toHaveTextContent("tc-a");
+  });
+
+  it("keeps a newly rendered app expanded inline alongside a manually reopened one", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <AppsProvider apps={[appA]}>
+        <Probe />
+      </AppsProvider>,
+    );
+
+    // Step 1 with no panel: collapse the app, then reopen it.
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle a" }));
+    });
+    expect(screen.getByTestId("open-a")).toHaveTextContent("false");
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "toggle a" }));
+    });
+    expect(screen.getByTestId("open-a")).toHaveTextContent("true");
+
+    // Step 2: the model renders a second app — both stay expanded inline.
+    rerender(
+      <AppsProvider apps={[appA, appB]}>
+        <Probe />
+      </AppsProvider>,
+    );
+    expect(screen.getByTestId("open-a")).toHaveTextContent("true");
+    expect(screen.getByTestId("open-b")).toHaveTextContent("true");
+  });
+});
+
 describe("McpAppSection older renders (no suppression)", () => {
   const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
 
@@ -948,31 +1102,34 @@ describe("McpAppSection unavailable owned app", () => {
     >);
   });
 
-  it("shows a plain pill and reveals the error message only when expanded", async () => {
+  it("shows the error message while expanded and never mounts the runtime", async () => {
     const user = userEvent.setup();
 
     await act(async () => {
       render(
-        <McpAppSection
-          {...defaultProps}
-          appId={APP_ID}
-          appName="Dashboard"
-          toolCallId="tc1"
-          preloadedResource={preloadedResource}
-        />,
+        <AppsProvider apps={[]}>
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
       );
     });
 
-    // Collapsed: just the pill, no error text, and never the runtime (would 404).
+    // Apps default open, so the unavailable message shows immediately — but
+    // the runtime never mounts (it would 404).
     const pill = screen.getByRole("button", { name: "Dashboard" });
-    expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
 
-    // Expanding shows the unavailable message; the runtime still never mounts.
+    // Collapsing via the pill hides the message like any other app content.
     await act(async () => {
       await user.click(pill);
     });
-    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer available/i)).not.toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
   });
 });

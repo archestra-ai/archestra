@@ -29,7 +29,6 @@ export const githubCopilotAdapterFactory = createOpenAiCompatibleAdapterFactory(
             "github-copilot",
             options.agent,
             options.source,
-            options.externalAgentId,
           )
         : undefined;
 

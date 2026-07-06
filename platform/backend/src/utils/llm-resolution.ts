@@ -54,6 +54,15 @@ interface ConversationLlmSelection {
  * Each level is a foreign key, so a deleted model is simply NULL and the chain
  * falls through. When the database has no models at all, falls back to
  * environment / Vertex AI / config defaults (and `modelId` is null).
+ *
+ * The member-default level is the model/key the user last picked in the /chat
+ * model selector — a personal preference for that UI. It should NOT bleed into
+ * runs the user isn't actively driving there (chatops replies, scheduled
+ * triggers, external A2A), where the surprising outcome is a Slack bot or a cron
+ * job silently using whatever model someone last chose in web chat. Those
+ * callers pass `includeMemberChatDefault: false` so resolution reflects the
+ * agent's own configuration (then org default, then best-available) — which is
+ * both predictable and self-explanatory to the user.
  */
 export async function resolveConversationLlmSelectionForAgent(params: {
   agent: { llmApiKeyId: string | null; modelId: string | null };
@@ -63,8 +72,15 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   explicitModelId?: string | null;
   /** The API key the user explicitly picked, alongside `explicitModelId`. */
   explicitApiKeyId?: string | null;
+  /**
+   * Whether the acting member's /chat default (defaultModelId /
+   * defaultChatApiKeyId) participates in resolution. Defaults to true (the
+   * /chat surfaces). Non-/chat A2A callers pass false. See the doc comment.
+   */
+  includeMemberChatDefault?: boolean;
 }): Promise<ConversationLlmSelection> {
   const { agent, organizationId, userId } = params;
+  const includeMemberChatDefault = params.includeMemberChatDefault ?? true;
 
   // A per-user provider model (e.g. GitHub Copilot) is catalogued org-wide and
   // its credential is resolved per-user at request time, so an explicit pick is
@@ -88,15 +104,21 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     }
   }
 
-  const member = await MemberModel.getByUserId(userId, organizationId);
-  const organization = await OrganizationModel.getById(organizationId);
+  const [member, organization] = await Promise.all([
+    MemberModel.getByUserId(userId, organizationId),
+    OrganizationModel.getById(organizationId),
+  ]);
 
   const configuredLevels: ModelSelection[] = [
     { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
-    {
-      modelId: member?.defaultModelId,
-      apiKeyId: member?.defaultChatApiKeyId,
-    },
+    ...(includeMemberChatDefault
+      ? [
+          {
+            modelId: member?.defaultModelId,
+            apiKeyId: member?.defaultChatApiKeyId,
+          },
+        ]
+      : []),
     { modelId: agent.modelId, apiKeyId: agent.llmApiKeyId },
     {
       modelId: organization?.defaultModelId,

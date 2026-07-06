@@ -4,7 +4,10 @@ import { jwtDecode } from "jwt-decode";
 import { z } from "zod";
 import { auth } from "@/auth/better-auth";
 import config from "@/config";
-import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
+import {
+  CREDENTIAL_PROVIDER_ID,
+  IDENTITY_PROVIDERS_API_PREFIX,
+} from "@/constants";
 import logger from "@/logging";
 import AccountModel from "@/models/account";
 import IdentityProviderModel from "@/models/identity-provider.ee";
@@ -298,7 +301,9 @@ export default identityProviderRoutes;
 export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
   // Find the user's SSO account (non-credential provider)
   const accounts = await AccountModel.getAllByUserId(userId);
-  const ssoAccount = accounts.find((a) => a.providerId !== "credential");
+  const ssoAccount = accounts.find(
+    (a) => a.providerId !== CREDENTIAL_PROVIDER_ID,
+  );
   if (!ssoAccount) {
     return null;
   }

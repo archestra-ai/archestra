@@ -18,6 +18,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+// Dependency-free by design — safe to import before test files apply mocks.
+import { clearRegisteredProcessLocalCaches } from "@/process-local-cache-registry";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
@@ -31,16 +33,6 @@ process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING = "true";
 // PGlite-backed tests do not provide a session-stable pg.Client connection for
 // LISTEN/NOTIFY, so use the polling compatibility notifier by default in tests.
 process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
-// Projects + My Files ship dark behind a flag; force it on by default so the
-// branch's project / My-Files / PFS-tool tests run. The gating ("OFF") tests
-// flip config.projects.enabled to false locally.
-process.env.ARCHESTRA_PROJECTS_ENABLED = "true";
-// Same for Apps: app route/tool tests exercise the enabled paths, and the
-// gating ("OFF") tests flip config.apps.enabled to false in their own
-// beforeEach. Before the per-test config restore existed, these tests rode a
-// cross-file config.apps.enabled leak (or the developer's .env) — make the
-// default explicit so CI and local agree.
-process.env.ARCHESTRA_APPS_ENABLED = "true";
 // Pin "My Files" byte storage to the inline (db) provider for hermetic tests,
 // independent of the dev .env. The filesystem-specific suites opt in by
 // overriding config.fileStorage at runtime against a temp root.
@@ -177,6 +169,13 @@ beforeEach(async () => {
     await pgliteClient.exec(truncateSql);
   }
 
+  // Process-local caches (e.g. the agent id/slug resolve cache) outlive the
+  // per-test truncation above — clear every registered one so a mapping cached
+  // by one test (fixture slugs are name-derived and can repeat) can't leak
+  // into the next. The registry module is dependency-free, so importing it
+  // here cannot pre-load real modules ahead of a test file's mocks.
+  clearRegisteredProcessLocalCaches();
+
   // NOTE: We intentionally do NOT seed organization or default agent here.
   // Tests that need them should use makeOrganization and makeAgent fixtures.
   // This allows organization tests to test both with and without existing organizations.
@@ -206,8 +205,8 @@ afterEach(() => {
   // beforeEach restore alone leaves a gap: mutations made by a file's LAST
   // test survive until the NEXT file's first beforeEach — which is after
   // that file's beforeAll has already run. Route tests build their Fastify
-  // server in beforeAll, so a leaked flag (apps.enabled=false, a polling
-  // toggle, ...) could shape another file's server for its entire lifetime.
+  // server in beforeAll, so a leaked flag (a polling toggle, a feature flag,
+  // ...) could shape another file's server for its entire lifetime.
   if (liveConfig && pristineConfig) {
     restoreConfig(liveConfig, structuredClone(pristineConfig));
   }

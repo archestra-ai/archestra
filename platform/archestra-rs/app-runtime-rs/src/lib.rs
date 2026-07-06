@@ -70,6 +70,31 @@ pub fn scan_app_html(html: String) -> napi::Result<AppHtmlScanResult> {
     .map_err(panic_to_napi_error)
 }
 
+/// Authoring-time lint of app HTML for the `validate_app` tool: hosts the
+/// pinned CSP would block, browser storage APIs the sandbox breaks, and
+/// `window.archestra` members the injected SDK does not expose. The caller
+/// owns the policy inputs and composes the user-facing messages.
+#[napi(js_name = "lintAppHtml")]
+pub fn lint_app_html(html: String, config: AppHtmlLintConfig) -> napi::Result<AppHtmlLintFindings> {
+    std::panic::catch_unwind(move || {
+        let findings = core::lint_app_html(
+            &html,
+            &core::LintConfig {
+                resource_host_allowlist: config.resource_host_allowlist,
+                sdk_top_level_members: config.sdk_top_level_members,
+                sdk_storage_partitions: config.sdk_storage_partitions,
+            },
+        );
+        AppHtmlLintFindings {
+            off_allowlist_hosts: findings.off_allowlist_hosts,
+            browser_storage_apis: findings.browser_storage_apis,
+            storage_misuse: findings.storage_misuse,
+            unknown_top_level: findings.unknown_top_level,
+        }
+    })
+    .map_err(panic_to_napi_error)
+}
+
 /// Escape `<`/`>` in untrusted diagnostic text so it cannot break out of the
 /// `<app-render-diagnostics>` delimiter block.
 #[napi(js_name = "escapeAngleBrackets")]
@@ -162,6 +187,28 @@ pub struct AppHtmlRejection {
 pub struct AppHtmlScanResult {
     pub rejection: Option<AppHtmlRejection>,
     pub warnings: Vec<String>,
+}
+
+/// Policy inputs for `lintAppHtml`; the TypeScript side is the single source
+/// of truth for the CDN allowlist and the injected-SDK surface.
+#[napi(object)]
+pub struct AppHtmlLintConfig {
+    /// Bare hostnames `<script src>`/`<link href>` may point at (exact match).
+    pub resource_host_allowlist: Vec<String>,
+    /// Top-level members of the injected `window.archestra`.
+    pub sdk_top_level_members: Vec<String>,
+    /// Partitions of `archestra.storage`.
+    pub sdk_storage_partitions: Vec<String>,
+}
+
+/// Structured lint findings, deduplicated in first-seen document order.
+/// Empty when the HTML does not parse (the scan rejects that fail-closed).
+#[napi(object)]
+pub struct AppHtmlLintFindings {
+    pub off_allowlist_hosts: Vec<String>,
+    pub browser_storage_apis: Vec<String>,
+    pub storage_misuse: Vec<String>,
+    pub unknown_top_level: Vec<String>,
 }
 
 fn into_core(entry: AppDiagnosticEntry) -> core::DiagnosticEntry {

@@ -19,6 +19,10 @@ import type {
   ScheduleTriggerRun,
 } from "@/types";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  stripThinkingBlocks,
+  THINKING_ONLY_NOTICE,
+} from "@/utils/strip-thinking-blocks";
 
 /**
  * Shared helpers for the chat conversation backing a scheduled trigger run.
@@ -81,6 +85,9 @@ export async function createAndLinkRunConversation(params: {
     },
     organizationId,
     userId: ownerUserId,
+    // A scheduled run is not the owner driving the /chat model selector, so it
+    // seeds from the agent's own configuration, not the owner's chat default.
+    includeMemberChatDefault: false,
   });
 
   const created = await ConversationModel.create({
@@ -134,8 +141,7 @@ export async function persistRunConversationMessages(params: {
 }): Promise<void> {
   const { conversation, userText, assistantMessage } = params;
 
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
+  if (await MessageModel.existsForConversation(conversation.id)) {
     return;
   }
 
@@ -173,8 +179,7 @@ export async function persistRunUserMessage(params: {
 }): Promise<void> {
   const { conversation, userText } = params;
 
-  const existing = await MessageModel.findByConversation(conversation.id);
-  if (existing.length > 0) {
+  if (await MessageModel.existsForConversation(conversation.id)) {
     return;
   }
 
@@ -228,11 +233,11 @@ export async function ensureFailedRunErrorVisible(params: {
     return;
   }
 
-  const [messages, errors] = await Promise.all([
-    MessageModel.findByConversation(conversation.id),
+  const [hasMessages, errors] = await Promise.all([
+    MessageModel.existsForConversation(conversation.id),
     ConversationChatErrorModel.findByConversation(conversation.id),
   ]);
-  if (messages.length > 0 || errors.length > 0) {
+  if (hasMessages || errors.length > 0) {
     return;
   }
 
@@ -269,8 +274,10 @@ export async function backfillRunConversationMessages(params: {
     return;
   }
 
+  // Only interactions[0] is consumed below — the newest interaction carries the
+  // full history in its request and the final reply in its response.
   const interactionResult = await InteractionModel.findAllPaginated(
-    { limit: 50, offset: 0 },
+    { limit: 1, offset: 0 },
     { sortBy: "createdAt", sortDirection: "desc" },
     ownerUserId,
     true,
@@ -330,6 +337,37 @@ function buildMessagesFromInteractions(
   }
 
   if (messages.length > 0) {
+    // Reconstructed from raw LLM-proxy interactions, which bypass the A2A
+    // executor's sanitization, so strip inline `<thinking>` blocks here too.
+    // These messages are freshly built above, so mutate text parts in place.
+    // An assistant turn whose text was entirely `<thinking>` strips to nothing;
+    // substitute the notice so it matches the live executor path rather than
+    // rendering a blank bubble.
+    for (const message of messages) {
+      let hadText = false;
+      let hasVisibleText = false;
+      let noticeTarget: { text: string } | null = null;
+      for (const part of message.parts) {
+        if (part.type === "text" && typeof part.text === "string") {
+          if (part.text.trim() !== "") {
+            hadText = true;
+          }
+          part.text = stripThinkingBlocks(part.text);
+          if (part.text !== "") {
+            hasVisibleText = true;
+          }
+          noticeTarget ??= part;
+        }
+      }
+      if (
+        message.role === "assistant" &&
+        hadText &&
+        !hasVisibleText &&
+        noticeTarget
+      ) {
+        noticeTarget.text = THINKING_ONLY_NOTICE;
+      }
+    }
     return messages;
   }
 

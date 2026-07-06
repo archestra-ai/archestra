@@ -1,5 +1,5 @@
 // Golden-fixture parity with the Rust analyzer: the one contract worth testing here. The fixture
-// (authored by the Rust side under archestra-bench/analyzer/tests/fixtures/triage_golden) pins the
+// (authored by the Rust side under ai-labs/analyzer/tests/fixtures/triage_golden) pins the
 // persisted record line and the rendered section to identical bytes across both pipelines.
 // Run: node --test bin/render-triage.test.mjs
 import assert from 'node:assert/strict'
@@ -15,7 +15,7 @@ const repoRoot = execSync('git rev-parse --show-toplevel', {
   cwd: dirname(fileURLToPath(import.meta.url)),
   encoding: 'utf8',
 }).trim()
-const fixtureDir = join(repoRoot, 'archestra-bench', 'analyzer', 'tests', 'fixtures', 'triage_golden')
+const fixtureDir = join(repoRoot, 'ai-labs', 'analyzer', 'tests', 'fixtures', 'triage_golden')
 
 test('golden fixture: stamped record matches record.jsonl byte-exactly', () => {
   const judgment = parseJudgment(readFileSync(join(fixtureDir, 'judgment.json'), 'utf8'))

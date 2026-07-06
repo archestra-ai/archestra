@@ -90,9 +90,11 @@ export function ConnectorRunDetailsDialog({
 
               {(run.itemsSkipped ?? 0) > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {run.itemsSkipped} file(s) were skipped: no extractable text
-                  or media (e.g. empty documents, unsupported binary formats, or
-                  password-protected files). These are not indexed.
+                  {run.itemsSkipped} file(s) were skipped and not indexed —
+                  their file type isn&apos;t supported for the knowledge base
+                  (e.g. videos, audio, archives, or other binary formats), or
+                  they had no extractable text (empty or password-protected
+                  documents).
                 </p>
               )}
 
@@ -116,17 +118,26 @@ export function ConnectorRunDetailsDialog({
                 </div>
               )}
 
-              {/* Error section */}
-              {run.error && (
-                <div>
-                  <h4 className="mb-1 text-sm font-medium text-destructive">
-                    Error
-                  </h4>
-                  <pre className="max-h-48 overflow-auto rounded-md bg-destructive/10 p-3 text-xs text-destructive whitespace-pre-wrap break-words">
-                    {run.error}
-                  </pre>
-                </div>
-              )}
+              {/* Superseded runs carry an explanatory note, not a real error —
+                  render it neutrally so it doesn't read as a failure. */}
+              {run.error &&
+                (run.status === "superseded" ? (
+                  <div>
+                    <h4 className="mb-1 text-sm font-medium">Note</h4>
+                    <pre className="max-h-48 overflow-auto rounded-md bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap break-words">
+                      {run.error}
+                    </pre>
+                  </div>
+                ) : (
+                  <div>
+                    <h4 className="mb-1 text-sm font-medium text-destructive">
+                      Error
+                    </h4>
+                    <pre className="max-h-48 overflow-auto rounded-md bg-destructive/10 p-3 text-xs text-destructive whitespace-pre-wrap break-words">
+                      {run.error}
+                    </pre>
+                  </div>
+                ))}
 
               {formattedLogs && (
                 <div>

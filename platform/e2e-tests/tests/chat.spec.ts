@@ -12,9 +12,16 @@ import {
 } from "../utils";
 import { expect, test } from "./api-fixtures";
 
-// Run all provider tests sequentially to avoid WireMock stub timing issues.
-// Retries handle transient streaming/WireMock flakiness in CI.
-test.describe.configure({ mode: "serial", retries: 2 });
+// Provider tests are mutually independent — each drives its own model in a fresh
+// conversation, and the WireMock chat stubs are stateless (matched only on the
+// "chat-ui-e2e-test" body marker), so they run in parallel to fill the CI workers
+// instead of serializing all ~16 providers onto one. This matters twice over: serial
+// mode both left 13 of the 14 CI workers idle behind one long provider chain (the
+// dominant reason this file was the slow long-pole of e2e shard 1) and, because a
+// serial group retries as a unit, let a single flaky provider skip and re-run every
+// other provider. Parallel mode scopes each retry to the one provider that flaked.
+// retries stay at 2 to absorb transient streaming/WireMock hiccups in CI.
+test.describe.configure({ mode: "parallel", retries: 2 });
 
 interface ChatProviderTestConfig {
   providerName: string;
@@ -248,13 +255,20 @@ for (const config of testConfigs) {
       // Submit the message by pressing Enter
       await page.keyboard.press("Enter");
 
-      // Wait for the response to appear
-      // The mocked response should contain our expected text
-      // Use generous timeout - streaming responses in CI can be slow
-      // (WireMock + streaming + CI resource contention can take >60s)
-      await expect(page.getByText(config.expectedResponse)).toBeVisible({
-        timeout: 90_000,
-      });
+      // Wait for the response to appear.
+      // The mocked response should contain our expected text. Use a generous
+      // timeout — streaming responses in CI can be slow (WireMock + streaming +
+      // CI resource contention can take >60s).
+      // Scope to the first (settled) assistant bubble: while the response is
+      // still streaming the client can transiently hold two assistant bubbles
+      // before they reconcile (the same double-render documented in the reconnect
+      // FIXME below), which would otherwise trip strict mode with "resolved to 2
+      // elements" and fail the assertion.
+      await expect(page.getByText(config.expectedResponse).first()).toBeVisible(
+        {
+          timeout: 90_000,
+        },
+      );
 
       // Verify the user's message also appears in the chat
       // Use .first() because the message text may also appear in the sidebar title

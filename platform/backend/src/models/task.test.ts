@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import TaskModel from "./task";
@@ -116,29 +116,147 @@ describe("TaskModel", () => {
   });
 
   describe("resetStuckTasks", () => {
-    test("resets tasks stuck in processing past the timeout", async () => {
-      // Create a task and manually set it to processing with an old startedAt
+    // Simulate a stuck task: set status to processing with startedAt in the past
+    async function wedgeIntoProcessing(id: string, attempt: number) {
+      await db
+        .update(schema.tasksTable)
+        .set({
+          status: "processing",
+          startedAt: new Date(Date.now() - 120_000),
+          attempt,
+        })
+        .where(eq(schema.tasksTable.id, id));
+    }
+
+    test("returns a stuck retryable task to pending with future scheduledFor", async () => {
       const task = await TaskModel.create({
         taskType: "connector_sync",
         payload: { connectorId: "conn-1" },
         maxAttempts: 5,
       });
+      await wedgeIntoProcessing(task.id, 1);
 
-      // Simulate a stuck task: set status to processing with startedAt in the past
-      const twoMinutesAgo = new Date(Date.now() - 120_000);
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "connector_sync", periodic: false, status: "pending" },
+      ]);
+
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("pending");
+      expect(updated.lastError).toBe("Task timed out (stuck in processing)");
+      expect(updated.scheduledFor.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    test("marks a stuck task with exhausted attempts as dead", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+        maxAttempts: 3,
+      });
+      await wedgeIntoProcessing(task.id, 3);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "connector_sync", periodic: false, status: "dead" },
+      ]);
+
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("dead");
+      expect(updated.lastError).toBe("Task timed out (stuck in processing)");
+      expect(updated.completedAt).toBeInstanceOf(Date);
+    });
+
+    test("reports the periodic flag on dead transitions", async () => {
+      const task = await TaskModel.create({
+        taskType: "check_due_connectors",
+        payload: {},
+        maxAttempts: 1,
+        periodic: true,
+      });
+      await wedgeIntoProcessing(task.id, 1);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([
+        { taskType: "check_due_connectors", periodic: true, status: "dead" },
+      ]);
+    });
+
+    test("ignores processing tasks within the timeout", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
       await db
         .update(schema.tasksTable)
-        .set({
-          status: "processing",
-          startedAt: twoMinutesAgo,
-          attempt: 1,
-        })
+        .set({ status: "processing", startedAt: new Date(), attempt: 1 })
         .where(eq(schema.tasksTable.id, task.id));
 
-      // Reset tasks stuck for more than 60 seconds
-      const count = await TaskModel.resetStuckTasks(60_000);
+      const transitions = await TaskModel.resetStuckTasks(60_000);
 
-      expect(count).toBe(1);
+      expect(transitions).toEqual([]);
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.status).toBe("processing");
+    });
+  });
+
+  describe("findActivePayloadValues", () => {
+    test("returns payload values for pending and processing tasks of the given type", async () => {
+      // Oldest task first so dequeue() flips exactly this one to processing.
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-processing" },
+      });
+      await TaskModel.dequeue();
+
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-pending" },
+      });
+
+      const completed = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-completed" },
+      });
+      await TaskModel.complete(completed.id);
+
+      await TaskModel.create({
+        taskType: "schedule_trigger_run_execute",
+        payload: { triggerId: "trig-1" },
+      });
+
+      const connectorIds = await TaskModel.findActivePayloadValues(
+        "connector_sync",
+        "connectorId",
+      );
+      expect(connectorIds).toEqual(
+        new Set(["conn-processing", "conn-pending"]),
+      );
+
+      const triggerIds = await TaskModel.findActivePayloadValues(
+        "schedule_trigger_run_execute",
+        "triggerId",
+      );
+      expect(triggerIds).toEqual(new Set(["trig-1"]));
+    });
+
+    test("returns an empty set when no active tasks match", async () => {
+      const result = await TaskModel.findActivePayloadValues(
+        "connector_sync",
+        "connectorId",
+      );
+      expect(result).toEqual(new Set());
     });
   });
 
@@ -217,6 +335,68 @@ describe("TaskModel", () => {
 
       const released = await TaskModel.releaseToQueue([task1.id, task2.id]);
       expect(released).toBe(2);
+
+      const rows = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(inArray(schema.tasksTable.id, [task1.id, task2.id]));
+      for (const row of rows) {
+        expect(row.status).toBe("pending");
+        expect(row.attempt).toBe(0);
+      }
+    });
+
+    test("decrements each task's own attempt in a mixed batch", async () => {
+      const task1 = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      const task2 = await TaskModel.create({
+        taskType: "batch_embedding",
+        payload: { documentIds: ["d1"] },
+      });
+
+      await TaskModel.dequeue();
+      await TaskModel.dequeue();
+      // Simulate a task on a later retry so batch rows carry different attempts
+      await db
+        .update(schema.tasksTable)
+        .set({ attempt: 3 })
+        .where(eq(schema.tasksTable.id, task2.id));
+
+      const released = await TaskModel.releaseToQueue([task1.id, task2.id]);
+      expect(released).toBe(2);
+
+      const rows = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(inArray(schema.tasksTable.id, [task1.id, task2.id]));
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      expect(byId.get(task1.id)?.attempt).toBe(0);
+      expect(byId.get(task2.id)?.attempt).toBe(2);
+    });
+
+    test("clamps attempt at 0 when releasing", async () => {
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      await TaskModel.dequeue();
+      // Force the edge: a processing task whose attempt is already 0
+      await db
+        .update(schema.tasksTable)
+        .set({ attempt: 0 })
+        .where(eq(schema.tasksTable.id, task.id));
+
+      const released = await TaskModel.releaseToQueue([task.id]);
+      expect(released).toBe(1);
+
+      const [updated] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(updated.attempt).toBe(0);
+      expect(updated.status).toBe("pending");
     });
   });
 

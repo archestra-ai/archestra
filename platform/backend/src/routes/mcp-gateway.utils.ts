@@ -37,12 +37,19 @@ import {
   filterToolNamesByPermission,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
-import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
+import {
+  getUnassignedDiscoverableTools,
+  resolveDynamicTool,
+} from "@/archestra-mcp-server/dynamic-tools";
+import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import {
+  evaluateSingleMcpToolInvocationPolicy,
+  policyBlockToToolError,
+} from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -68,6 +75,10 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import {
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -202,7 +213,15 @@ export async function createAgentServer(
     // Get MCP tools (from connected MCP servers + Archestra built-in tools)
     // Excludes proxy-discovered tools
     // Fetch fresh on every request to ensure we get newly assigned tools
-    const mcpTools = await ToolModel.getMcpToolsByAgent(agentId);
+    // Per-agent exclusions (Auto-tool mode): excluded assigned tools must not
+    // be advertised, and their catalogs must not be named in the search_tools
+    // description built below. Every built-in except the search_tools/run_tool
+    // meta tools (rejected at write time) is a valid exclusion target — this
+    // filter runs BEFORE filterExposedTools, so an excluded always-exposed
+    // built-in is dropped here and never re-admitted below. Empty (no-op)
+    // unless the agent's accessAllTools setting is on.
+    const { tools: mcpTools, exclusionSets } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
 
     // An all-tools agent reaches unassigned tools dynamically (search_tools /
     // run_tool already resolve them without an agent_tools row). A UI-providing
@@ -215,7 +234,7 @@ export async function createAgentServer(
     // an assigned one. Gated strictly on accessAllTools (not toolExposureMode
     // alone) — a search_and_run_only agent without it is deliberately scoped to
     // its assigned set for context-window management, not dynamic reach.
-    const dynamicUiTools =
+    const dynamicUiTools = (
       agent.accessAllTools && tokenAuth?.userId && tokenAuth.organizationId
         ? await ToolModel.getMcpToolsAccessibleToUser({
             userId: tokenAuth.userId,
@@ -229,7 +248,8 @@ export async function createAgentServer(
             ),
             requireUiResource: true,
           })
-        : [];
+        : []
+    ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
 
     const implicitMetaTools =
       agent.toolExposureMode === "search_and_run_only"
@@ -291,11 +311,28 @@ export async function createAgentServer(
       return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
     };
 
-    // Dynamically enrich the knowledge sources tool description with
-    // the agent's actual knowledge base names and connector types
+    // Dynamically enrich the knowledge sources tool description with the
+    // agent's actual knowledge base names and connector types, and the
+    // search_tools description with the servers in its search space. The
+    // latter involves resolving the dynamically discoverable tool space, so
+    // skip it when search_tools is not in the advertised list anyway ("full"
+    // exposure mode hides the meta tools).
+    const advertisesSearchTools = permittedTools.some(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_SEARCH_TOOLS_SHORT_NAME,
+    );
     const [kbToolDescription, searchToolsDescription] = await Promise.all([
       buildKnowledgeSourcesDescription(agentId),
-      buildSearchToolsDescription(mcpTools, catalogsById),
+      advertisesSearchTools
+        ? buildSearchToolsDescription({
+            mcpTools,
+            agentId,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
+            prefetchedCatalogs: catalogsById,
+          })
+        : null,
     ]);
 
     const toolsList: McpListTool[] = permittedTools.map(
@@ -476,12 +513,58 @@ export async function createAgentServer(
             assignedToolNames && {
               enabledToolNames: new Set([...assignedToolNames, name]),
             }),
+          // The dynamically-resolved All-mode row that will execute: evaluate the
+          // policy against it and ride its id along on a block so the "Edit
+          // policy" modal can resolve a tool with no agent_tools assignment.
+          resolvedToolId: availableTool?.id,
         });
         if (policyBlock) {
-          return {
-            content: [{ type: "text", text: policyBlock.refusalMessage }],
+          // Carry the machine-readable policy_denied error alongside the prose
+          // (in _meta + structuredContent) so MCP clients render the block
+          // structurally instead of scraping the refusal text.
+          const blockedResult = structuredToolErrorResult({
+            error: policyBlockToToolError(policyBlock),
+            text: policyBlock.refusalMessage,
+          });
+
+          // Blocked calls are still tool calls: report metrics and persist them
+          // (isError) so they show up in the MCP gateway logs and dashboards
+          // rather than vanishing before any recording.
+          const durationSeconds = (Date.now() - startTime) / 1000;
+          metrics.mcp.reportMcpToolCall({
+            agentId: agent.id,
+            agentName: agent.name,
+            agentType: agent.agentType ?? null,
+            mcpServerName,
+            toolName: name,
+            durationSeconds,
             isError: true,
-          };
+            agentLabels: agent.labels,
+            requestSizeBytes: args ? JSON.stringify(args).length : undefined,
+          });
+
+          try {
+            await McpToolCallModel.create({
+              agentId,
+              mcpServerName,
+              method: "tools/call",
+              toolCall: {
+                id: `blocked-${Date.now()}`,
+                name,
+                arguments: args || {},
+              },
+              toolResult: blockedResult,
+              userId: tokenAuth?.userId ?? null,
+              authMethod: deriveAuthMethod(tokenAuth) ?? null,
+            });
+          } catch (dbError) {
+            logger.info(
+              { err: dbError },
+              "Failed to persist blocked tool call",
+            );
+          }
+
+          return blockedResult;
         }
 
         if (isArchestraTool || isAgentDelegationTool) {
@@ -1727,6 +1810,7 @@ function filterExposedTools(params: {
 type McpListTool = ListToolsResult["tools"][number];
 
 type McpToolForSearchDescription = {
+  name: string;
   catalogId: string | null;
 };
 
@@ -1780,12 +1864,23 @@ function dedupeToolsByName<T extends { name: string }>(tools: T[]) {
   return Array.from(deduped.values());
 }
 
-async function buildSearchToolsDescription(
-  mcpTools: McpToolForSearchDescription[],
+// Caps for the server list appended to the search_tools description: how many
+// servers are named (past this the list degrades to ", and N more") and how
+// much of each server's own description is quoted alongside its name.
+const SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS = 100;
+const SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH = 200;
+
+async function buildSearchToolsDescription(params: {
+  mcpTools: McpToolForSearchDescription[];
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
   prefetchedCatalogs?: Awaited<
     ReturnType<typeof InternalMcpCatalogModel.getByIds>
-  >,
-) {
+  >;
+}) {
+  const { agentId, mcpTools, organizationId, prefetchedCatalogs, userId } =
+    params;
   const searchTool = getArchestraMcpTools().find(
     (tool) =>
       archestraMcpBranding.getToolShortName(tool.name) ===
@@ -1796,9 +1891,20 @@ async function buildSearchToolsDescription(
     return null;
   }
 
+  // Mirror search_tools' actual search space: the catalogs backing the
+  // assigned tools, widened by the dynamically discoverable ones when the
+  // agent's "access all tools" setting is on (getUnassignedDiscoverableTools
+  // self-gates on that setting and a real authenticated user).
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: new Set(mcpTools.map((tool) => tool.name)),
+    agentId,
+    userId,
+    organizationId,
+  });
+
   const catalogIds = [
     ...new Set(
-      mcpTools
+      [...mcpTools, ...discoverableTools]
         .map((tool) => tool.catalogId)
         .filter(
           (catalogId): catalogId is string =>
@@ -1811,29 +1917,45 @@ async function buildSearchToolsDescription(
     return baseDescription;
   }
 
-  const catalogs =
-    prefetchedCatalogs ?? (await InternalMcpCatalogModel.getByIds(catalogIds));
-  const catalogSummaries = catalogIds
+  const catalogs = new Map(prefetchedCatalogs ?? []);
+  const missingCatalogIds = catalogIds.filter((id) => !catalogs.has(id));
+  if (missingCatalogIds.length > 0) {
+    const fetched = await InternalMcpCatalogModel.getByIds(missingCatalogIds);
+    for (const [id, catalog] of fetched) {
+      catalogs.set(id, catalog);
+    }
+  }
+
+  const resolvedCatalogs = catalogIds
     .map((catalogId) => catalogs.get(catalogId))
-    .filter((catalog) => catalog !== undefined)
-    .slice(0, 10)
-    .map((catalog) => {
-      const labels = catalog.labels
-        .slice(0, 3)
-        .map((label) => `${label.key}:${label.value}`)
-        .join(", ");
-      return labels ? `${catalog.name} (labels: ${labels})` : catalog.name;
-    });
+    .filter((catalog) => catalog !== undefined);
+  const catalogSummaries = resolvedCatalogs
+    .slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS)
+    .map((catalog) =>
+      catalog.description
+        ? `${catalog.name} (${summarizeCatalogDescription(catalog.description)})`
+        : catalog.name,
+    );
 
   if (catalogSummaries.length === 0) {
     return baseDescription;
   }
 
-  const remainingCount = catalogIds.length - catalogSummaries.length;
+  const remainingCount = resolvedCatalogs.length - catalogSummaries.length;
   const remainingText =
     remainingCount > 0 ? `, and ${remainingCount} more` : "";
 
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
+}
+
+// One-line, length-capped rendering of a catalog's own description for
+// embedding in the search_tools description.
+function summarizeCatalogDescription(description: string): string {
+  const collapsed = description.replace(/\s+/g, " ").trim();
+  return collapsed.length >
+    SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH
+    ? `${collapsed.slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH)}…`
+    : collapsed;
 }
 
 /** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */

@@ -20,12 +20,7 @@ export const vllmAdapterFactory = createOpenAiCompatibleAdapterFactory({
     options: CreateClientOptions,
   ): OpenAIProvider {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "vllm",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("vllm", options.agent, options.source)
       : undefined;
 
     // vLLM typically runs without auth; the OpenAI SDK still requires a non-empty key.

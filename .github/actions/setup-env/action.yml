@@ -3,7 +3,7 @@ description: Setup node/pnpm + install dependencies
 inputs:
   working-directory:
     description: The working directory to install dependencies in
-    required: true
+    required: false
     default: platform
 runs:
   using: composite

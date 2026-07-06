@@ -12,6 +12,8 @@ export const RouteId = {
   RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
+  GetAgentToolExclusions: "getAgentToolExclusions",
+  UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -138,6 +140,7 @@ export const RouteId = {
   DeleteRole: "deleteRole",
 
   // Tool Routes
+  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
@@ -399,6 +402,13 @@ export const RouteId = {
   UpdateDefaultUserLimit: "updateDefaultUserLimit",
   DeleteDefaultUserLimit: "deleteDefaultUserLimit",
 
+  // Onboarding Routes
+  GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",
+  MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
+  GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
+  SubmitOnboardingSurvey: "submitOnboardingSurvey",
+  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
+
   // Organization Routes
   GetOrganization: "getOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
@@ -630,6 +640,10 @@ export const RouteId = {
   GetAppTemplates: "getAppTemplates",
   OpenAppInChat: "openAppInChat",
   OpenExternalAppInChat: "openExternalAppInChat",
+  PinApp: "pinApp",
+  UnpinApp: "unpinApp",
+  PinExternalApp: "pinExternalApp",
+  UnpinExternalApp: "unpinExternalApp",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)

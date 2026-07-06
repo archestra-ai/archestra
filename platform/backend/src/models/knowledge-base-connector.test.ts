@@ -1095,4 +1095,60 @@ describe("KnowledgeBaseConnectorModel", () => {
       expect(ids).toHaveLength(0);
     });
   });
+
+  describe("reconcileOrphanedConnectorStatuses", () => {
+    test("sets a connector stuck 'running' to its latest run's terminal status", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "running",
+      });
+      // Two terminal runs; the latest by startedAt is 'failed'.
+      await makeConnectorRun(connector.id, {
+        status: "success",
+        startedAt: new Date(Date.now() - 60_000),
+      });
+      await makeConnectorRun(connector.id, {
+        status: "failed",
+        startedAt: new Date(),
+      });
+
+      const corrected =
+        await KnowledgeBaseConnectorModel.reconcileOrphanedConnectorStatuses();
+
+      expect(corrected).toContain(connector.id);
+      const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(updated?.lastSyncStatus).toBe("failed");
+    });
+
+    test("leaves a connector alone while its latest run is still running", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "running",
+      });
+      await makeConnectorRun(connector.id, { status: "running" });
+
+      const corrected =
+        await KnowledgeBaseConnectorModel.reconcileOrphanedConnectorStatuses();
+
+      expect(corrected).not.toContain(connector.id);
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))
+          ?.lastSyncStatus,
+      ).toBe("running");
+    });
+  });
 });

@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   readFileAsBase64,
   summarizeUploadResults,
@@ -52,6 +53,9 @@ export function useProjects(
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
   const toastOnError = options?.toastOnError;
+  // The endpoint requires project:read; skip the request for users whose role
+  // lacks it (e.g. the sidebar mounts this for everyone) instead of 403ing.
+  const { data: canReadProjects } = useHasPermissions({ project: ["read"] });
   return useQuery({
     queryKey: [
       "projects",
@@ -64,7 +68,7 @@ export function useProjects(
         excludeAuthorIds: excludeAuthorIds ?? null,
       },
     ],
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && !!canReadProjects,
     queryFn: async () => {
       const { data, error } = await getProjects({
         query: { scope, search, teamIds, authorIds, excludeAuthorIds },

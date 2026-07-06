@@ -7,8 +7,6 @@ lastUpdated: 2026-05-05
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This is a development guide for adding new Knowledge Base connectors to Archestra.
 -->
 
@@ -20,7 +18,7 @@ This guide covers how to add a new Knowledge Connector to Archestra Platform. Co
 2. **Connector class** extending `BaseConnector` with `validateConfig`, `testConnection`, and `sync`
 3. **Registry entry** so the runtime can instantiate the connector by type string
 4. **Frontend config fields** component for the creation dialog
-5. **User-facing docs update** in `docs/pages/platform-knowledge-connectors.md`
+5. **User-facing docs update** in `docs/pages/platform-knowledge.md`
 
 When the external service provides an official SDK, prefer it over building a client from scratch with raw `fetch` calls. Use a hand-rolled client only when there is no suitable official SDK or the official SDK is clearly incompatible with the connector's requirements. Official SDKs usually handle pagination, authentication, rate limiting, and type safety out of the box. For example, the GitHub connector uses [`@octokit/rest`](https://www.npmjs.com/package/@octokit/rest) and the GitLab connector uses [`@gitbeaker/rest`](https://www.npmjs.com/package/@gitbeaker/rest).
 
@@ -361,7 +359,7 @@ Implement the `FolderTraversalAdapter` interface with a `listDirectSubfolders` m
 
 ## User-Facing Docs
 
-When you add a new connector, you must also add or update the matching section in `docs/pages/platform-knowledge-connectors.md`.
+When you add a new connector, you must also add or update the matching section in `docs/pages/platform-knowledge.md`.
 
 That section should cover the actual setup and operating model for users, not just raw config fields:
 

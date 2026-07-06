@@ -2838,14 +2838,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Verify conversation exists and user owns it
-      const conversation = await ConversationModel.findById({
+      // Verify conversation exists and user owns it. isOwnedBy, not findById:
+      // this endpoint only needs the ownership check, and findById drags every
+      // message body along with it.
+      const ownsConversation = await ConversationModel.isOwnedBy({
         id: id,
         userId: user.id,
         organizationId: organizationId,
       });
 
-      if (!conversation) {
+      if (!ownsConversation) {
         throw new ApiError(404, "Conversation not found");
       }
 
@@ -2885,14 +2887,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       { params: { id }, body: { toolIds }, user, organizationId },
       reply,
     ) => {
-      // Verify conversation exists and user owns it
-      const conversation = await ConversationModel.findById({
+      // Verify conversation exists and user owns it (see the GET handler on
+      // why this is isOwnedBy rather than findById)
+      const ownsConversation = await ConversationModel.isOwnedBy({
         id: id,
         userId: user.id,
         organizationId: organizationId,
       });
 
-      if (!conversation) {
+      if (!ownsConversation) {
         throw new ApiError(404, "Conversation not found");
       }
 
@@ -2918,14 +2921,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Verify conversation exists and user owns it
-      const conversation = await ConversationModel.findById({
+      // Verify conversation exists and user owns it (see the GET handler on
+      // why this is isOwnedBy rather than findById)
+      const ownsConversation = await ConversationModel.isOwnedBy({
         id: id,
         userId: user.id,
         organizationId: organizationId,
       });
 
-      if (!conversation) {
+      if (!ownsConversation) {
         throw new ApiError(404, "Conversation not found");
       }
 

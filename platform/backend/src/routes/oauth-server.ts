@@ -54,15 +54,6 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "",
       );
 
-      // An MCP App connector's discovery is dark when the feature is off, so it
-      // does not reveal that an app exists.
-      if (
-        resourcePath.startsWith(APP_CONNECTOR_PATH_PREFIX) &&
-        !config.apps.enabled
-      ) {
-        throw new ApiError(404, "Not found");
-      }
-
       // Check if the profile has an external IdP configured
       const authorizationServers = [baseUrl];
       const profileId = await extractProfileIdFromResourcePath(resourcePath);

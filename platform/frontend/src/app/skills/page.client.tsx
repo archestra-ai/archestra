@@ -44,10 +44,8 @@ import {
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useOrganization } from "@/lib/organization.query";
 import {
   useDeleteSkill,
-  useEnableSkillToolDefaults,
   useResetSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
@@ -430,18 +428,6 @@ function parseRepoFromSourceRef(sourceRef: string | null): string | null {
 }
 
 function SkillsEmptyState() {
-  const router = useRouter();
-  const { data: organization } = useOrganization();
-  const enableDefaults = useEnableSkillToolDefaults();
-  const alreadyEnabled = organization?.skillToolsEnabled === true;
-
-  const handleEnableAndCreate = useCallback(async () => {
-    const result = await enableDefaults.mutateAsync();
-    if (result) {
-      router.push("/skills/new");
-    }
-  }, [enableDefaults, router]);
-
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="max-w-md text-center">
@@ -449,36 +435,17 @@ function SkillsEmptyState() {
           <BookOpen className="h-7 w-7 text-primary" />
         </div>
         <h2 className="mb-2 text-xl font-semibold">No skills yet</h2>
-        <p className="mb-2 text-sm text-muted-foreground">
+        <p className="mb-6 text-sm text-muted-foreground">
           A skill is a set of instructions and files. Agents pick the right one
           by name and follow it on demand.
         </p>
-        {!alreadyEnabled && (
-          <p className="mb-6 text-sm text-muted-foreground">
-            Turning skills on makes them available to every agent in this
-            organization.
-          </p>
-        )}
         <div className="flex items-center justify-center">
-          {alreadyEnabled ? (
-            <PermissionButton permissions={{ skill: ["create"] }} asChild>
-              <Link href="/skills/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Add your first skill
-              </Link>
-            </PermissionButton>
-          ) : (
-            <PermissionButton
-              permissions={{ skill: ["admin"] }}
-              onClick={handleEnableAndCreate}
-              disabled={enableDefaults.isPending}
-            >
+          <PermissionButton permissions={{ skill: ["create"] }} asChild>
+            <Link href="/skills/new">
               <Plus className="mr-2 h-4 w-4" />
-              {enableDefaults.isPending
-                ? "Enabling…"
-                : "Enable and create a new skill"}
-            </PermissionButton>
-          )}
+              Add your first skill
+            </Link>
+          </PermissionButton>
         </div>
       </div>
     </div>

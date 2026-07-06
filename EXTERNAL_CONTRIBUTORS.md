@@ -689,3 +689,7 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @SaviPandey
 - @bbbbzzzzcc-afk
 - @yava-code
+- @Harxhit
+- @Vaibhav27vds
+- @PRyoucef
+- @mnfadel

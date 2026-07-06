@@ -286,20 +286,86 @@ class KnowledgeBaseConnectorModel {
     return result ?? null;
   }
 
+  /**
+   * Advance the connector's sync checkpoint, gated atomically on the given run
+   * still being `running`. If the run was reclaimed (its owner became a zombie),
+   * the EXISTS guard fails and the stale checkpoint write is dropped — a newer
+   * run's checkpoint can't be clobbered.
+   */
+  static async setCheckpointIfRunActive(params: {
+    connectorId: string;
+    runId: string;
+    checkpoint: Record<string, unknown>;
+  }): Promise<void> {
+    await db.execute(sql`
+      UPDATE knowledge_base_connectors
+      SET checkpoint = ${JSON.stringify(params.checkpoint)}::jsonb
+      WHERE id = ${params.connectorId}
+        AND EXISTS (
+          SELECT 1 FROM connector_runs
+          WHERE id = ${params.runId} AND status = 'running'
+        )
+    `);
+  }
+
+  /**
+   * Mirror a reaped run's terminal status onto its connector, but only while the
+   * connector still reflects THAT run — it is still `running` and its
+   * `last_sync_at` equals the run's `started_at` (each run stamps the connector
+   * with its own start; see Fix P in connector-sync). If a newer run has since
+   * claimed the connector, its `last_sync_at` differs and this no-ops, so the
+   * reaper can't clobber it. Compared in SQL against the run's `started_at` to
+   * preserve exact timestamp precision.
+   */
+  static async markReapedStatusIfCurrent(params: {
+    connectorId: string;
+    runId: string;
+    status: ConnectorSyncStatus;
+    error: string | null;
+  }): Promise<void> {
+    await db.execute(sql`
+      UPDATE knowledge_base_connectors
+      SET last_sync_status = ${params.status}, last_sync_error = ${params.error}
+      WHERE id = ${params.connectorId}
+        AND last_sync_status = 'running'
+        AND last_sync_at = (
+          SELECT started_at FROM connector_runs WHERE id = ${params.runId}
+        )
+    `);
+  }
+
+  /**
+   * Reconcile connectors left showing `running` when they have no running run —
+   * e.g. a run finalized but its connector-status write was lost. Derives the
+   * connector's status from its latest run (the authoritative source) in one
+   * statement, replacing the old task-scanning cleanup loop. A connector whose
+   * latest run is still `running` is skipped (it is genuinely in progress), so
+   * this never races a live run. Returns the ids it corrected, for logging.
+   */
+  static async reconcileOrphanedConnectorStatuses(): Promise<string[]> {
+    const { rows } = await db.execute<{ id: string }>(sql`
+      UPDATE knowledge_base_connectors c
+      SET last_sync_status = latest.status,
+          last_sync_error = latest.error
+      FROM (
+        SELECT DISTINCT ON (connector_id)
+          connector_id, status, error
+        FROM connector_runs
+        ORDER BY connector_id, started_at DESC
+      ) latest
+      WHERE c.id = latest.connector_id
+        AND c.last_sync_status = 'running'
+        AND latest.status <> 'running'
+      RETURNING c.id
+    `);
+    return rows.map((r) => r.id);
+  }
+
   static async findAllEnabled(): Promise<KnowledgeBaseConnector[]> {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
       .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
-  }
-
-  static async findAllWithStatus(
-    status: ConnectorSyncStatus,
-  ): Promise<KnowledgeBaseConnector[]> {
-    return await db
-      .select()
-      .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.lastSyncStatus, status));
   }
 
   static async delete(id: string): Promise<boolean> {

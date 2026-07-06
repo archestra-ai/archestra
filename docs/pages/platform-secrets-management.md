@@ -7,8 +7,6 @@ lastUpdated: 2026-05-13
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This document covers Vault secret manager configuration. Include:
 - Overview of secret storage options (DB vs Vault)
 - Environment variables

@@ -4,10 +4,6 @@ category: Archestra Platform
 order: 7
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 # Migrate to Archestra
 
 > **Experimental.** The migration kit is new and still evolving.

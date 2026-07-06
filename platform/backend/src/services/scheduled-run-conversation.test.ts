@@ -14,6 +14,7 @@ import {
   recordRunConversationError,
 } from "@/services/scheduled-run-conversation";
 import { expect, test } from "@/test";
+import { THINKING_ONLY_NOTICE } from "@/utils/strip-thinking-blocks";
 
 test("createAndLinkRunConversation makes a project-scoped, schedule-origin chat and links it once", async ({
   makeOrganization,
@@ -164,6 +165,183 @@ test("backfillRunConversationMessages materializes chat messages from a run's in
   expect(await MessageModel.findByConversation(conversation.id)).toHaveLength(
     messages.length,
   );
+});
+
+test("backfillRunConversationMessages strips inline <thinking> blocks from the reconstructed transcript", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "write a joke",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+
+  const conversation = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+
+  // The stored interaction carries the model's raw output, including inline
+  // thinking tags that bypass the A2A executor's sanitization.
+  await InteractionModel.create({
+    profileId: agent.id,
+    userId: actor.id,
+    sessionId: `scheduled-${run.id}`,
+    request: {
+      model: "gpt-4",
+      messages: [{ role: "user", content: "write a joke" }],
+    },
+    response: {
+      id: "resp-1",
+      object: "chat.completion",
+      created: Date.now(),
+      model: "gpt-4",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "Here is a joke.<thinking>pick a good one</thinking> Ha!",
+            refusal: null,
+          },
+          finish_reason: "stop",
+          logprobs: null,
+        },
+      ],
+    },
+    type: "openai:chatCompletions",
+  });
+
+  await backfillRunConversationMessages({
+    conversation,
+    trigger,
+    run,
+    ownerUserId: actor.id,
+  });
+
+  const messages = await MessageModel.findByConversation(conversation.id);
+  const assistant = messages.find((m) => m.role === "assistant");
+  const parts = (
+    assistant?.content as { parts?: { type: string; text?: string }[] }
+  ).parts;
+  const text = (parts ?? [])
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("");
+  expect(text).not.toContain("<thinking>");
+  expect(text).not.toContain("pick a good one");
+  expect(text).toContain("Here is a joke.");
+  expect(text).toContain("Ha!");
+});
+
+test("backfillRunConversationMessages substitutes a notice for a thinking-only assistant turn", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: actor.id,
+    name: "runs",
+    description: null,
+  });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+    projectId: project.id,
+    messageTemplate: "write a joke",
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+
+  const conversation = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+
+  // The whole assistant answer was inline thinking, so stripping empties it.
+  await InteractionModel.create({
+    profileId: agent.id,
+    userId: actor.id,
+    sessionId: `scheduled-${run.id}`,
+    request: {
+      model: "gpt-4",
+      messages: [{ role: "user", content: "write a joke" }],
+    },
+    response: {
+      id: "resp-1",
+      object: "chat.completion",
+      created: Date.now(),
+      model: "gpt-4",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "<thinking>I can't think of one</thinking>",
+            refusal: null,
+          },
+          finish_reason: "stop",
+          logprobs: null,
+        },
+      ],
+    },
+    type: "openai:chatCompletions",
+  });
+
+  await backfillRunConversationMessages({
+    conversation,
+    trigger,
+    run,
+    ownerUserId: actor.id,
+  });
+
+  const messages = await MessageModel.findByConversation(conversation.id);
+  const assistant = messages.find((m) => m.role === "assistant");
+  const parts = (
+    assistant?.content as { parts?: { type: string; text?: string }[] }
+  ).parts;
+  const text = (parts ?? [])
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("");
+  expect(text).not.toContain("<thinking>");
+  expect(text).toBe(THINKING_ONLY_NOTICE);
 });
 
 test("persistRunConversationMessages writes [user, assistant] from the executor result, once", async ({

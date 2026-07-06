@@ -13,7 +13,6 @@ import {
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
   stripDanglingToolCalls,
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
@@ -855,16 +854,6 @@ function ChatSessionHook({
       if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {
         queryClient.invalidateQueries({ queryKey: ["agents"] });
       }
-
-      // Detect artifact_write tool and invalidate conversation to fetch updated artifact
-      if (toolShortName === TOOL_ARTIFACT_WRITE_SHORT_NAME) {
-        // Small delay to ensure backend has saved the artifact
-        setTimeout(() => {
-          queryClient.invalidateQueries({
-            queryKey: ["conversation", conversationId],
-          });
-        }, 500);
-      }
     },
     onData: (dataPart) => {
       // Handle token usage data from the backend stream
@@ -1026,6 +1015,28 @@ function ChatSessionHook({
     );
   }, [stableMessages, optimisticToolCalls.length]);
 
+  // A regenerate replaces the failed turn, so any persisted chat-error rows
+  // are now stale — the backend never clears them on its own, and left behind
+  // they keep rendering an error card above the regenerated answer (also after
+  // a reload). Clear them only once the re-run is genuinely issued (clearing
+  // before would wipe the card even when the resend never starts). Fire the
+  // delete unconditionally rather than gating on the cached rows: the failed
+  // turn persists its error row asynchronously, so the client cache often has
+  // not loaded it yet at regenerate time — gating on it would skip the clear
+  // and let the next conversation refetch resurrect the card. The delete is
+  // idempotent and optimistically drops the rows from the cache. Destructure
+  // the stable mutateAsync like updateChatMessageAsync above so
+  // regenerateUserMessage stays referentially stable.
+  const { mutateAsync: clearChatErrorsAsync } = clearChatErrors;
+  const clearStalePersistedChatErrors = useCallback(() => {
+    clearChatErrorsAsync({ id: conversationId }).catch((error) => {
+      console.error(
+        "[ChatSession] Failed to clear stale chat errors after regenerate",
+        error,
+      );
+    });
+  }, [clearChatErrorsAsync, conversationId]);
+
   // Save the user message's text, then re-run the assistant turn from it.
   const regenerateUserMessage = useCallback(
     async ({
@@ -1072,6 +1083,7 @@ function ChatSessionHook({
         // regenerate from it. The server replaces the turn atomically.
         setMessages(canonical);
         void regenerate({ messageId: anchorId });
+        clearStalePersistedChatErrors();
         return;
       }
 
@@ -1091,8 +1103,14 @@ function ChatSessionHook({
         }),
       );
       void regenerate({ messageId });
+      clearStalePersistedChatErrors();
     },
-    [updateChatMessageAsync, setMessages, regenerate],
+    [
+      updateChatMessageAsync,
+      setMessages,
+      regenerate,
+      clearStalePersistedChatErrors,
+    ],
   );
 
   // Always keep the session ref up-to-date with the latest values (including

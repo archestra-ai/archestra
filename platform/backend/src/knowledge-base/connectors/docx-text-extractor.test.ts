@@ -1,6 +1,9 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { extractTextFromDocx } from "./docx-text-extractor";
+import {
+  extractTextFromDocx,
+  isCorruptOfficeFileError,
+} from "./docx-text-extractor";
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -61,9 +64,24 @@ describe("extractTextFromDocx", () => {
     expect((await extractTextFromDocx(buffer)).trim()).toBe("");
   });
 
-  it("throws for invalid buffer", async () => {
-    await expect(
-      extractTextFromDocx(Buffer.from("not a docx")),
-    ).rejects.toThrow();
+  it("returns empty string for a non-ZIP (mislabeled/corrupt) buffer", async () => {
+    // A file whose bytes are not a valid ZIP has no extractable text; the
+    // extractor swallows the ZIP error so the caller skips the item instead of
+    // failing it.
+    expect(await extractTextFromDocx(Buffer.from("not a docx"))).toBe("");
+  });
+});
+
+describe("isCorruptOfficeFileError", () => {
+  it("detects the JSZip 'end of central directory' error", () => {
+    const err = new Error(
+      "Can't find end of central directory : is this a zip file ?",
+    );
+    expect(isCorruptOfficeFileError(err)).toBe(true);
+  });
+
+  it("returns false for unrelated errors", () => {
+    expect(isCorruptOfficeFileError(new Error("network timeout"))).toBe(false);
+    expect(isCorruptOfficeFileError("some string")).toBe(false);
   });
 });

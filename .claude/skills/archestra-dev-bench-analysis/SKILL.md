@@ -9,8 +9,8 @@ argument-hint: "[run dir]"
 Map-reduce a finished `archestra-bench` run into a recommendations report, using Claude subagents
 for the judgment. The deterministic half (render + metrics + manifest) is done by the Rust
 `archestra-bench prepare` subcommand, so this skill reuses the analyzer's exact rendering, metrics,
-and ordering — it does not re-implement them. Mirrors `archestra-bench/analyzer` (map = per-rollout
-triage; reduce = repo-grounded Tier-1/Tier-2 report); see `archestra-bench/analyzer/README.md`.
+and ordering — it does not re-implement them. Mirrors `ai-labs/analyzer` (map = per-rollout
+triage; reduce = repo-grounded Tier-1/Tier-2 report); see `ai-labs/analyzer/README.md`.
 
 The subagent fan-out runs through the **native Workflow tool** — two scripts under this skill's
 `workflows/` directory drive the map and crawl phases, so the orchestrator never hand-batches Agent
@@ -24,7 +24,7 @@ skill's directory) — `bin/prepare.sh` extracts the MAP block automatically; yo
 ## 1. Prepare (deterministic: dir resolution + Rust `prepare` + arg shaping)
 
 Run the helper (from anywhere — it derives the repo root). Pass a run dir, or omit it to pick the
-newest under `archestra-bench/experiments/`:
+newest under `ai-labs/experiments/`:
 
 ```
 <SKILL_DIR>/bin/prepare.sh "$ARGUMENTS"
@@ -76,7 +76,7 @@ map work.
 `{ANALYSES_DOC_PATH}` with `ANALYSES_DOC`, `{RUN_DIR}` absolute, `{BACKEND_LOG_PATHS}` with
 `<RUN_DIR>/*.backend.log`).
 
-Ground every finding in `file:line` across `platform/` (Tier 1) and `archestra-bench/` (Tier 2) by
+Ground every finding in `file:line` across `platform/` (Tier 1) and `ai-labs/` (Tier 2) by
 fanning the crawlers out through the **crawl workflow**: derive one issue/subsystem per cluster from
 the analyses doc, then call the Workflow tool with `scriptPath: <SKILL_DIR>/workflows/crawl.mjs` and
 `args`:

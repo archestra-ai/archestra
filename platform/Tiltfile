@@ -35,6 +35,17 @@ for _ref_key in ['ARCHESTRA_CHAT_OPENROUTER_API_KEY', 'ARCHESTRA_CHAT_ANTHROPIC_
 if not os.getenv('ARCHESTRA_AUTH_SECRET'):
   os.putenv('ARCHESTRA_AUTH_SECRET', 'better-auth-secret-12345678901234567890')
 
+# Share the Rust build cache across git worktrees. Otherwise each worktree gets
+# its own archestra-rs/target and cold-rebuilds the whole dep graph on first
+# `tilt up`; pointing cargo/napi at one home-dir cache lets registry deps (keyed
+# independently of source path) be reused across worktrees on the same commit.
+# Honors an existing CARGO_TARGET_DIR override; HOME-guarded so it no-ops where
+# it is unset. Only the intermediate cargo cache moves — napi still copies the
+# .node into each crate's package dir, so binary loading is unaffected.
+_cargo_cache_home = os.getenv('HOME')
+if _cargo_cache_home and not os.getenv('CARGO_TARGET_DIR'):
+  os.putenv('CARGO_TARGET_DIR', _cargo_cache_home + '/.cache/archestra-rs-target')
+
 # Watch .env file for changes - triggers Tiltfile re-evaluation and restarts pnpm-dev
 watch_file('.env')
 

@@ -49,6 +49,10 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import {
+  AgentToolExclusionsEditor,
+  type AgentToolExclusionsEditorRef,
+} from "@/components/agent-tool-exclusions-editor";
+import {
   AgentToolsEditor,
   type AgentToolsEditorRef,
   type McpEnvConflict,
@@ -132,6 +136,7 @@ import {
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
+import type { AgentToolExclusions } from "@/lib/agent-tool-exclusions.query";
 import {
   useAgentDelegations,
   useSyncAgentDelegations,
@@ -611,10 +616,6 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
-  // Sandbox environment binding (internal agents only): the agent's code sandbox
-  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
-  // Gated behind a feature flag (off by default) until the per-env runtime ships.
-  const agentEnvironmentsEnabled = useFeature("agentEnvironmentsEnabled");
   // Environment isolation is always enforced by the backend for agents and MCP
   // gateways, so the tool picker reflects it (cross-environment catalogs are
   // shown disabled). When the org only has the Default environment, nothing is
@@ -661,6 +662,8 @@ export function AgentDialog({
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
+  const agentToolExclusionsEditorRef =
+    useRef<AgentToolExclusionsEditorRef>(null);
   // Snapshot of the form's pristine values, captured whenever the dialog
   // (re)populates from the loaded agent, so we can detect unsaved edits.
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
@@ -684,6 +687,12 @@ export function AgentDialog({
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
+  // The tools editor's live selection (pending edits included), so the
+  // exclusions editor's seed treats a just-checked-but-unsaved built-in as
+  // assigned instead of disabling it.
+  const [pendingSelectedToolIds, setPendingSelectedToolIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
@@ -705,13 +714,20 @@ export function AgentDialog({
   // New agents default to implicit ("All tools") access; editing an existing
   // agent overwrites this from its stored value.
   const [accessAllTools, setAccessAllTools] = useState(true);
+  // Auto-mode exclusions dirty tracking: { initial, current } normalized
+  // payloads reported by the exclusions editor (null until it initializes and
+  // after it unmounts when the dialog closes).
+  const [exclusionsState, setExclusionsState] = useState<{
+    initial: AgentToolExclusions;
+    current: AgentToolExclusions;
+  } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   // Agents, LLM proxies, and MCP gateways can all be assigned a deployment
-  // environment. For agents it binds the code sandbox runtime (feature-flagged);
-  // for LLM proxies / MCP gateways it is an attribution label so their
+  // environment. For agents it binds the code sandbox runtime; for LLM proxies
+  // / MCP gateways it is an attribution label so their
   // inference/usage falls under environment-scoped cost limits.
   const supportsEnvironment =
     isInternalAgent || agentType === "llm_proxy" || agentType === "mcp_gateway";
@@ -727,6 +743,14 @@ export function AgentDialog({
   // switch an agent to "Custom" (explicitly assigned tools). Implicit access is
   // scoped to tools/knowledge visible to the user AND in the agent's environment.
   const allToolsMode = accessAllTools;
+  // Seed the exclusions editor with the backend's All-mode pre-fill whenever
+  // saving would put the agent into All mode from scratch: creating a new
+  // agent on the All tab, or editing an agent whose SAVED accessAllTools is
+  // off while the All tab is selected. An agent already saved in All mode has
+  // its pre-fill persisted server-side, so the editor just loads it.
+  const savedAccessAllTools = (freshAgent || agent)?.accessAllTools ?? false;
+  const seedDefaultExclusions =
+    allToolsMode && (agent ? !savedAccessAllTools : true);
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -1077,6 +1101,13 @@ export function AgentDialog({
           },
         });
         savedAgentId = updated?.id ?? agent.id;
+        // Auto-mode exclusions (full-replace PUT; no-op when unchanged). Runs
+        // AFTER the agent update so that when accessAllTools flips Custom→All,
+        // the backend's switch-time pre-fill lands first and this full replace
+        // is the authoritative last write of the set the user saw and edited.
+        if (!isBuiltIn) {
+          await agentToolExclusionsEditorRef.current?.saveChanges();
+        }
         if (updated?.id) {
           toast.success(getSuccessMessage(agentType, true));
         }
@@ -1125,6 +1156,10 @@ export function AgentDialog({
             await agentToolsEditorRef.current?.saveChanges({
               agentId: savedAgentId,
               resourceLabel: agentTypeDisplayName[agentType] || "resource",
+            });
+            // Auto-mode exclusions configured before the agent existed.
+            await agentToolExclusionsEditorRef.current?.saveChanges({
+              agentId: savedAgentId,
             });
           } catch (error) {
             await deleteAgent.mutateAsync(savedAgentId);
@@ -1214,8 +1249,9 @@ export function AgentDialog({
 
   // Detect unsaved edits so any close path (Esc, backdrop, the X button, or the
   // Cancel button) prompts before discarding. Covers every form field held here
-  // plus delegations; per-tool selections live in the tools editor child and
-  // are not part of this check (the All-tools/Custom switch below is, though).
+  // plus delegations and Auto-mode tool exclusions; per-tool selections live in
+  // the tools editor child and are not part of this check (the All-tools/Custom
+  // switch below is, though).
   const currentSnapshot = buildAgentFormSnapshot({
     name,
     icon,
@@ -1245,7 +1281,12 @@ export function AgentDialog({
       hasUnsavedChanges(
         [...currentDelegations.map((delegate) => delegate.id)].sort(),
         [...selectedDelegationTargetIds].sort(),
-      ));
+      ) ||
+      // Auto-mode exclusions load async, so they're diffed against the
+      // baseline the editor reports (same pattern as delegations above)
+      // rather than the open-time snapshot.
+      (exclusionsState !== null &&
+        hasUnsavedChanges(exclusionsState.initial, exclusionsState.current)));
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
 
   const handleClose = guard.requestClose;
@@ -1271,9 +1312,7 @@ export function AgentDialog({
                   <p className="pt-2 text-sm text-muted-foreground">
                     {agent.description}.{" "}
                     <ExternalDocsLink
-                      href={getDocsUrl(
-                        DocsPage.PlatformBuiltInAgentsPolicyConfig,
-                      )}
+                      href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
                       className="underline"
                       showIcon={false}
                     >
@@ -1357,11 +1396,11 @@ export function AgentDialog({
 
                     {/* Environment assignment (below description).
                       - Agent: binds the agent's code sandbox to a per-environment
-                        Dagger engine + egress policy (feature-flagged).
+                        Dagger engine + egress policy.
                       - LLM proxy / MCP gateway: assigns the deployment environment
                         so its usage falls under environment-scoped cost limits.
-                      Hidden when only the default environment is available. */}
-                    {((isInternalAgent && agentEnvironmentsEnabled) ||
+                      Renders disabled when only the default environment exists. */}
+                    {(isInternalAgent ||
                       agentType === "llm_proxy" ||
                       agentType === "mcp_gateway") && (
                       <EnvironmentSelector
@@ -1671,6 +1710,31 @@ export function AgentDialog({
                           </li>
                         </ul>
                       )}
+                      {/* Auto-mode exclusions; kept mounted while hidden so
+                        pending edits and the save-time ref survive switching
+                        to "Custom". */}
+                      <div
+                        className={cn(
+                          "space-y-2 pt-2",
+                          !allToolsMode && "hidden",
+                        )}
+                      >
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Disabled tools
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          These tools are disabled for this{" "}
+                          {agentTypeDisplayName[agentType] || "agent"} while
+                          "All" access is on.
+                        </p>
+                        <AgentToolExclusionsEditor
+                          ref={agentToolExclusionsEditorRef}
+                          agentId={agent?.id}
+                          seedDefaultExclusions={seedDefaultExclusions}
+                          pendingAssignedToolIds={pendingSelectedToolIds}
+                          onStateChange={setExclusionsState}
+                        />
+                      </div>
                       {/* Kept mounted while hidden so pending selections and the
                         save-time ref survive switching to "All". */}
                       <div
@@ -1707,6 +1771,7 @@ export function AgentDialog({
                             assignmentScope={scope}
                             assignmentTeamIds={assignedTeamIds}
                             onSelectedCountChange={setSelectedToolsCount}
+                            onSelectedToolIdsChange={setPendingSelectedToolIds}
                             environmentScopingEnabled={
                               environmentScopingEnabled
                             }
@@ -1996,8 +2061,8 @@ export function AgentDialog({
                   </div>
                 )}
 
-                {/* Hooks (internal agents only, existing agents only; gated by
-                  the agent-hooks feature flag, which requires the agent runtime) */}
+                {/* Hooks (internal agents only, existing agents only; shown when
+                  the agent runtime is available, since hooks run in its sandbox) */}
                 {agentHooksEnabled &&
                   isInternalAgent &&
                   !isBuiltIn &&

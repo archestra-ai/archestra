@@ -548,6 +548,48 @@ describe("ModelModel", () => {
       );
       expect(updated?.embeddingDimensions).toBe(1536);
     });
+
+    const ollamaBase = {
+      externalId: "ollama/llama3",
+      provider: "ollama" as const,
+      modelId: "llama3",
+      description: "Llama 3",
+      contextLength: 8192,
+      inputModalities: ["text" as const],
+      outputModalities: ["text" as const],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      lastSyncedAt: new Date(),
+    };
+
+    test("keeps the last known default parameters when a non-full sync omits them", async () => {
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, defaultParameters: { num_ctx: 4096 } },
+      ]);
+      await ModelModel.bulkUpsert([{ ...ollamaBase, defaultParameters: null }]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3",
+      );
+      expect(updated?.defaultParameters).toEqual({ num_ctx: 4096 });
+    });
+
+    test("refreshes default parameters on non-full sync when the provider reports new values", async () => {
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, defaultParameters: { num_ctx: 4096 } },
+      ]);
+      await ModelModel.bulkUpsert([
+        { ...ollamaBase, defaultParameters: { num_ctx: 8192 } },
+      ]);
+
+      const updated = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3",
+      );
+      expect(updated?.defaultParameters).toEqual({ num_ctx: 8192 });
+    });
   });
 
   describe("bulkUpsertFull", () => {
@@ -575,6 +617,34 @@ describe("ModelModel", () => {
         "full-refresh",
       );
       expect(refreshed?.outputLength).toBe(64000);
+    });
+
+    test("overwrites default parameters on full refresh", async () => {
+      const base = {
+        externalId: "ollama/llama3-full",
+        provider: "ollama" as const,
+        modelId: "llama3-full",
+        description: "Llama 3",
+        contextLength: 8192,
+        inputModalities: ["text" as const],
+        outputModalities: ["text" as const],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        lastSyncedAt: new Date(),
+      };
+      await ModelModel.bulkUpsert([
+        { ...base, defaultParameters: { num_ctx: 4096 } },
+      ]);
+      await ModelModel.bulkUpsertFull([
+        { ...base, defaultParameters: { num_ctx: 8192 } },
+      ]);
+
+      const refreshed = await ModelModel.findByProviderAndModelId(
+        "ollama",
+        "llama3-full",
+      );
+      expect(refreshed?.defaultParameters).toEqual({ num_ctx: 8192 });
     });
   });
 

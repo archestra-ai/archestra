@@ -1,7 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { handleApiError, throwOnApiError } from "@/lib/utils";
+import { clipErrorMessage, trackEvent } from "@/lib/analytics";
+import {
+  getApiErrorMessage,
+  handleApiError,
+  throwOnApiError,
+} from "@/lib/utils";
 
 const {
   getConnectors,
@@ -114,6 +119,11 @@ export function useCreateConnector() {
     mutationFn: async (body: archestraApiTypes.CreateConnectorData["body"]) => {
       const { data, error } = await createConnector({ body });
       if (error) {
+        trackEvent("knowledge_base_connector_installation_failed", {
+          connectorType: body.connectorType,
+          stage: "create",
+          errorMessage: clipErrorMessage(getApiErrorMessage(error)),
+        });
         handleApiError(error);
         return null;
       }
@@ -232,6 +242,7 @@ export function useForceResyncConnector() {
 }
 
 export function useTestConnectorConnection() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (connectorId: string) => {
       const { data, error } = await testConnectorConnection({
@@ -243,11 +254,19 @@ export function useTestConnectorConnection() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, connectorId) => {
       if (!data) return;
       if (data.success) {
         toast.success("Connection test successful");
       } else {
+        const connector = queryClient.getQueryData<
+          archestraApiTypes.GetConnectorResponses["200"]
+        >(["connectors", connectorId]);
+        trackEvent("knowledge_base_connector_installation_failed", {
+          connectorType: connector?.connectorType,
+          stage: "connection_test",
+          errorMessage: clipErrorMessage(data.error),
+        });
         toast.error(data.error || "Connection test failed");
       }
     },

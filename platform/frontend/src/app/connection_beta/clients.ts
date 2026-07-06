@@ -3,6 +3,14 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 
+/**
+ * Title of the final wizard step for OAuth-gated clients. Registering the
+ * gateway only tells the client where it lives — the gateway authorizes each
+ * user individually, so a one-time browser sign-in is still needed before its
+ * tools work.
+ */
+export const FINISH_OAUTH_FLOW_TITLE = "Finish the OAuth flow";
+
 export interface ClientStep {
   title: string;
   body?: string;
@@ -183,7 +191,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
           title: "Add the gateway",
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName }) =>
-            `claude mcp add --transport http ${serverName} ${url}`,
+            `claude mcp add --transport http ${shellArg(serverName)} ${shellArg(url)}`,
         },
         {
           title:
@@ -192,8 +200,8 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
           buildCommand: () => "claude /mcp",
         },
         {
-          title: "Finish the OAuth flow",
-          body: "Claude Code opens your browser. Sign in and approve the gateway.",
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Claude Code opens your browser. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
         },
       ],
     },
@@ -284,8 +292,8 @@ claude`,
           buildCommand: ({ url }) => url,
         },
         {
-          title: "Finish the OAuth flow",
-          body: "Claude Desktop opens your browser. Sign in and approve the gateway; the connector's tools then appear in chat.",
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "Claude Desktop opens your browser. Sign in and approve the gateway — it grants tool access per user, so the connector's tools appear in chat only after this one-time sign-in.",
         },
       ],
     },
@@ -409,7 +417,7 @@ claude`,
           body: "Codex opens your browser to complete the OAuth handshake automatically.",
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName }) =>
-            `codex mcp add ${serverName} --url ${url}`,
+            `codex mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
         },
       ],
     },
@@ -465,13 +473,14 @@ requires_openai_auth = true`,
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName, token }) =>
             token
-              ? `copilot mcp add --transport http --header "Authorization: Bearer ${token}" ${serverName} ${url}`
-              : `copilot mcp add --transport http ${serverName} ${url}`,
+              ? `copilot mcp add --transport http --header ${shellArg(`Authorization: Bearer ${token}`)} ${shellArg(serverName)} ${shellArg(url)}`
+              : `copilot mcp add --transport http ${shellArg(serverName)} ${shellArg(url)}`,
         },
         {
           title: "Verify the server",
           terminalTitle: "terminal",
-          buildCommand: ({ serverName }) => `copilot mcp get ${serverName}`,
+          buildCommand: ({ serverName }) =>
+            `copilot mcp get ${shellArg(serverName)}`,
         },
       ],
     },
@@ -747,3 +756,15 @@ export COPILOT_MODEL="<model-name>"`,
     proxy: { kind: "generic" },
   },
 ];
+
+// === Internal helpers ===
+
+/**
+ * Single-quote a value for safe pasting into a POSIX shell, mirroring the
+ * backend setup script's `sh()`. A gateway name is member-editable free text,
+ * so metacharacters (`$()`, backticks, `;`, `|`) must not break out of the
+ * generated copy-paste command into the user's shell.
+ */
+function shellArg(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}

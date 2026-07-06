@@ -573,13 +573,17 @@ export function getCreationDefaultArchestraToolShortNames(params: {
  * agent is created in (or switched to) All-tools mode, every unassigned
  * built-in tool is pre-added to its exclusion list EXCEPT this set: the
  * search_tools/run_tool dispatch surface that All-tools mode runs on, the
- * sandbox runtime + persistent-files tools, and query_knowledge_sources.
+ * sandbox runtime + persistent-files tools, the skill tools, and
+ * query_knowledge_sources. Skill tools are part of the default agent surface
+ * (every org gets the opt-in enabled at startup), so pre-disabling them for
+ * All-tools agents would diverge from what a newly created agent gets.
  */
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+  ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

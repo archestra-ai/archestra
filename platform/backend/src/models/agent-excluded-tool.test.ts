@@ -3,6 +3,7 @@ import {
   TOOL_CREATE_AGENT_FULL_NAME,
   TOOL_GET_AGENT_FULL_NAME,
   TOOL_LIST_AGENTS_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -175,7 +176,8 @@ describe("All-tools exclusion pre-fill", () => {
     expect(excluded.has(manualId)).toBe(true);
     // Assigned tools are never pre-excluded.
     expect(excluded.has(assignedId)).toBe(false);
-    // Exempt set is never inserted: dispatch surface, KB query, sandbox.
+    // Exempt set is never inserted: dispatch surface, KB query, sandbox,
+    // skills.
     expect(excluded.has(await builtInToolId(TOOL_SEARCH_TOOLS_FULL_NAME))).toBe(
       false,
     );
@@ -186,6 +188,9 @@ describe("All-tools exclusion pre-fill", () => {
       excluded.has(await builtInToolId(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME)),
     ).toBe(false);
     expect(excluded.has(await builtInToolId(TOOL_RUN_COMMAND_FULL_NAME))).toBe(
+      false,
+    );
+    expect(excluded.has(await builtInToolId(TOOL_LIST_SKILLS_FULL_NAME))).toBe(
       false,
     );
 

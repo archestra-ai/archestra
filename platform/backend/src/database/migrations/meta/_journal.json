@@ -2346,6 +2346,13 @@
       "when": 1783294065959,
       "tag": "0334_loud_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 335,
+      "version": "7",
+      "when": 1783362129115,
+      "tag": "0335_remove-skill-tool-auto-mode-exclusions",
+      "breakpoints": true
     }
   ]
 }

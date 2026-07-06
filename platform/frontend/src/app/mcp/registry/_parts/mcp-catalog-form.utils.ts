@@ -12,6 +12,45 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+
+/**
+ * Parse a string of arguments from the textarea into an array of strings.
+ * Supports two formats:
+ * 1. One argument per line (legacy): "arg1\narg2" => ["arg1", "arg2"]
+ * 2. JSON array: '["arg1", "arg2"]' => ["arg1", "arg2"]
+ * 3. JSON object: '{"key": "val"}' => ["--key", "val"]
+ */
+export function parseArgumentsField(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  // Detect JSON format
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item));
+      }
+      if (typeof parsed === "object" && parsed !== null) {
+        // Convert object to --key value pairs
+        return Object.entries(parsed).flatMap(([key, value]) => {
+          if (value === true) return [`--${key}`];
+          if (value === false || value === null) return [];
+          return [`--${key}`, String(value)];
+        });
+      }
+      return [];
+    } catch {
+      // If JSON parse fails, fall through to line-by-line
+    }
+  }
+
+  // Legacy line-by-line format
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -36,11 +75,7 @@ export function transformFormToApiData(
   if (values.serverType === "local" && values.localConfig) {
     // Parse arguments string into array
     const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+      ? parseArgumentsField(values.localConfig.arguments) : [];
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -136,7 +171,7 @@ export function transformFormToApiData(
       //   3. If discovery yields nothing, backend falls back to `default_scopes`.
       // When the user configures explicit scopes, mirror them into default_scopes so
       // the fallback matches intent. When the field is blank, keep the generic
-      // ["read","write"] fallback â€” some proxy MCP servers (e.g. Atlassian) accept
+      // ["read","write"] fallback â€?some proxy MCP servers (e.g. Atlassian) accept
       // those literal values and translate them to real provider scopes.
       default_scopes:
         scopesList.length > 0
@@ -439,7 +474,7 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
-      // Normalize imagePullSecrets: legacy { name } â†’ { source: "existing", name }
+      // Normalize imagePullSecrets: legacy { name } â†?{ source: "existing", name }
       // Also hydrate passwords from localConfigSecret for credentials entries
       imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(
         (s: ImagePullSecretConfig | { name: string }) => {

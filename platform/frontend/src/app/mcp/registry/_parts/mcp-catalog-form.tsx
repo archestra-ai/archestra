@@ -169,7 +169,7 @@ interface McpCatalogFormProps {
         onReset: () => void;
         /**
          * True when stored config values violate the bound environment's
-         * validation rule ‚Äî the footer's Save button should disable on it.
+         * validation rule ‚Ä?the footer's Save button should disable on it.
          * Saving is also guarded internally, but disabling gives a visible cue.
          */
         hasBlockingErrors: boolean;
@@ -187,7 +187,7 @@ interface McpCatalogFormProps {
   /**
    * Number of installed servers that would be affected by a cascade
    * reinstall. Drives the inline confirm bar copy in edit mode. Defaults
-   * to 0 (no confirm bar ‚Äî used for create mode and standalone previews).
+   * to 0 (no confirm bar ‚Ä?used for create mode and standalone previews).
    */
   affectedServerCount?: number;
 }
@@ -403,7 +403,7 @@ export function McpCatalogForm({
         (header) => header.includeBearerPrefix,
       );
       if (!hasAuthHeader) {
-        // Bearer-token credential ‚Äî always sensitive. The Add Header
+        // Bearer-token credential ‚Ä?always sensitive. The Add Header
         // dialog forces this choice on manual additions, but the
         // token-auth flow seeds the row programmatically and so must
         // own the default itself.
@@ -476,7 +476,7 @@ export function McpCatalogForm({
   );
 
   // Baseline `additionalHeaders` derived from `initialValues.userConfig`.
-  // Used by `isHeadersDirty`'s schema-evolution check ‚Äî RHF's
+  // Used by `isHeadersDirty`'s schema-evolution check ‚Ä?RHF's
   // `dirtyFields.additionalHeaders` only tells us SOMETHING in the
   // array changed; we need the actual prev shape to classify what kind
   // of change (forward-compatible vs breaking).
@@ -503,14 +503,13 @@ export function McpCatalogForm({
 
   // Granular dirty flags used to show contextual reinstall hints in edit mode.
   // Editing any of these on a deployed catalog item invalidates existing install
-  // credentials or redeploys the pod ‚Äî admins must reinstall + re-enter creds.
+  // credentials or redeploys the pod ‚Ä?admins must reinstall + re-enter creds.
   //
-  // CAVEAT ‚Äî react-hook-form's `dirtyFields` representation: for ARRAYS
+  // CAVEAT ‚Ä?react-hook-form's `dirtyFields` representation: for ARRAYS
   // (additionalHeaders, localConfig.environment), it allocates an entry per
   // array index with every leaf as a boolean. A form initialized with
   // `additionalHeaders: [{...}]` (e.g., one header derived from userConfig)
-  // produces `dirtyFields.additionalHeaders = [{...all leaves false}]` ‚Äî
-  // a NON-EMPTY ARRAY that is `Boolean(...)`-truthy even though nothing
+  // produces `dirtyFields.additionalHeaders = [{...all leaves false}]` ‚Ä?  // a NON-EMPTY ARRAY that is `Boolean(...)`-truthy even though nothing
   // was actually edited. `isReallyDirty` walks the tree and only returns
   // true when SOME leaf is actually true.
   const isNameDirty = mode === "edit" && isReallyDirty(dirtyFields.name);
@@ -523,7 +522,7 @@ export function McpCatalogForm({
       isReallyDirty(dirtyFields.includeBearerPrefix) ||
       isReallyDirty(dirtyFields.oauthConfig) ||
       isReallyDirty(dirtyFields.enterpriseManagedConfig));
-  // Env-var dirtiness alone isn't enough to require reinstall ‚Äî adding an
+  // Env-var dirtiness alone isn't enough to require reinstall ‚Ä?adding an
   // OPTIONAL prompted env var leaves existing installs valid (they just
   // don't fill the new var). Mirror the backend's `promptedEnvVarsChanged`
   // schema-evolution rules in `backend/src/services/mcp-reinstall.ts` so
@@ -535,9 +534,9 @@ export function McpCatalogForm({
       initialValues?.localConfig?.environment,
       form.watch("localConfig.environment"),
     );
-  // Same shape as `isEnvDirty` ‚Äî `additionalHeaders` array dirty is too
+  // Same shape as `isEnvDirty` ‚Ä?`additionalHeaders` array dirty is too
   // coarse on its own (adding an OPTIONAL per-install header is forward-
-  // compatible ‚Äî existing installs that don't fill it stay valid).
+  // compatible ‚Ä?existing installs that don't fill it stay valid).
   // Mirror of backend's userConfig schema-evolution semantics, see
   // `additionalHeadersChangeRequiresReinstall` below.
   const isHeadersDirty =
@@ -620,8 +619,7 @@ export function McpCatalogForm({
           environmentName: boundEnvironmentName,
         })
     : undefined;
-  // Already-stored static values that violate the bound environment's rule ‚Äî
-  // e.g. after switching the item to a stricter environment. The add/edit
+  // Already-stored static values that violate the bound environment's rule ‚Ä?  // e.g. after switching the item to a stricter environment. The add/edit
   // dialogs block typing a bad value, but a value entered under a laxer
   // environment only surfaces here, where it blocks Save until fixed.
   //
@@ -862,7 +860,7 @@ export function McpCatalogForm({
   } | null>(null);
   // `form.formState.isSubmitting` clears the moment `handleSubmit`
   // returns (which we do early to show the bar), so it can't drive the
-  // bar's spinner ‚Äî track the bar‚Üísave phase ourselves.
+  // bar's spinner ‚Ä?track the bar‚Üísave phase ourselves.
   const [isConfirming, setIsConfirming] = useState(false);
 
   const performSubmit = async (values: McpCatalogFormValues) => {
@@ -909,7 +907,7 @@ export function McpCatalogForm({
         data-1p-ignore="true"
       >
         {/* Lock fields while the confirm bar is up AND during the save
-            itself ‚Äî keeps the snapshot the bar describes in sync with
+            itself ‚Ä?keeps the snapshot the bar describes in sync with
             what the user sees on screen, and prevents silent data loss
             when a mid-bar edit gets dropped on confirm (the save uses
             `pendingSubmit.values`, the snapshot taken at first-save
@@ -920,7 +918,7 @@ export function McpCatalogForm({
             but not the custom `<div role="button">` rows in the env-var
             and header tables (they CAN'T be real <button>s because they
             contain a nested delete <button>, and button-in-button is
-            invalid HTML ‚Äî see comments in those table components).
+            invalid HTML ‚Ä?see comments in those table components).
             `inert` blocks click + focus + keyboard for the entire
             subtree, catching the row-as-div case. The `opacity-60`
             class gives the user-visible "this is locked" signal that
@@ -1080,8 +1078,7 @@ export function McpCatalogForm({
                     <div className="font-semibold text-foreground">
                       {envRuleViolations.length} value
                       {envRuleViolations.length === 1 ? "" : "s"} not allowed in
-                      ‚Äú{boundEnvironmentName}‚Äù
-                    </div>
+                      ‚Äú{boundEnvironmentName}‚Ä?                    </div>
                     <div>
                       Edit or remove{" "}
                       {envRuleViolations.length === 1 ? "it" : "them"}, or
@@ -1297,12 +1294,12 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or JSON array)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n or ["--verbose", "--port", "8080"]`}
                             className="font-mono min-h-20"
                             {...field}
                           />
@@ -1599,7 +1596,7 @@ export function McpCatalogForm({
                               <SecretInput
                                 placeholder={
                                   mode === "edit" && !watchField("password")
-                                    ? "Saved ‚Äî leave blank to keep"
+                                    ? "Saved ‚Ä?leave blank to keep"
                                     : "password"
                                 }
                                 value={watchField("password") ?? ""}
@@ -1681,8 +1678,8 @@ export function McpCatalogForm({
                         title: "None",
                         description:
                           currentServerType === "remote"
-                            ? "No auth ‚Äî server is public or single-tenant"
-                            : "No auth ‚Äî credentials passed via env vars",
+                            ? "No auth ‚Ä?server is public or single-tenant"
+                            : "No auth ‚Ä?credentials passed via env vars",
                         icon: <Ban className="h-4 w-4" />,
                         available: true,
                       },
@@ -1736,7 +1733,7 @@ export function McpCatalogForm({
                       {
                         value: "bearer",
                         title: "Access token header (legacy)",
-                        description: "Legacy mode ‚Äî kept for backwards compat",
+                        description: "Legacy mode ‚Ä?kept for backwards compat",
                         icon: <KeyRound className="h-4 w-4" />,
                         available: authMethod === "bearer",
                       },
@@ -2384,7 +2381,7 @@ export function McpCatalogForm({
                       <ReinstallHint show={isHeadersDirty} />
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Sent on every request ‚Äî for tenant IDs, regions, or other
+                      Sent on every request ‚Ä?for tenant IDs, regions, or other
                       upstream metadata.
                     </p>
                   </div>
@@ -2511,7 +2508,7 @@ export function McpCatalogForm({
  * Recursively check whether a `react-hook-form` dirtyFields branch
  * actually has any dirty leaf. Necessary because RHF's dirty-tracking
  * for arrays allocates an entry per index with per-leaf booleans even
- * when nothing changed ‚Äî so a `Boolean(dirtyFields.someArray)` check
+ * when nothing changed ‚Ä?so a `Boolean(dirtyFields.someArray)` check
  * misfires on every form that has any non-empty array (e.g.,
  * additionalHeaders, localConfig.environment).
  */
@@ -2545,18 +2542,18 @@ type PromptedEnvVarInfo = {
  * `backend/src/services/mcp-reinstall.ts`. Returns true only when an env
  * array change actually invalidates existing installs:
  *
- *   - Added OPTIONAL prompted var ‚Üí existing installs stay valid (false)
- *   - Added REQUIRED prompted var ‚Üí existing installs missing required ‚Üí true
- *   - Removed prompted var        ‚Üí stored value for removed var ‚Üí true
- *   - Type change                 ‚Üí storage moved (e.g. plain ‚Üî secret) ‚Üí true
- *   - required false ‚Üí true       ‚Üí existing installs invalid ‚Üí true
- *   - required true ‚Üí false       ‚Üí existing installs still valid ‚Üí false
+ *   - Added OPTIONAL prompted var ‚Ü?existing installs stay valid (false)
+ *   - Added REQUIRED prompted var ‚Ü?existing installs missing required ‚Ü?true
+ *   - Removed prompted var        ‚Ü?stored value for removed var ‚Ü?true
+ *   - Type change                 ‚Ü?storage moved (e.g. plain ‚Ü?secret) ‚Ü?true
+ *   - required false ‚Ü?true       ‚Ü?existing installs invalid ‚Ü?true
+ *   - required true ‚Ü?false       ‚Ü?existing installs still valid ‚Ü?false
  *
  * For NON-prompted env vars (the catalog-template ones whose values ARE
  * part of the catalog), any change to value, key, type, or membership is
- * a real catalog-spec change that the pod needs to pick up ‚Üí true.
+ * a real catalog-spec change that the pod needs to pick up ‚Ü?true.
  *
- * Keep the two implementations in sync ‚Äî they're the user-visible warning
+ * Keep the two implementations in sync ‚Ä?they're the user-visible warning
  * and the authoritative gate respectively. Mismatch is a silent UX bug.
  */
 function envChangeRequiresReinstall(prev: unknown, next: unknown): boolean {
@@ -2580,7 +2577,7 @@ function envChangeRequiresReinstall(prev: unknown, next: unknown): boolean {
     if (!prevVal.required && nextVal.required) return true;
     // Runtime layout change: `mounted` flips the pod spec between env
     // var injection and a mounted secret file at `/secrets/<key>`.
-    // Mirror of backend `promptedEnvVarsRuntimeChanged` ‚Äî without
+    // Mirror of backend `promptedEnvVarsRuntimeChanged` ‚Ä?without
     // this, the badge stays hidden while the cascade bar still
     // fires on save.
     if (prevVal.mounted !== nextVal.mounted) return true;
@@ -2643,7 +2640,7 @@ type AdditionalHeader = {
 /**
  * Reconstruct the form's `additionalHeaders` shape from a catalog's
  * `userConfig`. Mirrors the equivalent transform in
- * `mcp-catalog-form.utils.ts ‚Üí transformCatalogItemToFormValues`. Used
+ * `mcp-catalog-form.utils.ts ‚Ü?transformCatalogItemToFormValues`. Used
  * to produce a stable baseline for `additionalHeadersChangeRequiresReinstall`.
  */
 function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
@@ -2680,27 +2677,26 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
  * mapped userConfig fields (the form's `additionalHeaders` projection).
  * Returns true only when the change invalidates existing installs:
  *
- *   - Added OPTIONAL header  ‚Üí existing installs stay valid (false)
- *   - Added REQUIRED header  ‚Üí existing installs are missing it ‚Üí true
- *   - Removed header         ‚Üí stored value for removed field ‚Üí true
- *   - required false ‚Üí true  ‚Üí installs that didn't fill it ‚Üí true
- *   - required true ‚Üí false  ‚Üí installs still valid ‚Üí false
- *   - headerName change      ‚Üí routing changes ‚Üí true
- *   - sensitive flag flip    ‚Üí storage bucket moved ‚Üí true
- *   - STATIC header `value`  ‚Üí that's the actual runtime header sent on
+ *   - Added OPTIONAL header  ‚Ü?existing installs stay valid (false)
+ *   - Added REQUIRED header  ‚Ü?existing installs are missing it ‚Ü?true
+ *   - Removed header         ‚Ü?stored value for removed field ‚Ü?true
+ *   - required false ‚Ü?true  ‚Ü?installs that didn't fill it ‚Ü?true
+ *   - required true ‚Ü?false  ‚Ü?installs still valid ‚Ü?false
+ *   - headerName change      ‚Ü?routing changes ‚Ü?true
+ *   - sensitive flag flip    ‚Ü?storage bucket moved ‚Ü?true
+ *   - STATIC header `value`  ‚Ü?that's the actual runtime header sent on
  *     the wire (form writes it into `userConfig[field].default` when
- *     promptOnInstallation is false). Change there ‚Üí installs would
- *     keep sending the old value ‚Üí true
+ *     promptOnInstallation is false). Change there ‚Ü?installs would
+ *     keep sending the old value ‚Ü?true
  *
  * Deliberately ignored:
- *   - `value` on prompted headers (becomes `default` in userConfig) ‚Äî
- *     just a placeholder shown at install time, doesn't affect what's
+ *   - `value` on prompted headers (becomes `default` in userConfig) ‚Ä? *     just a placeholder shown at install time, doesn't affect what's
  *     actually sent
- *   - `includeBearerPrefix` (becomes `valuePrefix: "Bearer "`) ‚Äî cosmetic
+ *   - `includeBearerPrefix` (becomes `valuePrefix: "Bearer "`) ‚Ä?cosmetic
  *     wire-format detail; doesn't move storage
- *   - `description`, `title` ‚Äî pure metadata
+ *   - `description`, `title` ‚Ä?pure metadata
  *
- * Keep in sync with `backend/src/services/mcp-reinstall.ts` ‚Äî a
+ * Keep in sync with `backend/src/services/mcp-reinstall.ts` ‚Ä?a
  * mismatch silently disagrees with the cascade bar's behaviour and
  * shows the user a misleading per-field hint badge.
  */
@@ -2722,7 +2718,7 @@ function additionalHeadersChangeRequiresReinstall(
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
     // Static header value rotation. `value` only matters at runtime
-    // when the header is fully static (no install prompt) ‚Äî for prompted
+    // when the header is fully static (no install prompt) ‚Ä?for prompted
     // headers it's just a placeholder.
     const wasStatic = !p.promptOnInstallation;
     const isStatic = !n.promptOnInstallation;

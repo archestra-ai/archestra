@@ -1,4 +1,5 @@
 import { Cron } from "croner";
+import config from "@/config";
 import logger from "@/logging";
 import {
   ConnectorRunModel,
@@ -7,10 +8,9 @@ import {
 } from "@/models";
 import { taskQueueService } from "@/task-queue";
 
-// If a connector produces more than this many runs within the window, stop
-// auto-resuming it — it is crash-looping and needs attention, not more retries.
-// It will still be retried on its next scheduled run.
-const MAX_RUNS_PER_RESUME_WINDOW = 12;
+// Window over which the crash-loop circuit breaker counts a connector's runs.
+// The threshold itself is derived from the lease/work-budget params — see
+// maxRunsPerResumeWindow() at the bottom of this file.
 const RESUME_WINDOW_SECONDS = 60 * 60; // 1 hour
 
 export async function handleCheckDueConnectors(): Promise<void> {
@@ -98,7 +98,7 @@ async function reapExpiredRuns(): Promise<void> {
       run.connectorId,
       RESUME_WINDOW_SECONDS,
     );
-    if (recentRuns > MAX_RUNS_PER_RESUME_WINDOW) {
+    if (recentRuns > maxRunsPerResumeWindow()) {
       // Crash-looping: stop auto-resuming to avoid a runaway. A scheduled
       // connector retries on its next cron; a scheduleless one stays `partial`
       // (checkpoint preserved) until manually re-triggered — it needs a look.
@@ -161,4 +161,34 @@ async function cleanupOrphanedRunningStatuses(): Promise<void> {
       );
     }
   }
+}
+
+/**
+ * How many runs a connector may produce within RESUME_WINDOW_SECONDS before the
+ * reaper stops auto-resuming it (treating it as crash-looping). Derived from the
+ * lease/work-budget params so it stays meaningful when they are tuned, rather
+ * than being a magic number:
+ *
+ *  - A run cannot be reclaimed sooner than one lease TTL after it starts
+ *    (`claim()` seeds the lease to `now()+TTL`), so a pure crash loop tops out at
+ *    `window / leaseTtl` reclaims per window — the natural trip point (12/hour at
+ *    the 300s default).
+ *  - A healthy sync that chunks on the work budget adds ~`window / (0.9*syncMax)`
+ *    runs per window (it stops at 90% of the budget, then continues). We keep the
+ *    ceiling comfortably (×2) above that so such a sync, if it also happens to be
+ *    reclaimed once, still resumes instead of tripping the breaker. This matters
+ *    when `syncMax` is lowered to chunk aggressively; at the default it is ~1–2
+ *    runs/hour, far below the TTL-derived term.
+ *
+ * Floored so a very long lease TTL (or a disabled work budget) can't drive the
+ * threshold absurdly low.
+ */
+function maxRunsPerResumeWindow(): number {
+  const leaseTtl = config.kb.connectorRunLeaseTtlSeconds;
+  const syncMax = config.kb.connectorSyncMaxDurationSeconds;
+  const crashLoopCeiling = Math.ceil(RESUME_WINDOW_SECONDS / leaseTtl);
+  const chunkHeadroom = syncMax
+    ? Math.ceil((2 * RESUME_WINDOW_SECONDS) / (0.9 * syncMax))
+    : 0;
+  return Math.max(6, crashLoopCeiling, chunkHeadroom);
 }

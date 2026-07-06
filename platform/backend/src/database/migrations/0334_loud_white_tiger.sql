@@ -21,4 +21,8 @@ WHERE "status" = 'running'
 UPDATE "connector_runs" SET "lease_expires_at" = now() + interval '5 minutes'
 WHERE "status" = 'running' AND "lease_expires_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "connector_runs_one_running_per_connector_idx" ON "connector_runs" USING btree ("connector_id") WHERE status = 'running';--> statement-breakpoint
-CREATE INDEX "connector_runs_lease_expires_at_idx" ON "connector_runs" USING btree ("lease_expires_at") WHERE status = 'running';
+CREATE INDEX "connector_runs_lease_expires_at_idx" ON "connector_runs" USING btree ("lease_expires_at") WHERE status = 'running';--> statement-breakpoint
+-- Index the reaper's drain-liveness probe: does an expired-lease run still have a
+-- live (pending/processing) batch_embedding task? Partial + expression, so only
+-- in-flight embedding tasks are indexed, keyed by their payload's connectorRunId.
+CREATE INDEX "tasks_batch_embedding_connector_run_idx" ON "tasks" USING btree (("payload" ->> 'connectorRunId')) WHERE "tasks"."task_type" = 'batch_embedding' AND "tasks"."status" IN ('pending', 'processing');

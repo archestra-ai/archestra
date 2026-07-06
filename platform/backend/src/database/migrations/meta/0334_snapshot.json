@@ -14271,6 +14271,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "tasks_batch_embedding_connector_run_idx": {
+          "name": "tasks_batch_embedding_connector_run_idx",
+          "columns": [
+            {
+              "expression": "(\"payload\" ->> 'connectorRunId')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tasks\".\"task_type\" = 'batch_embedding' AND \"tasks\".\"status\" IN ('pending', 'processing')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},

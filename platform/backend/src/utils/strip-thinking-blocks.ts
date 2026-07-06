@@ -1,14 +1,16 @@
 /**
- * Strip `<thinking>...</thinking>` blocks from LLM responses.
- * These are internal reasoning blocks that should not be shown to users.
+ * Strip inline reasoning blocks from LLM responses. Matches both the
+ * `<thinking>...</thinking>` spelling and the `<think>...</think>` spelling
+ * emitted by Qwen and similar models. These are internal reasoning blocks that
+ * should not leak into user-facing surfaces or A2A protocol replies.
  *
  * Uses non-greedy matching (`*?`) so multiple separate thinking blocks are
  * stripped independently without eating content between them. This assumes
- * blocks are not nested — nested `<thinking>` tags would leave the tail
- * visible, but LLMs do not produce nested thinking blocks in practice.
+ * blocks are not nested — nested thinking tags would leave the tail visible,
+ * but LLMs do not produce nested thinking blocks in practice.
  */
 export function stripThinkingBlocks(text: string): string {
-  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+  return text.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim();
 }
 
 /**

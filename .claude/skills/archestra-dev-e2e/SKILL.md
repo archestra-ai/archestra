@@ -44,8 +44,8 @@ ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
 ## Fixtures
 
 - Use the Playwright fixtures pattern.
-- API fixtures live in `e2e-tests/tests/api-fixtures.ts` — import from `./api-fixtures` in spec files under `tests/`. They include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, and `deleteTrustedDataPolicy`.
-- UI fixtures live in `e2e-tests/fixtures.ts` — import from `../fixtures` in spec files under `tests/`. They include `goToPage` and `makeRandomString`.
+- API fixtures live in `e2e-tests/tests/api-fixtures.ts` — import relative to the spec's location (`./api-fixtures` from `tests/`, `../api-fixtures` from a subdirectory like `tests/llm-proxy/`). They include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, and `deleteTrustedDataPolicy`.
+- UI fixtures live in `e2e-tests/fixtures.ts` — import relative to the spec's location (`../fixtures` from `tests/`). They include `goToPage` and `makeRandomString`.
 - Pure API tests (no browser needed) belong in the backend vitest suite as route tests, not in Playwright (#6155). Keep Playwright specs for flows that exercise the UI.
 
 Example:

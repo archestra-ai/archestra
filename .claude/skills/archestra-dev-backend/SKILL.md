@@ -55,10 +55,10 @@ Use this skill before changing files under `platform/backend/` (except unit test
 After any route/schema change, regenerate and commit the outputs — CI runs `pnpm codegen` and fails on uncommitted diffs (`.github/workflows/on-pull-requests.yml`):
 
 ```bash
-pnpm codegen   # from platform/: everything (backend openapi + access-control docs + MCP-server docs, then shared api-client + theme css)
+pnpm codegen   # from platform/: everything (backend openapi + access-control docs + MCP-server docs, shared api-client + theme css, Grafana dashboard variants via python3)
 ```
 
-Or piecewise, in this order: `cd backend && pnpm codegen` (writes `docs/openapi.json` + docs), then `cd shared && pnpm codegen:api-client`. Root `pnpm codegen` sets `CODEGEN=true`, so `shared/hey-api/openapi-ts.ts` reads the committed `docs/openapi.json`; a bare `codegen:api-client` without it hits a live `http://localhost:9000/openapi.json` instead.
+Or piecewise, in this order: `cd backend && pnpm codegen` (writes the repo-root `docs/openapi.json` + docs), then `cd shared && CODEGEN=true pnpm codegen:api-client`. The `CODEGEN=true` is required: with it, `shared/hey-api/openapi-ts.ts` reads the committed `docs/openapi.json`; without it, it hits a live `http://localhost:9000/openapi.json` and silently ignores the spec you just regenerated.
 
 ## Validation
 
@@ -71,7 +71,7 @@ cd backend && pnpm knip   # runs knip:dev AND knip:production — CI runs both; 
 
 ## Adding config / env vars
 
-- Name: `ARCHESTRA_<PRODUCT_AREA>_<THING>`. Then: parse/validate in `backend/src/config.ts` (+ tests in `config.test.ts` for custom parsers) → list in `platform/.env.example` with a comment → document in `docs/pages/platform-deployment.md` → expose via `backend/src/routes/config.ts` + `useFeature()` if the frontend needs it.
+- Name: `ARCHESTRA_<PRODUCT_AREA>_<THING>`. Then: parse/validate in `backend/src/config.ts` (+ tests in `config.test.ts` for custom parsers) → list in `platform/.env.example` with a comment → document in `../docs/pages/platform-deployment.md` → expose via `backend/src/routes/config.ts` + `useFeature()` if the frontend needs it.
 
 ## Related skills
 

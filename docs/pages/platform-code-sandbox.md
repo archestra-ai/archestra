@@ -3,7 +3,7 @@ title: Code Sandbox
 category: Agents
 order: 5
 description: A private Linux container where an agent runs code during a chat
-lastUpdated: 2026-07-05
+lastUpdated: 2026-07-06
 ---
 
 The code sandbox is a private Linux container where an agent runs code during a chat. It runs shell commands and Python, isolated from your own infrastructure — no host access, and no network beyond what the agent's [environment](./platform-environments) allows. Each conversation gets its own sandbox, created the first time the agent runs something.
@@ -23,6 +23,24 @@ When the agent produces a file — a cleaned dataset or a chart, for example —
 ## Skills
 
 When the agent loads a [skill](./platform-agent-skills), the skill's files mount at `/skills/<name>`, so any scripts it bundles run in the sandbox. The skill's Python modules import directly, with no path setup.
+
+## How the Sandbox Runs
+
+The sandbox keeps no long-lived container. The source of truth is an append-only command log in Postgres. Each command starts a fresh container from a warm base image, replays the recorded history, then runs the new step and appends it.
+
+This makes state cheap to rebuild — so an engine crash costs you nothing. If the engine restarts or drops a cached layer, the next command reconstructs the exact state from the log.
+
+Archestra runs the containers with [Dagger](https://dagger.io), a programmatic container engine. Its layer cache is content-addressed, so replaying an unchanged history is a cache hit and the common path stays fast. A cold replay reruns the whole history — still correct, just slower.
+
+One trade-off follows. A command that reads the network, the clock, or a random source can return a different result on a cold rebuild. `uv add` without a pinned version can resolve to a newer release the second time. Pin versions when a result has to be reproducible.
+
+## Security
+
+The sandbox limits what one user's code can reach — it is not a defense against a determined attacker. The case it handles is the careless script an agent just generated, kept away from everyone else's work.
+
+Each container runs as a non-root user, with no host mounts and no backend environment variables inside. CPU, memory, and wall-clock caps bound every command.
+
+Network access is on, because installers like uv and npm need it. Egress follows the [environment's network policy](./platform-environments), applied to the Dagger engine pod. Leave that policy unrestricted and the engine can reach link-local and cloud-metadata endpoints — restrict it in production.
 
 ## Limits
 

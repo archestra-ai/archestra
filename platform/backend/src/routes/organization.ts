@@ -916,15 +916,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId, user, headers }, reply) => {
+    async ({ organizationId, user, headers, serviceAccount }, reply) => {
       // member:read (admins, custom roles) sees the whole roster; everyone else
       // sees only the users they share a team with, so a member can pick a chat
       // share recipient without the org directory being exposed to (or scanned
-      // for) them.
+      // for) them. Forward serviceAccount + the resolved userContext exactly as
+      // the auth middleware does, so service-account callers are checked against
+      // their own permissions (not the synthetic user) and user callers against
+      // request.organizationId rather than the session cookie.
       const { success: canSeeAllMembers } = await hasPermission(
         { member: ["read"] },
         headers,
-        undefined,
+        serviceAccount,
         { userId: user.id, organizationId },
       );
       const members = canSeeAllMembers

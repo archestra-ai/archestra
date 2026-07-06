@@ -2,7 +2,7 @@ import { type Mock, vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import type { SelectServiceAccount, User } from "@/types";
 
 vi.mock("@/auth");
 
@@ -20,10 +20,12 @@ describe("GET /api/organization/members — visibility scope", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let currentUser: User;
+  let currentServiceAccount: SelectServiceAccount | undefined;
 
   beforeEach(async ({ makeOrganization }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    currentServiceAccount = undefined;
     organizationId = (await makeOrganization()).id;
 
     app = createFastifyInstance();
@@ -31,6 +33,11 @@ describe("GET /api/organization/members — visibility scope", () => {
       (request as typeof request & { user: User }).user = currentUser;
       (request as typeof request & { organizationId: string }).organizationId =
         organizationId;
+      (
+        request as typeof request & {
+          serviceAccount: SelectServiceAccount | undefined;
+        }
+      ).serviceAccount = currentServiceAccount;
     });
 
     const { default: routes } = await import("./organization");
@@ -116,6 +123,32 @@ describe("GET /api/organization/members — visibility scope", () => {
       .map((m) => m.email)
       .sort();
     expect(emails).toEqual(["admin@example.com", "other@example.com"]);
+  });
+
+  test("forwards the service account to the permission check so service accounts are not checked as the synthetic user", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // A service-account request: the middleware sets a synthetic user id
+    // (service-account:<id>) that carries no member record, so member:read must
+    // be evaluated against the service account itself. hasPermission checks its
+    // serviceAccount arg before userContext, so the handler must forward it.
+    const me = await makeUser({ email: "sa-caller@example.com" });
+    await makeMember(me.id, organizationId, { role: "member" });
+    currentUser = me;
+    currentServiceAccount = {
+      id: "svc-1",
+      organizationId,
+    } as unknown as SelectServiceAccount;
+
+    await get();
+
+    expect(mockHasPermission).toHaveBeenCalledWith(
+      { member: ["read"] },
+      expect.anything(),
+      currentServiceAccount,
+      { userId: me.id, organizationId },
+    );
   });
 
   test("a non-member:read caller's teammates expose only identity fields, not roles", async ({

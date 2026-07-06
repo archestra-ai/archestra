@@ -116,15 +116,15 @@ const ReadAppSchema = z.strictObject({
     .min(0)
     .optional()
     .describe(
-      "Start of the read window as a 0-based CHARACTER offset into the stored HTML (character-based, not line-based — minified HTML can be one enormous line). Defaults to 0. An offset past the end returns an empty window, not an error.",
+      "Start of the read window as a 0-based character offset (a JavaScript string index / UTF-16 code unit) into the stored HTML — character-based, not line-based, since minified HTML can be one enormous line. Defaults to 0. An offset past the end returns an empty window, not an error. A window never splits a character in half: its edges shift by one unit when they would.",
     ),
   limit: z
     .number()
     .int()
-    .positive()
+    .min(0)
     .optional()
     .describe(
-      "Maximum number of characters to return, starting at offset. Omitted reads to the end of the document.",
+      "Maximum number of characters to return, starting at offset. Omitted reads to the end of the document; 0 returns no content, just the size metadata.",
     ),
 });
 
@@ -716,18 +716,27 @@ const registry = defineArchestraTools([
       const byteSize = Buffer.byteLength(row.html, "utf8");
       const totalChars = row.html.length;
       // Character-based window (not line-based: minified HTML can be a single
-      // enormous line). Out-of-range values clamp instead of erroring.
+      // enormous line). Out-of-range values clamp instead of erroring. Indices
+      // are UTF-16 code units; edges snap so a surrogate pair is never split —
+      // a start on a pair's second half advances by one, an end that would
+      // strand a pair's first half extends by one — keeping `offset +
+      // html.length` a valid next offset for lossless paging.
       const windowed = args.offset !== undefined || args.limit !== undefined;
-      const offset = Math.min(args.offset ?? 0, totalChars);
-      const html = windowed
-        ? row.html.slice(
-            offset,
-            args.limit !== undefined ? offset + args.limit : undefined,
-          )
-        : row.html;
+      let offset = Math.min(args.offset ?? 0, totalChars);
+      if (windowed && isInsideSurrogatePair(row.html, offset)) {
+        offset += 1;
+      }
+      let end =
+        args.limit !== undefined
+          ? Math.min(offset + args.limit, totalChars)
+          : totalChars;
+      if (windowed && end > offset && isInsideSurrogatePair(row.html, end)) {
+        end += 1;
+      }
+      const html = windowed ? row.html.slice(offset, end) : row.html;
       const hasMore = offset + html.length < totalChars;
       const windowNote = windowed
-        ? `, characters ${offset}–${offset + html.length} of ${totalChars}${hasMore ? " (more follows — raise offset to continue)" : ""}`
+        ? `, window ${offset}–${offset + html.length} of ${totalChars} characters${hasMore ? ` (more follows — continue from offset ${offset + html.length})` : ""}`
         : "";
       return structuredSuccessResult(
         {
@@ -1906,6 +1915,16 @@ function textPartsOf(result: CommonToolResult): string[] {
 }
 
 /** Truncate to a UTF-8 byte budget without splitting a multi-byte character. */
+// True when `index` falls inside a surrogate pair — the unit at `index` is a
+// low surrogate preceded by a high surrogate — so a read-window edge there
+// would split a character into an unpaired half.
+function isInsideSurrogatePair(html: string, index: number): boolean {
+  if (index <= 0 || index >= html.length) return false;
+  const unit = html.charCodeAt(index);
+  const prev = html.charCodeAt(index - 1);
+  return unit >= 0xdc00 && unit <= 0xdfff && prev >= 0xd800 && prev <= 0xdbff;
+}
+
 function truncateUtf8(
   text: string,
   maxBytes: number,

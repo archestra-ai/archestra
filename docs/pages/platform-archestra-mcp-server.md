@@ -2028,8 +2028,8 @@ Required RBAC permission: `app:read`
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id. |
 | `version` | `integer` | No | Specific version to read; defaults to the current head. |
-| `offset` | `integer` | No | Start of the read window as a 0-based CHARACTER offset into the stored HTML (character-based, not line-based — minified HTML can be one enormous line). Defaults to 0. An offset past the end returns an empty window, not an error. |
-| `limit` | `integer` | No | Maximum number of characters to return, starting at offset. Omitted reads to the end of the document. |
+| `offset` | `integer` | No | Start of the read window as a 0-based character offset (a JavaScript string index / UTF-16 code unit) into the stored HTML — character-based, not line-based, since minified HTML can be one enormous line. Defaults to 0. An offset past the end returns an empty window, not an error. A window never splits a character in half: its edges shift by one unit when they would. |
+| `limit` | `integer` | No | Maximum number of characters to return, starting at offset. Omitted reads to the end of the document; 0 returns no content, just the size metadata. |
 
 ##### Output
 

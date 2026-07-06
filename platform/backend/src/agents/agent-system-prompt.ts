@@ -1,4 +1,5 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   buildUserSystemPromptContext,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -22,8 +23,12 @@ import {
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { dynamicAccessContext } from "@/archestra-mcp-server/dynamic-tools";
 import { TeamModel, UserModel } from "@/models";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import {
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -99,8 +104,11 @@ export async function buildAgentSystemPrompt(params: {
   const toolLoadingInstructions =
     agent.toolExposureMode === "search_and_run_only"
       ? buildLoadToolsWhenNeededSystemPrompt({
-          appAuthoringToolNames:
-            await getDispatchableAppAuthoringToolNames(agentId),
+          appAuthoringToolNames: await getDispatchableAppAuthoringToolNames({
+            agentId,
+            userId,
+            organizationId,
+          }),
         })
       : null;
 
@@ -265,24 +273,50 @@ const APP_AUTHORING_TOOL_SHORT_NAMES = [
 
 /**
  * Branded names of the app-authoring tools the agent can dispatch via
- * `run_tool`, resolved from the same exclusion-filtered assignment set
- * `run_tool` dispatches from. Empty (no steering) when `scaffold_app` — the
- * build entry point the steering directs to — is not dispatchable.
+ * `run_tool`, mirroring run_tool's assignment gate (resolveToolAssignment):
+ * exclusion-filtered assignments, plus — under the access-all-tools dynamic
+ * relaxation — unassigned built-ins that are not identity-excluded. App tools
+ * are registered unconditionally with no further per-tool availability rule,
+ * so this union is the exact dispatchable set. Empty (no steering) when
+ * `scaffold_app` — the build entry point the steering directs to — is not
+ * dispatchable.
  */
-async function getDispatchableAppAuthoringToolNames(
-  agentId: string,
-): Promise<string[]> {
-  const { tools } =
-    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+async function getDispatchableAppAuthoringToolNames(params: {
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+}): Promise<string[]> {
+  const { tools, exclusionSets } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(params.agentId);
   const assignedShortNames = new Set(
     tools.map((tool) => archestraMcpBranding.getToolShortName(tool.name)),
   );
-  if (!assignedShortNames.has(TOOL_SCAFFOLD_APP_SHORT_NAME)) {
+  const dynamicCtx = APP_AUTHORING_TOOL_SHORT_NAMES.every((shortName) =>
+    assignedShortNames.has(shortName),
+  )
+    ? null
+    : await dynamicAccessContext(params);
+  const dispatchable = APP_AUTHORING_TOOL_SHORT_NAMES.filter((shortName) => {
+    if (assignedShortNames.has(shortName)) {
+      return true;
+    }
+    if (!dynamicCtx) {
+      return false;
+    }
+    return !isToolIdentityExcluded(
+      {
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        name: archestraMcpBranding.getToolName(shortName),
+      },
+      exclusionSets,
+    );
+  });
+  if (!dispatchable.includes(TOOL_SCAFFOLD_APP_SHORT_NAME)) {
     return [];
   }
-  return APP_AUTHORING_TOOL_SHORT_NAMES.filter((shortName) =>
-    assignedShortNames.has(shortName),
-  ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+  return dispatchable.map((shortName) =>
+    archestraMcpBranding.getToolName(shortName),
+  );
 }
 
 function buildLoadToolsWhenNeededSystemPrompt(params: {

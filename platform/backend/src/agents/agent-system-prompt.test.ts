@@ -336,6 +336,33 @@ describe("buildAgentSystemPrompt", () => {
     expect(fullPrompt).not.toContain(scaffoldAppName);
   });
 
+  // run_tool dispatches unassigned built-ins for access-all-tools agents (the
+  // dynamic relaxation), so the steering must fire for them without any
+  // assignment — that is the main population of search_and_run_only agents.
+  test("names the app-authoring tools for an access-all-tools agent with nothing assigned", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      accessAllTools: true,
+    });
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+    expect(agent.toolExposureMode).toBe("search_and_run_only");
+    expect(prompt).toContain(brand(TOOL_SCAFFOLD_APP_SHORT_NAME));
+    expect(prompt).toContain(brand(TOOL_RENDER_APP_SHORT_NAME));
+  });
+
   test("appends the hook session context last", async ({
     makeAgent,
     makeUser,

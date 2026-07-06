@@ -48,11 +48,13 @@ def tool_calls() -> Iterator[tuple[str, dict]]:
     tool_exposure_mode=search_and_run_only the agent invokes discovered tools through the
     `archestra__run_tool` meta-tool with input {tool_name, tool_args}; decode that envelope so
     callers see the real tool name + args either way. Entries with a falsy effective name
-    (e.g. a run_tool call missing tool_name) are skipped."""
+    (e.g. a run_tool call missing tool_name) are skipped; a non-dict input degrades to {}."""
     for call in state().get("tool_calls", []):
         name = call.get("name")
-        inp = call.get("input") or {}
+        inp = call.get("input")
+        inp = inp if isinstance(inp, dict) else {}
         if name == "archestra__run_tool":
-            name, inp = inp.get("tool_name"), (inp.get("tool_args") or {})
+            name, inp = inp.get("tool_name"), inp.get("tool_args")
+            inp = inp if isinstance(inp, dict) else {}
         if name:
             yield name, inp

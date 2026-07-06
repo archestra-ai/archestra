@@ -497,6 +497,39 @@ describe("read_app / edit_app", () => {
     expect(structured(result).hasMore).toBe(false);
   });
 
+  test("read_app windows never split a surrogate pair", async () => {
+    // "😀" is one astral character = two UTF-16 code units at indices 5-6.
+    const html = "<div>😀</div>";
+    const { appId } = await scaffoldWithHtml(html);
+
+    // end lands between the pair's halves → the window extends by one unit
+    const head = await readAppWindow(appId, { offset: 0, limit: 6 });
+    expect(structured(head).html).toBe("<div>😀");
+    expect(structured(head).hasMore).toBe(true);
+
+    // paging from the reported next position starts on a whole character
+    const next = structured(head).offset + structured(head).html.length;
+    const tail = await readAppWindow(appId, { offset: next });
+    expect(structured(tail).html).toBe("</div>");
+    expect(structured(head).html + structured(tail).html).toBe(html);
+
+    // an offset pointed inside the pair advances past its second half
+    const midPair = await readAppWindow(appId, { offset: 6 });
+    expect(structured(midPair).html).toBe("</div>");
+    expect(structured(midPair).offset).toBe(7);
+  });
+
+  test("read_app accepts limit 0 as a pure size probe", async () => {
+    const html = "<h1>probe</h1>";
+    const { appId } = await scaffoldWithHtml(html);
+    const result = await readAppWindow(appId, { offset: 0, limit: 0 });
+    expect(result.isError).toBe(false);
+    expect(structured(result).html).toBe("");
+    expect(structured(result).offset).toBe(0);
+    expect(structured(result).totalChars).toBe(html.length);
+    expect(structured(result).hasMore).toBe(true);
+  });
+
   test("read_app full read (no offset/limit) reports full-document metadata", async () => {
     const html = "<h1>full</h1>";
     const { appId } = await scaffoldWithHtml(html);

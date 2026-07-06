@@ -217120,7 +217120,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Mark organization onboarding as complete\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Mark organization onboarding as complete\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -217918,9 +217918,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
         }
       }
     },

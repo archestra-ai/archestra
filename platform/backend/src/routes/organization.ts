@@ -902,7 +902,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetOrganizationMembers,
-        description: "Get all members of the organization",
+        description:
+          "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.",
         tags: ["Organization"],
         response: constructResponseSchema(
           z.array(
@@ -923,6 +924,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { success: canSeeAllMembers } = await hasPermission(
         { member: ["read"] },
         headers,
+        undefined,
+        { userId: user.id, organizationId },
       );
       if (canSeeAllMembers) {
         return reply.send(

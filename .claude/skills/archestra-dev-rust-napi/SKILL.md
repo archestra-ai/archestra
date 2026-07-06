@@ -1,6 +1,6 @@
 ---
 name: archestra-dev-rust-napi
-description: Use when editing Rust in this repo — the NAPI crates under platform/archestra-rs (Node bindings, generated TypeScript bindings, telemetry, validation/errors) or the standalone ai-labs Rust workspace (core/runner/cli/analyzer) — including Rust build/test checks.
+description: Use when editing Rust in this repo — the NAPI crates under platform/archestra-rs (app-runtime, image, and sandbox core/-rs crate pairs plus napi-loader, with their generated TypeScript bindings) or the standalone ai-labs Rust workspace (core/runner/cli/analyzer) — including Rust build/test checks.
 ---
 
 # Archestra Rust Coding Style

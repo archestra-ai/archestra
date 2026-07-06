@@ -247,6 +247,10 @@ export async function createAgentServer(
               "admin",
             ),
             requireUiResource: true,
+            // The internal chat opens owned apps via render_app, so keep their
+            // launch tools out of the dynamic widening; external UI apps
+            // (no render_app) and non-chat surfaces (the gateway) keep them.
+            excludeAppBackings: agent.agentType === "agent",
           })
         : []
     ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));

@@ -341,7 +341,15 @@ async function dispatchTool({
       schema: getArchestraToolInputSchema(resolvedName),
     });
     const result = await executeArchestraTool(resolvedName, toolArgs, context);
-    return appendEnvelopeRepairNote(result, repairedParams);
+    // Only disclose the repair once the call has cleared the RBAC/assignment
+    // gates inside executeArchestraTool — those run before arg validation and
+    // reject with a plain error carrying no archestraValidation descriptor. A
+    // success or a post-gate validation error (which does carry it) is safe to
+    // annotate; a gate denial is not, or the note would leak a denied caller
+    // the declared type of a param they cannot reach.
+    return reachedArgValidation(result)
+      ? appendEnvelopeRepairNote(result, repairedParams)
+      : result;
   }
 
   // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
@@ -733,7 +741,8 @@ type RepairableDeclaredType =
  *    $ref/anyOf/oneOf/allOf composition);
  *  - the supplied value is a plain object with exactly one key from the
  *    envelope set or equal to the param name;
- *  - the inner value's JS type matches the declared type.
+ *  - the inner value matches the declared type, or is a numeric/boolean string
+ *    the declared type parses cleanly (see coerceInnerToDeclaredType).
  * Under those conditions the as-sent value (an object) is provably invalid
  * against the declared type, so the repair can never rewrite a call the
  * schema could accept. Anything else — object-typed params, loose/absent
@@ -807,7 +816,7 @@ function unwrapEnvelope(params: {
   }
 
   const inner = value[keys[0]];
-  return innerMatchesDeclaredType(inner, declaredType) ? { inner } : null;
+  return coerceInnerToDeclaredType(inner, declaredType);
 }
 
 function asRepairableDeclaredType(
@@ -825,22 +834,94 @@ function asRepairableDeclaredType(
   }
 }
 
-function innerMatchesDeclaredType(
+/**
+ * The inner value coerced to the declared scalar type, or null when it does not
+ * qualify. Beyond an exact JS-type match, a numeric/boolean value the model
+ * carried as a *string* (the XML-text-node habit, e.g. `{"$text":"1"}` for a
+ * number param) is parsed to the scalar under a strict grammar — no naive
+ * `Number()`, which would accept `0x10`, `1e3`, `Infinity`, or whitespace. The
+ * outer envelope object is already provably invalid against the scalar type, so
+ * parsing its inner string can never rewrite a call the schema would accept.
+ */
+function coerceInnerToDeclaredType(
   value: unknown,
   declaredType: RepairableDeclaredType,
-): boolean {
+): { inner: unknown } | null {
   switch (declaredType) {
     case "string":
-      return typeof value === "string";
-    case "number":
-      return typeof value === "number";
-    case "integer":
-      return typeof value === "number" && Number.isInteger(value);
-    case "boolean":
-      return typeof value === "boolean";
+      return typeof value === "string" ? { inner: value } : null;
+    case "number": {
+      if (typeof value === "number") {
+        return { inner: value };
+      }
+      const parsed = parseNumericString(value);
+      return parsed === null ? null : { inner: parsed };
+    }
+    case "integer": {
+      if (typeof value === "number") {
+        return Number.isInteger(value) ? { inner: value } : null;
+      }
+      const parsed = parseIntegerString(value);
+      return parsed === null ? null : { inner: parsed };
+    }
+    case "boolean": {
+      if (typeof value === "boolean") {
+        return { inner: value };
+      }
+      if (value === "true") return { inner: true };
+      if (value === "false") return { inner: false };
+      return null;
+    }
     case "array":
-      return Array.isArray(value);
+      return Array.isArray(value) ? { inner: value } : null;
   }
+}
+
+/** A plain decimal string → number; null for anything non-decimal. An
+ * integer-form string must additionally be a safe integer, so a large value is
+ * left untouched rather than coerced to an imprecise float. */
+function parseNumericString(value: unknown): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  if (!trimmed.includes(".") && !Number.isSafeInteger(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+/** A plain integer string → safe integer; null otherwise. */
+function parseIntegerString(value: unknown): number | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!/^-?\d+$/.test(trimmed)) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/**
+ * Whether a built-in dispatch result reached argument validation — i.e. cleared
+ * the RBAC/assignment gates in executeArchestraTool. A success has no error; a
+ * post-gate validation error carries the `archestraValidation` descriptor
+ * (index.ts). A gate denial is a plain error with neither, so it reads false.
+ */
+function reachedArgValidation(result: CallToolResult): boolean {
+  if (!result.isError) {
+    return true;
+  }
+  return isRecord(result._meta) && "archestraValidation" in result._meta;
 }
 
 /**

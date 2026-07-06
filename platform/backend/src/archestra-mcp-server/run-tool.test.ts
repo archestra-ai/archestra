@@ -2341,5 +2341,128 @@ describe("run_tool", () => {
       expect(text).toContain('"destination"');
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
+
+    test("coerces a numeric/boolean string inner value to the declared scalar type", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          count: { type: "number" },
+          version: { type: "integer" },
+          enabled: { type: "boolean" },
+        },
+      };
+      const { repairedParams, toolArgs } =
+        runToolInternals.repairEnvelopedToolArgs({
+          toolArgs: {
+            count: { $text: "1.5" },
+            version: { $text: "2" },
+            enabled: { value: "true" },
+          },
+          schema,
+        });
+
+      expect(repairedParams.sort()).toEqual(["count", "enabled", "version"]);
+      expect(toolArgs).toEqual({ count: 1.5, version: 2, enabled: true });
+    });
+
+    test("rejects strings the declared scalar type cannot cleanly parse", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          n: { type: "number" },
+          i: { type: "integer" },
+          b: { type: "boolean" },
+          big: { type: "number" },
+        },
+      };
+      // Each inner string is left wrapped (not repaired) because it is not a
+      // clean decimal / exact boolean literal, or would lose integer precision.
+      const cases: Array<[string, unknown]> = [
+        ["n", { $text: "" }],
+        ["n", { $text: " " }],
+        ["n", { $text: "0x10" }],
+        ["n", { $text: "1e3" }],
+        ["n", { $text: "Infinity" }],
+        ["n", { $text: "NaN" }],
+        ["n", { $text: "+1" }],
+        ["i", { $text: "1.5" }],
+        ["b", { $text: "yes" }],
+        ["b", { $text: "1" }],
+        ["big", { $text: "9007199254740993" }],
+      ];
+      for (const [key, wrapped] of cases) {
+        const { repairedParams, toolArgs } =
+          runToolInternals.repairEnvelopedToolArgs({
+            toolArgs: { [key]: wrapped },
+            schema,
+          });
+        expect(repairedParams).toEqual([]);
+        expect(toolArgs).toEqual({ [key]: wrapped });
+      }
+    });
+
+    test("accepts a leading-zero integer string (coerced) but a huge integer string (left alone)", () => {
+      const schema = {
+        type: "object",
+        properties: { v: { type: "integer" } },
+      };
+      const ok = runToolInternals.repairEnvelopedToolArgs({
+        toolArgs: { v: { $text: "01" } },
+        schema,
+      });
+      expect(ok.repairedParams).toEqual(["v"]);
+      expect(ok.toolArgs).toEqual({ v: 1 });
+
+      const tooBig = runToolInternals.repairEnvelopedToolArgs({
+        toolArgs: { v: { $text: "9007199254740993" } },
+        schema,
+      });
+      expect(tooBig.repairedParams).toEqual([]);
+    });
+
+    test("suppresses the repair note when the built-in call is denied by a gate, but keeps it when the call reaches validation", async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      // Unassigned + no dynamic access → executeArchestraTool denies at the
+      // assignment gate, before arg validation. The envelope repair still fires
+      // on appId, but the note must not ride on the denial (it would disclose a
+      // param's declared type to a caller who cannot reach the tool).
+      const denied = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "edit_app",
+          tool_args: {
+            appId: { value: crypto.randomUUID() },
+            baseVersion: 1,
+          },
+        },
+        mockContext,
+      );
+      expect(denied.isError).toBe(true);
+      const deniedText = denied.content
+        .map((item) => (item as any).text)
+        .join("\n");
+      expect(deniedText).not.toContain("unwrapped a single-key wrapper");
+
+      // Assigned but arg-invalid (appId is not a uuid after unwrap) → the call
+      // reaches validation, which carries archestraValidation, so the note rides.
+      await seedAndAssignArchestraTools(testAgent.id);
+      const validated = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "edit_app",
+          tool_args: {
+            appId: { value: "not-a-uuid" },
+            baseVersion: 1,
+          },
+        },
+        mockContext,
+      );
+      expect(validated.isError).toBe(true);
+      const validatedText = validated.content
+        .map((item) => (item as any).text)
+        .join("\n");
+      expect(validatedText).toContain("unwrapped a single-key wrapper");
+    });
   });
 });

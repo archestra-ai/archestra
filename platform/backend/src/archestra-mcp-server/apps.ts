@@ -139,17 +139,25 @@ const EditAppSchema = z.strictObject({
     ),
   edits: z
     .array(
-      z.strictObject({
-        old_str: z
-          .string()
-          .min(1)
-          .describe(
-            "Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate).",
-          ),
-        new_str: z
-          .string()
-          .describe("Replacement text (may be empty to delete)."),
-      }),
+      // Accept edit_file's `old_string`/`new_string` as aliases: weak models
+      // that saw edit_file first transfer the longer names here. Each alias is
+      // stripped unconditionally and mapped to the canonical key only when the
+      // canonical key is absent (canonical wins), so the strict object below —
+      // and the published input schema — still expose only old_str/new_str.
+      z.preprocess(
+        normalizeEditKeyAliases,
+        z.strictObject({
+          old_str: z
+            .string()
+            .min(1)
+            .describe(
+              "Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate).",
+            ),
+          new_str: z
+            .string()
+            .describe("Replacement text (may be empty to delete)."),
+        }),
+      ),
     )
     .min(1)
     .optional()
@@ -1381,6 +1389,29 @@ async function safeAppName(name: string): Promise<string> {
  */
 function nextEditBaseVersionHint(latestVersion: number): string {
   return ` Use baseVersion=${latestVersion} for the next edit_app call.`;
+}
+
+// Map edit_file's old_string/new_string onto edit_app's canonical old_str/new_str
+// before the strict edit-item schema validates. The alias is always removed; it
+// is copied to the canonical key only when that key is absent, so a call that
+// sets both keeps the canonical value and never trips strict validation.
+function normalizeEditKeyAliases(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return value;
+  }
+  const item = { ...(value as Record<string, unknown>) };
+  for (const [alias, canonical] of [
+    ["old_string", "old_str"],
+    ["new_string", "new_str"],
+  ] as const) {
+    if (alias in item) {
+      if (!(canonical in item)) {
+        item[canonical] = item[alias];
+      }
+      delete item[alias];
+    }
+  }
+  return item;
 }
 
 // The soft save-time validation-warnings note appended to a mutation's result

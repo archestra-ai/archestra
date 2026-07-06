@@ -751,6 +751,8 @@ describe("executeA2AMessage model selection", () => {
       },
       organizationId: org.id,
       userId: user.id,
+      // A2A runs never adopt the acting member's /chat default.
+      includeMemberChatDefault: false,
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({

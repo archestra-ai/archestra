@@ -45,6 +45,7 @@ export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-req
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
+export { default as agentExcludedToolsTable } from "./agent-excluded-tool";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
@@ -53,6 +54,7 @@ export { default as agentToolsTable } from "./agent-tool";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";
+export { default as appPinsTable } from "./app-pin";
 export { default as appRenderDiagnosticsTable } from "./app-render-diagnostics";
 export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
@@ -164,6 +166,7 @@ export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
+export { default as userOnboardingSeenItemsTable } from "./user-onboarding-seen-item";
 export { default as userTokensTable } from "./user-token";
 export { default as verificationsTable } from "./verification";
 export { default as virtualApiKeysTable } from "./virtual-api-key";

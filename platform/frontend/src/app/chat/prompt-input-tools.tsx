@@ -419,7 +419,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <ModelSelectorLogo provider={logoProvider} className="size-4" />
             </Button>
           ) : (
-            <div className="flex items-center h-8 rounded-full border border-border bg-muted/50 overflow-hidden">
+            <div className="flex items-center h-8 rounded-full bg-muted/50 overflow-hidden">
               {(conversationId || onApiKeyChange) && (
                 <LlmProviderApiKeySelector
                   conversationId={conversationId}

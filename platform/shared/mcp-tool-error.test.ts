@@ -336,4 +336,38 @@ describe("buildPolicyDeniedMcpToolError", () => {
 
     expect(error.reasonType).toBe("generic");
   });
+
+  it("carries toolId through a structured round-trip when supplied", () => {
+    const error = buildPolicyDeniedMcpToolError({
+      toolName: "workspace__export_data",
+      toolId: "tool-123",
+      input: {},
+      reason: "blocked",
+      message: "blocked",
+    });
+
+    expect(error.toolId).toBe("tool-123");
+    expect(
+      extractMcpToolError({ structuredContent: { archestraError: error } }),
+    ).toEqual(error);
+  });
+
+  it("parses a policy_denied error persisted before toolId existed", () => {
+    // An old structured error with no toolId field must still parse (optional).
+    const parsed = extractMcpToolError({
+      structuredContent: {
+        archestraError: {
+          type: "policy_denied",
+          message: "blocked",
+          toolName: "some_tool",
+          input: {},
+          reason: "blocked",
+          reasonType: "generic",
+        },
+      },
+    });
+
+    expect(parsed?.type).toBe("policy_denied");
+    expect((parsed as { toolId?: string }).toolId).toBeUndefined();
+  });
 });

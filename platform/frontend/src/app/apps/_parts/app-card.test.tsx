@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { AppCard } from "./app-card";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
@@ -24,6 +25,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/app.query", () => ({
   useOpenAppInChat: () => ({ mutateAsync: vi.fn() }),
   useOpenExternalAppInChat: () => ({ mutateAsync: openExternalMutate }),
+  usePinApp: () => ({ mutate: vi.fn() }),
   // The card hosts the shared AppSettingsDialog, which reads the app by id.
   useApp: () => ({ data: undefined }),
 }));
@@ -34,6 +36,14 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("./app-delete-dialog", () => ({
   AppDeleteDialog: ({ open, app }: { open: boolean; app: { name: string } }) =>
     open ? <div data-testid="delete-dialog">Delete {app.name}</div> : null,
+}));
+
+// Stub the catalog icon (its real render pulls appearance settings via react
+// query); the card test only asserts which icon value flows into it.
+vi.mock("@/components/mcp-catalog-icon", () => ({
+  McpCatalogIcon: ({ icon }: { icon?: string | null }) => (
+    <span data-testid="mcp-catalog-icon">{icon ?? "generic-server-icon"}</span>
+  ),
 }));
 
 // Render menu items directly (no Radix portal) so their links are queryable.
@@ -93,6 +103,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   teams: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
+  pinnedAt: null,
 };
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
@@ -106,6 +117,8 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   resourceUri: "ui://pm/board.html",
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
+  pinnedAt: null,
+  icon: null,
 };
 
 describe("ExternalAppCard", () => {
@@ -127,7 +140,10 @@ describe("ExternalAppCard", () => {
   });
 
   it("opens the install in chat and navigates to the seeded conversation", async () => {
-    openExternalMutate.mockResolvedValue({ conversationId: "conv-1" });
+    openExternalMutate.mockResolvedValue({
+      conversationId: "conv-1",
+      mode: "render",
+    });
     render(<AppCard app={externalApp} />);
 
     fireEvent.click(
@@ -141,6 +157,31 @@ describe("ExternalAppCard", () => {
       resourceUri: "ui://pm/board.html",
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-1"));
+    // A seeded render needs no opening prompt.
+    expect(takePendingProjectChatHandoff("conv-1")).toBeNull();
+  });
+
+  it("stashes the opening prompt for prompt-mode opens (tool needs inputs)", async () => {
+    openExternalMutate.mockResolvedValue({
+      conversationId: "conv-2",
+      mode: "prompt",
+      prompt: "Open the Archestra PM / show_board app.",
+    });
+    render(<AppCard app={externalApp} />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open Archestra PM / show_board in new chat",
+      }),
+    );
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-2"));
+    // The prompt rides the pending-chat handoff so /chat/<id> sends it as the
+    // conversation's first user message (which triggers the model turn).
+    expect(takePendingProjectChatHandoff("conv-2")).toEqual({
+      conversationId: "conv-2",
+      prompt: "Open the Archestra PM / show_board app.",
+    });
   });
 
   it("links 'Open in new tab' to the install-pinned run page and 'Manage MCP server'", () => {
@@ -156,6 +197,18 @@ describe("ExternalAppCard", () => {
     expect(
       screen.getByRole("link", { name: /manage mcp server/i }),
     ).toHaveAttribute("href", "/mcp/registry/beta/cat-1");
+  });
+
+  it("shows the server's registry icon, falling back to the generic glyph without one", () => {
+    const { rerender } = render(
+      <AppCard app={{ ...externalApp, icon: "🗂️" }} />,
+    );
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent("🗂️");
+
+    rerender(<AppCard app={externalApp} />);
+    expect(screen.getByTestId("mcp-catalog-icon")).toHaveTextContent(
+      "generic-server-icon",
+    );
   });
 });
 

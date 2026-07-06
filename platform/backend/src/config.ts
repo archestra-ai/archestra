@@ -883,7 +883,12 @@ export function parseFileStorageS3Config(params: {
   };
 }
 
-/** @public — exported for testability */
+/**
+ * Parse the per-run sync work budget (seconds). A run stops at ~90% of this,
+ * checkpoints, and a continuation resumes from there. Invalid or non-positive
+ * values disable the budget (a run then goes to completion in one pass).
+ * @public — exported for testability
+ */
 export function parseConnectorSyncMaxDuration(
   value: string | undefined,
 ): number | undefined {
@@ -977,13 +982,14 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
   const runnerHost = envValue?.trim();
   if (!enabled) return runnerHost || undefined;
 
+  // No host configured is the normal "this deployment runs no code sandbox"
+  // case, not a misconfiguration — stay silent and leave the sandbox off.
   if (!runnerHost) {
-    logger.error(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must be set when ARCHESTRA_CODE_RUNTIME_ENABLED=true — code runtime disabled",
-    );
     return undefined;
   }
 
+  // A host that's set but malformed is a genuine misconfiguration (unlike an
+  // absent host, which just means "no sandbox here") — surface it loudly.
   if (!isSupportedDaggerRunnerHost(runnerHost)) {
     logger.error(
       "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST must use tcp:// or kube-pod:// — code runtime disabled",
@@ -1001,17 +1007,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
- * `ARCHESTRA_BETA`. This lets a single `ARCHESTRA_BETA=true` light up every
- * ships-dark/preview feature at once while keeping per-feature opt-out intact
- * (e.g. `ARCHESTRA_BETA=true` + `ARCHESTRA_APPS_ENABLED=false` keeps Apps off).
+ * `ARCHESTRA_BETA`, so `ARCHESTRA_BETA=true` turns on every gate wired through
+ * this helper while a per-feature flag keeps its own opt-out. Backs *product*
+ * features only, never credential/auth-mode toggles (e.g. Bedrock IAM,
+ * Azure/Vertex Entra).
  *
- * This backs ships-dark *product* features only. It deliberately does NOT touch
- * credential/auth-mode toggles (e.g. Bedrock IAM, Azure/Vertex Entra), which are
- * deployment configuration rather than preview features. Beta only flips the
- * *intent* to enable — the sandbox and agent hooks still need a Dagger runner
- * host present to actually run.
- *
- * @public — exported for testability
+ * @public — the shared gate for a product feature that ships off by default; also exported for testability
  */
 export function betaFeatureEnabled(envValue: string | undefined): boolean {
   if (envValue === undefined || envValue === "") {
@@ -1021,22 +1022,18 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
 }
 
 // the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host. it is independent of the
-// skills *read* feature — skills can be listed/activated/read with the sandbox
-// off.
-const skillsSandboxRequested = betaFeatureEnabled(
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
-);
+// skill activation-mounts) needs a Dagger runner host: it runs when a host is
+// configured and stays off otherwise — presence of the host is the switch. it
+// is independent of the skills *read* feature — skills can be listed/activated/
+// read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: skillsSandboxRequested,
+  enabled: true,
   envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
-// a missing/invalid runner host disables the feature instead of crashing boot.
-const skillsSandboxEnabled =
-  skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
+const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
 
-// the Dagger runtime fronts the sandbox; the feature flag turning on lights up
-// the shared session + warm base.
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
+// shared session + warm base.
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
   skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
@@ -1112,12 +1109,6 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    skillsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED,
-    ),
-    environmentsEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_AGENTS_ENVIRONMENTS_ENABLED,
-    ),
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {
@@ -1492,16 +1483,14 @@ const config = {
     ),
   },
   /**
-   * agent lifecycle hooks — user scripts run at chat lifecycle events. Gated by
-   * `ARCHESTRA_AGENT_HOOKS_ENABLED`, but only effective when the agent runtime
-   * (the code execution sandbox) is also on, since hooks execute in the
-   * conversation sandbox. This `enabled` is the fully-resolved flag — the
-   * dispatcher, the `/debug` toggle, and the chip read-gate all key off it.
+   * agent lifecycle hooks — user scripts run at chat lifecycle events.
+   * Available whenever the agent runtime (the code execution sandbox) is on,
+   * since hooks execute in the conversation sandbox; off otherwise. This
+   * `enabled` is the fully-resolved flag — the dispatcher, the `/debug` toggle,
+   * and the chip read-gate all key off it.
    */
   hooks: {
-    enabled:
-      betaFeatureEnabled(process.env.ARCHESTRA_AGENT_HOOKS_ENABLED) &&
-      skillsSandboxEnabled,
+    enabled: skillsSandboxEnabled,
   },
   /**
    * unified Dagger runtime — one shared session with a pre-warmed base
@@ -1542,24 +1531,6 @@ const config = {
         1024 * 1024 * 1024,
       ),
     },
-  },
-  /**
-   * user-authored MCP Apps — first-class apps created inside Archestra (from
-   * chat or the /apps page), backed by a per-app data store and assignable
-   * tools. Ships dark: off by default until the feature is ready to surface.
-   */
-  apps: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_APPS_ENABLED),
-  },
-  /**
-   * Projects + the persistent "My Files" file system on top of the skill
-   * sandbox. Ships dark: off by default until ready to surface. Gates the
-   * project APIs, the My Files endpoints, the persistent-file MCP tools
-   * (search_files, read_file, save_file, edit_file, delete_file), and the
-   * my_file upload source.
-   */
-  projects: {
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PROJECTS_ENABLED),
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -1663,22 +1634,50 @@ const config = {
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
+    taskWorkerPollIntervalSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
+      5,
+    ),
+    taskWorkerMaxConcurrent: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
+      2,
+    ),
+    taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
+      30,
+    ),
+    // Liveness lease for connector sync runs. The owning worker renews the
+    // lease every `heartbeatInterval`; a run whose lease is not renewed within
+    // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times
+    // the heartbeat interval so a missed beat (GC pause, slow batch) doesn't
+    // falsely expire a live run.
+    connectorRunLeaseTtlSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS,
+      300,
+    ),
+    connectorRunHeartbeatIntervalSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS,
+      90,
+    ),
+    // Max wall-clock time a single sync run works before it checkpoints and
+    // yields; a continuation then resumes from that checkpoint. This bounds how
+    // long one run holds a worker and chunks large syncs into resumable pieces.
+    // A run stops at ~90% of this, so 3300s (55m) yields ~49m of work per run.
+    // Liveness is enforced by the lease/heartbeat, not by this budget. (Retains
+    // the older env var name so existing custom configs keep working.)
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    taskWorkerPollIntervalSeconds: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
-        "5",
-      10,
-    ),
-    taskWorkerMaxConcurrent: Number.parseInt(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT || "2",
-      10,
-    ),
-    taskWorkerShutdownTimeoutSeconds: Number.parseInt(
-      process.env
-        .ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS || "30",
-      10,
+    // A document still `pending`/`processing` this long after its last touch has
+    // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
+    // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
+    // recovery sweep re-enqueues it. Kept comfortably above that ~8 min span (not
+    // at it) so a slow-but-live embedding batch is never reset out from under its
+    // worker, which would double-embed and waste embedding-API cost.
+    stalledEmbeddingAgeSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
+      15 * 60,
     ),
   },
   secretsManager: {
@@ -1723,6 +1722,10 @@ const config = {
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
+  // Instance-wide banner (markdown) shown at the top of the UI. Unlike
+  // maintenanceMode it does not affect request handling.
+  siteNotificationMessage:
+    process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
     retentionDays: parseAuditLogRetentionDays(
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,

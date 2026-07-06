@@ -48,6 +48,9 @@ export const ConnectorSyncStatusSchema = z.enum([
   "completed_with_errors",
   "failed",
   "partial",
+  // A newer sync run for the same connector replaced this one. Distinct from
+  // "failed" so it can be surfaced as an informational (not error) state.
+  "superseded",
 ]);
 export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
 

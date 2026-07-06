@@ -1,14 +1,11 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES,
-  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
   type archestraApiTypes,
   ChatMessageMetadataSchema,
-  getArchestraAppResourceUri,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
-  isAppRenderingArchestraToolShortName,
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
@@ -75,7 +72,6 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
-  getCompactToolState,
   getToolErrorText,
   getToolHeaderState,
   getToolNameFromPart,
@@ -107,7 +103,6 @@ import { AuthErrorTool, type AuthErrorToolProps } from "./auth-error-tool";
 import {
   collectSubagentToolCalls,
   extractFileAttachments,
-  extractOwnedAppRender,
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
@@ -600,7 +595,7 @@ export function ChatMessages({
                           group.startIndex,
                         ),
                         parts: group.entries.flatMap((entry) =>
-                          entry.kind === "tool"
+                          entry.kind === "tool" || entry.kind === "app"
                             ? [entry.toolResultPart ?? entry.part]
                             : [],
                         ),
@@ -621,38 +616,61 @@ export function ChatMessages({
                                     key: `${message.id}-hook-${entry.partIndex}`,
                                     data: entry.data,
                                   }
-                                : {
-                                    kind: "tool" as const,
-                                    key: getToolEntryKey(message.id, entry),
-                                    toolName: entry.toolName,
-                                    part: entry.part,
-                                    toolResultPart: entry.toolResultPart,
-                                    errorText: entry.errorText,
-                                    nestedToolCalls:
-                                      subagentParentToolCallIds.has(
-                                        entry.part.toolCallId ?? "",
-                                      ) ? (
-                                        <SubagentToolCalls
-                                          parentToolCallId={
-                                            entry.part.toolCallId ?? ""
-                                          }
-                                          subagentToolCalls={subagentToolCalls}
-                                          isDebugging={isDebugging}
-                                          canExpandToolCalls={
-                                            canExpandToolCalls
-                                          }
-                                          connectedCatalogIds={
-                                            orchestrator.connectedCatalogIds
-                                          }
-                                          getToolShortName={getToolShortName}
-                                          toolIconMap={toolIconMap}
-                                        />
-                                      ) : null,
-                                  },
+                                : entry.kind === "app"
+                                  ? {
+                                      kind: "app" as const,
+                                      key: getToolEntryKey(message.id, entry),
+                                      toolName: entry.toolName,
+                                      part: entry.part,
+                                      toolResultPart: entry.toolResultPart,
+                                      errorText: entry.errorText,
+                                    }
+                                  : {
+                                      kind: "tool" as const,
+                                      key: getToolEntryKey(message.id, entry),
+                                      toolName: entry.toolName,
+                                      part: entry.part,
+                                      toolResultPart: entry.toolResultPart,
+                                      errorText: entry.errorText,
+                                      nestedToolCalls:
+                                        subagentParentToolCallIds.has(
+                                          entry.part.toolCallId ?? "",
+                                        ) ? (
+                                          <SubagentToolCalls
+                                            parentToolCallId={
+                                              entry.part.toolCallId ?? ""
+                                            }
+                                            subagentToolCalls={
+                                              subagentToolCalls
+                                            }
+                                            isDebugging={isDebugging}
+                                            canExpandToolCalls={
+                                              canExpandToolCalls
+                                            }
+                                            connectedCatalogIds={
+                                              orchestrator.connectedCatalogIds
+                                            }
+                                            getToolShortName={getToolShortName}
+                                            toolIconMap={toolIconMap}
+                                          />
+                                        ) : null,
+                                    },
                             )}
                             toolIconMap={toolIconMap}
                             canExpandToolCalls={canExpandToolCalls}
                             onToolApprovalResponse={onToolApprovalResponse}
+                            appContext={{
+                              agentId,
+                              earlyToolUiStarts,
+                              onSendMessage: (text) =>
+                                session?.sendMessage({
+                                  role: "user",
+                                  parts: [{ type: "text", text }],
+                                  metadata: {
+                                    createdAt: new Date().toISOString(),
+                                  },
+                                }),
+                            }}
                           />
                         ),
                       });
@@ -1646,28 +1664,6 @@ const MessageTool = memo(
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
 
-    // Owned-app management result (create/update/render_app): mount the
-    // app-bound runtime from structuredContent.id. Standard UI resources,
-    // errors, and denials take priority — those results keep their text.
-    const ownedApp =
-      !uiResourceUri && !errorText && part.state !== "output-denied"
-        ? extractOwnedAppRender({
-            toolName: mcpAppToolName,
-            output: rawOutput,
-            getToolShortName,
-          })
-        : null;
-
-    // An owned-app management tool (scaffold/edit/render_app), detected by name
-    // even before its result lands. Lets the still-pending call render as the
-    // same compact Archestra-logo circle as the finished one, instead of the
-    // full-width tool card it would otherwise fall through to.
-    const appMgmtShortName = getToolShortName(mcpAppToolName);
-    const isOwnedAppMgmtTool =
-      appMgmtShortName !== null
-        ? isAppRenderingArchestraToolShortName(appMgmtShortName)
-        : isAppRenderingArchestraToolShortName(mcpAppToolName);
-
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
     const approvalDisplay = getApprovalToolDisplay({
@@ -1823,138 +1819,6 @@ const MessageTool = memo(
     const logsButton = errorText ? (
       <ToolErrorLogsButton toolName={toolName} />
     ) : null;
-
-    // MCP App tools: compact circle + canvas below (no collapsible wrapper).
-    // Owned-app management tools use this compact form even while pending (before
-    // a result identifies the app), so "Edit app" streaming looks like every
-    // other tool call rather than a full-width card.
-    if (
-      (uiResourceUri || ownedApp || isOwnedAppMgmtTool) &&
-      !isApprovalRequested &&
-      !isToolDenied &&
-      !errorText
-    ) {
-      const compactState = getCompactToolState({ part, toolResultPart });
-      // Unwrap run_tool so the circle carries the target tool's server icon.
-      const shortName = parseFullToolName(mcpAppToolName).toolName.replace(
-        /_/g,
-        " ",
-      );
-      const iconInfo = toolIconMap?.get(mcpAppToolName);
-      // Fall back to the Archestra catalog icon for owned-app / archestra tools
-      // whose icon isn't in the map yet (e.g. a still-pending management call).
-      const catalogId =
-        iconInfo?.catalogId ??
-        (appMgmtShortName !== null ? ARCHESTRA_MCP_CATALOG_ID : undefined);
-
-      // Expanded tool-call details (input/output). Handed to McpAppSection so it
-      // can place them above the app in the column below the circle+marker row.
-      const toolDetails = isOpen ? (
-        <Tool defaultOpen={true}>
-          <ToolHeader
-            type={`tool-${displayToolName}`}
-            state={getHeaderState({
-              state: part.state || "input-available",
-              toolResultPart,
-              errorText,
-            })}
-            isCollapsible={!!hasInput}
-          />
-          <ToolContent>
-            {hasInput ? <ToolInput input={displayInput} /> : null}
-            {toolResultPart && (
-              <ToolOutput
-                label="Result"
-                output={mcpOutput?.content ?? toolResultPart.output}
-              />
-            )}
-          </ToolContent>
-        </Tool>
-      ) : undefined;
-
-      // Tool-call circle and the app marker share the flex-wrap row's first line;
-      // the tool details + inline app card stack in a full-width column below.
-      return (
-        <div className="mb-4">
-          <div className="flex flex-wrap items-start gap-1.5">
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenChange(!isOpen)}
-                    className={cn(
-                      "relative inline-flex items-center justify-center size-8 rounded-full border transition-all hover:bg-accent hover:border-accent-foreground/20",
-                      isOpen &&
-                        "bg-accent border-accent-foreground/20 ring-2 ring-primary/20",
-                      !isOpen && "bg-background",
-                    )}
-                  >
-                    {iconInfo?.icon || catalogId ? (
-                      <McpCatalogIcon
-                        icon={iconInfo?.icon}
-                        catalogId={catalogId}
-                        size={16}
-                      />
-                    ) : (
-                      <BotIcon className="size-3.5 text-muted-foreground" />
-                    )}
-                    <span
-                      className={cn(
-                        "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                        compactState === "completed" && "bg-green-500",
-                        compactState === "running" &&
-                          "bg-blue-500 animate-pulse",
-                        compactState === "error" && "bg-destructive",
-                      )}
-                    />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  {shortName}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {agentId &&
-              (uiResourceUri ? (
-                <McpAppSection
-                  uiResourceUri={uiResourceUri}
-                  mcpServerId={uiMcpServerId}
-                  appId={uiAppId ?? undefined}
-                  agentId={agentId}
-                  toolName={mcpAppToolName}
-                  toolCallId={part.toolCallId}
-                  toolInput={mcpAppToolInput}
-                  rawOutput={mcpOutput}
-                  toolDetails={toolDetails}
-                  preloadedResource={
-                    earlyToolUiData?.html
-                      ? {
-                          html: earlyToolUiData.html,
-                          csp: earlyToolUiData.csp,
-                          permissions: earlyToolUiData.permissions,
-                        }
-                      : undefined
-                  }
-                  onSendMessage={onSendMessage}
-                />
-              ) : ownedApp ? (
-                <McpAppSection
-                  uiResourceUri={getArchestraAppResourceUri(ownedApp.appId)}
-                  appId={ownedApp.appId}
-                  appName={ownedApp.appName}
-                  appVersion={ownedApp.latestVersion}
-                  agentId={agentId}
-                  toolName={mcpAppToolName}
-                  toolCallId={part.toolCallId}
-                  toolDetails={toolDetails}
-                  onSendMessage={onSendMessage}
-                />
-              ) : null)}
-          </div>
-        </div>
-      );
-    }
 
     const isExpandable =
       hasContent && (canExpandToolCalls || isApprovalRequested);

@@ -8,12 +8,18 @@ import { DialogBody } from "@/components/ui/dialog";
 import { useAllProfileTools } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
+import { useTool } from "@/lib/tools/tool.query";
 
 interface EditPolicyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   toolName: string;
   profileId: string;
+  // The blocked tool's row id, when the backend supplied it. Resolves the tool
+  // directly (works for All-mode tools with no agent_tools assignment); absent
+  // for denials persisted before the id was carried, which fall back to the
+  // name + agent lookup below.
+  toolId?: string;
 }
 
 export function EditPolicyDialog({
@@ -21,12 +27,17 @@ export function EditPolicyDialog({
   onOpenChange,
   toolName,
   profileId,
+  toolId,
 }: EditPolicyDialogProps) {
   const { data: canUpdateToolPolicy, isLoading: isLoadingPermissions } =
     useHasPermissions({
       toolPolicy: ["update"],
     });
   const { data: organization } = useOrganization();
+  const { data: toolById, isLoading: isLoadingToolById } = useTool(
+    toolId,
+    canUpdateToolPolicy === true,
+  );
   const { data } = useAllProfileTools({
     filters: {
       search: toolName,
@@ -35,10 +46,12 @@ export function EditPolicyDialog({
     pagination: {
       limit: 50,
     },
-    enabled: canUpdateToolPolicy === true,
+    enabled: canUpdateToolPolicy === true && !toolId,
   });
 
-  const agentTool = data?.data?.find((t) => t.tool.name === toolName);
+  const tool =
+    toolById ?? data?.data?.find((t) => t.tool.name === toolName)?.tool;
+  const isLoadingTool = isLoadingPermissions || (!!toolId && isLoadingToolById);
   const supportMessage = organization?.chatErrorSupportMessage?.trim();
 
   return (
@@ -50,7 +63,7 @@ export function EditPolicyDialog({
       size="medium"
     >
       <DialogBody className="space-y-4">
-        {isLoadingPermissions ? (
+        {isLoadingTool ? (
           <div className="flex items-center justify-center py-6">
             <LoadingSpinner />
           </div>
@@ -59,10 +72,10 @@ export function EditPolicyDialog({
             {supportMessage ||
               "You do not have permission to edit tool guardrails. Contact your administrator or support team for help."}
           </p>
-        ) : agentTool ? (
+        ) : tool ? (
           <>
-            <ToolCallPolicies tool={agentTool.tool} />
-            <ToolResultPolicies tool={agentTool.tool} />
+            <ToolCallPolicies tool={tool} />
+            <ToolResultPolicies tool={tool} />
           </>
         ) : (
           <p className="text-muted-foreground text-sm">

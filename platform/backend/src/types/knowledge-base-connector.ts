@@ -100,8 +100,21 @@ export const SelectConnectorRunSchema = createSelectSchema(
   schema.connectorRunsTable,
   { status: ConnectorSyncStatusSchema },
 );
+// Internal liveness-lease columns — never exposed in API responses.
+const CONNECTOR_RUN_LEASE_FIELDS = {
+  leaseOwner: true,
+  leaseExpiresAt: true,
+  leaseEpoch: true,
+  heartbeatAt: true,
+} as const;
+/** Detail response: full run minus internal lease plumbing. */
+export const SelectConnectorRunDetailSchema = SelectConnectorRunSchema.omit(
+  CONNECTOR_RUN_LEASE_FIELDS,
+);
+/** List response: also drops the large `logs` column. */
 export const SelectConnectorRunListSchema = SelectConnectorRunSchema.omit({
   logs: true,
+  ...CONNECTOR_RUN_LEASE_FIELDS,
 });
 export const InsertConnectorRunSchema = createInsertSchema(
   schema.connectorRunsTable,
@@ -126,5 +139,7 @@ export const UpdateConnectorRunSchema = createUpdateSchema(
 });
 
 export type ConnectorRun = z.infer<typeof SelectConnectorRunSchema>;
+/** A run as returned by list endpoints: no `logs`, no internal lease columns. */
+export type ConnectorRunListItem = z.infer<typeof SelectConnectorRunListSchema>;
 export type InsertConnectorRun = z.infer<typeof InsertConnectorRunSchema>;
 export type UpdateConnectorRun = z.infer<typeof UpdateConnectorRunSchema>;

@@ -351,7 +351,7 @@ export function useUpdateAppearanceSettings(
 }
 
 /**
- * Update security settings (global tool policy, chat file uploads)
+ * Update security settings (default tool guardrails, chat file uploads)
  */
 export function useUpdateSecuritySettings(
   onSuccessMessage: string,

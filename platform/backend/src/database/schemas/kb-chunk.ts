@@ -26,7 +26,9 @@ function createVectorType(dimensions: number) {
 }
 
 const vector1536 = createVectorType(1536);
+const vector1024 = createVectorType(1024);
 const vector768 = createVectorType(768);
+const vector384 = createVectorType(384);
 const vector3072 = createVectorType(3072);
 
 const tsvector = customType<{ data: string; driverParam: string }>({
@@ -45,7 +47,9 @@ const kbChunksTable = pgTable(
     content: text("content").notNull(),
     chunkIndex: integer("chunk_index").notNull(),
     embedding: vector1536("embedding"),
+    embedding1024: vector1024("embedding_1024"),
     embedding768: vector768("embedding_768"),
+    embedding384: vector384("embedding_384"),
     embedding3072: vector3072("embedding_3072"),
     searchVector: tsvector("search_vector"),
     metadataSuffixSemantic: text("metadata_suffix_semantic"),

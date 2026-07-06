@@ -220,12 +220,7 @@ export const groqAdapterFactory: LLMProvider<
     }
 
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "groq",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("groq", options.agent, options.source)
       : undefined;
 
     return new OpenAIProvider({

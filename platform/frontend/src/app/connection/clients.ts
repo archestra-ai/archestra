@@ -184,7 +184,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
           title: "Add the gateway",
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName }) =>
-            `claude mcp add --transport http ${serverName} ${url}`,
+            `claude mcp add --transport http ${shellArg(serverName)} ${shellArg(url)}`,
         },
         {
           title:
@@ -424,7 +424,7 @@ claude`,
           body: "Codex opens your browser to complete the OAuth handshake automatically.",
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName }) =>
-            `codex mcp add ${serverName} --url ${url}`,
+            `codex mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
         },
       ],
     },
@@ -480,13 +480,14 @@ requires_openai_auth = true`,
           terminalTitle: "terminal",
           buildCommand: ({ url, serverName, token }) =>
             token
-              ? `copilot mcp add --transport http --header "Authorization: Bearer ${token}" ${serverName} ${url}`
-              : `copilot mcp add --transport http ${serverName} ${url}`,
+              ? `copilot mcp add --transport http --header ${shellArg(`Authorization: Bearer ${token}`)} ${shellArg(serverName)} ${shellArg(url)}`
+              : `copilot mcp add --transport http ${shellArg(serverName)} ${shellArg(url)}`,
         },
         {
           title: "Verify the server",
           terminalTitle: "terminal",
-          buildCommand: ({ serverName }) => `copilot mcp get ${serverName}`,
+          buildCommand: ({ serverName }) =>
+            `copilot mcp get ${shellArg(serverName)}`,
         },
       ],
     },
@@ -762,3 +763,15 @@ export COPILOT_MODEL="<model-name>"`,
     proxy: { kind: "generic" },
   },
 ];
+
+// === Internal helpers ===
+
+/**
+ * Single-quote a value for safe pasting into a POSIX shell, mirroring the
+ * backend setup script's `sh()`. A gateway name is member-editable free text,
+ * so metacharacters (`$()`, backticks, `;`, `|`) must not break out of the
+ * generated copy-paste command into the user's shell.
+ */
+function shellArg(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}

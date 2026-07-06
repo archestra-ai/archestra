@@ -45,7 +45,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -86,7 +85,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -138,7 +136,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -170,7 +167,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -222,7 +218,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -281,7 +276,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -329,7 +323,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -396,7 +389,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -448,7 +440,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -504,7 +495,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -708,7 +698,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         true,
-        "restrictive",
         { teamIds: [] },
         undefined,
         undefined,
@@ -772,7 +761,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -812,7 +800,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -846,7 +833,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -876,7 +862,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -898,7 +883,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -950,7 +934,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -1009,7 +992,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -1047,7 +1029,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -1056,77 +1037,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.toolResultUpdates).toEqual({});
     });
 
-    test("YOLO mode: trusts all data when globalToolPolicy is permissive", async () => {
-      const commonMessages: CommonMessage[] = [
-        { role: "assistant" },
-        {
-          role: "tool",
-          toolCalls: [
-            {
-              id: "call_yolo",
-              name: "get_emails",
-              content: { from: "untrusted@example.com", data: "anything" },
-              isError: false,
-            },
-          ],
-        },
-      ];
-
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        "permissive", // YOLO mode
-        { teamIds: [] },
-      );
-
-      // In permissive mode, all data is trusted regardless of policies
-      expect(result.contextIsTrusted).toBe(true);
-      expect(result.toolResultUpdates).toEqual({});
-    });
-
-    test("YOLO mode: ignores block policies in permissive mode", async () => {
-      // Create a block policy - should be ignored in YOLO mode
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "from", operator: "contains", value: "hacker" }],
-        action: "block_always",
-        description: "Block hacker emails",
-      });
-
-      const commonMessages: CommonMessage[] = [
-        { role: "assistant" },
-        {
-          role: "tool",
-          toolCalls: [
-            {
-              id: "call_allowed",
-              name: "get_emails",
-              content: { from: "hacker@evil.com" },
-              isError: false,
-            },
-          ],
-        },
-      ];
-
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        "permissive", // YOLO mode
-        { teamIds: [] },
-      );
-
-      // YOLO mode trusts everything, ignores block policies
-      expect(result.contextIsTrusted).toBe(true);
-      expect(result.toolResultUpdates).toEqual({});
-    });
-
-    test("restrictive mode: marks data as untrusted when no policies exist", async () => {
+    test("marks data as untrusted when no policies exist", async () => {
       const commonMessages: CommonMessage[] = [
         { role: "assistant" },
         {
@@ -1148,11 +1059,10 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive", // Default restrictive mode
         { teamIds: [] },
       );
 
-      // In restrictive mode with no policies, data should be untrusted
+      // With no policies, data should be untrusted (the engine always enforces)
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
     });
@@ -1181,7 +1091,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -1232,7 +1141,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
       requestAdapter.applyToolResultUpdates(result.toolResultUpdates);
@@ -1288,7 +1196,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
       requestAdapter.applyToolResultUpdates(result.toolResultUpdates);

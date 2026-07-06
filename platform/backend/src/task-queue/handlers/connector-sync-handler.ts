@@ -4,14 +4,12 @@ import { connectorSyncService } from "@/knowledge-base";
 import logger from "@/logging";
 import { KnowledgeBaseConnectorModel } from "@/models";
 import { taskQueueService } from "@/task-queue";
-
-const MAX_CONTINUATIONS = 50;
+import { withinResumeBudget } from "./connector-resume-budget";
 
 export async function handleConnectorSync(
   payload: Record<string, unknown>,
 ): Promise<void> {
   const connectorId = payload.connectorId as string;
-  const continuationCount = (payload.continuationCount as number) ?? 0;
 
   if (!connectorId) {
     throw new Error("Missing connectorId in connector_sync payload");
@@ -24,6 +22,9 @@ export async function handleConnectorSync(
 
   const { logger: capturingLogger, getLogOutput } = createCapturingLogger();
 
+  // A run works up to ~90% of this budget, then checkpoints and enqueues a
+  // continuation (marked `partial`) that resumes from the checkpoint. Unset
+  // (disabled) means the run goes to completion in a single pass.
   const maxDurationMs = config.kb.connectorSyncMaxDurationSeconds
     ? config.kb.connectorSyncMaxDurationSeconds * 1000
     : undefined;
@@ -34,36 +35,24 @@ export async function handleConnectorSync(
     maxDurationMs,
   });
 
-  // On partial result, enqueue a continuation
+  // On a partial (time-budget) result, enqueue a continuation — unless the
+  // connector has exceeded its run budget for the window (a runaway). The same
+  // budget bounds reaper-driven resumes, so chunking and reaping can't between
+  // them drive a connector into an unbounded run loop.
   if (result.status === "partial") {
-    if (continuationCount < MAX_CONTINUATIONS) {
+    if (await withinResumeBudget(connectorId)) {
       await taskQueueService.enqueue({
         taskType: "connector_sync",
-        payload: {
-          connectorId,
-          continuationCount: continuationCount + 1,
-        },
+        payload: { connectorId },
       });
       logger.info(
-        {
-          connectorId,
-          connectorName,
-          connectorType,
-          runId: result.runId,
-          continuationCount: continuationCount + 1,
-        },
+        { connectorId, connectorName, connectorType, runId: result.runId },
         "Enqueued sync continuation",
       );
     } else {
       logger.warn(
-        {
-          connectorId,
-          connectorName,
-          connectorType,
-          runId: result.runId,
-          maxContinuations: MAX_CONTINUATIONS,
-        },
-        "Max sync continuations reached",
+        { connectorId, connectorName, connectorType, runId: result.runId },
+        "Connector exceeded its run budget for the window; not continuing until next schedule",
       );
     }
   }

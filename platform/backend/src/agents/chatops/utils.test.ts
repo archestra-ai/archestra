@@ -1,10 +1,47 @@
 import { describe, expect, test } from "vitest";
 import {
+  buildAgentFooter,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   formatApprovalToolArgs,
+  isLlmProviderAuthError,
   Semaphore,
 } from "./utils";
+
+describe("buildAgentFooter", () => {
+  test("is just the agent identity when there is no extra detail", () => {
+    expect(buildAgentFooter("Sales Bot")).toBe("🤖 Sales Bot");
+  });
+
+  test("trails extra detail after the agent identity", () => {
+    expect(buildAgentFooter("Sales Bot", "invalid x-api-key")).toBe(
+      "🤖 Sales Bot · invalid x-api-key",
+    );
+  });
+});
+
+describe("isLlmProviderAuthError", () => {
+  test.each([
+    "invalid x-api-key",
+    "Incorrect API key provided: sk-abc***. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "API key not valid. Please pass a valid API key.",
+    '{"type":"error","error":{"type":"authentication_error","message":"invalid bearer token"}}',
+    "Authentication failed",
+    "invalid_api_key",
+  ])("matches provider auth failure: %s", (message) => {
+    expect(isLlmProviderAuthError(message)).toBe(true);
+  });
+
+  test.each([
+    "network timeout",
+    "Unauthorized: user does not have access to this agent",
+    "tool execution failed with status 401",
+    "rate limit exceeded",
+    "model overloaded, please retry",
+  ])("does not match unrelated error: %s", (message) => {
+    expect(isLlmProviderAuthError(message)).toBe(false);
+  });
+});
 
 describe("formatApprovalToolArgs", () => {
   test("pretty-prints a non-empty arguments object", () => {

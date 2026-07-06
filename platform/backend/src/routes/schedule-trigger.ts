@@ -8,7 +8,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
-import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -44,27 +43,32 @@ const ScheduleTriggerBodyFieldsSchema = z.object({
   // Optional: callers without `agent:read` (e.g. a basic-user role) omit it and
   // the handler falls back to the org's default agent.
   agentId: UuidIdSchema.optional(),
-  // Required at the handler when the projects feature is on; ignored otherwise.
+  // Optional in the shared shape so updates can omit it; create requires it
+  // (see CreateScheduleTriggerBodySchema) since a scheduled task is scoped to a
+  // project.
   projectId: UuidIdSchema.optional(),
   enabled: z.boolean().optional().default(true),
   ...ScheduleTriggerConfigurationSchemaBase.shape,
 });
 
-const CreateScheduleTriggerBodySchema =
-  ScheduleTriggerBodyFieldsSchema.superRefine((data, ctx) => {
-    const result = ScheduleTriggerConfigurationSchema.safeParse(data);
-    if (result.success) {
-      return;
-    }
+// A scheduled task is scoped to a project, so create requires projectId — the
+// contract clients see, not just a runtime check.
+const CreateScheduleTriggerBodySchema = ScheduleTriggerBodyFieldsSchema.extend({
+  projectId: UuidIdSchema,
+}).superRefine((data, ctx) => {
+  const result = ScheduleTriggerConfigurationSchema.safeParse(data);
+  if (result.success) {
+    return;
+  }
 
-    for (const issue of result.error.issues) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: issue.message,
-        path: issue.path,
-      });
-    }
-  });
+  for (const issue of result.error.issues) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: issue.message,
+      path: issue.path,
+    });
+  }
+});
 
 const UpdateScheduleTriggerBodySchema =
   ScheduleTriggerBodyFieldsSchema.partial().superRefine((data, ctx) => {
@@ -276,20 +280,13 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId = defaultAgent.id;
       }
 
-      // With the projects feature on, schedules belong to a project; verify the
-      // caller can access it. With the feature off, scheduling stays unscoped.
-      let projectId: string | null = null;
-      if (config.projects.enabled) {
-        if (!body.projectId) {
-          throw new ApiError(400, "A project is required for scheduled tasks");
-        }
-        await projectService.get({
-          id: body.projectId,
-          organizationId,
-          userId: user.id,
-        });
-        projectId = body.projectId;
-      }
+      // projectId is required by the schema; verify the caller can access it.
+      const projectId = body.projectId;
+      await projectService.get({
+        id: projectId,
+        organizationId,
+        userId: user.id,
+      });
 
       const trigger = await ScheduleTriggerModel.create({
         organizationId,
@@ -412,15 +409,8 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Guard project re-scoping the same way create does: only with the
-      // feature on and only to a project the caller can access.
+      // Guard project re-scoping: only to a project the caller can access.
       if (body.projectId !== undefined) {
-        if (!config.projects.enabled) {
-          throw new ApiError(
-            400,
-            "Projects are not enabled on this deployment",
-          );
-        }
         await projectService.get({
           id: body.projectId,
           organizationId,

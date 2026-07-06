@@ -232,6 +232,39 @@ class KbDocumentModel {
     return result.rowCount !== null && result.rowCount > 0;
   }
 
+  /**
+   * Recover documents whose embedding stalled. A `batch_embedding` task that
+   * exhausts its retries (or a worker that dies mid-embed) leaves a document at
+   * `pending`/`processing` with nothing queued to finish it — and the sync
+   * checkpoint has already advanced past it, so a resume won't re-ingest it.
+   * Reset any such document not touched for `olderThanSeconds` back to `pending`
+   * (bumping `updated_at` so the next sweep won't re-grab it) and return their
+   * ids, capped at `limit`, for the caller to re-enqueue embedding.
+   *
+   * Age-gated well beyond the batch task's total retry window so a batch still
+   * legitimately in flight is never disturbed; re-embedding is idempotent anyway
+   * (the embedder skips any document that is no longer `pending`).
+   */
+  static async recoverStalledEmbeddings(params: {
+    olderThanSeconds: number;
+    limit: number;
+  }): Promise<string[]> {
+    const { rows } = await db.execute<{ id: string }>(sql`
+      UPDATE kb_documents
+      SET embedding_status = 'pending', updated_at = now()
+      WHERE id IN (
+        SELECT id FROM kb_documents
+        WHERE embedding_status IN ('pending', 'processing')
+          AND updated_at < now() - make_interval(secs => ${params.olderThanSeconds})
+        ORDER BY updated_at ASC
+        LIMIT ${params.limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id
+    `);
+    return rows.map((r) => r.id);
+  }
+
   static async countByConnector(connectorId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })

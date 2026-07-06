@@ -245,7 +245,6 @@ export const openrouterAdapterFactory: LLMProvider<
           "openrouter",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 

@@ -1,6 +1,5 @@
 import type { ChatMessage } from "@archestra/shared";
-import { beforeEach, describe, expect, test } from "vitest";
-import config from "@/config";
+import { describe, expect, test } from "vitest";
 import { injectAppDiagnostics } from "./inject-app-diagnostics";
 
 const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
@@ -26,13 +25,6 @@ const diagnosticsMetadata = {
     },
   ],
 };
-
-// Pin the apps flag per TEST, not per file: the shared setup restores the
-// pristine config before and after every test, so a beforeAll-scoped
-// mutation does not survive, and a file must never depend on worker state.
-beforeEach(() => {
-  (config.apps as { enabled: boolean }).enabled = true;
-});
 
 describe("injectAppDiagnostics", () => {
   test("appends a delimited untrusted block to the last user message", async () => {
@@ -143,15 +135,5 @@ describe("injectAppDiagnostics", () => {
     ];
     const result = await injectAppDiagnostics(malformed);
     expect(result[0].parts?.[0].text).toBe("it looks broken");
-  });
-
-  test("inert when the apps feature is disabled", async () => {
-    (config.apps as { enabled: boolean }).enabled = false;
-    try {
-      const messages = [userMessage(diagnosticsMetadata)];
-      expect(await injectAppDiagnostics(messages)).toBe(messages);
-    } finally {
-      (config.apps as { enabled: boolean }).enabled = true;
-    }
   });
 });

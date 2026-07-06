@@ -194,6 +194,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "per-user pin on a project; personal preference, not an access change",
   },
+  userOnboardingSeenItemsTable: {
+    audited: false,
+    reason:
+      "per-user onboarding red-dot dismissals; personal preference, not an access change",
+  },
   conversationShareTeamsTable: {
     audited: false,
     reason: "join: conversation share × team",
@@ -289,6 +294,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedToolsTable: {
+    audited: false,
+    reason: "join: agent × tool exclusion; parent (agent) audited",
+  },
   agentKnowledgeBasesTable: {
     audited: false,
     reason: "join: agent × knowledge base; parent (agent) audited",
@@ -319,6 +328,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "app-scoped runtime data store; written by app HTML, no admin signal",
+  },
+  appPinsTable: {
+    audited: false,
+    reason: "per-user pin on an app; personal preference, not an access change",
   },
   appRenderDiagnosticsTable: {
     audited: false,

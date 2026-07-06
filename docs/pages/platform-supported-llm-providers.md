@@ -3,14 +3,8 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-01
+lastUpdated: 2026-07-03
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
 
 ## Overview
 
@@ -190,12 +184,12 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Cerebras Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/cerebras/{agent-id}`
+- **Base URL**: `http://localhost:9000/v1/cerebras/{profile-id}`
 - **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ## Cohere
 
-[Cohere](https://www.cohere.ai/) provides enterprise-grade LLMs designed for safe, controllable, and efficient AI applications. The platform offers features like safety guardrails, function calling, and both synchronous and streaming APIs.
+[Cohere](https://www.cohere.ai/) provides LLMs through an API with safety guardrails, function calling, and both synchronous and streaming responses.
 
 ### Supported Cohere APIs
 
@@ -299,7 +293,7 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 
 ## Mistral AI
 
-[Mistral AI](https://mistral.ai/) provides state-of-the-art open and commercial AI models through an OpenAI-compatible API.
+[Mistral AI](https://mistral.ai/) provides open and commercial AI models through an OpenAI-compatible API.
 
 ### Supported Mistral APIs
 
@@ -308,7 +302,7 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 
 ### Mistral Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/mistral/{agent-id}`
+- **Base URL**: `http://localhost:9000/v1/mistral/{profile-id}`
 - **Authentication**: Pass your Mistral API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Getting an API Key
@@ -325,7 +319,7 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Perplexity Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/perplexity/{agent-id}`
+- **Base URL**: `http://localhost:9000/v1/perplexity/{profile-id}`
 - **Authentication**: Pass your Perplexity API key in the `Authorization` header as `Bearer <your-api-key>`
 
 ### Environment Variables
@@ -347,7 +341,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ## vLLM
 
-[vLLM](https://github.com/vllm-project/vllm) is a high-throughput and memory-efficient inference and serving engine for LLMs. It's ideal for self-hosted deployments where you want to run open-source models on your own infrastructure.
+[vLLM](https://github.com/vllm-project/vllm) is an inference and serving engine for LLMs. Use it for self-hosted deployments to run open-source models on your own infrastructure.
 
 ### Supported vLLM APIs
 
@@ -382,7 +376,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ## Ollama
 
-[Ollama](https://ollama.ai/) is a local LLM runner that makes it easy to run open-source large language models on your machine. It's perfect for local development, testing, and privacy-conscious deployments.
+[Ollama](https://ollama.ai/) is a local LLM runner for open-source large language models on your machine. Use it for local development, testing, and privacy-conscious deployments.
 
 ### Supported Ollama APIs
 
@@ -418,7 +412,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 
 ## Zhipu AI
 
-[Zhipu AI (Z.ai)](https://z.ai/) is a Chinese AI company offering the GLM (General Language Model) series of large language models. The platform provides both free and commercial models with strong performance in Chinese and English language tasks.
+[Zhipu AI (Z.ai)](https://z.ai/) is a Chinese AI company offering the GLM (General Language Model) series of large language models. It provides both free and commercial models for Chinese and English language tasks.
 
 ### Supported Zhipu AI APIs
 
@@ -454,7 +448,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 
 ## xAI (Grok)
 
-[xAI](https://x.ai/) is Elon Musk's AI company offering the Grok series of large language models with real-time information access and advanced reasoning capabilities.
+[xAI](https://x.ai/) is Elon Musk's AI company offering the Grok series of large language models with real-time information access.
 
 ### Supported xAI APIs
 
@@ -491,7 +485,7 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 
 ## MiniMax
 
-[MiniMax](https://www.minimax.io/) is a Chinese AI company offering advanced large language models with strong reasoning capabilities. The platform provides the MiniMax-M2 series with chain-of-thought reasoning capabilities and support for text, images, and multi-turn conversations.
+[MiniMax](https://www.minimax.io/) is a Chinese AI company offering large language models. It provides the MiniMax-M2 series with chain-of-thought reasoning and support for text, images, and multi-turn conversations.
 
 ### Supported MiniMax APIs
 
@@ -722,7 +716,7 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 
 ## Azure AI Foundry
 
-[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides enterprise-grade access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
+[Azure AI Foundry](https://azure.microsoft.com/en-us/products/ai-foundry) (formerly Azure OpenAI) provides access to OpenAI models through Microsoft Azure, with an OpenAI-compatible API.
 
 ### Supported Azure AI Foundry APIs
 

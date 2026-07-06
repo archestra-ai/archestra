@@ -48,11 +48,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type {
-  Tool as CatalogTool,
-  GlobalToolPolicy,
-  UnsafeContextBoundary,
-} from "@/types";
+import type { Tool as CatalogTool, UnsafeContextBoundary } from "@/types";
 import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
@@ -103,7 +99,6 @@ export interface ChatToolContext {
    */
   subagentToolStream?: SubagentToolStreamBridge;
   mcpGwToken: McpGatewayToken;
-  globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   /**
    * Per-run guard against the model re-issuing the identical tool call forever.
@@ -191,7 +186,6 @@ export function buildMcpGatewayTool(params: {
                 organizationId: ctx.organizationId,
                 userId: ctx.userId,
                 considerContextUntrusted: ctx.considerContextUntrusted,
-                globalToolPolicy: ctx.globalToolPolicy,
                 policyContext: {
                   externalAgentId: getChatExternalAgentId(),
                 },
@@ -275,7 +269,6 @@ export function buildMcpGatewayTool(params: {
               organizationId: ctx.organizationId,
               isolationKey: ctx.scopeKey,
               mcpGwToken: ctx.mcpGwToken,
-              globalToolPolicy: ctx.globalToolPolicy,
               considerContextUntrusted: ctx.considerContextUntrusted,
               abortSignal: ctx.abortSignal,
               elicitation: ctx.elicitation,
@@ -371,7 +364,6 @@ export function buildAgentDelegationTool(params: {
             organizationId: ctx.organizationId,
             userId: ctx.userId,
             considerContextUntrusted: ctx.considerContextUntrusted,
-            globalToolPolicy: ctx.globalToolPolicy,
             policyContext: {
               externalAgentId: getChatExternalAgentId(),
             },
@@ -694,7 +686,6 @@ function needsApprovalProps(params: {
           teamIds: [],
           externalAgentId: getChatExternalAgentId(),
         },
-        ctx.globalToolPolicy,
       );
     },
   };
@@ -732,7 +723,7 @@ async function executeWithToolSpan<R>(params: {
   } = params;
 
   if (ctx.blockOnApprovalRequired) {
-    await throwIfApprovalRequired(toolName, args, ctx.globalToolPolicy);
+    await throwIfApprovalRequired(toolName, args);
   }
 
   logger.info(
@@ -805,7 +796,6 @@ interface ToolExecutionContext {
     McpGatewayToken,
     "tokenId" | "teamId" | "isOrganizationToken"
   > | null;
-  globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
@@ -972,7 +962,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         toolName,
         toolOutput: extractedError || result.error || "Tool execution failed",
         agentId,
-        globalToolPolicy: ctx.globalToolPolicy,
         considerContextUntrusted: ctx.considerContextUntrusted,
       })),
       structuredContent: result.structuredContent,
@@ -1113,7 +1102,6 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       toolName,
       toolOutput: result.structuredContent ?? textContent,
       agentId,
-      globalToolPolicy: ctx.globalToolPolicy,
       considerContextUntrusted: ctx.considerContextUntrusted,
     })),
     structuredContent: result.structuredContent,
@@ -1165,7 +1153,6 @@ async function buildUnsafeContextBoundaryResult(params: {
   toolName: string;
   toolOutput: unknown;
   agentId: string;
-  globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
 }): Promise<{
   _meta?: Record<string, unknown>;
@@ -1209,7 +1196,6 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   toolName: string;
   toolOutput: unknown;
   agentId: string;
-  globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
 }): Promise<UnsafeContextBoundary | undefined> {
   if (params.considerContextUntrusted) {
@@ -1225,7 +1211,6 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
         toolOutput: params.toolOutput,
       },
     ],
-    params.globalToolPolicy,
     {
       teamIds,
       externalAgentId: getChatExternalAgentId(),
@@ -1300,7 +1285,6 @@ function isAbortLikeError(error: unknown): boolean {
 async function throwIfApprovalRequired(
   toolName: string,
   args: unknown,
-  globalToolPolicy: GlobalToolPolicy,
 ): Promise<void> {
   const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
   const requiresApproval =
@@ -1311,7 +1295,6 @@ async function throwIfApprovalRequired(
         teamIds: [],
         externalAgentId: getChatExternalAgentId(),
       },
-      globalToolPolicy,
     );
   if (requiresApproval) {
     throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);

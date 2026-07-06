@@ -1,7 +1,14 @@
 "use client";
 
 import { archestraApiSdk } from "@archestra/shared";
-import { ChevronDown, CircuitBoard, Loader2, Play, Zap } from "lucide-react";
+import {
+  ChevronDown,
+  CircuitBoard,
+  Loader2,
+  Play,
+  Search,
+  Zap,
+} from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -15,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { filterMcpTools } from "./mcp-tool-search";
 
 interface McpTool {
   name: string;
@@ -56,6 +64,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [isCallingTool, setIsCallingTool] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
+  const [toolSearch, setToolSearch] = useState("");
   const [requestLog, setRequestLog] = useState<RequestLogEntry[]>([]);
   const logIdRef = useRef(0);
   const [logPanelRatio, setLogPanelRatio] = useState(0.4);
@@ -154,6 +163,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
       setTools([]);
       setSelectedTool(null);
       setParamValues({});
+      setToolSearch("");
       setRequestLog([]);
       logIdRef.current = 0;
       loadTools();
@@ -255,6 +265,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
 
   const properties = selectedTool?.inputSchema?.properties ?? {};
   const requiredParams = selectedTool?.inputSchema?.required ?? [];
+  const filteredTools = filterMcpTools(tools, toolSearch);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
@@ -286,12 +297,25 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
               Tools
             </span>
             <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-              {tools.length}
+              {toolSearch.trim()
+                ? `${filteredTools.length}/${tools.length}`
+                : tools.length}
             </span>
           </div>
-          <ScrollArea className="flex-1 min-h-0">
+          <div className="px-1.5 pt-1.5 flex-shrink-0">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+              <Input
+                value={toolSearch}
+                onChange={(e) => setToolSearch(e.target.value)}
+                placeholder="Search tools"
+                className="h-7 pl-7 font-mono text-xs"
+              />
+            </div>
+          </div>
+          <ScrollArea className="h-[480px]">
             <div className="p-1.5 space-y-0.5">
-              {tools.map((tool) => {
+              {filteredTools.map((tool) => {
                 const isSelected = selectedTool?.name === tool.name;
                 return (
                   <button
@@ -326,9 +350,9 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                   </button>
                 );
               })}
-              {tools.length === 0 && (
+              {filteredTools.length === 0 && (
                 <div className="px-3 py-8 text-xs text-muted-foreground text-center font-mono tracking-[0.08em]">
-                  No tools
+                  {tools.length === 0 ? "No tools" : "No matching tools"}
                 </div>
               )}
             </div>

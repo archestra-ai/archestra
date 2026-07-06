@@ -10,7 +10,7 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
-import { Loader2, Pencil, Search, X } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -24,18 +24,15 @@ import {
   AssignmentCombobox,
   type AssignmentComboboxItem,
 } from "@/components/ui/assignment-combobox";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -52,8 +49,8 @@ import {
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
-import { CatalogDocsLink } from "./catalog-docs-link";
 import { McpCatalogIcon } from "./mcp-catalog-icon";
+import { McpServerPillShell } from "./mcp-server-pill-shell";
 import { DYNAMIC_CREDENTIAL_VALUE, TokenSelect } from "./token-select";
 
 type InternalMcpCatalogItem =
@@ -104,6 +101,14 @@ interface AgentToolsEditorProps {
   assignmentTeamIds?: string[];
   onSelectedCountChange?: (count: number) => void;
   /**
+   * Reports the effective set of currently-selected tool ids (pending edits
+   * included, server assignments for untouched catalogs). The exclusions editor
+   * uses it so a built-in the user just checked here — but hasn't saved — is
+   * treated as assigned and not seeded as disabled. Pass a referentially-stable
+   * callback (e.g. a `useState` setter).
+   */
+  onSelectedToolIdsChange?: (toolIds: ReadonlySet<string>) => void;
+  /**
    * When true (the agent-environments feature is on), scope the MCP list to
    * `agentEnvironmentId` and report cross-environment selections via
    * `onConflictsChange`. When false, all catalogs are shown and no conflicts
@@ -142,6 +147,7 @@ export const AgentToolsEditor = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     onSelectedCountChange,
+    onSelectedToolIdsChange,
     environmentScopingEnabled,
     agentEnvironmentId,
     agentEnvironmentName,
@@ -158,6 +164,7 @@ export const AgentToolsEditor = forwardRef<
       assignmentScope={assignmentScope}
       assignmentTeamIds={assignmentTeamIds}
       onSelectedCountChange={onSelectedCountChange}
+      onSelectedToolIdsChange={onSelectedToolIdsChange}
       environmentScopingEnabled={environmentScopingEnabled}
       agentEnvironmentId={agentEnvironmentId}
       agentEnvironmentName={agentEnvironmentName}
@@ -179,6 +186,7 @@ const AgentToolsEditorContent = forwardRef<
     assignmentScope,
     assignmentTeamIds,
     onSelectedCountChange,
+    onSelectedToolIdsChange,
     environmentScopingEnabled = false,
     agentEnvironmentId = null,
     agentEnvironmentName,
@@ -295,45 +303,50 @@ const AgentToolsEditorContent = forwardRef<
 
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
+  const sandboxEnabled = useFeature("sandbox") === true;
 
-  // Pre-select default Archestra tools when creating a new agent (no agentId).
-  // When the org has opted into skills, also pre-select the skill tools so the
-  // form matches what AgentModel.create will assign server-side.
-  useEffect(() => {
-    if (agentId) return; // Only for new agent creation
-    if (defaultToolsInitializedRef.current) return; // Only initialize once
-
+  // The creation-default built-in set, composed by the shared
+  // getCreationDefaultArchestraToolShortNames from the same org/deployment
+  // flags AgentModel.create reads server-side. Null while editing an existing
+  // agent. Used twice: to pre-select the new-agent form, and as the
+  // saveChanges baseline for the built-in catalog right after create.
+  const creationDefaultTools = useMemo(() => {
+    if (agentId) return null; // Only for new agent creation
     const toolsByCatalogIndex = toolCountQueries.map(
       (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
     );
-    const result = getDefaultArchestraToolIds(
-      catalogItems,
-      toolsByCatalogIndex,
-      {
-        includeSkillTools: skillToolsEnabled,
-      },
-    );
-    if (!result) return;
-
-    const archestraCatalog = catalogItems[result.catalogIndex];
-    if (!archestraCatalog) return;
-
-    defaultToolsInitializedRef.current = true;
-    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
-      selectedToolIds: result.toolIds,
-      credentialSourceId: null,
-      catalogItem: archestraCatalog,
-      selectAll: false,
+    return getDefaultArchestraToolIds(catalogItems, toolsByCatalogIndex, {
+      skillsEnabled: skillToolsEnabled,
+      sandboxEnabled,
     });
-    onSelectedCountChange?.(result.toolIds.size);
-    setPendingVersion((v) => v + 1);
   }, [
     agentId,
     catalogItems,
     toolCountQueries,
-    onSelectedCountChange,
     skillToolsEnabled,
+    sandboxEnabled,
   ]);
+
+  // Pre-select the creation-default Archestra tools when creating a new agent
+  // (no agentId), so the form shows exactly what AgentModel.create will assign
+  // server-side.
+  useEffect(() => {
+    if (defaultToolsInitializedRef.current) return; // Only initialize once
+    if (!creationDefaultTools) return;
+
+    const archestraCatalog = catalogItems[creationDefaultTools.catalogIndex];
+    if (!archestraCatalog) return;
+
+    defaultToolsInitializedRef.current = true;
+    pendingChangesRef.current.set(ARCHESTRA_MCP_CATALOG_ID, {
+      selectedToolIds: creationDefaultTools.toolIds,
+      credentialSourceId: null,
+      catalogItem: archestraCatalog,
+      selectAll: false,
+    });
+    onSelectedCountChange?.(creationDefaultTools.toolIds.size);
+    setPendingVersion((v) => v + 1);
+  }, [creationDefaultTools, catalogItems, onSelectedCountChange]);
 
   // Calculate total selected count from pending changes
   const calculateTotalSelectedCount = useCallback(() => {
@@ -364,6 +377,37 @@ const AgentToolsEditorContent = forwardRef<
     [calculateTotalSelectedCount, onSelectedCountChange],
   );
 
+  // Effective current selection across every catalog: the pending edit when the
+  // user has touched a catalog, otherwise its saved assignments. Reported to the
+  // dialog so the exclusions editor's seed reflects unsaved Custom-tab edits.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pendingVersion triggers re-computation when pendingChangesRef updates
+  const effectiveSelectedToolIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const catalog of catalogItems) {
+      const pending = pendingChangesRef.current.get(catalog.id);
+      if (pending) {
+        for (const id of pending.selectedToolIds) ids.add(id);
+      } else {
+        for (const at of assignedToolsByCatalog.get(catalog.id) ?? [])
+          ids.add(at.tool.id);
+      }
+    }
+    return ids;
+  }, [catalogItems, assignedToolsByCatalog, pendingVersion]);
+
+  // Report only when the CONTENT changes. The memo's inputs get fresh
+  // identities on every render while the queries are loading (`data = []`
+  // defaults), so keying the parent's setState off the Set's identity would
+  // loop render → new Set → setState → render forever and crash the dialog.
+  const lastReportedSelectionKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onSelectedToolIdsChange) return;
+    const key = [...effectiveSelectedToolIds].sort().join(",");
+    if (lastReportedSelectionKeyRef.current === key) return;
+    lastReportedSelectionKeyRef.current = key;
+    onSelectedToolIdsChange(effectiveSelectedToolIds);
+  }, [effectiveSelectedToolIds, onSelectedToolIdsChange]);
+
   // Expose saveChanges method to parent
   useImperativeHandle(ref, () => ({
     saveChanges: async (params) => {
@@ -379,6 +423,17 @@ const AgentToolsEditorContent = forwardRef<
         const currentAssignedIds = new Set(
           currentAssigned.map((at) => at.tool.id),
         );
+        // A just-created agent already has the creation-default built-ins:
+        // AgentModel.create auto-assigned them, but the assigned-tools query
+        // still reflects the pre-create (empty) state. Diff the built-in
+        // catalog against that set so unchecking a pre-selected default
+        // produces a real unassign, and defaults left checked are not
+        // redundantly re-assigned.
+        if (!agentId && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
+          for (const id of creationDefaultTools?.toolIds ?? []) {
+            currentAssignedIds.add(id);
+          }
+        }
 
         const toAdd = [...changes.selectedToolIds].filter(
           (id) => !currentAssignedIds.has(id),
@@ -982,140 +1037,78 @@ function McpServerPill({
     !isPlaywright &&
     mcpServers.length > 0;
   return (
-    <Popover
+    <McpServerPillShell
+      icon={
+        <McpCatalogIcon
+          icon={catalogItem.icon}
+          catalogId={catalogItem.id}
+          size={14}
+        />
+      }
+      displayName={displayName}
+      count={displayedCount}
+      isEmpty={isEmpty}
+      highlighted={hasPendingChanges}
+      description={catalogItem.description}
+      docsUrl={catalogItem.docsUrl}
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
         if (v) setChangedInSession(false);
       }}
-      modal
+      onRemove={() => onRemove(catalogItem.id)}
+      removeAriaLabel={`Remove ${catalogItem.name}`}
+      triggerTestId={getAgentToolCatalogPillTestId(catalogItem.name)}
     >
-      <div className="flex items-center">
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "h-8 px-3 gap-1.5 text-xs",
-              isEmpty && "border-dashed opacity-50",
-              isEmpty && "rounded-r-none border-r-0",
-              hasPendingChanges && "border-primary opacity-100",
-            )}
-            data-testid={getAgentToolCatalogPillTestId(catalogItem.name)}
-          >
-            <McpCatalogIcon
-              icon={catalogItem.icon}
-              catalogId={catalogItem.id}
-              size={14}
-            />
-            <span className="font-medium">{displayName}</span>
-            <span className="text-muted-foreground">({displayedCount})</span>
-            <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-          </Button>
-        </PopoverTrigger>
-        {isEmpty && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 w-8 p-0 rounded-l-none border-dashed opacity-50 hover:opacity-100"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(catalogItem.id);
+      {showCredentialSelector && (
+        <div className="p-4 border-b space-y-2 shrink-0">
+          <Label className="text-sm font-medium">Connect on behalf of</Label>
+          <p className="text-xs text-muted-foreground">
+            Choose whether this tool uses a fixed server connection or resolves
+            credentials for the current caller at runtime.
+          </p>
+          <TokenSelect
+            catalogId={catalogItem.id}
+            assignmentScope={assignmentScope}
+            assignmentTeamIds={assignmentTeamIds}
+            value={selectedCredential}
+            onValueChange={setSelectedCredential}
+            shouldSetDefaultValue={false}
+            prefersEnterpriseManaged={prefersEnterpriseManaged}
+          />
+        </div>
+      )}
+
+      {isLoadingTools ? (
+        <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading tools...</span>
+        </div>
+      ) : totalCount === 0 ? (
+        <div className="p-4 text-sm text-muted-foreground">
+          No tools available for this server.
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <ToolChecklist
+            tools={allTools}
+            selectedToolIds={selectedToolIds}
+            onSelectionChange={(ids) => {
+              setSelectedToolIds(ids);
+              setChangedInSession(true);
             }}
-            aria-label={`Remove ${catalogItem.name}`}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        )}
-      </div>
-      <PopoverContent
-        className="w-[420px] max-h-[min(500px,var(--radix-popover-content-available-height))] p-0 flex flex-col overflow-hidden"
-        side="bottom"
-        align="start"
-        sideOffset={8}
-        avoidCollisions
-        collisionPadding={16}
-      >
-        <div className="p-4 border-b flex items-start justify-between gap-2 shrink-0">
-          <div>
-            <h4 className="font-semibold">{displayName}</h4>
-            {catalogItem.description && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {catalogItem.description}
-                {catalogItem.docsUrl ? (
-                  <>
-                    {" "}
-                    <CatalogDocsLink
-                      url={catalogItem.docsUrl}
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
-                    />
-                  </>
-                ) : null}
-              </p>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
-            onClick={() => setOpen(false)}
-          >
-            <X className="h-4 w-4" />
+          />
+        </div>
+      )}
+
+      {changedInSession && (
+        <div className="p-2 border-t shrink-0">
+          <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
+            OK
           </Button>
         </div>
-
-        {/* Credential Selector */}
-        {showCredentialSelector && (
-          <div className="p-4 border-b space-y-2 shrink-0">
-            <Label className="text-sm font-medium">Connect on behalf of</Label>
-            <p className="text-xs text-muted-foreground">
-              Choose whether this tool uses a fixed server connection or
-              resolves credentials for the current caller at runtime.
-            </p>
-            <TokenSelect
-              catalogId={catalogItem.id}
-              assignmentScope={assignmentScope}
-              assignmentTeamIds={assignmentTeamIds}
-              value={selectedCredential}
-              onValueChange={setSelectedCredential}
-              shouldSetDefaultValue={false}
-              prefersEnterpriseManaged={prefersEnterpriseManaged}
-            />
-          </div>
-        )}
-
-        {/* Tool Checklist */}
-        {isLoadingTools ? (
-          <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Loading tools...</span>
-          </div>
-        ) : totalCount === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">
-            No tools available for this server.
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <ToolChecklist
-              tools={allTools}
-              selectedToolIds={selectedToolIds}
-              onSelectionChange={(ids) => {
-                setSelectedToolIds(ids);
-                setChangedInSession(true);
-              }}
-            />
-          </div>
-        )}
-
-        {changedInSession && (
-          <div className="p-2 border-t shrink-0">
-            <Button size="sm" className="w-full" onClick={() => setOpen(false)}>
-              OK
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+      )}
+    </McpServerPillShell>
   );
 }
 
@@ -1123,6 +1116,13 @@ export interface ToolChecklistProps {
   tools: CatalogTool[];
   selectedToolIds: Set<string>;
   onSelectionChange: (selectedIds: Set<string>) => void;
+  /**
+   * What a checked row means. "assign" (default) keeps the neutral
+   * selection language; "disable" is the exclusions editor, where checked
+   * tools are disabled for the agent — counts, bulk buttons, and row
+   * styling all say so.
+   */
+  variant?: "assign" | "disable";
 }
 
 function formatToolName(toolName: string) {
@@ -1209,8 +1209,10 @@ export function ToolChecklist({
   tools,
   selectedToolIds,
   onSelectionChange,
+  variant = "assign",
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const disableVariant = variant === "disable";
 
   // Snapshot the initial selection for sort order so tools don't jump
   // around as the user toggles checkboxes. Updates synchronously during
@@ -1264,7 +1266,8 @@ export function ToolChecklist({
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-4 py-2 border-b flex items-center justify-between bg-muted/30 shrink-0">
         <span className="text-xs text-muted-foreground">
-          {selectedCount} of {tools.length} selected
+          {selectedCount} of {tools.length}{" "}
+          {disableVariant ? "disabled" : "selected"}
         </span>
         <div className="flex gap-1">
           <Button
@@ -1274,7 +1277,7 @@ export function ToolChecklist({
             onClick={handleSelectAll}
             disabled={allSelected}
           >
-            Select All
+            {disableVariant ? "Disable all" : "Select All"}
           </Button>
           <Button
             variant="ghost"
@@ -1283,7 +1286,7 @@ export function ToolChecklist({
             onClick={handleDeselectAll}
             disabled={noneSelected}
           >
-            Deselect All
+            {disableVariant ? "Enable all" : "Deselect All"}
           </Button>
         </div>
       </div>
@@ -1317,7 +1320,9 @@ export function ToolChecklist({
                   htmlFor={`tool-${tool.id}`}
                   className={cn(
                     "flex items-start gap-3 p-2 rounded-md transition-colors cursor-pointer",
-                    isSelected ? "bg-primary/10" : "hover:bg-muted/50",
+                    !isSelected && "hover:bg-muted/50",
+                    isSelected &&
+                      (disableVariant ? "bg-destructive/10" : "bg-primary/10"),
                   )}
                 >
                   <Checkbox
@@ -1327,7 +1332,17 @@ export function ToolChecklist({
                     className="mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">{toolName}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">{toolName}</div>
+                      {disableVariant && isSelected && (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/40 text-destructive px-1.5 py-0"
+                        >
+                          Disabled
+                        </Badge>
+                      )}
+                    </div>
                     {tool.description && (
                       <ExpandableDescription description={tool.description} />
                     )}

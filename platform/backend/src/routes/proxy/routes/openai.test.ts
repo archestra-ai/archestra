@@ -345,6 +345,64 @@ describe("OpenAI cost tracking", () => {
     expect(typeof interaction.baselineCost).toBe("string");
   });
 
+  test("maps an upstream provider error to its status code and records the failed interaction", async ({
+    makeAgent,
+  }) => {
+    // An SDK error carrying the upstream HTTP status (e.g. a provider 429)
+    // must reach the client with that status — not as a generic 500 — and the
+    // failed call must land in LLM logs. Regression test for the proxy's
+    // `return promise` (without await) letting rejections bypass its catch.
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          chat: {
+            completions: {
+              create: async () => {
+                throw Object.assign(
+                  new Error(
+                    "429 You've exceeded the rate limit, please slow down",
+                  ),
+                  { status: 429 },
+                );
+              },
+            },
+          },
+        }) as never,
+    );
+
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+    const agent = await makeAgent({ name: "Upstream Error Agent" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json().error.message).toContain("rate limit");
+
+    // The failed call is persisted so it appears in LLM logs.
+    const { InteractionModel } = await import("@/models");
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.length).toBeGreaterThan(0);
+    expect(interactions[interactions.length - 1].response).toMatchObject({
+      error: expect.stringContaining("rate limit"),
+    });
+  });
+
   test("creates embeddings through OpenAI proxy routes", async ({
     makeAgent,
   }) => {

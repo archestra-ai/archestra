@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -21,6 +22,7 @@ type CatalogItem =
  * entry points behave identically.
  */
 export function useChatWithCatalogItem() {
+  const router = useRouter();
   const createAgent = useCreateProfile();
   const bulkAssignTools = useBulkAssignTools();
   const [isCreating, setIsCreating] = useState(false);
@@ -63,7 +65,9 @@ export function useChatWithCatalogItem() {
       }
 
       if (agent) {
-        window.location.href = `/chat/new?agent_id=${agent.id}`;
+        // Client-side nav (the app's convention — /chat/new itself just
+        // router.replace()s onward) so we don't hard-reload the SPA.
+        router.push(`/chat/new?agent_id=${agent.id}`);
       }
     } catch {
       toast.error("Failed to create chat agent");

@@ -10,15 +10,8 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { disabledToolsNotRunMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import logger from "@/logging";
-import {
-  AgentTeamModel,
-  OrganizationModel,
-  TeamModel,
-  ToolInvocationPolicyModel,
-  ToolModel,
-} from "@/models";
+import { AgentTeamModel, ToolInvocationPolicyModel, ToolModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
-import type { GlobalToolPolicy } from "@/types";
 
 /**
  * Result returned when tool invocation policies block a tool call.
@@ -30,6 +23,8 @@ export interface PolicyBlockResult {
   reason: string;
   /** The specific tool that triggered the block */
   blockedToolName: string;
+  /** The id of the tool row the policy was evaluated against, when known. */
+  blockedToolId?: string;
   /** The blocked tool's arguments, carried into the structured tool error */
   toolInput: Record<string, unknown>;
   /** All tool call names in the batch (all are blocked when any one is) */
@@ -55,6 +50,7 @@ export function policyBlockToToolError(
 ): PolicyDeniedMcpToolError {
   return buildPolicyDeniedMcpToolError({
     toolName: policyBlock.blockedToolName,
+    toolId: policyBlock.blockedToolId,
     input: policyBlock.toolInput,
     reason: policyBlock.reason,
     message: policyBlock.contentMessage,
@@ -75,6 +71,13 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
    * reused instead of re-querying ToolModel.getAssignedToolNames here.
    */
   enabledToolNames?: Set<string>;
+  /**
+   * The id of the tool row the gateway resolved to execute. When supplied, the
+   * policy is evaluated against this exact row (instead of a name lookup) and
+   * the id rides along on the structured block so the chat "Edit policy" modal
+   * can resolve the tool even when it has no agent_tools assignment (All mode).
+   */
+  resolvedToolId?: string;
 }): Promise<PolicyBlockResult | null> {
   // Policy-bypassing built-ins and agent delegation tools are always allowed.
   // Policy-evaluated built-ins like query_knowledge_sources fall through so
@@ -86,21 +89,26 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     return null;
   }
 
-  const [teamIds, organizationPolicy, enabledToolNames] = await Promise.all([
+  const [teamIds, enabledToolNames] = await Promise.all([
     AgentTeamModel.getTeamsForAgent(params.agentId),
-    params.organizationId
-      ? OrganizationModel.getById(params.organizationId).then(
-          (organization) => organization?.globalToolPolicy,
-        )
-      : Promise.resolve(undefined),
     params.enabledToolNames ?? ToolModel.getAssignedToolNames(params.agentId),
   ]);
-  const globalToolPolicy =
-    organizationPolicy ?? (await getGlobalToolPolicy(params.agentId));
   const policyContext = {
     teamIds,
     externalAgentId: params.externalAgentId,
   };
+
+  // Resolve the row that will execute (dynamic id if supplied, else the assigned
+  // row via the execution resolver) so policy evaluation and the approval check
+  // both act on that exact row when a name is shared by duplicate rows.
+  const resolvedToolId =
+    params.resolvedToolId ??
+    (
+      await ToolModel.getAssignedToolIdsByName(
+        [params.toolName],
+        params.agentId,
+      )
+    ).get(params.toolName);
 
   const policyBlock = await evaluatePolicies(
     [
@@ -113,8 +121,8 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     policyContext,
     params.contextIsTrusted,
     enabledToolNames,
-    globalToolPolicy,
     MCP_GATEWAY_ENFORCEMENT,
+    resolvedToolId ? new Map([[params.toolName, resolvedToolId]]) : undefined,
   );
   if (policyBlock) {
     return policyBlock;
@@ -129,7 +137,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
       params.toolName,
       params.toolInput,
       policyContext,
-      globalToolPolicy,
+      resolvedToolId,
     );
   if (!requiresApproval) {
     return null;
@@ -137,6 +145,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
 
   return buildToolInvocationPolicyBlockResult({
     toolName: params.toolName,
+    toolId: resolvedToolId,
     toolInput: params.toolInput,
     reason: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     enforcement: MCP_GATEWAY_ENFORCEMENT,
@@ -165,15 +174,14 @@ export const evaluatePolicies = async (
   context: PolicyEvaluationContext,
   contextIsTrusted: boolean,
   enabledToolNames: Set<string>,
-  globalToolPolicy: GlobalToolPolicy,
   enforcement: PolicyEnforcementContext = { surface: "llm-proxy" },
+  resolvedToolIdByName?: Map<string, string>,
 ): Promise<PolicyBlockResult | null> => {
   logger.debug(
     {
       agentId,
       toolCallCount: toolCalls.length,
       contextIsTrusted,
-      globalToolPolicy,
     },
     "[toolInvocation] evaluatePolicies: starting evaluation",
   );
@@ -245,13 +253,13 @@ export const evaluatePolicies = async (
   });
 
   // Evaluate all tool calls in batch (1-2 queries total instead of N queries)
-  const { isAllowed, reason, toolCallName } =
+  const { isAllowed, reason, toolCallName, toolId } =
     await ToolInvocationPolicyModel.evaluateBatch(
       agentId,
       parsedToolCalls,
       context,
       contextIsTrusted,
-      globalToolPolicy,
+      resolvedToolIdByName,
     );
 
   logger.debug(
@@ -270,6 +278,7 @@ export const evaluatePolicies = async (
     );
     return buildToolInvocationPolicyBlockResult({
       toolName: toolCallName,
+      toolId,
       toolInput,
       reason,
       allToolCallNames: filteredToolCalls.map((tc) => tc.toolCallName),
@@ -284,75 +293,13 @@ export const evaluatePolicies = async (
   return null;
 };
 
-/**
- * Resolve the global tool policy for an agent.
- * 1. Try to get organizationId from agent's teams
- * 2. Fallback to first organization in database if agent has no teams
- *
- * @param agentId - The agent ID to resolve policy for
- * @returns The global tool policy ("permissive" or "restrictive"), defaults to "permissive"
- */
-export async function getGlobalToolPolicy(
-  agentId: string,
-): Promise<GlobalToolPolicy> {
-  const fallbackPolicy: GlobalToolPolicy = "permissive";
-  const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-
-  // Agent has teams - get organization from first team
-  if (agentTeamIds.length > 0) {
-    const teams = await TeamModel.findByIds(agentTeamIds);
-    if (teams.length > 0 && teams[0].organizationId) {
-      const organizationId = teams[0].organizationId;
-      logger.debug(
-        { agentId, organizationId },
-        "GlobalToolPolicy: resolved organizationId from team",
-      );
-
-      const organization = await OrganizationModel.getById(organizationId);
-      if (!organization) {
-        logger.warn(
-          { agentId, organizationId },
-          `GlobalToolPolicy: organization not found, defaulting to ${fallbackPolicy}`,
-        );
-        return fallbackPolicy;
-      }
-
-      logger.debug(
-        { agentId, organizationId, policy: organization.globalToolPolicy },
-        "GlobalToolPolicy: resolved policy from organization",
-      );
-      return organization.globalToolPolicy;
-    }
-  }
-
-  // Agent has no teams - fallback to first organization (avoid double fetch)
-  const firstOrg = await OrganizationModel.getFirst();
-  if (!firstOrg) {
-    logger.warn(
-      { agentId },
-      `GlobalToolPolicy: could not resolve organization, defaulting to ${fallbackPolicy}`,
-    );
-    return fallbackPolicy;
-  }
-
-  logger.debug(
-    { agentId, organizationId: firstOrg.id },
-    "GlobalToolPolicy: agent has no teams - using fallback organization",
-  );
-  logger.debug(
-    { agentId, organizationId: firstOrg.id, policy: firstOrg.globalToolPolicy },
-    "GlobalToolPolicy: resolved policy from organization",
-  );
-
-  return firstOrg.globalToolPolicy;
-}
-
 const MCP_GATEWAY_ENFORCEMENT: PolicyEnforcementContext = {
   surface: "mcp-gateway",
 };
 
 function buildToolInvocationPolicyBlockResult(params: {
   toolName: string;
+  toolId?: string;
   toolInput: Record<string, unknown>;
   reason: string;
   enforcement: PolicyEnforcementContext;
@@ -374,6 +321,7 @@ function buildToolInvocationPolicyBlockResult(params: {
     contentMessage,
     reason: params.reason,
     blockedToolName: params.toolName,
+    blockedToolId: params.toolId,
     toolInput: params.toolInput,
     allToolCallNames: params.allToolCallNames ?? [params.toolName],
   };

@@ -31,7 +31,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
-import { ModelModel, OrganizationModel } from "@/models";
+import { ModelModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { openaiAdapterFactory } from "./adapters";
 import openAiProxyRoutes from "./routes/openai";
@@ -130,13 +130,9 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
     makeTool,
     makeToolPolicy,
   }) => {
-    // Tool invocation policies are only evaluated under restrictive global
-    // policy (permissive short-circuits to allow). getGlobalToolPolicy falls
-    // back to the only org in the DB for a team-less agent.
+    // Tool-invocation policies are always enforced, so a block_always policy on
+    // an untrusted-context agent must replace the tool call with a refusal.
     const organization = await makeOrganization();
-    await OrganizationModel.patch(organization.id, {
-      globalToolPolicy: "restrictive",
-    });
 
     // considerContextUntrusted marks the whole context untrusted, mirroring the
     // e2e setup this test blocks against.
@@ -206,8 +202,9 @@ describe("LLM Proxy tool-invocation policy (OpenAI)", () => {
   test("passes regular and Archestra tool calls through when no policy blocks", async ({
     makeAgent,
   }) => {
-    // Default org globalToolPolicy is permissive and no blocking policy exists,
-    // so both the regular tool and the Archestra built-in tool pass through.
+    // No blocking policy exists, so with the engine always enforcing, the
+    // default invocation policy allows both the regular tool and the Archestra
+    // built-in tool to pass through.
     const agent = await makeAgent({
       name: "Tool Invocation Allow Agent",
       agentType: "llm_proxy",

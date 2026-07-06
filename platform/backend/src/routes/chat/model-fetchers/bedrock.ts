@@ -188,7 +188,10 @@ function mapInferenceProfilesToModels(
           }
         : {}),
     }))
-    .filter((model) => model.id);
+    .filter((model) => model.id)
+    .filter(
+      (model) => !isNonChatBedrockModel(model.id, model.underlyingModelName),
+    );
 
   logger.info(
     {
@@ -205,6 +208,35 @@ function mapInferenceProfilesToModels(
   );
 
   return models;
+}
+
+// Bedrock foundation-model families whose output is not chat text — embeddings,
+// rerankers, and image/video generators. They can't serve chat completions, so
+// listing one in the chat model picker lets a user select it and break every
+// message. The inference-profiles endpoint this fetcher uses carries no
+// modality (AWS ListFoundationModels holds the authoritative outputModalities
+// but would cost a second control-plane call per sync), so classify by the
+// stable model id / underlying foundation-model name. Fails open: an id that
+// matches no pattern is kept, so a new chat family is never hidden.
+const NON_CHAT_BEDROCK_MODEL_PATTERNS: RegExp[] = [
+  /embed/i, // cohere.embed, amazon.titan-embed, twelvelabs.marengo-embed
+  /rerank/i, // cohere.rerank
+  /stable-image|stable-diffusion|sdxl|stability\./i, // Stability image models
+  /titan-image|nova-canvas/i, // Amazon image generators
+  /nova-reel|luma\./i, // video generators
+];
+
+function isNonChatBedrockModel(
+  id: string,
+  underlyingModelName?: string | null,
+): boolean {
+  // Match both the profile id and the underlying model name: application
+  // inference profiles have opaque ids, so only the underlying name reveals the
+  // family; system/cross-region profiles encode it in the id.
+  const identifier = `${id} ${underlyingModelName ?? ""}`;
+  return NON_CHAT_BEDROCK_MODEL_PATTERNS.some((pattern) =>
+    pattern.test(identifier),
+  );
 }
 
 /**

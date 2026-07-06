@@ -1076,12 +1076,7 @@ export const minimaxAdapterFactory: LLMProvider<
     options: CreateClientOptions,
   ): MinimaxClient {
     const customFetch = options.agent
-      ? metrics.llm.getObservableFetch(
-          "minimax",
-          options.agent,
-          options.source,
-          options.externalAgentId,
-        )
+      ? metrics.llm.getObservableFetch("minimax", options.agent, options.source)
       : undefined;
 
     const baseUrl = options.baseUrl || config.llm.minimax.baseUrl;

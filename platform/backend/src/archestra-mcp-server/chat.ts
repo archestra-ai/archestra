@@ -1,5 +1,4 @@
 import {
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
@@ -16,7 +15,6 @@ import {
   ChatOpsThreadAgentOverrideModel,
   ConversationModel,
   OrganizationModel,
-  ScheduleTriggerRunModel,
 } from "@/models";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import {
@@ -78,15 +76,6 @@ const SwapAgentOutputSchema = z.discriminatedUnion("success", [
 ]);
 
 type SwapAgentStateCode = z.infer<typeof SwapAgentStateCodeSchema>;
-
-const ArtifactWriteOutputSchema = z.object({
-  success: z.literal(true).describe("Whether the artifact write succeeded."),
-  characterCount: z
-    .number()
-    .int()
-    .nonnegative()
-    .describe("The number of characters written to the artifact."),
-});
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -151,97 +140,6 @@ const registry = defineArchestraTools([
     outputSchema: SwapAgentOutputSchema,
     async handler({ context }) {
       return handleSwapToDefaultAgent({ context });
-    },
-  }),
-  defineArchestraTool({
-    shortName: TOOL_ARTIFACT_WRITE_SHORT_NAME,
-    title: "Write Artifact",
-    description:
-      "Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. Markdown only: never write HTML pages or interactive apps here; when the user asks for an app, tool, or interactive UI and a scaffold_app tool is available, use that instead. Each call completely replaces the existing artifact content. " +
-      "Mermaid diagrams: Use ```mermaid blocks. " +
-      "Supports: Headers, emphasis, lists, links, images, code blocks, tables, blockquotes, task lists, mermaid diagrams.",
-    schema: z
-      .object({
-        content: z
-          .string()
-          .min(1)
-          .describe(
-            "The markdown content to write to the conversation artifact. This completely replaces any existing artifact content.",
-          ),
-      })
-      .strict(),
-    outputSchema: ArtifactWriteOutputSchema,
-    async handler({ args, context }) {
-      const { agent: contextAgent } = context;
-
-      logger.info(
-        {
-          agentId: contextAgent.id,
-          contentLength: args.content.length,
-          scheduleTriggerRunId: context.scheduleTriggerRunId ?? null,
-          conversationId: context.conversationId ?? null,
-          userId: context.userId ?? null,
-          organizationId: context.organizationId ?? null,
-        },
-        "artifact_write tool called",
-      );
-
-      try {
-        let successMessage = `Successfully updated artifact (${args.content.length} characters)`;
-
-        // Scheduled run context — write to the run (there is no conversation
-        // to attach the artifact to)
-        if (context.scheduleTriggerRunId) {
-          const updated = await ScheduleTriggerRunModel.setArtifact(
-            context.scheduleTriggerRunId,
-            args.content,
-          );
-
-          if (!updated) {
-            return errorResult(
-              "Failed to update scheduled run artifact. The run may no longer exist.",
-            );
-          }
-        } else if (context.chatOpsBindingId) {
-          logger.info(
-            {
-              agentId: contextAgent.id,
-              chatOpsBindingId: context.chatOpsBindingId,
-              chatOpsThreadId: context.chatOpsThreadId ?? null,
-            },
-            "artifact_write completed in chatops context without persistent artifact storage",
-          );
-          successMessage = `Accepted artifact content (${args.content.length} characters). ChatOps does not persist conversation artifacts, so include relevant artifact content in the final response.`;
-        } else if (
-          context.conversationId &&
-          context.userId &&
-          context.organizationId
-        ) {
-          const updated = await ConversationModel.update(
-            context.conversationId,
-            context.userId,
-            context.organizationId,
-            { artifact: args.content },
-          );
-
-          if (!updated) {
-            return errorResult(
-              "Failed to update conversation artifact. The conversation may not exist or you may not have permission to update it.",
-            );
-          }
-        } else {
-          return errorResult(
-            "This tool requires conversation context. It can only be used within an active chat conversation or scheduled run.",
-          );
-        }
-
-        return structuredSuccessResult(
-          { success: true, characterCount: args.content.length },
-          successMessage,
-        );
-      } catch (error) {
-        return catchError(error, "writing artifact");
-      }
     },
   }),
 ] as const);

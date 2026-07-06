@@ -7,8 +7,6 @@ lastUpdated: 2026-04-29
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This is a development guide for adding new LLM providers to Archestra.
 -->
 

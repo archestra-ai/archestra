@@ -168,7 +168,6 @@ beforeEach(() => {
     defaultModelId: "gemini-2.5-pro",
     defaultLlmApiKeyId: "key-1",
     defaultAgentId: null,
-    globalToolPolicy: "permissive",
     allowChatFileUploads: true,
     allowToolAutoAssignment: true,
   };

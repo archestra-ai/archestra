@@ -27,11 +27,13 @@ import {
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
+  AgentToolExclusionsSchema,
   ApiError,
   BuiltInAgentConfigSchema,
   constructResponseSchema,
@@ -763,6 +765,122 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await serializeAgentForExport(agent));
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/tool-exclusions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentToolExclusions,
+        description:
+          "Get the agent's Auto-tool-mode exclusions: MCP catalogs and individual tools removed from its tool surface while 'access all tools' is on",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(AgentToolExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Fetch agent first to determine its type, then enforce type-specific RBAC
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Check read permission (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Non-admin: enforce scope/team-based visibility like GetAgent does
+      if (!checker.isAdmin(agent.agentType)) {
+        const filteredAgent = await AgentModel.findById(id, user.id, false);
+        if (!filteredAgent) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      return reply.send(await agentToolExclusionsService.getExclusions(id));
+    },
+  );
+
+  fastify.put(
+    "/api/agents/:id/tool-exclusions",
+    {
+      schema: {
+        operationId: RouteId.UpdateAgentToolExclusions,
+        description:
+          "Replace the agent's Auto-tool-mode exclusions (full replace of the excluded tool set)",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        body: AgentToolExclusionsSchema,
+        response: constructResponseSchema(AgentToolExclusionsSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // Fetch agent to determine its type for permission check
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Defense-in-depth: never allow cross-organization access, even for
+      // admins. AgentModel.findById is not org-scoped.
+      if (agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+
+      // Editing exclusions requires the same permission as agent update
+      // (return 404 to avoid leaking existence)
+      try {
+        checker.require(agent.agentType, "update");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Enforce scope-based modify permissions like UpdateAgent does
+      const userTeamIds = !checker.isAdmin(agent.agentType)
+        ? await TeamModel.getUserTeamIds(user.id)
+        : [];
+      requireAgentModifyPermission({
+        checker,
+        agentType: agent.agentType,
+        agentScope: agent.scope,
+        agentAuthorId: agent.authorId,
+        agentTeamIds: agent.teams.map((t) => t.id),
+        userTeamIds,
+        userId: user.id,
+      });
+
+      return reply.send(
+        await agentToolExclusionsService.replaceExclusions({
+          agentId: id,
+          organizationId,
+          excludedToolIds: body.excludedToolIds,
+        }),
+      );
     },
   );
 

@@ -58,7 +58,13 @@ interface AppsContextValue {
   isAppOpen: (toolCallId: string) => boolean;
   /** Toggle one app's inline expansion (canonicalized), leaving other open apps alone. */
   toggleAppOpen: (toolCallId: string) => void;
-  /** The single app the right panel hosts: the explicit pick, else the latest still-open app, else the latest — never blank. */
+  /**
+   * Make this render its app's visible one and ensure it is open — without the
+   * toggle semantics. Used when a pill click dismisses the panel-hosted copy:
+   * the app must expand under the clicked pill, not wherever it last was.
+   */
+  focusAppRender: (toolCallId: string) => void;
+  /** The single app the right panel hosts: the explicit pick (until a newer render arrives), else the latest still-open app, else the latest — never blank. */
   panelToolCallId: string | null;
   /** Point the right panel at an app (pill selector / "Open in right panel"). */
   setPanelApp: (toolCallId: string) => void;
@@ -89,6 +95,7 @@ const NOOP_VALUE: AppsContextValue = {
   apps: [],
   isAppOpen: () => false,
   toggleAppOpen: () => {},
+  focusAppRender: () => {},
   panelToolCallId: null,
   setPanelApp: () => {},
   canonicalToolCallId: (id) => id,
@@ -121,8 +128,14 @@ export function AppsProvider({
   // absent → the latest. Clicking an older owned pill points it here.
   const [pickedOwnedRender, setPickedOwnedRender] =
     useState<ReadonlyMap<string, string>>(EMPTY_MAP);
-  // Explicit right-panel pick; null falls back to the latest still-open app.
-  const [explicitPanelId, setExplicitPanelId] = useState<string | null>(null);
+  // Explicit right-panel pick, plus a snapshot of the renders that existed when
+  // it was made. The pick pins the panel only against those renders: a render
+  // arriving later (a new model-triggered app) supersedes it, so the panel
+  // returns to the latest-still-open default and hosts the new app.
+  const [explicitPanel, setExplicitPanel] = useState<{
+    toolCallId: string;
+    knownToolCallIds: ReadonlySet<string>;
+  } | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -179,20 +192,51 @@ export function AppsProvider({
     [groupByToolCallId, closedKeys],
   );
 
+  // Non-toggling variant of toggleAppOpen: point the app's group at this
+  // render and open it, regardless of prior open/pick state.
+  const focusAppRender = useCallback(
+    (id: string) => {
+      const group = groupByToolCallId.get(id);
+      const key = group?.key ?? id;
+      const appId = group?.appId ?? null;
+      if (appId) {
+        setPickedOwnedRender((prev) => new Map(prev).set(appId, id));
+      }
+      setClosedKeys((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      setSettingsOpen(false);
+    },
+    [groupByToolCallId],
+  );
+
   // Switching the panel app drops the previous app's settings form.
   const setPanelApp = useCallback(
     (id: string) => {
-      setExplicitPanelId(canonicalToolCallId(id));
+      setExplicitPanel({
+        toolCallId: canonicalToolCallId(id),
+        knownToolCallIds: new Set(apps.map((a) => a.toolCallId)),
+      });
       setSettingsOpen(false);
     },
-    [canonicalToolCallId],
+    [canonicalToolCallId, apps],
   );
 
   // One hosted app, never blank: explicit pick, else latest still-open active
   // render, else the latest active render overall.
   const panelToolCallId = useMemo(() => {
-    if (explicitPanelId && groupByToolCallId.has(explicitPanelId)) {
-      return explicitPanelId;
+    // Honor the pick only while no render has arrived since it was made — a
+    // newly rendered app supersedes it and takes the panel via the fallbacks.
+    const pick = explicitPanel;
+    if (
+      pick &&
+      groupByToolCallId.has(pick.toolCallId) &&
+      apps.every((a) => pick.knownToolCallIds.has(a.toolCallId))
+    ) {
+      return pick.toolCallId;
     }
     const isActive = (a: PanelApp) =>
       groupByToolCallId.get(a.toolCallId)?.activeRender.toolCallId ===
@@ -213,7 +257,7 @@ export function AppsProvider({
         ),
     );
     return latestOpen ?? latestBy(isActive);
-  }, [explicitPanelId, apps, closedKeys, groupByToolCallId]);
+  }, [explicitPanel, apps, closedKeys, groupByToolCallId]);
 
   const openRightPanel = useCallback(() => {
     onShowInPanel?.();
@@ -229,6 +273,7 @@ export function AppsProvider({
       apps,
       isAppOpen,
       toggleAppOpen,
+      focusAppRender,
       panelToolCallId,
       setPanelApp,
       canonicalToolCallId,
@@ -243,6 +288,7 @@ export function AppsProvider({
       apps,
       isAppOpen,
       toggleAppOpen,
+      focusAppRender,
       panelToolCallId,
       setPanelApp,
       canonicalToolCallId,

@@ -185,7 +185,13 @@ async function makeVirtualApiKey(
  */
 async function makeOrganization(
   overrides: Partial<
-    Pick<InsertOrganization, "name" | "slug" | "globalToolPolicy">
+    Pick<
+      InsertOrganization,
+      | "name"
+      | "slug"
+      | "defaultDiscoveredToolInvocationPolicy"
+      | "defaultDiscoveredToolResultPolicy"
+    >
   > = {},
 ) {
   const orgId = crypto.randomUUID();
@@ -665,6 +671,7 @@ async function makeInternalMcpCatalog(
       InsertInternalMcpCatalog,
       | "id"
       | "name"
+      | "icon"
       | "serverType"
       | "serverUrl"
       | "description"
@@ -1205,14 +1212,26 @@ async function makeKnowledgeBaseConnector(
 async function makeConnectorRun(
   connectorId: string,
   overrides: Partial<
-    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+    Pick<
+      InsertConnectorRun,
+      | "status"
+      | "startedAt"
+      | "documentsProcessed"
+      | "leaseOwner"
+      | "leaseExpiresAt"
+      | "leaseEpoch"
+    >
   > = {},
 ): Promise<ConnectorRun> {
   const [result] = await db
     .insert(schema.connectorRunsTable)
     .values({
+      // Default to a terminal status: the single-flight unique index allows only
+      // one "running" run per connector, so tests that create several runs for a
+      // connector must not all be running. Pass `status: "running"` explicitly
+      // (one per connector) when a live run is needed.
+      status: "success",
       connectorId,
-      status: "running",
       startedAt: new Date(),
       ...overrides,
     })

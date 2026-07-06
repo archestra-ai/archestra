@@ -5,6 +5,30 @@ export interface AppDiagnosticEntry {
   message: string
 }
 
+/**
+ * Policy inputs for `lintAppHtml`; the TypeScript side is the single source
+ * of truth for the CDN allowlist and the injected-SDK surface.
+ */
+export interface AppHtmlLintConfig {
+  /** Bare hostnames `<script src>`/`<link href>` may point at (exact match). */
+  resourceHostAllowlist: Array<string>
+  /** Top-level members of the injected `window.archestra`. */
+  sdkTopLevelMembers: Array<string>
+  /** Partitions of `archestra.storage`. */
+  sdkStoragePartitions: Array<string>
+}
+
+/**
+ * Structured lint findings, deduplicated in first-seen document order.
+ * Empty when the HTML does not parse (the scan rejects that fail-closed).
+ */
+export interface AppHtmlLintFindings {
+  offAllowlistHosts: Array<string>
+  browserStorageApis: Array<string>
+  storageMisuse: Array<string>
+  unknownTopLevel: Array<string>
+}
+
 export interface AppHtmlRejection {
   /**
    * Stable discriminant: `sdk_bootstrap` | `platform_script_src` |
@@ -51,6 +75,14 @@ export interface InlineAssets {
   /** The platform baseline stylesheet (same bytes served at the CSS path). */
   baseCss: string
 }
+
+/**
+ * Authoring-time lint of app HTML for the `validate_app` tool: hosts the
+ * pinned CSP would block, browser storage APIs the sandbox breaks, and
+ * `window.archestra` members the injected SDK does not expose. The caller
+ * owns the policy inputs and composes the user-facing messages.
+ */
+export declare function lintAppHtml(html: string, config: AppHtmlLintConfig): AppHtmlLintFindings
 
 /** Union and dedup two already-capped entry lists, capping the total. */
 export declare function mergeDiagnosticEntries(existing: Array<AppDiagnosticEntry>, incoming: Array<AppDiagnosticEntry>, maxEntries: number, dedupPrefixLen: number): Array<AppDiagnosticEntry>

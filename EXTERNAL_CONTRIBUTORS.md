@@ -695,3 +695,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @mnfadel
 - @l2384031044-cmd
 - @Barisskvk
+- @AntonioVFranco

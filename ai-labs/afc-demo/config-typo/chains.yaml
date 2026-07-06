@@ -1,0 +1,6 @@
+# Approver chains, keyed by the (effect, label class) they gate. `std.no_tainted_consequential`
+# picks up the (consequential, tainted) chain.
+chains:
+  tainted_consequential:
+    on: { effect: consequential, label_class: tainted }
+    approvers: [llm.judge, human.oncall]   # llm first; it abstains on tainted, then a human decides

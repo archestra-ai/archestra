@@ -1,0 +1,13 @@
+# Fixture annotation proposals for `afc bootstrap`. In a real system these would come from an LLM
+# reading the tool inventory; here they are canned, with the provenance fields left null.
+proposals:
+  - tool: legacy.dump
+    effects: [read, egress]
+    proposed_by: null
+    confidence: null
+    reviewed_by: null
+  - tool: drive.read_doc
+    effects: [read]
+    proposed_by: null
+    confidence: null
+    reviewed_by: null

@@ -1,0 +1,19 @@
+[package]
+name = "afc-cli"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "afc"
+path = "src/main.rs"
+
+[dependencies]
+afc-core = { path = "../afc-core" }
+afc-surface = { path = "../afc-surface" }
+afc-demo = { path = "../afc-demo" }
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

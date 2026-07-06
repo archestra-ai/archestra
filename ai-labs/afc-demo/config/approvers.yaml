@@ -1,0 +1,17 @@
+# Approver definitions referenced by chains.
+approvers:
+  llm.judge:
+    kind: llm
+    pin: "judge@1"
+    budget: 3
+    requires_clean_context: true    # abstains rather than reason over tainted context
+    scope: { tool: email.send }
+  human.oncall:
+    kind: human
+    auto_approve: true              # demo stand-in for a real prompt
+    scope: any
+  eu.hours:
+    kind: eu_business_hours
+    open: 9
+    close: 17
+    scope: any

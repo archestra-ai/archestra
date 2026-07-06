@@ -1,0 +1,5 @@
+# External label sources (tightening-only). Applied via meet, so they can only raise restriction.
+label_sources:
+  risk_bert:
+    kind: fake_risk_bert
+    keywords: [wire, transfer, ssn]   # a hit raises the value's risk dimension to high

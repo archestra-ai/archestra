@@ -1,0 +1,16 @@
+[package]
+name = "afc-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# afc-core is the judgment-free kernel: types, lattice, rule IR, engine, checker.
+# It deliberately depends on NO YAML/CLI crate — the authoring surface lives in afc-surface.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"

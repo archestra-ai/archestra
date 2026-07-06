@@ -1,0 +1,8 @@
+# Org guards: extra ArgCmp-based rules. Present mainly to exercise the checker's argument typing.
+guards:
+  org.block_sanctioned_region:
+    tool: crm.export
+    arg: { field: regionx, type: str }   # TYPO: crm.export has `region`, not `regionx`
+    op: eq
+    value: "CN"
+    outcome: forbid

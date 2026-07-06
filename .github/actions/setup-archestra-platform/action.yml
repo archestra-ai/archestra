@@ -181,6 +181,48 @@ runs:
         fi
         echo "All MCP dependency images fetched successfully"
 
+    # Sticky-disk-backed local image registry for the static MCP dependency
+    # images. Serving them from a same-host registry lets the pods pull from
+    # local NVMe (via the kind.yaml containerd mirror) instead of paying the ~16s
+    # `kind load` of these three images on the merge-queue critical path. The
+    # sticky disk persists the registry's storage across runs (Blacksmith evicts
+    # after 7d of inactivity; the merge queue keeps it warm). Merge-queue/deps
+    # path only.
+    - name: Mount sticky disk for the local MCP image registry
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
+      uses: useblacksmith/stickydisk@4c034ba57b706cf0e3b4b0ce098c2a3b1071580c # v1
+      with:
+        key: ${{ github.repository }}-e2e-mcp-registry
+        path: /tmp/kind-registry-data
+
+    - name: Start local MCP image registry
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # registry:2 on the sticky disk, published on host :5001 and joined to the
+        # kind network as `kind-registry` (the endpoint the kind.yaml mirror maps
+        # localhost:5001 -> http://kind-registry:5000 points at).
+        if [ -z "$(docker ps -q -f 'name=^kind-registry$')" ]; then
+          docker run -d --restart=always \
+            -p 127.0.0.1:5001:5000 \
+            -v /tmp/kind-registry-data:/var/lib/registry \
+            --name kind-registry registry:2
+        fi
+        docker network connect kind kind-registry 2>/dev/null || true
+
+        # Mirror the three static MCP images into the registry (the host daemon
+        # already has them from the fetch step above). Idempotent — on a warm
+        # sticky disk the layers already exist, so re-push is near-instant.
+        push_image() {
+          local src="$1" ref="localhost:5001/$2"
+          docker tag "${src}" "${ref}"
+          docker push "${ref}"
+        }
+        push_image "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1" "mcp-example-oauth-server:0.0.1"
+        push_image "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3" "mcp-server-jwks-keycloak:0.0.3"
+        push_image "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4" "mcp-server-id-jag:0.0.4"
+
     # Deploy the platform-image-INDEPENDENT e2e dependency stack (Vault,
     # Keycloak, WireMock, MCP servers) HERE — before the platform image wait
     # below — so it comes up while the image build is still running instead of
@@ -203,36 +245,27 @@ runs:
         E2E_DEPS_EXTRA_HELM_SET: ${{ inputs.e2e-dependencies-extra-helm-set }}
         E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
       run: |
-        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+        # The MCP dependency images are served from the sticky-disk-backed local
+        # registry (see "Start local MCP image registry"): point the chart at
+        # localhost:5001 so the pods pull them from local NVMe instead of us
+        # `kind load`-ing all three onto the critical path. Only the repository is
+        # overridden; the chart keeps its pinned tags.
+        E2E_DEPS_SET_FLAGS=(
+          --set mcpExampleOAuth.image.repository=localhost:5001/mcp-example-oauth-server
+          --set mcpServerJwks.image.repository=localhost:5001/mcp-server-jwks-keycloak
+          --set mcpServerIdJag.image.repository=localhost:5001/mcp-server-id-jag
+        )
 
-        echo "Loading MCP dependency images into Kind (parallel)..."
-        PIDS=()
-        for img in "${MCP_OAUTH_IMAGE}" "${MCP_JWKS_IMAGE}" "${MCP_ID_JAG_IMAGE}"; do
-          kind load docker-image "${img}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-        done
-        FAILED=0
-        for pid in "${PIDS[@]}"; do
-          if ! wait "$pid"; then FAILED=1; fi
-        done
-        if [ "$FAILED" -ne 0 ]; then
-          echo "One or more MCP dependency image loads into Kind failed"
-          exit 1
-        fi
-
-        # Build --set flags from comma-separated pairs (mirrors "Deploy with Helm").
-        E2E_DEPS_SET_FLAGS=""
+        # Append --set flags from comma-separated pairs (mirrors "Deploy with Helm").
         if [ -n "${E2E_DEPS_EXTRA_HELM_SET}" ]; then
           IFS=',' read -ra PAIRS <<< "${E2E_DEPS_EXTRA_HELM_SET}"
           for pair in "${PAIRS[@]}"; do
-            E2E_DEPS_SET_FLAGS="${E2E_DEPS_SET_FLAGS} --set ${pair}"
+            E2E_DEPS_SET_FLAGS+=(--set "${pair}")
           done
         fi
 
         echo "Installing e2e-tests chart (overlapping the platform image build)..."
-        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
+        helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" "${E2E_DEPS_SET_FLAGS[@]}"
 
         if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
           echo "Waiting for Vault pod before platform deploy..."

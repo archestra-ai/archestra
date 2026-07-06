@@ -1,6 +1,17 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: archestra-ci-cluster
+# Local image registry (e2e merge-queue/deps path only): setup-archestra-platform
+# runs a registry:2 backed by a Blacksmith sticky disk, connected to the kind
+# network as `kind-registry`, pre-populated with the static MCP dependency
+# images. Those pods reference images as `localhost:5001/...` and containerd
+# resolves that to the in-network registry, so they pull from local NVMe instead
+# of being `kind load`ed. Inert on every other path: when no manifest references
+# localhost:5001 (i.e. the registry isn't set up), this mirror is never consulted.
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5001"]
+      endpoint = ["http://kind-registry:5000"]
 # Uses Kind's default CNI (kindnet) which has built-in NetworkPolicy enforcement
 # since Kind v0.24.0 via kubernetes-sigs/kube-network-policies.
 # https://kind.sigs.k8s.io/docs/user/configuration/#disable-default-cni

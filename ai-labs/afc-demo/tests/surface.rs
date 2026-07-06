@@ -71,6 +71,33 @@ fn compiler_rejects_sink_dim_typo() {
 }
 
 #[test]
+fn compiler_rejects_sink_from_arg_field_typo() {
+    let tmp = copy_config();
+    let annotations = std::fs::read_to_string(tmp.path().join("annotations.yaml")).unwrap();
+    // drive.write_doc's sink reads a `doc` arg; misspell it to a field not in the schema.
+    let mutated = annotations.replace("field: doc }", "field: docx }");
+    std::fs::write(tmp.path().join("annotations.yaml"), mutated).unwrap();
+    assert!(matches!(
+        compile_dir(tmp.path()),
+        Err(SurfaceError::UnknownArgField { .. })
+    ));
+}
+
+#[test]
+fn compiler_rejects_scope_to_unknown_tool() {
+    let tmp = copy_config();
+    std::fs::write(
+        tmp.path().join("approvers.yaml"),
+        "approvers:\n  llm.judge:\n    kind: llm\n    pin: \"j@1\"\n    budget: 3\n    requires_clean_context: true\n    scope: { tool: email.send }\n  human.oncall:\n    kind: human\n    auto_approve: true\n    scope: { tool: email.snd }\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        compile_dir(tmp.path()),
+        Err(SurfaceError::UnknownScopeTool { .. })
+    ));
+}
+
+#[test]
 fn wiring_refuses_unknown_sanitizer_pin() {
     let tmp = copy_config();
     // A typo'd sanitizer pin must not silently become an identity transform.

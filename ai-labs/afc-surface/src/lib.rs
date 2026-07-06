@@ -156,7 +156,8 @@ pub fn compile(cfg: SurfaceConfig) -> Result<CompiledPolicy, SurfaceError> {
     let tools = compile_tools(&cfg.annotations, &dims)?;
     let declassifiers = compile_declassifiers(&cfg.declassifiers, &dims)?;
     let chains = compile_chains(&cfg.chains, &cfg.approvers)?;
-    let approvers = compile_approvers(&cfg.approvers)?;
+    let tool_ids: BTreeSet<String> = tools.iter().map(|t| t.id.clone()).collect();
+    let approvers = compile_approvers(&cfg.approvers, &tool_ids)?;
     let label_sources = compile_label_sources(&cfg.label_sources);
     let on_unknown = compile_on_unknown(&cfg.on_unknown, &dims)?;
 
@@ -202,7 +203,7 @@ fn compile_tools(file: &AnnotationsFile, dims: &DimRegistry) -> Result<Vec<ToolS
     let mut tools = Vec::new();
     for (id, cfg) in &file.tools {
         let effects = cfg.effects.iter().map(effect_of).collect();
-        let fields = cfg
+        let fields: BTreeMap<String, ArgType> = cfg
             .schema
             .iter()
             .map(|(k, v)| (k.clone(), arg_type_of(*v)))
@@ -220,7 +221,11 @@ fn compile_tools(file: &AnnotationsFile, dims: &DimRegistry) -> Result<Vec<ToolS
             }
             None => ResultTier::Unknown,
         };
-        let sink = cfg.sink.as_ref().map(|s| compile_sink(s, dims)).transpose()?;
+        let sink = cfg
+            .sink
+            .as_ref()
+            .map(|s| compile_sink(s, dims, &fields, id))
+            .transpose()?;
         tools.push(ToolSpec {
             id: id.clone(),
             effects,
@@ -233,12 +238,35 @@ fn compile_tools(file: &AnnotationsFile, dims: &DimRegistry) -> Result<Vec<ToolS
     Ok(tools)
 }
 
-fn compile_sink(cfg: &SinkCfg, registry: &DimRegistry) -> Result<SinkSpec, SurfaceError> {
+fn compile_sink(
+    cfg: &SinkCfg,
+    registry: &DimRegistry,
+    fields: &BTreeMap<String, ArgType>,
+    tool: &str,
+) -> Result<SinkSpec, SurfaceError> {
+    // Any `from_arg*` field a sink reads must exist in the tool's schema; otherwise the field name is
+    // a typo that resolves to Unknown/Conflict at runtime and denies, invisibly to `afc check`.
+    let require_field = |field: &str| -> Result<(), SurfaceError> {
+        if fields.contains_key(field) {
+            Ok(())
+        } else {
+            Err(SurfaceError::UnknownArgField {
+                tool: tool.to_string(),
+                field: field.to_string(),
+            })
+        }
+    };
     let readers = match &cfg.readers {
         SinkReadersCfg::Public => SinkReaders::Public,
         SinkReadersCfg::Principal => SinkReaders::Principal,
-        SinkReadersCfg::FromArgAcl { field } => SinkReaders::FromArgAcl(field.clone()),
-        SinkReadersCfg::FromArgRecipient { field } => SinkReaders::FromArgRecipient(field.clone()),
+        SinkReadersCfg::FromArgAcl { field } => {
+            require_field(field)?;
+            SinkReaders::FromArgAcl(field.clone())
+        }
+        SinkReadersCfg::FromArgRecipient { field } => {
+            require_field(field)?;
+            SinkReaders::FromArgRecipient(field.clone())
+        }
     };
     let mut dims = BTreeMap::new();
     for (id, dc) in &cfg.dims {
@@ -252,7 +280,10 @@ fn compile_sink(cfg: &SinkCfg, registry: &DimRegistry) -> Result<SinkSpec, Surfa
         }
         let sd = match dc {
             SinkDimCfg::Static { value } => SinkDim::Static(DimValue::val(value.clone())),
-            SinkDimCfg::FromArg { field } => SinkDim::FromArg(field.clone()),
+            SinkDimCfg::FromArg { field } => {
+                require_field(field)?;
+                SinkDim::FromArg(field.clone())
+            }
         };
         dims.insert(id.clone(), sd);
     }
@@ -310,7 +341,10 @@ fn compile_chains(file: &ChainsFile, approvers: &ApproversFile) -> Result<Vec<Ch
     Ok(out)
 }
 
-fn compile_approvers(file: &ApproversFile) -> Result<Vec<ApproverSpec>, SurfaceError> {
+fn compile_approvers(
+    file: &ApproversFile,
+    tool_ids: &BTreeSet<String>,
+) -> Result<Vec<ApproverSpec>, SurfaceError> {
     let mut out = Vec::new();
     for (id, cfg) in &file.approvers {
         let spec = match cfg {
@@ -319,7 +353,7 @@ fn compile_approvers(file: &ApproversFile) -> Result<Vec<ApproverSpec>, SurfaceE
                 scope,
             } => ApproverSpec::Human {
                 id: id.clone(),
-                scope: compile_scope(scope, id)?,
+                scope: compile_scope(scope, id, tool_ids)?,
                 auto_approve: *auto_approve,
             },
             ApproverCfg::Llm {
@@ -330,13 +364,13 @@ fn compile_approvers(file: &ApproversFile) -> Result<Vec<ApproverSpec>, SurfaceE
             } => ApproverSpec::Llm {
                 id: id.clone(),
                 pin: pin.clone(),
-                scope: compile_scope(scope, id)?,
+                scope: compile_scope(scope, id, tool_ids)?,
                 budget: *budget,
                 requires_clean_context: *requires_clean_context,
             },
             ApproverCfg::EuBusinessHours { open, close, scope } => ApproverSpec::EuBusinessHours {
                 id: id.clone(),
-                scope: compile_scope(scope, id)?,
+                scope: compile_scope(scope, id, tool_ids)?,
                 open: *open,
                 close: *close,
             },
@@ -468,7 +502,11 @@ fn rule_on_unknown() -> Rule {
 
 // --- small compilers --------------------------------------------------------
 
-fn compile_scope(scope: &ScopeCfg, approver: &str) -> Result<Predicate, SurfaceError> {
+fn compile_scope(
+    scope: &ScopeCfg,
+    approver: &str,
+    tool_ids: &BTreeSet<String>,
+) -> Result<Predicate, SurfaceError> {
     match scope {
         // Only the literal `any` is an unbounded scope. Any other bare string is a typo (e.g. a
         // misspelled tool name) that must fail closed rather than silently become unbounded.
@@ -476,6 +514,11 @@ fn compile_scope(scope: &ScopeCfg, approver: &str) -> Result<Predicate, SurfaceE
         ScopeCfg::Any(s) => Err(SurfaceError::InvalidScope {
             approver: approver.to_string(),
             scope: s.clone(),
+        }),
+        // A tool scope must name a real tool, or the approver silently governs nothing.
+        ScopeCfg::Tool { tool } if !tool_ids.contains(tool) => Err(SurfaceError::UnknownScopeTool {
+            approver: approver.to_string(),
+            tool: tool.clone(),
         }),
         ScopeCfg::Tool { tool } => Ok(Predicate::ToolIs(tool.clone())),
     }

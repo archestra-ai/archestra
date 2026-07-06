@@ -181,9 +181,10 @@ pub struct RuleEngine {
     jsonl: Option<PathBuf>,
     log: Vec<DecisionRecord>,
     next_id: u64,
-    /// Escalation decision ids awaiting an approval. `finalize_escalation` consumes one, so an
-    /// approval is bound to a specific escalation and cannot be replayed.
-    pending_escalations: BTreeSet<u64>,
+    /// Escalations awaiting approval: id → a fingerprint of the call that raised it.
+    /// `finalize_escalation` consumes the entry only if the presented call matches the fingerprint,
+    /// so an approval is bound to *that* call — it cannot be replayed or spent on a different call.
+    pending_escalations: BTreeMap<u64, String>,
 }
 
 impl RuleEngine {
@@ -200,7 +201,7 @@ impl RuleEngine {
             jsonl: None,
             log: Vec::new(),
             next_id: 0,
-            pending_escalations: BTreeSet::new(),
+            pending_escalations: BTreeMap::new(),
         }
     }
 
@@ -264,9 +265,10 @@ impl RuleEngine {
     /// never widen the sink ceiling. So we re-evaluate the scope against the same call and re-run the
     /// forbid pass; a `Forbid` that fires anyway still wins over the approval.
     ///
-    /// `escalation_id` binds this approval to a *specific* prior `Escalate` decision: it must still be
-    /// pending, and it is consumed one-shot, so an approval cannot be replayed. (Binding to the exact
-    /// approved args/sink snapshot is a further tightening left for later — see the follow-up ledger.)
+    /// `escalation_id` binds this approval to a *specific* prior `Escalate` decision: the escalation
+    /// must still be pending AND the presented call must match the fingerprint of the call that raised
+    /// it (same tool, args, sink, value label). It is consumed one-shot, so an approval cannot be
+    /// replayed or spent on a different call.
     pub fn finalize_escalation(
         &mut self,
         call: &CallSite,
@@ -276,17 +278,39 @@ impl RuleEngine {
         scope: &Predicate,
     ) -> Decision {
         let id = self.take_id();
-        if !self.pending_escalations.remove(&escalation_id) {
-            let decision = Decision::Deny {
-                id,
-                rule_id: "engine.no_pending_escalation".to_string(),
-                reason: format!(
-                    "escalation {escalation_id} is not pending (already discharged or never raised)"
-                ),
-                residual: self.residual(),
-            };
-            self.record(call, &decision, Some(chain_id), Some(approver), Vec::new());
-            return decision;
+        // The approval must match the exact call that raised the escalation — same tool, args, sink,
+        // and value label. This prevents approval *substitution*: spending an approval granted for one
+        // call on a different in-scope call.
+        let fingerprint_now = call_fingerprint(call);
+        match self.pending_escalations.get(&escalation_id) {
+            None => {
+                let decision = Decision::Deny {
+                    id,
+                    rule_id: "engine.no_pending_escalation".to_string(),
+                    reason: format!(
+                        "escalation {escalation_id} is not pending (already discharged or never raised)"
+                    ),
+                    residual: self.residual(),
+                };
+                self.record(call, &decision, Some(chain_id), Some(approver), Vec::new());
+                return decision;
+            }
+            Some(fingerprint) if *fingerprint != fingerprint_now => {
+                // Leave the escalation pending: the legitimate approval for its own call is unspent.
+                let decision = Decision::Deny {
+                    id,
+                    rule_id: "engine.approval_call_mismatch".to_string(),
+                    reason: format!(
+                        "approval for escalation {escalation_id} does not match the call it was raised on"
+                    ),
+                    residual: self.residual(),
+                };
+                self.record(call, &decision, Some(chain_id), Some(approver), Vec::new());
+                return decision;
+            }
+            Some(_) => {
+                self.pending_escalations.remove(&escalation_id);
+            }
         }
         let within_scope = {
             let lattice = self.lattice();
@@ -404,7 +428,7 @@ impl Engine for RuleEngine {
                     }
                 }
             }
-            self.pending_escalations.insert(id);
+            self.pending_escalations.insert(id, call_fingerprint(call));
             Decision::Escalate { id, chain }
         } else {
             // A call may carry a prior declassification; stamp the audit link when it is allowed.
@@ -460,6 +484,13 @@ fn ctx_for<'a>(call: &'a CallSite, lattice: Lattice<'a>) -> EvalCtx<'a> {
         args: &call.args,
         lattice,
     }
+}
+
+/// A stable identity for a call: its tool, args, sink, and value label. Used to bind an approval to
+/// the exact call that was escalated. (The value's content is excluded — the label is what governs.)
+fn call_fingerprint(call: &CallSite) -> String {
+    serde_json::to_string(&(&call.tool, &call.args, &call.sink, &call.value.label))
+        .expect("call components are serializable")
 }
 
 /// Best-effort audit append. A verdict must never depend on audit I/O succeeding, so a failure here

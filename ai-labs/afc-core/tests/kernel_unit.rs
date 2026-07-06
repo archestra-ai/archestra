@@ -221,6 +221,44 @@ fn escalation_approval_is_one_shot() {
 }
 
 #[test]
+fn approval_cannot_be_spent_on_a_different_call() {
+    let dir = DirectorySnapshot::default();
+    let rules = vec![Rule {
+        id: "r.escalate".to_string(),
+        when: Predicate::HasEffect(Effect::Egress),
+        then: Outcome::Escalate(vec!["human".to_string()]),
+        origin: RuleOrigin::Org,
+    }];
+    let mut engine = RuleEngine::new(rules, dims(), dir);
+    let principal = Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() };
+    let mk = |to: &str| {
+        CallSite::new(
+            "email.send".to_string(),
+            BTreeSet::from([Effect::Egress]),
+            Labeled::new(Chunk("x".into()), Label::public()),
+            Label::public(),
+            BTreeMap::from([("to".to_string(), afc_core::rule::ArgValue::Str(to.into()))]),
+            principal.clone(),
+        )
+    };
+    let call_a = mk("X");
+    let call_b = mk("Y");
+    let escalate_id = engine.check_call(&call_a).id();
+    let always = Predicate::And(vec![]);
+
+    // The approval for call A cannot be spent on the different call B, even though B is in scope.
+    match engine.finalize_escalation(&call_b, "c".into(), escalate_id, "human".into(), &always) {
+        Decision::Deny { rule_id, .. } => assert_eq!(rule_id, "engine.approval_call_mismatch"),
+        other => panic!("expected call-mismatch Deny, got {other:?}"),
+    }
+    // The escalation is still pending, so the legitimate approval for call A succeeds.
+    assert!(matches!(
+        engine.finalize_escalation(&call_a, "c".into(), escalate_id, "human".into(), &always),
+        Decision::Allow { .. }
+    ));
+}
+
+#[test]
 fn warn_rules_are_recorded_not_silently_dropped() {
     let dir = DirectorySnapshot::default();
     let rules = vec![Rule {

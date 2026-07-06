@@ -29,4 +29,8 @@ pub enum SurfaceError {
         value: String,
         ty: String,
     },
+    #[error("tool `{tool}` references argument `{field}` in its sink that is not in its schema")]
+    UnknownArgField { tool: String, field: String },
+    #[error("approver `{approver}` is scoped to unknown tool `{tool}`")]
+    UnknownScopeTool { approver: String, tool: String },
 }

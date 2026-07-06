@@ -26958,6 +26958,7 @@ export type GetConfigResponses = {
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
             agentHooksEnabled: boolean;
+            chatopsTelegramEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;

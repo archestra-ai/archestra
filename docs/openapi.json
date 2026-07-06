@@ -95906,6 +95906,9 @@
                         },
                         "agentHooksEnabled": {
                           "type": "boolean"
+                        },
+                        "chatopsTelegramEnabled": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -95929,7 +95932,8 @@
                         "mcpSandboxDomain",
                         "maintenanceMode",
                         "chatSecretScanEnabled",
-                        "agentHooksEnabled"
+                        "agentHooksEnabled",
+                        "chatopsTelegramEnabled"
                       ],
                       "additionalProperties": false
                     },

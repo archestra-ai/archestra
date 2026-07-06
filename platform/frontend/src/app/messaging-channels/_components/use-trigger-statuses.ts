@@ -40,9 +40,13 @@ export function useTriggerStatuses() {
       ? reachable && hasLlmKey && !!slack?.configured
       : hasLlmKey && !!slack?.configured;
 
-  // Telegram uses long polling — no public URL needed, so no reachability gate.
+  // Telegram is feature-flagged (ARCHESTRA_CHATOPS_TELEGRAM_ENABLED); when
+  // off, the channel is hidden entirely. It uses long polling — no public
+  // URL needed, so no reachability gate.
+  const telegramAvailable = !!configData?.features.chatopsTelegramEnabled;
   const telegram = chatOpsProviders?.find((p) => p.id === "telegram");
-  const telegramActive = hasLlmKey && !!telegram?.configured;
+  const telegramActive =
+    telegramAvailable && hasLlmKey && !!telegram?.configured;
 
   const emailActive =
     !!configData?.features.incomingEmail?.enabled && !!emailStatus?.isActive;
@@ -65,6 +69,7 @@ export function useTriggerStatuses() {
     msTeams: msTeamsActive,
     slack: slackActive,
     telegram: telegramActive,
+    telegramAvailable,
     email: emailActive,
     a2a: a2aActive,
     firstActiveHref,

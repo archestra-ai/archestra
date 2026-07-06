@@ -42,7 +42,27 @@ export default function TelegramPage() {
   const { data: chatOpsProviders, isLoading: statusLoading } =
     useChatOpsStatus();
   const telegram = chatOpsProviders?.find((p) => p.id === "telegram");
-  const { telegram: allStepsCompleted } = useTriggerStatuses();
+  const {
+    telegram: allStepsCompleted,
+    telegramAvailable,
+    isLoading: statusesLoading,
+  } = useTriggerStatuses();
+
+  // Feature-flagged: hidden from the nav, and a direct visit explains why
+  if (!statusesLoading && !telegramAvailable) {
+    return (
+      <div className="flex items-start gap-3 rounded-lg border px-4 py-3">
+        <Info className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+        <span className="text-sm text-muted-foreground">
+          The Telegram integration is not enabled on this deployment. Set{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-xs">
+            ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true
+          </code>{" "}
+          and restart to use it.
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

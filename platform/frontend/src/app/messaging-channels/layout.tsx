@@ -54,6 +54,7 @@ export default function AgentTriggersLayout({
     msTeams: msTeamsActive,
     slack: slackActive,
     telegram: telegramActive,
+    telegramAvailable,
     email: emailActive,
     a2a: a2aActive,
   } = useTriggerStatuses();
@@ -82,17 +83,22 @@ export default function AgentTriggersLayout({
         href: "/messaging-channels/slack",
         active: slackActive,
       },
-      {
-        label: (
-          <TabLabel
-            iconSrc="/icons/telegram.png"
-            label="Telegram"
-            active={telegramActive}
-          />
-        ),
-        href: "/messaging-channels/telegram",
-        active: telegramActive,
-      },
+      // Telegram is hidden unless the deployment enables the feature flag
+      ...(telegramAvailable
+        ? [
+            {
+              label: (
+                <TabLabel
+                  iconSrc="/icons/telegram.png"
+                  label="Telegram"
+                  active={telegramActive}
+                />
+              ),
+              href: "/messaging-channels/telegram",
+              active: telegramActive,
+            },
+          ]
+        : []),
       {
         label: <TabLabel icon={Mail} label="Email" active={emailActive} />,
         href: "/messaging-channels/email",
@@ -109,7 +115,14 @@ export default function AgentTriggersLayout({
         active: a2aActive,
       },
     ];
-  }, [msTeamsActive, slackActive, telegramActive, emailActive, a2aActive]);
+  }, [
+    msTeamsActive,
+    slackActive,
+    telegramActive,
+    telegramAvailable,
+    emailActive,
+    a2aActive,
+  ]);
 
   if (canReadTriggers === false) {
     return null;
@@ -118,7 +131,7 @@ export default function AgentTriggersLayout({
   return (
     <PageLayout
       title="Messaging Channels"
-      description="Manage how agents are invoked through Slack, Microsoft Teams, Telegram, email, and A2A"
+      description={`Manage how agents are invoked through Slack, Microsoft Teams, ${telegramAvailable ? "Telegram, " : ""}email, and A2A`}
       tabs={tabs}
     >
       {children}

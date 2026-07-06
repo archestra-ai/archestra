@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import config from "@/config";
 import { ChatOpsConfigModel } from "@/models";
 import { createFastifyInstance } from "@/server";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -157,10 +158,29 @@ describe("PUT /api/chatops/config/telegram", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal("fetch", fetchMock);
+    // The whole integration sits behind this master switch
+    config.chatops.telegramEnabled = true;
     // Bot token validation calls getMe
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ ok: true, result: { id: 1 } })),
     );
+  });
+
+  test("rejects updates when the Telegram feature flag is off", async () => {
+    config.chatops.telegramEnabled = false;
+    const app = createFastifyInstance();
+    await app.register(chatopsRoutes);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/chatops/config/telegram",
+      payload: { enabled: true, botToken: "123456:test-token" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(await ChatOpsConfigModel.getTelegramConfig()).toBeNull();
+
+    await app.close();
   });
 
   test("validates the token via getMe, saves config, and reinitializes", async () => {

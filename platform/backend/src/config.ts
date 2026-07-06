@@ -1718,6 +1718,10 @@ const config = {
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
   chatops: {
+    // Master switch for the Telegram integration. Off = the provider never
+    // starts (even with a token saved in the DB), the config endpoint rejects
+    // updates, and the frontend hides the Telegram messaging channel.
+    telegramEnabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED === "true",
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —

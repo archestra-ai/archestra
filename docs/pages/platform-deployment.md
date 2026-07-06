@@ -1434,8 +1434,9 @@ See [Slack](/docs/platform-slack) for setup instructions.
 
 See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses long polling — no public URL, webhook, or ngrok needed.
 
-- **`ARCHESTRA_CHATOPS_TELEGRAM_ENABLED`** - Enable Telegram integration.
-  - Default: `false`
+- **`ARCHESTRA_CHATOPS_TELEGRAM_ENABLED`** - Master switch for the Telegram integration.
+  - Default: `false` — the Telegram channel is hidden and the provider never starts
+  - Set to `true` to show the channel and allow configuration
 
 - **`ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN`** - Bot token issued by [@BotFather](https://t.me/BotFather).
   - Required when: `ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true`

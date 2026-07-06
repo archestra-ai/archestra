@@ -292,7 +292,9 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
-    if (telegramConfig) {
+    // The Telegram integration is feature-flagged: without the master switch
+    // the provider never starts, even if the DB already holds a config.
+    if (telegramConfig && config.chatops.telegramEnabled) {
       this.telegramProvider = new TelegramProvider(telegramConfig);
       // Telegram delivers everything over long polling, so all events flow
       // through the event handler (like Slack socket mode)
@@ -1530,6 +1532,9 @@ export class ChatOpsManager {
 
   private async seedTelegramConfigFromEnvVars(): Promise<void> {
     try {
+      // Don't store tokens for a feature-flagged-off integration
+      if (!config.chatops.telegramEnabled) return;
+
       const existing = await ChatOpsConfigModel.getTelegramConfig();
       if (existing) return;
 
@@ -1537,7 +1542,7 @@ export class ChatOpsManager {
       if (!botToken) return;
 
       await ChatOpsConfigModel.saveTelegramConfig({
-        enabled: process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED === "true",
+        enabled: true,
         botToken,
       });
       logger.info("[ChatOps] Seeded Telegram config from env vars to DB");

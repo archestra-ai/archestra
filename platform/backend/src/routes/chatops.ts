@@ -32,6 +32,7 @@ import {
 import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -1529,6 +1530,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true and restart.",
+        );
+      }
       const { enabled, botToken } = request.body;
 
       // Merge new values with existing DB config (or defaults for first setup)

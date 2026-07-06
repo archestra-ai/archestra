@@ -1,3 +1,4 @@
+import JSZip from "jszip";
 import { describe, expect, it, vi } from "vitest";
 import type { ConnectorSyncBatch } from "@/types";
 import { GoogleDriveConnector } from "./gdrive-connector";
@@ -67,6 +68,66 @@ function resetMocks() {
   mockFilesGet.mockReset();
   mockFilesExport.mockReset();
   mockAboutGet.mockReset();
+}
+
+/** Minimal valid .docx (OOXML zip) wrapping a single paragraph of text. */
+async function buildDocx(text: string): Promise<ArrayBuffer> {
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+  );
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
+/** Minimal valid .xlsx (OOXML zip) with one shared string in cell A1. */
+async function buildXlsx(cells: string[]): Promise<ArrayBuffer> {
+  const zip = new JSZip();
+  const sst = cells.map((c) => `<si><t>${c}</t></si>`).join("");
+  zip.file(
+    "xl/sharedStrings.xml",
+    `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sst}</sst>`,
+  );
+  const row = cells
+    .map((_, i) => `<c r="${i}1" t="s"><v>${i}</v></c>`)
+    .join("");
+  zip.file(
+    "xl/worksheets/sheet1.xml",
+    `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row>${row}</row></sheetData></worksheet>`,
+  );
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
+/** Minimal valid multi-sheet .xlsx: one shared-strings table, N worksheets. */
+async function buildMultiSheetXlsx(sheets: string[][]): Promise<ArrayBuffer> {
+  const zip = new JSZip();
+  const sst = sheets
+    .flat()
+    .map((c) => `<si><t>${c}</t></si>`)
+    .join("");
+  zip.file(
+    "xl/sharedStrings.xml",
+    `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sst}</sst>`,
+  );
+  let stringIndex = 0;
+  sheets.forEach((cells, sheetIdx) => {
+    const row = cells
+      .map((_, colIdx) => `<c r="${colIdx}1" t="s"><v>${stringIndex++}</v></c>`)
+      .join("");
+    zip.file(
+      `xl/worksheets/sheet${sheetIdx + 1}.xml`,
+      `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row>${row}</row></sheetData></worksheet>`,
+    );
+  });
+  return zip.generateAsync({ type: "arraybuffer" });
 }
 
 describe("GoogleDriveConnector", () => {
@@ -255,9 +316,8 @@ describe("GoogleDriveConnector", () => {
             makeDriveFile("file-2", "video.mp4", {
               mimeType: "video/mp4",
             }),
-            makeDriveFile("file-3", "spreadsheet.xlsx", {
-              mimeType:
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            makeDriveFile("file-3", "archive.zip", {
+              mimeType: "application/zip",
             }),
           ],
           nextPageToken: undefined,
@@ -280,6 +340,132 @@ describe("GoogleDriveConnector", () => {
       // Only doc.txt should be synced
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].title).toBe("doc.txt");
+
+      // The unsupported files are reported as skipped (not silently dropped) so
+      // the run can surface "N found, M imported, K unsupported".
+      expect(batches[0].skipped).toHaveLength(2);
+      expect(batches[0].skipped?.map((s) => s.name).sort()).toEqual([
+        "archive.zip",
+        "video.mp4",
+      ]);
+      expect(
+        batches[0].skipped?.every((s) => s.reason === "unsupported_file_type"),
+      ).toBe(true);
+    });
+
+    it("recognizes supported files by mimeType when the name has no extension", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      // A real .docx whose name carries no extension — Drive still reports the
+      // OOXML mimeType. The old extension-only check skipped this; it must not.
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-1", "Signed Contract", {
+              mimeType:
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: await buildDocx("Extensionless contract body"),
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].title).toBe("Signed Contract");
+      expect(batches[0].documents[0].content).toContain(
+        "Extensionless contract body",
+      );
+    });
+
+    it("syncs .xlsx spreadsheets", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("file-1", "budget.xlsx", {
+              mimeType:
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      mockFilesGet.mockResolvedValueOnce({
+        data: await buildXlsx(["Revenue", "Q1 2024"]),
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain("Revenue");
+      expect(batches[0].documents[0].content).toContain("Q1 2024");
+    });
+
+    it("exports Google Sheets as .xlsx so every sheet is ingested, not just the first", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("gsheet-1", "Quarterly Report", {
+              mimeType: "application/vnd.google-apps.spreadsheet",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      // Two sheets: a text/csv export would return only the first.
+      mockFilesExport.mockResolvedValueOnce({
+        data: await buildMultiSheetXlsx([
+          ["Sheet One Revenue"],
+          ["Sheet Two Expenses"],
+        ]),
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      // Exported as .xlsx bytes, not text/csv (which Google truncates to sheet 1).
+      expect(mockFilesExport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        expect.objectContaining({ responseType: "arraybuffer" }),
+      );
+      // Content from BOTH sheets is present.
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain("Sheet One Revenue");
+      expect(batches[0].documents[0].content).toContain("Sheet Two Expenses");
     });
 
     it("paginates using nextPageToken", async () => {

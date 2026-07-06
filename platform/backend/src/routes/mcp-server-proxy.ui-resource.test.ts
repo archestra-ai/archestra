@@ -197,6 +197,54 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     });
   });
 
+  test("resources/read of a non-ui:// resource is rejected without reaching the upstream server", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_clock",
+      meta: { _meta: { ui: { resourceUri: UI_RESOURCE_URI } } },
+    });
+
+    const readSpy = vi
+      .spyOn(mcpClient, "readResourceForServer")
+      .mockResolvedValue({
+        contents: [{ uri: "x", text: "SHOULD NOT BE READ" }],
+      } as Awaited<ReturnType<typeof mcpClient.readResourceForServer>>);
+
+    app = await buildApp(user.id, org.id);
+
+    // A non-ui:// URI addresses the server's model-facing data resources, not an
+    // app UI template — the sandbox must not be able to reach it.
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/mcp/server/${server.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: rpc("resources/read", { uri: "resource://internal/secrets" }),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().error?.code).toBe(-32002);
+    // The refused read must never reach the upstream (no exfiltration through
+    // the app runtime's install credentials).
+    expect(readSpy).not.toHaveBeenCalled();
+  });
+
   test("tools/call is delegated to the installed server's own runtime", async ({
     makeUser,
     makeOrganization,

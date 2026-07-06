@@ -12,26 +12,46 @@ const KEY: Key = {
   scope: "org",
 };
 
+const ANTHROPIC_KEY: Key = {
+  id: "key-2",
+  name: "Anthropic - org",
+  provider: "anthropic",
+  scope: "org",
+};
+
+type ModelStub = {
+  id: string;
+  dbId: string;
+  provider: string;
+  displayName: string;
+  isFree: boolean;
+  isBest: boolean;
+};
+
+const OPENAI_MODEL: ModelStub = {
+  id: "model-1",
+  dbId: "model-1",
+  provider: "openai",
+  displayName: "Model 1",
+  isFree: false,
+  isBest: true,
+};
+
 let mockAvailableKeys: Key[] = [KEY];
+// The models query serves this verbatim; tests flip `isPlaceholderData` to
+// simulate `keepPreviousData` holding the previous key's list during a switch.
+let mockModelsResult: {
+  data: ModelStub[];
+  isPending: boolean;
+  isPlaceholderData: boolean;
+} = { data: [OPENAI_MODEL], isPending: false, isPlaceholderData: false };
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useAvailableLlmProviderApiKeys: () => ({ data: mockAvailableKeys }),
 }));
 
 vi.mock("@/lib/llm-models.query", () => ({
-  useLlmModels: () => ({
-    data: [
-      {
-        id: "model-1",
-        dbId: "model-1",
-        provider: "openai",
-        displayName: "Model 1",
-        isFree: false,
-        isBest: true,
-      },
-    ],
-    isPending: false,
-  }),
+  useLlmModels: () => mockModelsResult,
 }));
 
 // Presentational stand-ins so the test drives selection deterministically
@@ -59,31 +79,46 @@ vi.mock("@/components/form-dialog", () => ({
 
 vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   LlmProviderApiKeyDropdown: ({
+    availableKeys,
     onSelectKey,
   }: {
+    availableKeys: { id: string }[];
     onSelectKey: (value: string) => void;
   }) => (
-    <button type="button" onClick={() => onSelectKey("key-1")}>
-      mock-select-key
-    </button>
+    <div>
+      {availableKeys.map((key) => (
+        <button key={key.id} type="button" onClick={() => onSelectKey(key.id)}>
+          select-key-{key.id}
+        </button>
+      ))}
+    </div>
   ),
 }));
 
+// Renders one button per offered option so a test can assert exactly which
+// models the picker exposes (a stale option would be a selectable button).
 vi.mock("@/components/llm-model-select", () => ({
   LlmModelSearchableSelect: ({
+    options,
     onValueChange,
     disabled,
   }: {
+    options: { value: string }[];
     onValueChange: (value: string) => void;
     disabled?: boolean;
   }) => (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onValueChange("model-1")}
-    >
-      mock-select-model
-    </button>
+    <div data-disabled={disabled}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          disabled={disabled}
+          onClick={() => onValueChange(option.value)}
+        >
+          model-option-{option.value}
+        </button>
+      ))}
+    </div>
   ),
 }));
 
@@ -111,6 +146,11 @@ function renderStep(onDone = vi.fn()) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockAvailableKeys = [KEY];
+  mockModelsResult = {
+    data: [OPENAI_MODEL],
+    isPending: false,
+    isPlaceholderData: false,
+  };
   // Success path returns the updated organization; the step closes only then.
   mutateAsync.mockResolvedValue({ id: "org-1" });
 
@@ -143,7 +183,7 @@ describe("DefaultModelOnboardingStep", () => {
     await user.click(screen.getByRole("button", { name: "Choose model" }));
     // The single available key is preselected, so the model can be picked
     // without choosing a key first.
-    await user.click(screen.getByText("mock-select-model"));
+    await user.click(screen.getByText("model-option-model-1"));
     await user.click(screen.getByRole("button", { name: "Set default" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -151,6 +191,29 @@ describe("DefaultModelOnboardingStep", () => {
       defaultLlmApiKeyId: "key-1",
     });
     expect(onDone).toHaveBeenCalled();
+  });
+
+  it("does not offer the previous key's models while the new key is loading", async () => {
+    const user = userEvent.setup();
+    mockAvailableKeys = [KEY, ANTHROPIC_KEY];
+    renderStep();
+
+    await user.click(screen.getByRole("button", { name: "Choose model" }));
+    // key-1 (OpenAI) is preselected and its model is offered.
+    expect(screen.getByText("model-option-model-1")).toBeInTheDocument();
+
+    // Switch to the Anthropic key. `keepPreviousData` keeps serving the OpenAI
+    // list (as placeholder) until the Anthropic fetch resolves — the picker
+    // must not expose that stale model, or the admin could save an OpenAI model
+    // against the Anthropic key.
+    mockModelsResult = {
+      data: [OPENAI_MODEL],
+      isPending: false,
+      isPlaceholderData: true,
+    };
+    await user.click(screen.getByText("select-key-key-2"));
+
+    expect(screen.queryByText("model-option-model-1")).not.toBeInTheDocument();
   });
 
   it("advances to chat from the card without saving when skipped", async () => {
@@ -170,7 +233,7 @@ describe("DefaultModelOnboardingStep", () => {
     const { onDone } = renderStep();
 
     await user.click(screen.getByRole("button", { name: "Choose model" }));
-    await user.click(screen.getByText("mock-select-model"));
+    await user.click(screen.getByText("model-option-model-1"));
     await user.click(screen.getByRole("button", { name: "Set default" }));
 
     expect(mutateAsync).toHaveBeenCalled();

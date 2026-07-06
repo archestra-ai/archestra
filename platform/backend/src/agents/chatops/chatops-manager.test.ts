@@ -23,6 +23,8 @@ import {
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsThreadAgentOverrideModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
@@ -400,6 +402,163 @@ describe("ChatOpsManager security validation", () => {
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: expect.stringContaining("/settings"),
+      }),
+    );
+    // Even the connect-prompt reply carries the agent footer.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        footer: `🤖 ${agent.name}`,
+      }),
+    );
+  });
+
+  test("LLM provider rejected the API key - names the key/model used and links to model providers", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Anthropic's 401 body surfaces verbatim as the thrown error's message.
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new Error("invalid x-api-key"),
+    );
+
+    const user = await makeUser({ email: "badkey@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+
+    // Pin the agent to a concrete (model, key) pair so the resolution the
+    // error reply re-runs lands on exactly this key.
+    const secret = await makeSecret({ secret: { apiKey: "sk-revoked" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      name: "Work Anthropic",
+      provider: "anthropic",
+      scope: "org",
+    });
+    const model = await ModelModel.create({
+      externalId: "anthropic/claude-test-model",
+      provider: "anthropic",
+      modelId: "claude-test-model",
+      contextLength: 200000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(apiKey.id, [
+      model.id,
+    ]);
+
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+      llmApiKeyId: apiKey.id,
+      modelId: model.id,
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "badkey@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    // The reply names the exact key and model the failed run used, and the
+    // footer leads with the agent identity and trails the raw provider error.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining(
+          'organization-wide Anthropic API key "Work Anthropic"',
+        ),
+        footer: `🤖 ${agent.name} · invalid x-api-key`,
+      }),
+    );
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("claude-test-model"),
+      }),
+    );
+    // It points the user at where to fix the key.
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("/llm/model-providers"),
+      }),
+    );
+  });
+
+  test("non-auth execution errors keep the generic reply with the raw error footer", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new Error("upstream exploded"),
+    );
+
+    const user = await makeUser({ email: "boom@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "boom@example.com",
+      sendReply: sendReplySpy,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Sorry, I encountered an error processing your request.",
+        footer: `🤖 ${agent.name} · upstream exploded`,
       }),
     );
   });

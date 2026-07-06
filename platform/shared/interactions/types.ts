@@ -15,6 +15,10 @@ export type PolicyDeniedPart = {
   input: Record<string, unknown>;
   errorText: string;
   unsafeContextActiveAtRequestStart?: boolean;
+  // The tool row the policy was evaluated against, when the backend knew it.
+  // Lets the "Edit policy" modal resolve the tool directly by id (All-mode
+  // tools have no agent_tools row for the assignment lookup to find).
+  toolId?: string;
 };
 
 export type DualLlmPart = {

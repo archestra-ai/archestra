@@ -5,11 +5,13 @@
 //! companion that links this crate directly.
 
 mod app_html;
+mod app_html_lint;
 pub mod contract;
 mod diagnostics;
 mod envelope;
 
 pub use app_html::{Rejection, RejectionKind, ScanResult, scan_app_html};
+pub use app_html_lint::{LintConfig, LintFindings, lint_app_html};
 pub use diagnostics::{
     DiagnosticEntry, cap_diagnostic_entries, escape_angle_brackets, format_diagnostic_entry_lines,
     merge_diagnostic_entries,

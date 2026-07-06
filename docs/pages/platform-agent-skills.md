@@ -1,14 +1,10 @@
 ---
 title: Skills
 category: Agents
-order: 8
+order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-05-21
+lastUpdated: 2026-07-03
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 Agent Skills are markdown instruction sets an agent loads on demand. A skill is a `SKILL.md` file plus optional resource files, following the [Agent Skills specification](https://agentskills.io/specification).
 
@@ -24,7 +20,7 @@ The two tools reveal a skill progressively:
 - `load_skill` with a name returns that skill's `SKILL.md` and the list of bundled resource paths.
 - `load_skill` with a name and a resource path fetches one bundled file at a time.
 
-> **No runtime in Archestra (yet).** Archestra only reads skill files — `load_skill` returns scripts as text and binaries as base64, never executes them. They are stored intact so external clients that have their own runtime (Claude Code, n8n, etc.) can pull them down and run them.
+> **Running a skill's scripts.** With the [Code Sandbox](./platform-code-sandbox) enabled, `load_skill` mounts the skill into the conversation's sandbox at `/skills/<name>`, so its scripts run right there. Without the sandbox, Archestra still stores and serves skill files intact — `load_skill` returns scripts as text and binaries as base64 — so external clients with their own runtime (Claude Code, n8n, and the like) can pull them down and run them.
 
 ## Invoking a skill from chat
 
@@ -40,7 +36,7 @@ A skill is a `SKILL.md` plus optional resource files.
 skill-name/
 ├── SKILL.md          # required: frontmatter + instructions
 ├── references/       # optional: docs the model reads on demand
-├── scripts/          # optional: code, served as readable text (not executed)
+├── scripts/          # optional: code, runnable in the code sandbox
 └── assets/           # optional: templates, images, fonts
 ```
 
@@ -107,9 +103,9 @@ Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skil
 
 Some skills only work in specific environments — a Python interpreter, a particular OS, a tool that has to be installed first. The spec captures that as a `compatibility` field in the frontmatter. Archestra shows it as a **compatibility** badge in the skill list and import dialog, and includes the value in the `load_skill` response so the model can tell the user when the environment cannot meet the requirement instead of failing halfway through the task.
 
-## Distribution to External Clients
+## Distribution to external clients
 
-The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no SKILL.md copies to keep in sync.
+The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no `SKILL.md` copies to keep in sync. To hand skills to a client as portable bundles instead, see [Sharing Skills](./platform-agent-skills-sharing).
 
 ## Skills vs agents vs routing
 
@@ -118,4 +114,4 @@ The two skill tools are plain MCP tools. Any external client — Claude Code, Cu
 | **Agent**        | System prompt + tools + knowledge                                                       | Default building block                       |
 | **Sub-agent**    | Agent called by another agent as a helper                                               | Compose specialists under one orchestrator   |
 | **Router agent** | Default agent that hands off via `swap_agent` and returns via `swap_to_default_agent`   | Pick the right specialist at runtime         |
-| **Skill**        | Markdown loaded on demand via `load_skill`                      | Keep agents generic; attach many specializations      |
+| **Skill**        | Markdown loaded on demand via `load_skill`                                               | Keep agents generic; attach many specializations |

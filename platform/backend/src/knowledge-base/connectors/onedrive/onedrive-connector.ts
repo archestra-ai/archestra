@@ -3,8 +3,6 @@ import { ClientSecretCredential } from "@azure/identity";
 import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
 import type { DriveItem as GraphDriveItem } from "@microsoft/microsoft-graph-types";
-import JSZip from "jszip";
-import mammoth from "mammoth";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -13,17 +11,19 @@ import type {
   OneDriveConfig,
 } from "@/types";
 import { OneDriveConfigSchema } from "@/types";
-import { stripHtmlTags } from "@/utils/strip-html";
 import {
   BaseConnector,
   buildCheckpoint,
   extractErrorMessage,
 } from "../base-connector";
+import { extractTextFromDocx } from "../docx-text-extractor";
 import {
   type FolderTraversalAdapter,
   traverseFolders,
 } from "../folder-traversal";
 import { parsePdfBuffer } from "../pdf-utils";
+import { extractTextFromPptx } from "../pptx-text-extractor";
+import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 const DEFAULT_BATCH_SIZE = 50;
@@ -44,7 +44,12 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   ".yml",
 ]);
 
-const SUPPORTED_BINARY_EXTENSIONS = new Set([".docx", ".pdf", ".pptx"]);
+const SUPPORTED_BINARY_EXTENSIONS = new Set([
+  ".docx",
+  ".pdf",
+  ".pptx",
+  ".xlsx",
+]);
 
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
   ".jpg",
@@ -704,8 +709,7 @@ async function extractTextFromBinary(
 ): Promise<string> {
   switch (ext) {
     case ".docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      return extractTextFromDocx(buffer);
     }
     case ".pdf": {
       return parsePdfBuffer(buffer);
@@ -713,35 +717,12 @@ async function extractTextFromBinary(
     case ".pptx": {
       return extractTextFromPptx(buffer);
     }
+    case ".xlsx": {
+      return extractTextFromXlsx(buffer);
+    }
     default:
       return "";
   }
-}
-
-async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
-  const parts: string[] = [];
-
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const numA = Number.parseInt(a.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      const numB = Number.parseInt(b.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      return numA - numB;
-    });
-
-  for (const slidePath of slideFiles) {
-    const xml = await zip.files[slidePath].async("text");
-    const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g);
-    if (texts) {
-      const slideText = texts
-        .map((text: string) => stripHtmlTags(text))
-        .join(" ");
-      if (slideText.trim()) parts.push(slideText.trim());
-    }
-  }
-
-  return parts.join("\n\n");
 }
 
 function driveItemToDocument(

@@ -172,6 +172,54 @@ describe("McpClient Auto-tool-mode exclusions", () => {
     expect(mockConnect).not.toHaveBeenCalled();
   });
 
+  test("an excluded assigned tool yields precedence to a non-excluded same-named tool from another catalog", async () => {
+    // Tool names are unique only per catalog. Catalog B has an identically
+    // named tool the agent can reach dynamically; only catalog A's ASSIGNED
+    // copy is excluded.
+    const secretB = await secretManager().createSecret(
+      { access_token: "mirror-token" },
+      "mirrortoken",
+    );
+    const catalogB = await InternalMcpCatalogModel.create({
+      name: "github-mirror",
+      serverType: "remote",
+      serverUrl: "https://mirror.example/mcp/",
+    });
+    await McpServerModel.create({
+      name: "github-mirror",
+      secretId: secretB.id,
+      catalogId: catalogB.id,
+      serverType: "remote",
+    });
+    const toolB = await ToolModel.createToolIfNotExists({
+      name: TOOL_NAME,
+      description: "List repos (mirror)",
+      parameters: {},
+      catalogId: catalogB.id,
+    });
+
+    await agentToolExclusionsService.replaceExclusions({
+      agentId,
+      organizationId,
+      excludedToolIds: [toolId],
+    });
+
+    // The dispatcher resolved catalog B's non-excluded row (search_tools /
+    // run_tool advertise it). Execution must resolve to that row instead of
+    // letting the excluded catalog-A assignment hijack the name and refuse the
+    // call as "unavailable" — the resolved row moves on to credential
+    // resolution (which fails here for lack of a token, a DIFFERENT error).
+    const result = await mcpClient.executeToolCallForOwner(
+      { id: "call_cross", name: TOOL_NAME, arguments: {} },
+      agentOwner(agentId),
+      undefined,
+      { availableTool: toolB as any },
+    );
+    expect(JSON.stringify(result.content)).not.toContain(
+      "is available to this agent",
+    );
+  });
+
   test("exclusions are inert when accessAllTools is off (Custom mode untouched)", async () => {
     await agentToolExclusionsService.replaceExclusions({
       agentId,

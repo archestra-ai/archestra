@@ -148,105 +148,151 @@ pub async fn run(
     max_workers: Option<usize>,
     update_mcp_lock: bool,
     platform_dir: Option<&Path>,
+    branch: Option<&str>,
 ) -> Result<RunOutcome, RunError> {
-    let envs_dir = bench_dir.join("envs");
-    let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
-    let default_lanes_path = bench_dir.join("lanes.toml");
-    let lanes_path = lanes_file.unwrap_or(&default_lanes_path);
-    let lane_list =
-        load_lanes(lanes_path, lanes_filter).map_err(|e| RunError::Config(e.to_string()))?;
-    let workers = resolve_workers(max_workers, lane_list.len());
-    // Lane keys prefer `platform/.env` over the process env, so the same `.env` that configures the
-    // backend also seeds the bench's own provider clients. The `.env` is already a hard requirement of
-    // every run (preflight below also loads it).
-    let platform = crate::lifecycle::resolve_platform_dir(platform_dir, &repo_root());
-    let platform_env = crate::lifecycle::load_platform_env(&platform)?;
-    let api_keys = lane_api_keys(&lane_list, &platform_env)?;
-
-    // Fetch OpenRouter prices once up front. A failure is non-fatal: every run then reports cost n/a.
-    let (prices, price_status) = match pricing::fetch_price_book().await {
-        Ok(book) => (book, "ok".to_string()),
-        Err(e) => {
-            warn!("OpenRouter price fetch failed, run costs will be n/a: {e}");
-            (PriceBook::default(), format!("failed: {e}"))
+    // `--branch` builds the backend from a git worktree of that ref, once per run; downstream it is
+    // just another platform dir. `--branch` conflicts with `--platform-dir` (see the CLI), so when a
+    // branch is set `platform_dir` is `None` and the source of the copied prereqs is `<repo>/platform`.
+    let worktree = match branch {
+        Some(git_ref) => {
+            let source = crate::lifecycle::resolve_platform_dir(platform_dir, &repo_root());
+            // Fail fast on a broken sandbox BEFORE the multi-minute build: preflight the source
+            // platform dir (whose `.env` is what the worktree copies) so a down Docker/Dagger aborts
+            // the run now rather than after the build. Preserves preflight's "abort before spending
+            // work" property, which building first would silently defeat; the in-block preflight below
+            // then hits the warmed OnceCells.
+            crate::lifecycle::preflight(&repo_root(), Some(&source)).await?;
+            Some(
+                crate::lifecycle::prepare_branch_worktree(
+                    &repo_root(),
+                    &source,
+                    git_ref,
+                    &sanitize_slug(git_ref, &run_id()),
+                )
+                .await?,
+            )
         }
+        None => None,
     };
-    let prices = Arc::new(prices);
+    let effective_platform_dir: Option<PathBuf> = worktree
+        .as_ref()
+        .map(|w| w.platform_dir.clone())
+        .or_else(|| platform_dir.map(Path::to_path_buf));
+    let backend_branch = branch.map(str::to_string);
+    let backend_commit = worktree.as_ref().map(|w| w.commit.clone());
 
-    let selected = select_envs(&envs, env_filter, task_filter)?;
-    let plan = build_run_plan(selected, lane_list);
+    // Everything after worktree creation runs inside this block so the worktree is removed on every
+    // normal exit — success or error (`?` returns from the block, not the fn) — while the signal path
+    // is covered by the registered teardown.
+    let outcome: Result<RunOutcome, RunError> = async {
+        let envs_dir = bench_dir.join("envs");
+        let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
+        let default_lanes_path = bench_dir.join("lanes.toml");
+        let lanes_path = lanes_file.unwrap_or(&default_lanes_path);
+        let lane_list =
+            load_lanes(lanes_path, lanes_filter).map_err(|e| RunError::Config(e.to_string()))?;
+        let workers = resolve_workers(max_workers, lane_list.len());
+        // Lane keys prefer `platform/.env` over the process env, so the same `.env` that configures the
+        // backend also seeds the bench's own provider clients. The `.env` is already a hard requirement of
+        // every run (preflight below also loads it).
+        let platform =
+            crate::lifecycle::resolve_platform_dir(effective_platform_dir.as_deref(), &repo_root());
+        let platform_env = crate::lifecycle::load_platform_env(&platform)?;
+        let api_keys = lane_api_keys(&lane_list, &platform_env)?;
 
-    // Preflight the sandbox once, before any artifact is written: a broken sandbox (managed bench
-    // Postgres can't come up, Dagger runner host won't resolve) aborts the whole run here with a
-    // single error instead of every backend boot failing the same way and fanning out one
-    // agent_error per (task × lane). Warms the same OnceCells `Instance::start` reads, so a healthy
-    // run pays nothing.
-    crate::lifecycle::preflight(&repo_root(), platform_dir).await?;
+        // Fetch OpenRouter prices once up front. A failure is non-fatal: every run then reports cost n/a.
+        let (prices, price_status) = match pricing::fetch_price_book().await {
+            Ok(book) => (book, "ok".to_string()),
+            Err(e) => {
+                warn!("OpenRouter price fetch failed, run costs will be n/a: {e}");
+                (PriceBook::default(), format!("failed: {e}"))
+            }
+        };
+        let prices = Arc::new(prices);
 
-    // An explicit `--run-dir` is reused (create_dir_all); an auto dir must be brand-new — the base name
-    // is seconds-granular, so two runs started in the same second would otherwise share a root and
-    // overwrite each other's config.json/aggregate.json.
-    let (root_run_dir, run_id) = match run_dir {
-        Some(p) => {
-            fs::create_dir_all(p).await?;
-            (p.to_path_buf(), run_id())
+        let selected = select_envs(&envs, env_filter, task_filter)?;
+        let plan = build_run_plan(selected, lane_list);
+
+        // Preflight the sandbox once, before any artifact is written: a broken sandbox (managed bench
+        // Postgres can't come up, Dagger runner host won't resolve) aborts the whole run here with a
+        // single error instead of every backend boot failing the same way and fanning out one
+        // agent_error per (task × lane). Warms the same OnceCells `Instance::start` reads, so a healthy
+        // run pays nothing.
+        crate::lifecycle::preflight(&repo_root(), effective_platform_dir.as_deref()).await?;
+
+        // An explicit `--run-dir` is reused (create_dir_all); an auto dir must be brand-new — the base name
+        // is seconds-granular, so two runs started in the same second would otherwise share a root and
+        // overwrite each other's config.json/aggregate.json.
+        let (root_run_dir, run_id) = match run_dir {
+            Some(p) => {
+                fs::create_dir_all(p).await?;
+                (p.to_path_buf(), run_id())
+            }
+            None => create_fresh_run_dir(bench_dir).await?,
+        };
+
+        write_run_config(
+            &root_run_dir,
+            &run_id,
+            &plan,
+            workers,
+            &prices,
+            &price_status,
+            backend_branch.as_deref(),
+            backend_commit.as_deref(),
+        )
+        .await?;
+
+        // Stream the managed Dagger engine's container logs into the run dir so a future engine crash is
+        // root-causeable (managed tier only; non-fatal). The host was resolved by `preflight` above.
+        let dagger_compose = repo_root()
+            .join("ai-labs")
+            .join("dev")
+            .join("docker-compose.bench-dagger.yml");
+        let dagger_logs =
+            crate::lifecycle::capture_managed_dagger_logs(&dagger_compose, &root_run_dir).await;
+
+        let ctx = RunCtx {
+            root_run_dir,
+            run_id,
+            api_keys,
+            envs_dir,
+            update_mcp_lock,
+            platform_dir: effective_platform_dir.clone(),
+            prices,
+        };
+
+        let results = execute_plan(plan, ctx.clone(), workers).await;
+
+        // All sandbox work is done; stop the engine-log follower (no-op if capture was skipped). The
+        // remaining report/aggregate steps touch no sandbox, so an early `?` return below cannot leak it.
+        if let Some(guard) = dagger_logs {
+            guard.stop().await;
         }
-        None => create_fresh_run_dir(bench_dir).await?,
-    };
 
-    write_run_config(
-        &root_run_dir,
-        &run_id,
-        &plan,
-        workers,
-        &prices,
-        &price_status,
-    )
-    .await?;
+        let results = crate::results::build_report(results).map_err(RunError::Config)?;
+        let report = render_markdown(&results);
+        write_report(&report, out).await?;
 
-    // Stream the managed Dagger engine's container logs into the run dir so a future engine crash is
-    // root-causeable (managed tier only; non-fatal). The host was resolved by `preflight` above.
-    let dagger_compose = repo_root()
-        .join("ai-labs")
-        .join("dev")
-        .join("docker-compose.bench-dagger.yml");
-    let dagger_logs =
-        crate::lifecycle::capture_managed_dagger_logs(&dagger_compose, &root_run_dir).await;
+        let aggregate = crate::results::aggregate(&results);
+        let aggregate_path = ctx.root_run_dir.join("aggregate.json");
+        fs::write(
+            &aggregate_path,
+            serde_json::to_string_pretty(&aggregate.to_json()).unwrap_or_default() + "\n",
+        )
+        .await?;
 
-    let ctx = RunCtx {
-        root_run_dir,
-        run_id,
-        api_keys,
-        envs_dir,
-        update_mcp_lock,
-        platform_dir: platform_dir.map(Path::to_path_buf),
-        prices,
-    };
-
-    let results = execute_plan(plan, ctx.clone(), workers).await;
-
-    // All sandbox work is done; stop the engine-log follower (no-op if capture was skipped). The
-    // remaining report/aggregate steps touch no sandbox, so an early `?` return below cannot leak it.
-    if let Some(guard) = dagger_logs {
-        guard.stop().await;
+        Ok(RunOutcome {
+            results,
+            run_dir: ctx.root_run_dir,
+        })
     }
+    .await;
 
-    let results = crate::results::build_report(results).map_err(RunError::Config)?;
-    let report = render_markdown(&results);
-    write_report(&report, out).await?;
-
-    let aggregate = crate::results::aggregate(&results);
-    let aggregate_path = ctx.root_run_dir.join("aggregate.json");
-    fs::write(
-        &aggregate_path,
-        serde_json::to_string_pretty(&aggregate.to_json()).unwrap_or_default() + "\n",
-    )
-    .await?;
-
-    Ok(RunOutcome {
-        results,
-        run_dir: ctx.root_run_dir,
-    })
+    if let Some(w) = worktree {
+        w.remove().await;
+    }
+    outcome
 }
 
 fn resolve_workers(requested: Option<usize>, lane_count: usize) -> usize {
@@ -2752,6 +2798,22 @@ fn timestamp() -> String {
         .replace("+00:00", "Z")
 }
 
+/// Filesystem-safe slug for the `--branch` worktree directory: map every char that isn't
+/// alnum/`-`/`_`/`.` (e.g. the `/` in `feature/foo`) to `-`, and suffix the run id so repeat runs of
+/// the same ref don't collide on the path.
+fn sanitize_slug(git_ref: &str, run_id: &str) -> String {
+    format!("{git_ref}-{run_id}")
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 async fn write_run_config(
     run_dir: &Path,
     run_id: &str,
@@ -2759,6 +2821,8 @@ async fn write_run_config(
     max_workers: usize,
     prices: &PriceBook,
     price_status: &str,
+    backend_branch: Option<&str>,
+    backend_commit: Option<&str>,
 ) -> Result<(), RunError> {
     let environments: Vec<serde_json::Value> = plan
         .iter()
@@ -2813,6 +2877,10 @@ async fn write_run_config(
         "lanes": lanes,
         "max_workers": max_workers,
         "git_commit": git_commit,
+        // When `--branch` is used the backend runs from a worktree of this ref/commit, not the harness
+        // checkout `git_commit` above; null on a normal run. Lets A/B results name the backend they ran.
+        "backend_branch": backend_branch,
+        "backend_commit": backend_commit,
         "temperature": crate::client::BENCH_TEMPERATURE,
         "pricing": {
             "source": "openrouter",
@@ -2847,6 +2915,19 @@ mod tests {
 
     fn files_payload(json: serde_json::Value) -> HashMap<String, serde_json::Value> {
         serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn test_sanitize_slug_is_filesystem_safe() {
+        // Slashes and other non-`[A-Za-z0-9._-]` chars collapse to `-`; the run id is appended.
+        assert_eq!(sanitize_slug("feature/foo", "rid1"), "feature-foo-rid1");
+        assert_eq!(sanitize_slug("release/v1.2", "r2"), "release-v1.2-r2");
+        assert_eq!(sanitize_slug("a b:c@d", "r"), "a-b-c-d-r");
+        assert!(
+            sanitize_slug("origin/x", "id")
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        );
     }
 
     #[test]
@@ -3445,9 +3526,18 @@ mod tests {
         let lanes = vec![dummy_lane("l1"), dummy_lane("l2")];
         let plan = build_run_plan(envs, lanes);
         let tmp = tempfile::tempdir().unwrap();
-        write_run_config(tmp.path(), "rid", &plan, 2, &PriceBook::default(), "ok")
-            .await
-            .unwrap();
+        write_run_config(
+            tmp.path(),
+            "rid",
+            &plan,
+            2,
+            &PriceBook::default(),
+            "ok",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
         let config: serde_json::Value =
             serde_json::from_slice(&std::fs::read(tmp.path().join("config.json")).unwrap())
                 .unwrap();

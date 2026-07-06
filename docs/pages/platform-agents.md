@@ -3,12 +3,8 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-05
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 Agents are reusable AI workers with instructions, tool access, and optional knowledge retrieval. You can invoke the same agent from chat, external integrations, or automation without rebuilding the workflow each time.
 
@@ -16,7 +12,7 @@ An agent can include:
 
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
-- a tools setting: **All** (every tool the calling user can access, minus an exclusion list) or **Custom** (only assigned tools)
+- a **Tools & Knowledge Sources** setting: **All** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
@@ -32,7 +28,7 @@ For larger toolsets, enable **Load tools when needed**. This keeps the initial t
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
 
-An agent's tools setting is **All** or **Custom** — tabs in the agent dialog. In **Custom** mode the agent uses only its explicitly assigned tools; new agents get a default set assigned by the backend, and the create form pre-selects that same set. In **All** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Agent connections** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills-sharing) reference tools without pre-assigning every tool to every agent.
+An agent's **Tools & Knowledge Sources** setting is **All** or **Custom** — tabs in the agent dialog. The tabs govern both tools and [knowledge sources](#knowledge-sources); this section covers the tools half. In **Custom** mode the agent uses only its explicitly assigned tools; new agents get a default set assigned by the backend, and the create form pre-selects that same set. In **All** mode, discovery is not limited to assigned tools: `search_tools` can find and `run_tool` can run every tool the signed-in user can access — Archestra built-in tools and tools from MCP servers — except tools on the agent's [exclusion list](#excluding-servers-and-tools). User permissions still apply. `run_tool` executes such a tool directly with credentials resolved at call time, following the MCP server's **Agent connections** setting: on behalf of the user by default (each person's own connection), or one shared account when the server is configured that way. A caller without a connection gets an actionable prompt to connect — nothing is borrowed from team or organization credentials. Nothing is assigned to the agent, so no permission to modify the agent is involved. This lets [Agent Skills](/docs/platform-agent-skills) reference tools without pre-assigning every tool to every agent.
 
 Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
 
@@ -68,17 +64,17 @@ Trigger setup is managed from **Agent Triggers**. Slack, MS Teams, and Incoming 
 
 ## Knowledge Sources
 
-Agents can be assigned one or more Knowledge Bases or knowledge connectors. This gives the agent retrieval access to your internal docs and connected systems without hardcoding those sources into the prompt.
+Knowledge follows the same **All** / **Custom** setting as tools (**Tools & Knowledge Sources** in the agent dialog). In **All** mode the agent can search every Knowledge Base and connector the chatting user can access, in its environment. In **Custom** mode it searches only the sources you assign to it. Either mode is still filtered by each user's own visibility.
 
-When at least one knowledge source is assigned, Archestra automatically adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool to that agent. The model can call it during a run to search across the assigned sources and pull relevant context into its answer.
+Whenever an agent has at least one reachable knowledge source, Archestra adds the built-in [`query_knowledge_sources`](/docs/platform-archestra-mcp-server#query_knowledge_sources) tool so the model can search across them during a run.
 
 The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
 
-See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
+See [Knowledge Bases](/docs/platform-knowledge) for how retrieval works and how sources are assigned. See [Archestra MCP Server](/docs/platform-archestra-mcp-server) for the built-in tool behavior and RBAC requirements.
 
 ## Environments
 
-An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its code sandbox runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools and knowledge it can use are scoped to that environment — the agent only sees tools and knowledge connectors in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
+An agent can be assigned to an [environment](/docs/platform-environments). This does two things: its [code sandbox](/docs/platform-code-sandbox) runs under that environment's egress network policy (the same machinery that governs self-hosted MCP server pods), and the tools and knowledge it can use are scoped to that environment — the agent only sees tools and knowledge connectors in the same environment (built-in servers excepted). With no environment assigned, the agent uses the Default environment.
 
 See [Environments](/docs/platform-environments) for the isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) for how policies are configured.
 
@@ -88,7 +84,7 @@ When an agent delegates work to another agent, Archestra tracks the full call ch
 
 ## Convert to Skill
 
-An agent can be converted into an [Agent Skill](/docs/platform-agent-skills-sharing) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
+An agent can be converted into an [Agent Skill](/docs/platform-agent-skills) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
 
 The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
 

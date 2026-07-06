@@ -96,11 +96,6 @@ export function ExposedServersSummary({
     };
   }, [recalcEdges]);
 
-  // Trigger an edge recalc once the server list changes (DOM width shifts).
-  useLayoutEffect(() => {
-    recalcEdges();
-  }, [recalcEdges]);
-
   const scrollByDir = (dir: 1 | -1) => {
     const el = scrollRef.current;
     if (!el) return;

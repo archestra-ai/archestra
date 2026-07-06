@@ -1,13 +1,17 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  getArchestraToolFullName,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import { AgentExcludedToolModel, ToolModel } from "@/models";
@@ -315,6 +319,61 @@ describe("agentToolExclusionsService", () => {
           sets,
         ),
       ).toBe(false);
+    });
+
+    test("Archestra built-in exclusions match by short name, so the default alias can't bypass a branded exclusion", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      // White-labeled deployment: the built-in row stores a branded name, but
+      // dispatch (run_tool / the gateway) reaches the same tool by the default
+      // `archestra__` alias. Both must resolve to the same short-name key.
+      const brandedName = "acme__whoami";
+      const defaultAliasName = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME);
+      expect(brandedName).not.toBe(defaultAliasName);
+      const shortNameSpy = vi
+        .spyOn(archestraMcpBranding, "getToolShortName")
+        .mockImplementation((name: string) =>
+          name === brandedName || name === defaultAliasName
+            ? TOOL_WHOAMI_SHORT_NAME
+            : null,
+        );
+      try {
+        await makeInternalMcpCatalog({
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          organizationId,
+        });
+        const branded = await makeTool({
+          name: brandedName,
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        });
+        await agentToolExclusionsService.replaceExclusions({
+          agentId: agent.id,
+          organizationId,
+          excludedToolIds: [branded.id],
+        });
+
+        const sets = await agentToolExclusionsService.getExclusionSets(
+          agent.id,
+        );
+        // Matched under the branded name the row stores...
+        expect(
+          isToolIdentityExcluded(
+            { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: brandedName },
+            sets,
+          ),
+        ).toBe(true);
+        // ...and under the default-prefix alias run_tool / the gateway resolve
+        // to, which must NOT bypass the exclusion on a white-labeled deployment.
+        expect(
+          isToolIdentityExcluded(
+            { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: defaultAliasName },
+            sets,
+          ),
+        ).toBe(true);
+      } finally {
+        shortNameSpy.mockRestore();
+      }
     });
 
     test("getActiveExclusionSets is empty when accessAllTools is off", async ({

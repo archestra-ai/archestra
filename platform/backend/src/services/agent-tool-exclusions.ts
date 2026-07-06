@@ -13,7 +13,7 @@ import {
   InternalMcpCatalogModel,
   ToolModel,
 } from "@/models";
-import { type AgentToolExclusions, ApiError } from "@/types";
+import { type AgentToolExclusions, ApiError, type Tool } from "@/types";
 
 /**
  * Per-agent tool exclusions for Auto-tool mode ("access all tools").
@@ -170,6 +170,29 @@ class AgentToolExclusionsService {
     return this.getExclusionSets(agentId);
   }
 
+  /**
+   * The agent's assigned MCP tools with excluded rows removed, plus the
+   * exclusion sets used to filter them. The single chokepoint every dispatch
+   * surface (gateway tools/list, search_tools, run_tool, resource client
+   * resolution, chat UI hints) shares, so the fetch-then-filter pairing lives in
+   * one place and a future enforcement change lands everywhere at once. Callers
+   * that already loaded the sets pass them in to skip the re-query; the two
+   * queries run in parallel otherwise.
+   */
+  async getFilteredMcpToolsByAgent(
+    agentId: string,
+    preloadedExclusionSets?: AgentToolExclusionSets,
+  ): Promise<{ tools: Tool[]; exclusionSets: AgentToolExclusionSets }> {
+    const [rows, exclusionSets] = await Promise.all([
+      ToolModel.getMcpToolsByAgent(agentId),
+      preloadedExclusionSets ?? this.getActiveExclusionSets(agentId),
+    ]);
+    return {
+      tools: rows.filter((tool) => !isToolRowExcluded(tool, exclusionSets)),
+      exclusionSets,
+    };
+  }
+
   // === Private validation helpers ===
 
   private async validateToolIds(
@@ -242,8 +265,23 @@ export const agentToolExclusionsService = new AgentToolExclusionsService();
 
 // === Internal helpers ===
 
+/**
+ * Dispatch-identity key for an exclusion match. Archestra built-in rows are
+ * keyed by SHORT name, not the stored row name: on a white-labeled deployment
+ * the row carries a branded prefix (`acme__list_agents`), but dispatch reaches
+ * the same tool by its short name (`run_tool`) or the default alias
+ * (`archestra__list_agents`) too. Normalizing both the build side
+ * (getExclusionSets) and every check side (isToolIdentityExcluded) through this
+ * one helper keeps the branded row, the branded call, and the default-alias
+ * call all matching the same key. Third-party rows are keyed by name verbatim
+ * (their names carry no branding alias).
+ */
 function toolKey(catalogId: string, name: string): string {
-  return `${catalogId}:${name}`;
+  const identityName =
+    catalogId === ARCHESTRA_MCP_CATALOG_ID
+      ? (archestraMcpBranding.getToolShortName(name) ?? name)
+      : name;
+  return `${catalogId}:${identityName}`;
 }
 
 /**

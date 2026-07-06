@@ -1,14 +1,10 @@
 ---
 title: Projects
-category: Agents
-order: 3
+category: Projects
+order: 1
 description: A shared workspace to organize your work
 lastUpdated: 2026-07-03
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 A project is a shared workspace for your chats, files, instructions, and scheduled tasks. Everything saved in a project is available to everyone in it. Projects are private until you share them with teams or the whole organization.
 

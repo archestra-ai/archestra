@@ -4,7 +4,7 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
-export type EmbeddingDimensionsInput = 3072 | 1536 | 768;
+export type EmbeddingDimensionsInput = 3072 | 1536 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefaultInput = string | number | boolean;
 
@@ -5318,7 +5318,7 @@ export type UserConfigFieldInput = {
     valuePrefix?: string;
 };
 
-export type EmbeddingDimensions = 3072 | 1536 | 768;
+export type EmbeddingDimensions = 3072 | 1536 | 1024 | 768 | 384;
 
 export type LocalConfigEnvironmentDefault = string | number | boolean;
 
@@ -42192,7 +42192,7 @@ export type GetConnectorsResponses = {
             schedule: string;
             enabled: boolean;
             lastSyncAt: string | null;
-            lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+            lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
             lastSyncError: string | null;
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
@@ -42596,7 +42596,7 @@ export type CreateConnectorResponses = {
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
@@ -42919,7 +42919,7 @@ export type GetConnectorResponses = {
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
@@ -43310,7 +43310,7 @@ export type UpdateConnectorResponses = {
         schedule: string;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
@@ -44233,7 +44233,7 @@ export type GetConnectorRunsResponses = {
         data: Array<{
             id: string;
             connectorId: string;
-            status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+            status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
             startedAt: string;
             completedAt: string | null;
             documentsProcessed: number | null;
@@ -44344,7 +44344,7 @@ export type GetConnectorRunResponses = {
     200: {
         id: string;
         connectorId: string;
-        status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial';
+        status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         startedAt: string;
         completedAt: string | null;
         documentsProcessed: number | null;
@@ -45147,6 +45147,9 @@ export type GetModelsWithApiKeysResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        defaultParameters: {
+            [key: string]: string | number | Array<string>;
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -45280,6 +45283,9 @@ export type UpdateModelResponses = {
         customPricePerMillionCacheWrite: string | null;
         ignored: boolean;
         embeddingDimensions: EmbeddingDimensions | null;
+        defaultParameters: {
+            [key: string]: string | number | Array<string>;
+        } | null;
         discoveredViaLlmProxy: boolean;
         lastSyncedAt: string;
         createdAt: string;
@@ -65918,6 +65924,107 @@ export type DeleteToolResponses = {
 };
 
 export type DeleteToolResponse = DeleteToolResponses[keyof DeleteToolResponses];
+
+export type GetToolData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/tools/{id}';
+};
+
+export type GetToolErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetToolError = GetToolErrors[keyof GetToolErrors];
+
+export type GetToolResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type GetToolResponse = GetToolResponses[keyof GetToolResponses];
 
 export type GetUserPermissionsData = {
     body?: never;

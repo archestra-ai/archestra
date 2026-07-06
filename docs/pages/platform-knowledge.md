@@ -1,15 +1,57 @@
 ---
-title: Connectors
+title: Knowledge
 category: Knowledge
-order: 2
-description: Supported connector types, configuration, and management
-lastUpdated: 2026-06-11
+order: 1
+description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
+lastUpdated: 2026-07-05
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
+A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions. The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra — no external vector database or separate retrieval service required.
 
--->
+> **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).
+
+![Agent answering from a Jira Knowledge Base with cited sources](/docs/automated_screenshots/platform-knowledge-bases_chat-with-citations.webp)
+
+## Configuration
+
+Open **Settings > Knowledge**. Both an embedding and a reranking model must be set before Knowledge Bases can be used.
+
+### Embedding Configuration
+
+![Embedding Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_embedding-configuration.webp)
+
+Pick the API key and embedding model. The embedding model vectorizes ingested documents so they can be queried semantically. The same model is used for both indexing and querying, which is why it is locked once saved.
+
+- **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
+- **Model** — any embedding-capable model exposed by the selected key.
+
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync.
+
+### Reranking Configuration
+
+![Reranking Configuration card in Settings > Knowledge](/docs/automated_screenshots/platform-knowledge-bases_reranking-configuration.webp)
+
+Pick the LLM that scores and reorders search results by relevance.
+
+- **Key** — any LLM provider key.
+- **Model** — any chat model from that provider.
+
+## Creating a Knowledge Base
+
+A Knowledge Base is a set of connectors. Create one from the **Knowledge** page and assign connectors to get data from. The same Knowledge Base can be reused across multiple agents and MCP Gateways.
+
+## Assigning to an Agent
+
+An agent — or an [MCP Gateway](/docs/platform-mcp-gateway) — reaches knowledge through the **Tools & Knowledge Sources** setting in its dialog, which has two modes:
+
+- **All** — the agent can search every Knowledge Base and connector the chatting user can access, within the agent's environment. Nothing is assigned; the reachable set follows each user's own visibility.
+- **Custom** — the agent searches only the Knowledge Bases and connectors you assign to it. Pick them under **Knowledge Sources**; the picker stays disabled until an embedding and reranking model are set (see [Configuration](#configuration)).
+
+Either mode is still filtered by the chatting user's own visibility, so an agent never surfaces a source the user could not read themselves. Once the agent has at least one reachable source, it gains a `query_knowledge_sources` tool that searches across them and returns the most relevant documents.
+
+The output of `query_knowledge_sources` is treated as sensitive by default, which can impact the ability to use subsequent tools. See [Archestra MCP Server](/docs/platform-archestra-mcp-server#auth), and [AI Tool Guardrails](/docs/platform-ai-tool-guardrails), for more details.
+
+![Selecting Knowledge Bases and connectors on an agent](/docs/automated_screenshots/platform-knowledge-bases_assign-to-agent.webp)
 
 Connectors pull data from external tools into Knowledge Bases. A connector can be assigned to multiple Knowledge Bases.
 
@@ -27,7 +69,11 @@ Users with the `knowledgeSource:admin` role can view and query every connector r
 
 > **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
 
-## Jira
+## Supported Connectors
+
+Archestra ships with these built-in connector types.
+
+### Jira
 
 Sync issues and discussions from Atlassian Jira.
 
@@ -44,7 +90,7 @@ Sync issues and discussions from Atlassian Jira.
 | Comment Email Blacklist | Comma-separated emails whose comments are excluded (optional)      |
 | Labels to Skip          | Comma-separated issue labels to exclude (optional)                 |
 
-## Confluence
+### Confluence
 
 Sync wiki pages from Atlassian Confluence.
 
@@ -62,7 +108,7 @@ Sync wiki pages from Atlassian Confluence.
 | Labels to Skip | Comma-separated labels to exclude (optional)                                  |
 | Batch Size     | Pages per batch (default: 50)                                                 |
 
-## GitHub
+### GitHub
 
 Sync issues, pull request discussions, and repository files from GitHub.
 
@@ -83,7 +129,7 @@ Sync issues, pull request discussions, and repository files from GitHub.
 | File Types            | Comma-separated file extensions to index when repository files are enabled (defaults to `.md`, `.mdx`, `.yaml`, `.yml`) |
 | Labels to Skip        | Comma-separated labels to exclude (optional)                                                    |
 
-## GitLab
+### GitLab
 
 Sync issues and merge request discussions from GitLab.
 
@@ -100,7 +146,7 @@ Sync issues and merge request discussions from GitLab.
 | Include Merge Requests | Toggle to sync merge requests and their comments (default: on)                     |
 | Labels to Skip         | Comma-separated labels to exclude (optional)                                       |
 
-## Asana
+### Asana
 
 Sync tasks and discussions from Asana projects.
 
@@ -114,7 +160,7 @@ Sync tasks and discussions from Asana projects.
 | Project GIDs  | Comma-separated project GIDs to sync (optional -- leave blank to sync all workspace projects) |
 | Tags to Skip  | Comma-separated tag names to exclude (optional)                                               |
 
-## ServiceNow
+### ServiceNow
 
 Sync ITSM records from a ServiceNow instance.
 
@@ -134,7 +180,7 @@ Sync ITSM records from a ServiceNow instance.
 | Assignment Groups             | Comma-separated assignment group sys_ids to filter by. Does not apply to business applications (optional)                     |
 | Batch Size                    | Records per batch (default: 50)                                                                                               |
 
-## Notion
+### Notion
 
 Sync pages and databases from a Notion workspace.
 
@@ -147,7 +193,7 @@ Sync pages and databases from a Notion workspace.
 | Database IDs | Comma-separated Notion database IDs to sync (optional -- leave blank to sync all accessible pages) |
 | Page IDs     | Comma-separated specific Notion page IDs to sync (optional -- takes precedence over Database IDs)  |
 
-## SharePoint
+### SharePoint
 
 Sync documents and site pages from SharePoint Online.
 
@@ -173,7 +219,7 @@ Where to find each value:
 - **Client Secret** — the secret **Value** from **Certificates & secrets** (not the secret ID).
 - **Site URL** — the exact SharePoint site web URL, not the display name.
 
-## OneDrive
+### OneDrive
 
 Ingests files from OneDrive for Business (personal drives of specified users) via the Microsoft Graph API. Text is extracted from `.txt`, `.md`, `.csv`, `.json`, `.xml`, `.html`, `.htm`, `.yaml`, `.log` files, as well as `.docx`, `.pdf`, and `.pptx` documents. When a multimodal embedding model is configured (e.g., `gemini-embedding-2-preview`), image files (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) up to 4 MB are also ingested and embedded directly.
 
@@ -198,12 +244,12 @@ To configure the connector:
 
 Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 
-### Known Limitations
+#### Known Limitations
 
 - Only OneDrive for Business (work/school accounts) is supported. Consumer OneDrive is not supported.
 - Syncs the personal drive (`/drive`) of each specified user; shared libraries are not traversed.
 
-## Google Drive
+### Google Drive
 
 Sync files from Google Drive (My Drive and Shared Drives).
 
@@ -218,7 +264,7 @@ Sync files from Google Drive (My Drive and Shared Drives).
 | File Types          | Comma-separated file extensions to include, e.g. `.pdf, .docx` (optional -- leave blank for all)                                                            |
 | Recursive Traversal | Sync files from all nested subfolders when a Folder ID is set (default: on)                                                                                 |
 
-## Dropbox
+### Dropbox
 
 Sync text and source files from a Dropbox account or team folder.
 
@@ -231,7 +277,7 @@ Sync text and source files from a Dropbox account or team folder.
 | Root Path  | Folder path to scope the sync (e.g., `/team-docs`). Leave blank to sync the entire account.              |
 | File Types | Comma-separated file extensions to include (e.g., `.md, .txt`). Leave blank to sync all supported types. |
 
-## Linear
+### Linear
 
 Sync issues, projects, and cycles from a Linear workspace.
 
@@ -250,7 +296,7 @@ Sync issues, projects, and cycles from a Linear workspace.
 | Include Cycles   | Sync cycles as documents (default: off)                                    |
 | Batch Size       | Items fetched per request (optional, defaults to connector implementation) |
 
-## Outline
+### Outline
 
 Sync published documents from an [Outline](https://www.getoutline.com/) workspace.
 
@@ -264,7 +310,7 @@ Sync published documents from an [Outline](https://www.getoutline.com/) workspac
 | API Key        | Your Outline API key (starts with `ol_api_`).                                                          |
 | Collection IDs | Optional comma-separated list of collection IDs to sync. Leave blank to sync all accessible documents. |
 
-## Salesforce
+### Salesforce
 
 Sync CRM records from a Salesforce org.
 
@@ -296,7 +342,7 @@ Example advanced config:
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
 
-## Web Crawler
+### Web Crawler
 
 Crawl static HTML pages from a documentation site or public web property.
 
@@ -321,7 +367,7 @@ If the start URL is the site root, such as `https://example.com/`, and no includ
 | Request Delay         | Optional delay between requests, in milliseconds.                                                        |
 | User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
 
-## Perforce (Helix Core)
+### Perforce (Helix Core)
 
 Sync text files from Perforce Helix Core depot paths.
 
@@ -344,19 +390,38 @@ Each depot path and extension combination is listed in its own REST API request.
 | File Types    | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                           |
 | Exclude Paths | Optional comma-separated depot paths skipped within the synced paths (e.g., `//depot/docs/generated`)  |
 
-## Managing Connectors
-
-Connectors can be managed from the **Connectors** page. Open a connector to:
-
-- **Toggle enabled/disabled** -- suspends or resumes the cron schedule
-- **Trigger sync** -- runs an immediate sync outside the schedule
-- **View indexed documents** -- search and page through the documents produced by that connector, preview source content, and delete documents that should be removed before the next sync
-- **View runs** -- see sync history with status, document counts, and errors
-
-## Environment
+## Environments
 
 A connector can be assigned a deployment environment. Only agents and gateways in the same environment can use its knowledge — a "dev" agent cannot query a "prod" connector. Unassigned connectors belong to the Default environment. See [Environments](/docs/platform-environments).
 
 ## Adding New Connector Types
 
 See [Adding Knowledge Connectors](/docs/platform-adding-knowledge-connectors) for a developer guide on implementing new connector types.
+
+## Architecture
+
+The RAG stack runs entirely within PostgreSQL — no external vector database. See [Deployment — Knowledge Base Configuration](/docs/platform-deployment#knowledge-base-configuration) for the full configuration reference.
+
+**Ingestion.** Connectors run on a cron schedule; documents are chunked and embedded into PostgreSQL with pgvector.
+
+```mermaid
+flowchart LR
+    C[Connectors] -->|cron schedule| D[Documents]
+    D --> CH[Chunking]
+    CH -->|Embedding provider API| E[Embedding]
+    E --> PG[(PostgreSQL + pgvector)]
+```
+
+**Querying.** The agent's query is embedded, then vector and optional full-text search run in parallel. Results are fused, reranked, and ACL-filtered before being returned.
+
+```mermaid
+flowchart LR
+    Q[Agent Query] -->|Embedding provider API| QE[Query Embedding]
+    QE --> VS[Vector Search]
+    QE --> FTS["Full-Text Search (configurable)"]
+    VS --> RRF[Reciprocal Rank Fusion]
+    FTS --> RRF
+    RRF --> RR[Reranking]
+    RR --> ACL[ACL Filtering]
+    ACL --> R[Results]
+```

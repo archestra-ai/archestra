@@ -50,6 +50,7 @@ import type {
   AgentType,
   InsertAgent,
   SortingQuery,
+  ToolExposureMode,
   UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -1672,6 +1673,24 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
+  }
+
+  /**
+   * The agent's mutable toolExposureMode, without findById's tool join and
+   * team/label/knowledge/connector/author/prompt hydration. The MCP gateway's
+   * tools/list handler re-reads it per request so a reused (cached) server
+   * reflects a mode change made after it was built.
+   */
+  static async findToolExposureModeById(
+    id: string,
+  ): Promise<{ toolExposureMode: ToolExposureMode } | null> {
+    const [row] = await db
+      .select({ toolExposureMode: schema.agentsTable.toolExposureMode })
+      .from(schema.agentsTable)
+      .where(
+        and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)),
+      );
+    return row ?? null;
   }
 
   /**

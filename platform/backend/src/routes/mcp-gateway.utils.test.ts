@@ -1490,6 +1490,61 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
+  test("reflects a toolExposureMode change on a reused server instead of the surface frozen at build time", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "full",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    // The MCP-App proxy reuses a cached server across requests, so the handler
+    // must not close over the agent's exposure fields captured at build time.
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: adminUser.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    // Custom "full" surface: assigned built-ins are listed, no dispatch meta tools.
+    const before = await listToolsHandler({ method: "tools/list", params: {} });
+    const beforeNames = before.tools.map((tool) => tool.name);
+    expect(beforeNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+    expect(beforeNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
+
+    // Switch the agent to progressive loading while the server stays cached.
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agent.id, {
+      toolExposureMode: "search_and_run_only",
+    });
+
+    // The SAME reused server must serve the new surface, not the frozen one.
+    const after = await listToolsHandler({ method: "tools/list", params: {} });
+    const afterNames = after.tools.map((tool) => tool.name);
+    expect(afterNames).toContain(TOOL_RUN_TOOL_FULL_NAME);
+    expect(afterNames).toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
+    expect(afterNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
+  });
+
   test("keeps assigned skill and sandbox runtime tools top-level in search_and_run_only", async ({
     makeAgent,
     makeMember,

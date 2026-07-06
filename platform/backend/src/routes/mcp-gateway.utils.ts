@@ -210,6 +210,18 @@ export async function createAgentServer(
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    // The MCP-App proxy reuses a cached server across requests, so the `agent`
+    // captured at build time can predate a toolExposureMode change (e.g. the
+    // switch to progressive loading in Custom→Auto). Re-read it fresh — the
+    // assigned tools below are already fetched fresh by agentId — so the list
+    // reflects the current mode. accessAllTools stays the build-time value so
+    // this list and the tools/call dynamic-access gate on the same cached server
+    // agree on it (refreshing only here would advertise dynamic tools that
+    // tools/call still rejects).
+    const surface = await AgentModel.findToolExposureModeById(agentId);
+    const toolExposureMode =
+      surface?.toolExposureMode ?? agent.toolExposureMode;
+
     // Get MCP tools (from connected MCP servers + Archestra built-in tools)
     // Excludes proxy-discovered tools
     // Fetch fresh on every request to ensure we get newly assigned tools
@@ -255,7 +267,7 @@ export async function createAgentServer(
     ).filter((tool) => !isToolRowExcluded(tool, exclusionSets));
 
     const implicitMetaTools =
-      agent.toolExposureMode === "search_and_run_only"
+      toolExposureMode === "search_and_run_only"
         ? getImplicitArchestraMetaTools()
         : [];
     const candidateTools = dedupeToolsByName(
@@ -269,7 +281,7 @@ export async function createAgentServer(
       tokenAuth?.organizationId,
     );
     const exposureFiltered = filterExposedTools({
-      toolExposureMode: agent.toolExposureMode ?? "full",
+      toolExposureMode: toolExposureMode ?? "full",
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
     // render_app renders only inside Archestra's own chat (the chat frontend

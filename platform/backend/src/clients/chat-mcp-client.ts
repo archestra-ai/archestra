@@ -145,6 +145,18 @@ const toolCache = new LRUCacheManager<CachedToolSet>({
 
 const clientLastValidatedAt = new Map<string, number>();
 
+// Per-agent tool-surface generation. clearChatMcpClient() bumps it whenever an
+// agent's surface changes; getChatMcpTools captures it before fetching and skips
+// its toolCache write if it advanced during the fetch. Without this, a tools/list
+// fetch that began before a surface change (e.g. switching Custom→Auto) can land
+// its now-stale result in the cache AFTER the eviction cleared it, pinning the
+// old surface for the whole cache TTL.
+const agentSurfaceGeneration = new Map<string, number>();
+
+function getAgentSurfaceGeneration(agentId: string): number {
+  return agentSurfaceGeneration.get(agentId) ?? 0;
+}
+
 /**
  * UI resource cache TTL — 60 seconds.
  * UI resources (MCP App HTML) rarely change during a conversation, so a
@@ -350,6 +362,10 @@ export function clearChatMcpClient(agentId: string): void {
 
   let clientClearedCount = 0;
   let toolClearedCount = 0;
+
+  // Invalidate any tools/list fetch already in flight for this agent: its
+  // post-fetch toolCache write will be dropped rather than re-poison the cache.
+  agentSurfaceGeneration.set(agentId, getAgentSurfaceGeneration(agentId) + 1);
 
   // Find and remove all client cache entries for this agentId (any user)
   // Collect keys first to avoid iterator invalidation during deletion
@@ -821,6 +837,10 @@ export async function getChatMcpTools({
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
   const shouldUseToolCache = !abortSignal;
+  // Snapshot the agent's surface generation before the fetch; if a concurrent
+  // clearChatMcpClient() bumps it while we fetch, the result is stale and must
+  // not be cached (see agentSurfaceGeneration).
+  const surfaceGenerationAtFetchStart = getAgentSurfaceGeneration(agentId);
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -1018,8 +1038,13 @@ export async function getChatMcpTools({
       }
     }
 
-    // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager)
-    if (shouldUseToolCache) {
+    // Cache tools in-memory (LRU eviction and TTL handled by LRUCacheManager).
+    // Skip the write if the agent's surface was evicted while we fetched — the
+    // result predates the change and would otherwise re-poison the cache.
+    if (
+      shouldUseToolCache &&
+      getAgentSurfaceGeneration(agentId) === surfaceGenerationAtFetchStart
+    ) {
       toolCache.set(toolCacheKey, { tools: aiTools, context: toolContext });
     }
 

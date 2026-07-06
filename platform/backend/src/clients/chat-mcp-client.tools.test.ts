@@ -1068,3 +1068,60 @@ describe("getChatMcpTools failure and cache gating", () => {
     expect(Object.keys(toolsB)).toEqual(["extsrv__b"]);
   });
 });
+
+describe("getChatMcpTools surface-eviction race (Custom→Auto)", () => {
+  test("drops the tool-cache write when the agent surface is evicted mid-fetch", async () => {
+    // Reproduces the Custom→Auto race: a tools/list fetch begins in Custom mode
+    // (full menu), the mode switch fires clearChatMcpClient() to evict caches,
+    // then the in-flight fetch completes and would re-poison toolCache with the
+    // stale full list for the whole cache TTL. Suspend tools/list to interleave
+    // the eviction between the fetch and the toolCache.set that follows it.
+    let releaseListTools: (() => void) | undefined;
+    const listToolsGate = new Promise<void>((resolve) => {
+      releaseListTools = resolve;
+    });
+    const customModeClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockImplementation(async () => {
+        await listToolsGate;
+        return { tools: [externalTool("custom_only_tool")] };
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    } as unknown as Client;
+
+    const { agent, user, conversation, baseParams } = await setupChatToolEnv({
+      gatewayClient: customModeClient,
+    });
+    if (!conversation) throw new Error("expected a conversation scope");
+    const scopeKey = conversation.id;
+
+    // Fetch starts in Custom mode and suspends inside tools/list.
+    const inflight = chatClient.getChatMcpTools(baseParams);
+    await vi.waitFor(() =>
+      expect(customModeClient.listTools).toHaveBeenCalled(),
+    );
+
+    // User switches Custom→Auto: the update path evicts the agent's caches.
+    chatClient.clearChatMcpClient(agent.id);
+
+    // The suspended Custom-mode fetch now resolves and tries to populate cache.
+    releaseListTools?.();
+    const firstTools = await inflight;
+    expect(firstTools.custom_only_tool).toBeDefined();
+
+    // The new Auto-mode surface exposes only the dispatch tool. Seed it.
+    const autoModeClient = buildMockGatewayClient([externalTool("run_tool")]);
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, scopeKey),
+      autoModeClient,
+    );
+
+    // A fresh run must reflect the Auto surface, not a cache poisoned by the
+    // raced write from the pre-switch Custom fetch.
+    const secondTools = await chatClient.getChatMcpTools(baseParams);
+    expect(secondTools.run_tool).toBeDefined();
+    expect(secondTools.custom_only_tool).toBeUndefined();
+    expect(autoModeClient.listTools).toHaveBeenCalledTimes(1);
+  });
+});

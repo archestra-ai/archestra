@@ -65,12 +65,15 @@ def tool_calls() -> Iterator[tuple[str, dict]]:
     """Each tool call in the run's trajectory as (effective_name, input). Under
     tool_exposure_mode=search_and_run_only the agent invokes discovered tools through the
     `archestra__run_tool` meta-tool with input {tool_name, tool_args}; decode that envelope so
-    callers see the real tool name + args either way. Args are then shallow-normalized (on both
-    the run_tool and direct surfaces, matching the platform's dispatch-time repair): a value that
-    is a single-key dict whose key is one of {value, $text, item, text} or the param name itself,
+    callers see the real tool name + args either way. run_tool args are then shallow-normalized,
+    approximating the platform's dispatch-time repair (which exists only on the run_tool path — a
+    direct call keeps its raw args, exactly as the platform saw them): a value that is a
+    single-key dict whose key is one of {value, $text, item, text} or the param name itself,
     holding a scalar or list, is replaced by that inner value -- the platform repairs such
     envelopes at dispatch but records the raw args, so without this the record misrepresents what
-    ran. Dict-valued inner payloads are never unwrapped and there is no recursion. Entries with a
+    ran. This layer is schema-free and slightly more permissive than the platform (it cannot see
+    declared param types), so a normalized entry is still just an attempt, not proof the call
+    executed. Dict-valued inner payloads are never unwrapped and there is no recursion. Entries with a
     falsy effective name (e.g. a run_tool call missing tool_name) are skipped; a non-dict input
     degrades to {}."""
     for call in state().get("tool_calls", []):
@@ -79,6 +82,6 @@ def tool_calls() -> Iterator[tuple[str, dict]]:
         inp = inp if isinstance(inp, dict) else {}
         if name == "archestra__run_tool":
             name, inp = inp.get("tool_name"), inp.get("tool_args")
-            inp = inp if isinstance(inp, dict) else {}
+            inp = _unwrap_value_envelopes(inp) if isinstance(inp, dict) else {}
         if name:
-            yield name, _unwrap_value_envelopes(inp)
+            yield name, inp

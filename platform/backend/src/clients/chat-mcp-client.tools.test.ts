@@ -1021,16 +1021,21 @@ describe("getChatMcpTools validation-error amplifier", () => {
   });
 
   /**
-   * The amplifier block's machine-readable payload: the JSON document on the
-   * result's last line, when it parses to a { params, required } shape.
+   * The amplifier block's machine-readable payload: a JSON document on its
+   * own line that parses to a { params, required } shape. Scans lines from
+   * the end so surrounding prose can change freely.
    */
   const parseShapeTemplate = (
     result: unknown,
   ): { params: Record<string, unknown>; required: string[] } | null => {
-    const content = toolResultContent(result);
-    const lastLine = content.slice(content.lastIndexOf("\n") + 1);
-    try {
-      const parsed: unknown = JSON.parse(lastLine);
+    const lines = toolResultContent(result).split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(lines[i]);
+      } catch {
+        continue;
+      }
       if (
         typeof parsed === "object" &&
         parsed !== null &&
@@ -1042,10 +1047,8 @@ describe("getChatMcpTools validation-error amplifier", () => {
           required: string[];
         };
       }
-      return null;
-    } catch {
-      return null;
     }
+    return null;
   };
 
   async function setupAmplifierEnv(
@@ -1117,6 +1120,34 @@ describe("getChatMcpTools validation-error amplifier", () => {
     // The interleaved class-B call did not reset class A's tally.
     const thirdA = await callClassA("three", "a-3");
     expect(parseShapeTemplate(thirdA)).not.toBeNull();
+  });
+
+  test("the same item-shape mistake at different array indices pools into one class", async () => {
+    const tools = await setupAmplifierEnv([runToolGatewayDef]);
+    const validEdit = { old_str: "x", new_str: "y" };
+    // The lone issue each time is invalid_type at edits.<i>.old_str, with the
+    // failing index shifting — exactly the re-guessed-item-shape loop.
+    const callWithBadItemAt = (index: number, id: string) =>
+      tools[runToolName].execute?.(
+        {
+          tool_name: "edit_app",
+          tool_args: {
+            appId: crypto.randomUUID(),
+            baseVersion: 1,
+            edits: [
+              ...Array.from({ length: index }, () => validEdit),
+              { old_str: index, new_str: "y" },
+            ],
+          },
+        },
+        execOptions(id),
+      );
+
+    expect(parseShapeTemplate(await callWithBadItemAt(0, "idx-0"))).toBeNull();
+    expect(parseShapeTemplate(await callWithBadItemAt(1, "idx-1"))).toBeNull();
+    expect(
+      parseShapeTemplate(await callWithBadItemAt(2, "idx-2")),
+    ).not.toBeNull();
   });
 
   test("a directly-called archestra tool pools under its own name", async () => {

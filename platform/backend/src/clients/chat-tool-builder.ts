@@ -1527,8 +1527,10 @@ function amplifyRepeatedValidationError(params: {
   if (!meta) {
     return;
   }
+  // Array indices are collapsed so re-guessing an item shape at varying
+  // positions (edits.0.old_str vs edits.1.old_str) still pools into one class.
   const issueClass = meta.issues
-    .map((issue) => `${issue.code}:${issue.path}`)
+    .map((issue) => `${issue.code}:${normalizeIssuePath(issue.path)}`)
     .sort()
     .join(",");
   const count = repeatTracker.noteValidationErrorClass(
@@ -1548,6 +1550,14 @@ function amplifyRepeatedValidationError(params: {
       text: `You have hit the same ${meta.toolName} validation error ${count} times. Restructure the call to match this parameter shape (placeholder values, not a working example):\n${JSON.stringify(synthesizeToolParamsTemplate(schema))}`,
     },
   ];
+}
+
+/** `edits.0.old_str` → `edits.*.old_str` (dot-joined path, see index.ts producer). */
+function normalizeIssuePath(path: string): string {
+  return path
+    .split(".")
+    .map((segment) => (/^\d+$/.test(segment) ? "*" : segment))
+    .join(".");
 }
 
 /** Narrowing reader for `_meta.archestraValidation` (see index.ts producer). */

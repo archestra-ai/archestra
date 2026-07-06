@@ -98,7 +98,10 @@ export type { ArchestraContext } from "./types";
 /**
  * Machine-readable descriptor of a tool-args validation failure, attached to
  * the error result as `_meta.archestraValidation`. Consumed by the chat
- * wrapper's same-error-class amplifier (chat-tool-builder.ts).
+ * wrapper's same-error-class amplifier (chat-tool-builder.ts). Like
+ * `_meta.archestraError` (shared/mcp-tool-error.ts), it is result metadata
+ * and reaches MCP gateway clients; it names only the tool and the issue
+ * code/path set — a subset of the error text beside it.
  */
 export interface ArchestraValidationMeta {
   /** Resolved target tool (full/branded name), never the run_tool wrapper. */

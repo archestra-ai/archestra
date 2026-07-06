@@ -426,11 +426,10 @@ describe("read_app / edit_app", () => {
       context,
     );
     expect(created.isError).toBe(false);
+    // The result text carries a next-baseVersion hint derived from this value;
+    // the hint is instruction prose, so only the structured contract is pinned.
     const createdVersion = structured(created).latestVersion as number;
     expect(createdVersion).toBe(1);
-    expect((created.content[0] as any).text).toContain(
-      `baseVersion=${createdVersion}`,
-    );
 
     const appId = structured(created).id as string;
     const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
@@ -443,9 +442,6 @@ describe("read_app / edit_app", () => {
     expect(updated.isError).toBe(false);
     const updatedVersion = structured(updated).latestVersion as number;
     expect(updatedVersion).toBe(2);
-    expect((updated.content[0] as any).text).toContain(
-      `baseVersion=${updatedVersion}`,
-    );
   });
 
   test("read_app returns the stored html and metadata for head and a pinned version", async () => {

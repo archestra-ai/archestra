@@ -508,13 +508,29 @@ async function dispatchTool({
         ? (result.content as CallToolResult["content"])
         : [{ type: "text", text: JSON.stringify(result.content) }],
       isError: result.isError,
-      _meta: result._meta,
+      _meta: stripArchestraValidationMeta(result._meta),
       structuredContent: result.structuredContent as
         | Record<string, unknown>
         | undefined,
     },
     repairedParams,
   );
+}
+
+/**
+ * `_meta.archestraValidation` is this platform's own validation descriptor
+ * (index.ts); an upstream third-party server must not be able to forge it and
+ * steer the chat wrapper's same-error-class amplifier. Other `_meta` keys pass
+ * through untouched.
+ */
+function stripArchestraValidationMeta(
+  meta: CallToolResult["_meta"],
+): CallToolResult["_meta"] {
+  if (!isRecord(meta) || !("archestraValidation" in meta)) {
+    return meta;
+  }
+  const { archestraValidation: _dropped, ...rest } = meta;
+  return rest;
 }
 
 /**

@@ -2022,7 +2022,7 @@ export function scaffoldPartialToolFailureResult(
       latestVersion: app.latestVersion,
       status: "partial" as const,
     },
-    `Created app "${app.name}" (${app.id}), but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+    `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
 }
 

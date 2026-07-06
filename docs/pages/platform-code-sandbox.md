@@ -12,7 +12,9 @@ The code sandbox is a private Linux container where an agent runs code during a 
 
 The agent runs shell commands with the `run_command` tool. Files a command writes stay on disk for the next command, so the agent builds up work across several steps. The working directory is `/home/sandbox`.
 
-Python runs in a ready-made project at `/home/sandbox`. The `python3` interpreter has numpy, pandas, and httpx already installed. The agent installs more packages with `uv add <package>` — `pip` is turned off on purpose. Pin versions when a result has to be reproducible, since a later install can resolve to a newer release.
+Python runs in a ready-made project at `/home/sandbox`. The `python3` interpreter has numpy, pandas, and httpx already installed. The agent installs more packages with `uv add <package>`. Pin versions when a result has to be reproducible, since a later install can resolve to a newer release.
+
+Other languages and command line tools can be installed by the agent when necessary.
 
 ## Files
 
@@ -26,11 +28,11 @@ When the agent loads a [skill](./platform-agent-skills), the skill's files mount
 
 ## How the Sandbox Runs
 
-The sandbox keeps no long-lived container. The source of truth is an append-only command log in Postgres. Each command starts a fresh container from a warm base image, replays the recorded history, then runs the new step and appends it.
-
-This makes state cheap to rebuild — so an engine crash costs you nothing. If the engine restarts or drops a cached layer, the next command reconstructs the exact state from the log.
+The sandbox keeps no long-lived container. The source of truth is an append-only command log in Archestra database. Each command starts a fresh container from a warm base image, replays the recorded history, then runs the new step and appends it.
 
 Archestra runs the containers with [Dagger](https://dagger.io), a programmatic container engine. Its layer cache is content-addressed, so replaying an unchanged history is a cache hit and the common path stays fast. A cold replay reruns the whole history — still correct, just slower.
+
+This design makes state cheap to rebuild — so an engine crash costs you nothing. If the engine restarts or drops a cached layer, the next command reconstructs the exact state from the log.
 
 One trade-off follows. A command that reads the network, the clock, or a random source can return a different result on a cold rebuild. `uv add` without a pinned version can resolve to a newer release the second time. Pin versions when a result has to be reproducible.
 

@@ -107,11 +107,11 @@ Some skills only work in specific environments — a Python interpreter, a parti
 
 The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no `SKILL.md` copies to keep in sync. To hand skills to a client as portable bundles instead, see [Sharing Skills](./platform-agent-skills-sharing).
 
-## Skills vs agents vs routing
+## Skills vs Agents
 
+We recommend using Skills as default way of customizing agentic workloads. 
 | Primitive        | What it is                                                                              | When to use                                  |
 | ---------------- | --------------------------------------------------------------------------------------- | -------------------------------------------- |
 | **Agent**        | System prompt + tools + knowledge                                                       | Default building block                       |
 | **Sub-agent**    | Agent called by another agent as a helper                                               | Compose specialists under one orchestrator   |
-| **Router agent** | Default agent that hands off via `swap_agent` and returns via `swap_to_default_agent`   | Pick the right specialist at runtime         |
-| **Skill**        | Markdown loaded on demand via `load_skill`                                               | Keep agents generic; attach many specializations |
+| **Skill**        | Markdown + scripts loaded on demand via `load_skill`                                               | Keep agents generic; attach many specializations |

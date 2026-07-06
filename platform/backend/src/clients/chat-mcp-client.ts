@@ -151,7 +151,15 @@ const clientLastValidatedAt = new Map<string, number>();
 // fetch that began before a surface change (e.g. switching Custom→Auto) can land
 // its now-stale result in the cache AFTER the eviction cleared it, pinning the
 // old surface for the whole cache TTL.
-const agentSurfaceGeneration = new Map<string, number>();
+//
+// LRU-bounded so a long-lived pod serving many distinct agents can't grow it
+// without bound. maxSize far exceeds the agents that could have a tools/list
+// fetch in flight at once, and the default TTL dwarfs any fetch, so a live
+// entry is never evicted mid-fetch — which would reset it to the absent default
+// and let a superseded write slip through.
+const agentSurfaceGeneration = new LRUCacheManager<number>({
+  maxSize: 10_000,
+});
 
 function getAgentSurfaceGeneration(agentId: string): number {
   return agentSurfaceGeneration.get(agentId) ?? 0;

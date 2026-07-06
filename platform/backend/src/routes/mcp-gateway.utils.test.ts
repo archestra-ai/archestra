@@ -1649,7 +1649,7 @@ describe("createAgentServer tools/list", () => {
     await makeMember(user.id, org.id, { role: "admin" });
     // The chat counterpart of the gateway test above: a chat agent renders an
     // app from the tool RESULT (render_app / run_tool), so an assigned UI tool
-    // must NOT be advertised — the list stays meta + always-exposed set (FR-2).
+    // must NOT be advertised — the list stays meta + always-exposed set.
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "agent",
@@ -1698,8 +1698,8 @@ describe("createAgentServer tools/list", () => {
   });
 
   // The realistic auto-mode matrix, both surfaces, for a DYNAMICALLY-reached
-  // (unassigned, accessAllTools) UI tool in search_and_run_only. Both assert
-  // current correct behavior the fix must preserve.
+  // (unassigned, accessAllTools) UI tool in search_and_run_only: the gateway
+  // advertises it (its client renders from the definition), the chat does not.
   for (const surface of [
     { agentType: "agent" as const, advertised: false },
     { agentType: "mcp_gateway" as const, advertised: true },
@@ -1979,7 +1979,7 @@ describe("createAgentServer tools/list", () => {
     await makeMember(user.id, org.id, { role: "admin" });
     // accessAllTools forces search_and_run_only. Assignment does not change the
     // chat rule: a UI tool is opened via render_app/run_tool from the result, so
-    // even an explicitly-assigned launch tool is not advertised here (FR-2).
+    // even an explicitly-assigned launch tool is not advertised here.
     const agent = await makeAgent({
       organizationId: org.id,
       accessAllTools: true,
@@ -2038,8 +2038,8 @@ describe("createAgentServer tools/list", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
     // The other half of the chat matrix: in full mode (custom tool selection,
-    // accessAllTools off) every assigned tool is advertised (FR-2), so the fix
-    // that hides UI tools in search_and_run_only must NOT reach into full mode.
+    // accessAllTools off) every assigned tool is advertised, a UI tool included;
+    // the search_and_run_only compaction does not apply here.
     const agent = await makeAgent({
       organizationId: org.id,
       accessAllTools: false,

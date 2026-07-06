@@ -334,20 +334,38 @@ class KnowledgeBaseConnectorModel {
     `);
   }
 
+  /**
+   * Reconcile connectors left showing `running` when they have no running run —
+   * e.g. a run finalized but its connector-status write was lost. Derives the
+   * connector's status from its latest run (the authoritative source) in one
+   * statement, replacing the old task-scanning cleanup loop. A connector whose
+   * latest run is still `running` is skipped (it is genuinely in progress), so
+   * this never races a live run. Returns the ids it corrected, for logging.
+   */
+  static async reconcileOrphanedConnectorStatuses(): Promise<string[]> {
+    const { rows } = await db.execute<{ id: string }>(sql`
+      UPDATE knowledge_base_connectors c
+      SET last_sync_status = latest.status,
+          last_sync_error = latest.error
+      FROM (
+        SELECT DISTINCT ON (connector_id)
+          connector_id, status, error
+        FROM connector_runs
+        ORDER BY connector_id, started_at DESC
+      ) latest
+      WHERE c.id = latest.connector_id
+        AND c.last_sync_status = 'running'
+        AND latest.status <> 'running'
+      RETURNING c.id
+    `);
+    return rows.map((r) => r.id);
+  }
+
   static async findAllEnabled(): Promise<KnowledgeBaseConnector[]> {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
       .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
-  }
-
-  static async findAllWithStatus(
-    status: ConnectorSyncStatus,
-  ): Promise<KnowledgeBaseConnector[]> {
-    return await db
-      .select()
-      .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.lastSyncStatus, status));
   }
 
   static async delete(id: string): Promise<boolean> {

@@ -363,72 +363,6 @@ describe("ConnectorRunModel", () => {
     });
   });
 
-  describe("hasActiveRun", () => {
-    test("returns true when connector has a running run", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeConnectorRun,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      await makeConnectorRun(connector.id, { status: "running" });
-
-      const result = await ConnectorRunModel.hasActiveRun(connector.id);
-
-      expect(result).toBe(true);
-    });
-
-    test("returns false when connector has no running runs", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeConnectorRun,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      await makeConnectorRun(connector.id, { status: "success" });
-      await makeConnectorRun(connector.id, { status: "failed" });
-
-      const result = await ConnectorRunModel.hasActiveRun(connector.id);
-
-      expect(result).toBe(false);
-    });
-
-    test("returns false when connector has no runs", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-
-      const result = await ConnectorRunModel.hasActiveRun(connector.id);
-
-      expect(result).toBe(false);
-    });
-
-    test("does not consider runs from other connectors", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeConnectorRun,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector1 = await makeKnowledgeBaseConnector(kb.id, org.id);
-      const connector2 = await makeKnowledgeBaseConnector(kb.id, org.id);
-      await makeConnectorRun(connector2.id, { status: "running" });
-
-      const result = await ConnectorRunModel.hasActiveRun(connector1.id);
-
-      expect(result).toBe(false);
-    });
-  });
-
   describe("sumDocsIngestedByConnector", () => {
     test("returns sum of documentsIngested for a connector", async ({
       makeOrganization,
@@ -691,7 +625,7 @@ describe("ConnectorRunModel", () => {
       expect(result.outcome).toBe("busy");
     });
 
-    test("reclaims an expired-lease run (fencing it) and claims fresh", async ({
+    test("is busy even when the existing run's lease has expired (reaper reclaims, not claim)", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -705,17 +639,20 @@ describe("ConnectorRunModel", () => {
         leaseExpiresAt: PAST_LEASE(),
       });
 
+      // claim() is a pure insert-or-skip: an expired-lease run still occupies the
+      // single-flight slot, so a new claim is busy. The reaper is the sole
+      // reclaimer — it frees the slot on its next pass, and claim never fences a
+      // run out from under a possibly-live owner.
       const result = await ConnectorRunModel.claim({
         connectorId: connector.id,
         owner: "worker-2",
         leaseTtlSeconds: 300,
       });
 
-      expect(result.outcome).toBe("claimed");
-      // The stale run is superseded and its epoch bumped (fences its old owner).
+      expect(result.outcome).toBe("busy");
       const old = await ConnectorRunModel.findById(stale.id);
-      expect(old?.status).toBe("superseded");
-      expect(old?.leaseEpoch).toBe(1);
+      expect(old?.status).toBe("running");
+      expect(old?.leaseEpoch).toBe(0);
     });
   });
 
@@ -866,7 +803,7 @@ describe("ConnectorRunModel", () => {
       expect(after?.status).toBe("running");
     });
 
-    test("does not reap an expired-lease run with embedding work still queued", async ({
+    test("reaps an expired-lease run purely on the lease — ignores queued batch tasks", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -879,7 +816,9 @@ describe("ConnectorRunModel", () => {
         status: "running",
         leaseExpiresAt: PAST_LEASE(),
       });
-      // A pending batch_embedding task = the run is draining, not orphaned.
+      // A pending batch_embedding task no longer protects the run: a healthy
+      // drain renews the lease per batch, so an expired lease means the drain is
+      // genuinely dead. Liveness is the lease alone; the reaper does not scan tasks.
       await TaskModel.create({
         taskType: "batch_embedding",
         payload: { connectorRunId: run.id, documentIds: ["doc-1"] },
@@ -888,9 +827,62 @@ describe("ConnectorRunModel", () => {
 
       const reaped = await ConnectorRunModel.reapExpiredRuns();
 
+      expect(reaped.map((r) => r.id)).toContain(run.id);
+      const after = await ConnectorRunModel.findById(run.id);
+      expect(after?.status).toBe("partial");
+    });
+  });
+
+  describe("renewLeaseForRun", () => {
+    test("extends a running run's lease (drain-phase liveness)", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await makeConnectorRun(connector.id, {
+        status: "running",
+        leaseExpiresAt: PAST_LEASE(),
+      });
+
+      await ConnectorRunModel.renewLeaseForRun({
+        runId: run.id,
+        leaseTtlSeconds: 300,
+      });
+
+      // Lease pushed into the future → the reaper now leaves it alone.
+      const reaped = await ConnectorRunModel.reapExpiredRuns();
       expect(reaped.map((r) => r.id)).not.toContain(run.id);
       const after = await ConnectorRunModel.findById(run.id);
       expect(after?.status).toBe("running");
+      expect(after?.leaseExpiresAt?.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    test("does not revive a non-running (reclaimed/finalized) run", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const run = await makeConnectorRun(connector.id, {
+        status: "partial",
+        leaseExpiresAt: PAST_LEASE(),
+      });
+
+      await ConnectorRunModel.renewLeaseForRun({
+        runId: run.id,
+        leaseTtlSeconds: 300,
+      });
+
+      const after = await ConnectorRunModel.findById(run.id);
+      expect(after?.status).toBe("partial");
+      expect(after?.leaseExpiresAt?.getTime()).toBeLessThan(Date.now());
     });
   });
 

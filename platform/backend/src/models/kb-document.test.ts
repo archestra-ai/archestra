@@ -509,4 +509,111 @@ describe("KbDocumentModel", () => {
       ]);
     });
   });
+
+  describe("recoverStalledEmbeddings", () => {
+    test("resets stalled pending/processing docs to pending and returns their ids", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      const pending = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "pending",
+        }),
+      );
+      const processing = await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "processing",
+        }),
+      );
+
+      // olderThanSeconds: 0 → "last touched before now" → both just-created rows
+      // qualify (the sweep runs after their creation), no clock-fiddling needed.
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 0,
+        limit: 10,
+      });
+
+      expect(ids.sort()).toEqual([pending.id, processing.id].sort());
+      // The stuck 'processing' row is reset to 'pending' so the embedder re-runs it.
+      expect(
+        (await KbDocumentModel.findById(processing.id))?.embeddingStatus,
+      ).toBe("pending");
+    });
+
+    test("ignores documents touched within the window", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "pending",
+        }),
+      );
+
+      // Freshly created → newer than a 1-hour window → not swept.
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 3600,
+        limit: 10,
+      });
+
+      expect(ids).toHaveLength(0);
+    });
+
+    test("does not touch completed or failed documents", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, {
+          embeddingStatus: "completed",
+        }),
+      );
+      await KbDocumentModel.create(
+        createDocumentData(connector.id, org.id, { embeddingStatus: "failed" }),
+      );
+
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 0,
+        limit: 10,
+      });
+
+      expect(ids).toHaveLength(0);
+    });
+
+    test("respects the limit", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      for (let i = 0; i < 3; i++) {
+        await KbDocumentModel.create(
+          createDocumentData(connector.id, org.id, {
+            embeddingStatus: "pending",
+          }),
+        );
+      }
+
+      const ids = await KbDocumentModel.recoverStalledEmbeddings({
+        olderThanSeconds: 0,
+        limit: 2,
+      });
+
+      expect(ids).toHaveLength(2);
+    });
+  });
 });

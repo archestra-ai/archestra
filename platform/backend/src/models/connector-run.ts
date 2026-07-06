@@ -7,17 +7,6 @@ import type {
   UpdateConnectorRun,
 } from "@/types";
 
-/**
- * Postgres unique-violation SQLSTATE (23505) — a losing race on the
- * single-flight index. Drizzle wraps the driver error, so check `.cause` too.
- */
-function isUniqueViolation(error: unknown): boolean {
-  const code =
-    (error as { code?: string } | null)?.code ??
-    (error as { cause?: { code?: string } } | null)?.cause?.code;
-  return code === "23505";
-}
-
 class ConnectorRunModel {
   /** List runs without the `logs` column (for list endpoints). */
   static async findByConnectorList(params: {
@@ -124,13 +113,18 @@ class ConnectorRunModel {
   /**
    * Start a new run for a connector under the single-flight invariant (unique
    * partial index on connector_id WHERE status='running'). Returns the claimed
-   * run with its lease, or `{ outcome: "busy" }` if another worker holds a
-   * still-live lease for this connector.
+   * run with its lease, or `{ outcome: "busy" }` if a `running` run already holds
+   * the slot.
    *
-   * A `running` run whose lease has expired (owner crashed/hung) is reclaimed
-   * first so it leaves the unique index; the reclaim bumps its `leaseEpoch`,
-   * fencing the dead owner's guarded writes. All time comparisons use the DB
-   * clock (`now()`), so per-worker clock skew never enters the decision.
+   * This is a pure insert-or-skip — it does NOT reclaim an expired-lease run.
+   * The reaper is the sole reclaimer, so `claim()` and the reaper can never
+   * disagree about liveness (both simply treat a fresh lease as "alive"). A
+   * crashed run's slot therefore frees on the next reaper pass rather than
+   * instantly; given syncs run on minute-granularity cron, that latency is
+   * irrelevant. Liveness is uniform across both phases: the ingest heartbeat and
+   * the embedding-drain batches (see `renewLeaseForRun`) both keep the lease
+   * fresh, so a healthy run — draining or not — is never reclaimed out from under
+   * itself here.
    */
   static async claim(params: {
     connectorId: string;
@@ -140,49 +134,26 @@ class ConnectorRunModel {
     const { connectorId, owner, leaseTtlSeconds } = params;
     const t = schema.connectorRunsTable;
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      // Reclaim an expired running run so it releases the single-flight slot.
-      await db.execute(sql`
-        UPDATE connector_runs
-        SET status = 'superseded',
-            completed_at = now(),
-            lease_epoch = lease_epoch + 1,
-            error = 'Superseded: the previous run''s lease expired before it finished.'
-        WHERE connector_id = ${connectorId}
-          AND status = 'running'
-          AND lease_expires_at < now()
-      `);
-
-      try {
-        const [run] = await db
-          .insert(t)
-          .values({
-            connectorId,
-            status: "running",
-            startedAt: sql`now()`,
-            documentsProcessed: 0,
-            documentsIngested: 0,
-            leaseOwner: owner,
-            leaseExpiresAt: sql`now() + make_interval(secs => ${leaseTtlSeconds})`,
-            heartbeatAt: sql`now()`,
-          })
-          .returning();
-        return { outcome: "claimed", run };
-      } catch (error) {
-        if (!isUniqueViolation(error)) throw error;
-        // Another run holds the slot. If its lease is still live, back off;
-        // if it just expired, loop to reclaim it (bounded retries).
-        const { rows } = await db.execute<{ valid: boolean }>(sql`
-          SELECT lease_expires_at > now() AS valid
-          FROM connector_runs
-          WHERE connector_id = ${connectorId} AND status = 'running'
-          LIMIT 1
-        `);
-        if (rows[0]?.valid) return { outcome: "busy" };
-        // expired or already gone — retry
-      }
-    }
-    return { outcome: "busy" };
+    const [run] = await db
+      .insert(t)
+      .values({
+        connectorId,
+        status: "running",
+        startedAt: sql`now()`,
+        documentsProcessed: 0,
+        documentsIngested: 0,
+        leaseOwner: owner,
+        leaseExpiresAt: sql`now() + make_interval(secs => ${leaseTtlSeconds})`,
+        heartbeatAt: sql`now()`,
+      })
+      // Conflict on the single-flight partial index → a run already holds the
+      // slot → busy. (target + predicate must match the partial unique index.)
+      .onConflictDoNothing({
+        target: t.connectorId,
+        where: sql`status = 'running'`,
+      })
+      .returning();
+    return run ? { outcome: "claimed", run } : { outcome: "busy" };
   }
 
   /**
@@ -240,6 +211,28 @@ class ConnectorRunModel {
     return !!result;
   }
 
+  /**
+   * Drain-phase lease renewal: keep a still-running run's lease fresh while its
+   * `batch_embedding` tasks drain, so liveness is uniform across both phases
+   * ("is the lease fresh?"). Unlike the ingest heartbeat this is keyed only on
+   * `status = 'running'` (no owner/epoch): any worker processing a batch for the
+   * run may renew it, and a run that has already been reclaimed or finalized
+   * (status != 'running') is never revived. No-op if the run is not running.
+   */
+  static async renewLeaseForRun(params: {
+    runId: string;
+    leaseTtlSeconds: number;
+  }): Promise<void> {
+    const t = schema.connectorRunsTable;
+    await db
+      .update(t)
+      .set({
+        leaseExpiresAt: sql`now() + make_interval(secs => ${params.leaseTtlSeconds})`,
+        heartbeatAt: sql`now()`,
+      })
+      .where(and(eq(t.id, params.runId), eq(t.status, "running")));
+  }
+
   static async completeBatch(runId: string): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
     const [result] = await db
@@ -286,16 +279,20 @@ class ConnectorRunModel {
   }
 
   /**
-   * Reclaim runs whose liveness lease has expired AND that have no embedding
-   * work left in flight. Liveness spans both phases:
-   *  - ingest: the owning worker renews the lease via a heartbeat;
-   *  - embedding drain: pending/processing `batch_embedding` tasks ARE the
-   *    liveness signal — a run with queued embedding work is draining, not
-   *    orphaned, so it is skipped here even if its lease has lapsed.
-   * A run is only reclaimed when its lease lapsed and no embedding tasks remain,
-   * which reliably means the worker crashed/hung. Marks it `partial` (an
-   * interrupted run, not an error) and bumps `leaseEpoch` to fence the dead
-   * owner. Returns the reclaimed runs so the caller can resume from checkpoint.
+   * Reclaim runs whose liveness lease has expired. Liveness is uniform across a
+   * run's whole life: the owning worker renews the lease during ingest (the
+   * heartbeat) and any worker renews it during the embedding-drain phase (per
+   * batch, via `renewLeaseForRun`). So an expired lease reliably means the run's
+   * worker crashed or hung in either phase — no per-phase special-casing, and no
+   * scan of the `tasks` table. Marks each reclaimed run `partial` (interrupted,
+   * not an error) and bumps `leaseEpoch` to fence the dead owner. Returns the
+   * reclaimed runs so the caller can resume them from their checkpoints.
+   *
+   * (A pathological edge remains: if a healthy run's drain stalls in the queue
+   * for longer than the lease TTL with no batch processed, it is reaped early.
+   * That is cosmetic only — its documents still embed idempotently and the
+   * continuation is a no-op — and is bounded by keeping the TTL comfortably
+   * above the batch cadence.)
    */
   static async reapExpiredRuns(): Promise<
     Array<{ id: string; connectorId: string }>
@@ -308,12 +305,6 @@ class ConnectorRunModel {
           error = 'Sync was interrupted (worker stopped heartbeating); resuming from checkpoint.'
       WHERE r.status = 'running'
         AND r.lease_expires_at < now()
-        AND NOT EXISTS (
-          SELECT 1 FROM tasks t
-          WHERE t.task_type = 'batch_embedding'
-            AND t.status IN ('pending', 'processing')
-            AND t.payload->>'connectorRunId' = r.id::text
-        )
       RETURNING r.id, r.connector_id AS "connectorId"
     `);
     return rows;
@@ -325,20 +316,6 @@ class ConnectorRunModel {
       .where(eq(schema.connectorRunsTable.connectorId, connectorId));
 
     return result.rowCount ?? 0;
-  }
-
-  static async hasActiveRun(connectorId: string): Promise<boolean> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(schema.connectorRunsTable)
-      .where(
-        and(
-          eq(schema.connectorRunsTable.connectorId, connectorId),
-          eq(schema.connectorRunsTable.status, "running"),
-        ),
-      );
-
-    return (result?.count ?? 0) > 0;
   }
 
   /** Count runs for a connector started within the last `seconds` (crash-loop guard). */

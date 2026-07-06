@@ -5,8 +5,11 @@ vi.mock("@/task-queue", () => ({
   taskQueueService: { enqueue: mockEnqueue },
 }));
 
+import { sql } from "drizzle-orm";
+import db from "@/database";
 import {
   ConnectorRunModel,
+  KbDocumentModel,
   KnowledgeBaseConnectorModel,
   TaskModel,
 } from "@/models";
@@ -120,10 +123,11 @@ describe("handleCheckDueConnectors", () => {
     });
   });
 
-  test("resets orphaned running status to failed when no task or run exists", async ({
+  test("reconciles a connector stuck 'running' to its latest run's terminal status", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
+    makeConnectorRun,
   }) => {
     const org = await makeOrganization();
     const kb = await makeKnowledgeBase(org.id);
@@ -133,12 +137,14 @@ describe("handleCheckDueConnectors", () => {
     await KnowledgeBaseConnectorModel.update(connector.id, {
       lastSyncStatus: "running",
     });
+    // The latest run finalized but the connector was left showing 'running'
+    // (its finalizing status write was lost). Reconcile derives it from the run.
+    await makeConnectorRun(connector.id, { status: "success" });
 
     await handleCheckDueConnectors();
 
     const updated = await KnowledgeBaseConnectorModel.findById(connector.id);
-    expect(updated?.lastSyncStatus).toBe("failed");
-    expect(updated?.lastSyncError).toBe("Sync task was lost");
+    expect(updated?.lastSyncStatus).toBe("success");
   });
 
   test("does not reset running status when a pending task exists", async ({
@@ -268,7 +274,7 @@ describe("handleCheckDueConnectors", () => {
       expect(mockEnqueue).not.toHaveBeenCalled();
     });
 
-    test("does NOT reap an expired-lease run that still has embedding work queued", async ({
+    test("reaps an expired-lease run on the lease alone — a stalled drain no longer protects it", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -279,9 +285,10 @@ describe("handleCheckDueConnectors", () => {
         schedule: "",
         enabled: true,
       });
-      // Ingest finished (lease last renewed during ingest, now lapsed) but the
-      // embedding drain is still in flight — a pending batch_embedding task is
-      // the liveness signal, so this healthy run must not be reaped.
+      // A healthy drain renews the lease per batch (renewLeaseForRun), so an
+      // expired lease means the drain itself is dead. The run is reaped on the
+      // lease alone — a lingering batch_embedding task row no longer protects it,
+      // and the reaper no longer scans the tasks table.
       const run = await ConnectorRunModel.create({
         connectorId: connector.id,
         status: "running",
@@ -298,9 +305,12 @@ describe("handleCheckDueConnectors", () => {
 
       await handleCheckDueConnectors();
 
-      const stillRunning = await ConnectorRunModel.findById(run.id);
-      expect(stillRunning?.status).toBe("running");
-      expect(mockEnqueue).not.toHaveBeenCalled();
+      const reaped = await ConnectorRunModel.findById(run.id);
+      expect(reaped?.status).toBe("partial");
+      expect(mockEnqueue).toHaveBeenCalledWith({
+        taskType: "connector_sync",
+        payload: { connectorId: connector.id },
+      });
     });
 
     test("stops auto-resuming a crash-looping connector", async ({
@@ -334,6 +344,65 @@ describe("handleCheckDueConnectors", () => {
 
       const reaped = await ConnectorRunModel.findById(run.id);
       expect(reaped?.status).toBe("partial");
+      expect(mockEnqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("stalled embedding recovery", () => {
+    test("re-enqueues embedding for a document stuck pending past the threshold", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        schedule: "",
+        enabled: true,
+      });
+      const doc = await KbDocumentModel.create({
+        connectorId: connector.id,
+        organizationId: org.id,
+        title: "Stuck",
+        content: "Stuck content",
+        contentHash: "hash-stuck",
+        embeddingStatus: "pending",
+      });
+      // Age it well past the 30-minute stall threshold (its live task is long dead).
+      await db.execute(
+        sql`UPDATE kb_documents SET updated_at = now() - interval '2 hours' WHERE id = ${doc.id}`,
+      );
+
+      await handleCheckDueConnectors();
+
+      expect(mockEnqueue).toHaveBeenCalledWith({
+        taskType: "batch_embedding",
+        payload: { documentIds: [doc.id], connectorRunId: null },
+      });
+    });
+
+    test("does not re-enqueue a document that is still fresh", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        schedule: "",
+        enabled: true,
+      });
+      await KbDocumentModel.create({
+        connectorId: connector.id,
+        organizationId: org.id,
+        title: "Fresh",
+        content: "Fresh content",
+        contentHash: "hash-fresh",
+        embeddingStatus: "pending",
+      });
+
+      await handleCheckDueConnectors();
+
       expect(mockEnqueue).not.toHaveBeenCalled();
     });
   });

@@ -1,3 +1,4 @@
+import config from "@/config";
 import { embeddingService } from "@/knowledge-base";
 import logger from "@/logging";
 import { ConnectorRunModel, KnowledgeBaseConnectorModel } from "@/models";
@@ -13,11 +14,18 @@ export async function handleBatchEmbedding(
     throw new Error("Missing documentIds in batch_embedding payload");
   }
 
-  // Note: the run's lease is NOT renewed here. During the embedding-drain phase
-  // the presence of pending/processing batch_embedding tasks is itself the
-  // liveness signal — the reaper (reapExpiredRuns) skips any run that still has
-  // embedding work queued, so a healthy draining run is never reclaimed even
-  // though its lease (last renewed during ingest) has lapsed.
+  // Drain-phase liveness: renew the run's lease so a healthy run draining its
+  // embedding backlog stays "alive" to claim()/the reaper (both treat an expired
+  // lease as a dead worker). Renew BEFORE the embed so the fresh TTL also covers
+  // this batch's work. Keyed on status='running', so a reclaimed/finalized run
+  // is never revived. This is what makes liveness uniform across ingest + drain
+  // and lets the reaper avoid scanning the tasks table.
+  if (connectorRunId) {
+    await ConnectorRunModel.renewLeaseForRun({
+      runId: connectorRunId,
+      leaseTtlSeconds: config.kb.connectorRunLeaseTtlSeconds,
+    });
+  }
 
   try {
     await embeddingService.processDocuments(

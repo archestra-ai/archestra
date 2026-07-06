@@ -1,17 +1,21 @@
 import { Cron } from "croner";
-import config from "@/config";
 import logger from "@/logging";
 import {
   ConnectorRunModel,
+  KbDocumentModel,
   KnowledgeBaseConnectorModel,
   TaskModel,
 } from "@/models";
 import { taskQueueService } from "@/task-queue";
+import { withinResumeBudget } from "./connector-resume-budget";
 
-// Window over which the crash-loop circuit breaker counts a connector's runs.
-// The threshold itself is derived from the lease/work-budget params — see
-// maxRunsPerResumeWindow() at the bottom of this file.
-const RESUME_WINDOW_SECONDS = 60 * 60; // 1 hour
+// A document still `pending`/`processing` this long after its last touch has no
+// live `batch_embedding` task behind it — the task exhausts its 5 retries within
+// ~8 minutes — so it is stalled and safe to re-enqueue.
+const STALLED_EMBEDDING_AGE_SECONDS = 30 * 60;
+// Bound the work one recovery sweep enqueues.
+const EMBEDDING_RECOVERY_SWEEP_LIMIT = 500;
+const EMBEDDING_RECOVERY_BATCH_SIZE = 100;
 
 export async function handleCheckDueConnectors(): Promise<void> {
   const connectors = await KnowledgeBaseConnectorModel.findAllEnabled();
@@ -59,28 +63,25 @@ export async function handleCheckDueConnectors(): Promise<void> {
   }
 
   await reapExpiredRuns();
-  await cleanupOrphanedRunningStatuses();
+  await reconcileOrphanedConnectors();
+  await recoverStalledEmbeddings();
 }
 
 /**
- * Reclaim connector runs whose liveness lease has lapsed. Liveness spans both
- * phases of a run: during ingest the owning worker renews the lease via a
- * heartbeat; during embedding drain, pending/processing `batch_embedding` tasks
- * ARE the liveness signal (reapExpiredRuns skips any run that still has embedding
- * work queued). So a run is only reclaimed when its lease lapsed AND it has no
- * embedding work left, which reliably means the worker died or hung — never a
- * healthy run mid-drain. (This fixes the old advisory-lock reaper, which reaped
- * healthy runs whose lock was released at end-of-ingest while embeddings — and
- * therefore the run — were still legitimately in progress.)
+ * Reclaim connector runs whose liveness lease has lapsed and resume them from
+ * their checkpoint. Liveness is uniform across a run's whole life: the owning
+ * worker renews the lease during ingest (the heartbeat) and any worker renews it
+ * per batch during the embedding-drain phase, so an expired lease reliably means
+ * the run's worker crashed or hung — never a healthy run mid-drain. There is no
+ * separate time-based hard-fail: a live run is bounded by the sync work budget
+ * (it checkpoints and continues), a dead one is caught by lease expiry here.
  *
- * A lease-expired run is marked `partial` and resumed from its checkpoint — it
- * did not drain its source, so reporting it complete would strand the remainder
- * — unless the connector is crash-looping. There is no separate time-based
- * hard-fail: a live run is bounded by the sync work budget (it checkpoints and
- * continues), and a dead/hung worker is caught by the lease expiry here.
+ * A reclaimed run is marked `partial` and resumed unless the connector is over
+ * its run budget for the window (a runaway) — the SAME budget that bounds
+ * time-budget chunk continuations, so chunking and reaping cannot between them
+ * drive an unbounded run loop.
  */
 async function reapExpiredRuns(): Promise<void> {
-  // Lease-expired runs with no embedding work left → interrupted → resume.
   const expired = await ConnectorRunModel.reapExpiredRuns();
   for (const run of expired) {
     logger.warn(
@@ -94,16 +95,12 @@ async function reapExpiredRuns(): Promise<void> {
       error: null,
     });
 
-    const recentRuns = await ConnectorRunModel.countRunsSince(
-      run.connectorId,
-      RESUME_WINDOW_SECONDS,
-    );
-    if (recentRuns > maxRunsPerResumeWindow()) {
-      // Crash-looping: stop auto-resuming to avoid a runaway. A scheduled
-      // connector retries on its next cron; a scheduleless one stays `partial`
-      // (checkpoint preserved) until manually re-triggered — it needs a look.
+    if (!(await withinResumeBudget(run.connectorId))) {
+      // Runaway: stop auto-resuming. A scheduled connector retries on its next
+      // cron; a scheduleless one stays `partial` (checkpoint preserved) until
+      // manually re-triggered — it needs a look.
       logger.error(
-        { connectorId: run.connectorId, recentRuns },
+        { connectorId: run.connectorId },
         "Connector sync is repeatedly interrupted; not auto-resuming — needs investigation",
       );
       continue;
@@ -118,77 +115,47 @@ async function reapExpiredRuns(): Promise<void> {
   }
 }
 
-async function cleanupOrphanedRunningStatuses(): Promise<void> {
-  const stuckConnectors =
-    await KnowledgeBaseConnectorModel.findAllWithStatus("running");
-  if (stuckConnectors.length === 0) return;
-
-  // Re-fetched here (not reused from the due-check) so tasks enqueued above
-  // are visible and their connectors are not treated as orphaned.
-  const activeConnectorIds = await TaskModel.findActivePayloadValues(
-    "connector_sync",
-    "connectorId",
-  );
-
-  for (const connector of stuckConnectors) {
-    try {
-      if (activeConnectorIds.has(connector.id)) continue;
-
-      const hasRun = await ConnectorRunModel.hasActiveRun(connector.id);
-      if (hasRun) continue;
-
-      await KnowledgeBaseConnectorModel.update(connector.id, {
-        lastSyncStatus: "failed",
-        lastSyncError: "Sync task was lost",
-      });
-      logger.warn(
-        {
-          connectorId: connector.id,
-          connectorName: connector.name,
-          connectorType: connector.connectorType,
-        },
-        "Reset orphaned running status to failed",
-      );
-    } catch (error) {
-      logger.warn(
-        {
-          connectorId: connector.id,
-          connectorName: connector.name,
-          connectorType: connector.connectorType,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to cleanup orphaned running status",
-      );
-    }
+/**
+ * Fix connectors left showing `running` when they have no running run (e.g. a
+ * finalized run whose connector-status write was lost). Derives each from its
+ * latest run in one statement — no task scan, no per-connector loop.
+ */
+async function reconcileOrphanedConnectors(): Promise<void> {
+  const corrected =
+    await KnowledgeBaseConnectorModel.reconcileOrphanedConnectorStatuses();
+  if (corrected.length > 0) {
+    logger.warn(
+      { connectorIds: corrected },
+      "Reconciled connectors stuck in 'running' to their latest run status",
+    );
   }
 }
 
 /**
- * How many runs a connector may produce within RESUME_WINDOW_SECONDS before the
- * reaper stops auto-resuming it (treating it as crash-looping). Derived from the
- * lease/work-budget params so it stays meaningful when they are tuned, rather
- * than being a magic number:
- *
- *  - A run cannot be reclaimed sooner than one lease TTL after it starts
- *    (`claim()` seeds the lease to `now()+TTL`), so a pure crash loop tops out at
- *    `window / leaseTtl` reclaims per window — the natural trip point (12/hour at
- *    the 300s default).
- *  - A healthy sync that chunks on the work budget adds ~`window / (0.9*syncMax)`
- *    runs per window (it stops at 90% of the budget, then continues). We keep the
- *    ceiling comfortably (×2) above that so such a sync, if it also happens to be
- *    reclaimed once, still resumes instead of tripping the breaker. This matters
- *    when `syncMax` is lowered to chunk aggressively; at the default it is ~1–2
- *    runs/hour, far below the TTL-derived term.
- *
- * Floored so a very long lease TTL (or a disabled work budget) can't drive the
- * threshold absurdly low.
+ * Re-embed documents whose embedding stalled (a `batch_embedding` task died
+ * terminally, so they sit at `pending`/`processing` forever and the advanced
+ * sync checkpoint won't re-surface them). Enqueued with `connectorRunId: null`
+ * so they embed without run bookkeeping; the embedder skips any that finished in
+ * the meantime, so a redundant enqueue is harmless.
  */
-function maxRunsPerResumeWindow(): number {
-  const leaseTtl = config.kb.connectorRunLeaseTtlSeconds;
-  const syncMax = config.kb.connectorSyncMaxDurationSeconds;
-  const crashLoopCeiling = Math.ceil(RESUME_WINDOW_SECONDS / leaseTtl);
-  const chunkHeadroom = syncMax
-    ? Math.ceil((2 * RESUME_WINDOW_SECONDS) / (0.9 * syncMax))
-    : 0;
-  return Math.max(6, crashLoopCeiling, chunkHeadroom);
+async function recoverStalledEmbeddings(): Promise<void> {
+  const documentIds = await KbDocumentModel.recoverStalledEmbeddings({
+    olderThanSeconds: STALLED_EMBEDDING_AGE_SECONDS,
+    limit: EMBEDDING_RECOVERY_SWEEP_LIMIT,
+  });
+  if (documentIds.length === 0) return;
+
+  logger.warn(
+    { count: documentIds.length },
+    "Re-enqueuing embedding for stalled documents",
+  );
+  for (let i = 0; i < documentIds.length; i += EMBEDDING_RECOVERY_BATCH_SIZE) {
+    await taskQueueService.enqueue({
+      taskType: "batch_embedding",
+      payload: {
+        documentIds: documentIds.slice(i, i + EMBEDDING_RECOVERY_BATCH_SIZE),
+        connectorRunId: null,
+      },
+    });
+  }
 }

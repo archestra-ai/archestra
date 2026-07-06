@@ -2029,6 +2029,48 @@ describe("run_tool", () => {
       }
     });
 
+    test("unwraps a {type:'text', text:X} content-block wrapper on dispatch and notes the repair", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "github__search_repositories",
+          tool_args: { query: { type: "text", text: "archestra" } },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      // the target handler receives the unwrapped string, not the content block
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenLastCalledWith(
+        expect.objectContaining({ arguments: { query: "archestra" } }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      const text = result.content.map((item) => (item as any).text).join("\n");
+      expect(text).toContain('"query"');
+    });
+
     test("unwraps a param-name-keyed wrapper around a primitive-declared param", async ({
       makeAgentTool,
       makeInternalMcpCatalog,
@@ -2418,6 +2460,98 @@ describe("run_tool", () => {
         schema,
       });
       expect(tooBig.repairedParams).toEqual([]);
+    });
+
+    test("unwraps the {type:'text', text:X} content-block wrapper through the same coercion", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          count: { type: "number" },
+          version: { type: "integer" },
+          enabled: { type: "boolean" },
+          tags: { type: "array" },
+          note: { type: "string" },
+        },
+      };
+      const { repairedParams, toolArgs } =
+        runToolInternals.repairEnvelopedToolArgs({
+          toolArgs: {
+            name: { type: "text", text: "personal" },
+            count: { type: "text", text: "5" },
+            version: { type: "text", text: "5" },
+            enabled: { type: "text", text: "true" },
+            tags: { type: "text", text: ["a", "b"] },
+            note: { type: "text", text: "" },
+          },
+          schema,
+        });
+
+      expect(repairedParams.sort()).toEqual([
+        "count",
+        "enabled",
+        "name",
+        "note",
+        "tags",
+        "version",
+      ]);
+      expect(toolArgs).toEqual({
+        name: "personal",
+        count: 5,
+        version: 5,
+        enabled: true,
+        tags: ["a", "b"],
+        note: "",
+      });
+    });
+
+    test("leaves malformed or non-scalar-typed content-block wrappers untouched", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          obj: { type: "object" },
+        },
+      };
+      const cases: Array<[string, unknown]> = [
+        // three keys — the content block carries an extra field we must not drop
+        [
+          "name",
+          { type: "text", text: "x", cache_control: { type: "ephemeral" } },
+        ],
+        ["name", { type: "image", text: "x" }], // wrong content-block type
+        ["name", { type: "text" }], // no text field
+        ["name", { type: "text", text: { nested: true } }], // non-string text on a string param
+        ["obj", { type: "text", text: "x" }], // object-declared param is never repairable
+      ];
+      for (const [key, wrapped] of cases) {
+        const { repairedParams, toolArgs } =
+          runToolInternals.repairEnvelopedToolArgs({
+            toolArgs: { [key]: wrapped },
+            schema,
+          });
+        expect(repairedParams).toEqual([]);
+        expect(toolArgs).toEqual({ [key]: wrapped });
+      }
+    });
+
+    test("leaves a content-block wrapper against a composed schema untouched", () => {
+      const wrapped = { type: "text", text: "x" };
+      const composed: unknown[] = [
+        { $ref: "#/$defs/P" },
+        { anyOf: [{ type: "string" }] },
+        { oneOf: [{ type: "string" }] },
+        { allOf: [{ type: "string" }] },
+      ];
+      for (const p of composed) {
+        const { repairedParams, toolArgs } =
+          runToolInternals.repairEnvelopedToolArgs({
+            toolArgs: { p: wrapped },
+            schema: { type: "object", properties: { p } },
+          });
+        expect(repairedParams).toEqual([]);
+        expect(toolArgs).toEqual({ p: wrapped });
+      }
     });
 
     test("suppresses the repair note when the built-in call is denied by a gate, but keeps it when the call reaches validation", async ({

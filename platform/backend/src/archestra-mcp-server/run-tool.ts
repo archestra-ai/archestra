@@ -731,23 +731,24 @@ type RepairableDeclaredType =
   | "array";
 
 /**
- * Deterministic repair for the single-key envelope anti-pattern weak models
- * produce when calling run_tool: a scalar/array param wrapped in an object
- * like `{"value": …}`, `{"$text": …}`, `{"item": […]}` or `{"text": …}`, or
- * keyed by the param's own name (`{"appId": {"appId": …}}`).
+ * Deterministic repair for the wrapper anti-patterns weak models produce when
+ * calling run_tool: a scalar/array param wrapped in an object like `{"value": …}`,
+ * `{"$text": …}`, `{"item": […]}` or `{"text": …}`, keyed by the param's own
+ * name (`{"appId": {"appId": …}}`), or as the Anthropic text content block
+ * `{"type":"text","text": …}` leaked from message content into tool_args.
  * A top-level tool_args entry is unwrapped only when ALL hold:
  *  - the tool's schema literally declares the param's `type` as
  *    string/number/integer/boolean/array (no type arrays, no
  *    $ref/anyOf/oneOf/allOf composition);
- *  - the supplied value is a plain object with exactly one key from the
- *    envelope set or equal to the param name;
+ *  - the supplied value is a plain object of a recognized wrapper shape (see
+ *    envelopeInnerValue);
  *  - the inner value matches the declared type, or is a numeric/boolean string
  *    the declared type parses cleanly (see coerceInnerToDeclaredType).
  * Under those conditions the as-sent value (an object) is provably invalid
  * against the declared type, so the repair can never rewrite a call the
  * schema could accept. Anything else — object-typed params, loose/absent
- * types, multi-key objects, unknown envelope keys — is left untouched, and a
- * call with nothing to repair passes through as the same object.
+ * types, unrecognized multi-key objects, unknown envelope keys — is left
+ * untouched, and a call with nothing to repair passes through as the same object.
  */
 function repairEnvelopedToolArgs(params: {
   toolArgs: Record<string, unknown>;
@@ -790,11 +791,8 @@ function unwrapEnvelope(params: {
   if (!isRecord(value)) {
     return null;
   }
-  const keys = Object.keys(value);
-  if (
-    keys.length !== 1 ||
-    (keys[0] !== paramName && !ENVELOPE_KEYS.has(keys[0]))
-  ) {
+  const candidate = envelopeInnerValue(value, paramName);
+  if (!candidate) {
     return null;
   }
 
@@ -815,8 +813,36 @@ function unwrapEnvelope(params: {
     return null;
   }
 
-  const inner = value[keys[0]];
-  return coerceInnerToDeclaredType(inner, declaredType);
+  return coerceInnerToDeclaredType(candidate.inner, declaredType);
+}
+
+/**
+ * The inner value from a recognized wrapper shape, or null when `value` is not
+ * a wrapper. Two shapes qualify:
+ *  - single-key envelope: exactly one key that is from ENVELOPE_KEYS or equal to
+ *    the param name — e.g. `{"value": X}`, `{"$text": X}`, `{"appId": {"appId": X}}`;
+ *  - Anthropic text content block: exactly the two keys `{type, text}` with
+ *    `type === "text"` — e.g. `{"type":"text","text":X}`, the shape weak models
+ *    leak from message content into tool_args.
+ * The caller enforces the declared-type guards; either shape is an object and so
+ * is provably invalid against a scalar/array declared type, keeping the repair
+ * unable to rewrite a call the schema would have accepted.
+ */
+function envelopeInnerValue(
+  value: Record<string, unknown>,
+  paramName: string,
+): { inner: unknown } | null {
+  const keys = Object.keys(value);
+  if (
+    keys.length === 1 &&
+    (keys[0] === paramName || ENVELOPE_KEYS.has(keys[0]))
+  ) {
+    return { inner: value[keys[0]] };
+  }
+  if (keys.length === 2 && value.type === "text" && "text" in value) {
+    return { inner: value.text };
+  }
+  return null;
 }
 
 function asRepairableDeclaredType(
@@ -949,7 +975,7 @@ function appendEnvelopeRepairNote(
       ...result.content,
       {
         type: "text",
-        text: `Note: run_tool unwrapped a single-key wrapper object around ${names} in tool_args — pass the value directly next time.`,
+        text: `Note: run_tool unwrapped a wrapper object around ${names} in tool_args — pass the value directly next time.`,
       },
     ],
   };

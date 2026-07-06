@@ -735,8 +735,16 @@ const registry = defineArchestraTools([
       }
       const html = windowed ? row.html.slice(offset, end) : row.html;
       const hasMore = offset + html.length < totalChars;
+      // The continuation hint only makes sense for a progressing window; a
+      // limit-0 probe would otherwise be told to continue from where it is.
+      const continuation =
+        hasMore && html.length > 0
+          ? ` (more follows — continue from offset ${offset + html.length})`
+          : hasMore
+            ? " (pass a limit to read content)"
+            : "";
       const windowNote = windowed
-        ? `, window ${offset}–${offset + html.length} of ${totalChars} characters${hasMore ? ` (more follows — continue from offset ${offset + html.length})` : ""}`
+        ? `, window ${offset}–${offset + html.length} of ${totalChars} characters${continuation}`
         : "";
       return structuredSuccessResult(
         {

@@ -22,7 +22,10 @@ import {
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "ai";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
+import {
+  archestraMcpBranding,
+  filterToolNamesByPermission,
+} from "@/archestra-mcp-server";
 import { dynamicAccessContext } from "@/archestra-mcp-server/dynamic-tools";
 import { TeamModel, UserModel } from "@/models";
 import {
@@ -296,27 +299,39 @@ async function getDispatchableAppAuthoringToolNames(params: {
   )
     ? null
     : await dynamicAccessContext(params);
-  const dispatchable = APP_AUTHORING_TOOL_SHORT_NAMES.filter((shortName) => {
-    if (assignedShortNames.has(shortName)) {
-      return true;
-    }
-    if (!dynamicCtx) {
-      return false;
-    }
-    return !isToolIdentityExcluded(
-      {
-        catalogId: ARCHESTRA_MCP_CATALOG_ID,
-        name: archestraMcpBranding.getToolName(shortName),
-      },
-      exclusionSets,
-    );
-  });
-  if (!dispatchable.includes(TOOL_SCAFFOLD_APP_SHORT_NAME)) {
+  const dispatchableNames = APP_AUTHORING_TOOL_SHORT_NAMES.filter(
+    (shortName) => {
+      if (assignedShortNames.has(shortName)) {
+        return true;
+      }
+      if (!dynamicCtx) {
+        return false;
+      }
+      return !isToolIdentityExcluded(
+        {
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+          name: archestraMcpBranding.getToolName(shortName),
+        },
+        exclusionSets,
+      );
+    },
+  ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+  // RBAC runs before the assignment gate at dispatch; mirror it so the
+  // steering never names a tool the user's role cannot execute.
+  const permitted = await filterToolNamesByPermission(
+    dispatchableNames,
+    params.userId,
+    params.organizationId,
+  );
+  const names = dispatchableNames.filter((name) => permitted.has(name));
+  if (
+    !names.includes(
+      archestraMcpBranding.getToolName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+    )
+  ) {
     return [];
   }
-  return dispatchable.map((shortName) =>
-    archestraMcpBranding.getToolName(shortName),
-  );
+  return names;
 }
 
 function buildLoadToolsWhenNeededSystemPrompt(params: {

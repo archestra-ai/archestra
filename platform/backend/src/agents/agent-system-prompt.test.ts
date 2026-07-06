@@ -363,6 +363,38 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain(brand(TOOL_RENDER_APP_SHORT_NAME));
   });
 
+  // RBAC runs before the assignment gate at dispatch, so a user whose role
+  // cannot execute the app tools must get no steering even when they are
+  // assigned to the agent.
+  test("omits the app-authoring steering for a user without app permissions", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    seedAndAssignArchestraTools,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "search_and_run_only",
+    });
+    const role = await makeCustomRole(agent.organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await makeMember(user.id, agent.organizationId, { role: role.role });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: {},
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+    expect(prompt).toContain("must be discovered");
+    expect(prompt).not.toContain(brand(TOOL_SCAFFOLD_APP_SHORT_NAME));
+  });
+
   test("appends the hook session context last", async ({
     makeAgent,
     makeUser,

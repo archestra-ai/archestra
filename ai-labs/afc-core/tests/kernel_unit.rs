@@ -161,14 +161,14 @@ fn engine_forbid_wins_over_escalate() {
     let mut engine = RuleEngine::new(rules, dims(), dir)
         .with_remedies(vec!["san.redact".to_string()], vec![]);
 
-    let call = CallSite {
-        tool: "email.send".to_string(),
-        effects: BTreeSet::from([Effect::Egress]),
-        value: Labeled::new(Chunk("x".into()), owner_only("X")),
-        sink: Label::public(),
-        args: BTreeMap::new(),
-        principal: Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
-    };
+    let call = CallSite::new(
+        "email.send".to_string(),
+        BTreeSet::from([Effect::Egress]),
+        Labeled::new(Chunk("x".into()), owner_only("X")),
+        Label::public(),
+        BTreeMap::new(),
+        Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+    );
     match engine.check_call(&call) {
         Decision::Deny { rule_id, residual, reason, .. } => {
             assert_eq!(rule_id, "r.forbid");
@@ -177,6 +177,71 @@ fn engine_forbid_wins_over_escalate() {
         }
         other => panic!("expected forbid-wins Deny, got {other:?}"),
     }
+}
+
+#[test]
+fn declassify_human_authority_is_refused_without_a_verdict() {
+    // A human/LLM declassifier is an authority decision, not a pure transform — declassify must not
+    // silently relabel clean content; it refuses and points at the approval remedy.
+    let human = DeclassRule::new("dc.human", DeclassAuthority::Human, Label::public());
+    let clean = Labeled::new(Chunk("secret".into()), owner_only("X"));
+    assert!(matches!(declassify(&clean, &human), Err(Decision::Deny { .. })));
+}
+
+#[test]
+fn escalation_approval_is_one_shot() {
+    let dir = DirectorySnapshot::default();
+    let rules = vec![Rule {
+        id: "r.escalate".to_string(),
+        when: Predicate::HasEffect(Effect::Egress),
+        then: Outcome::Escalate(vec!["human".to_string()]),
+        origin: RuleOrigin::Org,
+    }];
+    let mut engine = RuleEngine::new(rules, dims(), dir);
+    let call = CallSite::new(
+        "email.send".to_string(),
+        BTreeSet::from([Effect::Egress]),
+        Labeled::new(Chunk("x".into()), Label::public()),
+        Label::public(),
+        BTreeMap::new(),
+        Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+    );
+    let escalate_id = engine.check_call(&call).id();
+    let always = Predicate::And(vec![]);
+    // First discharge of that escalation succeeds.
+    assert!(matches!(
+        engine.finalize_escalation(&call, "c".into(), escalate_id, "human".into(), &always),
+        Decision::Allow { .. }
+    ));
+    // Replaying the same approval is refused — the escalation is no longer pending.
+    match engine.finalize_escalation(&call, "c".into(), escalate_id, "human".into(), &always) {
+        Decision::Deny { rule_id, .. } => assert_eq!(rule_id, "engine.no_pending_escalation"),
+        other => panic!("expected replay to be denied, got {other:?}"),
+    }
+}
+
+#[test]
+fn warn_rules_are_recorded_not_silently_dropped() {
+    let dir = DirectorySnapshot::default();
+    let rules = vec![Rule {
+        id: "r.warn".to_string(),
+        when: Predicate::HasEffect(Effect::Egress),
+        then: Outcome::Warn,
+        origin: RuleOrigin::Org,
+    }];
+    let mut engine = RuleEngine::new(rules, dims(), dir);
+    let call = CallSite::new(
+        "email.send".to_string(),
+        BTreeSet::from([Effect::Egress]),
+        Labeled::new(Chunk("x".into()), Label::public()),
+        Label::public(),
+        BTreeMap::new(),
+        Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+    );
+    // A warn rule does not change the verdict...
+    assert!(matches!(engine.check_call(&call), Decision::Allow { .. }));
+    // ...but it is recorded in the audit trail.
+    assert_eq!(engine.audit().last().unwrap().warnings, vec!["r.warn".to_string()]);
 }
 
 #[test]
@@ -192,4 +257,45 @@ fn label_result_tier_fallthrough_to_unknown() {
     // Unannotated tool → tier4 Unknown.
     let unknown = engine.label_result(&"legacy.dump".to_string(), &BTreeMap::new(), Chunk("d".into()));
     assert_eq!(unknown.label.readers, Readers::Unknown);
+}
+
+#[test]
+fn checker_flags_argcmp_literal_type_mismatch() {
+    use afc_core::checker::{Inventory, ToolEntry, check, Severity};
+    use afc_core::rule::{ArgType, ArgValue, CmpOp, TypedPath, ValueExpr};
+
+    let tool = ToolEntry {
+        id: "crm.export".to_string(),
+        effects: BTreeSet::from([Effect::Egress]),
+        fields: BTreeMap::from([("region".to_string(), ArgType::Str)]),
+        labeled: true,
+        produces: None,
+        sink: None,
+    };
+    // Path is Str, but the compared literal is an Int — the guard can never match.
+    let rule = Rule {
+        id: "org.mismatch".to_string(),
+        when: Predicate::And(vec![
+            Predicate::ToolIs("crm.export".to_string()),
+            Predicate::ArgCmp(
+                TypedPath { field: "region".to_string(), ty: ArgType::Str },
+                CmpOp::Eq,
+                ValueExpr::Lit(ArgValue::Int(0)),
+            ),
+        ]),
+        then: Outcome::Forbid,
+        origin: RuleOrigin::Org,
+    };
+    let inv = Inventory {
+        tools: vec![tool],
+        rules: vec![rule],
+        dims: dims(),
+        declassifiers: vec![],
+        chains: vec![],
+        assumptions: vec![],
+        dir: DirectorySnapshot::default(),
+        principal: Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+    };
+    let report = check(&inv);
+    assert!(report.findings.iter().any(|f| f.code == "RUL-ARGCMP-TYPE" && f.severity == Severity::Error));
 }

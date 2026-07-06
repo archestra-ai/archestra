@@ -156,7 +156,7 @@ pub fn compile(cfg: SurfaceConfig) -> Result<CompiledPolicy, SurfaceError> {
     let tools = compile_tools(&cfg.annotations, &dims)?;
     let declassifiers = compile_declassifiers(&cfg.declassifiers, &dims)?;
     let chains = compile_chains(&cfg.chains, &cfg.approvers)?;
-    let approvers = compile_approvers(&cfg.approvers);
+    let approvers = compile_approvers(&cfg.approvers)?;
     let label_sources = compile_label_sources(&cfg.label_sources);
     let on_unknown = compile_on_unknown(&cfg.on_unknown, &dims)?;
 
@@ -220,7 +220,7 @@ fn compile_tools(file: &AnnotationsFile, dims: &DimRegistry) -> Result<Vec<ToolS
             }
             None => ResultTier::Unknown,
         };
-        let sink = cfg.sink.as_ref().map(compile_sink).transpose()?;
+        let sink = cfg.sink.as_ref().map(|s| compile_sink(s, dims)).transpose()?;
         tools.push(ToolSpec {
             id: id.clone(),
             effects,
@@ -233,7 +233,7 @@ fn compile_tools(file: &AnnotationsFile, dims: &DimRegistry) -> Result<Vec<ToolS
     Ok(tools)
 }
 
-fn compile_sink(cfg: &SinkCfg) -> Result<SinkSpec, SurfaceError> {
+fn compile_sink(cfg: &SinkCfg, registry: &DimRegistry) -> Result<SinkSpec, SurfaceError> {
     let readers = match &cfg.readers {
         SinkReadersCfg::Public => SinkReaders::Public,
         SinkReadersCfg::Principal => SinkReaders::Principal,
@@ -242,6 +242,14 @@ fn compile_sink(cfg: &SinkCfg) -> Result<SinkSpec, SurfaceError> {
     };
     let mut dims = BTreeMap::new();
     for (id, dc) in &cfg.dims {
+        // A sink cannot constrain an undeclared dimension — the lattice would treat a typo as an
+        // exact match and give it meaning at runtime.
+        if !registry.contains(id) {
+            return Err(SurfaceError::UnknownDimension {
+                dim: id.clone(),
+                whence: "sink".to_string(),
+            });
+        }
         let sd = match dc {
             SinkDimCfg::Static { value } => SinkDim::Static(DimValue::val(value.clone())),
             SinkDimCfg::FromArg { field } => SinkDim::FromArg(field.clone()),
@@ -302,16 +310,16 @@ fn compile_chains(file: &ChainsFile, approvers: &ApproversFile) -> Result<Vec<Ch
     Ok(out)
 }
 
-fn compile_approvers(file: &ApproversFile) -> Vec<ApproverSpec> {
-    file.approvers
-        .iter()
-        .map(|(id, cfg)| match cfg {
+fn compile_approvers(file: &ApproversFile) -> Result<Vec<ApproverSpec>, SurfaceError> {
+    let mut out = Vec::new();
+    for (id, cfg) in &file.approvers {
+        let spec = match cfg {
             ApproverCfg::Human {
                 auto_approve,
                 scope,
             } => ApproverSpec::Human {
                 id: id.clone(),
-                scope: compile_scope(scope),
+                scope: compile_scope(scope, id)?,
                 auto_approve: *auto_approve,
             },
             ApproverCfg::Llm {
@@ -322,18 +330,20 @@ fn compile_approvers(file: &ApproversFile) -> Vec<ApproverSpec> {
             } => ApproverSpec::Llm {
                 id: id.clone(),
                 pin: pin.clone(),
-                scope: compile_scope(scope),
+                scope: compile_scope(scope, id)?,
                 budget: *budget,
                 requires_clean_context: *requires_clean_context,
             },
             ApproverCfg::EuBusinessHours { open, close, scope } => ApproverSpec::EuBusinessHours {
                 id: id.clone(),
-                scope: compile_scope(scope),
+                scope: compile_scope(scope, id)?,
                 open: *open,
                 close: *close,
             },
-        })
-        .collect()
+        };
+        out.push(spec);
+    }
+    Ok(out)
 }
 
 fn compile_label_sources(file: &LabelSourcesFile) -> Vec<LabelSourceSpec> {
@@ -363,7 +373,13 @@ fn compile_guards(file: &GuardsFile) -> Result<Vec<Rule>, SurfaceError> {
         let ty = arg_type_of(cfg.arg.ty);
         let value = match ty {
             ArgType::Str => ArgValue::Str(cfg.value.clone()),
-            ArgType::Int => ArgValue::Int(cfg.value.parse().unwrap_or(0)),
+            ArgType::Int => ArgValue::Int(cfg.value.parse().map_err(|_| {
+                SurfaceError::InvalidGuardValue {
+                    guard: id.clone(),
+                    value: cfg.value.clone(),
+                    ty: "int".to_string(),
+                }
+            })?),
             ArgType::Subject => ArgValue::Subject(Subject::User(cfg.value.clone())),
         };
         let op = match cfg.op {
@@ -452,11 +468,16 @@ fn rule_on_unknown() -> Rule {
 
 // --- small compilers --------------------------------------------------------
 
-fn compile_scope(scope: &ScopeCfg) -> Predicate {
+fn compile_scope(scope: &ScopeCfg, approver: &str) -> Result<Predicate, SurfaceError> {
     match scope {
-        // An empty conjunction is vacuously true — an unbounded scope.
-        ScopeCfg::Any(_) => Predicate::And(vec![]),
-        ScopeCfg::Tool { tool } => Predicate::ToolIs(tool.clone()),
+        // Only the literal `any` is an unbounded scope. Any other bare string is a typo (e.g. a
+        // misspelled tool name) that must fail closed rather than silently become unbounded.
+        ScopeCfg::Any(s) if s == "any" => Ok(Predicate::And(vec![])),
+        ScopeCfg::Any(s) => Err(SurfaceError::InvalidScope {
+            approver: approver.to_string(),
+            scope: s.clone(),
+        }),
+        ScopeCfg::Tool { tool } => Ok(Predicate::ToolIs(tool.clone())),
     }
 }
 

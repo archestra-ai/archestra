@@ -9,7 +9,7 @@ approvers:
   human.oncall:
     kind: human
     auto_approve: true              # demo stand-in for a real prompt
-    scope: any
+    scope: { tool: email.send }     # bounded: the on-call can only approve email.send calls
   eu.hours:
     kind: eu_business_hours
     open: 9

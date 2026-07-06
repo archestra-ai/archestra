@@ -48,13 +48,23 @@ fn beat2_write_leaks_and_is_denied_by_no_leak() {
 fn beat3_declassify_then_write_allowed() {
     let s = run();
     assert!(s.beat3_declassified_ok);
-    assert!(matches!(s.beat3_allow, Decision::Allow { .. }));
+    // The allow records the declassifier that unblocked it.
+    match &s.beat3_allow {
+        Decision::Allow { via: Some(AllowVia::DeclassifiedBy(id)), .. } => assert_eq!(id, "san.redact"),
+        other => panic!("expected Allow via declassifier, got {other:?}"),
+    }
 }
 
 #[test]
 fn beat4_tainted_consequential_escalates_then_human_approves() {
     let s = run();
-    assert!(matches!(s.beat4_escalate, Decision::Escalate { .. }));
+    // The engine preserves the configured chain order: the llm is consulted before the human.
+    match &s.beat4_escalate {
+        Decision::Escalate { chain, .. } => {
+            assert_eq!(chain, &vec!["llm.judge".to_string(), "human.oncall".to_string()]);
+        }
+        other => panic!("expected Escalate, got {other:?}"),
+    }
     assert!(s.beat4_llm_abstained, "llm must abstain on tainted context");
     match &s.beat4_final {
         Decision::Allow { via: Some(AllowVia::ApprovedBy(chain)), .. } => {

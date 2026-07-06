@@ -21,4 +21,12 @@ pub enum SurfaceError {
     UnknownDimension { dim: String, whence: String },
     #[error("chain `{id}` references undeclared approver `{approver}`")]
     UnknownApprover { id: String, approver: String },
+    #[error("approver `{approver}` has an unrecognized scope `{scope}` (expected `any` or a tool map)")]
+    InvalidScope { approver: String, scope: String },
+    #[error("guard `{guard}` has a value `{value}` that is not a valid {ty}")]
+    InvalidGuardValue {
+        guard: String,
+        value: String,
+        ty: String,
+    },
 }

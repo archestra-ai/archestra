@@ -60,21 +60,22 @@ fn redact(c: &Chunk) -> Chunk {
     Chunk(format!("[redacted summary, {} chars]", c.0.len()))
 }
 
-fn sanitizer_fn(impl_pin: &str) -> fn(&Chunk) -> Chunk {
+/// Resolve a sanitizer impl by its pin. Unknown pins are refused (return `None`) — falling back to an
+/// identity transform would let a typo'd pin launder confidential content through the declassifier.
+fn sanitizer_fn(impl_pin: &str) -> Option<fn(&Chunk) -> Chunk> {
     match impl_pin {
-        "redact@1" => redact,
-        // Unknown pins fall back to identity; a real system would refuse to load an unpinned impl.
-        _ => |c| c.clone(),
+        "redact@1" => Some(redact),
+        _ => None,
     }
 }
 
 impl Runtime {
     pub fn from_config(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Self, String> {
         let policy = compile_dir(config_dir).map_err(|e| e.to_string())?;
-        Ok(Self::from_policy(policy, jsonl))
+        Self::from_policy(policy, jsonl)
     }
 
-    pub fn from_policy(policy: CompiledPolicy, jsonl: Option<PathBuf>) -> Self {
+    pub fn from_policy(policy: CompiledPolicy, jsonl: Option<PathBuf>) -> Result<Self, String> {
         let dir = fixtures::directory();
         let doc_acls = fixtures::doc_acls();
         let principal = fixtures::principal();
@@ -96,26 +97,28 @@ impl Runtime {
             }
         }
 
-        let declassifiers: BTreeMap<String, DeclassRule> = policy
-            .declassifiers
-            .into_iter()
-            .map(|spec| {
-                let authority = match &spec.authority {
-                    DeclassAuthoritySpec::Sanitizer { impl_pin } => DeclassAuthority::Sanitizer {
+        let mut declassifiers: BTreeMap<String, DeclassRule> = BTreeMap::new();
+        for spec in policy.declassifiers {
+            let authority = match &spec.authority {
+                DeclassAuthoritySpec::Sanitizer { impl_pin } => {
+                    let f = sanitizer_fn(impl_pin).ok_or_else(|| {
+                        format!(
+                            "declassifier `{}` pins unknown sanitizer impl `{impl_pin}`; refusing to load",
+                            spec.id
+                        )
+                    })?;
+                    DeclassAuthority::Sanitizer {
                         impl_pin: impl_pin.clone(),
-                        f: sanitizer_fn(impl_pin),
-                    },
-                    DeclassAuthoritySpec::Human => DeclassAuthority::Human,
-                    DeclassAuthoritySpec::LlmJudge { approver } => {
-                        DeclassAuthority::LlmJudge(approver.clone())
+                        f,
                     }
-                };
-                (
-                    spec.id.clone(),
-                    DeclassRule::new(spec.id, authority, spec.relabel),
-                )
-            })
-            .collect();
+                }
+                DeclassAuthoritySpec::Human => DeclassAuthority::Human,
+                DeclassAuthoritySpec::LlmJudge { approver } => {
+                    DeclassAuthority::LlmJudge(approver.clone())
+                }
+            };
+            declassifiers.insert(spec.id.clone(), DeclassRule::new(spec.id, authority, spec.relabel));
+        }
 
         let declass_ids: Vec<String> = declassifiers.keys().cloned().collect();
         let chain_ids: Vec<String> = policy.chains.iter().map(|c| c.id.clone()).collect();
@@ -146,7 +149,7 @@ impl Runtime {
             engine = engine.with_jsonl(path);
         }
 
-        Runtime {
+        Ok(Runtime {
             engine,
             approvers,
             declassifiers,
@@ -157,7 +160,7 @@ impl Runtime {
             principal,
             tainted_chain,
             doc_acls,
-        }
+        })
     }
 
     /// Resolve the sink ceiling for a governed call from its annotation, args, and the principal.

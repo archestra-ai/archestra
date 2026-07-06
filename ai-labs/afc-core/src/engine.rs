@@ -71,6 +71,30 @@ pub struct CallSite {
     pub sink: Label,
     pub args: BTreeMap<String, ArgValue>,
     pub principal: Principal,
+    /// Set when `value` was produced by a declassifier, so an `Allow` can record the audit link.
+    pub declassified_by: Option<DeclassId>,
+}
+
+impl CallSite {
+    /// A call site with no prior declassification.
+    pub fn new(
+        tool: ToolId,
+        effects: BTreeSet<crate::rule::Effect>,
+        value: Labeled<Chunk>,
+        sink: Label,
+        args: BTreeMap<String, ArgValue>,
+        principal: Principal,
+    ) -> Self {
+        CallSite {
+            tool,
+            effects,
+            value,
+            sink,
+            args,
+            principal,
+            declassified_by: None,
+        }
+    }
 }
 
 /// How a tool's result is labeled, for tiers 1 and 3 of `label_result`.
@@ -119,6 +143,9 @@ pub struct DecisionRecord {
     pub label_in: Label,
     pub label_out: Label,
     pub snapshot_hash: String,
+    /// Ids of `warn` rules that matched — advisory, they do not change the verdict.
+    #[serde(default)]
+    pub warnings: Vec<RuleId>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -154,6 +181,9 @@ pub struct RuleEngine {
     jsonl: Option<PathBuf>,
     log: Vec<DecisionRecord>,
     next_id: u64,
+    /// Escalation decision ids awaiting an approval. `finalize_escalation` consumes one, so an
+    /// approval is bound to a specific escalation and cannot be replayed.
+    pending_escalations: BTreeSet<u64>,
 }
 
 impl RuleEngine {
@@ -170,6 +200,7 @@ impl RuleEngine {
             jsonl: None,
             log: Vec::new(),
             next_id: 0,
+            pending_escalations: BTreeSet::new(),
         }
     }
 
@@ -232,14 +263,31 @@ impl RuleEngine {
     /// WHY the re-check: an approval authorizes *only* what its scope predicate covers, and it may
     /// never widen the sink ceiling. So we re-evaluate the scope against the same call and re-run the
     /// forbid pass; a `Forbid` that fires anyway still wins over the approval.
+    ///
+    /// `escalation_id` binds this approval to a *specific* prior `Escalate` decision: it must still be
+    /// pending, and it is consumed one-shot, so an approval cannot be replayed. (Binding to the exact
+    /// approved args/sink snapshot is a further tightening left for later — see the follow-up ledger.)
     pub fn finalize_escalation(
         &mut self,
         call: &CallSite,
         chain_id: ChainId,
+        escalation_id: u64,
         approver: ApproverId,
         scope: &Predicate,
     ) -> Decision {
         let id = self.take_id();
+        if !self.pending_escalations.remove(&escalation_id) {
+            let decision = Decision::Deny {
+                id,
+                rule_id: "engine.no_pending_escalation".to_string(),
+                reason: format!(
+                    "escalation {escalation_id} is not pending (already discharged or never raised)"
+                ),
+                residual: self.residual(),
+            };
+            self.record(call, &decision, Some(chain_id), Some(approver), Vec::new());
+            return decision;
+        }
         let within_scope = {
             let lattice = self.lattice();
             let ctx = ctx_for(call, lattice);
@@ -253,14 +301,14 @@ impl RuleEngine {
         } else {
             Decision::Deny {
                 id,
-                rule_id: "std.approval_out_of_scope".to_string(),
+                rule_id: "engine.approval_out_of_scope".to_string(),
                 reason: format!(
                     "approval by {approver} does not cover this call (scope re-check or forbid pass failed)"
                 ),
                 residual: self.residual(),
             }
         };
-        self.record(call, &decision, Some(chain_id), Some(approver));
+        self.record(call, &decision, Some(chain_id), Some(approver), Vec::new());
         decision
     }
 
@@ -283,6 +331,7 @@ impl RuleEngine {
         decision: &Decision,
         chain_id: Option<ChainId>,
         approver: Option<ApproverId>,
+        warnings: Vec<RuleId>,
     ) {
         let (kind, rule_id) = match decision {
             Decision::Allow { .. } => (DecisionKind::Allow, None),
@@ -300,6 +349,7 @@ impl RuleEngine {
             label_in: call.value.label.clone(),
             label_out: call.sink.clone(),
             snapshot_hash: self.dir.hash(),
+            warnings,
         };
         if let Some(path) = &self.jsonl {
             append_jsonl(path, &record);
@@ -311,7 +361,8 @@ impl RuleEngine {
 impl Engine for RuleEngine {
     fn check_call(&mut self, call: &CallSite) -> Decision {
         let id = self.take_id();
-        let (mut forbids, mut escalates): (Vec<&Rule>, Vec<&Rule>) = (Vec::new(), Vec::new());
+        let (mut forbids, mut escalates, mut warns): (Vec<&Rule>, Vec<&Rule>, Vec<&Rule>) =
+            (Vec::new(), Vec::new(), Vec::new());
         {
             let lattice = self.lattice();
             let ctx = ctx_for(call, lattice);
@@ -320,11 +371,14 @@ impl Engine for RuleEngine {
                     match &rule.then {
                         Outcome::Forbid => forbids.push(rule),
                         Outcome::Escalate(_) => escalates.push(rule),
-                        Outcome::Warn => {}
+                        Outcome::Warn => warns.push(rule),
                     }
                 }
             }
         }
+        // Warn rules do not change the verdict, but they are recorded so an authored `warn` guard is
+        // never silently inert.
+        let warnings: Vec<RuleId> = warns.iter().map(|r| r.id.clone()).collect();
 
         let decision = if !forbids.is_empty() {
             // forbid-wins, order-independent: sort by id so the recorded rule_id is deterministic.
@@ -337,22 +391,31 @@ impl Engine for RuleEngine {
                 residual: self.residual(),
             }
         } else if !escalates.is_empty() {
-            // Union the approver chains, order-independent (dedup, sorted).
-            let mut chain: BTreeSet<ApproverId> = BTreeSet::new();
+            // Union the approver chains, order-independent across rules (sorted by rule id) but
+            // preserving each chain's internal order — the order approvers are consulted matters.
+            escalates.sort_by(|a, b| a.id.cmp(&b.id));
+            let mut chain: Vec<ApproverId> = Vec::new();
             for rule in &escalates {
                 if let Outcome::Escalate(approvers) = &rule.then {
-                    chain.extend(approvers.iter().cloned());
+                    for approver in approvers {
+                        if !chain.contains(approver) {
+                            chain.push(approver.clone());
+                        }
+                    }
                 }
             }
-            Decision::Escalate {
-                id,
-                chain: chain.into_iter().collect(),
-            }
+            self.pending_escalations.insert(id);
+            Decision::Escalate { id, chain }
         } else {
-            Decision::Allow { id, via: None }
+            // A call may carry a prior declassification; stamp the audit link when it is allowed.
+            let via = call
+                .declassified_by
+                .clone()
+                .map(AllowVia::DeclassifiedBy);
+            Decision::Allow { id, via }
         };
 
-        self.record(call, &decision, None, None);
+        self.record(call, &decision, None, None, warnings);
         decision
     }
 
@@ -399,12 +462,16 @@ fn ctx_for<'a>(call: &'a CallSite, lattice: Lattice<'a>) -> EvalCtx<'a> {
     }
 }
 
+/// Best-effort audit append. A verdict must never depend on audit I/O succeeding, so a failure here
+/// is reported to stderr and the decision still stands — it is surfaced, never silently swallowed.
 fn append_jsonl(path: &PathBuf, record: &DecisionRecord) {
     let line = serde_json::to_string(record).expect("decision record is serializable");
-    let mut file = std::fs::OpenOptions::new()
+    let result = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
-        .expect("open decision log");
-    writeln!(file, "{line}").expect("write decision log");
+        .and_then(|mut file| writeln!(file, "{line}"));
+    if let Err(e) = result {
+        eprintln!("afc: failed to append decision to {}: {e}", path.display());
+    }
 }

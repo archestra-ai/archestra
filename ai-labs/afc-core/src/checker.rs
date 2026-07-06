@@ -13,7 +13,7 @@ use crate::engine::{ChainId, DeclassId};
 use crate::label::{DimRegistry, Label};
 use crate::lattice::{FlowClass, Lattice};
 use crate::rule::{
-    ArgType, Effect, EvalCtx, Outcome, Predicate, Principal, Rule, ToolId,
+    ArgType, ArgValue, Effect, EvalCtx, Outcome, Predicate, Principal, Rule, ToolId, ValueExpr,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -174,6 +174,20 @@ fn check_predicate_types(
                     ),
                 });
             }
+            // The literal being compared must have the same type as the path, or the comparison can
+            // never match and the rule is silently inert.
+            if let Predicate::ArgCmp(_, _, expr) = pred
+                && !value_expr_matches_type(expr, path.ty)
+            {
+                findings.push(Finding {
+                    code: "RUL-ARGCMP-TYPE".to_string(),
+                    severity: Severity::Error,
+                    message: format!(
+                        "rule `{}` compares `{}` ({:?}) against a value of a different type",
+                        rule.id, path.field, path.ty
+                    ),
+                });
+            }
         }
         Predicate::DimCmp { dim, .. } => {
             if !inv.dims.contains(dim) {
@@ -307,12 +321,9 @@ fn gate_for(
             }
         }
     }
-    // A chain registered for this sink's effect also gates the path (escalation surface).
-    let chain_covers = inv
-        .chains
-        .iter()
-        .any(|c| sink.effects.contains(&c.effect));
-    if escalated || chain_covers {
+    // Only a rule that actually escalates this flow gates it. Mere chain *registration* for the sink's
+    // effect is not coverage — a leak with no escalating rule must still be reported.
+    if escalated {
         return Gate::Escalated;
     }
     // A declassifier bridges the leak if its relabeled output flows to the sink.
@@ -352,10 +363,17 @@ fn describe_tool_scope(tools: &BTreeSet<ToolId>) -> String {
     }
 }
 
-/// A rule that is never satisfiable by construction (contradictory) — reported as `DeadRule`.
-/// Kept as a helper for callers that build rules programmatically and want an early check.
-pub fn is_trivially_dead(rule: &Rule, tool_ids: &BTreeSet<&ToolId>) -> bool {
-    let mut tools = BTreeSet::new();
-    collect_tool_is(&rule.when, &mut tools);
-    tools.iter().any(|t| !tool_ids.contains(t))
+fn value_expr_matches_type(expr: &ValueExpr, ty: ArgType) -> bool {
+    let matches_one = |v: &ArgValue| {
+        matches!(
+            (v, ty),
+            (ArgValue::Str(_), ArgType::Str)
+                | (ArgValue::Int(_), ArgType::Int)
+                | (ArgValue::Subject(_), ArgType::Subject)
+        )
+    };
+    match expr {
+        ValueExpr::Lit(v) => matches_one(v),
+        ValueExpr::Set(vs) => vs.iter().all(matches_one),
+    }
 }

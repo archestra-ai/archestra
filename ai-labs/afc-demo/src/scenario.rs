@@ -74,27 +74,30 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         ("content", ArgValue::Str("summary".into())),
     ]);
     let (write_effects, write_sink) = rt.sink_and_effects("drive.write_doc", &write_args);
-    let beat2_deny = rt.engine.check_call(&CallSite {
-        tool: "drive.write_doc".into(),
-        effects: write_effects.clone(),
-        value: summary.clone(),
-        sink: write_sink.clone(),
-        args: write_args.clone(),
-        principal: principal.clone(),
-    });
+    let beat2_deny = rt.engine.check_call(&CallSite::new(
+        "drive.write_doc".into(),
+        write_effects.clone(),
+        summary.clone(),
+        write_sink.clone(),
+        write_args.clone(),
+        principal.clone(),
+    ));
 
-    // Beat 3: declassify the summary via the sanitizer, then the write to doc B is allowed.
+    // Beat 3: declassify the summary via the sanitizer, then the write to doc B is allowed and the
+    // audit records the declassifier that unblocked it.
     let declassified = declassify(&summary, &rt.declassifiers["san.redact"]);
     let beat3_declassified_ok = declassified.is_ok();
     let beat3_value = declassified.unwrap_or_else(|_| summary.clone());
-    let beat3_allow = rt.engine.check_call(&CallSite {
-        tool: "drive.write_doc".into(),
-        effects: write_effects,
-        value: beat3_value,
-        sink: write_sink,
-        args: write_args,
-        principal: principal.clone(),
-    });
+    let mut beat3_call = CallSite::new(
+        "drive.write_doc".into(),
+        write_effects,
+        beat3_value,
+        write_sink,
+        write_args,
+        principal.clone(),
+    );
+    beat3_call.declassified_by = Some("san.redact".to_string());
+    let beat3_allow = rt.engine.check_call(&beat3_call);
 
     // Beat 4: fetch a web page (tainted), digest it, email the digest internally. Tainted +
     // consequential escalates; the llm abstains on the tainted context, the human approves, and the
@@ -112,33 +115,47 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         ("body", ArgValue::Str("digest".into())),
     ]);
     let (email_effects, sink4) = rt.sink_and_effects("email.send", &email_internal_args);
-    let call4 = CallSite {
-        tool: "email.send".into(),
-        effects: email_effects.clone(),
-        value: digest,
-        sink: sink4,
-        args: email_internal_args,
-        principal: principal.clone(),
-    };
+    let call4 = CallSite::new(
+        "email.send".into(),
+        email_effects.clone(),
+        digest,
+        sink4,
+        email_internal_args,
+        principal.clone(),
+    );
     let beat4_escalate = rt.engine.check_call(&call4);
     let request = ApprovalRequest {
         tainted: call4.value.label.integrity == Integrity::Tainted,
         clock: 10,
     };
-    let (beat4_final, beat4_llm_abstained) =
-        match run_chain(&rt.tainted_chain.1, &rt.approvers, &request) {
-            ChainOutcome::Approved { approver, scope, .. } => {
-                let llm_abstained = approver != "llm.judge";
-                let decision =
-                    rt.engine
-                        .finalize_escalation(&call4, rt.tainted_chain.0.clone(), approver, &scope);
-                (decision, llm_abstained)
-            }
-            ChainOutcome::Rejected { reason, .. } => {
-                return Err(format!("beat 4 unexpectedly rejected: {reason}"));
-            }
-            ChainOutcome::Exhausted => return Err("beat 4 chain exhausted".into()),
-        };
+    // Witness the abstention directly against the llm approver, rather than inferring it from which
+    // approver ended up granting — the latter would pass even if the llm were absent from the chain.
+    let beat4_llm_abstained = matches!(
+        rt.approvers
+            .get("llm.judge")
+            .expect("llm.judge registered")
+            .decide(&request),
+        Verdict::Abstain
+    );
+    // Run the chain the ENGINE returned (order preserved), not the config's, so the engine output is
+    // what is exercised.
+    let engine_chain = match &beat4_escalate {
+        Decision::Escalate { chain, .. } => chain.clone(),
+        other => return Err(format!("beat 4 expected Escalate, got {other:?}")),
+    };
+    let beat4_final = match run_chain(&engine_chain, &rt.approvers, &request) {
+        ChainOutcome::Approved { approver, scope, .. } => rt.engine.finalize_escalation(
+            &call4,
+            rt.tainted_chain.0.clone(),
+            beat4_escalate.id(),
+            approver,
+            &scope,
+        ),
+        ChainOutcome::Rejected { reason, .. } => {
+            return Err(format!("beat 4 unexpectedly rejected: {reason}"));
+        }
+        ChainOutcome::Exhausted => return Err("beat 4 chain exhausted".into()),
+    };
 
     // Beat 5: export a US record with region=EU. The region dimension leaks — pure lattice, no
     // custom rule: Deny(std.no_leak).
@@ -153,14 +170,14 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         ("record", ArgValue::Str("row-1".into())),
     ]);
     let (crm_effects, crm_sink) = rt.sink_and_effects("crm.export", &export_args);
-    let beat5_deny = rt.engine.check_call(&CallSite {
-        tool: "crm.export".into(),
-        effects: crm_effects,
-        value: record,
-        sink: crm_sink,
-        args: export_args,
-        principal: principal.clone(),
-    });
+    let beat5_deny = rt.engine.check_call(&CallSite::new(
+        "crm.export".into(),
+        crm_effects,
+        record,
+        crm_sink,
+        export_args,
+        principal.clone(),
+    ));
 
     // Beat 6: an unlabeled tool's result is Unknown; egressing it hits on_unknown → Deny.
     let dump = rt.engine.label_result(
@@ -173,14 +190,14 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         ("body", ArgValue::Str("dump".into())),
     ]);
     let (_e, sink6) = rt.sink_and_effects("email.send", &email_dump_args);
-    let beat6_deny = rt.engine.check_call(&CallSite {
-        tool: "email.send".into(),
-        effects: email_effects.clone(),
-        value: dump,
-        sink: sink6,
-        args: email_dump_args,
-        principal: principal.clone(),
-    });
+    let beat6_deny = rt.engine.check_call(&CallSite::new(
+        "email.send".into(),
+        email_effects.clone(),
+        dump,
+        sink6,
+        email_dump_args,
+        principal.clone(),
+    ));
 
     // Beat 7: injection replay. The model "complies" and tries to email doc A content to an outsider.
     // The content is tainted by the injection context. Readers leak → Deny(std.no_leak); the llm
@@ -195,14 +212,14 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         ("body", ArgValue::Str("doc A".into())),
     ]);
     let (_e2, sink7) = rt.sink_and_effects("email.send", &evil_args);
-    let beat7_deny = rt.engine.check_call(&CallSite {
-        tool: "email.send".into(),
-        effects: email_effects,
-        value: exfil.clone(),
-        sink: sink7,
-        args: evil_args,
-        principal: principal.clone(),
-    });
+    let beat7_deny = rt.engine.check_call(&CallSite::new(
+        "email.send".into(),
+        email_effects,
+        exfil.clone(),
+        sink7,
+        evil_args,
+        principal.clone(),
+    ));
     let beat7_llm_abstains = matches!(
         rt.approvers
             .get("llm.judge")
@@ -230,14 +247,14 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         provenance: vec![],
         provenance_truncated: false,
     };
-    let beat8_risk_deny = rt.engine.check_call(&CallSite {
-        tool: "email.send".into(),
-        effects: [Effect::Egress].into(),
-        value: tightened,
-        sink: low_risk_sink,
-        args: BTreeMap::new(),
-        principal: principal.clone(),
-    });
+    let beat8_risk_deny = rt.engine.check_call(&CallSite::new(
+        "email.send".into(),
+        [Effect::Egress].into(),
+        tightened,
+        low_risk_sink,
+        BTreeMap::new(),
+        principal.clone(),
+    ));
     let org_hook = Hook::new(
         "audit.hook",
         Label {

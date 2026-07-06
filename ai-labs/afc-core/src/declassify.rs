@@ -71,7 +71,20 @@ pub fn declassify(v: &Labeled<Chunk>, rule: &DeclassRule) -> Result<Labeled<Chun
     }
     let out = match &rule.authority {
         DeclassAuthority::Sanitizer { f, .. } => f(&v.value),
-        DeclassAuthority::Human | DeclassAuthority::LlmJudge(_) => v.value.clone(),
+        // A human/LLM declassifier is an *authority* decision, not a pure transform: it must be routed
+        // through the approver flow, which produces an audited verdict. Relabeling here without that
+        // verdict would silently grant the relaxation, so this path is refused rather than faked.
+        DeclassAuthority::Human | DeclassAuthority::LlmJudge(_) => {
+            return Err(Decision::Deny {
+                id: u64::MAX,
+                rule_id: "std.declass_needs_authority".to_string(),
+                reason: format!(
+                    "declassifier {} requires a human/LLM authority verdict; route it through an approver",
+                    rule.id
+                ),
+                residual: vec![Remedy::RequestApproval(rule.id.clone())],
+            });
+        }
     };
     Ok(Labeled::new(out, rule.relabel.clone()))
 }

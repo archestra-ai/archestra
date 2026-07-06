@@ -1526,6 +1526,62 @@ class ToolModel {
   }
 
   /**
+   * One-time backfill triggered on startup: when a sandbox built-in tool
+   * (runtime or persistent-files) is created for the first time on this seed
+   * run — i.e. the code runtime was just enabled — assign just those new
+   * tools to every existing agent in every org.
+   *
+   * New agents inherit the sandbox surface via
+   * {@link assignSandboxToolsToAgent}, but agents that predate the runtime
+   * enablement would otherwise never receive it: migration 0332 runs in the
+   * pre-upgrade hook, before the seed creates these flag-gated rows, so it
+   * cannot backfill them. Matching AgentModel.create, this spans every agent
+   * kind and both tool modes — an All-tools agent advertises only assigned
+   * built-ins in chat, so it needs the rows too — and skips built-in system
+   * agents, which bypass the create-time tool hooks by design. Idempotent:
+   * only the newly-created short names are assigned, via
+   * `createManyIfNotExists`.
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewSandboxToolsToAgents(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newSandboxShortNames = [
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+    ].filter((shortName) => createdShortNames.has(shortName));
+    if (newSandboxShortNames.length === 0) return;
+
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        newSandboxShortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds =
+        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+      logger.info(
+        {
+          organizationId,
+          agentCount: agentIds.length,
+          newSandboxShortNames,
+        },
+        "Backfilled new sandbox tools to org agents",
+      );
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *

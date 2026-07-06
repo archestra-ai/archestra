@@ -1456,6 +1456,28 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
+  /**
+   * Ids of the org's non-deleted agents that go through the create-time
+   * default tool hooks — i.e. excluding built-in system agents, which are
+   * seeded via raw insert and deliberately bypass them.
+   */
+  static async findNonBuiltInIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+          isNull(schema.agentsTable.builtInAgentConfig),
+        ),
+      );
+
+    return agents.map((agent) => agent.id);
+  }
+
   static async findAccessibleIdsForUser(userId: string): Promise<string[]> {
     const rows = await db
       .selectDistinct({ id: schema.agentsTable.id })

@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-06
 ---
 
 Agent Skills are markdown instruction sets an agent loads on demand. A skill is a `SKILL.md` file plus optional resource files, following the [Agent Skills specification](https://agentskills.io/specification).
@@ -67,6 +67,8 @@ Skills do not have to be written in the UI. The `create_skill` and `update_skill
 A skill created from chat is **personal** to its author — sharing it with a team or the whole organization stays a deliberate action in the skill editor. `create_skill` needs `skill:create`; `update_skill` needs `skill:update` and only applies to skills the user is allowed to manage, keeping the skill's current scope. `update_skill` replaces a skill's entire bundled file set in one call — there is no per-file patch, so changing one resource file means re-sending all of them.
 
 ## Importing from GitHub
+
+![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
 Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, paste a token — it is used for the request and never stored.
 

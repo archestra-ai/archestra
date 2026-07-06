@@ -227,6 +227,30 @@ class ConnectorSyncService {
       });
 
       for await (const batch of syncGenerator) {
+        // Fence the payload writes and refresh the lease at each batch boundary.
+        // renewLease is owner+epoch fenced: a `false` result means we were
+        // reclaimed, so we stop BEFORE writing this batch's kb_documents/kb_chunks
+        // — a zombie owner can't keep touching rows a newer run now owns (the
+        // payload writes are now fenced at the same batch granularity as the
+        // bookkeeping). Renewing here — synchronously, coupled to actual work —
+        // also means a slow batch's liveness doesn't hinge on the heartbeat timer
+        // alone, which a CPU-blocked event loop starves: every batch starts with a
+        // full lease TTL of headroom. (A single batch that blocks longer than the
+        // TTL can still be reclaimed — inherent to a lease-based scheme.)
+        const stillHeld = await ConnectorRunModel.renewLease({
+          runId: run.id,
+          owner: WORKER_ID,
+          epoch,
+          leaseTtlSeconds: config.kb.connectorRunLeaseTtlSeconds,
+        });
+        if (!stillHeld) {
+          runLog.info(
+            { documentsProcessed, documentsIngested },
+            "Run lease lost (reclaimed); stopping before ingesting the next batch",
+          );
+          return { runId: run.id, status: "superseded" };
+        }
+
         const ingestedDocumentIds: string[] = [];
         for (const doc of batch.documents) {
           documentsProcessed++;

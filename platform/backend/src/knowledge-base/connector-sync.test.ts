@@ -40,6 +40,7 @@ vi.mock("./chunker", () => ({
 }));
 
 import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   ConnectorRunModel,
@@ -489,5 +490,62 @@ describe("ConnectorSyncService", () => {
     expect(doc.acl).toEqual([`team:${connectorTeam.id}`]);
     expect(chunks[0].acl).toEqual([`team:${connectorTeam.id}`]);
     expect(chunks[1].acl).toEqual([`team:${connectorTeam.id}`]);
+  });
+
+  test("stops before ingesting the next batch when the run is reclaimed mid-sync", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+    setupSecret();
+
+    // A connector that yields two batches; between them a reaper reclaims the run
+    // (status -> partial, epoch bumped), simulating a lost lease mid-sync. The
+    // batch-boundary lease check must then fence the second batch's writes.
+    const mockImpl = {
+      estimateTotalItems: vi.fn().mockResolvedValue(2),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [{ id: "doc-a", title: "A", content: "Body A" }],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          await db.execute(sql`
+            UPDATE connector_runs
+            SET status = 'partial', lease_epoch = lease_epoch + 1
+            WHERE connector_id = ${connector.id} AND status = 'running'
+          `);
+          yield {
+            documents: [{ id: "doc-b", title: "B", content: "Body B" }],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    };
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("superseded");
+    // Batch 1's document was ingested before the reclaim; batch 2's was fenced out.
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "doc-a",
+      }),
+    ).not.toBeNull();
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "doc-b",
+      }),
+    ).toBeNull();
   });
 });

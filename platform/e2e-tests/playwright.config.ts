@@ -127,7 +127,21 @@ export default defineConfig({
   /* Global timeout for each test */
   timeout: 60_000,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: IS_CI ? [["blob"], ["github"], ["line"]] : "line",
+  /* Blob report filename must be unique per shard so the later merge-reports
+   * step doesn't collide. Playwright's built-in --shard appends the shard number
+   * automatically; our duration-balanced split runs the same projects on both
+   * shards (distinguished only by E2E_SHARD + testIgnore), so we set the name
+   * ourselves. Without this, both shards emit an identically named blob and the
+   * merge fails with "invalid local file header signature". */
+  reporter: IS_CI
+    ? [
+        process.env.E2E_SHARD
+          ? ["blob", { fileName: `report-shard-${process.env.E2E_SHARD}.zip` }]
+          : ["blob"],
+        ["github"],
+        ["line"],
+      ]
+    : "line",
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */

@@ -10,6 +10,8 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
+![The Skills page listing the organization's skills, each with its name, description, source repository, and file count](/docs/automated_screenshots/platform-agent-skills_catalog.webp)
+
 ## Progressive disclosure via two tools
 
 Skills are off until an admin enables them for the organization. Enabling assigns `list_skills` and `load_skill` to every existing agent and to every agent created afterwards, and exposes the tools on each agent's MCP gateway so external clients see them too. Any tool can still be dropped from an individual agent's tool picker.

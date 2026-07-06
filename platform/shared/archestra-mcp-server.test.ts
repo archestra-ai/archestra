@@ -79,7 +79,7 @@ describe("archestra MCP tool names", () => {
     expect(isAgentTool("archestra__whoami")).toBe(false);
   });
 
-  test("flags the skill, sandbox, persistent-files, and app runtime path as always-exposed", () => {
+  test("flags the skill, sandbox, and persistent-files path as always-exposed", () => {
     for (const shortName of [
       "list_skills",
       "load_skill",
@@ -88,23 +88,27 @@ describe("archestra MCP tool names", () => {
       "upload_file",
       // persistent-files (Projects) surface — all top-level, including
       // delete_file (deleting a file is part of the everyday file flow here,
-      // unlike delete_app below).
+      // unlike the app tools below).
       "search_files",
       "read_file",
       "save_file",
       "edit_file",
       "delete_file",
-      "scaffold_app",
-      "edit_app",
-      "read_app",
-      "render_app",
-      "list_apps",
     ]) {
       expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(true);
     }
-    // delete_app stays search-gated (destructive); preview_app_tool and
-    // get_app_diagnostics are follow-up steps reached via run_tool.
+    // The whole app surface is reached through search_tools/run_tool in
+    // search_and_run_only mode.
     for (const shortName of [
+      "scaffold_app",
+      "refine_app",
+      "edit_app",
+      "validate_app",
+      "publish_app",
+      "read_app",
+      "render_app",
+      "list_apps",
+      "set_app_tools",
       "delete_app",
       "preview_app_tool",
       "get_app_diagnostics",

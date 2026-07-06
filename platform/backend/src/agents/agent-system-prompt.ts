@@ -3,18 +3,27 @@ import {
   buildUserSystemPromptContext,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "ai";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { TeamModel, UserModel } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -89,7 +98,10 @@ export async function buildAgentSystemPrompt(params: {
 
   const toolLoadingInstructions =
     agent.toolExposureMode === "search_and_run_only"
-      ? buildLoadToolsWhenNeededSystemPrompt()
+      ? buildLoadToolsWhenNeededSystemPrompt({
+          appAuthoringToolNames:
+            await getDispatchableAppAuthoringToolNames(agentId),
+        })
       : null;
 
   const toolResultInstructions =
@@ -234,7 +246,54 @@ function buildFileHandlingInstruction(
   return paragraphs.join("\n\n");
 }
 
-function buildLoadToolsWhenNeededSystemPrompt(): string {
+/**
+ * App-authoring tools are hidden from `tools/list` in `search_and_run_only`
+ * mode but stay dispatchable through `run_tool` while assigned. The order here
+ * is the order the tool-loading prompt names them in, scaffold first — the
+ * steering only makes sense when the build entry point is dispatchable.
+ */
+const APP_AUTHORING_TOOL_SHORT_NAMES = [
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_REFINE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_VALIDATE_APP_SHORT_NAME,
+  TOOL_PUBLISH_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Branded names of the app-authoring tools the agent can dispatch via
+ * `run_tool`, resolved from the same exclusion-filtered assignment set
+ * `run_tool` dispatches from. Empty (no steering) when `scaffold_app` — the
+ * build entry point the steering directs to — is not dispatchable.
+ */
+async function getDispatchableAppAuthoringToolNames(
+  agentId: string,
+): Promise<string[]> {
+  const { tools } =
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+  const assignedShortNames = new Set(
+    tools.map((tool) => archestraMcpBranding.getToolShortName(tool.name)),
+  );
+  if (!assignedShortNames.has(TOOL_SCAFFOLD_APP_SHORT_NAME)) {
+    return [];
+  }
+  return APP_AUTHORING_TOOL_SHORT_NAMES.filter((shortName) =>
+    assignedShortNames.has(shortName),
+  ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+}
+
+function buildLoadToolsWhenNeededSystemPrompt(params: {
+  /**
+   * Branded app-authoring tool names dispatchable via run_tool, scaffold_app
+   * first; empty when the agent cannot build apps. Naming them verbatim here
+   * satisfies the names-seen-verbatim gate below, so the model can dispatch
+   * them without a search_tools round-trip.
+   */
+  appAuthoringToolNames: readonly string[];
+}): string {
   const searchToolsName = archestraMcpBranding.getToolName(
     TOOL_SEARCH_TOOLS_SHORT_NAME,
   );
@@ -242,7 +301,20 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
     TOOL_RUN_TOOL_SHORT_NAME,
   );
 
-  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.
+  const base = `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.
 
-\`${runToolName}\` takes exactly two arguments: \`tool_name\` (the exact name) and \`tool_args\` (an object holding the target tool's own parameters). For example, to call a tool \`maps__set_marker\` that takes a name and a \`coordinates\` object, call \`${runToolName}\` with \`tool_name: "maps__set_marker"\` and \`tool_args: { "name": "home", "coordinates": { "lat": 51.5, "lng": -0.1 } }\` — keep each parameter under its own key in \`tool_args\` and preserve nested objects as-is; do not flatten their fields into \`tool_args\`. The \`${searchToolsName}\` parameter signatures are summaries; if a \`${runToolName}\` call is rejected as invalid, the error describes the expected input (for third-party tools, the target tool's full input schema) — use it to correct the call.`;
+\`${runToolName}\` takes exactly two arguments: \`tool_name\` (the exact name) and \`tool_args\` (an object holding the target tool's own parameters). For example, to call a tool \`maps__set_marker\` that takes a name and a \`coordinates\` object, call \`${runToolName}\` with \`tool_name: "maps__set_marker"\` and \`tool_args: { "name": "home", "coordinates": { "lat": 51.5, "lng": -0.1 } }\` — keep each parameter under its own key in \`tool_args\` and preserve nested objects as-is; do not flatten their fields into \`tool_args\`. Equally, pass strings, numbers, booleans, and arrays directly as parameter values — never wrap a value in a single-key object like \`{"value": …}\`, \`{"$text": …}\`, or \`{"item": …}\`. The \`${searchToolsName}\` parameter signatures are summaries; if a \`${runToolName}\` call is rejected as invalid, the error describes the expected input (for third-party tools, the target tool's full input schema) — use it to correct the call.`;
+
+  const [scaffoldAppName, ...otherAppToolNames] = params.appAuthoringToolNames;
+  if (!scaffoldAppName) {
+    return base;
+  }
+
+  const otherAppTools =
+    otherAppToolNames.length > 0
+      ? `, then continue with ${otherAppToolNames.map((name) => `\`${name}\``).join(", ")} through \`${runToolName}\` the same way`
+      : "";
+  return `${base}
+
+When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`${otherAppTools}.`;
 }

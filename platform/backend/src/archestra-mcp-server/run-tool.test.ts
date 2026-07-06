@@ -1865,4 +1865,371 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
   });
+
+  // A single-key wrapper object ({"value": …}, {"item": […]}, {"$text": …})
+  // around a param the target schema declares scalar/array is unwrapped before
+  // policy evaluation, the structural pre-check, and dispatch — and the repair
+  // is disclosed on the result. Anything the schema could accept as sent is
+  // never touched.
+  describe("schema-aware envelope repair", () => {
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+
+    afterEach(() => {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+      vi.restoreAllMocks();
+    });
+
+    test('unwraps {"value": …} around a string-declared built-in param', async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      await seedAndAssignArchestraTools(testAgent.id);
+      const runSpy = vi
+        .spyOn(skillSandboxRuntimeService, "runCommand")
+        .mockResolvedValue({
+          commandId: "cmd-1",
+          sandboxId: "sb-1" as any,
+          command: "echo hi",
+          cwd: null,
+          stdout: "hi\n",
+          stderr: "",
+          exitCode: 0,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false,
+          binaryStripped: false,
+          stagingNotices: [],
+        });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "run_command",
+          tool_args: { command: { value: "echo hi" } },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBeFalsy();
+      // the dispatched target received the unwrapped string
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ command: "echo hi" }),
+      );
+      const text = result.content.map((item) => (item as any).text).join("\n");
+      expect(text).toContain('"command"');
+    });
+
+    test('unwraps {"item": […]} and {"value": […]} around an array-declared built-in param', async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(testAgent.id);
+      const todos = [{ id: 1, content: "write tests", status: "pending" }];
+
+      for (const envelope of [{ item: todos }, { value: todos }]) {
+        const result = await executeArchestraTool(
+          TOOL_RUN_TOOL_FULL_NAME,
+          {
+            tool_name: TOOL_TODO_WRITE_FULL_NAME,
+            tool_args: { todos: envelope },
+          },
+          mockContext,
+        );
+
+        // todo_write's strict schema rejects the envelope as sent, so a
+        // successful write proves the handler received the unwrapped array.
+        expect(result.isError).toBe(false);
+        expect(result.structuredContent).toEqual({
+          success: true,
+          todoCount: 1,
+        });
+        const text = result.content
+          .map((item) => (item as any).text)
+          .join("\n");
+        expect(text).toContain("todos");
+      }
+    });
+
+    test("unwraps envelopes for a third-party string-declared param and notes the repair", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      for (const envelope of [{ value: "archestra" }, { $text: "archestra" }]) {
+        vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        } as any);
+
+        const result = await executeArchestraTool(
+          TOOL_RUN_TOOL_FULL_NAME,
+          {
+            tool_name: "github__search_repositories",
+            tool_args: { query: envelope },
+          },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mcpClient.executeToolCallForOwner).toHaveBeenLastCalledWith(
+          expect.objectContaining({ arguments: { query: "archestra" } }),
+          agentOwner(testAgent.id),
+          mockContext.tokenAuth,
+          { conversationId: testConversationId },
+        );
+        const text = result.content
+          .map((item) => (item as any).text)
+          .join("\n");
+        expect(text).toContain('"query"');
+      }
+    });
+
+    test("does not repair when the declared param type is object", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "final_answer__submit_result",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            result: { type: "object", additionalProperties: true },
+          },
+          required: ["result"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "final_answer__submit_result",
+          tool_args: { result: { value: "x" } },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      // the envelope IS a valid object for this schema — dispatched untouched,
+      // with no repair note appended
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ arguments: { result: { value: "x" } } }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+    });
+
+    test("does not repair when the declared type is absent or non-literal", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "loose__ingest",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: {
+            payload: {},
+            flexible: { type: ["string", "null"] },
+          },
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const sentArgs = { payload: { value: "x" }, flexible: { value: "y" } };
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "loose__ingest", tool_args: sentArgs },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ arguments: sentArgs }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+    });
+
+    test("does not repair multi-key objects, unknown envelope keys, or mismatched inner types", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+
+      const nonRepairable = [
+        { value: "x", extra: "y" }, // multi-key
+        { wrapped: "x" }, // unknown single key
+        { value: 123 }, // inner type does not match the declared string
+      ];
+      for (const sent of nonRepairable) {
+        vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+          content: [{ type: "text", text: "ok" }],
+          isError: false,
+        } as any);
+
+        const result = await executeArchestraTool(
+          TOOL_RUN_TOOL_FULL_NAME,
+          {
+            tool_name: "github__search_repositories",
+            tool_args: { query: sent },
+          },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(false);
+        expect(mcpClient.executeToolCallForOwner).toHaveBeenLastCalledWith(
+          expect.objectContaining({ arguments: { query: sent } }),
+          agentOwner(testAgent.id),
+          mockContext.tokenAuth,
+          { conversationId: testConversationId },
+        );
+        expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+      }
+    });
+
+    test("passes a call that is valid as sent through unchanged, with no note", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "github__search_repositories",
+          tool_args: { query: "archestra" },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ arguments: { query: "archestra" } }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      expect(result.content).toEqual([{ type: "text", text: "ok" }]);
+    });
+
+    test("invocation policy evaluates the repaired args and the note rides on the refusal", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeOrganization,
+      makeTool,
+      makeToolPolicy,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Repair Policy Agent",
+        organizationId: org.id,
+      });
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { destination: { type: "string" } },
+          required: ["destination"],
+        },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await makeToolPolicy(tool.id, {
+        action: "block_always",
+        reason: "External export blocked",
+        conditions: [
+          { key: "destination", operator: "equal", value: "external" },
+        ],
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: tool.name,
+          tool_args: { destination: { value: "external" } },
+        },
+        {
+          ...mockContext,
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      // The condition matches only the unwrapped string, so the block firing
+      // proves the policy evaluated the repaired args — visible in the
+      // structured error's input too.
+      expect((result.structuredContent as any)?.archestraError).toMatchObject({
+        type: "policy_denied",
+        input: { destination: "external" },
+      });
+      const text = result.content.map((item) => (item as any).text).join("\n");
+      expect(text).toContain("External export blocked");
+      expect(text).toContain('"destination"');
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
+    });
+  });
 });

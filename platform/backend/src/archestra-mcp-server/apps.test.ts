@@ -448,6 +448,66 @@ describe("read_app / edit_app", () => {
     expect((noVersion.content[0] as any).text).toContain("no version 99");
   });
 
+  function readAppWindow(appId: string, params: Record<string, number>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId, ...params },
+      context,
+    );
+  }
+
+  test("read_app returns a character window with metadata when offset/limit are passed", async () => {
+    // Window content uses non-hex letters so it can never collide with the
+    // random hex suffix in the scaffolded app name that rides the text header.
+    const html = "<div>ghijklmnop</div>";
+    const { appId } = await scaffoldWithHtml(html);
+
+    const window = await readAppWindow(appId, { offset: 5, limit: 4 });
+    expect(window.isError).toBe(false);
+    expect(structured(window).html).toBe(html.slice(5, 9));
+    expect(structured(window).offset).toBe(5);
+    expect(structured(window).totalChars).toBe(html.length);
+    expect(structured(window).hasMore).toBe(true);
+    // byteSize stays the full document's, never the window's
+    expect(structured(window).byteSize).toBe(Buffer.byteLength(html, "utf8"));
+    // the windowed slice (and only it) rides the text content
+    expect((window.content[0] as any).text).toContain(html.slice(5, 9));
+    expect((window.content[0] as any).text).not.toContain("<div>");
+
+    // offset alone reads to the end of the document
+    const tail = await readAppWindow(appId, { offset: 5 });
+    expect(structured(tail).html).toBe(html.slice(5));
+    expect(structured(tail).hasMore).toBe(false);
+
+    // limit alone reads from the start
+    const headWindow = await readAppWindow(appId, { limit: 5 });
+    expect(structured(headWindow).html).toBe(html.slice(0, 5));
+    expect(structured(headWindow).offset).toBe(0);
+    expect(structured(headWindow).hasMore).toBe(true);
+  });
+
+  test("read_app clamps an offset past the end to an empty window, not an error", async () => {
+    const html = "<h1>short</h1>";
+    const { appId } = await scaffoldWithHtml(html);
+    const result = await readAppWindow(appId, { offset: 10_000, limit: 5 });
+    expect(result.isError).toBe(false);
+    expect(structured(result).html).toBe("");
+    expect(structured(result).offset).toBe(html.length);
+    expect(structured(result).totalChars).toBe(html.length);
+    expect(structured(result).hasMore).toBe(false);
+  });
+
+  test("read_app full read (no offset/limit) reports full-document metadata", async () => {
+    const html = "<h1>full</h1>";
+    const { appId } = await scaffoldWithHtml(html);
+    const result = await readApp(appId);
+    expect(result.isError).toBe(false);
+    expect(structured(result).html).toBe(html);
+    expect(structured(result).offset).toBe(0);
+    expect(structured(result).totalChars).toBe(html.length);
+    expect(structured(result).hasMore).toBe(false);
+  });
+
   test("read_app/edit_app respect per-app visibility", async ({
     makeUser,
     makeMember,
@@ -584,13 +644,43 @@ describe("read_app / edit_app", () => {
     ).toBe("<pre>aaa</pre>");
   });
 
-  test("a no-op edit (old_str === new_str) is rejected", async () => {
+  test("a batch of only no-op edits (old_str === new_str) is skipped without a new version", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>same</h1>");
     const result = await editApp(appId, version, [
       { old_str: "same", new_str: "same" },
     ]);
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("identical");
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<h1>same</h1>");
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("skipped");
+    // an all-skipped batch must not claim it applied anything
+    expect(text).not.toMatch(/Applied \d+ edit/);
+  });
+
+  test("a no-op edit amid real edits is skipped while the rest apply", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<div>alpha beta gamma</div>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "alpha", new_str: "ALPHA" },
+      { old_str: "beta", new_str: "beta" }, // no-op → skipped
+      { old_str: "gamma", new_str: "GAMMA" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version + 1);
+    const head = await AppVersionModel.findByAppAndVersion(appId, version + 1);
+    expect(head?.html).toBe("<div>ALPHA beta GAMMA</div>");
+    const text = (result.content[0] as any).text as string;
+    // applied count excludes the skipped edit, which is called out
+    expect(text).toContain("Applied 2 edits");
+    expect(text).toContain("skipped");
+    // excerpt labels keep the caller's original numbering: the GAMMA edit is
+    // still "edit 3" even though only two edits applied
+    expect(text).toContain("edit 3");
   });
 
   test("an edit that injects SDK bootstrap markers is rejected", async () => {

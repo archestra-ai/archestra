@@ -322,8 +322,19 @@ async function dispatchTool({
 
     // Dynamic import avoids the circular import between this file and
     // ./index (index.ts imports every tool group, including this one).
-    const { executeArchestraTool } = await import("./index");
-    return executeArchestraTool(resolvedName, args.tool_args, context);
+    const { executeArchestraTool, getArchestraToolInputSchema } = await import(
+      "./index"
+    );
+    // Envelope repair against the built-in's published input schema, so the
+    // handler's strict zod validation sees the repaired args. Delegations
+    // (agent-<id>) have no published JSON schema — the lookup returns
+    // undefined and nothing is repaired.
+    const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+      toolArgs: args.tool_args ?? {},
+      schema: getArchestraToolInputSchema(resolvedName),
+    });
+    const result = await executeArchestraTool(resolvedName, toolArgs, context);
+    return appendEnvelopeRepairNote(result, repairedParams);
   }
 
   // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
@@ -382,7 +393,31 @@ async function dispatchTool({
     if (gateError) return gateError;
   }
 
-  const toolInput = args.tool_args ?? {};
+  // The target's stored input schema, resolved BEFORE the policy gate so the
+  // envelope repair below runs first and invocation policy evaluation, the
+  // shallow pre-check, and dispatch all see the same repaired tool_args.
+  // Dynamic dispatch passes availableTool straight through, so its schema is
+  // exactly what runs. For the assigned path the gateway re-resolves by name
+  // at dispatch with no defined ordering, so when duplicate rows share the
+  // name we cannot know which schema will run — treat it as unknown rather
+  // than risk reading the wrong row.
+  const assignedMatches = assignedTools.filter(
+    (tool) => tool.name === resolvedName,
+  );
+  const targetSchema = availableTool
+    ? availableTool.parameters
+    : assignedMatches.length === 1
+      ? assignedMatches[0].parameters
+      : undefined;
+
+  // Schema-aware envelope repair: unwrap {"value": …}-style single-key
+  // wrappers around params the schema declares scalar/array (see
+  // repairEnvelopedToolArgs). Disclosed via a note appended to the result.
+  const { repairedParams, toolArgs: toolInput } = repairEnvelopedToolArgs({
+    toolArgs: args.tool_args ?? {},
+    schema: targetSchema,
+  });
+
   // Reuse the set computed above so the policy gate does not re-query it.
   // A dynamically resolved tool is appended so the evaluator does not
   // refuse it as "disabled" — invocation policies still evaluate it.
@@ -405,10 +440,13 @@ async function dispatchTool({
   if (policyBlock) {
     // Attach the structured policy_denied error (in _meta + structuredContent)
     // so clients parse the block without scraping the prose.
-    return structuredToolErrorResult({
-      error: policyBlockToToolError(policyBlock),
-      text: `Error: ${policyBlock.refusalMessage}`,
-    });
+    return appendEnvelopeRepairNote(
+      structuredToolErrorResult({
+        error: policyBlockToToolError(policyBlock),
+        text: `Error: ${policyBlock.refusalMessage}`,
+      }),
+      repairedParams,
+    );
   }
 
   // Cheap structural pre-check against the target's stored schema. Runs only
@@ -418,27 +456,16 @@ async function dispatchTool({
   // the compact search_tools signature defers to. Deliberately shallow: only
   // a literal top-level `required` and a closed `additionalProperties:false`
   // are enforced, so refs/composed schemas fall through to the upstream
-  // server unchanged.
-  // Dynamic dispatch passes availableTool straight through, so its schema is
-  // exactly what runs. For the assigned path the gateway re-resolves by name
-  // at dispatch with no defined ordering, so when duplicate rows share the
-  // name we cannot know which schema will run — skip the pre-check rather
-  // than risk validating against the wrong row.
-  const assignedMatches = assignedTools.filter(
-    (tool) => tool.name === resolvedName,
-  );
-  const targetSchema = availableTool
-    ? availableTool.parameters
-    : assignedMatches.length === 1
-      ? assignedMatches[0].parameters
-      : undefined;
+  // server unchanged. Runs on the repaired tool_args against the same schema
+  // resolved above (undefined when duplicate rows share the name — skip the
+  // pre-check rather than risk validating against the wrong row).
   const schemaError = checkThirdPartyToolArgs({
     toolName: resolvedName,
     toolArgs: toolInput,
     schema: targetSchema,
   });
   if (schemaError) {
-    return schemaError;
+    return appendEnvelopeRepairNote(schemaError, repairedParams);
   }
 
   const { default: mcpClient } = await import("@/clients/mcp-client");
@@ -468,16 +495,19 @@ async function dispatchTool({
     },
   );
 
-  return {
-    content: Array.isArray(result.content)
-      ? (result.content as CallToolResult["content"])
-      : [{ type: "text", text: JSON.stringify(result.content) }],
-    isError: result.isError,
-    _meta: result._meta,
-    structuredContent: result.structuredContent as
-      | Record<string, unknown>
-      | undefined,
-  };
+  return appendEnvelopeRepairNote(
+    {
+      content: Array.isArray(result.content)
+        ? (result.content as CallToolResult["content"])
+        : [{ type: "text", text: JSON.stringify(result.content) }],
+      isError: result.isError,
+      _meta: result._meta,
+      structuredContent: result.structuredContent as
+        | Record<string, unknown>
+        | undefined,
+    },
+    repairedParams,
+  );
 }
 
 /**
@@ -653,6 +683,157 @@ function placeholderForSchema(schema: unknown, depth: number): string {
     default:
       return "<value>";
   }
+}
+
+// Envelope keys weak models wrap scalar/array params in, e.g.
+// {"appId": {"value": "abc"}} or {"tools": {"item": [...]}}.
+const ENVELOPE_KEYS = new Set(["value", "$text", "item", "text"]);
+
+/** Param types the repair may unwrap to — a literal declared `type` only. */
+type RepairableDeclaredType =
+  | "string"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "array";
+
+/**
+ * Deterministic repair for the single-key envelope anti-pattern weak models
+ * produce when calling run_tool: a scalar/array param wrapped in an object
+ * like `{"value": …}`, `{"$text": …}`, `{"item": […]}` or `{"text": …}`.
+ * A top-level tool_args entry is unwrapped only when ALL hold:
+ *  - the tool's schema literally declares the param's `type` as
+ *    string/number/integer/boolean/array (no type arrays, no
+ *    $ref/anyOf/oneOf/allOf composition);
+ *  - the supplied value is a plain object with exactly one key from the
+ *    envelope set;
+ *  - the inner value's JS type matches the declared type.
+ * Under those conditions the as-sent value (an object) is provably invalid
+ * against the declared type, so the repair can never rewrite a call the
+ * schema could accept. Anything else — object-typed params, loose/absent
+ * types, multi-key objects, unknown envelope keys — is left untouched, and a
+ * call with nothing to repair passes through as the same object.
+ */
+function repairEnvelopedToolArgs(params: {
+  toolArgs: Record<string, unknown>;
+  schema: unknown;
+}): { toolArgs: Record<string, unknown>; repairedParams: string[] } {
+  const { schema, toolArgs } = params;
+  const properties =
+    isRecord(schema) && isRecord(schema.properties) ? schema.properties : null;
+  if (!properties) {
+    return { toolArgs, repairedParams: [] };
+  }
+
+  const repairedParams: string[] = [];
+  const repaired: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(toolArgs)) {
+    const unwrapped = unwrapEnvelope({
+      value,
+      propertySchema: properties[key],
+    });
+    if (unwrapped) {
+      repairedParams.push(key);
+      repaired[key] = unwrapped.inner;
+    } else {
+      repaired[key] = value;
+    }
+  }
+  return repairedParams.length === 0
+    ? { toolArgs, repairedParams }
+    : { toolArgs: repaired, repairedParams };
+}
+
+/** The unwrapped inner value, or null when the entry does not qualify. */
+function unwrapEnvelope(params: {
+  value: unknown;
+  propertySchema: unknown;
+}): { inner: unknown } | null {
+  const { propertySchema, value } = params;
+  if (!isRecord(value)) {
+    return null;
+  }
+  const keys = Object.keys(value);
+  if (keys.length !== 1 || !ENVELOPE_KEYS.has(keys[0])) {
+    return null;
+  }
+
+  if (!isRecord(propertySchema)) {
+    return null;
+  }
+  // A composed/referenced schema may accept the object as sent — never touch it.
+  if (
+    "$ref" in propertySchema ||
+    "anyOf" in propertySchema ||
+    "oneOf" in propertySchema ||
+    "allOf" in propertySchema
+  ) {
+    return null;
+  }
+  const declaredType = asRepairableDeclaredType(propertySchema.type);
+  if (!declaredType) {
+    return null;
+  }
+
+  const inner = value[keys[0]];
+  return innerMatchesDeclaredType(inner, declaredType) ? { inner } : null;
+}
+
+function asRepairableDeclaredType(
+  value: unknown,
+): RepairableDeclaredType | null {
+  switch (value) {
+    case "string":
+    case "number":
+    case "integer":
+    case "boolean":
+    case "array":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function innerMatchesDeclaredType(
+  value: unknown,
+  declaredType: RepairableDeclaredType,
+): boolean {
+  switch (declaredType) {
+    case "string":
+      return typeof value === "string";
+    case "number":
+      return typeof value === "number";
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "array":
+      return Array.isArray(value);
+  }
+}
+
+/**
+ * Disclose a fired envelope repair on the tool result (success or failure),
+ * so the model sees what was attempted and self-corrects in-context.
+ */
+function appendEnvelopeRepairNote(
+  result: CallToolResult,
+  repairedParams: string[],
+): CallToolResult {
+  if (repairedParams.length === 0) {
+    return result;
+  }
+  const names = repairedParams.map((name) => `"${name}"`).join(", ");
+  return {
+    ...result,
+    content: [
+      ...result.content,
+      {
+        type: "text",
+        text: `Note: run_tool unwrapped a single-key wrapper object around ${names} in tool_args — pass the value directly next time.`,
+      },
+    ],
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

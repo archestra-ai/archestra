@@ -9,7 +9,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { ZodError, type ZodType } from "zod";
+import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import {
@@ -157,6 +157,30 @@ export function getArchestraMcpTools() {
       name: archestraMcpBranding.getToolName(shortName),
     };
   });
+}
+
+/**
+ * JSON input schema of a built-in Archestra tool, resolved by its published
+ * (branding-aware) full name or canonical `archestra__` name — derived from the
+ * same zod schema `tools/list` advertises. Returns undefined for names that are
+ * not built-ins (agent delegations, third-party names). Consumed by run_tool's
+ * schema-aware envelope repair.
+ */
+export function getArchestraToolInputSchema(
+  toolName: string,
+): Record<string, unknown> | undefined {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (!shortName) {
+    return undefined;
+  }
+  const entry = toolEntries[getArchestraToolFullName(shortName)];
+  if (!entry) {
+    return undefined;
+  }
+  return z.toJSONSchema(entry.schema, { io: "input" }) as Record<
+    string,
+    unknown
+  >;
 }
 
 export async function executeArchestraTool(

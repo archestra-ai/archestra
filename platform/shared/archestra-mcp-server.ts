@@ -469,8 +469,8 @@ export function isSkillRuntimeTool(toolName: string): boolean {
 
 /**
  * MCP App management tools — assigned to new agents by default, so "build me
- * an app" works without per-agent setup. delete_app completes the lifecycle
- * but stays search-gated in `search_and_run_only` mode (see
+ * an app" works without per-agent setup. In `search_and_run_only` mode the
+ * whole group is reached through `search_tools`/`run_tool` (see
  * ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES).
  */
 export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -596,15 +596,12 @@ export function isPrefillExemptArchestraToolShortName(
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
  * and file-transfer path behind `search_tools`/`run_tool` would make the common
- * runtime flow depend on deferred tool loading. App tools stay top-level
- * because "build me an app" intents compete with the model's default of
- * writing code in the reply — the model won't search for a capability it
- * doesn't know exists, so the scaffold/read/edit/render authoring surface stays
- * top-level. delete_app stays behind search (destructive, never
- * intent-time-critical); preview_app_tool, get_app_diagnostics, and
- * set_app_tools likewise — they are follow-up steps the scaffold/edit tool
- * descriptions and the authoring guidance name explicitly, so the model reaches
- * them via run_tool once it is already building.
+ * runtime flow depend on deferred tool loading. App tools are deliberately
+ * absent: apps are a secondary flow, reached through `search_tools`/`run_tool`
+ * and steered by the `search_and_run_only` system-prompt section, which names
+ * the authoring tools verbatim so `run_tool` can dispatch them without a
+ * search round-trip. Inline chat rendering of app results is unaffected — chat
+ * resolves a `run_tool` call to its target tool before the app-render check.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -614,14 +611,6 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   // persistent file is part of the everyday file-management flow, not a rare
   // destructive escape hatch.
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
-  TOOL_REFINE_APP_SHORT_NAME,
-  TOOL_EDIT_APP_SHORT_NAME,
-  TOOL_VALIDATE_APP_SHORT_NAME,
-  TOOL_PUBLISH_APP_SHORT_NAME,
-  TOOL_READ_APP_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
-  TOOL_LIST_APPS_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

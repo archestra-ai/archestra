@@ -4,8 +4,10 @@ import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
@@ -276,6 +278,62 @@ describe("buildAgentSystemPrompt", () => {
       agentId: fullAgent.id,
     });
     expect(fullPrompt).not.toContain("must be discovered");
+  });
+
+  // The app tools are hidden from tools/list in search_and_run_only mode, so
+  // the tool-loading section must name them verbatim (run_tool only accepts
+  // names the model has seen) — but only when the agent can dispatch them.
+  test("names the app-authoring tools in the tool-loading instruction only when they are assigned", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    const user = await makeUser();
+    const scaffoldAppName = brand(TOOL_SCAFFOLD_APP_SHORT_NAME);
+    const renderAppName = brand(TOOL_RENDER_APP_SHORT_NAME);
+
+    const searchAgent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeMember(user.id, searchAgent.organizationId);
+    const common = {
+      mcpTools: {},
+      organizationId: searchAgent.organizationId,
+      userId: user.id,
+    };
+
+    // no app tools assigned → no app steering (and no tool names to dispatch)
+    const withoutApps = await buildAgentSystemPrompt({
+      ...common,
+      agent: searchAgent,
+      agentId: searchAgent.id,
+    });
+    expect(withoutApps).not.toContain(scaffoldAppName);
+
+    await seedAndAssignArchestraTools(searchAgent.id);
+    const withApps = await buildAgentSystemPrompt({
+      ...common,
+      agent: searchAgent,
+      agentId: searchAgent.id,
+    });
+    expect(withApps).toContain(scaffoldAppName);
+    expect(withApps).toContain(renderAppName);
+
+    // full mode has no tool-loading section, so no app steering either
+    const fullAgent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+      organizationId: searchAgent.organizationId,
+    });
+    await seedAndAssignArchestraTools(fullAgent.id);
+    const fullPrompt = await buildAgentSystemPrompt({
+      ...common,
+      agent: fullAgent,
+      agentId: fullAgent.id,
+    });
+    expect(fullPrompt).not.toContain(scaffoldAppName);
   });
 
   test("appends the hook session context last", async ({

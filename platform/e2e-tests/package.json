@@ -11,8 +11,9 @@
     "test:e2e": "pnpm exec playwright test",
     "test:e2e:ui": "pnpm exec playwright test --ui",
     "test:e2e:report": "pnpm exec playwright show-report",
-    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
-    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome 'pnpm type-check' 'pnpm knip' 'biome ci'",
+    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,knip,biome,shards 'pnpm type-check' 'pnpm knip' 'biome ci' 'pnpm check:shard-buckets'",
+    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,knip,biome,shards 'pnpm type-check' 'pnpm knip' 'biome ci' 'pnpm check:shard-buckets'",
+    "check:shard-buckets": "node scripts/check-shard-buckets.mjs",
     "knip": "knip"
   },
   "keywords": [],

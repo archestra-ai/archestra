@@ -352,7 +352,10 @@ jobs:
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
-          shard: "--shard=${{ matrix.shard }}/2"
+          # Duration-balanced split (config-driven via E2E_SHARD + shard-buckets.json)
+          # instead of Playwright's count-based --shard, so the two shards finish
+          # closer together (chat.spec.ts on one, static-credentials + jwks on the other).
+          shard_index: "${{ matrix.shard }}"
           extra_args: "--grep-invert '@quickstart'"
           timeout: "20"
 

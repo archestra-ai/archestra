@@ -7,8 +7,8 @@ inputs:
   projects:
     description: "Playwright project(s) to run (e.g., 'chromium', 'api', 'chromium --project=identity-providers')"
     required: true
-  shard:
-    description: "Shard configuration (e.g., '--shard=1/3')"
+  shard_index:
+    description: "Shard number (e.g. '1' or '2'). Forwarded as E2E_SHARD; the config's duration-balanced split (shard-buckets.ts) partitions specs by this. Empty runs the full suite."
     required: false
     default: ""
   extra_args:
@@ -60,7 +60,7 @@ runs:
       shell: bash
       env:
         PROJECTS: ${{ inputs.projects }}
-        SHARD: ${{ inputs.shard }}
+        SHARD_INDEX: ${{ inputs.shard_index }}
         EXTRA_ARGS: ${{ inputs.extra_args }}
         WORKING_DIRECTORY: ${{ inputs.working_directory }}
         ENV_FILE: ${{ inputs.env_file }}
@@ -111,10 +111,11 @@ runs:
           -w "/work/${WORKING_DIRECTORY#./}" \
           -e CI=true \
           -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+          -e "E2E_SHARD=${SHARD_INDEX}" \
           "${KUBE_ARGS[@]}" \
           "${ENV_ARGS[@]}" \
           "mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble" \
-          /bin/bash -c "corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${SHARD} ${EXTRA_ARGS}" \
+          /bin/bash -c "corepack enable && corepack prepare pnpm@11.9.0 --activate && pnpm test:e2e -- --project=${PROJECTS} ${EXTRA_ARGS}" \
           2>&1 | tee "${WORKING_DIRECTORY}/playwright-output.txt"
 
     - name: Check for flaky tests

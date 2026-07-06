@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { adminAuthFile, IS_CI } from "./consts";
+import { withShardIgnore } from "./shard-buckets";
 
 /**
  * Project names for dependency references
@@ -145,8 +146,10 @@ export default defineConfig({
     timeout: 10_000,
   },
 
-  /* Configure projects for major browsers */
-  projects: [
+  /* Configure projects for major browsers.
+   * withShardIgnore() injects the duration-balanced shard split (E2E_SHARD env)
+   * into each project's testIgnore; a no-op for local/unsharded runs. */
+  projects: withShardIgnore([
     // Setup projects - run authentication in correct order
     {
       name: projectNames.setupAdmin,
@@ -261,5 +264,5 @@ export default defineConfig({
       },
       dependencies: dependencies.testProjects,
     },
-  ],
+  ]),
 });

@@ -88,14 +88,25 @@ const buildMockGatewayClient = (
   } as unknown as Client;
 };
 
-const externalTool = (name: string, description = "") => ({
+const externalTool = (
+  name: string,
+  description = "",
+  meta?: Record<string, unknown>,
+) => ({
   name,
   description,
   inputSchema: {
     type: "object",
     properties: { query: { type: "string" } },
   },
+  ...(meta ? { _meta: meta } : {}),
 });
+
+// A UI-providing launch tool as the gateway lists it: the `_meta.ui.resourceUri`
+// it carries top-level (mcp-gateway.utils.ts sets `_meta` on every listed tool)
+// is what marks it directly dispatchable while unassigned.
+const uiLaunchTool = (name: string) =>
+  externalTool(name, "", { ui: { resourceUri: `ui://app/${name}` } });
 
 interface Fixtures {
   makeOrganization: (
@@ -562,7 +573,7 @@ describe("getChatMcpTools dynamic UI tool dispatch (all-tools agents)", () => {
     });
     expect(launchTool?.name).toBeDefined();
 
-    wireGateway([externalTool(launchTool.name)]);
+    wireGateway([uiLaunchTool(launchTool.name)]);
     const tools = await chatClient.getChatMcpTools(baseParams);
     await tools[launchTool.name].execute?.({}, execOptions("call-open"));
 

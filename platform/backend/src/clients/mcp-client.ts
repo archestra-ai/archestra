@@ -4099,7 +4099,7 @@ function isAuthRelatedError(errorMessage: string): boolean {
 
 // Remove the platform-reserved `archestraError` key from tool-supplied metadata
 // so it can only ever be present when the platform itself authored it (see
-// createSuccessResult). Returns the same reference when nothing was stripped.
+// createErrorResult). Returns the same reference when nothing was stripped.
 function stripReservedArchestraError(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {

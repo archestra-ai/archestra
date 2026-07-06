@@ -545,7 +545,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -578,7 +577,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -625,7 +623,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 
@@ -684,7 +681,6 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         organizationId,
         undefined,
         false,
-        "restrictive",
         { teamIds: [] },
       );
 

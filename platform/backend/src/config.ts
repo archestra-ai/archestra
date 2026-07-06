@@ -1669,6 +1669,16 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
+    // A document still `pending`/`processing` this long after its last touch has
+    // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
+    // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
+    // recovery sweep re-enqueues it. Kept comfortably above that ~8 min span (not
+    // at it) so a slow-but-live embedding batch is never reset out from under its
+    // worker, which would double-embed and waste embedding-API cost.
+    stalledEmbeddingAgeSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
+      15 * 60,
+    ),
   },
   secretsManager: {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",

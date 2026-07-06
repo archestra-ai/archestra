@@ -1,4 +1,5 @@
 import { Cron } from "croner";
+import config from "@/config";
 import logger from "@/logging";
 import {
   ConnectorRunModel,
@@ -9,10 +10,6 @@ import {
 import { taskQueueService } from "@/task-queue";
 import { withinResumeBudget } from "./connector-resume-budget";
 
-// A document still `pending`/`processing` this long after its last touch has no
-// live `batch_embedding` task behind it — the task exhausts its 5 retries within
-// ~8 minutes — so it is stalled and safe to re-enqueue.
-const STALLED_EMBEDDING_AGE_SECONDS = 30 * 60;
 // Bound the work one recovery sweep enqueues.
 const EMBEDDING_RECOVERY_SWEEP_LIMIT = 500;
 const EMBEDDING_RECOVERY_BATCH_SIZE = 100;
@@ -140,7 +137,7 @@ async function reconcileOrphanedConnectors(): Promise<void> {
  */
 async function recoverStalledEmbeddings(): Promise<void> {
   const documentIds = await KbDocumentModel.recoverStalledEmbeddings({
-    olderThanSeconds: STALLED_EMBEDDING_AGE_SECONDS,
+    olderThanSeconds: config.kb.stalledEmbeddingAgeSeconds,
     limit: EMBEDDING_RECOVERY_SWEEP_LIMIT,
   });
   if (documentIds.length === 0) return;

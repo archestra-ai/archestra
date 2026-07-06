@@ -1448,6 +1448,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
 - **`ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS`** - How often the owning worker renews a run's lease.
   - Default: `90` (seconds)
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS`** - How long a document may sit un-embedded before the recovery sweep re-enqueues it.
+  - Default: `900` (15 minutes)
+  - An embedding job that fails permanently leaves its documents stuck. This window is the worst-case wait before the sweep re-embeds them. It bounds recovery from a stalled or failed embedding. Keep it above an embedding job's full retry span, about 8 minutes. Otherwise a slow-but-live job is reset while it still runs, which repeats work. Lower it to recover faster; raise it to be more conservative.
+
 - **`ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED`** - Enable or disable hybrid search (combines vector similarity with full-text search using Reciprocal Rank Fusion).
   - Default: `true`
   - Set to `false` to use vector similarity search only.

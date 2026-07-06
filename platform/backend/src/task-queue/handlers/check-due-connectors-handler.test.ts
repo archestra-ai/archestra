@@ -365,9 +365,42 @@ describe("handleCheckDueConnectors", () => {
         contentHash: "hash-stuck",
         embeddingStatus: "pending",
       });
-      // Age it well past the 30-minute stall threshold (its live task is long dead).
+      // Age it well past the stall threshold (its live task is long dead).
       await db.execute(
         sql`UPDATE kb_documents SET updated_at = now() - interval '2 hours' WHERE id = ${doc.id}`,
+      );
+
+      await handleCheckDueConnectors();
+
+      expect(mockEnqueue).toHaveBeenCalledWith({
+        taskType: "batch_embedding",
+        payload: { documentIds: [doc.id], connectorRunId: null },
+      });
+    });
+
+    test("recovers a document stalled for 20 minutes (default threshold is 15 min, not 30)", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+        schedule: "",
+        enabled: true,
+      });
+      const doc = await KbDocumentModel.create({
+        connectorId: connector.id,
+        organizationId: org.id,
+        title: "Stuck 20m",
+        content: "Stuck content",
+        contentHash: "hash-stuck-20m",
+        embeddingStatus: "processing",
+      });
+      // 20 min stale: past the 15-min default but within the old 30-min window, so
+      // this pins the tightened latency — it would NOT have been swept before.
+      await db.execute(
+        sql`UPDATE kb_documents SET updated_at = now() - interval '20 minutes' WHERE id = ${doc.id}`,
       );
 
       await handleCheckDueConnectors();

@@ -274,7 +274,7 @@ describe("handleCheckDueConnectors", () => {
       expect(mockEnqueue).not.toHaveBeenCalled();
     });
 
-    test("reaps an expired-lease run on the lease alone — a stalled drain no longer protects it", async ({
+    test("does NOT reap an expired-lease run that still has embedding work queued", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -285,10 +285,10 @@ describe("handleCheckDueConnectors", () => {
         schedule: "",
         enabled: true,
       });
-      // A healthy drain renews the lease per batch (renewLeaseForRun), so an
-      // expired lease means the drain itself is dead. The run is reaped on the
-      // lease alone — a lingering batch_embedding task row no longer protects it,
-      // and the reaper no longer scans the tasks table.
+      // Ingest finished (lease last renewed during ingest, now lapsed) but the
+      // embedding drain is still in flight — a pending batch_embedding task is the
+      // liveness signal (even if it is queued behind a backlog rather than running
+      // right now), so this healthy run must not be reaped.
       const run = await ConnectorRunModel.create({
         connectorId: connector.id,
         status: "running",
@@ -305,12 +305,9 @@ describe("handleCheckDueConnectors", () => {
 
       await handleCheckDueConnectors();
 
-      const reaped = await ConnectorRunModel.findById(run.id);
-      expect(reaped?.status).toBe("partial");
-      expect(mockEnqueue).toHaveBeenCalledWith({
-        taskType: "connector_sync",
-        payload: { connectorId: connector.id },
-      });
+      const stillRunning = await ConnectorRunModel.findById(run.id);
+      expect(stillRunning?.status).toBe("running");
+      expect(mockEnqueue).not.toHaveBeenCalled();
     });
 
     test("stops auto-resuming a crash-looping connector", async ({

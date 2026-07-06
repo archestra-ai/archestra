@@ -117,14 +117,9 @@ class ConnectorRunModel {
    * the slot.
    *
    * This is a pure insert-or-skip — it does NOT reclaim an expired-lease run.
-   * The reaper is the sole reclaimer, so `claim()` and the reaper can never
-   * disagree about liveness (both simply treat a fresh lease as "alive"). A
-   * crashed run's slot therefore frees on the next reaper pass rather than
-   * instantly; given syncs run on minute-granularity cron, that latency is
-   * irrelevant. Liveness is uniform across both phases: the ingest heartbeat and
-   * the embedding-drain batches (see `renewLeaseForRun`) both keep the lease
-   * fresh, so a healthy run — draining or not — is never reclaimed out from under
-   * itself here.
+   * The reaper is the sole reclaimer, so `claim()` never fences a run out from
+   * under a possibly-live owner; a crashed run's slot frees on the next reaper
+   * pass rather than instantly, which is irrelevant at minute-granularity cron.
    */
   static async claim(params: {
     connectorId: string;
@@ -211,28 +206,6 @@ class ConnectorRunModel {
     return !!result;
   }
 
-  /**
-   * Drain-phase lease renewal: keep a still-running run's lease fresh while its
-   * `batch_embedding` tasks drain, so liveness is uniform across both phases
-   * ("is the lease fresh?"). Unlike the ingest heartbeat this is keyed only on
-   * `status = 'running'` (no owner/epoch): any worker processing a batch for the
-   * run may renew it, and a run that has already been reclaimed or finalized
-   * (status != 'running') is never revived. No-op if the run is not running.
-   */
-  static async renewLeaseForRun(params: {
-    runId: string;
-    leaseTtlSeconds: number;
-  }): Promise<void> {
-    const t = schema.connectorRunsTable;
-    await db
-      .update(t)
-      .set({
-        leaseExpiresAt: sql`now() + make_interval(secs => ${params.leaseTtlSeconds})`,
-        heartbeatAt: sql`now()`,
-      })
-      .where(and(eq(t.id, params.runId), eq(t.status, "running")));
-  }
-
   static async completeBatch(runId: string): Promise<ConnectorRun | null> {
     const t = schema.connectorRunsTable;
     const [result] = await db
@@ -279,20 +252,24 @@ class ConnectorRunModel {
   }
 
   /**
-   * Reclaim runs whose liveness lease has expired. Liveness is uniform across a
-   * run's whole life: the owning worker renews the lease during ingest (the
-   * heartbeat) and any worker renews it during the embedding-drain phase (per
-   * batch, via `renewLeaseForRun`). So an expired lease reliably means the run's
-   * worker crashed or hung in either phase — no per-phase special-casing, and no
-   * scan of the `tasks` table. Marks each reclaimed run `partial` (interrupted,
-   * not an error) and bumps `leaseEpoch` to fence the dead owner. Returns the
-   * reclaimed runs so the caller can resume them from their checkpoints.
+   * Reclaim runs whose worker died, distinguished per phase:
+   *  - ingest: the owning worker renews the lease via a heartbeat, so an expired
+   *    lease means it crashed/hung;
+   *  - embedding drain: the lease is no longer renewed (ingest is done), so
+   *    liveness is instead the existence of pending/processing `batch_embedding`
+   *    tasks. A run whose batches are still queued — even behind a backlog — is
+   *    draining, not dead, so it is skipped here regardless of its lease. This is
+   *    the only signal that reflects *queued* (not just in-progress) work, which
+   *    no run-row field can: skipping it is why a slow drain is never reaped early.
+   * A run is reclaimed only when its lease has expired AND no batch_embedding work
+   * remains, which reliably means a dead worker (or, for a drain whose batch tasks
+   * died terminally, a run whose stuck documents the embedding-recovery sweep
+   * re-enqueues). Marks each `partial` and bumps `leaseEpoch` to fence the dead
+   * owner; returns them so the caller can resume from checkpoint.
    *
-   * (A pathological edge remains: if a healthy run's drain stalls in the queue
-   * for longer than the lease TTL with no batch processed, it is reaped early.
-   * That is cosmetic only — its documents still embed idempotently and the
-   * continuation is a no-op — and is bounded by keeping the TTL comfortably
-   * above the batch cadence.)
+   * The subquery only runs for the few expired-lease running runs (filtered first
+   * by the partial `connector_runs_lease_expires_at_idx`) and hits
+   * `tasks_dequeue_idx` on (task_type, status), so it is not a table scan.
    */
   static async reapExpiredRuns(): Promise<
     Array<{ id: string; connectorId: string }>
@@ -305,6 +282,12 @@ class ConnectorRunModel {
           error = 'Sync was interrupted (worker stopped heartbeating); resuming from checkpoint.'
       WHERE r.status = 'running'
         AND r.lease_expires_at < now()
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks t
+          WHERE t.task_type = 'batch_embedding'
+            AND t.status IN ('pending', 'processing')
+            AND t.payload->>'connectorRunId' = r.id::text
+        )
       RETURNING r.id, r.connector_id AS "connectorId"
     `);
     return rows;

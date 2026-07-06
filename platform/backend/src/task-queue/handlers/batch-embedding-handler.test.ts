@@ -198,33 +198,4 @@ describe("handleBatchEmbedding", () => {
     const updatedRun = await ConnectorRunModel.findById(run.id);
     expect(updatedRun?.completedBatches).toBe(0);
   });
-
-  test("renews the run's lease during the embedding drain", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization();
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-    // Expired lease + more batches to go, so the handler renews it without
-    // finalizing — this is what keeps a healthy drain "alive" to the reaper.
-    const run = await ConnectorRunModel.create({
-      connectorId: connector.id,
-      status: "running",
-      startedAt: RUN_STARTED_AT,
-      leaseExpiresAt: OLD_DATE,
-      totalBatches: 3,
-      completedBatches: 0,
-    });
-
-    await handleBatchEmbedding({
-      documentIds: ["doc-1"],
-      connectorRunId: run.id,
-    });
-
-    const after = await ConnectorRunModel.findById(run.id);
-    expect(after?.status).toBe("running");
-    expect(after?.leaseExpiresAt?.getTime()).toBeGreaterThan(Date.now());
-  });
 });

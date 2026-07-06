@@ -803,7 +803,7 @@ describe("ConnectorRunModel", () => {
       expect(after?.status).toBe("running");
     });
 
-    test("reaps an expired-lease run purely on the lease — ignores queued batch tasks", async ({
+    test("does not reap an expired-lease run that still has embedding work queued", async ({
       makeOrganization,
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
@@ -816,9 +816,9 @@ describe("ConnectorRunModel", () => {
         status: "running",
         leaseExpiresAt: PAST_LEASE(),
       });
-      // A pending batch_embedding task no longer protects the run: a healthy
-      // drain renews the lease per batch, so an expired lease means the drain is
-      // genuinely dead. Liveness is the lease alone; the reaper does not scan tasks.
+      // During drain the lease is no longer renewed; a pending batch_embedding
+      // task is the liveness signal, so this run is draining (even if queued
+      // behind a backlog), not orphaned, and must not be reaped.
       await TaskModel.create({
         taskType: "batch_embedding",
         payload: { connectorRunId: run.id, documentIds: ["doc-1"] },
@@ -827,62 +827,9 @@ describe("ConnectorRunModel", () => {
 
       const reaped = await ConnectorRunModel.reapExpiredRuns();
 
-      expect(reaped.map((r) => r.id)).toContain(run.id);
-      const after = await ConnectorRunModel.findById(run.id);
-      expect(after?.status).toBe("partial");
-    });
-  });
-
-  describe("renewLeaseForRun", () => {
-    test("extends a running run's lease (drain-phase liveness)", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeConnectorRun,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      const run = await makeConnectorRun(connector.id, {
-        status: "running",
-        leaseExpiresAt: PAST_LEASE(),
-      });
-
-      await ConnectorRunModel.renewLeaseForRun({
-        runId: run.id,
-        leaseTtlSeconds: 300,
-      });
-
-      // Lease pushed into the future → the reaper now leaves it alone.
-      const reaped = await ConnectorRunModel.reapExpiredRuns();
       expect(reaped.map((r) => r.id)).not.toContain(run.id);
       const after = await ConnectorRunModel.findById(run.id);
       expect(after?.status).toBe("running");
-      expect(after?.leaseExpiresAt?.getTime()).toBeGreaterThan(Date.now());
-    });
-
-    test("does not revive a non-running (reclaimed/finalized) run", async ({
-      makeOrganization,
-      makeKnowledgeBase,
-      makeKnowledgeBaseConnector,
-      makeConnectorRun,
-    }) => {
-      const org = await makeOrganization();
-      const kb = await makeKnowledgeBase(org.id);
-      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
-      const run = await makeConnectorRun(connector.id, {
-        status: "partial",
-        leaseExpiresAt: PAST_LEASE(),
-      });
-
-      await ConnectorRunModel.renewLeaseForRun({
-        runId: run.id,
-        leaseTtlSeconds: 300,
-      });
-
-      const after = await ConnectorRunModel.findById(run.id);
-      expect(after?.status).toBe("partial");
-      expect(after?.leaseExpiresAt?.getTime()).toBeLessThan(Date.now());
     });
   });
 

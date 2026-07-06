@@ -283,6 +283,17 @@ second backend runs the already-built `dist/server.mjs` the main stack keeps fre
 starts a competing `tsdown --watch`. Teardown always runs: the backend process group is killed and
 the benchmark database is dropped.
 
+**Spawning from a git branch (`--branch <ref>`).** To A/B a branch against the working tree, pass
+`--branch <ref>` (or `ARCHESTRA_BENCH_BACKEND_BRANCH`). The runner fetches `origin/<ref>`, checks the
+commit out into a throwaway git worktree, runs a full `pnpm install --frozen-lockfile` + `pnpm build`
+(so native `*.node` addons and `dist/server.mjs` come from the branch), and spawns every env's backend
+from it — one build per run, shared by all envs. Prereqs a fresh checkout lacks are sourced from the
+dev tree: `platform/.env` is copied in and `dev/bin/dagger` is symlinked when present (otherwise the
+worktree relies on `ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN`, same as the dev tree). The worktree is
+removed on normal completion and on SIGINT/SIGTERM; `config.json` records `backend_branch` /
+`backend_commit`. This is the slower opt-in path — it conflicts with `--platform-dir`, and the bench's
+own sidecars (Postgres/Dagger) still come from the harness checkout, not the branch.
+
 **Dagger host resolution.** Before booting the backend, the runner resolves a Dagger host and shares
 the first successful result across lanes (so they can't split across engines; a failed attempt isn't
 cached and the next lane re-resolves):

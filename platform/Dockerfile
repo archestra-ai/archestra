@@ -127,7 +127,9 @@ FROM ${NODE_IMAGE} AS dagger-engine-image
 ARG TARGETARCH
 ARG DAGGER_VERSION
 RUN apk add --no-cache skopeo
-RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
+# --retry-times: the engine image has ~100 layers and registry.dagger.io
+# intermittently 504s on individual blob fetches, which is fatal without retries
+RUN skopeo copy --retry-times 5 --override-os linux --override-arch "${TARGETARCH}" \
         "docker://registry.dagger.io/engine:${DAGGER_VERSION}" \
         "docker-archive:/dagger-engine.tar:registry.dagger.io/engine:${DAGGER_VERSION}"
 

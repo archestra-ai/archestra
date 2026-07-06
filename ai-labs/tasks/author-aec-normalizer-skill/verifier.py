@@ -15,7 +15,7 @@ ran and grades the rows independently. Tightening that would require the harness
 output, which is out of scope here.
 """
 
-from bench_verifier import read_fixture_json, result, state
+from bench_verifier import read_fixture_json, result, state, tool_calls
 
 
 def _normalize_v2(rows: list[dict]) -> list[dict]:
@@ -46,24 +46,11 @@ def _normalizer_skill(snapshot: dict) -> dict:
     return skill
 
 
-def _effective(call: dict) -> tuple[str | None, dict]:
-    """The real tool + args behind a call. Under tool_exposure_mode=search_and_run_only the agent
-    invokes discovered tools through the `archestra__run_tool` meta-tool, so a create_skill /
-    update_skill / run_command shows up as run_tool with the true tool in input.tool_name and its
-    payload in input.tool_args. Unwrap that; pass other calls through unchanged."""
-    name = call.get("name")
-    inp = call.get("input") or {}
-    if name == "archestra__run_tool":
-        return inp.get("tool_name"), (inp.get("tool_args") or {})
-    return name, inp
-
-
-def _run_command_text(call: dict) -> str:
-    """The text of a (possibly run_tool-wrapped) run_command: its `command` plus its `cwd`. The mounted
-    skill path may appear in either -- `cwd: /skills/<name>` with a relative command, or an absolute
-    `python /skills/<name>/...` command -- so join both before matching."""
-    eff_name, inp = _effective(call)
-    if eff_name != "archestra__run_command":
+def _run_command_text(name: str, inp: dict) -> str:
+    """The text of a run_command call (already run_tool-decoded by `tool_calls`): its `command` plus
+    its `cwd`. The mounted skill path may appear in either -- `cwd: /skills/<name>` with a relative
+    command, or an absolute `python /skills/<name>/...` command -- so join both before matching."""
+    if name != "archestra__run_command":
         return ""
     return " ".join(str(inp.get(field) or "") for field in ("command", "cwd"))
 
@@ -100,7 +87,7 @@ def test_skill_created_updated_and_used() -> None:
     )
 
     # run_command texts that ran the bundled normalize.py under the skill mount.
-    ran = [t for c in snapshot.get("tool_calls", []) if mount in (t := _run_command_text(c)) and "normalize.py" in t]
+    ran = [t for name, inp in tool_calls() if mount in (t := _run_command_text(name, inp)) and "normalize.py" in t]
     assert any("vendor_v1.json" in t for t in ran), (
         f"no run_command invoked {mount!r}'s normalize.py on vendor_v1.json; the bundled script was not run on the first file"
     )

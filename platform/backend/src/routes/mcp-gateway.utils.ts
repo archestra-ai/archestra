@@ -223,20 +223,34 @@ export async function createAgentServer(
     const { tools: mcpTools, exclusionSets } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
 
-    // A non-chat gateway serves external MCP clients that discover a UI-providing
-    // tool only from its tools/list DEFINITION (per the MCP Apps extension) and
-    // render it when called — so an all-tools gateway must widen its list with
-    // the caller's dynamically accessible UI-providing tools, which have no
-    // agent_tools row and would otherwise never be advertised. The internal chat
-    // is host and server both: it resolves a tool's ui:// resource from its own
-    // catalog when the model invokes it (render_app for owned apps, run_tool for
-    // any UI tool), so it needs no such widening — skipping it keeps the list
-    // compact instead of adding one entry per accessible app. Gated on
-    // accessAllTools (an agent without it is scoped to its assigned set) and
-    // skipped for the chat surface.
+    // A tools/list is served to one of two surfaces, and the whole gateway/chat
+    // difference lives in this policy. An internal chat (agentType "agent") is
+    // host and server both: it mounts an app from the tool RESULT — render_app
+    // for owned apps, run_tool for any UI tool — resolving the `ui://` resource
+    // from its own catalog, so it advertises render_app and NO UI-providing tool,
+    // keeping the list compact regardless of dynamic reach. An external MCP client
+    // on any other surface (mcp_gateway, legacy profile) renders only from a
+    // discovery-time tool DEFINITION (per the MCP Apps extension), so it must
+    // advertise UI-providing tools — both assigned and dynamically-reached, which
+    // have no agent_tools row — and drops render_app, which no-ops for it. The
+    // three flags are independently motivated; they coincide on agentType, the
+    // surface signal this codebase keys on throughout.
+    const surface =
+      agent.agentType === "agent"
+        ? {
+            widenDynamicUiTools: false,
+            advertiseUiTools: false,
+            keepRenderApp: true,
+          }
+        : {
+            widenDynamicUiTools: true,
+            advertiseUiTools: true,
+            keepRenderApp: false,
+          };
+
     const dynamicUiTools = (
       agent.accessAllTools &&
-      agent.agentType !== "agent" &&
+      surface.widenDynamicUiTools &&
       tokenAuth?.userId &&
       tokenAuth.organizationId
         ? await ToolModel.getMcpToolsAccessibleToUser({
@@ -270,25 +284,16 @@ export async function createAgentServer(
     );
     const exposureFiltered = filterExposedTools({
       toolExposureMode: agent.toolExposureMode ?? "full",
+      advertiseUiResourceTools: surface.advertiseUiTools,
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
-    // render_app renders only inside Archestra's own chat (the chat frontend
-    // mounts the app from the tool result); on an external MCP host it renders
-    // nothing while its result text reads as success, so models keep picking
-    // it over the app's own __open launch tool — the only path that renders
-    // there. Only chat ("agent"-type) agents keep the tool: every other agent
-    // type (mcp_gateway, legacy profile) is an external connection surface.
-    // The rest of the authoring surface (scaffold/read/edit/validate) works
-    // from external clients and stays. The render_app handler itself steers
-    // external callers the same way, since run_tool can still dispatch it.
-    const permittedTools =
-      agent.agentType !== "agent"
-        ? exposureFiltered.filter(
-            (tool) =>
-              archestraMcpBranding.getToolShortName(tool.name) !==
-              TOOL_RENDER_APP_SHORT_NAME,
-          )
-        : exposureFiltered;
+    const permittedTools = surface.keepRenderApp
+      ? exposureFiltered
+      : exposureFiltered.filter(
+          (tool) =>
+            archestraMcpBranding.getToolShortName(tool.name) !==
+            TOOL_RENDER_APP_SHORT_NAME,
+        );
 
     // Resolve the backing catalogs of the assigned tools once: their names feed
     // both the search_tools description and the app launch-tool titles below.
@@ -1792,20 +1797,23 @@ export async function buildKnowledgeSourcesDescription(
 
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
+  advertiseUiResourceTools: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, tools } = params;
+  const { toolExposureMode, advertiseUiResourceTools, tools } = params;
   return tools.filter((tool) => {
     // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
     // but the meta tools themselves and the always-exposed skill path must stay
     // top-level. UI-providing tools (app launch tools, external ext-apps tools)
-    // must too: an MCP Apps host renders a UI only from a tool DEFINITION listed
-    // at discovery time, so a tool hidden behind search/run can never render its
-    // `ui://` resource. `full` mode hides only the meta tools.
+    // stay too ONLY on a surface that advertises them: an MCP Apps host renders a
+    // UI from a tool DEFINITION listed at discovery time, so a gateway must keep
+    // it top-level; the chat surface renders from the tool result instead, so it
+    // reaches UI tools through search_tools/run_tool and keeps its list compact.
+    // `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
           isAlwaysExposedTool(tool.name) ||
-          providesUiResource(tool)
+          (advertiseUiResourceTools && providesUiResource(tool))
       : !isArchestraMetaTool(tool.name);
   });
 }

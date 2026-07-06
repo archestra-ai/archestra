@@ -73,6 +73,20 @@ describe("extractTextFromXlsx", () => {
     expect(await extractTextFromXlsx(buffer)).toBe("<script>alert(1)</script>");
   });
 
+  test("separates sheets with a newline (cells within a sheet stay space-joined)", async () => {
+    const zip = new JSZip();
+    const sheet = (cells: string) =>
+      `<?xml version="1.0"?><worksheet xmlns="${SHEET_NS}"><sheetData><row>${cells}</row></sheetData></worksheet>`;
+    zip.file(
+      "xl/worksheets/sheet1.xml",
+      sheet(`<c r="A1"><v>1</v></c><c r="B1"><v>2</v></c>`),
+    );
+    zip.file("xl/worksheets/sheet2.xml", sheet(`<c r="A1"><v>3</v></c>`));
+    const buffer = Buffer.from(await zip.generateAsync({ type: "nodebuffer" }));
+
+    expect(await extractTextFromXlsx(buffer)).toBe("1 2\n3");
+  });
+
   test("returns an empty string for a non-ZIP buffer", async () => {
     expect(await extractTextFromXlsx(Buffer.from("not a zip"))).toBe("");
   });

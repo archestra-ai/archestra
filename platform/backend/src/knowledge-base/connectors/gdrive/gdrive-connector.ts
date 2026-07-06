@@ -526,23 +526,24 @@ export class GoogleDriveConnector extends BaseConnector {
     } = params;
     const useSharedDriveApi = hasSharedDriveTarget(config);
 
+    // The query is identical for every page of this folder — build it once.
+    let query = `'${escapeDriveQueryValue(folderId)}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+    if (syncFrom) {
+      query += ` and modifiedTime >= '${escapeDriveQueryValue(syncFrom)}'`;
+    }
+    if (config.fileTypes && config.fileTypes.length > 0) {
+      const mimeFilters = config.fileTypes
+        .map((ext) => `name contains '${escapeDriveQueryValue(ext)}'`)
+        .join(" or ");
+      query += ` and (${mimeFilters})`;
+    }
+
     let pageToken: string | undefined;
     let hasMore = true;
     let batchIndex = 0;
 
     while (hasMore) {
       await this.rateLimit();
-
-      let query = `'${escapeDriveQueryValue(folderId)}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-      if (syncFrom) {
-        query += ` and modifiedTime >= '${escapeDriveQueryValue(syncFrom)}'`;
-      }
-      if (config.fileTypes && config.fileTypes.length > 0) {
-        const mimeFilters = config.fileTypes
-          .map((ext) => `name contains '${escapeDriveQueryValue(ext)}'`)
-          .join(" or ");
-        query += ` and (${mimeFilters})`;
-      }
 
       let res: FileListResponse;
       try {

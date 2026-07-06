@@ -23,13 +23,14 @@ export async function extractTextFromXlsx(buffer: Buffer): Promise<string> {
 
   const sharedStrings = await readSharedStrings(zip);
 
-  const parts: string[] = [];
+  const sheets: string[] = [];
   const sheetPaths = Object.keys(zip.files)
     .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
     .sort();
   for (const sheetPath of sheetPaths) {
     const xml = await zip.files[sheetPath].async("text");
     const $ = cheerio.load(xml, { xml: true });
+    const cells: string[] = [];
     $("c").each((_, cell) => {
       const $cell = $(cell);
       // t="s" → <v> holds an index into the shared-strings table.
@@ -38,22 +39,26 @@ export async function extractTextFromXlsx(buffer: Buffer): Promise<string> {
           sharedStrings[
             Number.parseInt($cell.children("v").first().text(), 10)
           ];
-        if (shared) parts.push(shared);
+        if (shared) cells.push(shared);
         return;
       }
       // Inline string (t="inlineStr"): text lives in <is><t>.
       const inline = $cell.find("is t").text();
       if (inline) {
-        parts.push(inline);
+        cells.push(inline);
         return;
       }
       // Numbers, booleans, and formula string results (t="str") live in <v>.
       const value = $cell.children("v").first().text();
-      if (value) parts.push(value);
+      if (value) cells.push(value);
     });
+    if (cells.length > 0) sheets.push(cells.join(" "));
   }
 
-  return parts.join(" ");
+  // Cells within a sheet are space-joined; sheets are newline-separated so the
+  // chunker sees a boundary between them (mirroring the blank line between pptx
+  // slides), keeping unrelated sheets from bleeding into a single chunk.
+  return sheets.join("\n");
 }
 
 /** Read the shared-strings table into an index-addressable array of cell text. */

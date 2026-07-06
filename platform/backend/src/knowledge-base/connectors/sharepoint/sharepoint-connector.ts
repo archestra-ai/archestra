@@ -27,6 +27,7 @@ import {
 } from "../folder-traversal";
 import { parsePdfBuffer } from "../pdf-utils";
 import { extractTextFromPptx } from "../pptx-text-extractor";
+import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0";
 const DEFAULT_BATCH_SIZE = 50;
@@ -49,7 +50,12 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
 ]);
 
 // Binary file extensions we can extract text from using libraries
-const SUPPORTED_BINARY_EXTENSIONS = new Set([".docx", ".pdf", ".pptx"]);
+const SUPPORTED_BINARY_EXTENSIONS = new Set([
+  ".docx",
+  ".pdf",
+  ".pptx",
+  ".xlsx",
+]);
 
 // Image file extensions supported for multimodal embedding
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
@@ -1203,6 +1209,9 @@ async function extractTextFromBinary(
     }
     case ".pptx": {
       return extractTextFromPptx(buffer);
+    }
+    case ".xlsx": {
+      return extractTextFromXlsx(buffer);
     }
     default:
       return "";

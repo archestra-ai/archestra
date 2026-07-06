@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import db from "@/database";
 import { describe, expect, test } from "@/test";
 import type { InsertKbDocument } from "@/types";
 import KbDocumentModel from "./kb-document";
@@ -530,8 +532,13 @@ describe("KbDocumentModel", () => {
         }),
       );
 
-      // olderThanSeconds: 0 → "last touched before now" → both just-created rows
-      // qualify (the sweep runs after their creation), no clock-fiddling needed.
+      // Age both rows so they are unambiguously stale. A just-created row can
+      // share the sweep query's transaction timestamp, so `updated_at < now()`
+      // would drop it — the source of prior CI flakiness with `olderThanSeconds: 0`.
+      await db.execute(
+        sql`UPDATE kb_documents SET updated_at = now() - interval '1 hour' WHERE connector_id = ${connector.id}`,
+      );
+
       const ids = await KbDocumentModel.recoverStalledEmbeddings({
         olderThanSeconds: 0,
         limit: 10,
@@ -607,6 +614,10 @@ describe("KbDocumentModel", () => {
           }),
         );
       }
+      // Age all three so they are unambiguously stale (see the note above).
+      await db.execute(
+        sql`UPDATE kb_documents SET updated_at = now() - interval '1 hour' WHERE connector_id = ${connector.id}`,
+      );
 
       const ids = await KbDocumentModel.recoverStalledEmbeddings({
         olderThanSeconds: 0,

@@ -316,6 +316,9 @@ async function getDispatchableAppAuthoringToolNames(params: {
       );
     },
   ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+  if (dispatchableNames.length === 0) {
+    return [];
+  }
   // RBAC runs before the assignment gate at dispatch; mirror it so the
   // steering never names a tool the user's role cannot execute.
   const permitted = await filterToolNamesByPermission(

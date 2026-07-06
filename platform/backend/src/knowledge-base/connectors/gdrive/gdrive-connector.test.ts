@@ -106,6 +106,30 @@ async function buildXlsx(cells: string[]): Promise<ArrayBuffer> {
   return zip.generateAsync({ type: "arraybuffer" });
 }
 
+/** Minimal valid multi-sheet .xlsx: one shared-strings table, N worksheets. */
+async function buildMultiSheetXlsx(sheets: string[][]): Promise<ArrayBuffer> {
+  const zip = new JSZip();
+  const sst = sheets
+    .flat()
+    .map((c) => `<si><t>${c}</t></si>`)
+    .join("");
+  zip.file(
+    "xl/sharedStrings.xml",
+    `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${sst}</sst>`,
+  );
+  let stringIndex = 0;
+  sheets.forEach((cells, sheetIdx) => {
+    const row = cells
+      .map((_, colIdx) => `<c r="${colIdx}1" t="s"><v>${stringIndex++}</v></c>`)
+      .join("");
+    zip.file(
+      `xl/worksheets/sheet${sheetIdx + 1}.xml`,
+      `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row>${row}</row></sheetData></worksheet>`,
+    );
+  });
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
 describe("GoogleDriveConnector", () => {
   it("has the correct type", () => {
     const connector = new GoogleDriveConnector();
@@ -397,6 +421,51 @@ describe("GoogleDriveConnector", () => {
       expect(batches[0].documents).toHaveLength(1);
       expect(batches[0].documents[0].content).toContain("Revenue");
       expect(batches[0].documents[0].content).toContain("Q1 2024");
+    });
+
+    it("exports Google Sheets as .xlsx so every sheet is ingested, not just the first", async () => {
+      resetMocks();
+      const connector = new GoogleDriveConnector();
+
+      mockFilesList.mockResolvedValueOnce({
+        data: {
+          files: [
+            makeDriveFile("gsheet-1", "Quarterly Report", {
+              mimeType: "application/vnd.google-apps.spreadsheet",
+            }),
+          ],
+          nextPageToken: undefined,
+        },
+      });
+      // Two sheets: a text/csv export would return only the first.
+      mockFilesExport.mockResolvedValueOnce({
+        data: await buildMultiSheetXlsx([
+          ["Sheet One Revenue"],
+          ["Sheet Two Expenses"],
+        ]),
+      });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {},
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      // Exported as .xlsx bytes, not text/csv (which Google truncates to sheet 1).
+      expect(mockFilesExport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        expect.objectContaining({ responseType: "arraybuffer" }),
+      );
+      // Content from BOTH sheets is present.
+      expect(batches[0].documents).toHaveLength(1);
+      expect(batches[0].documents[0].content).toContain("Sheet One Revenue");
+      expect(batches[0].documents[0].content).toContain("Sheet Two Expenses");
     });
 
     it("paginates using nextPageToken", async () => {

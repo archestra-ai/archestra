@@ -78,11 +78,24 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 // recognize images by mimeType, not just by filename extension.
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(Object.values(IMAGE_MIME_TYPES));
 
-// Google Workspace MIME types that can be exported as text
+// Google Workspace native files exported as plain text (one logical document).
 const GOOGLE_DOC_MIME_TYPES: Record<string, string> = {
   "application/vnd.google-apps.document": "text/plain",
-  "application/vnd.google-apps.spreadsheet": "text/csv",
   "application/vnd.google-apps.presentation": "text/plain",
+};
+
+// Google Workspace native files exported as a binary Office format instead of
+// text, then run through the same extractor as an uploaded file. A Google Sheet
+// exported as CSV is only its FIRST sheet, so export .xlsx and read every sheet.
+const GOOGLE_BINARY_EXPORTS: Record<
+  string,
+  { exportMimeType: string; format: BinaryFormat }
+> = {
+  "application/vnd.google-apps.spreadsheet": {
+    exportMimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    format: ".xlsx",
+  },
 };
 
 /** Narrowed Drive file type – the fields listed in our $select queries. */
@@ -709,6 +722,27 @@ export class GoogleDriveConnector extends BaseConnector {
       }
     }
 
+    // Google Sheets (and any other Workspace type worth exporting as Office
+    // bytes): export the binary format and extract every sheet — a CSV export
+    // would be the first sheet only.
+    if (resolved?.kind === "google-binary") {
+      try {
+        const res = await drive.files.export(
+          { fileId, mimeType: resolved.exportMimeType },
+          { responseType: "arraybuffer" },
+        );
+        const buffer = Buffer.from(res.data as ArrayBuffer);
+        const text = await extractTextFromBinary(buffer, resolved.format);
+        return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      } catch (error) {
+        this.log.debug(
+          { fileId, fileName, error: extractErrorMessage(error) },
+          "Google Drive: failed to export Google Workspace file as Office bytes",
+        );
+        return { text: "" };
+      }
+    }
+
     // Plain text files: download and read as text
     if (resolved?.kind === "text") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
@@ -826,6 +860,7 @@ function escapeDriveQueryValue(value: string): string {
 
 type ResolvedDriveFile =
   | { kind: "google"; exportMimeType: string }
+  | { kind: "google-binary"; exportMimeType: string; format: BinaryFormat }
   | { kind: "binary"; format: BinaryFormat }
   | { kind: "image"; mimeType: string }
   | { kind: "text" }
@@ -845,7 +880,12 @@ function resolveDriveFile(
   const mimeType = file.mimeType ?? "";
   const ext = getFileExtension(file.name ?? "");
 
-  // Google Workspace native files are exported as text.
+  // Google Sheets export as .xlsx (a CSV export is the first sheet only), then
+  // go through the same extractor as an uploaded spreadsheet.
+  const binaryExport = GOOGLE_BINARY_EXPORTS[mimeType];
+  if (binaryExport) return { kind: "google-binary", ...binaryExport };
+
+  // Other Google Workspace native files are exported as text.
   const exportMimeType = GOOGLE_DOC_MIME_TYPES[mimeType];
   if (exportMimeType) return { kind: "google", exportMimeType };
 

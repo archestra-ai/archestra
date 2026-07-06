@@ -1726,8 +1726,8 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // Default agentType is "agent" — the internal chat surface, which opens
-    // owned apps via render_app, so their launch tools must not bloat the list.
+    // agentType "agent" is the internal chat surface, which opens owned apps
+    // via render_app, so their launch tools must not bloat its list.
     const agent = await makeAgent({
       organizationId: org.id,
       accessAllTools: true,

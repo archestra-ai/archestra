@@ -218774,7 +218774,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get all members of the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:read`: View organization members and their roles",
+        "description": "Get all members of the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -219036,10 +219036,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "member:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

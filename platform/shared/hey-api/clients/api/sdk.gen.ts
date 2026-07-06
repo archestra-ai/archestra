@@ -5366,7 +5366,7 @@ export const deletePendingSignupMember = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `member:read`: View organization members and their roles
+ * None (no additional RBAC permission required)
  */
 export const getOrganizationMembers = <ThrowOnError extends boolean = false>(options?: Options<GetOrganizationMembersData, ThrowOnError>) => (options?.client ?? client).get<GetOrganizationMembersResponses, GetOrganizationMembersErrors, ThrowOnError>({ url: '/api/organization/members', ...options });
 

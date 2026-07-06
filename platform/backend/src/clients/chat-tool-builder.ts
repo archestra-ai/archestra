@@ -25,8 +25,10 @@ import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
 import {
   type ArchestraContext,
+  type ArchestraValidationMeta,
   archestraMcpBranding,
   executeArchestraTool,
+  getArchestraToolInputSchema,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
@@ -247,6 +249,12 @@ export function buildMcpGatewayTool(params: {
                 mcpTool.name,
                 toolArguments,
               );
+              // Must run BEFORE buildArchestraToolOutput, which collapses an
+              // error result to plain text and drops `_meta`.
+              amplifyRepeatedValidationError({
+                response: archestraResponse,
+                repeatTracker: ctx.repeatTracker,
+              });
             }
 
             // Return errors as tool-result text so the LLM can read
@@ -655,6 +663,7 @@ export const __test = {
   executeMcpTool,
   resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
+  synthesizeToolParamsTemplate,
   // Hook helpers — exposed for focused unit tests
   firePreToolUseHook,
   firePostToolUseHook,
@@ -1490,6 +1499,140 @@ function applyRepeatedCallBreaker(params: {
     isError: false,
   });
   return buildRepeatedCallNudge(toolName, repeat.count, repeat.severity);
+}
+
+/**
+ * Occurrences of one validation-error class at which the amplifier starts
+ * appending the schema shape template to the error result.
+ */
+const VALIDATION_ERROR_AMPLIFIER_THRESHOLD = 3;
+
+/**
+ * Same-error-class amplifier: when one archestra tool keeps failing argument
+ * validation with the same issue class (code + path set) — the argument
+ * values may differ and the calls need not be consecutive, so the
+ * identical-call breaker never sees this loop — appends a corrective text
+ * block with a schema-derived parameter shape template to the error result.
+ * The tool named in `_meta.archestraValidation` is the resolved dispatch
+ * target, so run_tool-wrapped failures pool with (and render the template of)
+ * the target tool. Purely additive: it never blocks execution or terminates
+ * the run, and results without validation metadata are untouched.
+ */
+function amplifyRepeatedValidationError(params: {
+  response: CallToolResult;
+  repeatTracker: ToolCallRepeatTracker;
+}): void {
+  const { response, repeatTracker } = params;
+  const meta = extractArchestraValidationMeta(response._meta);
+  if (!meta) {
+    return;
+  }
+  const issueClass = meta.issues
+    .map((issue) => `${issue.code}:${issue.path}`)
+    .sort()
+    .join(",");
+  const count = repeatTracker.noteValidationErrorClass(
+    `${meta.toolName}\0${issueClass}`,
+  );
+  if (count < VALIDATION_ERROR_AMPLIFIER_THRESHOLD) {
+    return;
+  }
+  const schema = getArchestraToolInputSchema(meta.toolName);
+  if (!schema) {
+    return;
+  }
+  response.content = [
+    ...response.content,
+    {
+      type: "text",
+      text: `You have hit the same ${meta.toolName} validation error ${count} times. Restructure the call to match this parameter shape (placeholder values, not a working example):\n${JSON.stringify(synthesizeToolParamsTemplate(schema))}`,
+    },
+  ];
+}
+
+/** Narrowing reader for `_meta.archestraValidation` (see index.ts producer). */
+function extractArchestraValidationMeta(
+  meta: unknown,
+): ArchestraValidationMeta | null {
+  if (!isRecord(meta) || !isRecord(meta.archestraValidation)) {
+    return null;
+  }
+  const { toolName, issues } = meta.archestraValidation;
+  if (typeof toolName !== "string" || !Array.isArray(issues)) {
+    return null;
+  }
+  const parsedIssues: ArchestraValidationMeta["issues"] = [];
+  for (const issue of issues) {
+    if (
+      !isRecord(issue) ||
+      typeof issue.code !== "string" ||
+      typeof issue.path !== "string"
+    ) {
+      return null;
+    }
+    parsedIssues.push({ code: issue.code, path: issue.path });
+  }
+  return { toolName, issues: parsedIssues };
+}
+
+/**
+ * Deterministic placeholder-value template of a tool's parameters, synthesized
+ * from its JSON input schema: every top-level property is rendered by declared
+ * type — string `"..."`, number/integer `0`, boolean `false`, enum → its first
+ * value, array → a single-element array of the item template, object → its
+ * properties one level deep (anything deeper collapses to `"..."`).
+ */
+function synthesizeToolParamsTemplate(schema: Record<string, unknown>): {
+  params: Record<string, unknown>;
+  required: string[];
+} {
+  const properties = isRecord(schema.properties) ? schema.properties : {};
+  const params = Object.fromEntries(
+    Object.entries(properties).map(([name, propertySchema]) => [
+      name,
+      placeholderValueForSchema(propertySchema, 1),
+    ]),
+  );
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((key): key is string => typeof key === "string")
+    : [];
+  return { params, required };
+}
+
+function placeholderValueForSchema(
+  schema: unknown,
+  objectDepth: number,
+): unknown {
+  if (!isRecord(schema)) {
+    return "...";
+  }
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    return schema.enum[0];
+  }
+  switch (schema.type) {
+    case "string":
+      return "...";
+    case "number":
+    case "integer":
+      return 0;
+    case "boolean":
+      return false;
+    case "array":
+      return [placeholderValueForSchema(schema.items, objectDepth)];
+    case "object": {
+      if (objectDepth <= 0 || !isRecord(schema.properties)) {
+        return "...";
+      }
+      return Object.fromEntries(
+        Object.entries(schema.properties).map(([name, propertySchema]) => [
+          name,
+          placeholderValueForSchema(propertySchema, objectDepth - 1),
+        ]),
+      );
+    }
+    default:
+      return "...";
+  }
 }
 
 /** Max chars of tool output passed to a PostToolUse hook payload. */

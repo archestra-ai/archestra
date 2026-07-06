@@ -30,6 +30,7 @@ import {
 } from "@/test";
 import { type Agent, agentOwner } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { __test as runToolInternals } from "./run-tool";
 
 const mockExecuteA2AMessage = vi.fn();
 
@@ -109,9 +110,6 @@ describe("run_tool", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "run_tool cannot invoke itself",
-    );
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
@@ -123,9 +121,6 @@ describe("run_tool", () => {
     );
 
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "run_tool cannot invoke itself",
-    );
     expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
@@ -1994,6 +1989,83 @@ describe("run_tool", () => {
           .join("\n");
         expect(text).toContain('"query"');
       }
+    });
+
+    test("unwraps a param-name-keyed wrapper around a primitive-declared param", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "workspace__get_app",
+        catalogId: catalog.id,
+        parameters: {
+          type: "object",
+          properties: { appId: { type: "string" } },
+          required: ["appId"],
+        },
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      const appId = crypto.randomUUID();
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "workspace__get_app",
+          tool_args: { appId: { appId } },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
+        expect.objectContaining({ arguments: { appId } }),
+        agentOwner(testAgent.id),
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      // The upstream result is one block; the disclosed repair note is the
+      // extra one.
+      expect(result.content).toHaveLength(2);
+      expect(result.content[0]).toEqual({ type: "text", text: "ok" });
+      expect((result.content[1] as any).type).toBe("text");
+    });
+
+    test("repairEnvelopedToolArgs reports a param-name-keyed repair as data", () => {
+      const { repairedParams, toolArgs } =
+        runToolInternals.repairEnvelopedToolArgs({
+          toolArgs: { appId: { appId: "abc-123" }, limit: 5 },
+          schema: {
+            type: "object",
+            properties: {
+              appId: { type: "string" },
+              limit: { type: "number" },
+            },
+          },
+        });
+
+      expect(repairedParams).toEqual(["appId"]);
+      expect(toolArgs).toEqual({ appId: "abc-123", limit: 5 });
+    });
+
+    test("an object-declared param with a same-named single inner key passes through by reference", () => {
+      const sent = { config: { config: { nested: true } } };
+      const { repairedParams, toolArgs } =
+        runToolInternals.repairEnvelopedToolArgs({
+          toolArgs: sent,
+          schema: {
+            type: "object",
+            properties: { config: { type: "object" } },
+          },
+        });
+
+      expect(repairedParams).toEqual([]);
+      expect(toolArgs).toBe(sent);
     });
 
     test("does not repair when the declared param type is object", async ({

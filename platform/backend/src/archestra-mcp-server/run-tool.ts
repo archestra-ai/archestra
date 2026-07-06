@@ -72,6 +72,11 @@ const registry = defineArchestraTools([
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
+/** @public — exported for testability */
+export const __test = {
+  repairEnvelopedToolArgs,
+};
+
 // ===== Internal helpers =====
 
 /**
@@ -282,7 +287,9 @@ async function dispatchTool({
 
   const runToolFullName = getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME);
   if (resolvedName === runToolFullName) {
-    return errorResult(`${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself`);
+    return errorResult(
+      `${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself. Call ${TOOL_RUN_TOOL_SHORT_NAME} once, with tool_name set to the target tool's exact name (from search_tools) and the target's arguments in tool_args — never set tool_name to ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+    );
   }
 
   // Per-conversation enabled-tool gate: in a chat with a custom tool
@@ -686,7 +693,9 @@ function placeholderForSchema(schema: unknown, depth: number): string {
 }
 
 // Envelope keys weak models wrap scalar/array params in, e.g.
-// {"appId": {"value": "abc"}} or {"tools": {"item": [...]}}.
+// {"appId": {"value": "abc"}} or {"tools": {"item": [...]}}. A wrapper keyed
+// by the param's own name (e.g. {"appId": {"appId": "abc"}}) is the same
+// anti-pattern and is accepted alongside these keys.
 const ENVELOPE_KEYS = new Set(["value", "$text", "item", "text"]);
 
 /** Param types the repair may unwrap to — a literal declared `type` only. */
@@ -700,13 +709,14 @@ type RepairableDeclaredType =
 /**
  * Deterministic repair for the single-key envelope anti-pattern weak models
  * produce when calling run_tool: a scalar/array param wrapped in an object
- * like `{"value": …}`, `{"$text": …}`, `{"item": […]}` or `{"text": …}`.
+ * like `{"value": …}`, `{"$text": …}`, `{"item": […]}` or `{"text": …}`, or
+ * keyed by the param's own name (`{"appId": {"appId": …}}`).
  * A top-level tool_args entry is unwrapped only when ALL hold:
  *  - the tool's schema literally declares the param's `type` as
  *    string/number/integer/boolean/array (no type arrays, no
  *    $ref/anyOf/oneOf/allOf composition);
  *  - the supplied value is a plain object with exactly one key from the
- *    envelope set;
+ *    envelope set or equal to the param name;
  *  - the inner value's JS type matches the declared type.
  * Under those conditions the as-sent value (an object) is provably invalid
  * against the declared type, so the repair can never rewrite a call the
@@ -730,6 +740,7 @@ function repairEnvelopedToolArgs(params: {
   for (const [key, value] of Object.entries(toolArgs)) {
     const unwrapped = unwrapEnvelope({
       value,
+      paramName: key,
       propertySchema: properties[key],
     });
     if (unwrapped) {
@@ -747,14 +758,18 @@ function repairEnvelopedToolArgs(params: {
 /** The unwrapped inner value, or null when the entry does not qualify. */
 function unwrapEnvelope(params: {
   value: unknown;
+  paramName: string;
   propertySchema: unknown;
 }): { inner: unknown } | null {
-  const { propertySchema, value } = params;
+  const { paramName, propertySchema, value } = params;
   if (!isRecord(value)) {
     return null;
   }
   const keys = Object.keys(value);
-  if (keys.length !== 1 || !ENVELOPE_KEYS.has(keys[0])) {
+  if (
+    keys.length !== 1 ||
+    (keys[0] !== paramName && !ENVELOPE_KEYS.has(keys[0]))
+  ) {
     return null;
   }
 

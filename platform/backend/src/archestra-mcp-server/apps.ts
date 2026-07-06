@@ -505,7 +505,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Will render inline when opened in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -907,7 +907,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary} Will render inline when opened in chat; standalone page: ${appRunUrl(updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
+        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -1372,6 +1372,15 @@ function appRunUrl(appId: string): string {
 // cannot break the diagnostics/validation framing it is interpolated into.
 async function safeAppName(name: string): Promise<string> {
   return (await escapeAngleBrackets(name)).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Next-edit rider on scaffold_app/edit_app success texts: names the head
+ * version the next edit_app call must pass as baseVersion, so the model never
+ * has to guess (or re-read) it.
+ */
+function nextEditBaseVersionHint(latestVersion: number): string {
+  return ` Use baseVersion=${latestVersion} for the next edit_app call.`;
 }
 
 // The soft save-time validation-warnings note appended to a mutation's result

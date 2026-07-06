@@ -14,12 +14,14 @@ import {
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "ai";
 import { afterEach, vi } from "vitest";
+import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { ToolModel } from "@/models";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { beforeEach, describe, expect, test } from "@/test";
 import * as chatClient from "./chat-mcp-client";
+import { __test as toolBuilderInternals } from "./chat-tool-builder";
 import mcpClient from "./mcp-client";
 import {
   MAX_IDENTICAL_TOOL_CALLS,
@@ -992,6 +994,210 @@ describe("getChatMcpTools repeated-call circuit breaker", () => {
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(
       MAX_IDENTICAL_TOOL_CALLS,
     );
+  });
+});
+
+describe("getChatMcpTools validation-error amplifier", () => {
+  const runToolName = getArchestraToolFullName("run_tool");
+  const editAppName = getArchestraToolFullName("edit_app");
+  const runToolGatewayDef = {
+    name: runToolName,
+    description: "Run tool",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool_name: { type: "string" },
+        tool_args: { type: "object" },
+      },
+      required: ["tool_name"],
+    },
+  };
+
+  /** edit_app args that fail one validation class (non-numeric baseVersion). */
+  const invalidEditArgs = (baseVersion: unknown) => ({
+    appId: crypto.randomUUID(),
+    baseVersion,
+    edits: [{ old_str: "x", new_str: "y" }],
+  });
+
+  /**
+   * The amplifier block's machine-readable payload: the JSON document on the
+   * result's last line, when it parses to a { params, required } shape.
+   */
+  const parseShapeTemplate = (
+    result: unknown,
+  ): { params: Record<string, unknown>; required: string[] } | null => {
+    const content = toolResultContent(result);
+    const lastLine = content.slice(content.lastIndexOf("\n") + 1);
+    try {
+      const parsed: unknown = JSON.parse(lastLine);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "params" in parsed &&
+        "required" in parsed
+      ) {
+        return parsed as {
+          params: Record<string, unknown>;
+          required: string[];
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  async function setupAmplifierEnv(
+    gatewayTools: Array<Record<string, unknown>>,
+  ) {
+    const { agent, baseParams } = await setupChatToolEnv({ gatewayTools });
+    await f.seedAndAssignArchestraTools(agent.id);
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    return chatClient.getChatMcpTools(baseParams);
+  }
+
+  test("three run_tool-wrapped edit_app failures of one class append the TARGET's shape template", async () => {
+    const tools = await setupAmplifierEnv([runToolGatewayDef]);
+    const call = (baseVersion: unknown, id: string) =>
+      tools[runToolName].execute?.(
+        { tool_name: "edit_app", tool_args: invalidEditArgs(baseVersion) },
+        execOptions(id),
+      );
+
+    // Different args each time: the identical-call breaker never fires, and
+    // the first two occurrences keep the plain error shape.
+    const first = await call("one", "wrapped-1");
+    const second = await call("two", "wrapped-2");
+    expect(parseShapeTemplate(first)).toBeNull();
+    expect(parseShapeTemplate(second)).toBeNull();
+
+    const third = await call("three", "wrapped-3");
+    const template = parseShapeTemplate(third);
+    expect(template).not.toBeNull();
+    // The template is edit_app's (the resolved target), not run_tool's.
+    const editAppSchema = getArchestraToolInputSchema(editAppName);
+    expect(editAppSchema).toBeDefined();
+    expect(Object.keys(template?.params ?? {}).sort()).toEqual(
+      Object.keys(editAppSchema?.properties as Record<string, unknown>).sort(),
+    );
+    expect(template?.required).toEqual(editAppSchema?.required);
+  });
+
+  test("a different issue class does not pool; the original class still fires non-consecutively", async () => {
+    const tools = await setupAmplifierEnv([runToolGatewayDef]);
+    const callClassA = (baseVersion: unknown, id: string) =>
+      tools[runToolName].execute?.(
+        { tool_name: "edit_app", tool_args: invalidEditArgs(baseVersion) },
+        execOptions(id),
+      );
+
+    await callClassA("one", "a-1");
+    await callClassA("two", "a-2");
+
+    // Third failed call overall, but only the first of its own class
+    // (unrecognized key with otherwise valid args) — no amplifier.
+    const classB = await tools[runToolName].execute?.(
+      {
+        tool_name: "edit_app",
+        tool_args: {
+          appId: crypto.randomUUID(),
+          baseVersion: 1,
+          edits: [{ old_str: "x", new_str: "y" }],
+          bogus: true,
+        },
+      },
+      execOptions("b-1"),
+    );
+    expect(parseShapeTemplate(classB)).toBeNull();
+
+    // The interleaved class-B call did not reset class A's tally.
+    const thirdA = await callClassA("three", "a-3");
+    expect(parseShapeTemplate(thirdA)).not.toBeNull();
+  });
+
+  test("a directly-called archestra tool pools under its own name", async () => {
+    const tools = await setupAmplifierEnv([
+      {
+        name: editAppName,
+        description: "Edit app",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+    const call = (baseVersion: unknown, id: string) =>
+      tools[editAppName].execute?.(
+        invalidEditArgs(baseVersion),
+        execOptions(id),
+      );
+
+    expect(parseShapeTemplate(await call("one", "direct-1"))).toBeNull();
+    expect(parseShapeTemplate(await call("two", "direct-2"))).toBeNull();
+
+    const template = parseShapeTemplate(await call("three", "direct-3"));
+    expect(template).not.toBeNull();
+    const editAppSchema = getArchestraToolInputSchema(editAppName);
+    expect(Object.keys(template?.params ?? {}).sort()).toEqual(
+      Object.keys(editAppSchema?.properties as Record<string, unknown>).sort(),
+    );
+  });
+});
+
+describe("synthesizeToolParamsTemplate", () => {
+  test("covers every top-level edit_app param and its required list, one nested level deep", () => {
+    const schema = getArchestraToolInputSchema(
+      getArchestraToolFullName("edit_app"),
+    );
+    expect(schema).toBeDefined();
+    if (!schema) return;
+
+    const template = toolBuilderInternals.synthesizeToolParamsTemplate(schema);
+
+    expect(Object.keys(template.params).sort()).toEqual(
+      Object.keys(schema.properties as Record<string, unknown>).sort(),
+    );
+    expect(template.required).toEqual(schema.required);
+    // Array-of-objects params render the item's keys.
+    expect(template.params.edits).toEqual([{ old_str: "...", new_str: "..." }]);
+    expect(template.params.baseVersion).toBe(0);
+    expect(template.params.appId).toBe("...");
+    expect(template.params.replacementHtml).toBe("...");
+  });
+
+  test("renders enum, boolean, number, deep-object and array placeholders deterministically", () => {
+    const template = toolBuilderInternals.synthesizeToolParamsTemplate({
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["fast", "slow"] },
+        dryRun: { type: "boolean" },
+        depth: { type: "number" },
+        config: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            inner: { type: "object", properties: { deep: { type: "string" } } },
+          },
+        },
+        tags: { type: "array", items: { type: "string" } },
+        anything: {},
+      },
+      required: ["mode", "depth"],
+    });
+
+    expect(template).toEqual({
+      params: {
+        mode: "fast",
+        dryRun: false,
+        depth: 0,
+        // one level deep, then "..." for deeper objects
+        config: { label: "...", inner: "..." },
+        tags: ["..."],
+        anything: "...",
+      },
+      required: ["mode", "depth"],
+    });
   });
 });
 

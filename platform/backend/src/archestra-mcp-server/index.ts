@@ -95,6 +95,17 @@ export { getAgentTools } from "./delegation";
 export { filterToolNamesByPermission } from "./rbac";
 export type { ArchestraContext } from "./types";
 
+/**
+ * Machine-readable descriptor of a tool-args validation failure, attached to
+ * the error result as `_meta.archestraValidation`. Consumed by the chat
+ * wrapper's same-error-class amplifier (chat-tool-builder.ts).
+ */
+export interface ArchestraValidationMeta {
+  /** Resolved target tool (full/branded name), never the run_tool wrapper. */
+  toolName: string;
+  issues: Array<{ code: string; path: string }>;
+}
+
 const toolEntries: Partial<
   Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
 > = {
@@ -256,9 +267,7 @@ export async function executeArchestraTool(
     return result;
   } catch (error) {
     if (error instanceof ZodError) {
-      return errorResult(
-        `Validation error in ${toolName}: ${formatZodError(error)}`,
-      );
+      return zodValidationErrorResult({ toolName, error });
     }
     throw error;
   }
@@ -381,6 +390,7 @@ function validateToolResult(
 /** @public — exported for testability */
 export const __test = {
   validateToolResult,
+  zodValidationErrorResult,
 };
 
 function validateToolArgs(
@@ -395,11 +405,36 @@ function validateToolArgs(
   }
 
   return {
-    error: errorResult(
-      `Validation error in ${toolName}: ${formatZodErrorWithSchema(
-        parsed.error,
-        schema,
-      )}`,
-    ),
+    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
+  };
+}
+
+/**
+ * Shared error-result builder for a tool-args ZodError: the same text as the
+ * per-site formatting always produced, plus machine-readable
+ * `_meta.archestraValidation` so the chat wrapper can detect a model stuck on
+ * one validation-error class (see chat-tool-builder.ts). `toolName` is the
+ * resolved dispatch target, so run_tool-wrapped failures carry the target's
+ * name, not the wrapper's.
+ */
+function zodValidationErrorResult(params: {
+  toolName: string;
+  error: ZodError;
+  schema?: ZodType;
+}): CallToolResult {
+  const { toolName, error, schema } = params;
+  const details = schema
+    ? formatZodErrorWithSchema(error, schema)
+    : formatZodError(error);
+  const meta: ArchestraValidationMeta = {
+    toolName,
+    issues: error.issues.map((issue) => ({
+      code: issue.code ?? "custom",
+      path: issue.path.map((segment) => String(segment)).join("."),
+    })),
+  };
+  return {
+    ...errorResult(`Validation error in ${toolName}: ${details}`),
+    _meta: { archestraValidation: meta },
   };
 }

@@ -419,6 +419,35 @@ describe("read_app / edit_app", () => {
     );
   }
 
+  test("scaffold and edit results name the head version to pass as the next baseVersion", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `App ${crypto.randomUUID().slice(0, 8)}` },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const createdVersion = structured(created).latestVersion as number;
+    expect(createdVersion).toBe(1);
+    expect((created.content[0] as any).text).toContain(
+      `baseVersion=${createdVersion}`,
+    );
+
+    const appId = structured(created).id as string;
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    if (!seeded) {
+      throw new Error("seeded head version missing");
+    }
+    const updated = await editApp(appId, 1, [
+      { old_str: seeded.html, new_str: "<h1>v2</h1>" },
+    ]);
+    expect(updated.isError).toBe(false);
+    const updatedVersion = structured(updated).latestVersion as number;
+    expect(updatedVersion).toBe(2);
+    expect((updated.content[0] as any).text).toContain(
+      `baseVersion=${updatedVersion}`,
+    );
+  });
+
   test("read_app returns the stored html and metadata for head and a pinned version", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);

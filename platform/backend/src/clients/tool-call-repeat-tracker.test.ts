@@ -144,6 +144,34 @@ describe("ToolCallRepeatTracker", () => {
     expect(tracker.record("edit_app", failed).severity).toBe("none");
   });
 
+  it("tallies validation-error classes independently, without pooling", () => {
+    const tracker = new ToolCallRepeatTracker();
+    const classA = "archestra__edit_app\0invalid_type:baseVersion";
+    const classB = "archestra__edit_app\0unrecognized_keys:";
+    const classC = "archestra__scaffold_app\0invalid_type:baseVersion";
+
+    expect(tracker.noteValidationErrorClass(classA)).toBe(1);
+    expect(tracker.noteValidationErrorClass(classB)).toBe(1);
+    expect(tracker.noteValidationErrorClass(classA)).toBe(2);
+    // A different tool with the same issue shape is a different class.
+    expect(tracker.noteValidationErrorClass(classC)).toBe(1);
+    expect(tracker.noteValidationErrorClass(classA)).toBe(3);
+    expect(tracker.noteValidationErrorClass(classB)).toBe(2);
+  });
+
+  it("keeps the validation-class tally across interleaved calls (never reset)", () => {
+    const tracker = new ToolCallRepeatTracker();
+    const classKey = "archestra__edit_app\0invalid_type:baseVersion";
+
+    expect(tracker.noteValidationErrorClass(classKey)).toBe(1);
+    // Interleaved different calls reset the consecutive streak, not the tally.
+    tracker.record("read_app", { appId: "x" });
+    tracker.record("search_tools", { query: "y" });
+    expect(tracker.noteValidationErrorClass(classKey)).toBe(2);
+    tracker.record("edit_app", { appId: "z" });
+    expect(tracker.noteValidationErrorClass(classKey)).toBe(3);
+  });
+
   it("handles undefined arguments without throwing", () => {
     const tracker = new ToolCallRepeatTracker();
     expect(tracker.record("noop", undefined)).toEqual({

@@ -286,8 +286,36 @@ runs:
           done
         }
 
+        # The platform image lives in the PUBLIC archestra-public Artifact
+        # Registry, so on the registry path the platform pod's containerd pulls it
+        # directly from GAR — we don't `docker pull` + `kind load` it into the
+        # node (that double-handling is ~34s on the critical path). Here we only
+        # wait for the manifest to be pushed (no layer download). Fork PRs have no
+        # GAR image (it arrives as a loaded artifact), so if it's already present
+        # locally, leave it for the `kind load` guard below.
+        wait_for_platform_manifest() {
+          local image="$1"
+          if docker image inspect "${image}" > /dev/null 2>&1; then
+            echo "Platform image ${image} already present locally (fork artifact)"
+            return 0
+          fi
+          local deadline=$(( $(date +%s) + PULL_TIMEOUT_SECONDS ))
+          while true; do
+            if docker buildx imagetools inspect "${image}" > /dev/null 2>&1; then
+              echo "Platform image ${image} is available in the registry"
+              return 0
+            fi
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for ${image} to be pushed"
+              return 1
+            fi
+            echo "Platform image ${image} not available yet, retrying in 10s..."
+            sleep 10
+          done
+        }
+
         PIDS=()
-        wait_and_pull "${PLATFORM_IMAGE_TAG}" &
+        wait_for_platform_manifest "${PLATFORM_IMAGE_TAG}" &
         PIDS+=($!)
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           wait_and_pull "${MCP_SERVER_BASE_IMAGE_TAG}" &
@@ -316,9 +344,17 @@ runs:
       run: |
         PIDS=()
 
-        echo "Loading platform image into Kind..."
-        kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
-        PIDS+=($!)
+        # Only kind-load the platform image if it's actually in the local daemon
+        # (fork PRs load it from an artifact). On the registry path it was never
+        # pulled locally — the pod pulls it straight from the public registry — so
+        # there is nothing to load, and we skip the ~34s kind-load.
+        if docker image inspect "${PLATFORM_IMAGE_TAG}" > /dev/null 2>&1; then
+          echo "Loading platform image into Kind..."
+          kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        else
+          echo "Platform image ${PLATFORM_IMAGE_TAG} not in local daemon; the pod pulls it from the registry."
+        fi
 
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           echo "Loading MCP server base image into Kind..."

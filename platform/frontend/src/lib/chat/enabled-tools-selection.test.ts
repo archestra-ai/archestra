@@ -1,0 +1,60 @@
+import { describe, expect, test } from "vitest";
+import { resolveEnabledToolIds } from "./enabled-tools-selection";
+import type { PendingToolAction } from "./pending-tool-state";
+
+const disablePlaywright: PendingToolAction = {
+  type: "disableAll",
+  toolIds: ["playwright"],
+};
+
+describe("resolveEnabledToolIds", () => {
+  // RED: the bug. Declining a subset on a fresh (non-custom) conversation must
+  // keep every other tool enabled, not collapse to an empty allowlist.
+  test("disabling a subset on a non-custom conversation keeps the other tools", () => {
+    expect(
+      resolveEnabledToolIds({
+        hasCustomSelection: false,
+        enabledToolIds: [],
+        allToolIds: ["a", "b", "playwright"],
+        pendingActions: [disablePlaywright],
+      }),
+    ).toEqual(["a", "b"]);
+  });
+
+  // Pin: a real custom selection is authoritative — its stored ids are the base,
+  // NOT the agent's full set.
+  test("a custom selection uses its stored ids as the base", () => {
+    expect(
+      resolveEnabledToolIds({
+        hasCustomSelection: true,
+        enabledToolIds: ["a"],
+        allToolIds: ["a", "b", "playwright"],
+        pendingActions: [],
+      }),
+    ).toEqual(["a"]);
+  });
+
+  // Pin: no pending actions + non-custom → the default is every tool enabled.
+  test("no custom selection and no pending actions enables all tools", () => {
+    expect(
+      resolveEnabledToolIds({
+        hasCustomSelection: false,
+        enabledToolIds: [],
+        allToolIds: ["a", "b", "playwright"],
+      }),
+    ).toEqual(["a", "b", "playwright"]);
+  });
+
+  // Pin: a custom selection that genuinely enabled zero tools stays empty — the
+  // fix must not turn a real empty allowlist back into "all tools".
+  test("a custom selection of zero tools stays empty", () => {
+    expect(
+      resolveEnabledToolIds({
+        hasCustomSelection: true,
+        enabledToolIds: [],
+        allToolIds: ["a", "b"],
+        pendingActions: [],
+      }),
+    ).toEqual([]);
+  });
+});

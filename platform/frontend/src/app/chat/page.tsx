@@ -102,6 +102,7 @@ import {
   useHasPlaywrightMcpTools,
   useKeepViewedConversationRead,
   useMemberDefaultModel,
+  useProfileToolsWithIds,
   useStopChatStream,
   useUpdateConversation,
   useUpdateConversationEnabledTools,
@@ -119,6 +120,7 @@ import {
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
@@ -127,7 +129,6 @@ import {
 } from "@/lib/chat/pending-chat-handoff-files";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import {
-  applyPendingActions,
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
@@ -906,6 +907,12 @@ export function ChatPageContent({
 
   // Update enabled tools mutation (for applying pending actions)
   const updateEnabledToolsMutation = useUpdateConversationEnabledTools();
+
+  // The agent's full tool set — the base a pre-conversation tool selection is
+  // computed against when the first message creates the conversation.
+  const { data: initialAgentProfileTools = [] } = useProfileToolsWithIds(
+    initialAgentId ?? undefined,
+  );
 
   // Stop chat stream mutation (signals backend to abort subagents)
   const stopChatStreamMutation = useStopChatStream();
@@ -1869,13 +1876,23 @@ export function ChatPageContent({
             const enabledToolsResult = await fetchConversationEnabledTools(
               newConversation.id,
             );
-            if (enabledToolsResult?.data) {
-              const baseEnabledToolIds =
-                enabledToolsResult.data.enabledToolIds || [];
-              const newEnabledToolIds = applyPendingActions(
-                baseEnabledToolIds,
+            const allToolIds = initialAgentProfileTools.map((t) => t.id);
+            // A fresh conversation carries no custom selection, so the pending
+            // actions must apply on top of the agent's full tool set — not the
+            // GET's empty array, which would turn "disable a subset" into
+            // "enable nothing" and drop every tool. Without that set (tools not
+            // loaded yet) the base is unknown, so leave the conversation on its
+            // default rather than persist an untrusted empty allowlist.
+            const canResolveBase =
+              enabledToolsResult?.data?.hasCustomSelection ||
+              allToolIds.length > 0;
+            if (enabledToolsResult?.data && canResolveBase) {
+              const newEnabledToolIds = resolveEnabledToolIds({
+                hasCustomSelection: enabledToolsResult.data.hasCustomSelection,
+                enabledToolIds: enabledToolsResult.data.enabledToolIds || [],
+                allToolIds,
                 pendingActions,
-              );
+              });
 
               // Pre-populate the query cache so useConversationEnabledTools
               // immediately sees the correct state when conversationId is set.
@@ -1908,6 +1925,7 @@ export function ChatPageContent({
     [
       isPlaywrightSetupVisible,
       initialAgentId,
+      initialAgentProfileTools,
       createInitialConversation,
       updateEnabledToolsMutation,
       selectConversation,

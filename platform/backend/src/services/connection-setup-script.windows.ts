@@ -722,12 +722,22 @@ function Convert-ArchHttpErrorBodyToJson($arch_error) {
       return $arch_err_msg | ConvertFrom-Json
     }
     $arch_err_resp = $arch_error.Exception.Response
-    if ($arch_err_resp -and $arch_err_resp.GetResponseStream()) {
-      $arch_reader = New-Object System.IO.StreamReader($arch_err_resp.GetResponseStream())
-      $arch_err_body = $arch_reader.ReadToEnd()
-      if (-not [string]::IsNullOrEmpty($arch_err_body)) {
-        return $arch_err_body | ConvertFrom-Json
+    $arch_err_stream = $null
+    $arch_reader = $null
+    try {
+      if ($arch_err_resp) {
+        $arch_err_stream = $arch_err_resp.GetResponseStream()
+        if ($arch_err_stream) {
+          $arch_reader = New-Object System.IO.StreamReader($arch_err_stream)
+          $arch_err_body = $arch_reader.ReadToEnd()
+          if (-not [string]::IsNullOrEmpty($arch_err_body)) {
+            return $arch_err_body | ConvertFrom-Json
+          }
+        }
       }
+    } finally {
+      if ($arch_reader) { $arch_reader.Dispose() }
+      if ($arch_err_stream) { $arch_err_stream.Dispose() }
     }
   } catch { }
   return $null

@@ -1075,6 +1075,11 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("$arch_error.Exception.Response");
     expect(script).toContain("GetResponseStream");
     expect(script).toContain(
+      "$arch_err_stream = $arch_err_resp.GetResponseStream()",
+    );
+    expect(script).toContain("$arch_reader.Dispose()");
+    expect(script).toContain("$arch_err_stream.Dispose()");
+    expect(script).toContain(
       "$arch_poll = Convert-ArchHttpErrorBodyToJson $PSItem",
     );
     expect(script).toContain("if (-not $arch_poll) { continue }");

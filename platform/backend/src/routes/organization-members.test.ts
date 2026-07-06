@@ -118,6 +118,35 @@ describe("GET /api/organization/members — visibility scope", () => {
     expect(emails).toEqual(["admin@example.com", "other@example.com"]);
   });
 
+  test("a non-member:read caller's teammates expose only identity fields, not roles", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const me = await makeUser({ name: "Me", email: "me@example.com" });
+    const teammate = await makeUser({
+      name: "Teammate",
+      email: "teammate@example.com",
+    });
+    await makeMember(me.id, organizationId, { role: "member" });
+    // Give the teammate a privileged role so a leak would be visible.
+    await makeMember(teammate.id, organizationId, { role: "admin" });
+    const team = await makeTeam(organizationId, me.id);
+    await makeTeamMember(team.id, me.id);
+    await makeTeamMember(team.id, teammate.id);
+
+    currentUser = me;
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+
+    const res = await get();
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Array<Record<string, unknown>>;
+    expect(body).toHaveLength(1);
+    expect(Object.keys(body[0]).sort()).toEqual(["email", "id", "name"]);
+  });
+
   test("excludes a teammate whose only shared team is in another organization", async ({
     makeOrganization,
     makeUser,

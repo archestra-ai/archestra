@@ -927,20 +927,21 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         undefined,
         { userId: user.id, organizationId },
       );
-      if (canSeeAllMembers) {
-        return reply.send(
-          await MemberModel.findAllByOrganization(organizationId),
-        );
-      }
-      const teammateIds = await TeamModel.getTeammateUserIdsInOrganization({
-        userId: user.id,
-        organizationId,
-      });
+      const members = canSeeAllMembers
+        ? await MemberModel.findAllByOrganization(organizationId)
+        : await MemberModel.findByUserIdsInOrganization({
+            organizationId,
+            userIds: await TeamModel.getTeammateUserIdsInOrganization({
+              userId: user.id,
+              organizationId,
+            }),
+          });
+      // These model queries also select role/systemRole for admin surfaces that
+      // reuse them; this endpoint exposes identity only. Project explicitly so
+      // the privileged fields never depend on response-schema serialization to
+      // be dropped — a member without member:read must not learn teammates' roles.
       return reply.send(
-        await MemberModel.findByUserIdsInOrganization({
-          organizationId,
-          userIds: teammateIds,
-        }),
+        members.map(({ id, name, email }) => ({ id, name, email })),
       );
     },
   );

@@ -1086,6 +1086,16 @@ const config = {
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
+    /**
+     * Per-request timeout (ms) for an upstream MCP tool call made through the
+     * gateway. The MCP SDK defaults to 60s, which is too short for tools that
+     * do slow work (long-running scrapers, report builders, etc.). Raise this
+     * env var to give such tools more time before the request times out.
+     */
+    toolCallTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
+      60000,
+    ),
   },
   skillMarketplace: {
     endpoint: SKILL_MARKETPLACE_PREFIX,

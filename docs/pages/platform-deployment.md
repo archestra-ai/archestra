@@ -1243,6 +1243,12 @@ Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d
 
 The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
+### MCP Gateway
+
+- **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
+  - Default: `60000` (60 seconds)
+  - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+
 ### MCP Server Orchestrator
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.

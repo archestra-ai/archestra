@@ -625,7 +625,10 @@ class McpClient {
         if (resourceUri) {
           const result = await client.readResource(
             { uri: resourceUri },
-            { signal: options?.abortSignal },
+            {
+              signal: options?.abortSignal,
+              timeout: config.mcpGateway.toolCallTimeoutMs,
+            },
           );
           return await this.createSuccessResult({
             toolCall,
@@ -662,7 +665,10 @@ class McpClient {
             arguments: toolCall.arguments,
           },
           undefined,
-          { signal: options?.abortSignal },
+          {
+            signal: options?.abortSignal,
+            timeout: config.mcpGateway.toolCallTimeoutMs,
+          },
         );
 
         const isOAuthServer = !!catalogItem.oauthConfig;
@@ -3180,11 +3186,15 @@ class McpClient {
         throw new Error("toolName is required for tools/call");
       }
       return await this.raceWithTimeout(
-        client.callTool({
-          name: params.toolName,
-          arguments: params.toolArguments ?? {},
-        }),
-        60000,
+        client.callTool(
+          {
+            name: params.toolName,
+            arguments: params.toolArguments ?? {},
+          },
+          undefined,
+          { timeout: config.mcpGateway.toolCallTimeoutMs },
+        ),
+        config.mcpGateway.toolCallTimeoutMs,
         "Tool call timeout",
       );
     } finally {
@@ -3264,11 +3274,15 @@ class McpClient {
   }): Promise<unknown> {
     return this.withDirectServerClient(params.mcpServerId, (client) =>
       this.raceWithTimeout(
-        client.callTool({
-          name: params.name,
-          arguments: params.arguments ?? {},
-        }),
-        60000,
+        client.callTool(
+          {
+            name: params.name,
+            arguments: params.arguments ?? {},
+          },
+          undefined,
+          { timeout: config.mcpGateway.toolCallTimeoutMs },
+        ),
+        config.mcpGateway.toolCallTimeoutMs,
         "Tool call timeout",
       ),
     );

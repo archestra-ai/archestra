@@ -144,7 +144,7 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         other => return Err(format!("beat 4 expected Escalate, got {other:?}")),
     };
     let beat4_final = match run_chain(&engine_chain, &rt.approvers, &request) {
-        ChainOutcome::Approved { approver, scope, .. } => rt.engine.finalize_escalation(
+        ChainOutcome::Approved { approver, scope } => rt.engine.finalize_escalation(
             &call4,
             rt.tainted_chain.0.clone(),
             beat4_escalate.id(),

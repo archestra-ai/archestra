@@ -13,7 +13,7 @@ pub type ApproverId = String;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Verdict {
-    Approve { obligations: Vec<String> },
+    Approve,
     Deny { reason: String },
     /// Decline to rule — the chain moves to the next approver.
     Abstain,
@@ -82,9 +82,7 @@ impl Approver for HumanApprover {
     }
     fn decide(&self, _req: &ApprovalRequest) -> Verdict {
         if self.auto_approve {
-            Verdict::Approve {
-                obligations: Vec::new(),
-            }
+            Verdict::Approve
         } else {
             Verdict::Deny {
                 reason: "human declined".to_string(),
@@ -137,9 +135,7 @@ impl Approver for LlmApprover {
         if !self.budget.try_spend() {
             return Verdict::Abstain;
         }
-        Verdict::Approve {
-            obligations: Vec::new(),
-        }
+        Verdict::Approve
     }
 }
 
@@ -181,9 +177,7 @@ impl Approver for EuBusinessHours {
     fn decide(&self, req: &ApprovalRequest) -> Verdict {
         let hour = req.clock % 24;
         if hour >= self.open_hour && hour < self.close_hour {
-            Verdict::Approve {
-                obligations: Vec::new(),
-            }
+            Verdict::Approve
         } else {
             self.on_timeout.clone()
         }
@@ -213,7 +207,6 @@ pub enum ChainOutcome {
     Approved {
         approver: ApproverId,
         scope: Predicate,
-        obligations: Vec<String>,
     },
     Rejected {
         approver: ApproverId,
@@ -234,11 +227,10 @@ pub fn run_chain(
             continue;
         };
         match approver.decide(req) {
-            Verdict::Approve { obligations } => {
+            Verdict::Approve => {
                 return ChainOutcome::Approved {
                     approver: id.clone(),
                     scope: approver.scope().clone(),
-                    obligations,
                 };
             }
             Verdict::Deny { reason } => {

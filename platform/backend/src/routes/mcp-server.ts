@@ -33,7 +33,10 @@ import {
   findExternalIdentityProviderByProviderId,
 } from "@/services/identity-providers/oidc";
 import { assertInstallAllowedOrBlock } from "@/services/mcp-install-policy";
-import { autoReinstallServer } from "@/services/mcp-reinstall";
+import {
+  autoReinstallServer,
+  reloadToolsForServer,
+} from "@/services/mcp-reinstall";
 import {
   type Account,
   AgentScopeSchema,
@@ -2046,6 +2049,60 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(updatedServer);
     },
   );
+
+  /**
+   * Re-discover an MCP server's tools from the LIVE upstream server and
+   * reconcile the stored tool snapshot — no pod restart, no reinstall.
+   * Adds newly-advertised tools, updates changed descriptions/input schemas,
+   * and removes tools the server no longer exposes, preserving policies and
+   * agent assignments. Tools are shared per catalog item, so the refresh
+   * applies to every install of the same server.
+   */
+  fastify.post(
+    "/api/mcp_server/:id/reload-tools",
+    {
+      schema: {
+        operationId: RouteId.ReloadMcpServerTools,
+        description:
+          "Re-discover an MCP server's tools from the live server and refresh the stored tool catalog without reinstalling",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            created: z.number(),
+            updated: z.number(),
+            unchanged: z.number(),
+            deleted: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, user, headers }) => {
+      const mcpServer = await McpServerModel.findById(id);
+
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers manage their tools in-process; there is nothing to reload.",
+        );
+      }
+
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "reload tools for",
+      });
+
+      return reloadToolsForServer(mcpServer);
+    },
+  );
 };
 
 export default mcpServerRoutes;
@@ -2089,7 +2146,7 @@ async function assertScopedLifecycleAuthorization(params: {
   };
   userId: string;
   headers: IncomingHttpHeaders;
-  action: "revoke" | "re-authenticate" | "reinstall";
+  action: "revoke" | "re-authenticate" | "reinstall" | "reload tools for";
 }): Promise<void> {
   const { mcpServer, userId, headers, action } = params;
 

@@ -217,6 +217,29 @@ class McpServerModel {
     return row?.createdAt ?? null;
   }
 
+  /**
+   * One installed server per catalog, for the periodic tools refresher. Tool
+   * rows are shared per catalog item, so re-syncing one install covers every
+   * install of that catalog. Only local/remote servers participate — app and
+   * builtin servers manage their tools in-process. Oldest install wins for a
+   * stable pick across ticks.
+   */
+  static async findOnePerCatalogForToolsRefresh(): Promise<McpServer[]> {
+    return db
+      .selectDistinctOn([schema.mcpServersTable.catalogId])
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          isNotNull(schema.mcpServersTable.catalogId),
+          inArray(schema.mcpServersTable.serverType, ["local", "remote"]),
+        ),
+      )
+      .orderBy(
+        asc(schema.mcpServersTable.catalogId),
+        asc(schema.mcpServersTable.createdAt),
+      );
+  }
+
   static async findAll(
     userId?: string,
     isMcpServerAdmin?: boolean,

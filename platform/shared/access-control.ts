@@ -694,6 +694,12 @@ export const requiredEndpointPermissionsMap: Partial<
     // more. Requiring :update here locked owners out of reinstalling their own.
     mcpServerInstallation: ["create"],
   },
+  [RouteId.ReloadMcpServerTools]: {
+    // Reloading tools is a strict subset of reinstalling (tool re-sync with no
+    // redeploy), so it is gated identically; the handler's
+    // assertScopedLifecycleAuthorization does the same finer-grained scope check.
+    mcpServerInstallation: ["create"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
   },

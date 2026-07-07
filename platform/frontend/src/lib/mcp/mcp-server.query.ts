@@ -27,6 +27,7 @@ const {
   getMcpServer,
   reauthenticateMcpServer,
   reinstallMcpServer,
+  reloadMcpServerTools,
 } = archestraApiSdk;
 
 type McpServersQuery = Partial<
@@ -291,6 +292,57 @@ export function useDeleteMcpServer() {
     onError: (error, variables) => {
       console.error("Uninstall error:", error);
       toast.error(`Failed to uninstall ${variables.name}`);
+    },
+  });
+}
+
+/**
+ * Re-discover a server's tools from the live server and persist them to the
+ * tool catalog (add/update/remove) — no reinstall, no pod restart. Refreshes
+ * every query that renders tool lists or counts, since the shared catalog
+ * rows may have changed for all installs of the same server.
+ */
+export function useReloadMcpServerTools() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      name?: string;
+      catalogId?: string | null;
+    }) => {
+      const { data: result, error } = await reloadMcpServerTools({
+        path: { id: data.id },
+      });
+      if (error) {
+        handleApiError(error);
+        throw new Error(getApiErrorMessage(error));
+      }
+      return result;
+    },
+    onSuccess: async (result, variables) => {
+      await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
+      invalidateToolAssignmentQueries(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: ["mcp-servers", variables.id, "tools"],
+      });
+      if (variables.catalogId) {
+        queryClient.invalidateQueries({
+          queryKey: ["mcp-catalog", variables.catalogId, "tools"],
+        });
+      }
+      const target = variables.name ?? "server";
+      const changed =
+        (result?.created ?? 0) +
+        (result?.updated ?? 0) +
+        (result?.deleted ?? 0);
+      toast.success(
+        changed > 0 && result
+          ? `Refreshed ${target} tools: ${result.created} added, ${result.updated} updated, ${result.deleted} removed`
+          : `${variables.name ?? "Server"} tools are already up to date`,
+      );
+    },
+    onError: (_error, variables) => {
+      toast.error(`Failed to refresh ${variables.name ?? "server"} tools`);
     },
   });
 }

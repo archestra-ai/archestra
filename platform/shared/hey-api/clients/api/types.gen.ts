@@ -10968,6 +10968,7 @@ export type GetAgentsResponses = {
                 catalogId: string | null;
                 delegateToAgentId: string | null;
                 name: string;
+                rawName: string | null;
                 /**
                  *
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -11209,6 +11210,7 @@ export type CreateAgentResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -11415,6 +11417,7 @@ export type GetAllAgentsResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -11596,6 +11599,7 @@ export type GetDefaultMcpGatewayResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -11777,6 +11781,7 @@ export type GetDefaultLlmProxyResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -12037,6 +12042,7 @@ export type ImportAgentResponses = {
                 catalogId: string | null;
                 delegateToAgentId: string | null;
                 name: string;
+                rawName: string | null;
                 /**
                  *
                  * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -12311,6 +12317,7 @@ export type GetAgentResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -12545,6 +12552,7 @@ export type UpdateAgentResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -12728,6 +12736,7 @@ export type CloneAgentResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -13253,6 +13262,7 @@ export type RestoreAgentResponses = {
             catalogId: string | null;
             delegateToAgentId: string | null;
             name: string;
+            rawName: string | null;
             /**
              *
              * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -14330,6 +14340,7 @@ export type GetAgentToolsResponses = {
         catalogId: string | null;
         delegateToAgentId: string | null;
         name: string;
+        rawName: string | null;
         /**
          *
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -17164,6 +17175,7 @@ export type GetAppToolsResponses = {
         catalogId: string | null;
         delegateToAgentId: string | null;
         name: string;
+        rawName: string | null;
         /**
          *
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
@@ -49533,6 +49545,94 @@ export type ReinstallMcpServerResponses = {
 
 export type ReinstallMcpServerResponse = ReinstallMcpServerResponses[keyof ReinstallMcpServerResponses];
 
+export type ReloadMcpServerToolsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/mcp_server/{id}/reload-tools';
+};
+
+export type ReloadMcpServerToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReloadMcpServerToolsError = ReloadMcpServerToolsErrors[keyof ReloadMcpServerToolsErrors];
+
+export type ReloadMcpServerToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        created: number;
+        updated: number;
+        unchanged: number;
+        deleted: number;
+    };
+};
+
+export type ReloadMcpServerToolsResponse = ReloadMcpServerToolsResponses[keyof ReloadMcpServerToolsResponses];
+
 export type GetMcpToolCallsData = {
     body?: never;
     path?: never;
@@ -65571,6 +65671,7 @@ export type GetToolsResponses = {
         catalogId: string | null;
         delegateToAgentId: string | null;
         name: string;
+        rawName: string | null;
         /**
          *
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217

@@ -1249,6 +1249,13 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 
+### MCP Servers
+
+- **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools. Every N minutes, each installed server's stored tool list is re-synced from the live server — new tools are added, changed descriptions and input schemas are updated, and removed tools are dropped. No restart or reinstall happens. Tool assignments and policies are preserved.
+  - Default: unset (disabled). Set to `0` to disable explicitly.
+  - Example: `30`
+  - Tools can also be refreshed on demand: from the server's Inspector tab in the MCP Registry, or via `POST /api/mcp_server/:id/reload-tools`.
+
 ### MCP Server Orchestrator
 
 - **`ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE`** - Kubernetes namespace to run MCP server pods.

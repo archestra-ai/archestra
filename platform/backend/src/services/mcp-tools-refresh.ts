@@ -30,10 +30,7 @@ class McpToolsRefreshManager {
     );
     // Never keep the process alive just for the refresher.
     this.intervalId.unref();
-    logger.info(
-      { intervalMinutes },
-      "Periodic MCP tools refresh enabled",
-    );
+    logger.info({ intervalMinutes }, "Periodic MCP tools refresh enabled");
   }
 
   stop(): void {

@@ -66,7 +66,6 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
@@ -76,6 +75,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";

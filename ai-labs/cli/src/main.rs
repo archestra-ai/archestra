@@ -80,6 +80,13 @@ struct CommonBenchArgs {
         help = "Platform directory (the prod image lays the app out at /app); default: <repo>/platform"
     )]
     platform_dir: Option<PathBuf>,
+    #[arg(
+        long,
+        env = "ARCHESTRA_BENCH_BACKEND_BRANCH",
+        conflicts_with = "platform_dir",
+        help = "Build and spawn the backend from a git ref (fetched from origin) instead of the working tree; slower (full install + build), torn down each run"
+    )]
+    branch: Option<String>,
 }
 
 /// Flags shared by `analyze` and `full` — which lanes drive the analysis. Flattened into both.
@@ -359,6 +366,7 @@ async fn guarded_run(
             common.max_workers,
             update_mcp_lock,
             common.platform_dir.as_deref(),
+            common.branch.as_deref(),
         ) => return GuardedRun::Completed(result),
     };
     // run() was dropped mid-flight, so live instances are still registered; shutdown_all tears

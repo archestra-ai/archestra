@@ -44,6 +44,15 @@ const tasksTable = pgTable(
       .where(
         sql`${table.periodic} = true AND ${table.status} IN ('pending', 'processing')`,
       ),
+    // Lets the connector-run reaper ask "does this run still have live embedding
+    // work?" as an index lookup instead of a JSONB filter over every pending/
+    // processing batch_embedding task. Partial + expression: only in-flight
+    // embedding tasks are indexed, keyed by the connectorRunId in their payload.
+    index("tasks_batch_embedding_connector_run_idx")
+      .on(sql`(${table.payload} ->> 'connectorRunId')`)
+      .where(
+        sql`${table.taskType} = 'batch_embedding' AND ${table.status} IN ('pending', 'processing')`,
+      ),
   ],
 );
 

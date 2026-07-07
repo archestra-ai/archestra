@@ -1312,9 +1312,7 @@ export function AgentDialog({
                   <p className="pt-2 text-sm text-muted-foreground">
                     {agent.description}.{" "}
                     <ExternalDocsLink
-                      href={getDocsUrl(
-                        DocsPage.PlatformBuiltInAgentsPolicyConfig,
-                      )}
+                      href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
                       className="underline"
                       showIcon={false}
                     >

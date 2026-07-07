@@ -43,7 +43,8 @@ platform image instead of the dev repo. Three knobs make that work, all defaulti
 behavior when unset:
 
 - `--platform-dir` / `ARCHESTRA_BENCH_PLATFORM_DIR` — the platform dir is `/app` in the prod image,
-  not `<repo>/platform`.
+  not `<repo>/platform`. (Its local-dev sibling is `--branch` / `ARCHESTRA_BENCH_BACKEND_BRANCH`, which
+  builds the backend from a git worktree of a ref; the two conflict. See the README lifecycle section.)
 - `ARCHESTRA_BENCH_MIGRATE_CMD` — the prod image has no pnpm; it runs `drizzle-kit migrate` directly.
 - The Dagger runner host + CLI bin arrive via **process env**, not `/app/.env`: `build_backend_env`
   force-overwrites those two keys, so `.env` can't steer them (it seeds from `std::env::vars()`, so

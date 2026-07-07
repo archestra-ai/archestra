@@ -156,6 +156,21 @@ jobs:
       - name: Enforce docs asset format and size policy
         run: python3 .github/scripts/check-docs-image-policy.py
 
+  docs-links:
+    name: Docs Link Check
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check internal doc links and asset embeds resolve
+        run: python3 .github/scripts/check-docs-links.py
+
   migration-kit-checks:
     name: Migration Kit Checks
     runs-on: blacksmith-2vcpu-ubuntu-2404

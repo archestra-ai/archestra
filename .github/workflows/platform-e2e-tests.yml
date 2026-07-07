@@ -122,13 +122,62 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-      - name: Build Platform image and push to Artifact Registry
+      # Reuse a platform image already built for this exact ./platform tree — by
+      # this PR's run-e2e build, a prior merge-queue entry, or the scheduled warm
+      # build — instead of rebuilding it on the merge-queue critical path. The
+      # image is a deterministic function of the ./platform build context (base
+      # images are digest-pinned in the Dockerfile and no build arg varies here),
+      # so a matching git tree OID guarantees byte-identical build inputs. On a
+      # hit we do a registry-side manifest copy to the commit-SHA tag, so the
+      # shards' existing `:${sha}` pull contract is unchanged and no rebuild runs.
+      # Registry path only: fork PRs have no OIDC/registry access and fall through
+      # to the artifact build below.
+      - name: Resolve platform image reuse
+        id: platform-reuse
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # git tree OID of the ./platform build context — identical iff the
+          # context bytes are identical (checkout is shallow but has the full
+          # tree of HEAD, which is all `rev-parse HEAD:platform` needs).
+          TREE_HASH=$(git rev-parse "HEAD:platform")
+          TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
+          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
+          echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          # Default to a build; only skip it if we actually land the reused image
+          # on the SHA tag. A missing/just-pruned tree tag or a transient registry
+          # error then falls back to building instead of failing the required gate.
+          REUSE=false
+          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1; then
+            echo "Found cached platform image for tree ${TREE_HASH}; copying to ${SHA_TAG}"
+            # Registry-side manifest copy (no layer pull/push) onto the SHA tag
+            # the shards pull. Seconds, versus the ~85-226s build it replaces.
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"; then
+              REUSE=true
+            else
+              echo "::warning::reuse retag failed (tree tag may have just been pruned); building instead"
+            fi
+          else
+            echo "No cached image for platform tree ${TREE_HASH}; building."
+          fi
+          echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build Platform image and push to Artifact Registry
+        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
           push: "true"
-          tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+          # Publish under both the commit SHA (what the shards pull) and the
+          # tree-OID tag, so a later run of the same ./platform tree reuses this
+          # image instead of rebuilding.
+          tags: |
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}
+            ${{ steps.platform-reuse.outputs.tree_tag }}
           # E2E image consumed only by CI shards — skip SLSA provenance attestation to
           # trim export time and keep a plain single-manifest image. (Published release
           # images keep provenance via build-native-multi-arch-image.yml's default.)
@@ -182,6 +231,34 @@ jobs:
           path: /tmp/${{ matrix.tarball-name }}
           retention-days: 1
           compression-level: 0 # Already gzipped
+
+  # Fast-cancel the run when an image build fails. The shards deliberately have
+  # no `needs: [platform-e2e-build]` so they can set up in parallel with the
+  # build (see the shards job), and then poll the registry for the pushed image
+  # up to image-pull-timeout-seconds (900s). That overlap is a win when the build
+  # succeeds, but when it FAILS the shards would otherwise burn the full ~15-min
+  # poll deadline on a 16vcpu runner for an image that will never arrive. The
+  # merge is already blocked by the failed required "Build ... Image" check, so
+  # cancelling the run here only reclaims that wasted shard time — it changes no
+  # merge outcome. (quickstart already fast-fails: it `needs` the build and is
+  # skipped on failure. Only the poll-based shards need this.)
+  platform-e2e-cancel-on-build-failure:
+    name: Cancel E2E on build failure
+    needs: [platform-e2e-build]
+    if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      actions: write # Required to cancel this workflow run.
+    steps:
+      - name: Cancel run so shards stop polling for an image that will never arrive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "An image build failed; cancelling run ${RUN_ID} so the e2e shards stop burning the image-pull deadline."
+          gh api --method POST "repos/${REPO}/actions/runs/${RUN_ID}/cancel"
 
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.

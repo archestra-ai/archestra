@@ -13,6 +13,7 @@ import {
   AgentSelector,
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
+import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Button } from "@/components/ui/button";
@@ -725,6 +726,7 @@ export function ConnectCommandPanel({
                 onRetry={() => runGeneration(inputsKey)}
               />
             )}
+            <CreditWarningNotice warning={result?.creditWarning} />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">

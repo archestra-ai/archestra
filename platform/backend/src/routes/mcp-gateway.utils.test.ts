@@ -1635,6 +1635,135 @@ describe("createAgentServer tools/list", () => {
     expect(byName.has("bug_tracker__list")).toBe(false);
   });
 
+  test("chat agent does NOT advertise an assigned UI tool in search_and_run_only", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // The chat counterpart of the gateway test above: a chat agent renders an
+    // app from the tool RESULT (render_app / run_tool), so an assigned UI tool
+    // must NOT be advertised — the list stays meta + always-exposed set.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "bug-tracker",
+    });
+    const uiTool = await makeTool({
+      catalogId: catalog.id,
+      name: "bug_tracker__open",
+      parameters: { type: "object", properties: {} },
+      meta: {
+        _meta: { ui: { resourceUri: "ui://archestra-app/bug-tracker" } },
+      },
+    });
+    await makeAgentTool(agent.id, uiTool.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+    // The assigned UI tool is reachable via search_tools/run_tool, not advertised.
+    expect(names.has("bug_tracker__open")).toBe(false);
+    // The meta tools stay — the model reaches the UI tool through them.
+    expect(names.has("archestra__search_tools")).toBe(true);
+    expect(names.has("archestra__run_tool")).toBe(true);
+  });
+
+  // The realistic auto-mode matrix, both surfaces, for a DYNAMICALLY-reached
+  // (unassigned, accessAllTools) UI tool in search_and_run_only: the gateway
+  // advertises it (its client renders from the definition), the chat does not.
+  for (const surface of [
+    { agentType: "agent" as const, advertised: false },
+    { agentType: "mcp_gateway" as const, advertised: true },
+  ]) {
+    test(`${surface.agentType} ${surface.advertised ? "advertises" : "does NOT advertise"} a dynamically-reached UI tool in search_and_run_only`, async ({
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeOrganization,
+      makeTool,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        agentType: surface.agentType,
+        accessAllTools: true,
+        toolExposureMode: "search_and_run_only",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "bug-tracker",
+        serverType: "remote",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      // Not assigned — reached only through accessAllTools dynamic access.
+      await makeTool({
+        catalogId: catalog.id,
+        name: "bug_tracker__open",
+        parameters: { type: "object", properties: {} },
+        meta: {
+          _meta: { ui: { resourceUri: "ui://archestra-app/bug-tracker" } },
+        },
+      });
+
+      const { server } = await createAgentServer(agent.id, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      });
+      const listToolsHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestListToolsHandler>;
+        }
+      )._requestHandlers.get("tools/list");
+      if (!listToolsHandler) {
+        throw new Error("Expected tools/list handler to be registered");
+      }
+      const response = await listToolsHandler({
+        method: "tools/list",
+        params: {},
+      });
+      const names = new Set(response.tools.map((tool) => tool.name));
+      expect(names.has("bug_tracker__open")).toBe(surface.advertised);
+    });
+  }
+
   test("Auto-tool mode: an excluded unassigned UI tool is not advertised in tools/list", async ({
     makeAgent,
     makeInternalMcpCatalog,
@@ -1647,10 +1776,13 @@ describe("createAgentServer tools/list", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // accessAllTools reaches unassigned UI tools dynamically (dynamicUiTools).
+    // A gateway (external) surface: accessAllTools reaches unassigned UI tools
+    // dynamically, and owned-app launch tools stay advertised there — unlike
+    // the internal chat, which opens owned apps via render_app.
     const agent = await makeAgent({
       organizationId: org.id,
       accessAllTools: true,
+      agentType: "mcp_gateway",
     });
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
@@ -1709,6 +1841,248 @@ describe("createAgentServer tools/list", () => {
     expect(names.has("bug_tracker__open_shown")).toBe(true);
     // ...but the excluded one must not be advertised.
     expect(names.has("bug_tracker__open_excluded")).toBe(false);
+  });
+
+  test("chat agent does not advertise an owned-app launch tool reached via dynamic access", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // agentType "agent" is the internal chat surface, which opens owned apps
+    // via render_app, so their launch tools must not bloat its list.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+      agentType: "agent",
+    });
+    const appCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "get-time",
+      serverType: "app",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
+    // Unassigned owned-app launch tool — reachable only through dynamic access.
+    await makeTool({
+      catalogId: appCatalog.id,
+      name: "get_time__open",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://archestra-app/get-time" } } },
+    });
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+    // Not advertised — a chat agent opens owned apps via render_app.
+    expect(names.has("get_time__open")).toBe(false);
+  });
+
+  test("external UI-providing tool is dropped in chat but kept on the gateway", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // An external (serverType remote) UI-providing tool, reachable only via
+    // dynamic access — not assigned to any agent.
+    const extCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "maps",
+      serverType: "remote",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: extCatalog.id, scope: "org" });
+    await makeTool({
+      catalogId: extCatalog.id,
+      name: "maps__show",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://maps/show" } } },
+    });
+
+    const listNames = async (agentType: "agent" | "mcp_gateway") => {
+      const agent = await makeAgent({
+        organizationId: org.id,
+        accessAllTools: true,
+        agentType,
+      });
+      const { server } = await createAgentServer(agent.id, {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestListToolsHandler>;
+        }
+      )._requestHandlers.get("tools/list");
+      if (!handler)
+        throw new Error("Expected tools/list handler to be registered");
+      const response = await handler({ method: "tools/list", params: {} });
+      return new Set(response.tools.map((tool) => tool.name));
+    };
+
+    // Chat resolves any UI tool's ui:// resource from its own catalog when the
+    // model invokes it (run_tool), so it need not advertise the dynamic UI tool.
+    expect((await listNames("agent")).has("maps__show")).toBe(false);
+    // An external MCP client on the gateway discovers UI-providing tools only
+    // from tools/list, so the gateway must keep advertising it.
+    expect((await listNames("mcp_gateway")).has("maps__show")).toBe(true);
+  });
+
+  test("chat agent in search_and_run_only does NOT advertise an assigned owned-app launch tool", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // accessAllTools forces search_and_run_only. Assignment does not change the
+    // chat rule: a UI tool is opened via render_app/run_tool from the result, so
+    // even an explicitly-assigned launch tool is not advertised here.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+      agentType: "agent",
+    });
+    const appCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "todo",
+      serverType: "app",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
+    const openTool = await makeTool({
+      catalogId: appCatalog.id,
+      name: "todo__open",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://archestra-app/todo" } } },
+    });
+    await makeAgentTool(agent.id, openTool.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+    expect(names.has("todo__open")).toBe(false);
+  });
+
+  test("chat agent in full mode DOES advertise an assigned owned-app launch tool", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    // The other half of the chat matrix: in full mode (custom tool selection,
+    // accessAllTools off) every assigned tool is advertised, a UI tool included;
+    // the search_and_run_only compaction does not apply here.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: false,
+      toolExposureMode: "full",
+      agentType: "agent",
+    });
+    const appCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "todo",
+      serverType: "app",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: appCatalog.id, scope: "org" });
+    const openTool = await makeTool({
+      catalogId: appCatalog.id,
+      name: "todo__open",
+      parameters: { type: "object", properties: {} },
+      meta: { _meta: { ui: { resourceUri: "ui://archestra-app/todo" } } },
+    });
+    await makeAgentTool(agent.id, openTool.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+    expect(names.has("todo__open")).toBe(true);
   });
 
   test("full mode lists a UI-providing tool with its resource", async ({

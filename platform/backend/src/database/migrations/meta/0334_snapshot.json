@@ -1,5 +1,5 @@
 {
-  "id": "13127937-11fe-4917-a909-b5a7dd6165f7",
+  "id": "ff489338-2740-44de-8d6a-ab29cf6d06bd",
   "prevId": "1c94e0a0-5234-42e8-8690-52a0efcbc8c7",
   "version": "7",
   "dialect": "postgresql",
@@ -4177,6 +4177,31 @@
           "primaryKey": false,
           "notNull": false
         },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_epoch": {
+          "name": "lease_epoch",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "heartbeat_at": {
+          "name": "heartbeat_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -4197,6 +4222,38 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connector_runs_one_running_per_connector_idx": {
+          "name": "connector_runs_one_running_per_connector_idx",
+          "columns": [
+            {
+              "expression": "connector_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status = 'running'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connector_runs_lease_expires_at_idx": {
+          "name": "connector_runs_lease_expires_at_idx",
+          "columns": [
+            {
+              "expression": "lease_expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "status = 'running'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -14214,6 +14271,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "tasks_batch_embedding_connector_run_idx": {
+          "name": "tasks_batch_embedding_connector_run_idx",
+          "columns": [
+            {
+              "expression": "(\"payload\" ->> 'connectorRunId')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"tasks\".\"task_type\" = 'batch_embedding' AND \"tasks\".\"status\" IN ('pending', 'processing')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -14938,12 +15011,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "raw_name": {
-          "name": "raw_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "parameters": {
           "name": "parameters",

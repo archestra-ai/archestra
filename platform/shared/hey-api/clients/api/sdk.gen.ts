@@ -5307,7 +5307,7 @@ export const testEmbeddingConnection = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * None (no additional RBAC permission required)
+ * `organizationSettings:update`: Customize organization appearance, authentication, etc
  */
 export const completeOnboarding = <ThrowOnError extends boolean = false>(options: Options<CompleteOnboardingData, ThrowOnError>) => (options.client ?? client).post<CompleteOnboardingResponses, CompleteOnboardingErrors, ThrowOnError>({
     url: '/api/organization/complete-onboarding',

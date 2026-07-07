@@ -6,10 +6,6 @@ description: Build a custom OAuth app that calls the OpenAI-compatible Model Rou
 lastUpdated: 2026-05-04
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 ## Overview
 
 This example shows a custom web application using OAuth authorization code with PKCE to call the OpenAI-compatible Model Router as the signed-in Archestra user.

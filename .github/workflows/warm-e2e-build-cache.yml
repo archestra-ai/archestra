@@ -1,0 +1,79 @@
+name: Warm E2E Build Cache
+
+# The platform image build swings ~85s (warm) to ~226s (cold) purely on how hot
+# the BuildKit layer cache is. Merge-queue entries run on ephemeral
+# gh-readonly-queue/* refs and land on whichever Blacksmith runner is free, so
+# they routinely hit a cold/evicted layer cache and pay the full ~226s on the
+# merge-queue critical path (the build gates every e2e shard).
+#
+# This job rebuilds the platform image from main on a schedule so the EXPENSIVE,
+# rarely-changing base layers — the go-builder toolchain, `pnpm install`
+# node_modules, the dagger-engine assets — stay hot in the Blacksmith layer
+# cache and the Turborepo remote cache. Even when a queue entry changes app
+# source, only the cheap top layers rebuild; the heavy base is reused. That is
+# the difference between the ~85s and ~226s paths.
+#
+# It deliberately does NOT push (push: false, load: false): the only product is a
+# warm cache, not an image. It runs on the same runner class as the real build
+# (blacksmith-16vcpu-ubuntu-2404) so it shares that pool's sticky-disk cache.
+#
+# Mirrors the trigger shape of warm-e2e-image-caches.yml: daily before European
+# hours, plus an immediate re-warm on push to main when a base-layer input
+# changes (Dockerfile, lockfile, or the build actions themselves).
+
+on:
+  schedule:
+    # Daily, before European working hours; staggered a little ahead of the
+    # tarball warmer (17 4 * * *) so both are hot by the morning queue.
+    - cron: "39 3 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      # Base-layer-defining inputs. A change to any of these invalidates the
+      # heavy cached layers, so re-warm immediately rather than waiting for the
+      # next scheduled run.
+      - "platform/Dockerfile"
+      - "platform/pnpm-lock.yaml"
+      - ".github/actions/build-docker-image/action.yml"
+      - ".github/actions/blacksmith-build-push/action.yml"
+      - ".github/actions/setup-blacksmith-builder/action.yml"
+      - ".github/workflows/warm-e2e-build-cache.yml"
+
+permissions: {}
+
+concurrency:
+  group: warm-e2e-build-cache
+  cancel-in-progress: false
+
+jobs:
+  warm-build-cache:
+    name: Warm E2E Build Cache
+    # Same runner class as platform-e2e-tests.yml's Build Platform Image leg so
+    # this warms the layer cache on the pool the merge queue actually builds on.
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: read # Checkout only. No id-token: this build never pushes.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # Same action, context, and cache credentials as the real merge-queue
+      # build (platform-e2e-tests.yml), but push: false / load: false — the run
+      # exists solely to populate the BuildKit layer cache and Turborepo remote
+      # cache. provenance: false matches the e2e build so the cached layers line
+      # up byte-for-byte with what the queue produces.
+      - name: Warm platform image build cache
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
+          push: "false"
+          load: "false"
+          provenance: "false"
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

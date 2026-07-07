@@ -13,11 +13,10 @@ export async function parsePdfBuffer(buffer: Buffer): Promise<string> {
   try {
     const result = await pdfParse(buffer);
     return result.text;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("No password") || msg.includes("password")) {
-      return "";
-    }
-    throw err;
+  } catch {
+    // A PDF we cannot parse (password-protected, malformed/corrupt structure, or
+    // truncated) has no extractable text. Return empty so the caller skips it,
+    // rather than surfacing a hard per-item error for an unreadable source file.
+    return "";
   }
 }

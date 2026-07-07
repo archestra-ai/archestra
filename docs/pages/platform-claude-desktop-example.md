@@ -7,8 +7,6 @@ lastUpdated: 2026-07-03
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Walkthrough for the /connection_beta?clientId=claude-desktop flow: connecting
 Anthropic's Claude Desktop (Cowork) to Archestra with a single downloadable
 configuration profile. Cover:
@@ -76,4 +74,4 @@ Claude Desktop opens Archestra's consent screen in your browser; sign in and cli
 
 ## Done
 
-You can now leverage Archestra MCP orchestrator, guardrails and observability, all while enjoying your Claude Desktop app.
+Claude Desktop's inference and tools now run through Archestra, with its guardrails and observability.

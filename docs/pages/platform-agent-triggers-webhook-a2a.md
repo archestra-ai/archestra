@@ -1,13 +1,9 @@
 ---
 title: Webhook (A2A)
 category: Agents
-order: 7
+order: 9
 description: Invoke agents over HTTP using the A2A protocol
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent URL. The endpoint follows the [A2A (Agent-to-Agent) 1.0 protocol](https://a2a-protocol.org/) for interoperability with other A2A-compatible callers.
 
@@ -132,7 +128,7 @@ curl -X POST https://archestra.example.com/v2/a2a/<agentId> \
 
 ## Approvals
 
-When an agent's tool call hits a [tool invocation policy](/docs/platform-guardrails-toolpolicies) requiring approval, the response is a `task`, not a `message`:
+When an agent's tool call hits a [tool invocation policy](/docs/platform-ai-tool-guardrails) requiring approval, the response is a `task`, not a `message`:
 
 ```json
 {
@@ -175,7 +171,7 @@ To approve (or reject), send a follow-up `SendMessage` with `taskId`, `contextId
 }
 ```
 
-Approvals also work through Slack/Teams [ChatOps](/docs/platform-chatops). The same flow handles multi-request and multi-turn approvals.
+Approvals also work through [Slack](/docs/platform-slack) and [MS Teams](/docs/platform-ms-teams). The same flow handles multi-request and multi-turn approvals.
 
 ## GetTask
 

@@ -85,6 +85,18 @@ describe("onboarding-wizards-editor utils", () => {
       ).toEqual({ pages: "Add at least one page with content." });
     });
 
+    it("accepts a wizard whose only page is image-only", () => {
+      expect(
+        validateOnboardingWizard(
+          {
+            label: "Setup",
+            pages: [{ content: " ", image: "data:image/png;base64,AAA" }],
+          },
+          { requireComplete: true },
+        ),
+      ).toEqual({});
+    });
+
     it("rejects more than 10 pages", () => {
       expect(
         validateOnboardingWizard({

@@ -441,14 +441,22 @@ runs:
           MCP_SET_FLAG="--set archestra.env.ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE_TAG}"
         fi
 
+        # No --wait/--atomic here. `helm --wait` blocks until ALL chart workloads
+        # are Ready, which on this fresh install includes the 2 background-worker
+        # replicas the sharded e2e suite never gates on (workers only process KB
+        # sync / embeddings / scheduled tasks, none exercised at setup time). The
+        # correctness anchor is the web Deployment's own readiness — waited on
+        # explicitly in the next step — so waiting on workers here is dead weight
+        # on the merge-queue critical path. Losing --atomic's auto-rollback is
+        # fine on a throwaway Kind cluster: a failed deploy fails the job and the
+        # "Show logs on failure" step dumps diagnostics.
         echo "Deploying Archestra Platform..."
         helm install archestra-platform "${CHART_REF}" \
           ${VERSION_FLAG} \
           --values "${HELM_VALUES_PATH}" \
           --set "archestra.image=${PLATFORM_IMAGE_TAG}" \
           ${MCP_SET_FLAG} \
-          ${EXTRA_SET_FLAGS} \
-          --atomic --timeout=15m
+          ${EXTRA_SET_FLAGS}
 
         # Wait for e2e-tests to complete (should already be done by now)
         if [ -n "${E2E_PID}" ]; then
@@ -480,13 +488,34 @@ runs:
           kubectl logs -l app=vault --previous --tail=200 || true
         }
 
-        echo "Waiting for platform pods to be ready..."
-        kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=archestra-platform --timeout=90s
-        echo "Platform pods are ready"
+        # Correctness anchor for the platform now that helm no longer --waits:
+        # wait on the WEB Deployment's Available condition. The selector
+        # app.kubernetes.io/name=archestra-platform exact-matches only the web
+        # Deployment (the worker carries ...=archestra-platform-worker), and
+        # Available ⟹ the web pod is Ready ⟹ Postgres reachable + pgvector created
+        # + migrations applied (the /ready probe gates on DB health, and
+        # drizzle-kit migrate runs before the backend listens). The Deployment
+        # object exists as soon as `helm install` returns, so there is no
+        # zero-resource race. 900s matches the prior --timeout budget; web
+        # readiness is the slowest step (Postgres boot + init containers +
+        # migrations), and workers are intentionally not waited on.
+        echo "Waiting for the platform (web) deployment to become Available..."
+        kubectl wait --for=condition=Available deployment -l app.kubernetes.io/name=archestra-platform --timeout=900s
+        echo "Platform web deployment is Available"
 
+        # These curls are the real readiness gate for the HTTP surfaces. The
+        # deployment's Available condition reflects the backend /ready probe (port
+        # 9000); the frontend (port 3000) is served by the same pod but binds a
+        # few seconds LATER, so right after Available it can reset the connection
+        # ("curl: (56) Recv failure: Connection reset by peer") until it is
+        # serving. Previously `helm --wait` blocking on the worker pods gave the
+        # frontend incidental slack to come up before this check; now that we
+        # don't wait on workers, wait explicitly here instead. --retry-all-errors
+        # is required: --retry-connrefused does NOT cover a connection reset, so
+        # the old 5x/1s budget failed on the first attempt.
         echo "Verifying services are accessible..."
-        curl --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:3000/ || (echo "Frontend not accessible" && exit 1)
-        curl --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:9000/health || (echo "Backend not accessible" && exit 1)
+        curl --retry 30 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:3000/ || (echo "Frontend not accessible" && exit 1)
+        curl --retry 30 --retry-delay 2 --retry-all-errors --retry-connrefused http://127.0.0.1:9000/health || (echo "Backend not accessible" && exit 1)
         echo "Platform services are ready"
 
         if [ "$DEPLOY_E2E_DEPS" = "true" ]; then

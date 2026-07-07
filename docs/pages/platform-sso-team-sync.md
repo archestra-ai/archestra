@@ -8,8 +8,6 @@ lastUpdated: 2026-05-05
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Provider-agnostic page covering team synchronization for any OIDC or SAML SSO
 provider. Linked from per-provider pages (Entra, Okta, etc.) and from the parent
 Identity Providers index.

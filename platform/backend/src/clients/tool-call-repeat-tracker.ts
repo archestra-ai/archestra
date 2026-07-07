@@ -65,13 +65,6 @@ export class ToolCallRepeatTracker {
    * fast nudge — only a consecutive identical repeat of the exact failing call.
    */
   private lastErroredFingerprint: string | null = null;
-  /**
-   * Per-run tally of validation-error classes (see
-   * {@link noteValidationErrorClass}), independent of the consecutive
-   * fingerprint streak above: args may differ and occurrences may be
-   * non-consecutive. Never reset within a run.
-   */
-  private validationErrorClassCounts = new Map<string, number>();
 
   /**
    * Records one tool call. Increments the consecutive count when the call
@@ -114,20 +107,6 @@ export class ToolCallRepeatTracker {
     args: Record<string, unknown> | undefined,
   ): void {
     this.lastErroredFingerprint = this.fingerprint(toolName, args);
-  }
-
-  /**
-   * Records one occurrence of a validation-error class — an opaque key for
-   * "the same tool failed schema validation the same way" (tool + issue
-   * code/path set), regardless of the concrete argument values — and returns
-   * the class's new per-run total. Lets the tool layer escalate a model that
-   * keeps re-guessing one schema with different args, which the
-   * consecutive-identical breaker above can never see.
-   */
-  noteValidationErrorClass(classKey: string): number {
-    const count = (this.validationErrorClassCounts.get(classKey) ?? 0) + 1;
-    this.validationErrorClassCounts.set(classKey, count);
-    return count;
   }
 
   private fingerprint(

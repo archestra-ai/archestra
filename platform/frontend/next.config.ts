@@ -88,6 +88,15 @@ const nextConfig: NextConfig = {
         destination: "/llm/models",
         permanent: true,
       },
+      // The external app standalone surface moved under the chrome-less /a
+      // namespace (next to the owned /a/[appId]). Run links are meant to be
+      // shared (mcp-apps.md FR-31), so the old URL keeps working; the
+      // install/resource query params pass through automatically.
+      {
+        source: "/apps/catalog/:catalogId/run",
+        destination: "/a/catalog/:catalogId",
+        permanent: true,
+      },
     ];
   },
   async rewrites() {

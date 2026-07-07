@@ -14,11 +14,19 @@ const resolution = {
       resourceUri: "ui://pm/backlog.html",
       toolName: "show_backlog",
       name: "Archestra PM / show_backlog",
+      requiresInput: false,
     },
     {
       resourceUri: "ui://pm/board.html",
       toolName: "show_board",
       name: "Archestra PM / show_board",
+      requiresInput: false,
+    },
+    {
+      resourceUri: "ui://pm/task.html",
+      toolName: "show_task",
+      name: "Archestra PM / show_task",
+      requiresInput: true,
     },
   ],
   defaultMcpServerId: "srv-1",
@@ -39,6 +47,7 @@ vi.mock("next/navigation");
 
 vi.mock("@/lib/app.query", () => ({
   useExternalApp: () => ({ data: resolution, isPending: false }),
+  useOpenExternalAppInChat: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("@/components/mcp-app/app-frame", () => ({
@@ -84,5 +93,19 @@ describe("CatalogAppRunPage", () => {
       "data-resource",
       "ui://pm/backlog.html",
     );
+  });
+
+  it("offers an open-in-chat handoff instead of a bare render when the tool needs inputs", () => {
+    searchString = "resource=ui://pm/task.html";
+    render(<CatalogAppRunPage catalogId="cat-1" />);
+
+    // A deep link to a prompt-mode app must not mount a broken app.
+    expect(screen.queryByTestId("app-frame")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/needs a few inputs before it can render/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /open in chat/i }),
+    ).toBeInTheDocument();
   });
 });

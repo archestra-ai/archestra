@@ -54439,6 +54439,9 @@
                               "icon": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "requiresInput": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -54452,7 +54455,8 @@
                               "mcpServerId",
                               "scope",
                               "resourceUri",
-                              "icon"
+                              "icon",
+                              "requiresInput"
                             ],
                             "additionalProperties": false
                           }
@@ -55253,12 +55257,16 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "requiresInput": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "resourceUri",
                           "toolName",
-                          "name"
+                          "name",
+                          "requiresInput"
                         ],
                         "additionalProperties": false
                       }

@@ -129,6 +129,58 @@ describe("GET /api/apps", () => {
       cspOrigin: "author-declared",
       // The catalog's registry icon rides along so the card can show it.
       icon: "🕒",
+      // No required inputs → runnable standalone.
+      requiresInput: false,
+    });
+  });
+
+  test("flags external apps whose tool has required inputs (requiresInput)", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      parameters: {
+        type: "object",
+        properties: { boardId: { type: "string" } },
+        required: ["boardId"],
+      },
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      parameters: {
+        type: "object",
+        properties: { boardId: { type: "string" } },
+      },
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0",
+    });
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const byResource = (uri: string) =>
+      items.find((i) => i.source === "external" && i.resourceUri === uri);
+    // Required inputs → prompt-mode only, no standalone render.
+    expect(byResource("ui://pm/board.html")).toMatchObject({
+      requiresInput: true,
+    });
+    // Optional-only inputs render fine with `{}`.
+    expect(byResource("ui://pm/backlog.html")).toMatchObject({
+      requiresInput: false,
     });
   });
 

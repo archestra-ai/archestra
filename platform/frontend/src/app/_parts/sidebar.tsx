@@ -132,6 +132,7 @@ const chatsNavItems: NavItem[] = [
     customIsActive: (pathname: string) => pathname.startsWith("/connection"),
     beta: true,
     dotKey: "nav:connect",
+    badgeLabel: "Beta",
   },
 ];
 
@@ -680,19 +681,7 @@ export function AppSidebar() {
     [showConnect, betaEnabled],
   );
 
-  // With ARCHESTRA_BETA on, some nav items point at their beta routes.
-  const filteredNavGroups = React.useMemo(() => {
-    const betaNavUrls: Record<string, string> = {
-      "MCP Registry": "/mcp/registry/beta",
-    };
-    return contentNavGroups.map((group) => ({
-      ...group,
-      items: group.items.map((item) => {
-        const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
-        return betaUrl ? { ...item, url: betaUrl } : item;
-      }),
-    }));
-  }, [betaEnabled]);
+  const filteredNavGroups = contentNavGroups;
 
   return (
     <Sidebar collapsible="icon">

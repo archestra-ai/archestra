@@ -24,7 +24,7 @@ export const DOTTED_NAV_ITEMS: DottedNavItem[] = [
   {
     key: "nav:connect",
     mode: "chats",
-    urlPrefixes: ["/connection", "/connection_beta"],
+    urlPrefixes: ["/connection"],
   },
   {
     key: "nav:model-providers",

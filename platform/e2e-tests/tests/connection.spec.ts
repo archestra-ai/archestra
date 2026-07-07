@@ -3,18 +3,18 @@ import { API_BASE_URL } from "../consts";
 import { test } from "../fixtures";
 
 /**
- * /connection_beta — the new step-by-step wizard for script-capable clients
+ * /connection — the new step-by-step wizard for script-capable clients
  * (Claude Code / Codex / Copilot CLI / Cursor) and the manual flow for n8n.
  * The command auto-generates — there is no generate button.
  */
-test.describe("connection_beta wizard", () => {
+test.describe("connection wizard", () => {
   test("the wizard auto-generates a one-time curl|bash command", async ({
     page,
     goToPage,
   }) => {
     // no clientId: the wizard preselects the first visible client and the
     // command appears without any clicks
-    await goToPage(page, "/connection_beta");
+    await goToPage(page, "/connection");
 
     const command = page.getByText(/curl -fsSL '.*\/api\/connection-setups\//);
     await expect(command).toBeVisible();
@@ -51,7 +51,7 @@ test.describe("connection_beta wizard", () => {
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/connection_beta?clientId=claude-code");
+    await goToPage(page, "/connection?clientId=claude-code");
 
     // claude-code supports two providers — rendered as flat tabs on the block
     await expect(page.getByRole("button", { name: "Anthropic" })).toBeVisible();
@@ -75,7 +75,7 @@ test.describe("connection_beta wizard", () => {
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/connection_beta?clientId=claude-code");
+    await goToPage(page, "/connection?clientId=claude-code");
 
     // defaults to a curl|bash command (macOS/Linux)
     await expect(
@@ -112,7 +112,7 @@ test.describe("connection_beta wizard", () => {
   }) => {
     // passthrough (provider key) is the default for claude-code + Anthropic; the
     // admin fixture user can mint a passthrough key, so attribution is on.
-    await goToPage(page, "/connection_beta?clientId=claude-code");
+    await goToPage(page, "/connection?clientId=claude-code");
 
     const command = page.getByText(/curl -fsSL '.*\/api\/connection-setups\//);
     await expect(command).toBeVisible();
@@ -135,7 +135,7 @@ test.describe("connection_beta wizard", () => {
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/connection_beta");
+    await goToPage(page, "/connection");
 
     // the fixture user is an admin, so the settings entry point is visible
     await page.getByTestId("connect-page-settings").click();
@@ -146,7 +146,7 @@ test.describe("connection_beta wizard", () => {
   });
 
   test("n8n keeps the manual step-by-step flow", async ({ page, goToPage }) => {
-    await goToPage(page, "/connection_beta?clientId=n8n");
+    await goToPage(page, "/connection?clientId=n8n");
 
     // manual flow: step-by-step instructions remain, no auto-generated command
     await expect(

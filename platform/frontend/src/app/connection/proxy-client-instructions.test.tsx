@@ -45,7 +45,7 @@ beforeEach(() => {
       typeof useSearchParams
     >,
   );
-  vi.mocked(usePathname).mockReturnValue("/connection_beta");
+  vi.mocked(usePathname).mockReturnValue("/connection");
   vi.mocked(useRouter).mockReturnValue({
     replace: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);

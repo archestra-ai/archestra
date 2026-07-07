@@ -7,7 +7,7 @@ lastUpdated: 2026-07-03
 ---
 
 <!--
-Walkthrough for the /connection_beta?clientId=claude-desktop flow: connecting
+Walkthrough for the /connection?clientId=claude-desktop flow: connecting
 Anthropic's Claude Desktop (Cowork) to Archestra with a single downloadable
 configuration profile. Cover:
 - What the profile wires up: inference through an LLM proxy + tools through an

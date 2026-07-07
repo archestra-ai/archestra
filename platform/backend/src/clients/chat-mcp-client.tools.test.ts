@@ -88,14 +88,25 @@ const buildMockGatewayClient = (
   } as unknown as Client;
 };
 
-const externalTool = (name: string, description = "") => ({
+const externalTool = (
+  name: string,
+  description = "",
+  meta?: Record<string, unknown>,
+) => ({
   name,
   description,
   inputSchema: {
     type: "object",
     properties: { query: { type: "string" } },
   },
+  ...(meta ? { _meta: meta } : {}),
 });
+
+// A UI-providing launch tool as the gateway lists it: the `_meta.ui.resourceUri`
+// it carries top-level (mcp-gateway.utils.ts sets `_meta` on every listed tool)
+// is what marks it directly dispatchable while unassigned.
+const uiLaunchTool = (name: string) =>
+  externalTool(name, "", { ui: { resourceUri: `ui://app/${name}` } });
 
 interface Fixtures {
   makeOrganization: (
@@ -125,6 +136,12 @@ interface Fixtures {
     toolId: string,
     overrides: Record<string, unknown>,
   ) => Promise<unknown>;
+  makeApp: (
+    overrides?: Record<string, unknown>,
+  ) => Promise<{ id: string; name: string }>;
+  makeMcpServer: (
+    overrides?: Record<string, unknown>,
+  ) => Promise<{ id: string }>;
   seedAndAssignArchestraTools: (agentId: string) => Promise<void>;
 }
 
@@ -147,6 +164,8 @@ beforeEach(
     makeInternalMcpCatalog,
     makeTool,
     makeToolPolicy,
+    makeApp,
+    makeMcpServer,
     seedAndAssignArchestraTools,
   }) => {
     f = {
@@ -159,6 +178,8 @@ beforeEach(
       makeInternalMcpCatalog,
       makeTool,
       makeToolPolicy,
+      makeApp,
+      makeMcpServer,
       seedAndAssignArchestraTools,
     };
     vi.restoreAllMocks();
@@ -486,6 +507,104 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
 
     expect(toolResultContent(result)).toContain("external result");
     expect(toolResultContent(result)).toContain("[hook feedback] be careful");
+  });
+});
+
+describe("getChatMcpTools dynamic UI tool dispatch (all-tools agents)", () => {
+  async function setupAllToolsAgent() {
+    const org = await f.makeOrganization();
+    const user = await f.makeUser();
+    await f.makeMember(user.id, org.id, { role: "admin" });
+    const agent = await f.makeAgent({
+      organizationId: org.id,
+      name: "All Tools Agent",
+      accessAllTools: true,
+    });
+    const conversation = await f.makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+    cleanupAgentIds.push(agent.id);
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as never);
+    const wireGateway = (gatewayTools: Array<Record<string, unknown>>) =>
+      chatClient.__test.setCachedClient(
+        chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
+        buildMockGatewayClient(gatewayTools),
+      );
+    return {
+      org,
+      user,
+      agent,
+      wireGateway,
+      baseParams: {
+        agentName: agent.name,
+        agentId: agent.id,
+        userId: user.id,
+        organizationId: org.id,
+        conversationId: conversation.id,
+      },
+    };
+  }
+
+  const lastAvailableTool = () => {
+    const calls = vi.mocked(mcpClient.executeToolCallForOwner).mock.calls;
+    const options = calls.at(-1)?.[3] as
+      | { availableTool?: { name: string } }
+      | undefined;
+    return options?.availableTool;
+  };
+
+  test("passes a resolved availableTool for a direct call to an unassigned owned-app launch tool", async () => {
+    const { org, user, wireGateway, baseParams } = await setupAllToolsAgent();
+    // The owned app's __open launch tool is advertised top-level (a UI host
+    // renders from the definition) but has no agent_tools row for this agent.
+    await f.makeApp({ organizationId: org.id, authorId: user.id });
+    const [launchTool] = await ToolModel.getMcpToolsAccessibleToUser({
+      userId: user.id,
+      organizationId: org.id,
+      isAdmin: true,
+      environmentId: null,
+      requireUiResource: true,
+    });
+    expect(launchTool?.name).toBeDefined();
+
+    wireGateway([uiLaunchTool(launchTool.name)]);
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools[launchTool.name].execute?.({}, execOptions("call-open"));
+
+    // Without the pre-resolution the dispatch layer rejects the unassigned tool
+    // as unknown_tool; with it the launch tool is handed through as availableTool.
+    expect(lastAvailableTool()?.name).toBe(launchTool.name);
+  });
+
+  test("does not pass availableTool for a direct call to an unassigned NON-UI tool", async () => {
+    // Security guard: only UI-providing tools are advertised top-level, so only
+    // they become directly callable. A plain accessible-but-unassigned tool must
+    // stay behind search_tools/run_tool — resolving it here would make every
+    // hidden tool name directly executable.
+    const { org, user, wireGateway, baseParams } = await setupAllToolsAgent();
+    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
+    await f.makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+      ownerId: user.id,
+    });
+    await f.makeTool({
+      catalogId: catalog.id,
+      name: "plainsrv__do_thing",
+      parameters: { type: "object", properties: {} },
+    });
+
+    wireGateway([externalTool("plainsrv__do_thing")]);
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    await tools.plainsrv__do_thing.execute?.({}, execOptions("call-plain"));
+
+    expect(lastAvailableTool()).toBeUndefined();
   });
 });
 

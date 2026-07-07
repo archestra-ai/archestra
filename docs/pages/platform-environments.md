@@ -3,12 +3,10 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-06-21
+lastUpdated: 2026-07-03
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)
 - Who can view vs. manage environments (environment:admin), Settings > Environments
@@ -59,7 +57,7 @@ This applies to both explicitly assigned tools/knowledge and the implicit "All t
 
 ## Network egress policies
 
-An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent code sandboxes for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+An environment can define a Kubernetes **namespace** and a **network egress policy**. Both MCP server pods and agent [code sandboxes](/docs/platform-code-sandbox) for that environment run in its namespace and inherit its egress policy, so their outbound network reach is contained. Policies can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When a workload runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
 
@@ -175,5 +173,5 @@ Cost limits and per-user default limits can be scoped to an environment. A limit
 - [Agents](/docs/platform-agents) — sandbox runtime, network egress, and visible tools/knowledge
 - [MCP Gateway](/docs/platform-mcp-gateway) — which tools and knowledge the gateway exposes
 - [LLM Proxy](/docs/platform-llm-proxy) — cost-limit attribution for inference
-- [Knowledge Connectors](/docs/platform-knowledge-connectors) — which environments can use the connector's knowledge
+- [Knowledge Connectors](/docs/platform-knowledge) — which environments can use the connector's knowledge
 - [Private Registry](/docs/platform-private-registry) — assigning MCP catalog entries to environments

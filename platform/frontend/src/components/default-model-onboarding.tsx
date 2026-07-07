@@ -95,12 +95,22 @@ function SetDefaultModelDialog({
     }
   }, [availableKeys, selectedApiKeyId]);
 
-  const { data: allModels, isPending: modelsLoading } = useLlmModels({
+  const {
+    data: allModels,
+    isPending: modelsLoading,
+    isPlaceholderData,
+  } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
 
+  // `useLlmModels` uses `keepPreviousData`, so right after a key switch `data`
+  // still holds the previous key's models (isPlaceholderData). Treat that as
+  // still-loading for the new key: otherwise the admin could pick a model that
+  // belongs to the old provider and save it against the new provider's key.
+  const modelsPending = modelsLoading || isPlaceholderData;
+
   const modelItems = useMemo(() => {
-    if (!allModels) return [];
+    if (!allModels || isPlaceholderData) return [];
     return allModels.map((model) => ({
       value: model.dbId,
       model: model.displayName ?? model.id,
@@ -109,7 +119,7 @@ function SetDefaultModelDialog({
       isFree: model.isFree,
       isBest: model.isBest,
     }));
-  }, [allModels]);
+  }, [allModels, isPlaceholderData]);
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -174,11 +184,11 @@ function SetDefaultModelDialog({
           placeholder={
             !selectedApiKeyId
               ? "Select API key first..."
-              : modelsLoading
+              : modelsPending
                 ? "Loading models..."
                 : "Select model..."
           }
-          disabled={isSaving || modelsLoading || !selectedApiKeyId}
+          disabled={isSaving || modelsPending || !selectedApiKeyId}
         />
       </DialogBody>
       <DialogStickyFooter>

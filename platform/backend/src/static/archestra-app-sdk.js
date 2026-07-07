@@ -276,7 +276,10 @@
    * unwraps it (see unwrapToolResult). Tool-level failures throw — apps
    * handle one error channel instead of checking isError:
    * - upstream MCP needs (re)auth → { code: "auth_required", url } so the app
-   *   can render a "Connect" link (the user authenticates in the registry UI);
+   *   can show the error message with the url as a clickable link that calls
+   *   archestra.ui.openLink(url) — the sandbox blocks popups, so a plain
+   *   target="_blank" link cannot open (the user authenticates in the
+   *   registry UI);
    * - any other tool error → { code: "tool_error" } with the error text.
    */
   const callTool = async (name, args) => {

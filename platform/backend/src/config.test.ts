@@ -1164,6 +1164,45 @@ describe("chat active run config", () => {
   });
 });
 
+describe("mcp gateway config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("defaults the tool call timeout to 60s", async () => {
+    delete process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
+  });
+
+  test("reads the tool call timeout from the env var", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS = "300000";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(300000);
+  });
+
+  test("falls back to the default for invalid values", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS = "-1";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
+  });
+});
+
 describe("getCorsOrigins", () => {
   const originalEnv = process.env;
 

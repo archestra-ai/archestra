@@ -40,6 +40,7 @@ export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as memberRoutes } from "./member";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
+export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";

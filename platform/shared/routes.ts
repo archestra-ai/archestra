@@ -12,6 +12,8 @@ export const RouteId = {
   RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
+  GetAgentToolExclusions: "getAgentToolExclusions",
+  UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 
@@ -80,6 +82,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
+  ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
@@ -138,6 +141,7 @@ export const RouteId = {
   DeleteRole: "deleteRole",
 
   // Tool Routes
+  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",
@@ -398,6 +402,13 @@ export const RouteId = {
   CreateDefaultUserLimit: "createDefaultUserLimit",
   UpdateDefaultUserLimit: "updateDefaultUserLimit",
   DeleteDefaultUserLimit: "deleteDefaultUserLimit",
+
+  // Onboarding Routes
+  GetOnboardingSeenNavItems: "getOnboardingSeenNavItems",
+  MarkOnboardingNavItemsSeen: "markOnboardingNavItemsSeen",
+  GetOnboardingSurveyEligibility: "getOnboardingSurveyEligibility",
+  SubmitOnboardingSurvey: "submitOnboardingSurvey",
+  GetFeedbackPopupActivation: "getFeedbackPopupActivation",
 
   // Organization Routes
   GetOrganization: "getOrganization",

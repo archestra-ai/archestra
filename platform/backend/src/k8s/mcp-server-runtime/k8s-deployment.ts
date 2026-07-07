@@ -1483,9 +1483,34 @@ export default class K8sDeployment {
   private getSystemLabels(): Record<string, string> {
     return sanitizeMetadataLabels({
       app: "mcp-server",
-      "mcp-server-id": this.mcpServer.id,
+      "mcp-server-id": this.getPodSelectorServerId(),
       "mcp-server-name": this.mcpServer.name,
     });
+  }
+
+  /**
+   * The identity stamped into the `mcp-server-id` pod label + selector (and the
+   * matching Service selector / pod lookups).
+   *
+   * Multitenant catalogs share ONE catalog-named Deployment + Service across
+   * every install (see {@link constructDeploymentName}, which keys the name on
+   * `catalogId` for multitenant). Keying the *selector* on the per-install
+   * `mcpServer.id` lets whichever install reconciles the shared resource last
+   * overwrite it, so the Deployment's pods and the Service's selector can end up
+   * bound to different installs — the Service then selects zero pods, has no
+   * Endpoints, and every connect/read fails ("Resource read failed").
+   *
+   * Use the catalog-stable id for multitenant so every install reconciles to the
+   * exact same selector. Single-tenant servers keep their per-install id (their
+   * Deployment/Service are not shared, so the name and selector are per-install).
+   * This uses the same condition as `constructDeploymentName`, so the selector is
+   * catalog-stable exactly when the resource is catalog-shared.
+   */
+  private getPodSelectorServerId(): string {
+    if (this.catalogItem?.multitenant && this.mcpServer.catalogId) {
+      return this.mcpServer.catalogId;
+    }
+    return this.mcpServer.id;
   }
 
   /**
@@ -1755,12 +1780,9 @@ export default class K8sDeployment {
       envValues,
     );
 
-    // System-managed labels that must always be present
-    const labels = sanitizeMetadataLabels({
-      app: "mcp-server",
-      "mcp-server-id": this.mcpServer.id,
-      "mcp-server-name": this.mcpServer.name,
-    });
+    // System-managed labels that must always be present (catalog-stable selector
+    // id for multitenant — see getPodSelectorServerId).
+    const labels = this.getSystemLabels();
 
     // Parse YAML and merge with system values
     const deployment = customYamlToDeployment(resolvedYaml, {
@@ -2295,6 +2317,35 @@ export default class K8sDeployment {
             namespace: this.namespace,
           });
 
+        // SELF-HEAL: a Deployment created before the catalog-stable selector fix
+        // (#6340) still labels its pods with the per-install `mcpServer.id`, while
+        // the shared Service's selector is now reconciled to the catalog-stable id
+        // (getPodSelectorServerId). For multitenant catalogs those differ, so the
+        // Service selects zero pods, has no Endpoints, and every connect/read fails
+        // with ECONNREFUSED ("fetch failed"). A Deployment's `spec.selector` is
+        // immutable, so the only way to realign the pod labels is delete+recreate.
+        const existingSelectorId =
+          existingDeployment.spec?.selector?.matchLabels?.["mcp-server-id"];
+        const desiredSelectorId = this.getSystemLabels()["mcp-server-id"];
+        if (existingSelectorId && existingSelectorId !== desiredSelectorId) {
+          logger.warn(
+            {
+              deploymentName: this.deploymentName,
+              existingSelectorId,
+              desiredSelectorId,
+            },
+            `Deployment ${this.deploymentName} has a stale mcp-server-id selector; ` +
+              "recreating it so its pod labels match the Service selector",
+          );
+          await this.k8sAppsApi.deleteNamespacedDeployment({
+            name: this.deploymentName,
+            namespace: this.namespace,
+          });
+          await this.waitForDeploymentAbsent();
+          // Recreate from scratch with the correct catalog-stable pod labels.
+          return this.startOrCreateDeployment(resolvedImagePullSecretNames);
+        }
+
         if (existingDeployment.status?.availableReplicas) {
           this.state = "running";
 
@@ -2431,7 +2482,7 @@ export default class K8sDeployment {
    */
   private async findPodForDeployment(): Promise<k8s.V1Pod | undefined> {
     try {
-      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -2477,7 +2528,7 @@ export default class K8sDeployment {
    */
   private async findAnyPodForDeployment(): Promise<k8s.V1Pod | undefined> {
     try {
-      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -2664,7 +2715,7 @@ export default class K8sDeployment {
     let transientImagePullMessage: string | null = null;
 
     try {
-      const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
+      const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
       const pods = await this.k8sApi.listNamespacedPod({
         namespace: this.namespace,
         labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -2795,17 +2846,16 @@ export default class K8sDeployment {
 
     // System-managed identity labels shared by the service metadata and its
     // pod selector. The service NAME is derived from the (stable) deployment
-    // name, but the selector targets `mcp-server-id`, which changes whenever
-    // the server record is recreated. A Deployment's selector is immutable, so
-    // on such a change the Deployment is deleted + recreated with the new id —
-    // but the like-named Service already exists. If we skipped it (the previous
-    // behaviour), the Service kept selecting the OLD id, matched zero pods, and
-    // was left with no endpoints, so every connect/read failed with a generic
-    // "Resource read failed". Reconcile an existing Service's selector/labels
-    // to the current id instead of skipping.
+    // name, but the selector targets `mcp-server-id`. For multitenant catalogs
+    // the Deployment + Service are shared across installs, so this uses the
+    // catalog-stable id (getPodSelectorServerId) — every install reconciles to
+    // the same selector, matching the Deployment's pod labels. It still changes
+    // on a genuine identity change, so an existing Service is reconciled here
+    // (not skipped): otherwise it kept selecting a stale id, matched zero pods,
+    // had no endpoints, and every connect/read failed ("Resource read failed").
     const identityLabels = sanitizeMetadataLabels({
       app: "mcp-server",
-      "mcp-server-id": this.mcpServer.id,
+      "mcp-server-id": this.getPodSelectorServerId(),
     });
 
     try {
@@ -2950,7 +3000,7 @@ export default class K8sDeployment {
         }
 
         // Check for failures in latest pods
-        const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
+        const sanitizedId = sanitizeLabelValue(this.getPodSelectorServerId());
         const pods = await this.k8sApi.listNamespacedPod({
           namespace: this.namespace,
           labelSelector: `mcp-server-id=${sanitizedId}`,
@@ -3048,6 +3098,35 @@ export default class K8sDeployment {
           ? ` (last image pull error: ${lastImagePullError})`
           : ""
       }`,
+    );
+  }
+
+  /**
+   * Poll until the Deployment is fully gone (404). Used before recreating a
+   * Deployment whose immutable selector drifted — creating the replacement while
+   * the old object is still terminating would 409 ("already exists"). Bounded so
+   * a stuck finalizer can't hang the reconcile forever.
+   */
+  private async waitForDeploymentAbsent(
+    maxAttempts = 30,
+    intervalMs = 1000,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        });
+      } catch (error: unknown) {
+        if (isK8sNotFoundError(error)) {
+          return;
+        }
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(
+      `Deployment ${this.deploymentName} was not deleted after ${maxAttempts} attempts`,
     );
   }
 

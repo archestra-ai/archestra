@@ -561,9 +561,12 @@ describe("search_tools", () => {
     }
   });
 
-  // Sandbox built-ins surface in search only while UNassigned (so the model can
-  // discover and run them dynamically), and only for callers who can actually
-  // run them. Seeded but not assigned here to exercise that path.
+  // Unassigned Archestra built-ins surface in search for All-mode agents (so
+  // the model can discover and run them dynamically); assigned always-exposed
+  // tools stay out (they are already top-level). Sandbox built-ins additionally
+  // require their feature flag, and every result is RBAC-filtered — so they
+  // only surface for callers who can actually run them (sandbox:execute).
+  // Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
     async function searchSandboxTools(
       context: ArchestraContext,
@@ -655,6 +658,62 @@ describe("search_tools", () => {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
       }
+    });
+  });
+
+  // The same discovery widening covers the management built-ins: unassigned,
+  // they surface for an All-mode agent and drop out when excluded per-agent.
+  describe("management built-in discovery", () => {
+    test("surfaces an unassigned management built-in for an All-mode agent and hides it when excluded", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const { agentToolExclusionsService } = await import(
+        "@/services/agent-tool-exclusions"
+      );
+      const { TOOL_LIST_AGENTS_FULL_NAME } = await import("@archestra/shared");
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Management Discovery Agent",
+        organizationId: org.id,
+        accessAllTools: true,
+      });
+      // seed the built-in rows, do NOT assign them
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const search = async () => {
+        const result = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "list agents", limit: 20 },
+          context,
+        );
+        expect(result.isError).toBe(false);
+        return (
+          result.structuredContent as SearchToolsStructuredContent
+        ).tools.map((tool) => tool.toolName);
+      };
+
+      expect(await search()).toContain(TOOL_LIST_AGENTS_FULL_NAME);
+
+      const listAgents = await ToolModel.findByName(TOOL_LIST_AGENTS_FULL_NAME);
+      if (!listAgents) throw new Error("list_agents row missing");
+      await agentToolExclusionsService.replaceExclusions({
+        agentId: agent.id,
+        organizationId: org.id,
+        excludedToolIds: [listAgents.id],
+      });
+
+      expect(await search()).not.toContain(TOOL_LIST_AGENTS_FULL_NAME);
     });
   });
 

@@ -1,5 +1,4 @@
 import {
-  DEFAULT_PROVIDER_BASE_URLS,
   hasArchestraTokenPrefix,
   LLM_PROXY_OAUTH_SCOPE,
   RouteId,
@@ -8,6 +7,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -549,9 +549,8 @@ function getModelRouterEmbeddingsProvider(
     return openAiEmbeddingsAdapterFactory;
   }
   if (provider in openAiWireProviders) {
-    return makeOpenAiCompatibleEmbeddingsAdapterFactory(
-      provider,
-      () => DEFAULT_PROVIDER_BASE_URLS[provider] || undefined,
+    return makeOpenAiCompatibleEmbeddingsAdapterFactory(provider, () =>
+      getProviderConfiguredBaseUrl(provider),
     );
   }
   throw new ApiError(

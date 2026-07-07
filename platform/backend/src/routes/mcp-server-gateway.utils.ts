@@ -20,11 +20,12 @@ type McpListTool = ListToolsResult["tools"][number];
  * Build the server-scoped MCP server backing the Apps run path
  * (`POST /api/mcp/server/:mcpServerId`). It serves one installed external
  * server's runtime — `tools/list` (from discovered tools), `resources/read`
- * (its `ui://` resource), and `tools/call` — all bound to the route's
- * `mcpServerId`, with no agent/owner context. The connection only ever talks to
- * this one installed server, so a `resources/read` can reach only this server's
- * own resources. Access (`mcpServerInstallation:read`) and the
- * `_meta.ui.visibility` model-only gate are enforced by the route before here.
+ * (restricted to `ui://` UI resources), and `tools/call` — all bound to the
+ * route's `mcpServerId`, with no agent/owner context. `resources/read` refuses
+ * any non-`ui://` URI so sandboxed app code cannot read the installed server's
+ * model-facing data resources through the install's own credentials. Access
+ * (`mcpServerInstallation:read`), the `_meta.ui.visibility` model-only tool
+ * gate, and tool-invocation policy are enforced by the route before here.
  */
 export function createServerScopedServer(params: {
   mcpServerId: string;
@@ -69,11 +70,20 @@ export function createServerScopedServer(params: {
 
   server.setRequestHandler(
     ReadResourceRequestSchema,
-    async ({ params: { uri } }) =>
-      (await mcpClient.readResourceForServer({
+    async ({ params: { uri } }) => {
+      // The app sandbox may read only `ui://` UI resources. A non-`ui://` URI is
+      // one of the installed server's model-facing data resources; proxying it
+      // here would let sandboxed app code exfiltrate it through the install's own
+      // credentials. Refuse rather than forward (mirrors the owned-app gateway,
+      // which serves only its own `ui://` resource).
+      if (!uri.startsWith("ui://")) {
+        throw { code: -32002, message: `Resource not found: ${uri}` };
+      }
+      return (await mcpClient.readResourceForServer({
         mcpServerId,
         uri,
-      })) as ReadResourceResult,
+      })) as ReadResourceResult;
+    },
   );
 
   server.setRequestHandler(

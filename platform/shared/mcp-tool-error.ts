@@ -74,6 +74,11 @@ export const PolicyDeniedMcpToolErrorSchema = z
     type: z.literal("policy_denied"),
     message: z.string(),
     toolName: z.string(),
+    // The id of the tool row the policy was actually evaluated against. Lets the
+    // chat "Edit policy" modal resolve the tool directly by id, which the
+    // assignment-based lookup cannot for All-mode tools that have no agent_tools
+    // row. Optional so denials persisted before this field still parse.
+    toolId: z.string().optional(),
     input: z.record(z.string(), z.unknown()),
     reason: z.string(),
     reasonType: PolicyDeniedReasonTypeSchema.optional(),
@@ -140,6 +145,7 @@ export function classifyPolicyDeniedReason(
  */
 export function buildPolicyDeniedMcpToolError(params: {
   toolName: string;
+  toolId?: string;
   input: Record<string, unknown>;
   reason: string;
   message: string;
@@ -148,6 +154,7 @@ export function buildPolicyDeniedMcpToolError(params: {
     type: "policy_denied",
     message: params.message,
     toolName: params.toolName,
+    toolId: params.toolId,
     input: params.input,
     reason: params.reason,
     reasonType: classifyPolicyDeniedReason(params.reason),

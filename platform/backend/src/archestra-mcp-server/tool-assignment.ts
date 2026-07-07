@@ -1,6 +1,7 @@
 import {
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
+  TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -9,8 +10,9 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import { AgentModel, TeamModel } from "@/models";
+import { AgentModel, AgentToolModel, TeamModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
 import {
   catchError,
@@ -53,9 +55,17 @@ const McpGatewayAssignmentSchema = AgentToolAssignmentInputSchema.extend({
   ),
 }).strict();
 
+const AgentRemovalSchema = z
+  .object({
+    agentId: UuidIdSchema.describe("The agent ID to remove the tool from."),
+    toolId: UuidIdSchema.describe("The ID of the tool to remove."),
+  })
+  .strict();
+
 type AgentAssignmentInput = z.infer<typeof AgentAssignmentSchema>;
 type McpGatewayAssignmentInput = z.infer<typeof McpGatewayAssignmentSchema>;
 type BulkAssignmentInput = AgentAssignmentInput | McpGatewayAssignmentInput;
+type AgentRemovalInput = z.infer<typeof AgentRemovalSchema>;
 
 const BulkAgentAssignmentResultSchema = z
   .object({
@@ -101,6 +111,30 @@ const BulkAssignAgentsOutputSchema = z.object({
     .describe("Assignments skipped because they already existed."),
 });
 
+const BulkAgentRemovalResultSchema = z
+  .object({
+    agentId: UuidIdSchema.describe("The target agent ID."),
+    toolId: UuidIdSchema.describe("The tool ID."),
+    error: z.string().optional().describe("Permission or removal error."),
+  })
+  .strict();
+
+const BulkRemoveAgentsOutputSchema = z.object({
+  succeeded: z
+    .array(BulkAgentRemovalResultSchema)
+    .describe("Removals that took effect."),
+  notAssigned: z
+    .array(BulkAgentRemovalResultSchema)
+    .describe(
+      "Removals skipped because the tool was not assigned to the agent (Custom mode).",
+    ),
+  failed: z
+    .array(BulkAgentRemovalResultSchema)
+    .describe(
+      "Removals that failed (e.g. no permission, agent not found, or a tool that cannot be excluded).",
+    ),
+});
+
 const BulkAssignMcpGatewaysOutputSchema = z.object({
   succeeded: z
     .array(BulkMcpGatewayAssignmentResultSchema)
@@ -133,6 +167,23 @@ const registry = defineArchestraTools([
         context,
         bulkAssignType: "agent",
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
+    title: "Bulk Remove Tools from Agents",
+    description:
+      'Remove multiple tools from multiple agents in bulk. For Custom-mode agents this deletes the tool assignment; for agents in Auto-tool ("access all tools") mode it adds the tool to the agent\'s exclusions, since those agents reach unassigned tools dynamically.',
+    schema: z
+      .object({
+        removals: z
+          .array(AgentRemovalSchema)
+          .describe("Tool removals to apply to agents."),
+      })
+      .strict(),
+    outputSchema: BulkRemoveAgentsOutputSchema,
+    async handler({ args, context }) {
+      return handleBulkRemoveTool({ removals: args.removals, context });
     },
   }),
   defineArchestraTool({
@@ -269,6 +320,118 @@ async function handleBulkAssignTool(params: {
     return structuredSuccessResult(output, JSON.stringify(output, null, 2));
   } catch (error) {
     return catchError(error, `bulk assigning tools to ${bulkAssignLabel}`);
+  }
+}
+
+async function handleBulkRemoveTool(params: {
+  removals: AgentRemovalInput[];
+  context: ArchestraContext;
+}): Promise<CallToolResult> {
+  const { removals, context } = params;
+  const { agent: contextAgent } = context;
+
+  logger.info(
+    { agentId: contextAgent.id, removals },
+    "bulk_remove_tools_from_agents tool called",
+  );
+
+  try {
+    if (!context.userId || !context.organizationId) {
+      return errorResult("user/organization context not available.");
+    }
+    const { organizationId, userId } = context;
+
+    const uniqueAgentIds = [...new Set(removals.map((r) => r.agentId))];
+    const [targetAgents, checker] = await Promise.all([
+      AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+      getAgentTypePermissionChecker({ userId, organizationId }),
+    ]);
+
+    // Prefetch Auto-tool mode once per agent so the per-removal loop doesn't
+    // re-query it. Only for agents that exist.
+    const accessAllByAgent = new Map<string, boolean>();
+    await Promise.all(
+      uniqueAgentIds
+        .filter((id) => targetAgents.has(id))
+        .map(async (id) =>
+          accessAllByAgent.set(id, await AgentModel.getAccessAllTools(id)),
+        ),
+    );
+
+    const requiresTeamIds = [...targetAgents.values()].some(
+      (target) => target && !checker.isAdmin(target.agentType),
+    );
+    const userTeamIds = requiresTeamIds
+      ? await TeamModel.getUserTeamIds(userId)
+      : [];
+
+    const results = await Promise.allSettled(
+      removals.map(async (removal) => {
+        const target = targetAgents.get(removal.agentId);
+        if (!target) {
+          throw new Error(`Agent with ID ${removal.agentId} not found`);
+        }
+        checker.require(target.agentType, "update");
+        requireAgentModifyPermission({
+          checker,
+          agentType: target.agentType,
+          agentScope: target.scope,
+          agentAuthorId: target.authorId,
+          agentTeamIds: target.teamIds,
+          userTeamIds,
+          userId,
+        });
+
+        // Auto-tool mode: deleting an assignment row is a no-op (dynamic access
+        // re-permits), so removal means adding an exclusion. Custom mode: delete
+        // the assignment row; a missing row means the tool was not assigned.
+        if (accessAllByAgent.get(removal.agentId)) {
+          await agentToolExclusionsService.addExclusions({
+            agentId: removal.agentId,
+            organizationId,
+            toolIds: [removal.toolId],
+          });
+          return "removed" as const;
+        }
+        // Check existence rather than trusting delete's affected-row count,
+        // which some drivers do not report reliably.
+        const wasAssigned = await AgentToolModel.exists(
+          removal.agentId,
+          removal.toolId,
+        );
+        if (!wasAssigned) {
+          return "not_assigned" as const;
+        }
+        await AgentToolModel.delete(removal.agentId, removal.toolId);
+        return "removed" as const;
+      }),
+    );
+
+    const succeeded: AgentRemovalInput[] = [];
+    const notAssigned: AgentRemovalInput[] = [];
+    const failed: (AgentRemovalInput & { error: string })[] = [];
+
+    results.forEach((result, index) => {
+      const { agentId, toolId } = removals[index];
+      if (result.status === "fulfilled") {
+        if (result.value === "removed") {
+          succeeded.push({ agentId, toolId });
+        } else {
+          notAssigned.push({ agentId, toolId });
+        }
+      } else {
+        const error =
+          result.reason instanceof Error
+            ? result.reason.message
+            : "Unknown error";
+        failed.push({ agentId, toolId, error });
+      }
+    });
+
+    const output = { succeeded, notAssigned, failed };
+    return structuredSuccessResult(output, JSON.stringify(output, null, 2));
+  } catch (error) {
+    return catchError(error, "removing tools from agents");
   }
 }
 

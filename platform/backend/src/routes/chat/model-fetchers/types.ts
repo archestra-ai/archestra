@@ -1,4 +1,5 @@
 import type { SupportedProvider } from "@archestra/shared";
+import type { ModelDefaultParameters } from "@/types/model";
 
 export const PLACEHOLDER_API_KEY = "EMPTY";
 export const PLACEHOLDER_BEARER_TOKEN = `Bearer ${PLACEHOLDER_API_KEY}`;
@@ -18,6 +19,16 @@ export interface FetchedModelCapabilities {
   cacheReadPricePerToken?: string | null;
   /** Per-token cache-write price (USD, default TTL), when the provider reports one. */
   cacheWritePricePerToken?: string | null;
+  /**
+   * Embedding classification when the provider reports capabilities authoritatively
+   * (e.g. Ollama `/api/show`). Tri-state:
+   * - `number` — authoritative embedding model with this native dimension.
+   * - `null` — authoritatively NOT an embedding model; the name heuristic is skipped.
+   * - `undefined` — unknown (provider gave no capability data); the name heuristic decides.
+   */
+  embeddingDimensions?: number | null;
+  /** Provider-reported default generation parameters (Ollama `/api/show`). */
+  defaultParameters?: ModelDefaultParameters | null;
 }
 
 export interface ModelInfo {

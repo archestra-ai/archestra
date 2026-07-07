@@ -1,4 +1,7 @@
-import { buildTrustedDataBlockedContentNotice } from "@archestra/shared";
+import {
+  buildTrustedDataBlockedContentNotice,
+  extractMcpToolError,
+} from "@archestra/shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
@@ -88,6 +91,7 @@ export async function evaluateIfContextIsTrusted(
     toolName: string;
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolResult: any;
+    isPlatformDispatchError: boolean;
   }> = [];
 
   for (const message of messages) {
@@ -97,6 +101,11 @@ export async function evaluateIfContextIsTrusted(
           toolCallId: toolCall.id,
           toolName: toolCall.name,
           toolResult: toolCall.content,
+          // A platform-generated `tool_state` envelope (e.g. unknown_tool)
+          // means no upstream tool ran, so the result is our own text with no
+          // external data — it must not flip the context to untrusted.
+          isPlatformDispatchError:
+            extractMcpToolError(toolCall)?.type === "tool_state",
         });
       }
     }
@@ -142,7 +151,15 @@ export async function evaluateIfContextIsTrusted(
 
   // Process evaluation results
   for (let i = 0; i < allToolCalls.length; i++) {
-    const { toolCallId, toolResult, toolName } = allToolCalls[i];
+    const { toolCallId, toolResult, toolName, isPlatformDispatchError } =
+      allToolCalls[i];
+    // A platform dispatch error never reached an upstream tool, so its result
+    // carries no external data. Skip it — otherwise a not-found tool has no
+    // trusted-data evaluation and falls through to the untrusted branch below,
+    // poisoning the session over a benign error.
+    if (isPlatformDispatchError) {
+      continue;
+    }
     // evaluateBulk() returns a Map keyed by the stringified input index, so we
     // read results back using the same positional key we submitted above.
     const evaluation = evaluationResults.get(i.toString());

@@ -3491,6 +3491,68 @@ describe("K8sDeployment.createServiceForHttpServer (selector reconciliation)", (
   });
 });
 
+describe("K8sDeployment multitenant selector stability", () => {
+  function make(
+    // biome-ignore lint/suspicious/noExplicitAny: minimal catalog mock for tests
+    catalogItem: any,
+  ): K8sDeployment {
+    const mcpServer = {
+      id: "install-abc-123",
+      name: "archestra-pm",
+      catalogId: "cat9999-0000-0000-0000-000000000000",
+      // biome-ignore lint/suspicious/noExplicitAny: mock server for tests
+    } as any as McpServer;
+    return new K8sDeployment({
+      mcpServer,
+      k8sApi: {} as k8s.CoreV1Api,
+      k8sAppsApi: {} as k8s.AppsV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem,
+    });
+  }
+  const localConfig: z.infer<typeof LocalConfigSchema> = {
+    command: "node",
+    arguments: ["server.js"],
+  };
+
+  // Multitenant catalogs share ONE catalog-named Deployment + Service across all
+  // installs. If the selector used the per-install id, two installs would fight
+  // over the shared resource and leave the Service with zero endpoints. The
+  // selector must be catalog-stable so every install reconciles to the same one.
+  test("multitenant: deployment selector + pod labels use the catalog id (not the per-install id)", () => {
+    const catalogItem = { multitenant: true, name: "Archestra PM" };
+    const spec = make(catalogItem).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    expect(spec.spec?.template.metadata?.labels?.["mcp-server-id"]).toBe(
+      "cat9999-0000-0000-0000-000000000000",
+    );
+    // The name is catalog-derived too, so name and selector stay in lockstep.
+    expect(spec.metadata?.name).toContain("mcp-mt-cat9999-");
+  });
+
+  test("single-tenant (no catalog item): selector keeps the per-install id", () => {
+    const spec = make(null).generateDeploymentSpec(
+      "img:latest",
+      localConfig,
+      true,
+      8080,
+    );
+    expect(spec.spec?.selector.matchLabels?.["mcp-server-id"]).toBe(
+      "install-abc-123",
+    );
+  });
+});
+
 describe("K8sDeployment.constructHttpServiceName", () => {
   function createK8sDeploymentForServiceName(
     serverName: string,
@@ -6375,6 +6437,104 @@ describe("K8sDeployment image pull failure handling", () => {
       await expect(deployment.waitForDeploymentReady(2, 1)).rejects.toThrow(
         /did not become ready after 2 attempts.*ImagePullBackOff/,
       );
+    });
+  });
+});
+
+describe("K8sDeployment selector self-heal (multitenant drift)", () => {
+  const notFound = { statusCode: 404, message: "not found" };
+
+  function makeDeployment(params: {
+    readNamespacedPod?: ReturnType<typeof vi.fn>;
+    readNamespacedDeployment: ReturnType<typeof vi.fn>;
+    deleteNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const mockMcpServer = {
+      id: "current-install-id",
+      name: "test-server",
+      // null catalogId so getCatalogItem() short-circuits without a DB lookup;
+      // the recreate path then fails fast on missing local config, which is all
+      // we need — the assertion is that the drifted deployment was deleted first.
+      catalogId: null,
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {
+        readNamespacedPod: params.readNamespacedPod ?? vi.fn(),
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment: params.readNamespacedDeployment,
+        deleteNamespacedDeployment:
+          params.deleteNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  // Regression: a Deployment created before the catalog-stable selector fix
+  // (#6340) keeps its old per-install `mcp-server-id` pod label while the shared
+  // Service's selector is reconciled to the catalog-stable id. The two diverge,
+  // the Service selects zero pods, and every connect/read fails ("fetch failed").
+  // A Deployment selector is immutable, so the only fix is delete + recreate.
+  test("recreates a deployment whose mcp-server-id selector drifted from the target", async () => {
+    const readNamespacedPod = vi.fn().mockRejectedValue(notFound); // no legacy bare pod
+    // 1st read: the deployment exists with a STALE selector (a different
+    // install's id). After deletion every read returns 404, which drains
+    // waitForDeploymentAbsent and sends the recreate down the create path.
+    const readNamespacedDeployment = vi
+      .fn()
+      .mockResolvedValueOnce({
+        spec: {
+          selector: { matchLabels: { "mcp-server-id": "stale-install-id" } },
+        },
+        status: { availableReplicas: 1 },
+      })
+      .mockRejectedValue(notFound);
+    const deleteNamespacedDeployment = vi.fn().mockResolvedValue({});
+
+    const deployment = makeDeployment({
+      readNamespacedPod,
+      readNamespacedDeployment,
+      deleteNamespacedDeployment,
+    });
+
+    // The recreate fails fast in this mock (no catalog/local config) — expected.
+    await expect(deployment.startOrCreateDeployment()).rejects.toThrow();
+
+    expect(deleteNamespacedDeployment).toHaveBeenCalledTimes(1);
+    expect(deleteNamespacedDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: deployment.k8sDeploymentName }),
+    );
+  });
+
+  describe("waitForDeploymentAbsent", () => {
+    test("resolves once the deployment returns 404", async () => {
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({}) // still present
+        .mockRejectedValue(notFound); // then gone
+      const deployment = makeDeployment({ readNamespacedDeployment });
+
+      await expect(
+        // @ts-expect-error - exercising a private method directly
+        deployment.waitForDeploymentAbsent(5, 1),
+      ).resolves.toBeUndefined();
+    });
+
+    test("throws if the deployment never disappears", async () => {
+      const readNamespacedDeployment = vi.fn().mockResolvedValue({});
+      const deployment = makeDeployment({ readNamespacedDeployment });
+
+      await expect(
+        // @ts-expect-error - exercising a private method directly
+        deployment.waitForDeploymentAbsent(2, 1),
+      ).rejects.toThrow(/was not deleted after 2 attempts/);
     });
   });
 });

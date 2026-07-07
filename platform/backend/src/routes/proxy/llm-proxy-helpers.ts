@@ -375,6 +375,9 @@ export function handleError(
       error: {
         type: "api_error",
         message: errorMessage,
+        // Surface the normalized code (e.g. provider_insufficient_balance)
+        // mid-stream too, so a failure after headers commit stays classifiable.
+        ...(internalCode ? { internal_code: internalCode } : {}),
       },
     };
     try {

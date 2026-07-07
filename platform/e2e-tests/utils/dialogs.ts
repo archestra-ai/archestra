@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 export async function closeOpenDialogs(
   page: Page,
@@ -73,4 +73,31 @@ export async function clickButton({
   }
 
   return await button.click();
+}
+
+export async function waitForElementWithReload(
+  page: Page,
+  locator: Locator,
+  options?: {
+    timeout?: number;
+    intervals?: number[];
+    checkEnabled?: boolean;
+  },
+): Promise<void> {
+  const timeout = options?.timeout ?? 90_000;
+  const intervals = options?.intervals ?? [2000, 5000, 10000];
+  const checkEnabled = options?.checkEnabled ?? true;
+
+  let attempts = 0;
+  await expect(async () => {
+    attempts++;
+    if (attempts > 1) {
+      await page.reload();
+      await page.waitForLoadState("domcontentloaded");
+    }
+    await expect(locator).toBeVisible({ timeout: 5000 });
+    if (checkEnabled) {
+      await expect(locator).toBeEnabled({ timeout: 5000 });
+    }
+  }).toPass({ timeout, intervals });
 }

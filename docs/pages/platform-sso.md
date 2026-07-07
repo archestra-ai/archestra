@@ -4,16 +4,14 @@ category: Administration
 subcategory: Identity Providers
 description: "Sign users in with their existing identity provider via OIDC or SAML"
 order: 4
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-05
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Provider-agnostic SSO concept page. Covers what SSO is in Archestra, how the
 flow works, callback URL formats, supported protocols, allowed-domain
-boundary, basic-auth/invitation toggles, user provisioning, account linking,
-and common SSO error codes.
+boundary, basic-auth/invitation toggles, user provisioning, and common SSO
+error codes.
 
 Per-provider walkthroughs (Entra, Okta) live on their own pages and link here.
 -->
@@ -108,13 +106,6 @@ When a user authenticates via SSO for the first time:
 4. A session is created and the user is logged in
 
 Subsequent logins link to the existing account by email. Role mapping rules are evaluated on each login, so role changes in the IdP take effect on next sign-in.
-
-## Account linking
-
-If a user already has an Archestra account (for example created via email/password), SSO will automatically link to it when:
-
-- The email addresses match
-- The SSO provider is trusted for account linking — Archestra trusts the built-in providers (Okta, Google, GitHub, GitLab, Entra ID) plus any custom Generic OIDC or Generic SAML provider configured in Identity Providers
 
 ## Downstream providers
 

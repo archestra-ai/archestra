@@ -7,8 +7,6 @@ lastUpdated: 2026-07-03
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 Walkthrough for the /connection_beta?clientId=claude-code flow: connecting
 Claude Code to Archestra with the one-time setup script, in passthrough mode so
 an existing Claude Pro/Max subscription keeps paying for inference. Cover:
@@ -51,4 +49,4 @@ Claude Code opens Archestra's consent screen in your browser; sign in and click 
 
 ## All Set
 
-You can now leverage Archestra MCP orchestrator, guardrails and observability, all while enjoying your Claude Code subscription plan.
+Claude Code now runs through Archestra — its MCP orchestrator, guardrails, and observability — while your Claude subscription keeps paying for inference.

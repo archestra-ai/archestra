@@ -7,8 +7,6 @@ lastUpdated: 2026-05-07
 ---
 
 <!--
-Check ../docs_writer_prompt.md before changing this file.
-
 This is the INDEX page for identity. It lists what Archestra supports per
 provider, points readers at the relevant sub-page, and keeps short notes for
 providers that don't yet have dedicated pages (Google, GitHub, GitLab, Generic

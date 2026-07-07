@@ -320,7 +320,7 @@ export function getConnectorUrlConfig(
 
 export function getConnectorDocsUrl(type: ConnectorType): string | null {
   return getFrontendDocsUrl(
-    DocsPage.PlatformKnowledgeConnectors,
+    DocsPage.PlatformKnowledge,
     CONNECTOR_DOC_ANCHORS[type] ?? type,
   );
 }

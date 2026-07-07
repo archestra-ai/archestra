@@ -24,6 +24,7 @@ import {
 } from "@/models";
 import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import {
+  type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
@@ -99,11 +100,23 @@ const CreateConnectionSetupBodySchema = z.object({
     .optional(),
 });
 
+/**
+ * Non-fatal signal that the bound Anthropic key couldn't be confirmed to have a
+ * usable balance. `insufficient_balance` = remaining usage balance is too low,
+ * whether out of credit or over a usage/spend limit (do-not-retry); `unverified`
+ * = the check itself failed transiently (retry-friendly).
+ */
+const ConnectionCreditWarningSchema = z.object({
+  kind: z.enum(["insufficient_balance", "unverified"]),
+});
+
 const CreateConnectionSetupResponseSchema = z.object({
   id: z.string().uuid(),
   command: z.string(),
   expiresAt: z.date(),
   tokenStart: z.string(),
+  /** Present when the bound Anthropic key has no (confirmable) credit. */
+  creditWarning: ConnectionCreditWarningSchema.optional(),
 });
 
 const CreateConnectionVirtualKeyBodySchema = z.object({
@@ -115,6 +128,8 @@ const CreateConnectionVirtualKeyResponseSchema = z.object({
   value: z.string(),
   /** Display name of the key (for revocation guidance). */
   name: z.string(),
+  /** Present when the bound Anthropic key has no (confirmable) credit. */
+  creditWarning: ConnectionCreditWarningSchema.optional(),
 });
 
 const CreateConnectionPassthroughKeyBodySchema = z.object({
@@ -193,6 +208,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       let virtualApiKeyId: string | null = null;
+      let creditWarning: ConnectionCreditWarning | undefined;
       if (llmProxyId && provider) {
         await requireAgentAccess({
           agentId: llmProxyId,
@@ -215,15 +231,16 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "You need llmVirtualKey:create permission to use a virtual key. Choose the provider-key option instead.",
             );
           }
-          virtualApiKeyId = await ensureConnectionVirtualKey({
-            organizationId,
-            userId: user.id,
-            userEmail: user.email,
-            userTeamIds: await TeamModel.getUserTeamIds(user.id),
-            provider,
-            preferredProviderKeyId:
-              organization.connectionDefaultProviderKeys?.[provider] ?? null,
-          });
+          ({ virtualApiKeyId, creditWarning } =
+            await ensureConnectionVirtualKey({
+              organizationId,
+              userId: user.id,
+              userEmail: user.email,
+              userTeamIds: await TeamModel.getUserTeamIds(user.id),
+              provider,
+              preferredProviderKeyId:
+                organization.connectionDefaultProviderKeys?.[provider] ?? null,
+            }));
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
           // URL. For Claude Code passthrough (Anthropic subscription or the
@@ -285,6 +302,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         expiresAt: setup.expiresAt,
         tokenStart: setup.tokenStart,
+        creditWarning,
       });
     },
   );
@@ -329,15 +347,16 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Organization not found");
       }
 
-      const virtualApiKeyId = await ensureConnectionVirtualKey({
-        organizationId,
-        userId: user.id,
-        userEmail: user.email,
-        userTeamIds: await TeamModel.getUserTeamIds(user.id),
-        provider,
-        preferredProviderKeyId:
-          organization.connectionDefaultProviderKeys?.[provider] ?? null,
-      });
+      const { virtualApiKeyId, creditWarning } =
+        await ensureConnectionVirtualKey({
+          organizationId,
+          userId: user.id,
+          userEmail: user.email,
+          userTeamIds: await TeamModel.getUserTeamIds(user.id),
+          provider,
+          preferredProviderKeyId:
+            organization.connectionDefaultProviderKeys?.[provider] ?? null,
+        });
 
       const value = await readVirtualKeyValue(virtualApiKeyId);
       const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
@@ -345,7 +364,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(500, "Failed to provision a virtual key");
       }
 
-      return reply.send({ value, name: virtualKey.name });
+      return reply.send({ value, name: virtualKey.name, creditWarning });
     },
   );
 

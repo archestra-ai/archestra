@@ -31,4 +31,28 @@ describe("stripThinkingBlocks", () => {
   it("leaves text without blocks unchanged except for trimming", () => {
     expect(stripThinkingBlocks("plain answer")).toBe("plain answer");
   });
+
+  it("removes a `<think>` block (Qwen-style spelling)", () => {
+    expect(stripThinkingBlocks("a<think>b</think>c")).toBe("ac");
+  });
+
+  it("strips a multiline `<think>` block", () => {
+    expect(stripThinkingBlocks("a<think>line1\nline2</think>b")).toBe("ab");
+  });
+
+  it("matches the `<think>` tag case-insensitively", () => {
+    expect(stripThinkingBlocks("a<THINK>b</Think>c")).toBe("ac");
+  });
+
+  it("strips a mix of `<think>` and `<thinking>` blocks", () => {
+    expect(
+      stripThinkingBlocks(
+        "keep1<think>x</think>keep2<thinking>y</thinking>keep3",
+      ),
+    ).toBe("keep1keep2keep3");
+  });
+
+  it("returns empty when only a `<think>` block remains", () => {
+    expect(stripThinkingBlocks("  <think>all</think>  ")).toBe("");
+  });
 });

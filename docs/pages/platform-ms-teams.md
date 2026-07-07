@@ -1,14 +1,10 @@
 ---
 title: MS Teams
 category: Agents
-order: 5
+order: 7
 description: Connect Archestra agents to Microsoft Teams channels
 lastUpdated: 2026-06-12
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 Archestra can connect directly to Microsoft Teams channels. When users mention the bot in a channel, messages are routed to your configured agent and responses appear directly in Teams.
 

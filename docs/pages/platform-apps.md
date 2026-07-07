@@ -6,17 +6,21 @@ description: User-authored MCP Apps — sandboxed HTML interfaces with their own
 lastUpdated: 2026-07-03
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 MCP Apps are interactive interfaces authored inside Archestra. An app is an HTML document that runs in a hardened sandbox iframe and talks to the host only through tools. Apps are first-class, scoped entities — created from chat or the `/apps` page, versioned on every edit, runnable standalone or inside a conversation, and governed by the same personal/team/org RBAC as agents and skills.
 
 Archestra already hosts and renders MCP Apps served by external MCP servers. This feature adds the authoring side: apps you own, backed by a data store and your own assignable tools, deliberately decoupled from agents.
 
 ## Authoring and running
 
-Authoring is a staged flow, each tool's result pointing at the next step: `refine_app` clarifies what to build — it asks the user up to three questions and records a spec, grounded in the MCP tools that user can actually assign — `scaffold_app` seeds the app from one opinionated starter template, `edit_app` builds up the HTML with targeted string replacements, `validate_app` checks the result (static structure plus the diagnostics from its live render), and `publish_app` promotes a personal app to a team or the organization. Editing the HTML forks a new immutable version; the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
+Authoring is a staged flow — each tool's result points at the next step:
+
+- `refine_app` clarifies what to build. It asks the user up to three questions and records a spec, grounded in the MCP tools that user can assign.
+- `scaffold_app` seeds the app from one opinionated starter template.
+- `edit_app` builds up the HTML with targeted string replacements.
+- `validate_app` checks the result — static structure plus the diagnostics from a live render.
+- `publish_app` promotes a personal app to a team or the organization.
+
+Editing the HTML forks a new immutable version, and the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
 
 Run an app full-page at `/a/:id` (no chat chrome, no sidebar), author it (preview, model context, versions, name and description) at `/apps/:id`, or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
 

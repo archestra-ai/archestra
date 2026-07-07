@@ -6,10 +6,6 @@ description: Build a service app that calls the OpenAI-compatible Model Router w
 lastUpdated: 2026-05-04
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 ## Overview
 
 This example shows a backend service using OAuth client credentials to call the OpenAI-compatible Model Router.

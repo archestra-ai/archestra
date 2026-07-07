@@ -1,5 +1,6 @@
 import {
   AnthropicErrorTypes,
+  ArchestraInternalErrorCode,
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
@@ -372,6 +373,22 @@ describe("mapProviderError - Anthropic", () => {
       expect(result.code).toBe(ChatErrorCode.InvalidRequest);
       expect(result.isRetryable).toBe(false);
       expect(result.originalError?.provider).toBe("anthropic");
+    });
+
+    it("reclassifies a balance-too-low envelope (internal_code) to a non-retryable ProviderInsufficientBalance card", () => {
+      const error = createAnthropicError(
+        400,
+        "api_validation_error",
+        "Anthropic API key remaining usage balance is too low. Please contact your administrator or try again later.",
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ProviderInsufficientBalance);
+      expect(result.isRetryable).toBe(false);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.ProviderInsufficientBalance],
+      );
     });
   });
 

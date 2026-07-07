@@ -134,19 +134,19 @@ type AppValidationFinding = {
 
 /**
  * Static, headless validation of an app's stored HTML for the `validate_app`
- * MCP tool. Reuses the save-time Rust scan (SDK self-bootstrap, platform-asset
- * self-loads, missing document root) — surfaced here as findings rather than a
- * thrown rejection so authoring tools can report them — and adds the one check
- * the scanner does not do: `<script src>`/`<link href>` hosts outside
- * {@link APP_PLATFORM_CSP_RESOURCE_DOMAINS}, which the served CSP blocks at
- * render time, are flagged as warnings. It cannot exercise runtime behaviour;
- * that gap is what the live diagnostics round-trip covers.
+ * MCP tool: the save-time Rust scan (surfaced as findings rather than a thrown
+ * rejection) plus the Rust-backed authoring lint — off-allowlist
+ * `<script src>`/`<link href>` hosts, browser storage APIs the sandbox breaks,
+ * and window.archestra members the injected SDK does not expose. This module
+ * stays the single source of truth for the policy inputs and the warning text;
+ * Rust returns structured lists. It cannot exercise runtime behaviour; that
+ * gap is what the live diagnostics round-trip covers.
  */
 export async function validateAppHtmlStatic(
   html: string,
 ): Promise<AppValidationFinding[]> {
   const findings: AppValidationFinding[] = [];
-  const { scanAppHtml } = await loadAppRuntimeNative();
+  const { scanAppHtml, lintAppHtml } = await loadAppRuntimeNative();
   const { rejection, warnings } = scanAppHtml(html);
   if (rejection) {
     findings.push({ severity: "error", message: rejectionMessage(rejection) });
@@ -154,7 +154,12 @@ export async function validateAppHtmlStatic(
   for (const warning of warnings) {
     findings.push({ severity: "warning", message: warning });
   }
-  for (const host of offAllowlistResourceHosts(html)) {
+  const lint = lintAppHtml(html, {
+    resourceHostAllowlist: [...APP_PLATFORM_CSP_RESOURCE_DOMAINS],
+    sdkTopLevelMembers: [...ARCHESTRA_APP_SDK_SURFACE.topLevel],
+    sdkStoragePartitions: [...ARCHESTRA_APP_SDK_SURFACE.storage.partitions],
+  });
+  for (const host of lint.offAllowlistHosts) {
     findings.push({
       severity: "warning",
       message: `<script>/<link> references the host "${host}", which is outside the app CDN allowlist (${APP_PLATFORM_CSP_RESOURCE_DOMAINS.join(
@@ -162,28 +167,26 @@ export async function validateAppHtmlStatic(
       )}); the sandbox CSP blocks it at render time. Load client-side assets from an allowlisted CDN, and fetch data through an assigned MCP tool instead.`,
     });
   }
-  const browserStorageApis = browserStorageApisUsed(html);
-  if (browserStorageApis.length > 0) {
+  if (lint.browserStorageApis.length > 0) {
     findings.push({
       severity: "warning",
-      message: `Uses browser storage (${browserStorageApis.join(
+      message: `Uses browser storage (${lint.browserStorageApis.join(
         ", ",
       )}), which is unavailable in the app sandbox (an opaque origin where it throws) and ephemeral browser-local state even where it works. Persist state through the platform-attached store instead: archestra.storage.user.* (private per viewer) or archestra.storage.shared.* (shared across viewers).`,
     });
   }
-  const sdkMisuse = unknownArchestraSdkMembers(html);
-  if (sdkMisuse.storageMisuse.length > 0) {
+  if (lint.storageMisuse.length > 0) {
     findings.push({
       severity: "warning",
-      message: `Accesses ${sdkMisuse.storageMisuse.join(
+      message: `Accesses ${lint.storageMisuse.join(
         ", ",
       )} directly, but the store has no such member — it is partitioned. Call it on a partition instead: archestra.storage.user.* (private per viewer) or archestra.storage.shared.* (shared across viewers), e.g. archestra.storage.user.get(key).`,
     });
   }
-  if (sdkMisuse.unknownTopLevel.length > 0) {
+  if (lint.unknownTopLevel.length > 0) {
     findings.push({
       severity: "warning",
-      message: `Uses ${sdkMisuse.unknownTopLevel.join(
+      message: `Uses ${lint.unknownTopLevel.join(
         ", ",
       )}, which the injected window.archestra SDK does not expose. Its top-level surface is ${ARCHESTRA_APP_SDK_SURFACE.topLevel
         .map((member) => `archestra.${member}`)
@@ -191,115 +194,6 @@ export async function validateAppHtmlStatic(
     });
   }
   return findings;
-}
-
-const SCRIPT_BLOCK_PATTERN = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
-const BROWSER_STORAGE_API_PATTERN =
-  /\b(localStorage|sessionStorage|indexedDB)\b/g;
-
-// Browser storage APIs referenced inside <script> blocks. Scoped to script
-// content (not the whole html) so prose, comments, and attribute text that
-// merely name an API do not warn — the same structural anchoring the resource
-// check uses. It stays a lexical scan: dynamic access (window["local"+"Storage"])
-// is not detected, which is acceptable for a soft authoring hint. They are
-// unusable in the app sandbox: the opaque-origin iframe throws on access, and
-// where it doesn't the data is ephemeral and browser-local rather than the
-// platform-attached archestra.storage. Returned in first-seen order, deduplicated.
-function browserStorageApisUsed(html: string): string[] {
-  const apis = new Set<string>();
-  for (const block of html.matchAll(SCRIPT_BLOCK_PATTERN)) {
-    for (const match of block[1].matchAll(BROWSER_STORAGE_API_PATTERN)) {
-      apis.add(match[1]);
-    }
-  }
-  return [...apis];
-}
-
-// `archestra.<member>` and `archestra.storage.<member>` accesses inside <script>
-// blocks. Anchored on a word boundary so `myarchestra.x` is not matched, and it
-// also covers the `window.archestra.<member>` form (the `archestra.<member>`
-// substring still matches). Reused across script blocks; matchAll takes a fresh
-// iterator each call so sharing the global regex is safe.
-const ARCHESTRA_TOP_LEVEL_PATTERN = /\barchestra\.([A-Za-z_$][\w$]*)/g;
-const ARCHESTRA_STORAGE_MEMBER_PATTERN =
-  /\barchestra\.storage\.([A-Za-z_$][\w$]*)/g;
-
-// window.archestra members referenced inside <script> blocks that the injected
-// SDK does not expose: the wrong-nesting bug (archestra.storage.get instead of
-// archestra.storage.user.get) and unknown/typo'd top-level members
-// (archestra.tool.call). Script-block scoped like browserStorageApisUsed so
-// prose, comments, and attributes do not warn. Deliberately lexical: aliasing
-// (const s = archestra.storage; s.get()) and computed access
-// (archestra["storage"]) are not detected, and method-level typos under a valid
-// namespace (archestra.tools.calll) are out of scope — acceptable for a soft
-// authoring hint. Full references, first-seen order, deduplicated per category.
-function unknownArchestraSdkMembers(html: string): {
-  storageMisuse: string[];
-  unknownTopLevel: string[];
-} {
-  const topLevel = new Set<string>(ARCHESTRA_APP_SDK_SURFACE.topLevel);
-  const partitions = new Set<string>(
-    ARCHESTRA_APP_SDK_SURFACE.storage.partitions,
-  );
-  const storageMisuse = new Set<string>();
-  const unknownTopLevel = new Set<string>();
-  for (const block of html.matchAll(SCRIPT_BLOCK_PATTERN)) {
-    const script = stripJsComments(block[1]);
-    for (const match of script.matchAll(ARCHESTRA_TOP_LEVEL_PATTERN)) {
-      if (!topLevel.has(match[1])) {
-        unknownTopLevel.add(`archestra.${match[1]}`);
-      }
-    }
-    for (const match of script.matchAll(ARCHESTRA_STORAGE_MEMBER_PATTERN)) {
-      if (!partitions.has(match[1])) {
-        storageMisuse.add(`archestra.storage.${match[1]}`);
-      }
-    }
-  }
-  return {
-    storageMisuse: [...storageMisuse],
-    unknownTopLevel: [...unknownTopLevel],
-  };
-}
-
-// Drop // line and /* */ block comments from a script so a commented-out or
-// documented call (`// use archestra.storage.user.get, not .get`) does not warn.
-// Block comments collapse to a space so a comment between tokens can never fuse
-// two identifiers into a spurious `archestra.*`. Only ever deletes spans, so it
-// can miss a call that is literally inside a comment-shaped string, never invent
-// one; string literals are left as-is (lexically unsafe to strip), a known limit
-// shared with browserStorageApisUsed.
-function stripJsComments(script: string): string {
-  return script.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, "");
-}
-
-const RESOURCE_REF_PATTERN =
-  /<(?:script|link)\b[^>]*?\b(?:src|href)\s*=\s*["']([^"']+)["']/gi;
-
-// External hosts referenced by <script src>/<link href> that are not on the CSP
-// resource allowlist (exact host match, mirroring CSP host-source semantics).
-function offAllowlistResourceHosts(html: string): string[] {
-  const allowlist = new Set<string>(APP_PLATFORM_CSP_RESOURCE_DOMAINS);
-  const hosts = new Set<string>();
-  for (const match of html.matchAll(RESOURCE_REF_PATTERN)) {
-    const host = externalHost(match[1]);
-    if (host && !allowlist.has(host)) {
-      hosts.add(host);
-    }
-  }
-  return [...hosts];
-}
-
-// The host of an absolute or protocol-relative http(s) URL; null for relative,
-// data:, blob:, or otherwise host-less refs (which the resource CSP ignores).
-function externalHost(ref: string): string | null {
-  const normalized = ref.startsWith("//") ? `https:${ref}` : ref;
-  if (!/^https?:\/\//i.test(normalized)) return null;
-  try {
-    return new URL(normalized).hostname;
-  } catch {
-    return null;
-  }
 }
 
 function rejectionMessage(rejection: {

@@ -1,4 +1,7 @@
+import { TOOL_RUN_COMMAND_FULL_NAME } from "@archestra/shared";
 import config from "@/config";
+import { ToolModel } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { isSkillSandboxAvailableForAgent } from "./skill-sandbox-availability";
 
@@ -94,6 +97,46 @@ describe("isSkillSandboxAvailableForAgent", () => {
         agentId: agent.id,
       }),
     ).toBe(true);
+  });
+
+  test("false for accessAllTools when a sandbox tool is excluded", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { sandbox: ["execute"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Access-all Agent",
+      accessAllTools: true,
+    });
+    // Seed the built-in tool rows so run_command has an id to exclude.
+    await seedAndAssignArchestraTools(agent.id);
+    const runCommand = await ToolModel.findByName(TOOL_RUN_COMMAND_FULL_NAME);
+    if (!runCommand) throw new Error("run_command tool not seeded");
+    await agentToolExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId: org.id,
+      excludedToolIds: [runCommand.id],
+    });
+
+    // Dynamic access is on, but excluding a sandbox tool means dispatch would
+    // refuse it — so the sandbox must not be advertised as available.
+    expect(
+      await isSkillSandboxAvailableForAgent({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+      }),
+    ).toBe(false);
   });
 
   test("false for accessAllTools without sandbox:execute", async ({

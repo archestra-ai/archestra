@@ -2,19 +2,14 @@
 title: Secure Agent with N8N
 category: Examples
 order: 4
+lastUpdated: 2026-07-03
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
 
 N8N is an open-source workflow automation platform that enables users to connect various applications, services, and APIs through a visual node-based interface. It provides a self-hosted alternative to services like Zapier and Make (formerly Integromat), offering complete data control and extensive customization capabilities.
 
 ## Security Challenges with Autonomous N8N Agents
 
-While N8N excels at executing pre-defined workflows with deterministic behavior, its flexibility in building fully autonomous AI agents introduces significant security risks. When N8N workflows incorporate LLMs that can dynamically determine actions based on user input or external data, they become vulnerable to the [lethal trifecta](/docs/platform-lethal-trifecta):
+N8N runs pre-defined workflows with deterministic behavior. It can also build fully autonomous AI agents, which introduces security risks. When N8N workflows incorporate LLMs that can dynamically determine actions based on user input or external data, they become vulnerable to the [lethal trifecta](/docs/platform-ai-tool-guardrails#the-lethal-trifecta):
 
 1. **Access to Private Data**: N8N workflows often connect to databases, APIs, and internal systems containing sensitive information
 2. **Processing Untrusted Content**: Autonomous agents may process user inputs, emails, webhooks, or data from external sources
@@ -24,7 +19,7 @@ This combination allows malicious actors to potentially exploit prompt injection
 
 ## Securing N8N with Archestra Platform
 
-Archestra Platform provides a security layer that enables safe deployment of autonomous N8N agents without sacrificing functionality. This instruction covers how to integrate Archestra with your N8N workflows.
+Archestra Platform adds a security layer for autonomous N8N agents. This section covers how to integrate Archestra with your N8N workflows.
 
 ### 0. Running N8N and Archestra Platform
 
@@ -114,7 +109,7 @@ flowchart LR
 
 With Archestra acting as a proxy between N8N and OpenAI, all LLM requests are monitored and controlled based on the trust level of the data in context. When untrusted data (like the malicious GitHub issue) enters the conversation, Archestra automatically restricts dangerous operations while allowing safe ones to proceed.
 
-▶️ Configure Archestra as a proxy for N8N:
+Configure Archestra as a proxy for N8N:
 
 1. Go to credentials: <http://127.0.0.1:5678/home/credentials/>
 2. Choose your OpenAI credentials
@@ -151,7 +146,7 @@ It's also possible to track the number of N8N agent executions flowing through A
 
 N8N assigns a unique execution ID to every workflow run. To make Archestra aware of it, pass it via a custom header:
 
-▶️ Configure the custom header in N8N:
+Configure the custom header in N8N:
 
 1. Go to credentials: <http://127.0.0.1:5678/home/credentials/>
 2. Open the same OpenAI credentials that your Chat Model node uses (the ones where you set the Archestra Base URL in step 3)

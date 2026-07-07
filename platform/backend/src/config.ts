@@ -883,7 +883,12 @@ export function parseFileStorageS3Config(params: {
   };
 }
 
-/** @public — exported for testability */
+/**
+ * Parse the per-run sync work budget (seconds). A run stops at ~90% of this,
+ * checkpoints, and a continuation resumes from there. Invalid or non-positive
+ * values disable the budget (a run then goes to completion in one pass).
+ * @public — exported for testability
+ */
 export function parseConnectorSyncMaxDuration(
   value: string | undefined,
 ): number | undefined {
@@ -1081,6 +1086,28 @@ const config = {
   },
   mcpGateway: {
     endpoint: "/v1/mcp",
+    /**
+     * Per-request timeout (ms) for an upstream MCP tool call made through the
+     * gateway. The MCP SDK defaults to 60s, which is too short for tools that
+     * do slow work (long-running scrapers, report builders, etc.). Raise this
+     * env var to give such tools more time before the request times out.
+     */
+    toolCallTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
+      60000,
+    ),
+  },
+  mcpServer: {
+    /**
+     * Opt-in periodic re-discovery of installed MCP servers' tools. Every N
+     * minutes each installed server's catalog tool snapshot is re-synced from
+     * the live server (add/update/remove — same as the reload-tools endpoint,
+     * no pod restart). Unset or 0 disables the refresher (the default).
+     */
+    toolsRefreshIntervalMinutes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES,
+      0,
+    ),
   },
   skillMarketplace: {
     endpoint: SKILL_MARKETPLACE_PREFIX,
@@ -1629,9 +1656,6 @@ const config = {
   kb: {
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
-    connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
-      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
-    ),
     taskWorkerPollIntervalSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS,
       5,
@@ -1643,6 +1667,39 @@ const config = {
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,
       30,
+    ),
+    // Liveness lease for connector sync runs. The owning worker renews the
+    // lease every `heartbeatInterval`; a run whose lease is not renewed within
+    // `leaseTtl` is treated as orphaned and reclaimed. TTL must be several times
+    // the heartbeat interval so a missed beat (GC pause, slow batch) doesn't
+    // falsely expire a live run.
+    connectorRunLeaseTtlSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_LEASE_TTL_SECONDS,
+      300,
+    ),
+    connectorRunHeartbeatIntervalSeconds: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_RUN_HEARTBEAT_INTERVAL_SECONDS,
+      90,
+    ),
+    // Max wall-clock time a single sync run works before it checkpoints and
+    // yields; a continuation then resumes from that checkpoint. This bounds how
+    // long one run holds a worker and chunks large syncs into resumable pieces.
+    // A run stops at ~90% of this, so 3300s (55m) yields ~49m of work per run.
+    // Liveness is enforced by the lease/heartbeat, not by this budget. (Retains
+    // the older env var name so existing custom configs keep working.)
+    connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
+    ),
+    // A document still `pending`/`processing` this long after its last touch has
+    // no live `batch_embedding` task behind it: a task exhausts its 5 retries in
+    // ~8 min (30s * 2^(attempt-1) backoff), so past that it is stalled and the
+    // recovery sweep re-enqueues it. Kept comfortably above that ~8 min span (not
+    // at it) so a slow-but-live embedding batch is never reset out from under its
+    // worker, which would double-embed and waste embedding-API cost.
+    stalledEmbeddingAgeSeconds: parsePositiveInt(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_STALLED_EMBEDDING_AGE_SECONDS,
+      15 * 60,
     ),
   },
   secretsManager: {

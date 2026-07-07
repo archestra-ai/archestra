@@ -1,6 +1,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
+  asc,
   eq,
   ilike,
   inArray,
@@ -201,6 +202,42 @@ class McpServerModel {
       .limit(1);
 
     return result.length > 0;
+  }
+
+  /**
+   * When the first MCP server was connected; null when none exist. An
+   * activation signal for the feedback pop-up.
+   */
+  static async getFirstCreatedAt(): Promise<Date | null> {
+    const [row] = await db
+      .select({ createdAt: schema.mcpServersTable.createdAt })
+      .from(schema.mcpServersTable)
+      .orderBy(asc(schema.mcpServersTable.createdAt))
+      .limit(1);
+    return row?.createdAt ?? null;
+  }
+
+  /**
+   * One installed server per catalog, for the periodic tools refresher. Tool
+   * rows are shared per catalog item, so re-syncing one install covers every
+   * install of that catalog. Only local/remote servers participate — app and
+   * builtin servers manage their tools in-process. Oldest install wins for a
+   * stable pick across ticks.
+   */
+  static async findOnePerCatalogForToolsRefresh(): Promise<McpServer[]> {
+    return db
+      .selectDistinctOn([schema.mcpServersTable.catalogId])
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          isNotNull(schema.mcpServersTable.catalogId),
+          inArray(schema.mcpServersTable.serverType, ["local", "remote"]),
+        ),
+      )
+      .orderBy(
+        asc(schema.mcpServersTable.catalogId),
+        asc(schema.mcpServersTable.createdAt),
+      );
   }
 
   static async findAll(

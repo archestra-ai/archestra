@@ -75,6 +75,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -1132,6 +1133,10 @@ const startWebServer = async () => {
     // instance is reachable from the Internet for inbound chatops webhooks.
     await ngrokTunnelManager.initialize();
 
+    // Opt-in periodic re-discovery of installed MCP servers' tools
+    // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
+    mcpToolsRefreshManager.start();
+
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
     if (shouldRunWorker) {
@@ -1355,6 +1360,8 @@ function registerWebServerShutdown(
       if (shouldRunWorker) {
         await taskQueueService.stopWorker();
       }
+
+      mcpToolsRefreshManager.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"

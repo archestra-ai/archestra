@@ -6,6 +6,7 @@ import {
   CircuitBoard,
   Loader2,
   Play,
+  RefreshCw,
   Search,
   Zap,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useReloadMcpServerTools } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import { filterMcpTools } from "./mcp-tool-search";
 
@@ -57,6 +59,7 @@ interface McpInspectorProps {
 }
 
 export function McpInspector({ serverId, isActive }: McpInspectorProps) {
+  const reloadTools = useReloadMcpServerTools();
   const [tools, setTools] = useState<McpTool[]>([]);
   const [selectedTool, setSelectedTool] = useState<McpTool | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -286,6 +289,26 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
         >
           <Zap className="h-3 w-3" />
           List Tools
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reloadTools.isPending}
+          onClick={() =>
+            reloadTools.mutate(
+              { id: serverId },
+              { onSuccess: () => void loadTools() },
+            )
+          }
+          className="h-7 px-2.5 text-xs gap-1.5"
+          title="Re-sync the registry's tool catalog from the live server so agents and gateway clients see the current tools"
+        >
+          {reloadTools.isPending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          Refresh Tools
         </Button>
       </div>
 

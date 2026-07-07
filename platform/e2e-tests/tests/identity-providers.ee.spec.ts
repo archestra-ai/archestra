@@ -37,6 +37,19 @@ import {
 // and running in parallel causes identity provider conflicts.
 test.describe.configure({ mode: "serial" });
 
+// Merge-queue / run-e2e label runs keep the two flows that exercise unique
+// live-Keycloak behavior end to end: the OIDC create/login/update/delete
+// round-trip and RP-initiated logout. The role-mapping and team-sync variants
+// are tagged @nightly and only run on the scheduled nightly /
+// workflow_dispatch runs (which drop the @nightly grep-invert — see
+// .github/workflows/platform-e2e-tests.yml): their branch logic is covered by
+// backend auth/idp unit tests, and they share the same Keycloak transport the
+// round-trip already proves. Filtering them out of this serial file is safe —
+// serial mode here only serializes access to the shared Keycloak realm /
+// Generic OIDC slot; every test authenticates fresh, uses a unique provider
+// name, and starts with defensive cleanup, so no test depends on a previous
+// test's state.
+
 // =============================================================================
 // Shared Test Helpers
 // =============================================================================
@@ -535,7 +548,7 @@ async function expectActiveSession(page: Page): Promise<void> {
     .toBe(ADMIN_EMAIL);
 }
 
-test.describe("Identity Provider Team Sync E2E", () => {
+test.describe("Identity Provider Team Sync E2E", { tag: "@nightly" }, () => {
   test("should sync user to team based on SSO group membership", async ({
     page,
     browser,
@@ -813,7 +826,7 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
   });
 });
 
-test.describe("Identity Provider Role Mapping E2E", () => {
+test.describe("Identity Provider Role Mapping E2E", { tag: "@nightly" }, () => {
   test("should evaluate second rule when first rule does not match", async ({
     page,
     browser,

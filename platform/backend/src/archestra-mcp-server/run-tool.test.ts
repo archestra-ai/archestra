@@ -337,7 +337,7 @@ describe("run_tool", () => {
       _meta: {
         requestId: "request-2",
         // The platform's own validation descriptor must not be forgeable by
-        // an upstream server (it steers the chat wrapper's amplifier).
+        // an upstream server (it gates the repair-note disclosure).
         archestraValidation: {
           toolName: "archestra__edit_app",
           issues: [{ code: "invalid_type", path: "baseVersion" }],

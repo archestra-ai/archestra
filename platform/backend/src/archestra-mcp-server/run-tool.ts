@@ -530,8 +530,8 @@ async function dispatchTool({
 /**
  * `_meta.archestraValidation` is this platform's own validation descriptor
  * (index.ts); an upstream third-party server must not be able to forge it and
- * steer the chat wrapper's same-error-class amplifier. Other `_meta` keys pass
- * through untouched.
+ * pass `reachedArgValidation`, unlocking the repair-note disclosure. Other
+ * `_meta` keys pass through untouched.
  */
 function stripArchestraValidationMeta(
   meta: CallToolResult["_meta"],

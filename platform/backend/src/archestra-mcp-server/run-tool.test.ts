@@ -2384,53 +2384,25 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
-    test("coerces a numeric/boolean string inner value to the declared scalar type", () => {
-      const schema = {
-        type: "object",
-        properties: {
-          count: { type: "number" },
-          version: { type: "integer" },
-          enabled: { type: "boolean" },
-        },
-      };
-      const { repairedParams, toolArgs } =
-        runToolInternals.repairEnvelopedToolArgs({
-          toolArgs: {
-            count: { $text: "1.5" },
-            version: { $text: "2" },
-            enabled: { value: "true" },
-          },
-          schema,
-        });
-
-      expect(repairedParams.sort()).toEqual(["count", "enabled", "version"]);
-      expect(toolArgs).toEqual({ count: 1.5, version: 2, enabled: true });
-    });
-
-    test("rejects strings the declared scalar type cannot cleanly parse", () => {
+    test("leaves a string-carried scalar wrapped — the repair never retypes a value", () => {
       const schema = {
         type: "object",
         properties: {
           n: { type: "number" },
           i: { type: "integer" },
           b: { type: "boolean" },
-          big: { type: "number" },
         },
       };
-      // Each inner string is left wrapped (not repaired) because it is not a
-      // clean decimal / exact boolean literal, or would lose integer precision.
+      // The inner value is the model's own but its type does not match the
+      // declared scalar, so the wrapper stays and the target's validation
+      // error (with the parameter skeleton) teaches the shape instead.
       const cases: Array<[string, unknown]> = [
-        ["n", { $text: "" }],
-        ["n", { $text: " " }],
+        ["n", { $text: "1.5" }],
         ["n", { $text: "0x10" }],
-        ["n", { $text: "1e3" }],
-        ["n", { $text: "Infinity" }],
-        ["n", { $text: "NaN" }],
-        ["n", { $text: "+1" }],
-        ["i", { $text: "1.5" }],
+        ["i", { $text: "2" }],
+        ["i", { value: 1.5 }],
+        ["b", { value: "true" }],
         ["b", { $text: "yes" }],
-        ["b", { $text: "1" }],
-        ["big", { $text: "9007199254740993" }],
       ];
       for (const [key, wrapped] of cases) {
         const { repairedParams, toolArgs } =
@@ -2443,33 +2415,12 @@ describe("run_tool", () => {
       }
     });
 
-    test("accepts a leading-zero integer string (coerced) but a huge integer string (left alone)", () => {
-      const schema = {
-        type: "object",
-        properties: { v: { type: "integer" } },
-      };
-      const ok = runToolInternals.repairEnvelopedToolArgs({
-        toolArgs: { v: { $text: "01" } },
-        schema,
-      });
-      expect(ok.repairedParams).toEqual(["v"]);
-      expect(ok.toolArgs).toEqual({ v: 1 });
-
-      const tooBig = runToolInternals.repairEnvelopedToolArgs({
-        toolArgs: { v: { $text: "9007199254740993" } },
-        schema,
-      });
-      expect(tooBig.repairedParams).toEqual([]);
-    });
-
-    test("unwraps the {type:'text', text:X} content-block wrapper through the same coercion", () => {
+    test("unwraps the {type:'text', text:X} content-block wrapper when the inner type matches", () => {
       const schema = {
         type: "object",
         properties: {
           name: { type: "string" },
           count: { type: "number" },
-          version: { type: "integer" },
-          enabled: { type: "boolean" },
           tags: { type: "array" },
           note: { type: "string" },
         },
@@ -2478,28 +2429,17 @@ describe("run_tool", () => {
         runToolInternals.repairEnvelopedToolArgs({
           toolArgs: {
             name: { type: "text", text: "personal" },
-            count: { type: "text", text: "5" },
-            version: { type: "text", text: "5" },
-            enabled: { type: "text", text: "true" },
+            count: { type: "text", text: "5" }, // string inner on a number param — stays wrapped
             tags: { type: "text", text: ["a", "b"] },
             note: { type: "text", text: "" },
           },
           schema,
         });
 
-      expect(repairedParams.sort()).toEqual([
-        "count",
-        "enabled",
-        "name",
-        "note",
-        "tags",
-        "version",
-      ]);
+      expect(repairedParams.sort()).toEqual(["name", "note", "tags"]);
       expect(toolArgs).toEqual({
         name: "personal",
-        count: 5,
-        version: 5,
-        enabled: true,
+        count: { type: "text", text: "5" },
         tags: ["a", "b"],
         note: "",
       });
@@ -2572,8 +2512,8 @@ describe("run_tool", () => {
             name: { "standup-notes-app": "standup-notes-app" },
             description: { "standup-notes-app": "A personal standup notepad." },
             tools: { "standup-notes-app": [] },
-            version: { anything: "5" },
-            enabled: { whatever: "true" },
+            version: { anything: 5 },
+            enabled: { whatever: true },
           },
           schema,
         });
@@ -2643,7 +2583,7 @@ describe("run_tool", () => {
             kind: { k: "loose" }, // not the const
             rows: { items: ["deleted"] }, // item not in enum
             pair: { p: ["only-one"] }, // violates tuple shape
-            count: { c: "3" }, // below minimum
+            count: { c: 3 }, // below minimum
           },
           schema,
         });
@@ -2699,47 +2639,6 @@ describe("run_tool", () => {
       expect(invalidBare.isError).toBe(true);
       expect(invalidWrapped.content).toHaveLength(
         invalidBare.content.length + 1,
-      );
-    });
-
-    test("coerces an envelope-wrapped numeric string end to end so the dispatched call receives the number", async ({
-      makeAgentTool,
-      makeInternalMcpCatalog,
-      makeTool,
-    }) => {
-      const catalog = await makeInternalMcpCatalog();
-      const tool = await makeTool({
-        name: "github__list_issues",
-        catalogId: catalog.id,
-        parameters: {
-          type: "object",
-          properties: { perPage: { type: "integer" } },
-          required: ["perPage"],
-        },
-      });
-      await makeAgentTool(testAgent.id, tool.id);
-      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
-        content: [{ type: "text", text: "ok" }],
-        isError: false,
-      } as any);
-
-      const result = await executeArchestraTool(
-        TOOL_RUN_TOOL_FULL_NAME,
-        {
-          tool_name: "github__list_issues",
-          tool_args: { perPage: { $text: " 5 " } },
-        },
-        mockContext,
-      );
-
-      expect(result.isError).toBe(false);
-      // The wrapper's inner string is trimmed and coerced to the integer 5
-      // before dispatch — the upstream tool never sees the envelope or a string.
-      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
-        expect.objectContaining({ arguments: { perPage: 5 } }),
-        agentOwner(testAgent.id),
-        mockContext.tokenAuth,
-        { conversationId: testConversationId },
       );
     });
   });

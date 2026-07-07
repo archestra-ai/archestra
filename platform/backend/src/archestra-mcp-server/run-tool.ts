@@ -643,8 +643,8 @@ type RepairableDeclaredType =
  *    $ref/anyOf/oneOf/allOf composition);
  *  - the supplied value is a plain object of a recognized wrapper shape (see
  *    envelopeInnerValue);
- *  - the inner value matches the declared type, or is a numeric/boolean string
- *    the declared type parses cleanly (see coerceInnerToDeclaredType).
+ *  - the inner value already matches the declared type (see
+ *    innerMatchesDeclaredType) — the repair never retypes a value.
  * The guard is on the declared *type* only — it deliberately does not check
  * `enum`/`const`/`items`/tuple/`additionalProperties`; the target tool applies its
  * complete schema at dispatch, so an inner value that satisfies the type but
@@ -718,7 +718,7 @@ function unwrapEnvelope(params: {
     return null;
   }
 
-  return coerceInnerToDeclaredType(candidate.inner, declaredType);
+  return innerMatchesDeclaredType(candidate.inner, declaredType);
 }
 
 /**
@@ -764,82 +764,29 @@ function asRepairableDeclaredType(
 }
 
 /**
- * The inner value coerced to the declared scalar type, or null when it does not
- * qualify. Beyond an exact JS-type match, a numeric/boolean value the model
- * carried as a *string* (the XML-text-node habit, e.g. `{"$text":"1"}` for a
- * number param) is parsed to the scalar under a strict grammar: surrounding
- * whitespace is trimmed, then a plain-decimal (or exact `"true"`/`"false"`)
- * literal is required — unlike a naive `Number()`, which would accept `0x10`,
- * `1e3`, `Infinity`, or an all-whitespace string. The outer envelope object is
- * already provably invalid against the scalar type, so parsing its inner string
- * can never rewrite a call the schema would accept.
+ * Whether the inner value already matches the declared scalar/array type. The
+ * repair delivers the model's own value untouched and never retypes it: a
+ * number carried as a string stays wrapped, fails the target's validation, and
+ * the validation error's parameter skeleton teaches the shape.
  */
-function coerceInnerToDeclaredType(
+function innerMatchesDeclaredType(
   value: unknown,
   declaredType: RepairableDeclaredType,
 ): { inner: unknown } | null {
   switch (declaredType) {
     case "string":
       return typeof value === "string" ? { inner: value } : null;
-    case "number": {
-      if (typeof value === "number") {
-        return { inner: value };
-      }
-      const parsed = parseNumericString(value);
-      return parsed === null ? null : { inner: parsed };
-    }
-    case "integer": {
-      if (typeof value === "number") {
-        return Number.isInteger(value) ? { inner: value } : null;
-      }
-      const parsed = parseIntegerString(value);
-      return parsed === null ? null : { inner: parsed };
-    }
-    case "boolean": {
-      if (typeof value === "boolean") {
-        return { inner: value };
-      }
-      if (value === "true") return { inner: true };
-      if (value === "false") return { inner: false };
-      return null;
-    }
+    case "number":
+      return typeof value === "number" ? { inner: value } : null;
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value)
+        ? { inner: value }
+        : null;
+    case "boolean":
+      return typeof value === "boolean" ? { inner: value } : null;
     case "array":
       return Array.isArray(value) ? { inner: value } : null;
   }
-}
-
-/** A plain decimal string → number; null for anything non-decimal. An
- * integer-form string must additionally be a safe integer, so a large value is
- * left untouched rather than coerced to an imprecise float. */
-function parseNumericString(value: unknown): number | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
-    return null;
-  }
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-  if (!trimmed.includes(".") && !Number.isSafeInteger(parsed)) {
-    return null;
-  }
-  return parsed;
-}
-
-/** A plain integer string → safe integer; null otherwise. */
-function parseIntegerString(value: unknown): number | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!/^-?\d+$/.test(trimmed)) {
-    return null;
-  }
-  const parsed = Number(trimmed);
-  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 /**

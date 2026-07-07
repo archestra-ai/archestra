@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-07-07
+lastUpdated: 2026-07-03
 ---
 
 Archestra includes a built-in Chat interface for working with agents, MCP tools, files, browser actions, and model selection in one place.
@@ -21,14 +21,6 @@ Type `/` in the prompt input to open available chat commands.
 - [`/compact`](#context-compaction) summarizes older conversation history to reduce context usage and help prevent hitting the selected model's context limit. The full chat history remains visible in the conversation.
 
 When the agent has the [code sandbox](./platform-code-sandbox) available, a message starting with `!` (for example `! ls attachments/`) runs the rest of the message as a shell command in the conversation's sandbox instead of asking the model. The command and its output appear in the conversation as a regular `run_command` tool call, so the agent sees the result in later turns. Output appears when the command finishes. Requires the `sandbox: execute` permission; without a sandbox, the message is sent as normal text. User-typed commands do not trigger PreToolUse/PostToolUse hooks — the user, not the model, initiated the call.
-
-### Message Queue
-
-Message queueing is a beta feature. Set `ARCHESTRA_BETA=true` to enable it.
-
-You can keep typing while the agent is responding — Shift+Enter inserts a newline as usual. Press Enter to queue the message. Queued messages are sent automatically, in order, as each response finishes.
-
-Queued messages appear above the prompt input, where you can remove them. Each conversation has its own queue. Queues survive page refreshes and switching between conversations. Stopping a response pauses its queue; sending a new message resumes it.
 
 ### MCP Elicitation
 

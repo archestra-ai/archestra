@@ -235,45 +235,26 @@ runs:
 
     # Deploy the platform-image-INDEPENDENT e2e dependency stack (Vault,
     # Keycloak, WireMock, MCP servers) HERE — before the platform image wait
-    # below — so it comes up while the image build is still running instead of
-    # adding to the merge-queue critical path after. The dependency images were
-    # just pulled into the daemon above, so load them into Kind and install the
-    # chart now. Vault in particular gates the platform pod (its vault-secrets
-    # init container), so having it Ready before the platform chart installs
-    # shortens the post-build path.
+    # and the Kind image loads below — so its pods boot while that work runs
+    # instead of adding to the merge-queue critical path after. Submitting the
+    # chart before the MCP fixture images are loaded is fine: those pods sit
+    # in ImagePull retry until the loads land (exactly how the "background"
+    # install mode already behaves), and Vault/Keycloak/WireMock pull their
+    # images from public registries independently of our loads. Vault gates
+    # the platform pod (its vault-secrets init container), so the foreground
+    # mode waits for it in "Deploy with Helm", right before the platform
+    # chart installs — by then it has had the whole image-load window to boot.
     #
     # Only the foreground+deps path (the merge-queue shards) takes this branch;
     # the "background" install mode keeps deploying inside "Deploy with Helm"
-    # (see below), and "Load all images into Kind" / "Deploy with Helm" both
-    # skip the dependency work they would otherwise repeat for this path.
-    - name: Deploy e2e dependencies (overlaps platform image build)
+    # (see below).
+    - name: Deploy e2e dependencies (overlaps image pulls and Kind loads)
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
       shell: bash
       env:
-        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
         E2E_DEPS_EXTRA_HELM_SET: ${{ inputs.e2e-dependencies-extra-helm-set }}
-        E2E_DEPS_WAIT_FOR_VAULT: ${{ inputs.e2e-dependencies-wait-for-vault }}
       run: |
-        MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-        MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-        MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
-
-        echo "Loading MCP dependency images into Kind (parallel)..."
-        PIDS=()
-        for img in "${MCP_OAUTH_IMAGE}" "${MCP_JWKS_IMAGE}" "${MCP_ID_JAG_IMAGE}"; do
-          kind load docker-image "${img}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-        done
-        FAILED=0
-        for pid in "${PIDS[@]}"; do
-          if ! wait "$pid"; then FAILED=1; fi
-        done
-        if [ "$FAILED" -ne 0 ]; then
-          echo "One or more MCP dependency image loads into Kind failed"
-          exit 1
-        fi
-
         # Build --set flags from comma-separated pairs (mirrors "Deploy with Helm").
         E2E_DEPS_SET_FLAGS=""
         if [ -n "${E2E_DEPS_EXTRA_HELM_SET}" ]; then
@@ -283,23 +264,8 @@ runs:
           done
         fi
 
-        echo "Installing e2e-tests chart (overlapping the platform image build)..."
+        echo "Installing e2e-tests chart (its pods boot while the image loads below run)..."
         helm install e2e-tests "${PLATFORM_CONTEXT}/helm/e2e-tests" ${E2E_DEPS_SET_FLAGS}
-
-        if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
-          echo "Waiting for Vault pod before platform deploy..."
-          if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
-            echo "=== Vault Pod Status ==="
-            kubectl get pods -l app=vault -o wide || true
-            echo "=== Vault Pod Describe ==="
-            kubectl describe pod -l app=vault || true
-            echo "=== Vault Pod Logs ==="
-            kubectl logs -l app=vault --tail=200 || true
-            echo "=== Vault Pod Previous Logs ==="
-            kubectl logs -l app=vault --previous --tail=200 || true
-            exit 1
-          fi
-        fi
 
     # Deliberately placed AFTER the Kind cluster, MCP dependency image setup, and
     # (for the merge-queue shards) the e2e dependency deploy above: everything
@@ -357,81 +323,17 @@ runs:
           exit 1
         fi
 
-    - name: Load all images into Kind in parallel
-      shell: bash
-      env:
-        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
-        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
-        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
-        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
-        E2E_DEPS_INSTALL_MODE: ${{ inputs.e2e-dependencies-install-mode }}
-      run: |
-        PIDS=()
-
-        echo "Loading platform image into Kind..."
-        kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
-        PIDS+=($!)
-
-        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
-          echo "Loading MCP server base image into Kind..."
-          kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-        fi
-
-        # Postgres is deployed by the platform release (values-ci pins its
-        # pullPolicy to IfNotPresent), so preload it whenever the e2e
-        # dependency stack is in play — see the "Cache PostgreSQL image" step.
-        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
-          POSTGRES_IMAGE="docker.io/bitnamisecure/postgresql:latest"
-          echo "Loading PostgreSQL image into Kind..."
-          kind load docker-image "${POSTGRES_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-        fi
-
-        # The foreground path already loaded the MCP dependency images into Kind
-        # in "Deploy e2e dependencies (overlaps platform image build)" above, so
-        # only the background path needs to load them here.
-        if [ "${DEPLOY_E2E_DEPS}" == "true" ] && [ "${E2E_DEPS_INSTALL_MODE}" != "foreground" ]; then
-          MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
-          MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
-          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
-
-          echo "Loading MCP example OAuth server image into Kind..."
-          kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-
-          echo "Loading MCP JWKS server image into Kind..."
-          kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-
-          echo "Loading MCP ID-JAG server image into Kind..."
-          kind load docker-image "${MCP_ID_JAG_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
-          PIDS+=($!)
-        fi
-
-        echo "Waiting for all image loads to complete..."
-        FAILED=0
-        for pid in "${PIDS[@]}"; do
-          if ! wait "$pid"; then
-            FAILED=1
-          fi
-        done
-
-        if [ "$FAILED" -ne 0 ]; then
-          echo "One or more image loads failed"
-          exit 1
-        fi
-        echo "All images loaded into Kind successfully"
-
     # Seed the e2e database from the platform image so boot-time migrations
-    # no-op. The image bakes a pg_dump of its own fully-migrated schema (see
-    # the Dockerfile db-seed stage); extract it, verify it matches THIS
-    # checkout's migrations directory (drift guard — the image is built from
-    # the same SHA, so a mismatch means something is badly wrong), and ship it
-    # to the bitnami postgres pod as an initdb scriptsSecret together with the
-    # restore hook script. Every failure path is soft: we simply skip the
-    # --set, postgres boots unseeded, and the platform pod runs the normal
-    # full `drizzle-kit migrate` at boot.
+    # no-op. Runs right after the platform image pull — it only needs a
+    # `docker cp` from the pulled image plus kubectl, so it must not wait for
+    # the Kind loads below. The image bakes a pg_dump of its own
+    # fully-migrated schema (see the Dockerfile db-seed stage); extract it,
+    # verify it matches THIS checkout's migrations directory (drift guard —
+    # the image is built from the same SHA, so a mismatch means something is
+    # badly wrong), and ship it to the bitnami postgres pod as an initdb
+    # scriptsSecret together with the restore hook script. Every failure path
+    # is soft: we simply skip the --set, postgres boots unseeded, and the
+    # platform pod runs the normal full `drizzle-kit migrate` at boot.
     - name: Seed e2e database from platform image snapshot
       id: db-seed
       if: ${{ inputs.seed-e2e-database == 'true' }}
@@ -474,6 +376,72 @@ runs:
 
         echo "Database seed secret created (migrations hash ${BAKED_HASH})"
         echo "helm-set=postgresql.primary.initdb.scriptsSecret=archestra-e2e-db-seed" >> "${GITHUB_OUTPUT}"
+
+    - name: Load all images into Kind in parallel
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
+        DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+      run: |
+        PIDS=()
+
+        echo "Loading platform image into Kind..."
+        kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+        PIDS+=($!)
+
+        if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
+          echo "Loading MCP server base image into Kind..."
+          kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        # Postgres is deployed by the platform release (values-ci pins its
+        # pullPolicy to IfNotPresent), so preload it whenever the e2e
+        # dependency stack is in play — see the "Cache PostgreSQL image" step.
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          POSTGRES_IMAGE="docker.io/bitnamisecure/postgresql:latest"
+          echo "Loading PostgreSQL image into Kind..."
+          kind load docker-image "${POSTGRES_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        # MCP fixture images load here for BOTH install modes: the e2e-tests
+        # chart is already submitted (foreground: step above; background:
+        # concurrently in "Deploy with Helm") and its fixture pods retry their
+        # image pulls until these loads land.
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
+          MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
+          MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+
+          echo "Loading MCP example OAuth server image into Kind..."
+          kind load docker-image "${MCP_OAUTH_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP JWKS server image into Kind..."
+          kind load docker-image "${MCP_JWKS_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+
+          echo "Loading MCP ID-JAG server image into Kind..."
+          kind load docker-image "${MCP_ID_JAG_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        echo "Waiting for all image loads to complete..."
+        FAILED=0
+        for pid in "${PIDS[@]}"; do
+          if ! wait "$pid"; then
+            FAILED=1
+          fi
+        done
+
+        if [ "$FAILED" -ne 0 ]; then
+          echo "One or more image loads failed"
+          exit 1
+        fi
+        echo "All images loaded into Kind successfully"
 
     - name: Deploy with Helm
       shell: bash
@@ -533,10 +501,20 @@ runs:
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           if [ "${E2E_DEPS_INSTALL_MODE}" = "foreground" ]; then
-            # Already installed (and Vault already waited on) in the earlier
-            # "Deploy e2e dependencies (overlaps platform image build)" step, so
-            # the release exists before we get here — nothing to do.
-            echo "e2e-tests chart already deployed earlier (overlapped the image build); skipping."
+            # Already installed in the earlier "Deploy e2e dependencies" step
+            # (its pods booted while the images were pulled and loaded). Vault
+            # gates the platform pod's vault-secrets init container, so gate
+            # the platform install on it HERE — after the image loads, which
+            # gave it the whole window to come up, this is normally already
+            # satisfied.
+            echo "e2e-tests chart already deployed earlier (overlapped the image loads)."
+            if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
+              echo "Waiting for Vault pod before platform deploy..."
+              if ! kubectl wait --for=condition=Ready pod -l app=vault --timeout=180s; then
+                show_vault_diagnostics
+                exit 1
+              fi
+            fi
           else
             echo "Starting e2e-tests Helm install in background..."
             install_e2e_dependencies &

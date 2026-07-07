@@ -1,0 +1,47 @@
+{{- if and .Values.archestra.codeRuntime.dagger.managed.enabled .Values.archestra.codeRuntime.dagger.managed.networkPolicy.create }}
+---
+# Egress NetworkPolicy for the managed Dagger engine pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-dagger-engine
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dagger-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      name: {{ .Values.dagger.fullnameOverride | default "dagger-runtime" }}-engine
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 0.0.0.0/32
+              {{- range .Values.archestra.codeRuntime.dagger.managed.networkPolicy.additionalDeniedCidrs }}
+              - {{ . }}
+              {{- end }}
+    {{- if .Values.archestra.codeRuntime.dagger.managed.networkPolicy.allowIpv6 }}
+    - to:
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - ::1/128
+              - fc00::/7
+              - fe80::/10
+    {{- end }}
+{{- end }}

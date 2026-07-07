@@ -198,6 +198,15 @@ archestra:
           automountServiceAccountToken: false
           annotations: {}
 
+        networkPolicy:
+          # egress NetworkPolicy for the managed engine; on by default. Actual
+          # enforcement depends on the cluster CNI supporting NetworkPolicy.
+          create: true
+          # extra IPv4 CIDRs to block from the public egress rule (e.g. the
+          # cluster Service/Pod CIDRs when they fall outside RFC1918).
+          additionalDeniedCidrs: []
+          allowIpv6: true
+
       pod:
         # pod created by the managed Dagger subchart or companion chart.
         name: dagger-runtime-engine-0

@@ -1,0 +1,75 @@
+suite: test archestra platform -- Dagger Engine NetworkPolicy
+templates:
+  - dagger-network-policy.yaml
+values:
+  - ../values.yaml
+tests:
+  - it: creates the dagger engine NetworkPolicy by default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.podSelector.matchLabels.name
+          value: dagger-runtime-engine
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Egress
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: dagger-network-policy
+
+  - it: does not create the NetworkPolicy when disabled
+    set:
+      archestra.codeRuntime.dagger.managed.networkPolicy.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the NetworkPolicy when the managed engine is disabled
+    set:
+      archestra.codeRuntime.dagger.managed.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: allows DNS and all-ports public egress by default
+    asserts:
+      - contains:
+          path: spec.egress[0].ports
+          content:
+            protocol: UDP
+            port: 53
+      - equal:
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - notExists:
+          path: spec.egress[1].ports
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 169.254.0.0/16
+      - lengthEqual:
+          path: spec.egress[1].to[0].ipBlock.except
+          count: 7
+
+  - it: includes additional denied CIDRs when configured
+    set:
+      archestra.codeRuntime.dagger.managed.networkPolicy.additionalDeniedCidrs:
+        - 34.118.224.0/20
+    asserts:
+      - contains:
+          path: spec.egress[1].to[0].ipBlock.except
+          content: 34.118.224.0/20
+      - lengthEqual:
+          path: spec.egress[1].to[0].ipBlock.except
+          count: 8
+
+  - it: omits IPv6 egress when allowIpv6 is false
+    set:
+      archestra.codeRuntime.dagger.managed.networkPolicy.allowIpv6: false
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 2

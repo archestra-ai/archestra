@@ -1,0 +1,118 @@
+name: Prebuild E2E Platform Image
+
+# Builds the e2e platform image pair (full + -slim) as soon as a PR is
+# approved, publishing ONLY tree-OID tags. When the PR later enters the merge
+# queue, the queue's "Resolve platform image reuse" step in
+# platform-e2e-tests.yml finds the tree tags and skips its inline build — the
+# single largest term in merge-queue latency (~4-11 min for platform-touching
+# PRs). We build from GitHub's test-merge ref (refs/pull/N/merge), i.e. the PR
+# merged onto current main, because that is the tree the merge queue will
+# build; the PR head's tree would miss whenever main's ./platform moved since
+# branch-off.
+#
+# This workflow is purely opportunistic: if main's ./platform tree moves again
+# between approval and enqueue, or this build fails or is skipped, the queue
+# builds inline exactly as before. Nothing depends on it for correctness,
+# which is why the job sets continue-on-error.
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+concurrency:
+  group: prebuild-e2e-image-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_NAME: platform
+
+jobs:
+  prebuild:
+    name: Prebuild Platform E2E Image
+    # Approved reviews on same-repo, non-draft PRs only: fork PRs receive no
+    # OIDC secrets, and their e2e path uses build artifacts, not the registry.
+    if: >-
+      ${{ github.event.review.state == 'approved' &&
+          github.event.pull_request.draft == false &&
+          github.event.pull_request.head.repo.fork == false }}
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    timeout-minutes: 30
+    # Opportunistic cache warmer — a red result must not alarm anyone or gate
+    # anything, so failures are swallowed at the job level.
+    continue-on-error: true
+    permissions:
+      contents: read # Checkout for the image build.
+      id-token: write # Workload Identity Federation for the GAR push.
+    steps:
+      - name: Checkout predicted merge result
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # GitHub's up-to-date test merge of the PR onto main. Unavailable
+          # while the PR conflicts — the checkout then fails, which is fine
+          # (see continue-on-error above): a conflicting PR can't enqueue
+          # anyway until it's updated, and updating re-triggers on re-approval.
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Authenticate to Google Artifact Registry
+        uses: ./.github/actions/auth-to-gar
+        with:
+          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+      # Same tree-OID recipe as platform-e2e-tests.yml's "Resolve platform
+      # image reuse" step — keep the two in sync.
+      - name: Check for existing image pair
+        id: tree
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          TREE_HASH=$(git rev-parse "HEAD:platform")
+          TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
+          SLIM_TREE_TAG="${TREE_TAG}-slim"
+          echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "slim_tree_tag=${SLIM_TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          BUILD=true
+          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1 \
+            && docker buildx imagetools inspect "${SLIM_TREE_TAG}" >/dev/null 2>&1; then
+            echo "Image pair for platform tree ${TREE_HASH} already cached; nothing to do."
+            BUILD=false
+          fi
+          echo "build=${BUILD}" >> "${GITHUB_OUTPUT}"
+
+      # Mirrors the merge-queue build in platform-e2e-tests.yml (zstd outputs,
+      # no provenance) except it publishes ONLY the tree tags: the queue's
+      # reuse step performs the tree->commit-SHA retag itself, so pushing SHA
+      # tags here would be meaningless (this run's SHA is the review merge
+      # ref, not the queue's merge commit).
+      - name: Build Platform image (tree tag only)
+        if: ${{ steps.tree.outputs.build == 'true' }}
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
+          tags: ${{ steps.tree.outputs.tree_tag }}
+          provenance: "false"
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Build slim Platform image (tree tag only)
+        if: ${{ steps.tree.outputs.build == 'true' }}
+        uses: ./.github/actions/blacksmith-build-push
+        with:
+          context: ./platform
+          file: ./platform/Dockerfile
+          push: "true"
+          target: unified-slim
+          tags: ${{ steps.tree.outputs.slim_tree_tag }}
+          provenance: "false"
+          network: host
+          secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

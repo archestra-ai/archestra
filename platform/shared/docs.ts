@@ -21,6 +21,7 @@ export const DocsPage = {
   PlatformApiReference: "platform-api-reference",
   PlatformBuiltInSubagents: "platform-built-in-subagents",
   PlatformChat: "platform-chat",
+  PlatformConnection: "platform-connection",
   PlatformCostsAndLimits: "platform-costs-and-limits",
   PlatformDeployment: "platform-deployment",
   PlatformDeveloperQuickstart: "platform-developer-quickstart",

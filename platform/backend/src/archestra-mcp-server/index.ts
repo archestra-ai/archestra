@@ -105,7 +105,7 @@ export type { ArchestraContext } from "./types";
  * and reaches MCP gateway clients; it names only the tool and the issue
  * code/path set — a subset of the error text beside it.
  */
-export interface ArchestraValidationMeta {
+interface ArchestraValidationMeta {
   /** Resolved target tool (full/branded name), never the run_tool wrapper. */
   toolName: string;
   issues: Array<{ code: string; path: string }>;

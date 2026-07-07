@@ -43,20 +43,33 @@ def read_fixture_json(*rel: str) -> Any:
     return json.loads(fixtures(*rel).read_text(encoding="utf-8"))
 
 
-_VALUE_ENVELOPE_KEYS = frozenset({"value", "$text", "item", "text"})
+def _envelope_inner(value: Any) -> tuple[bool, Any]:
+    """The candidate inner value of a wrapper shape the platform repairs: any
+    single-key dict (the key name carries no meaning), or the exact two-key
+    Anthropic content block {"type": "text", "text": X}. Mirrors
+    envelopeInnerValue in the platform's run-tool.ts."""
+    if not isinstance(value, dict):
+        return False, None
+    if len(value) == 1:
+        ((_, inner),) = value.items()
+        return True, inner
+    if len(value) == 2 and value.get("type") == "text" and "text" in value:
+        return True, value["text"]
+    return False, None
 
 
 def _unwrap_value_envelopes(args: dict) -> dict:
-    """Shallow-unwrap single-key value envelopes weak models wrap scalar args in, e.g.
-    {"appId": {"value": "x"}} or {"appId": {"appId": "x"}} -> {"appId": "x"}. Only when the
-    inner key is a known envelope key or repeats the param name, and the inner value is a
-    scalar or list. Never recurses; a dict-valued inner payload is never unwrapped."""
+    """Shallow-unwrap the wrapper shapes the platform repairs at dispatch, e.g.
+    {"appId": {"value": "x"}}, {"appId": {"appId": "x"}}, or
+    {"name": {"type": "text", "text": "x"}} -> the inner value. Only a scalar or
+    list inner value is unwrapped, approximating the platform's declared-type
+    guard, which this schema-free layer cannot see. Never recurses; a dict-valued
+    inner payload is never unwrapped."""
     out: dict = {}
     for k, v in args.items():
-        if isinstance(v, dict) and len(v) == 1:
-            ((k2, inner),) = v.items()
-            if (k2 in _VALUE_ENVELOPE_KEYS or k2 == k) and (inner is None or isinstance(inner, (str, int, float, bool, list))):
-                v = inner
+        found, inner = _envelope_inner(v)
+        if found and isinstance(inner, (str, int, float, bool, list)):
+            v = inner
         out[k] = v
     return out
 
@@ -67,8 +80,8 @@ def tool_calls() -> Iterator[tuple[str, dict]]:
     `archestra__run_tool` meta-tool with input {tool_name, tool_args}; decode that envelope so
     callers see the real tool name + args either way. run_tool args are then shallow-normalized,
     approximating the platform's dispatch-time repair (which exists only on the run_tool path — a
-    direct call keeps its raw args, exactly as the platform saw them): a value that is a
-    single-key dict whose key is one of {value, $text, item, text} or the param name itself,
+    direct call keeps its raw args, exactly as the platform saw them): a value that is any
+    single-key dict, or the {"type": "text", "text": X} content block,
     holding a scalar or list, is replaced by that inner value -- the platform repairs such
     envelopes at dispatch but records the raw args, so without this the record misrepresents what
     ran. This layer is schema-free and slightly more permissive than the platform (it cannot see

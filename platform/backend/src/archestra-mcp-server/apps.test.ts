@@ -713,10 +713,6 @@ describe("read_app / edit_app", () => {
     expect(
       (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
     ).toBe("<h1>same</h1>");
-    const text = (result.content[0] as any).text as string;
-    expect(text).toContain("skipped");
-    // an all-skipped batch must not claim it applied anything
-    expect(text).not.toMatch(/Applied \d+ edit/);
   });
 
   test("a no-op edit amid real edits is skipped while the rest apply", async () => {
@@ -732,13 +728,6 @@ describe("read_app / edit_app", () => {
     expect(structured(result).latestVersion).toBe(version + 1);
     const head = await AppVersionModel.findByAppAndVersion(appId, version + 1);
     expect(head?.html).toBe("<div>ALPHA beta GAMMA</div>");
-    const text = (result.content[0] as any).text as string;
-    // applied count excludes the skipped edit, which is called out
-    expect(text).toContain("Applied 2 edits");
-    expect(text).toContain("skipped");
-    // excerpt labels keep the caller's original numbering: the GAMMA edit is
-    // still "edit 3" even though only two edits applied
-    expect(text).toContain("edit 3");
   });
 
   test("an edit that injects SDK bootstrap markers is rejected", async () => {

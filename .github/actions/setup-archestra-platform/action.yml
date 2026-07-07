@@ -160,6 +160,22 @@ runs:
         path: /tmp/mcp-id-jag-server.tar
         key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
 
+    # The platform release's bitnami Postgres uses a `:latest` tag, which makes
+    # Kubernetes default the pod's imagePullPolicy to Always — every run pulled
+    # ~200MB from Docker Hub on the web-boot critical path (and depended on
+    # Docker Hub availability/rate limits inside the merge queue). values-ci
+    # pins pullPolicy to IfNotPresent and we preload the image into Kind like
+    # the other dependency images; the daily warm-cache workflow keeps this
+    # tarball fresh, bounding `latest` staleness to the cache lifetime.
+    - name: Cache PostgreSQL image
+      if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
+      id: cache-postgres-image
+      uses: ./.github/actions/github-cache
+      with:
+        path: /tmp/bitnami-postgresql.tar
+        # Keep in sync with warm-e2e-image-caches.yml (same key).
+        key: bitnami-postgresql-latest-v1-${{ runner.arch }}
+
     # Fetch all three MCP dependency images concurrently. On a cache hit we
     # `docker load` the tarball; on a miss we pull from the registry and save the
     # tarball for the actions/cache post-job upload. These pulls previously ran as
@@ -172,10 +188,12 @@ runs:
         OAUTH_CACHE_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
         JWKS_CACHE_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
         ID_JAG_CACHE_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
+        POSTGRES_CACHE_HIT: ${{ steps.cache-postgres-image.outputs.cache-hit }}
       run: |
         MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
         MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
         MCP_ID_JAG_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4"
+        POSTGRES_IMAGE="docker.io/bitnamisecure/postgresql:latest"
 
         # fetch_image <cache-hit> <image-ref> <tarball-path>
         # Loads from the cached tarball on a hit, otherwise pulls and re-saves it.
@@ -197,6 +215,8 @@ runs:
         fetch_image "${JWKS_CACHE_HIT}" "${MCP_JWKS_IMAGE}" /tmp/mcp-jwks-server.tar &
         PIDS+=($!)
         fetch_image "${ID_JAG_CACHE_HIT}" "${MCP_ID_JAG_IMAGE}" /tmp/mcp-id-jag-server.tar &
+        PIDS+=($!)
+        fetch_image "${POSTGRES_CACHE_HIT}" "${POSTGRES_IMAGE}" /tmp/bitnami-postgresql.tar &
         PIDS+=($!)
 
         echo "Waiting for all MCP dependency image fetches to complete..."
@@ -355,6 +375,16 @@ runs:
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           echo "Loading MCP server base image into Kind..."
           kind load docker-image "${MCP_SERVER_BASE_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
+
+        # Postgres is deployed by the platform release (values-ci pins its
+        # pullPolicy to IfNotPresent), so preload it whenever the e2e
+        # dependency stack is in play — see the "Cache PostgreSQL image" step.
+        if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
+          POSTGRES_IMAGE="docker.io/bitnamisecure/postgresql:latest"
+          echo "Loading PostgreSQL image into Kind..."
+          kind load docker-image "${POSTGRES_IMAGE}" --name "${KIND_CLUSTER_NAME}" &
           PIDS+=($!)
         fi
 

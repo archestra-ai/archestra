@@ -78,6 +78,16 @@ jobs:
           path: /tmp/mcp-id-jag-server.tar
           key: mcp-id-jag-server-0.0.4-${{ runner.arch }}
 
+      # NOTE: the upstream tag is `latest`, so this cache effectively freezes
+      # the Postgres build CI runs against — which is deterministic, and what
+      # e2e wants. Bump the -v suffix to pick up a newer upstream image.
+      - name: Cache PostgreSQL image
+        id: cache-postgres-image
+        uses: ./.github/actions/github-cache
+        with:
+          path: /tmp/bitnami-postgresql.tar
+          key: bitnami-postgresql-latest-v1-${{ runner.arch }}
+
       # Pull and tarball whichever images missed; the cache action's post
       # step uploads them with main-branch scope, which is what makes them
       # visible to merge-queue and PR runs. All-hit runs are near-free.
@@ -87,6 +97,7 @@ jobs:
           OAUTH_HIT: ${{ steps.cache-oauth-image.outputs.cache-hit }}
           JWKS_HIT: ${{ steps.cache-jwks-image.outputs.cache-hit }}
           ID_JAG_HIT: ${{ steps.cache-id-jag-image.outputs.cache-hit }}
+          POSTGRES_HIT: ${{ steps.cache-postgres-image.outputs.cache-hit }}
         run: |
           set -euo pipefail
 
@@ -110,6 +121,8 @@ jobs:
           save_image "${JWKS_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3" /tmp/mcp-jwks-server.tar &
           PIDS+=($!)
           save_image "${ID_JAG_HIT}" "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-id-jag:0.0.4" /tmp/mcp-id-jag-server.tar &
+          PIDS+=($!)
+          save_image "${POSTGRES_HIT}" "docker.io/bitnamisecure/postgresql:latest" /tmp/bitnami-postgresql.tar &
           PIDS+=($!)
 
           FAILED=0

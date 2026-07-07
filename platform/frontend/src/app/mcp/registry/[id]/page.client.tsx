@@ -617,6 +617,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
               onAddOrgConnection={() => install.addOrgConnection(item)}
               deploymentStatuses={deploymentStatuses}
               hideHeader
+              bodyTestId={E2eTestId.McpServerSettingsConnectionsContent}
               onOpenPodLogs={variant === "local" ? openPodLogs : undefined}
             />
           </CardContent>

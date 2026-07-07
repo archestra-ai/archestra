@@ -240,8 +240,39 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+      # Same tree-OID reuse scheme as the Platform image above: the MCP server
+      # base image changes rarely, yet its ~100s per-run rebuild sat on the
+      # merge-queue critical path (quickstart `needs` this job, so it could not
+      # start until this leg finished). On a tree match the SHA tag is a
+      # seconds-long registry-side manifest copy instead.
+      - name: Resolve MCP server base image reuse
+        id: mcp-base-reuse
+        if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TREE_HASH=$(git rev-parse "HEAD:platform/mcp_server_docker_image")
+          TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
+          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
+          echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          REUSE=false
+          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1; then
+            echo "Found cached MCP server base image for tree ${TREE_HASH}; copying to ${SHA_TAG}"
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"; then
+              REUSE=true
+            else
+              echo "::warning::mcp base reuse retag failed (tree tag may have just been pruned); building instead"
+            fi
+          else
+            echo "No cached MCP server base image for tree ${TREE_HASH}; building."
+          fi
+          echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
+
       - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
+        if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
@@ -249,7 +280,9 @@ jobs:
           platforms: linux/amd64
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
-          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
+          # tree OID (what the reuse step above checks next time).
+          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
       # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
       # only: they are the sole consumer (shards use source=artifact for forks,

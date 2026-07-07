@@ -14,7 +14,7 @@ use afc_core::rule::{ArgValue, Principal, ToolId};
 use afc_core::value::Chunk;
 use afc_surface::{
     ApproverSpec, CompiledPolicy, DeclassAuthoritySpec, ResultTier, SinkDim, SinkReaders, ToolSpec,
-    compile_dir,
+    compile_file,
 };
 
 use crate::fixtures;
@@ -70,8 +70,8 @@ fn sanitizer_fn(impl_pin: &str) -> Option<fn(&Chunk) -> Chunk> {
 }
 
 impl Runtime {
-    pub fn from_config(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Self, String> {
-        let policy = compile_dir(config_dir).map_err(|e| e.to_string())?;
+    pub fn from_config(policy_path: &Path, jsonl: Option<PathBuf>) -> Result<Self, String> {
+        let policy = compile_file(policy_path).map_err(|e| e.to_string())?;
         Self::from_policy(policy, jsonl)
     }
 

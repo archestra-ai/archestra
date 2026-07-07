@@ -1,0 +1,110 @@
+# The demo AFC policy — one document, one section per concern. Every id cross-references freely
+# across sections; the compiler (afc-surface) resolves them into afc-core IR.
+
+# Org-declared label dimensions beyond readers/integrity.
+dimensions:
+  region:
+    compat: exact          # data residency: the value's region must match the sink's exactly
+  risk:
+    compat: at_most        # a value may flow to a sink whose max risk is >= the value's risk
+    order: [low, high]     # least restrictive first
+
+# Per-tool annotations: effects, how results are labeled, and each sink's ceiling.
+# `legacy.dump` is deliberately absent — an unlabeled tool whose results are Unknown.
+tools:
+  drive.read_doc:
+    effects: [read]
+    label_source: resolver        # tier2: the result label comes from the doc's ACL at call time
+    schema:
+      doc: str
+
+  drive.write_doc:
+    effects: [write]
+    schema:
+      doc: str
+      content: str
+    sink:
+      readers: { kind: from_arg_acl, field: doc }   # sink audience = the target doc's ACL
+
+  web.fetch:
+    effects: [read]
+    label_source: static          # tier3: web content is public but untrusted
+    result:
+      readers: { kind: public }
+      integrity: tainted
+    schema:
+      url: str
+
+  email.send:
+    effects: [egress, consequential]
+    schema:
+      to: subject
+      body: str
+    sink:
+      readers: { kind: from_arg_recipient, field: to }  # sink audience = the recipient
+
+  crm.export:
+    effects: [egress, consequential]
+    schema:
+      region: str
+      record: str
+    sink:
+      readers: { kind: principal }                 # export stays within the principal's audience
+      dims:
+        region: { kind: from_arg, field: region }  # but must satisfy the export's declared region
+
+# Sanctioned relaxations. The precondition MUST be `integrity: clean` (robust declassification);
+# the surface compiler rejects anything else.
+declassifiers:
+  san.redact:
+    authority: { kind: sanitizer, impl_pin: "redact@1" }
+    relabel:
+      readers: { kind: users, users: [X, Y] }   # a redacted summary is safe for the eng team
+      integrity: clean
+    precondition:
+      integrity: clean
+
+# Approver chains, keyed by the (effect, label class) they gate. `std.no_tainted_consequential`
+# picks up the (consequential, tainted) chain.
+chains:
+  tainted_consequential:
+    on: { effect: consequential, label_class: tainted }
+    approvers: [llm.judge, human.oncall]   # llm first; it abstains on tainted, then a human decides
+
+# Approver definitions referenced by chains.
+approvers:
+  llm.judge:
+    kind: llm
+    pin: "judge@1"
+    budget: 3
+    requires_clean_context: true    # abstains rather than reason over tainted context
+    scope: { tool: email.send }
+  human.oncall:
+    kind: human
+    auto_approve: true              # demo stand-in for a real prompt
+    scope: { tool: email.send }     # bounded: the on-call can only approve email.send calls
+  eu.hours:
+    kind: eu_business_hours
+    open: 9
+    close: 17
+    scope: any
+
+# External label sources (tightening-only). Applied via meet, so they can only raise restriction.
+label_sources:
+  risk_bert:
+    kind: fake_risk_bert
+    keywords: [wire, transfer, ssn]   # a hit raises the value's risk dimension to high
+
+# What to do when a value's label is under-determined (NeedsPolicy) at a governed sink.
+on_unknown:
+  action: forbid       # default-deny for governed effects — emitted as the `on_unknown.egress` rule
+assume: {}             # no `Assume` overrides in the demo; legacy.dump stays Unknown
+
+# Org guards: extra ArgCmp-based rules. Present mainly to exercise the checker's argument typing.
+guards:
+  org.block_sanctioned_region:
+    tool: crm.export
+    arg: { field: region, type: str }   # `region` IS in crm.export's schema — this type-checks
+    op: eq
+    value: "CN"
+    outcome: forbid

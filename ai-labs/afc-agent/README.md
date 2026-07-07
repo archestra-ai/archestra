@@ -8,7 +8,7 @@ what to call and AFC decides whether it may.
 
 - **`afc-mcp-tools`** — a standalone `rmcp` MCP server (stdio) exposing five dummy tools
   (`drive_read_doc`, `drive_write_doc`, `web_fetch`, `email_send`, `crm_export`) whose schemas mirror
-  `afc-demo/config/annotations.yaml`. Any MCP client can spawn it.
+  `afc-demo/policy.yaml`. Any MCP client can spawn it.
 - **`afc-agent`** — spawns that server, connects as an MCP client, and drives an OpenRouter model
   through a nitpicker agent loop. Each tool is wrapped by an AFC gate: effectful calls
   (write/egress/consequential) are run through `RuleEngine::check_call` *before* dispatch; reads are
@@ -25,7 +25,7 @@ export OPENROUTER_API_KEY=...            # required
 cargo run -p afc-agent --bin afc-agent   # defaults to deepseek/deepseek-v4-flash
 ```
 
-Flags: `--model <slug>`, `--config <policy dir>`, `--mcp-server <path>`.
+Flags: `--model <slug>`, `--config <policy file>`, `--mcp-server <path>`.
 
 The run walks two tasks: one that trips the no-leak rule (reading a confidential doc then emailing it
 widely), and one that escalates (fetching an untrusted page, then a consequential email). The demo

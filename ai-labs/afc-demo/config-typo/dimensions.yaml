@@ -1,7 +1,0 @@
-# Org-declared label dimensions beyond readers/integrity.
-dimensions:
-  region:
-    compat: exact          # data residency: the value's region must match the sink's exactly
-  risk:
-    compat: at_most        # a value may flow to a sink whose max risk is >= the value's risk
-    order: [low, high]     # least restrictive first

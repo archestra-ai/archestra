@@ -34,7 +34,7 @@ struct Cli {
     /// OpenRouter model slug.
     #[arg(long, default_value = DEFAULT_MODEL)]
     model: String,
-    /// Policy config directory (defaults to the bundled afc-demo config).
+    /// Policy config file (defaults to the bundled afc-demo policy).
     #[arg(long)]
     config: Option<PathBuf>,
     /// Path to the afc-mcp-tools server binary (defaults to the sibling of this binary).
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         );
     }
 
-    let config = cli.config.unwrap_or_else(afc_demo::default_config_dir);
+    let config = cli.config.unwrap_or_else(afc_demo::default_policy_path);
     let server = match cli.mcp_server {
         Some(p) => p,
         None => sibling_binary("afc-mcp-tools")?,

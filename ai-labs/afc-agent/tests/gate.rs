@@ -20,7 +20,7 @@ fn args(pairs: &[(&str, &str)]) -> Map<String, Value> {
 }
 
 async fn new_state() -> GovernanceState {
-    GovernanceState::new(&afc_demo::default_config_dir(), Path::new(server_bin()))
+    GovernanceState::new(&afc_demo::default_policy_path(), Path::new(server_bin()))
         .await
         .expect("build governance state")
 }

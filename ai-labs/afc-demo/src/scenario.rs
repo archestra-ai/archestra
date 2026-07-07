@@ -57,8 +57,8 @@ fn labeled(
     )
 }
 
-pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String> {
-    let mut rt = Runtime::from_config(config_dir, jsonl)?;
+pub fn run(policy_path: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String> {
+    let mut rt = Runtime::from_config(policy_path, jsonl)?;
     let principal = rt.principal.clone();
 
     // Beat 1: read doc A. The tier-2 resolver labels the result from doc A's ACL: readers {X}.

@@ -1,4 +1,4 @@
-//! Build a checker [`Inventory`] from a config directory + fixtures. Representative labels stand in
+//! Build a checker [`Inventory`] from a policy file + fixtures. Representative labels stand in
 //! for the concrete labels a read produces / a sink requires, which is all the class-level leak-path
 //! analysis needs.
 
@@ -8,12 +8,12 @@ use std::path::Path;
 use afc_core::checker::{ChainEntry, DeclassEntry, Inventory, ToolEntry};
 use afc_core::label::{DimValue, Integrity, Label, Readers, Subject};
 use afc_core::rule::Effect;
-use afc_surface::{ResultTier, SinkDim, SinkReaders, ToolSpec, compile_dir};
+use afc_surface::{ResultTier, SinkDim, SinkReaders, ToolSpec, compile_file};
 
 use crate::fixtures;
 
-pub fn build_inventory(config_dir: &Path) -> Result<Inventory, String> {
-    let policy = compile_dir(config_dir).map_err(|e| e.to_string())?;
+pub fn build_inventory(policy_path: &Path) -> Result<Inventory, String> {
+    let policy = compile_file(policy_path).map_err(|e| e.to_string())?;
 
     let mut tools: Vec<ToolEntry> = policy
         .tools

@@ -1,4 +1,0 @@
-# What to do when a value's label is under-determined (NeedsPolicy) at a governed sink.
-on_unknown:
-  action: forbid       # default-deny for governed effects — emitted as the `on_unknown.egress` rule
-assume: {}             # no `Assume` overrides in the demo; legacy.dump stays Unknown

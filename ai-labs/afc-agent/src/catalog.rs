@@ -1,7 +1,7 @@
 //! The dummy tool catalog: the single source of truth shared by the MCP server (which exposes these
 //! tools) and the agent (which wraps each in an AFC-governed proxy). Each tool carries both its
 //! model/MCP-facing `tool_name` (underscored — the grammar OpenAI-compatible function names accept)
-//! and its `afc_id` (dotted — the id the AFC policy in `afc-demo/config/annotations.yaml` governs by).
+//! and its `afc_id` (dotted — the id the AFC policy in `afc-demo/policy.yaml` governs by).
 //! The two names form an explicit bijection; nothing else in the crate hardcodes the mapping.
 
 use serde_json::{Map, Value, json};
@@ -17,7 +17,7 @@ pub struct ToolDef {
     pub schema: Value,
 }
 
-/// The five governed tools, mirroring the vocabulary annotated in `afc-demo/config/annotations.yaml`.
+/// The five governed tools, mirroring the vocabulary annotated in `afc-demo/policy.yaml`.
 pub fn catalog() -> Vec<ToolDef> {
     vec![
         ToolDef {

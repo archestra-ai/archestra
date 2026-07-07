@@ -117,49 +117,38 @@ pub struct OnUnknownSpec {
     pub assumptions: Vec<(String, Label)>,
 }
 
-/// The parsed (but not yet compiled) config files.
+/// The parsed (but not yet compiled) policy document — one section per top-level key. `assume` and
+/// `guards` default to empty; the other sections are required.
+#[derive(Debug, serde::Deserialize)]
 pub struct SurfaceConfig {
-    pub dimensions: DimensionsFile,
-    pub annotations: AnnotationsFile,
-    pub declassifiers: DeclassifiersFile,
-    pub chains: ChainsFile,
-    pub on_unknown: OnUnknownFile,
-    pub label_sources: LabelSourcesFile,
-    pub approvers: ApproversFile,
-    pub guards: GuardsFile,
+    pub dimensions: BTreeMap<String, DimensionCfg>,
+    pub tools: BTreeMap<String, ToolCfg>,
+    pub declassifiers: BTreeMap<String, DeclassCfg>,
+    pub chains: BTreeMap<String, ChainCfg>,
+    pub on_unknown: OnUnknownCfg,
+    #[serde(default)]
+    pub assume: BTreeMap<String, LabelCfg>,
+    pub label_sources: BTreeMap<String, LabelSourceCfg>,
+    pub approvers: BTreeMap<String, ApproverCfg>,
+    #[serde(default)]
+    pub guards: BTreeMap<String, GuardCfg>,
 }
 
-/// Load and compile a config directory in one step.
-pub fn compile_dir(dir: &Path) -> Result<CompiledPolicy, SurfaceError> {
-    compile(load_dir(dir)?)
-}
-
-/// Read the surface files from a directory. `guards.yaml` is optional.
-pub fn load_dir(dir: &Path) -> Result<SurfaceConfig, SurfaceError> {
-    Ok(SurfaceConfig {
-        dimensions: read_yaml(&dir.join("dimensions.yaml"))?,
-        annotations: read_yaml(&dir.join("annotations.yaml"))?,
-        declassifiers: read_yaml(&dir.join("declassifiers.yaml"))?,
-        chains: read_yaml(&dir.join("chains.yaml"))?,
-        on_unknown: read_yaml(&dir.join("on_unknown.yaml"))?,
-        label_sources: read_yaml(&dir.join("label_sources.yaml"))?,
-        approvers: read_yaml(&dir.join("approvers.yaml"))?,
-        guards: read_optional_yaml(&dir.join("guards.yaml"))?.unwrap_or(GuardsFile {
-            guards: BTreeMap::new(),
-        }),
-    })
+/// Load and compile a policy file in one step.
+pub fn compile_file(path: &Path) -> Result<CompiledPolicy, SurfaceError> {
+    compile(read_yaml(path)?)
 }
 
 /// Compile parsed config into afc-core IR + specs.
 pub fn compile(cfg: SurfaceConfig) -> Result<CompiledPolicy, SurfaceError> {
     let dims = compile_dims(&cfg.dimensions);
-    let tools = compile_tools(&cfg.annotations, &dims)?;
+    let tools = compile_tools(&cfg.tools, &dims)?;
     let declassifiers = compile_declassifiers(&cfg.declassifiers, &dims)?;
     let chains = compile_chains(&cfg.chains, &cfg.approvers)?;
     let tool_ids: BTreeSet<String> = tools.iter().map(|t| t.id.clone()).collect();
     let approvers = compile_approvers(&cfg.approvers, &tool_ids)?;
     let label_sources = compile_label_sources(&cfg.label_sources);
-    let on_unknown = compile_on_unknown(&cfg.on_unknown, &dims)?;
+    let on_unknown = compile_on_unknown(&cfg.on_unknown, &cfg.assume, &dims)?;
 
     let mut rules = Vec::new();
     rules.push(rule_no_leak());
@@ -181,9 +170,9 @@ pub fn compile(cfg: SurfaceConfig) -> Result<CompiledPolicy, SurfaceError> {
     })
 }
 
-fn compile_dims(file: &DimensionsFile) -> DimRegistry {
+fn compile_dims(dimensions: &BTreeMap<String, DimensionCfg>) -> DimRegistry {
     let mut m = BTreeMap::new();
-    for (id, cfg) in &file.dimensions {
+    for (id, cfg) in dimensions {
         let compat = match cfg.compat {
             CompatCfg::Exact => afc_core::label::DimCompat::Exact,
             CompatCfg::AtMost => afc_core::label::DimCompat::AtMost,
@@ -199,9 +188,12 @@ fn compile_dims(file: &DimensionsFile) -> DimRegistry {
     DimRegistry(m)
 }
 
-fn compile_tools(file: &AnnotationsFile, dims: &DimRegistry) -> Result<Vec<ToolSpec>, SurfaceError> {
+fn compile_tools(
+    tools_cfg: &BTreeMap<String, ToolCfg>,
+    dims: &DimRegistry,
+) -> Result<Vec<ToolSpec>, SurfaceError> {
     let mut tools = Vec::new();
-    for (id, cfg) in &file.tools {
+    for (id, cfg) in tools_cfg {
         let effects = cfg.effects.iter().map(effect_of).collect();
         let fields: BTreeMap<String, ArgType> = cfg
             .schema
@@ -291,11 +283,11 @@ fn compile_sink(
 }
 
 fn compile_declassifiers(
-    file: &DeclassifiersFile,
+    declassifiers: &BTreeMap<String, DeclassCfg>,
     dims: &DimRegistry,
 ) -> Result<Vec<DeclassSpec>, SurfaceError> {
     let mut out = Vec::new();
-    for (id, cfg) in &file.declassifiers {
+    for (id, cfg) in declassifiers {
         // Robust declassification: the precondition MUST require Clean integrity. A config that asks
         // to declassify tainted content is rejected here — it can never be compiled into an IR rule.
         if !matches!(cfg.precondition.integrity, IntegrityCfg::Clean) {
@@ -320,11 +312,14 @@ fn compile_declassifiers(
     Ok(out)
 }
 
-fn compile_chains(file: &ChainsFile, approvers: &ApproversFile) -> Result<Vec<ChainSpec>, SurfaceError> {
+fn compile_chains(
+    chains: &BTreeMap<String, ChainCfg>,
+    approvers: &BTreeMap<String, ApproverCfg>,
+) -> Result<Vec<ChainSpec>, SurfaceError> {
     let mut out = Vec::new();
-    for (id, cfg) in &file.chains {
+    for (id, cfg) in chains {
         for a in &cfg.approvers {
-            if !approvers.approvers.contains_key(a) {
+            if !approvers.contains_key(a) {
                 return Err(SurfaceError::UnknownApprover {
                     id: id.clone(),
                     approver: a.clone(),
@@ -342,11 +337,11 @@ fn compile_chains(file: &ChainsFile, approvers: &ApproversFile) -> Result<Vec<Ch
 }
 
 fn compile_approvers(
-    file: &ApproversFile,
+    approvers: &BTreeMap<String, ApproverCfg>,
     tool_ids: &BTreeSet<String>,
 ) -> Result<Vec<ApproverSpec>, SurfaceError> {
     let mut out = Vec::new();
-    for (id, cfg) in &file.approvers {
+    for (id, cfg) in approvers {
         let spec = match cfg {
             ApproverCfg::Human {
                 auto_approve,
@@ -380,8 +375,8 @@ fn compile_approvers(
     Ok(out)
 }
 
-fn compile_label_sources(file: &LabelSourcesFile) -> Vec<LabelSourceSpec> {
-    file.label_sources
+fn compile_label_sources(label_sources: &BTreeMap<String, LabelSourceCfg>) -> Vec<LabelSourceSpec> {
+    label_sources
         .iter()
         .map(|(id, cfg)| match cfg {
             LabelSourceCfg::FakeRiskBert { keywords } => LabelSourceSpec {
@@ -392,30 +387,38 @@ fn compile_label_sources(file: &LabelSourcesFile) -> Vec<LabelSourceSpec> {
         .collect()
 }
 
-fn compile_on_unknown(file: &OnUnknownFile, dims: &DimRegistry) -> Result<OnUnknownSpec, SurfaceError> {
-    let forbid = matches!(file.on_unknown.action, UnknownActionCfg::Forbid);
+fn compile_on_unknown(
+    on_unknown: &OnUnknownCfg,
+    assume: &BTreeMap<String, LabelCfg>,
+    dims: &DimRegistry,
+) -> Result<OnUnknownSpec, SurfaceError> {
+    let forbid = matches!(on_unknown.action, UnknownActionCfg::Forbid);
     let mut assumptions = Vec::new();
-    for (tool, label) in &file.assume {
+    for (tool, label) in assume {
         assumptions.push((tool.clone(), compile_label(label, dims, tool)?));
     }
-    Ok(OnUnknownSpec { forbid, assumptions })
+    Ok(OnUnknownSpec {
+        forbid,
+        assumptions,
+    })
 }
 
-fn compile_guards(file: &GuardsFile) -> Result<Vec<Rule>, SurfaceError> {
+fn compile_guards(guards: &BTreeMap<String, GuardCfg>) -> Result<Vec<Rule>, SurfaceError> {
     let mut out = Vec::new();
-    for (id, cfg) in &file.guards {
+    for (id, cfg) in guards {
         let ty = arg_type_of(cfg.arg.ty);
-        let value = match ty {
-            ArgType::Str => ArgValue::Str(cfg.value.clone()),
-            ArgType::Int => ArgValue::Int(cfg.value.parse().map_err(|_| {
-                SurfaceError::InvalidGuardValue {
-                    guard: id.clone(),
-                    value: cfg.value.clone(),
-                    ty: "int".to_string(),
-                }
-            })?),
-            ArgType::Subject => ArgValue::Subject(Subject::User(cfg.value.clone())),
-        };
+        let value =
+            match ty {
+                ArgType::Str => ArgValue::Str(cfg.value.clone()),
+                ArgType::Int => ArgValue::Int(cfg.value.parse().map_err(|_| {
+                    SurfaceError::InvalidGuardValue {
+                        guard: id.clone(),
+                        value: cfg.value.clone(),
+                        ty: "int".to_string(),
+                    }
+                })?),
+                ArgType::Subject => ArgValue::Subject(Subject::User(cfg.value.clone())),
+            };
         let op = match cfg.op {
             OpCfg::Eq => CmpOp::Eq,
             OpCfg::Ne => CmpOp::Ne,
@@ -516,10 +519,12 @@ fn compile_scope(
             scope: s.clone(),
         }),
         // A tool scope must name a real tool, or the approver silently governs nothing.
-        ScopeCfg::Tool { tool } if !tool_ids.contains(tool) => Err(SurfaceError::UnknownScopeTool {
-            approver: approver.to_string(),
-            tool: tool.clone(),
-        }),
+        ScopeCfg::Tool { tool } if !tool_ids.contains(tool) => {
+            Err(SurfaceError::UnknownScopeTool {
+                approver: approver.to_string(),
+                tool: tool.clone(),
+            })
+        }
         ScopeCfg::Tool { tool } => Ok(Predicate::ToolIs(tool.clone())),
     }
 }
@@ -532,8 +537,12 @@ fn compile_label(cfg: &LabelCfg, dims: &DimRegistry, whence: &str) -> Result<Lab
         Some(ReadersCfg::Users { users }) => {
             Readers::Known(users.iter().cloned().map(Subject::User).collect())
         }
-        Some(ReadersCfg::Team { team }) => Readers::Known(BTreeSet::from([Subject::Team(team.clone())])),
-        Some(ReadersCfg::Org { org }) => Readers::Known(BTreeSet::from([Subject::Org(org.clone())])),
+        Some(ReadersCfg::Team { team }) => {
+            Readers::Known(BTreeSet::from([Subject::Team(team.clone())]))
+        }
+        Some(ReadersCfg::Org { org }) => {
+            Readers::Known(BTreeSet::from([Subject::Org(org.clone())]))
+        }
     };
     let integrity = match cfg.integrity {
         None | Some(IntegrityCfg::Clean) => Integrity::Clean,
@@ -585,11 +594,4 @@ fn read_yaml<T: DeserializeOwned>(path: &Path) -> Result<T, SurfaceError> {
         path: path.display().to_string(),
         source,
     })
-}
-
-fn read_optional_yaml<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, SurfaceError> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    read_yaml(path).map(Some)
 }

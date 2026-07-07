@@ -20,7 +20,7 @@ fn deny_parts(d: &Decision) -> (&str, &str, &[Remedy]) {
 fn run() -> afc_demo::Scenario {
     let dir = tempfile::tempdir().unwrap();
     let jsonl = dir.path().join("decisions.jsonl");
-    afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl)).expect("scenario runs")
+    afc_demo::run_scenario(&afc_demo::default_policy_path(), Some(jsonl)).expect("scenario runs")
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn every_deny_has_reason_and_residual() {
 fn decision_log_is_valid_jsonl() {
     let dir = tempfile::tempdir().unwrap();
     let jsonl = dir.path().join("decisions.jsonl");
-    afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl.clone())).unwrap();
+    afc_demo::run_scenario(&afc_demo::default_policy_path(), Some(jsonl.clone())).unwrap();
 
     let records = afc_demo::suggest::read_log(&jsonl).expect("valid JSONL");
     assert!(!records.is_empty());
@@ -164,7 +164,7 @@ fn decision_log_is_valid_jsonl() {
 
 #[test]
 fn check_passes_on_clean_config_and_reports_escalation_surface() {
-    let inv = afc_demo::build_inventory(&afc_demo::default_config_dir()).unwrap();
+    let inv = afc_demo::build_inventory(&afc_demo::default_policy_path()).unwrap();
     let report = afc_core::checker::check(&inv);
     assert!(
         !report.has_errors(),
@@ -181,7 +181,7 @@ fn check_passes_on_clean_config_and_reports_escalation_surface() {
 
 #[test]
 fn check_rejects_typo_argcmp_path_with_rul_error() {
-    let inv = afc_demo::build_inventory(&afc_demo::typo_config_dir()).unwrap();
+    let inv = afc_demo::build_inventory(&afc_demo::typo_policy_path()).unwrap();
     let report = afc_core::checker::check(&inv);
     assert!(report.has_errors());
     assert!(
@@ -218,7 +218,7 @@ fn bootstrap_and_review_and_suggest() {
     // suggest: the scenario's denies produce both canned patterns.
     let dir = tempfile::tempdir().unwrap();
     let jsonl = dir.path().join("decisions.jsonl");
-    afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl.clone())).unwrap();
+    afc_demo::run_scenario(&afc_demo::default_policy_path(), Some(jsonl.clone())).unwrap();
     let records = afc_demo::suggest::read_log(&jsonl).unwrap();
     let suggestions = afc_demo::suggest::suggest(&records);
     assert!(

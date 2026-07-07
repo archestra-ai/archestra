@@ -1,14 +1,9 @@
-//! The raw YAML authoring surface: serde structs mirroring the config files 1:1. These carry no
-//! judgment — [`crate::compile`] turns them into afc-core IR.
+//! The raw YAML authoring surface: the per-section serde types the single policy document
+//! deserializes into. These carry no judgment — [`crate::compile`] turns them into afc-core IR.
 
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-pub struct DimensionsFile {
-    pub dimensions: BTreeMap<String, DimensionCfg>,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct DimensionCfg {
@@ -22,11 +17,6 @@ pub struct DimensionCfg {
 pub enum CompatCfg {
     Exact,
     AtMost,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AnnotationsFile {
-    pub tools: BTreeMap<String, ToolCfg>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,11 +110,6 @@ pub enum SinkDimCfg {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DeclassifiersFile {
-    pub declassifiers: BTreeMap<String, DeclassCfg>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct DeclassCfg {
     pub authority: AuthorityCfg,
     pub relabel: LabelCfg,
@@ -145,11 +130,6 @@ pub struct PreconditionCfg {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ChainsFile {
-    pub chains: BTreeMap<String, ChainCfg>,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct ChainCfg {
     pub on: ChainOnCfg,
     pub approvers: Vec<String>,
@@ -159,13 +139,6 @@ pub struct ChainCfg {
 pub struct ChainOnCfg {
     pub effect: EffectCfg,
     pub label_class: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct OnUnknownFile {
-    pub on_unknown: OnUnknownCfg,
-    #[serde(default)]
-    pub assume: BTreeMap<String, LabelCfg>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,19 +154,9 @@ pub enum UnknownActionCfg {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct LabelSourcesFile {
-    pub label_sources: BTreeMap<String, LabelSourceCfg>,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LabelSourceCfg {
     FakeRiskBert { keywords: Vec<String> },
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ApproversFile {
-    pub approvers: BTreeMap<String, ApproverCfg>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -223,13 +186,9 @@ pub enum ApproverCfg {
 pub enum ScopeCfg {
     /// The literal string `any` — an unbounded scope.
     Any(String),
-    Tool { tool: String },
-}
-
-#[derive(Debug, Deserialize)]
-pub struct GuardsFile {
-    #[serde(default)]
-    pub guards: BTreeMap<String, GuardCfg>,
+    Tool {
+        tool: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]

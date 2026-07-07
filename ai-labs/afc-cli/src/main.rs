@@ -8,7 +8,10 @@ use afc_core::engine::{AllowVia, Decision};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "afc", about = "AFC — information-flow control for agent tool calls (demo)")]
+#[command(
+    name = "afc",
+    about = "AFC — information-flow control for agent tool calls (demo)"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -16,8 +19,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Statically check a policy config for leaks, type errors, and unlabeled tools.
+    /// Statically check a policy file for leaks, type errors, and unlabeled tools.
     Check {
+        /// Policy file (defaults to the bundled demo policy).
         #[arg(long)]
         config: Option<PathBuf>,
         /// The caller's last-seen inventory hash; a mismatch reports that the inventory changed.
@@ -63,7 +67,7 @@ fn main() -> ExitCode {
 }
 
 fn cmd_check(config: Option<PathBuf>, inventory_hash: Option<String>) -> ExitCode {
-    let config = config.unwrap_or_else(afc_demo::default_config_dir);
+    let config = config.unwrap_or_else(afc_demo::default_policy_path);
     let inv = match afc_demo::build_inventory(&config) {
         Ok(inv) => inv,
         Err(e) => {
@@ -116,8 +120,7 @@ fn print_report(report: &CheckReport) {
 }
 
 fn cmd_review(_approve_all: bool, except: Vec<String>) -> ExitCode {
-    let source =
-        afc_demo::bootstrap::FixtureProposalSource::new(afc_demo::proposals_fixture());
+    let source = afc_demo::bootstrap::FixtureProposalSource::new(afc_demo::proposals_fixture());
     let proposals = match proposals(&source) {
         Ok(p) => p,
         Err(e) => {
@@ -129,14 +132,16 @@ fn cmd_review(_approve_all: bool, except: Vec<String>) -> ExitCode {
     println!("== afc review (approve-all, except {except:?}) ==");
     for p in &reviewed {
         let status = p.reviewed_by.as_deref().unwrap_or("UNREVIEWED");
-        println!("  {} effects={:?} reviewed_by={}", p.tool, p.effects, status);
+        println!(
+            "  {} effects={:?} reviewed_by={}",
+            p.tool, p.effects, status
+        );
     }
     ExitCode::SUCCESS
 }
 
 fn cmd_bootstrap() -> ExitCode {
-    let source =
-        afc_demo::bootstrap::FixtureProposalSource::new(afc_demo::proposals_fixture());
+    let source = afc_demo::bootstrap::FixtureProposalSource::new(afc_demo::proposals_fixture());
     let proposals = match proposals(&source) {
         Ok(p) => p,
         Err(e) => {
@@ -166,7 +171,9 @@ fn cmd_suggest(log: Option<PathBuf>) -> ExitCode {
         None => {
             // No log given — run the scenario to a temp log so suggest has something to read.
             let dir = std::env::temp_dir().join("afc-suggest.jsonl");
-            if let Err(e) = afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(dir.clone())) {
+            if let Err(e) =
+                afc_demo::run_scenario(&afc_demo::default_policy_path(), Some(dir.clone()))
+            {
                 eprintln!("{e}");
                 return ExitCode::FAILURE;
             }
@@ -188,7 +195,7 @@ fn cmd_suggest(log: Option<PathBuf>) -> ExitCode {
 
 fn cmd_demo(log: Option<PathBuf>) -> ExitCode {
     let jsonl = log.unwrap_or_else(|| std::env::temp_dir().join("afc-demo.jsonl"));
-    let s = match afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl.clone())) {
+    let s = match afc_demo::run_scenario(&afc_demo::default_policy_path(), Some(jsonl.clone())) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("scenario failed: {e}");
@@ -197,7 +204,10 @@ fn cmd_demo(log: Option<PathBuf>) -> ExitCode {
     };
 
     println!("== afc demo — annotated trace ==\n");
-    println!("1. read doc A            → labeled {}", render_readers(&s.beat1_read.label.readers));
+    println!(
+        "1. read doc A            → labeled {}",
+        render_readers(&s.beat1_read.label.readers)
+    );
     println!("2. summarize → write B   → {}", render(&s.beat2_deny));
     println!(
         "3. declassify → write B  → declassified={} {}",
@@ -226,8 +236,14 @@ fn cmd_demo(log: Option<PathBuf>) -> ExitCode {
 fn render(d: &Decision) -> String {
     match d {
         Decision::Allow { via: None, .. } => "Allow".to_string(),
-        Decision::Allow { via: Some(AllowVia::ApprovedBy(c)), .. } => format!("Allow (approved via {c})"),
-        Decision::Allow { via: Some(AllowVia::DeclassifiedBy(d)), .. } => format!("Allow (declassified by {d})"),
+        Decision::Allow {
+            via: Some(AllowVia::ApprovedBy(c)),
+            ..
+        } => format!("Allow (approved via {c})"),
+        Decision::Allow {
+            via: Some(AllowVia::DeclassifiedBy(d)),
+            ..
+        } => format!("Allow (declassified by {d})"),
         Decision::Deny { rule_id, .. } => format!("Deny ({rule_id})"),
         Decision::Escalate { chain, .. } => format!("Escalate → {chain:?}"),
     }

@@ -59,11 +59,11 @@ pub struct GovernanceState {
 }
 
 impl GovernanceState {
-    /// Build the engine from the policy at `config_dir`, connect to the MCP server at `server_bin`,
+    /// Build the engine from the policy at `policy_path`, connect to the MCP server at `server_bin`,
     /// override `human.oncall` with the demo parity approver, and fail closed if any effectful tool
     /// lacks a resolvable sink.
-    pub async fn new(config_dir: &Path, server_bin: &Path) -> Result<Self> {
-        let mut rt = afc_demo::Runtime::from_config(config_dir, None).map_err(|e| eyre!(e))?;
+    pub async fn new(policy_path: &Path, server_bin: &Path) -> Result<Self> {
+        let mut rt = afc_demo::Runtime::from_config(policy_path, None).map_err(|e| eyre!(e))?;
 
         let scope = rt
             .approvers

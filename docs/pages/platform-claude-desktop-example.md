@@ -26,7 +26,7 @@ Screenshots live in /docs/automated_screenshots/platform-claude-desktop-example_
 Don't restate obvious UI; keep it short.
 -->
 
-> **Note:** This routes Claude Desktop's inference through an Anthropic API key, billed at pay-as-you-go API token rates. Claude Desktop can't reuse a Claude Pro or Max subscription for third-party inference — for that, connect [Claude Code](/docs/platform-claude-code-example) in passthrough mode instead.
+> **Note:** Claude Desktop's third-party inference needs an Anthropic API key (or an Archestra virtual key), so its calls bill at pay-as-you-go API token rates. It cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
 
 ## Step 1. Download the configuration profile
 
@@ -78,4 +78,6 @@ Claude Desktop opens Archestra's consent screen in your browser; sign in and cli
 
 Claude Desktop's inference and tools now run through Archestra, with its guardrails and observability.
 
-For full documentation of the connection setup script see the [Connection Page](/docs/platform-connection).
+## Next Step
+
+Explore full local agents connection docs: [Connect Your Agents](/docs/platform-connection).

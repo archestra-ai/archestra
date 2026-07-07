@@ -51,4 +51,6 @@ Claude Code opens Archestra's consent screen in your browser; sign in and click 
 
 Claude Code now runs through Archestra — its MCP orchestrator, guardrails, and observability — while your Claude subscription keeps paying for inference.
 
-For full documentation of the connection setup script see the [Connection Page](/docs/platform-connection).
+## Next Step
+
+Explore full local agents connection docs: [Connect Your Agents](/docs/platform-connection).

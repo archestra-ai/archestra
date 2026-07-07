@@ -1,5 +1,5 @@
 ---
-title: Connection Page
+title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it

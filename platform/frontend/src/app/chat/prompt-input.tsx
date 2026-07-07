@@ -668,13 +668,19 @@ const PromptInputContent = ({
   const submitStatus = status === "error" ? "ready" : status;
   const isResponseInFlight = status === "submitted" || status === "streaming";
 
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  // When off, the composer behaves as before: Enter is blocked while a
+  // response streams and the submit button stops via the form-submit path.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
-  const queuedMessages = useConversationMessageQueue(conversationId);
+  const queuedMessages = useConversationMessageQueue(
+    isMessageQueueEnabled ? conversationId : undefined,
+  );
 
   return (
     <div className="relative">
-      {conversationId && queuedMessages.length > 0 && (
+      {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
         <Queue className="mb-2" data-testid={E2eTestId.ChatMessageQueue}>
           <QueueSection>
             <QueueSectionTrigger>
@@ -804,11 +810,14 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={submitDisabled || isContextCompacting}
-              // With a live conversation, Enter during a stream submits and
-              // the submit handler queues the message. Without one (new-chat
-              // composer while the conversation is being created) Enter stays
-              // blocked so it cannot double-create.
-              disableEnterSubmit={!conversationId && isResponseInFlight}
+              // With queueing on and a live conversation, Enter during a
+              // stream submits and the submit handler queues the message.
+              // Otherwise (queueing off, or the new-chat composer while the
+              // conversation is being created) Enter stays blocked.
+              disableEnterSubmit={
+                isResponseInFlight &&
+                (!isMessageQueueEnabled || !conversationId)
+              }
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
             />
@@ -857,8 +866,10 @@ const PromptInputContent = ({
               onClick={(event) => {
                 // While a response is in-flight the button shows Stop; a
                 // click stops the stream instead of submitting the form
-                // (which would queue the typed text — see onStop docs).
-                if (onStop && isResponseInFlight) {
+                // (which would queue the typed text — see onStop docs). With
+                // queueing off, the click falls through to the form submit,
+                // whose handler stops the stream (the pre-queue behavior).
+                if (isMessageQueueEnabled && onStop && isResponseInFlight) {
                   event.preventDefault();
                   onStop();
                 }

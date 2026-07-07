@@ -24,6 +24,8 @@ When the agent has the [code sandbox](./platform-code-sandbox) available, a mess
 
 ### Message Queue
 
+Message queueing is a beta feature. Set `ARCHESTRA_BETA=true` to enable it.
+
 You can keep typing while the agent is responding — Shift+Enter inserts a newline as usual. Press Enter to queue the message. Queued messages are sent automatically, in order, as each response finishes.
 
 Queued messages appear above the prompt input, where you can remove them. Each conversation has its own queue. Queues survive page refreshes and switching between conversations. Stopping a response pauses its queue; sending a new message resumes it.

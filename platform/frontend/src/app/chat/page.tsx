@@ -137,7 +137,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -986,6 +986,8 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
 
   // A scheduled run's transcript is persisted only when it completes, so a run
   // opened while still running seeds the live chat session empty. When the run
@@ -1508,10 +1510,11 @@ export function ChatPageContent({
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
-      // A submit while a response is in-flight queues the message; the
-      // conversation's ChatSessionHook sends it once the turn settles.
-      // (Stopping is the submit button's onClick, not a form submit.)
-      if (!conversationId) {
+      // With queueing on, a submit while a response is in-flight queues the
+      // message; the conversation's ChatSessionHook sends it once the turn
+      // settles. (Stopping is the submit button's onClick, not a form
+      // submit.) With queueing off, the submit button doubles as Stop.
+      if (!isMessageQueueEnabled || !conversationId) {
         handleStopStreaming();
         // Throw to keep the textarea and draft intact — see onSubmit
         // contract in ArchestraPromptInputProps.

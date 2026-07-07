@@ -320,17 +320,29 @@ export function useReloadMcpServerTools() {
       return result;
     },
     onSuccess: async (result, variables) => {
+      // Callers pass only the server id; recover name/catalogId from the
+      // cached mcp-servers lists (same lookup useMcpInstallationStatusCacheSync
+      // uses) for the toast and catalog-scoped invalidation.
+      const cachedServer = queryClient
+        .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
+          queryKey: ["mcp-servers"],
+        })
+        .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
+        .find((candidate) => candidate.id === variables.id);
+      const name = variables.name ?? cachedServer?.name;
+      const catalogId = variables.catalogId ?? cachedServer?.catalogId;
+
       await queryClient.refetchQueries({ queryKey: ["mcp-servers"] });
       invalidateToolAssignmentQueries(queryClient);
       queryClient.invalidateQueries({
         queryKey: ["mcp-servers", variables.id, "tools"],
       });
-      if (variables.catalogId) {
+      if (catalogId) {
         queryClient.invalidateQueries({
-          queryKey: ["mcp-catalog", variables.catalogId, "tools"],
+          queryKey: ["mcp-catalog", catalogId, "tools"],
         });
       }
-      const target = variables.name ?? "server";
+      const target = name ?? "server";
       const changed =
         (result?.created ?? 0) +
         (result?.updated ?? 0) +
@@ -338,7 +350,7 @@ export function useReloadMcpServerTools() {
       toast.success(
         changed > 0 && result
           ? `Refreshed ${target} tools: ${result.created} added, ${result.updated} updated, ${result.deleted} removed`
-          : `${variables.name ?? "Server"} tools are already up to date`,
+          : `${name ?? "Server"} tools are already up to date`,
       );
     },
     onError: (_error, variables) => {

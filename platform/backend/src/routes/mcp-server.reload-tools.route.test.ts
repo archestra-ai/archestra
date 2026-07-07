@@ -111,30 +111,34 @@ describe("POST /api/mcp_server/:id/reload-tools", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  test("rejects app servers with 400", async ({
-    makeInternalMcpCatalog,
-    makeMcpServer,
-  }) => {
-    const catalog = await makeInternalMcpCatalog({
-      name: "reload-app-catalog",
-      serverType: "remote",
-    });
-    const server = await makeMcpServer({
-      catalogId: catalog.id,
-      name: "reload-app-catalog",
-      ownerId: user.id,
-    });
-    await db
-      .update(schema.mcpServersTable)
-      .set({ serverType: "app" })
-      .where(eq(schema.mcpServersTable.id, server.id));
+  // App and builtin servers manage their tools in-process — there is no live
+  // upstream to re-discover from.
+  for (const serverType of ["app", "builtin"] as const) {
+    test(`rejects ${serverType} servers with 400`, async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: `reload-${serverType}-catalog`,
+        serverType: "remote",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        name: `reload-${serverType}-catalog`,
+        ownerId: user.id,
+      });
+      await db
+        .update(schema.mcpServersTable)
+        .set({ serverType })
+        .where(eq(schema.mcpServersTable.id, server.id));
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/mcp_server/${server.id}/reload-tools`,
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp_server/${server.id}/reload-tools`,
+      });
+      expect(response.statusCode).toBe(400);
     });
-    expect(response.statusCode).toBe(400);
-  });
+  }
 
   test("denies reload of another user's personal connection", async ({
     makeInternalMcpCatalog,

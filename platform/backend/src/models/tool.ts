@@ -83,7 +83,10 @@ const MCP_TOOL_NAME_MAX_LENGTH = 64;
 /**
  * Small deterministic hash (djb2, 8 hex chars) used only to disambiguate slugs
  * that must be hard-truncated because the raw tool name alone exceeds the
- * 64-char cap. Not security-sensitive.
+ * 64-char cap. Not security-sensitive: a 32-bit collision between two distinct
+ * over-long names on the same catalog would surface as a (catalog_id, name)
+ * unique-constraint insert failure, not silent data corruption — and the
+ * precondition (two >64-char raw names sharing a djb2 hash) is negligible.
  */
 function shortSlugHash(value: string): string {
   let hash = 5381;

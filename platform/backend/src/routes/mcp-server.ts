@@ -2086,10 +2086,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      if (mcpServer.serverType === "app") {
+      // Only local/remote servers have a live upstream to re-discover from;
+      // app and builtin servers manage their tools in-process (mirrors the
+      // periodic refresher's findOnePerCatalogForToolsRefresh filter).
+      if (
+        mcpServer.serverType === "app" ||
+        mcpServer.serverType === "builtin"
+      ) {
         throw new ApiError(
           400,
-          "App servers manage their tools in-process; there is nothing to reload.",
+          "This server manages its tools in-process; there is nothing to reload.",
         );
       }
 

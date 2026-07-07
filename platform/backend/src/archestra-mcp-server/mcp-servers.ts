@@ -1467,6 +1467,12 @@ async function handleReloadMcpServerTools(
     if (!server) {
       return errorResult("MCP server not found or you don't have access.");
     }
+    // Only local/remote servers have a live upstream to re-discover from.
+    if (server.serverType === "app" || server.serverType === "builtin") {
+      return errorResult(
+        "This server manages its tools in-process; there is nothing to reload.",
+      );
+    }
 
     const result = await reloadToolsForServer(server);
 

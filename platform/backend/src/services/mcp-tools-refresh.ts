@@ -12,6 +12,11 @@ import { reloadToolsForServer } from "@/services/mcp-reinstall";
  * endpoint, with no pod restart. Tool rows are shared per catalog item, so
  * one install per catalog is refreshed. A failing server is logged and
  * skipped; it never blocks the rest of the sweep.
+ *
+ * The in-process sweepInProgress guard only prevents tick stacking within one
+ * process. In a multi-replica deployment every backend pod sweeps
+ * independently — safe, because the sync is idempotent (same live tool list
+ * reconciles to the same rows), just redundant upstream `tools/list` calls.
  */
 class McpToolsRefreshManager {
   private intervalId: NodeJS.Timeout | null = null;

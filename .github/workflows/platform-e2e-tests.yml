@@ -229,10 +229,6 @@ jobs:
             turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
             turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
         uses: ./.github/actions/auth-to-gar
@@ -270,6 +266,13 @@ jobs:
             echo "No cached MCP server base image for tree ${TREE_HASH}; building."
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
+
+      # The builder is only needed when actually building — on a reuse hit it
+      # was ~85s of setup+teardown for nothing (the imagetools calls in the
+      # reuse step talk straight to the registry). Fork PRs always build.
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
+        uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}

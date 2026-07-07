@@ -1,28 +1,37 @@
 name: Prebuild E2E Platform Image
 
-# Builds the e2e platform image pair (full + -slim) as soon as a PR is
-# approved, publishing ONLY tree-OID tags. When the PR later enters the merge
-# queue, the queue's "Resolve platform image reuse" step in
-# platform-e2e-tests.yml finds the tree tags and skips its inline build — the
-# single largest term in merge-queue latency (~4-11 min for platform-touching
+# Builds the e2e platform image pair (full + -slim) as soon as a PR's main CI
+# ("On Pull Requests") goes green, publishing ONLY tree-OID tags. In this
+# repo's flow PRs are merged right after checks pass (no review-approval
+# step), so a green check run is the last reliable signal before the merge
+# queue. When the PR enqueues, the queue's "Resolve platform image reuse" step
+# in platform-e2e-tests.yml finds the tree tags and skips its inline build —
+# the largest term in merge-queue latency (~4-11 min for platform-touching
 # PRs). We build from GitHub's test-merge ref (refs/pull/N/merge), i.e. the PR
 # merged onto current main, because that is the tree the merge queue will
 # build; the PR head's tree would miss whenever main's ./platform moved since
 # branch-off.
 #
-# This workflow is purely opportunistic: if main's ./platform tree moves again
-# between approval and enqueue, or this build fails or is skipped, the queue
-# builds inline exactly as before. Nothing depends on it for correctness,
-# which is why the job sets continue-on-error.
+# Cost shape: the tree-hash check makes non-platform PRs (docs, CI, frontend
+# integration tests outside ./platform) free — they skip in seconds. For
+# platform-touching PRs this is the SAME build the queue would run, just
+# earlier; net extra spend is only prebuilds that get superseded by another
+# push (concurrency cancels the in-flight one) or PRs that never merge.
+#
+# Purely opportunistic: if main's ./platform tree moves between the green run
+# and enqueue, or this build fails, the queue builds inline exactly as before.
+# Nothing depends on it for correctness, hence continue-on-error.
 
 on:
-  pull_request_review:
-    types: [submitted]
+  workflow_run:
+    workflows: ["On Pull Requests"]
+    types: [completed]
 
 permissions: {}
 
 concurrency:
-  group: prebuild-e2e-image-${{ github.event.pull_request.number }}
+  # One prebuild per PR head branch; a newer green run supersedes the older.
+  group: prebuild-e2e-image-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 env:
@@ -32,12 +41,15 @@ env:
 jobs:
   prebuild:
     name: Prebuild Platform E2E Image
-    # Approved reviews on same-repo, non-draft PRs only: fork PRs receive no
-    # OIDC secrets, and their e2e path uses build artifacts, not the registry.
+    # Only after a GREEN check run, only for the pull_request event (the same
+    # workflow also runs on merge_group — prebuilding there is pointless), and
+    # only for same-repo PRs: fork PRs receive no OIDC secrets, and their e2e
+    # path uses build artifacts, not the registry. workflow_run exposes the PR
+    # list only for same-repo runs, so an empty list also filters forks.
     if: >-
-      ${{ github.event.review.state == 'approved' &&
-          github.event.pull_request.draft == false &&
-          github.event.pull_request.head.repo.fork == false }}
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.pull_requests[0] != null }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 30
     # Opportunistic cache warmer — a red result must not alarm anyone or gate
@@ -53,8 +65,8 @@ jobs:
           # GitHub's up-to-date test merge of the PR onto main. Unavailable
           # while the PR conflicts — the checkout then fails, which is fine
           # (see continue-on-error above): a conflicting PR can't enqueue
-          # anyway until it's updated, and updating re-triggers on re-approval.
-          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          # anyway, and fixing it re-runs CI, which re-triggers this workflow.
+          ref: refs/pull/${{ github.event.workflow_run.pull_requests[0].number }}/merge
           persist-credentials: false
           fetch-depth: 1
 
@@ -89,8 +101,8 @@ jobs:
       # Mirrors the merge-queue build in platform-e2e-tests.yml (zstd outputs,
       # no provenance) except it publishes ONLY the tree tags: the queue's
       # reuse step performs the tree->commit-SHA retag itself, so pushing SHA
-      # tags here would be meaningless (this run's SHA is the review merge
-      # ref, not the queue's merge commit).
+      # tags here would be meaningless (this run's SHA is the test-merge ref,
+      # not the queue's merge commit).
       - name: Build Platform image (tree tag only)
         if: ${{ steps.tree.outputs.build == 'true' }}
         uses: ./.github/actions/build-docker-image

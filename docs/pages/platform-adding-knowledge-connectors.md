@@ -277,7 +277,7 @@ The `Record<ConnectorType, ...>` type ensures TypeScript will error if you add a
 
 ## Frontend Config Fields
 
-Create `frontend/src/app/knowledge-bases/_parts/github-config-fields.tsx`. This component renders form fields for the connector-specific config. It receives a `react-hook-form` `UseFormReturn` and an optional field name prefix (defaults to `"config"`).
+Create `frontend/src/app/knowledge/knowledge-bases/_parts/github-config-fields.tsx`. This component renders form fields for the connector-specific config. It receives a `react-hook-form` `UseFormReturn` and an optional field name prefix (defaults to `"config"`).
 
 ```tsx
 "use client";
@@ -329,7 +329,7 @@ export function GithubConfigFields({
 
 ### Wire into the create connector dialog
 
-In `frontend/src/app/knowledge-bases/_parts/create-connector-dialog.tsx`:
+In `frontend/src/app/knowledge/knowledge-bases/_parts/create-connector-dialog.tsx`:
 
 1. Import the new config fields component.
 2. Add a `<SelectItem>` for the new connector type.

@@ -7,7 +7,6 @@ import {
   getArchestraToolShortName,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
-import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
 
@@ -267,11 +266,8 @@ function generateMarkdownBody(): string {
     (name) => getArchestraToolShortName(name) ?? name,
   );
 
-  // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
-  const knowledgeToolSet = new Set<string>(knowledgeManagementToolShortNames);
   const preInstalledShortNames = allPreInstalledShortNames.filter(
-    (n): n is ArchestraToolShortName =>
-      isArchestraToolShortName(n) && !knowledgeToolSet.has(n),
+    (n): n is ArchestraToolShortName => isArchestraToolShortName(n),
   );
 
   // Group tools
@@ -372,7 +368,7 @@ The Archestra MCP Server is a built-in MCP server that ships with the platform a
 
 Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
 
-Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base or connector](/docs/platform-knowledge) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
+${formatToolLink("query_knowledge_sources")} appears for Agents and MCP Gateways only when at least one [knowledge base or connector](/docs/platform-knowledge) is attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
 
 All Archestra tools are prefixed with \`archestra__\`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
 

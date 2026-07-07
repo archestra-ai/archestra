@@ -16,7 +16,8 @@ Files:
 - `Dockerfile` — bench runner image: the `archestra-bench` binary + `/bench` fixtures + reporting
   scripts + `uv` on top of the resolved `PLATFORM_IMAGE`.
 - `runner-entrypoint.sh` (`run-benchmark`) — writes `/app/.env`, runs the bench, then exports
-  TensorBoard, uploads to GCS, and posts Slack (`scripts/export_tensorboard.py`, `scripts/publish_run.py`).
+  TensorBoard, uploads to GCS, and posts Slack. The reporting scripts live in `ai-labs/scripts/` and
+  are copied into the image as `/bench/scripts/`.
 - `job.yaml` — the k8s Job (bench container + `pgvector` sidecar). `${...}` filled by `envsubst` in CI.
 
 ## One-time prerequisites (not automated)

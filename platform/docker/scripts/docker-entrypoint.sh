@@ -269,9 +269,15 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # cache, so without this every boot would pull ~352MB from the registry.
         # The image is baked into this image as a docker-archive at build time, so
         # the engine starts offline (manifest uses imagePullPolicy: IfNotPresent).
-        echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
-        kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
-            || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
+        # Slim image variants (CI e2e shards, Dockerfile target unified-slim) omit
+        # the archive; they fall back to a registry pull if the engine is needed.
+        if [ -f /app/dagger-engine.tar ]; then
+            echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
+            kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
+                || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
+        else
+            echo "No bundled Dagger Engine archive in this image (slim variant); the engine will be pulled from the registry"
+        fi
 
         # Gate the runtime on the engine actually being Ready: kubectl apply only
         # proves the API accepted the manifest, not that the pod scheduled and

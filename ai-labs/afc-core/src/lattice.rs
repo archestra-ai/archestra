@@ -93,11 +93,7 @@ impl<'a> Lattice<'a> {
         }
     }
 
-    fn meet_dims(
-        &self,
-        a: &Label,
-        b: &Label,
-    ) -> std::collections::BTreeMap<String, DimValue> {
+    fn meet_dims(&self, a: &Label, b: &Label) -> std::collections::BTreeMap<String, DimValue> {
         let mut out = std::collections::BTreeMap::new();
         let ids: BTreeSet<&String> = a.dims.keys().chain(b.dims.keys()).collect();
         for id in ids {

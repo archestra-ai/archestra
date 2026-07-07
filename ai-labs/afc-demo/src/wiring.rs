@@ -80,8 +80,11 @@ impl Runtime {
         let doc_acls = fixtures::doc_acls();
         let principal = fixtures::principal();
 
-        let tools: BTreeMap<ToolId, ToolSpec> =
-            policy.tools.into_iter().map(|t| (t.id.clone(), t)).collect();
+        let tools: BTreeMap<ToolId, ToolSpec> = policy
+            .tools
+            .into_iter()
+            .map(|t| (t.id.clone(), t))
+            .collect();
 
         // tier1 meta / tier3 static result labels, from the annotations.
         let mut result_labels = BTreeMap::new();
@@ -117,7 +120,10 @@ impl Runtime {
                     DeclassAuthority::LlmJudge(approver.clone())
                 }
             };
-            declassifiers.insert(spec.id.clone(), DeclassRule::new(spec.id, authority, spec.relabel));
+            declassifiers.insert(
+                spec.id.clone(),
+                DeclassRule::new(spec.id, authority, spec.relabel),
+            );
         }
 
         let declass_ids: Vec<String> = declassifiers.keys().cloned().collect();
@@ -135,7 +141,9 @@ impl Runtime {
         let tainted_chain = policy
             .chains
             .iter()
-            .find(|c| c.effect == afc_core::rule::Effect::Consequential && c.label_class == "tainted")
+            .find(|c| {
+                c.effect == afc_core::rule::Effect::Consequential && c.label_class == "tainted"
+            })
             .map(|c| (c.id.clone(), c.approvers.clone()))
             .unwrap_or_else(|| ("tainted_consequential".to_string(), vec![]));
 
@@ -179,9 +187,7 @@ impl Runtime {
                 .unwrap_or(Readers::Unknown),
             SinkReaders::FromArgRecipient(field) => match args.get(field) {
                 Some(ArgValue::Subject(s)) => Readers::Known([s.clone()].into()),
-                Some(ArgValue::Str(email)) => {
-                    Readers::Known([Subject::User(email.clone())].into())
-                }
+                Some(ArgValue::Str(email)) => Readers::Known([Subject::User(email.clone())].into()),
                 _ => Readers::Unknown,
             },
         };

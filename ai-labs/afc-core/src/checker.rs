@@ -115,11 +115,7 @@ pub fn check(inv: &Inventory) -> CheckReport {
     }
 }
 
-fn check_rule_types(
-    inv: &Inventory,
-    tool_ids: &BTreeSet<&ToolId>,
-    findings: &mut Vec<Finding>,
-) {
+fn check_rule_types(inv: &Inventory, tool_ids: &BTreeSet<&ToolId>, findings: &mut Vec<Finding>) {
     for rule in &inv.rules {
         let mut tools_in_rule = BTreeSet::new();
         collect_tool_is(&rule.when, &mut tools_in_rule);
@@ -232,7 +228,10 @@ fn count_escalation_surface(inv: &Inventory) -> usize {
     let tainted_reads = inv.tools.iter().filter(|t| {
         t.effects.contains(&Effect::Read)
             && t.produces.as_ref().is_some_and(|l| {
-                matches!(l.integrity, crate::label::Integrity::Tainted | crate::label::Integrity::Unknown)
+                matches!(
+                    l.integrity,
+                    crate::label::Integrity::Tainted | crate::label::Integrity::Unknown
+                )
             })
     });
     let consequential_sinks = inv
@@ -265,7 +264,10 @@ fn check_leak_paths(inv: &Inventory, findings: &mut Vec<Finding>) {
         .collect();
 
     for read in &reads {
-        let produces = read.produces.as_ref().expect("filtered to produces.is_some");
+        let produces = read
+            .produces
+            .as_ref()
+            .expect("filtered to produces.is_some");
         for sink in &sinks {
             let sink_label = sink.sink.as_ref().expect("filtered to sink.is_some");
             if lattice.flows_to(produces, sink_label).class() == FlowClass::Ok {

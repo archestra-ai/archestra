@@ -56,7 +56,9 @@ pub enum Decision {
 impl Decision {
     pub fn id(&self) -> u64 {
         match self {
-            Decision::Allow { id, .. } | Decision::Deny { id, .. } | Decision::Escalate { id, .. } => *id,
+            Decision::Allow { id, .. }
+            | Decision::Deny { id, .. }
+            | Decision::Escalate { id, .. } => *id,
         }
     }
 }
@@ -252,7 +254,12 @@ impl RuleEngine {
             .cloned()
             .map(Remedy::DeclassifyVia)
             .collect();
-        remedies.extend(self.remedy_chains.iter().cloned().map(Remedy::RequestApproval));
+        remedies.extend(
+            self.remedy_chains
+                .iter()
+                .cloned()
+                .map(Remedy::RequestApproval),
+        );
         remedies.push(Remedy::NarrowArgs(
             "narrow the audience, region, or arguments so the value fits the sink".to_string(),
         ));
@@ -333,6 +340,66 @@ impl RuleEngine {
             }
         };
         self.record(call, &decision, Some(chain_id), Some(approver), Vec::new());
+        decision
+    }
+
+    /// Finalize an escalation whose approver chain did NOT approve — an approver returned `Deny`
+    /// (`Rejected`) or every approver abstained (`Exhausted`). Symmetric to
+    /// [`RuleEngine::finalize_escalation`]: it consumes the same one-shot pending escalation (verifying
+    /// the call fingerprint, so a rejection cannot be spent on a different call) and records an audited
+    /// `Deny`. Without it a rejected chain would leave a dangling pending escalation with no decision.
+    ///
+    /// `approver` is `Some` for a `Rejected` outcome and `None` for `Exhausted`.
+    pub fn finalize_rejection(
+        &mut self,
+        call: &CallSite,
+        chain_id: ChainId,
+        escalation_id: u64,
+        approver: Option<ApproverId>,
+        reason: String,
+    ) -> Decision {
+        let id = self.take_id();
+        let fingerprint_now = call_fingerprint(call);
+        match self.pending_escalations.get(&escalation_id) {
+            None => {
+                let decision = Decision::Deny {
+                    id,
+                    rule_id: "engine.no_pending_escalation".to_string(),
+                    reason: format!(
+                        "escalation {escalation_id} is not pending (already discharged or never raised)"
+                    ),
+                    residual: self.residual(),
+                };
+                self.record(call, &decision, Some(chain_id), approver, Vec::new());
+                return decision;
+            }
+            Some(fingerprint) if *fingerprint != fingerprint_now => {
+                // Leave the escalation pending: the legitimate outcome for its own call is unspent.
+                let decision = Decision::Deny {
+                    id,
+                    rule_id: "engine.rejection_call_mismatch".to_string(),
+                    reason: format!(
+                        "rejection for escalation {escalation_id} does not match the call it was raised on"
+                    ),
+                    residual: self.residual(),
+                };
+                self.record(call, &decision, Some(chain_id), approver, Vec::new());
+                return decision;
+            }
+            Some(_) => {
+                self.pending_escalations.remove(&escalation_id);
+            }
+        }
+        let decision = Decision::Deny {
+            id,
+            rule_id: "chain.rejected".to_string(),
+            reason: match &approver {
+                Some(a) => format!("escalation {escalation_id} rejected by {a}: {reason}"),
+                None => format!("escalation {escalation_id} exhausted: {reason}"),
+            },
+            residual: self.residual(),
+        };
+        self.record(call, &decision, Some(chain_id), approver, Vec::new());
         decision
     }
 
@@ -432,10 +499,7 @@ impl Engine for RuleEngine {
             Decision::Escalate { id, chain }
         } else {
             // A call may carry a prior declassification; stamp the audit link when it is allowed.
-            let via = call
-                .declassified_by
-                .clone()
-                .map(AllowVia::DeclassifiedBy);
+            let via = call.declassified_by.clone().map(AllowVia::DeclassifiedBy);
             Decision::Allow { id, via }
         };
 

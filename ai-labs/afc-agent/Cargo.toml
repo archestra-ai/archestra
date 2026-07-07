@@ -1,0 +1,31 @@
+[package]
+name = "afc-agent"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "afc-mcp-tools"
+path = "src/bin/afc-mcp-tools.rs"
+
+[[bin]]
+name = "afc-agent"
+path = "src/bin/afc-agent.rs"
+
+[dependencies]
+afc-core = { path = "../afc-core" }
+afc-surface = { path = "../afc-surface" }
+afc-demo = { path = "../afc-demo" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "sync", "time"] }
+rmcp = { version = "1.7", features = ["server", "macros", "client", "transport-child-process", "transport-io"] }
+nitpicker-agent = "0.1.1"
+rig-core = "0.39"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive", "env"] }
+eyre = "0.6"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

@@ -14,10 +14,19 @@ use afc_core::value::{Chunk, Labeled, ModelInput, ValueId};
 
 fn dims() -> DimRegistry {
     let mut m = BTreeMap::new();
-    m.insert("region".to_string(), DimDecl { compat: DimCompat::Exact, order: vec![] });
+    m.insert(
+        "region".to_string(),
+        DimDecl {
+            compat: DimCompat::Exact,
+            order: vec![],
+        },
+    );
     m.insert(
         "risk".to_string(),
-        DimDecl { compat: DimCompat::AtMost, order: vec!["low".to_string(), "high".to_string()] },
+        DimDecl {
+            compat: DimCompat::AtMost,
+            order: vec!["low".to_string(), "high".to_string()],
+        },
     );
     DimRegistry(m)
 }
@@ -49,7 +58,10 @@ fn flows_to_respects_reader_direction() {
     };
 
     // Owner-only value cannot flow to a team-wide sink: everyone on the team is not an allowed reader.
-    assert!(matches!(lat.flows_to(&owner, &team), FlowVerdict::Leak { .. }));
+    assert!(matches!(
+        lat.flows_to(&owner, &team),
+        FlowVerdict::Leak { .. }
+    ));
     // A team-wide value can flow to an owner-only sink: the owner is already a team member.
     assert_eq!(lat.flows_to(&team, &owner), FlowVerdict::Ok);
 }
@@ -59,7 +71,10 @@ fn unknown_readers_need_policy() {
     let dir = DirectorySnapshot::default();
     let dims = dims();
     let lat = Lattice::new(&dir, &dims);
-    let unknown = Label { readers: Readers::Unknown, ..owner_only("X") };
+    let unknown = Label {
+        readers: Readers::Unknown,
+        ..owner_only("X")
+    };
     assert!(matches!(
         lat.flows_to(&unknown, &owner_only("X")),
         FlowVerdict::NeedsPolicy { .. }
@@ -75,14 +90,22 @@ fn dim_exact_and_at_most() {
     let us = owner_only("X").with_dim("region", DimValue::val("US"));
     let eu_sink = Label::public().with_dim("region", DimValue::val("EU"));
     // Exact mismatch is a leak on the region dimension.
-    assert_eq!(lat.flows_to(&us, &eu_sink), FlowVerdict::Leak { dim: "region".into() });
+    assert_eq!(
+        lat.flows_to(&us, &eu_sink),
+        FlowVerdict::Leak {
+            dim: "region".into()
+        }
+    );
 
     let low = owner_only("X").with_dim("risk", DimValue::val("low"));
     let high = owner_only("X").with_dim("risk", DimValue::val("high"));
     let low_sink = Label::public().with_dim("risk", DimValue::val("low"));
     // at_most: low <= low ok, high </= low leaks.
     assert_eq!(lat.flows_to(&low, &low_sink), FlowVerdict::Ok);
-    assert_eq!(lat.flows_to(&high, &low_sink), FlowVerdict::Leak { dim: "risk".into() });
+    assert_eq!(
+        lat.flows_to(&high, &low_sink),
+        FlowVerdict::Leak { dim: "risk".into() }
+    );
     // meet of low and high on an at_most dim is the max (high).
     let met = lat.meet(&low, &high);
     assert_eq!(met.dims.get("risk"), Some(&DimValue::val("high")));
@@ -93,8 +116,14 @@ fn integrity_meet_taint_dominates_unknown() {
     let dir = DirectorySnapshot::default();
     let dims = dims();
     let lat = Lattice::new(&dir, &dims);
-    let tainted = Label { integrity: Integrity::Tainted, ..owner_only("X") };
-    let unknown = Label { integrity: Integrity::Unknown, ..owner_only("X") };
+    let tainted = Label {
+        integrity: Integrity::Tainted,
+        ..owner_only("X")
+    };
+    let unknown = Label {
+        integrity: Integrity::Unknown,
+        ..owner_only("X")
+    };
     assert_eq!(lat.meet(&tainted, &unknown).integrity, Integrity::Tainted);
 }
 
@@ -120,10 +149,16 @@ fn declassify_refuses_tainted() {
     );
     let tainted = Labeled::new(
         Chunk("evil".to_string()),
-        Label { integrity: Integrity::Tainted, ..owner_only("X") },
+        Label {
+            integrity: Integrity::Tainted,
+            ..owner_only("X")
+        },
     );
     // Robust precondition: tainted content cannot be laundered through a declassifier.
-    assert!(matches!(declassify(&tainted, &sanitizer), Err(Decision::Deny { .. })));
+    assert!(matches!(
+        declassify(&tainted, &sanitizer),
+        Err(Decision::Deny { .. })
+    ));
 
     let clean = Labeled::new(Chunk("ok".to_string()), owner_only("X"));
     assert!(declassify(&clean, &sanitizer).is_ok());
@@ -137,7 +172,8 @@ fn label_completion_uses_inline_only() {
     let inline = ModelInput::Inline(Labeled::new(Chunk("a".into()), owner_only("X")));
     // A ref does not contribute to the completion label (its content never entered context).
     let reference = ModelInput::Ref(ValueId("v1".into()));
-    let completed = afc_core::value::label_completion(&[inline, reference], Chunk("out".into()), &lat);
+    let completed =
+        afc_core::value::label_completion(&[inline, reference], Chunk("out".into()), &lat);
     assert_eq!(completed.label.readers, Readers::users(["X".to_string()]));
 }
 
@@ -158,8 +194,8 @@ fn engine_forbid_wins_over_escalate() {
             origin: RuleOrigin::Stdlib,
         },
     ];
-    let mut engine = RuleEngine::new(rules, dims(), dir)
-        .with_remedies(vec!["san.redact".to_string()], vec![]);
+    let mut engine =
+        RuleEngine::new(rules, dims(), dir).with_remedies(vec!["san.redact".to_string()], vec![]);
 
     let call = CallSite::new(
         "email.send".to_string(),
@@ -167,10 +203,18 @@ fn engine_forbid_wins_over_escalate() {
         Labeled::new(Chunk("x".into()), owner_only("X")),
         Label::public(),
         BTreeMap::new(),
-        Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+        Principal {
+            subject: Subject::User("X".into()),
+            dims: BTreeMap::new(),
+        },
     );
     match engine.check_call(&call) {
-        Decision::Deny { rule_id, residual, reason, .. } => {
+        Decision::Deny {
+            rule_id,
+            residual,
+            reason,
+            ..
+        } => {
             assert_eq!(rule_id, "r.forbid");
             assert!(!residual.is_empty(), "every deny must carry a remedy");
             assert!(!reason.is_empty());
@@ -185,7 +229,10 @@ fn declassify_human_authority_is_refused_without_a_verdict() {
     // silently relabel clean content; it refuses and points at the approval remedy.
     let human = DeclassRule::new("dc.human", DeclassAuthority::Human, Label::public());
     let clean = Labeled::new(Chunk("secret".into()), owner_only("X"));
-    assert!(matches!(declassify(&clean, &human), Err(Decision::Deny { .. })));
+    assert!(matches!(
+        declassify(&clean, &human),
+        Err(Decision::Deny { .. })
+    ));
 }
 
 #[test]
@@ -204,7 +251,10 @@ fn escalation_approval_is_one_shot() {
         Labeled::new(Chunk("x".into()), Label::public()),
         Label::public(),
         BTreeMap::new(),
-        Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+        Principal {
+            subject: Subject::User("X".into()),
+            dims: BTreeMap::new(),
+        },
     );
     let escalate_id = engine.check_call(&call).id();
     let always = Predicate::And(vec![]);
@@ -221,6 +271,53 @@ fn escalation_approval_is_one_shot() {
 }
 
 #[test]
+fn escalation_rejection_finalizes_to_deny_and_clears_pending() {
+    let dir = DirectorySnapshot::default();
+    let rules = vec![Rule {
+        id: "r.escalate".to_string(),
+        when: Predicate::HasEffect(Effect::Egress),
+        then: Outcome::Escalate(vec!["human".to_string()]),
+        origin: RuleOrigin::Org,
+    }];
+    let mut engine = RuleEngine::new(rules, dims(), dir);
+    let call = CallSite::new(
+        "email.send".to_string(),
+        BTreeSet::from([Effect::Egress]),
+        Labeled::new(Chunk("x".into()), Label::public()),
+        Label::public(),
+        BTreeMap::new(),
+        Principal {
+            subject: Subject::User("X".into()),
+            dims: BTreeMap::new(),
+        },
+    );
+    let escalate_id = engine.check_call(&call).id();
+    // A rejecting approver resolves the escalation to a real audited Deny.
+    match engine.finalize_rejection(
+        &call,
+        "c".into(),
+        escalate_id,
+        Some("human".into()),
+        "declined".into(),
+    ) {
+        Decision::Deny { rule_id, .. } => assert_eq!(rule_id, "chain.rejected"),
+        other => panic!("expected chain.rejected Deny, got {other:?}"),
+    }
+    // The pending escalation is consumed one-shot: a second finalize finds nothing pending.
+    match engine.finalize_rejection(&call, "c".into(), escalate_id, None, "exhausted".into()) {
+        Decision::Deny { rule_id, .. } => assert_eq!(rule_id, "engine.no_pending_escalation"),
+        other => panic!("expected no-pending Deny on replay, got {other:?}"),
+    }
+    // The audit recorded the rejection as a Deny under the escalated chain.
+    let last = engine
+        .audit()
+        .iter()
+        .rev()
+        .find(|r| r.rule_id.as_deref() == Some("chain.rejected"));
+    assert!(last.is_some(), "rejection must be audited");
+}
+
+#[test]
 fn approval_cannot_be_spent_on_a_different_call() {
     let dir = DirectorySnapshot::default();
     let rules = vec![Rule {
@@ -230,7 +327,10 @@ fn approval_cannot_be_spent_on_a_different_call() {
         origin: RuleOrigin::Org,
     }];
     let mut engine = RuleEngine::new(rules, dims(), dir);
-    let principal = Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() };
+    let principal = Principal {
+        subject: Subject::User("X".into()),
+        dims: BTreeMap::new(),
+    };
     let mk = |to: &str| {
         CallSite::new(
             "email.send".to_string(),
@@ -274,12 +374,18 @@ fn warn_rules_are_recorded_not_silently_dropped() {
         Labeled::new(Chunk("x".into()), Label::public()),
         Label::public(),
         BTreeMap::new(),
-        Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+        Principal {
+            subject: Subject::User("X".into()),
+            dims: BTreeMap::new(),
+        },
     );
     // A warn rule does not change the verdict...
     assert!(matches!(engine.check_call(&call), Decision::Allow { .. }));
     // ...but it is recorded in the audit trail.
-    assert_eq!(engine.audit().last().unwrap().warnings, vec!["r.warn".to_string()]);
+    assert_eq!(
+        engine.audit().last().unwrap().warnings,
+        vec!["r.warn".to_string()]
+    );
 }
 
 #[test]
@@ -287,19 +393,30 @@ fn label_result_tier_fallthrough_to_unknown() {
     let dir = DirectorySnapshot::default();
     let engine = RuleEngine::new(vec![], dims(), dir).with_result_labels(BTreeMap::from([(
         "drive.read".to_string(),
-        ResultLabelSpec { meta: None, static_label: Some(owner_only("X")) },
+        ResultLabelSpec {
+            meta: None,
+            static_label: Some(owner_only("X")),
+        },
     )]));
     // Annotated tool → tier3 static label.
-    let labeled = engine.label_result(&"drive.read".to_string(), &BTreeMap::new(), Chunk("d".into()));
+    let labeled = engine.label_result(
+        &"drive.read".to_string(),
+        &BTreeMap::new(),
+        Chunk("d".into()),
+    );
     assert_eq!(labeled.label.readers, Readers::users(["X".to_string()]));
     // Unannotated tool → tier4 Unknown.
-    let unknown = engine.label_result(&"legacy.dump".to_string(), &BTreeMap::new(), Chunk("d".into()));
+    let unknown = engine.label_result(
+        &"legacy.dump".to_string(),
+        &BTreeMap::new(),
+        Chunk("d".into()),
+    );
     assert_eq!(unknown.label.readers, Readers::Unknown);
 }
 
 #[test]
 fn checker_flags_argcmp_literal_type_mismatch() {
-    use afc_core::checker::{Inventory, ToolEntry, check, Severity};
+    use afc_core::checker::{Inventory, Severity, ToolEntry, check};
     use afc_core::rule::{ArgType, ArgValue, CmpOp, TypedPath, ValueExpr};
 
     let tool = ToolEntry {
@@ -316,7 +433,10 @@ fn checker_flags_argcmp_literal_type_mismatch() {
         when: Predicate::And(vec![
             Predicate::ToolIs("crm.export".to_string()),
             Predicate::ArgCmp(
-                TypedPath { field: "region".to_string(), ty: ArgType::Str },
+                TypedPath {
+                    field: "region".to_string(),
+                    ty: ArgType::Str,
+                },
                 CmpOp::Eq,
                 ValueExpr::Lit(ArgValue::Int(0)),
             ),
@@ -332,8 +452,16 @@ fn checker_flags_argcmp_literal_type_mismatch() {
         chains: vec![],
         assumptions: vec![],
         dir: DirectorySnapshot::default(),
-        principal: Principal { subject: Subject::User("X".into()), dims: BTreeMap::new() },
+        principal: Principal {
+            subject: Subject::User("X".into()),
+            dims: BTreeMap::new(),
+        },
     };
     let report = check(&inv);
-    assert!(report.findings.iter().any(|f| f.code == "RUL-ARGCMP-TYPE" && f.severity == Severity::Error));
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.code == "RUL-ARGCMP-TYPE" && f.severity == Severity::Error)
+    );
 }

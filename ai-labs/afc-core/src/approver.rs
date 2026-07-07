@@ -14,7 +14,9 @@ pub type ApproverId = String;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Verdict {
     Approve,
-    Deny { reason: String },
+    Deny {
+        reason: String,
+    },
     /// Decline to rule — the chain moves to the next approver.
     Abstain,
 }
@@ -25,6 +27,9 @@ pub struct ApprovalRequest {
     pub tainted: bool,
     /// The injected clock reading, so time-based approvers stay pure/deterministic.
     pub clock: u64,
+    /// Length of the model's driving prompt for this call — what a length-sensitive approver
+    /// observes (e.g. a parity approver that gates on `prompt_len % 2`).
+    pub prompt_len: usize,
 }
 
 pub trait Approver {

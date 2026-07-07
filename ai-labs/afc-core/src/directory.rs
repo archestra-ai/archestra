@@ -96,7 +96,10 @@ impl DirectoryBuilder {
             .entry(org.to_string())
             .or_default()
             .insert(user.to_string());
-        self.snapshot.user_teams.entry(user.to_string()).or_default();
+        self.snapshot
+            .user_teams
+            .entry(user.to_string())
+            .or_default();
         self
     }
 

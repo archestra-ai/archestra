@@ -52,8 +52,7 @@ impl LabelSource for FakeRiskBert {
     fn hint(&self, base: &Label, chunk: &Chunk) -> LabelHint {
         let mut hint = base.clone();
         if self.keywords.iter().any(|k| chunk.0.contains(k)) {
-            hint.dims
-                .insert("risk".to_string(), DimValue::val("high"));
+            hint.dims.insert("risk".to_string(), DimValue::val("high"));
         }
         LabelHint(hint)
     }

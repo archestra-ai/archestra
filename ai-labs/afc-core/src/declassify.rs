@@ -19,7 +19,10 @@ pub type SanitizerFn = fn(&Chunk) -> Chunk;
 #[derive(Clone)]
 pub enum DeclassAuthority {
     /// A pinned, deterministic transform (e.g. a redactor). `impl_pin` identifies the exact code.
-    Sanitizer { impl_pin: String, f: SanitizerFn },
+    Sanitizer {
+        impl_pin: String,
+        f: SanitizerFn,
+    },
     Human,
     LlmJudge(ApproverId),
 }

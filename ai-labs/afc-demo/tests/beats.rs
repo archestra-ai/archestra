@@ -20,8 +20,7 @@ fn deny_parts(d: &Decision) -> (&str, &str, &[Remedy]) {
 fn run() -> afc_demo::Scenario {
     let dir = tempfile::tempdir().unwrap();
     let jsonl = dir.path().join("decisions.jsonl");
-    afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl))
-        .expect("scenario runs")
+    afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl)).expect("scenario runs")
 }
 
 #[test]
@@ -50,7 +49,10 @@ fn beat3_declassify_then_write_allowed() {
     assert!(s.beat3_declassified_ok);
     // The allow records the declassifier that unblocked it.
     match &s.beat3_allow {
-        Decision::Allow { via: Some(AllowVia::DeclassifiedBy(id)), .. } => assert_eq!(id, "san.redact"),
+        Decision::Allow {
+            via: Some(AllowVia::DeclassifiedBy(id)),
+            ..
+        } => assert_eq!(id, "san.redact"),
         other => panic!("expected Allow via declassifier, got {other:?}"),
     }
 }
@@ -61,13 +63,19 @@ fn beat4_tainted_consequential_escalates_then_human_approves() {
     // The engine preserves the configured chain order: the llm is consulted before the human.
     match &s.beat4_escalate {
         Decision::Escalate { chain, .. } => {
-            assert_eq!(chain, &vec!["llm.judge".to_string(), "human.oncall".to_string()]);
+            assert_eq!(
+                chain,
+                &vec!["llm.judge".to_string(), "human.oncall".to_string()]
+            );
         }
         other => panic!("expected Escalate, got {other:?}"),
     }
     assert!(s.beat4_llm_abstained, "llm must abstain on tainted context");
     match &s.beat4_final {
-        Decision::Allow { via: Some(AllowVia::ApprovedBy(chain)), .. } => {
+        Decision::Allow {
+            via: Some(AllowVia::ApprovedBy(chain)),
+            ..
+        } => {
             assert_eq!(chain, "tainted_consequential");
         }
         other => panic!("expected Allow via approved chain, got {other:?}"),
@@ -95,8 +103,14 @@ fn beat7_injection_replay_fails_at_flow() {
     // Persuasion succeeds, flow fails: readers leak wins.
     let (rule, _, _) = deny_parts(&s.beat7_deny);
     assert_eq!(rule, "std.no_leak");
-    assert!(s.beat7_llm_abstains, "automated approval unavailable on taint");
-    assert!(s.beat7_declass_refused, "robust precondition refuses tainted declassify");
+    assert!(
+        s.beat7_llm_abstains,
+        "automated approval unavailable on taint"
+    );
+    assert!(
+        s.beat7_declass_refused,
+        "robust precondition refuses tainted declassify"
+    );
 }
 
 #[test]
@@ -110,7 +124,13 @@ fn beat8_risk_tighten_blocks_and_hook_egress_denied() {
 #[test]
 fn every_deny_has_reason_and_residual() {
     let s = run();
-    for d in [&s.beat2_deny, &s.beat5_deny, &s.beat6_deny, &s.beat7_deny, &s.beat8_risk_deny] {
+    for d in [
+        &s.beat2_deny,
+        &s.beat5_deny,
+        &s.beat6_deny,
+        &s.beat7_deny,
+        &s.beat8_risk_deny,
+    ] {
         let (_, reason, residual) = deny_parts(d);
         assert!(!reason.is_empty());
         assert!(!residual.is_empty());
@@ -126,21 +146,35 @@ fn decision_log_is_valid_jsonl() {
     let records = afc_demo::suggest::read_log(&jsonl).expect("valid JSONL");
     assert!(!records.is_empty());
     for r in &records {
-        assert!(!r.snapshot_hash.is_empty(), "every record pins the directory snapshot");
+        assert!(
+            !r.snapshot_hash.is_empty(),
+            "every record pins the directory snapshot"
+        );
         if r.decision == DecisionKind::Deny {
             assert!(r.rule_id.is_some(), "a deny record names its rule");
         }
     }
     // The approved beat-4 escalation is recorded as an Allow with its chain id.
-    assert!(records.iter().any(|r| r.decision == DecisionKind::Allow && r.chain_id.is_some()));
+    assert!(
+        records
+            .iter()
+            .any(|r| r.decision == DecisionKind::Allow && r.chain_id.is_some())
+    );
 }
 
 #[test]
 fn check_passes_on_clean_config_and_reports_escalation_surface() {
     let inv = afc_demo::build_inventory(&afc_demo::default_config_dir()).unwrap();
     let report = afc_core::checker::check(&inv);
-    assert!(!report.has_errors(), "clean config has no error findings: {:?}", report.findings);
-    assert!(report.escalation_surface > 0, "a tainted read reaches a consequential sink");
+    assert!(
+        !report.has_errors(),
+        "clean config has no error findings: {:?}",
+        report.findings
+    );
+    assert!(
+        report.escalation_surface > 0,
+        "a tainted read reaches a consequential sink"
+    );
     assert_eq!(report.assume_count, 0);
     assert!(report.unlabeled_count >= 1, "legacy.dump is unlabeled");
 }
@@ -174,7 +208,12 @@ fn bootstrap_and_review_and_suggest() {
     let reviewed = afc_demo::bootstrap::review(&proposals, &["legacy.dump".to_string()]);
     let legacy = reviewed.iter().find(|p| p.tool == "legacy.dump").unwrap();
     assert!(legacy.reviewed_by.is_none());
-    assert!(reviewed.iter().filter(|p| p.tool != "legacy.dump").all(|p| p.reviewed_by.is_some()));
+    assert!(
+        reviewed
+            .iter()
+            .filter(|p| p.tool != "legacy.dump")
+            .all(|p| p.reviewed_by.is_some())
+    );
 
     // suggest: the scenario's denies produce both canned patterns.
     let dir = tempfile::tempdir().unwrap();
@@ -182,6 +221,14 @@ fn bootstrap_and_review_and_suggest() {
     afc_demo::run_scenario(&afc_demo::default_config_dir(), Some(jsonl.clone())).unwrap();
     let records = afc_demo::suggest::read_log(&jsonl).unwrap();
     let suggestions = afc_demo::suggest::suggest(&records);
-    assert!(suggestions.iter().any(|s| s.pattern == "repeated-deny-declassify"));
-    assert!(suggestions.iter().any(|s| s.pattern == "unknown-tool-repeated-block"));
+    assert!(
+        suggestions
+            .iter()
+            .any(|s| s.pattern == "repeated-deny-declassify")
+    );
+    assert!(
+        suggestions
+            .iter()
+            .any(|s| s.pattern == "unknown-tool-repeated-block")
+    );
 }

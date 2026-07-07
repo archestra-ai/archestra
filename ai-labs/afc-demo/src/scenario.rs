@@ -39,7 +39,12 @@ fn args(pairs: Vec<(&str, ArgValue)>) -> BTreeMap<String, ArgValue> {
     pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect()
 }
 
-fn labeled(content: &str, readers: Readers, integrity: Integrity, dims: BTreeMap<String, DimValue>) -> Labeled<Chunk> {
+fn labeled(
+    content: &str,
+    readers: Readers,
+    integrity: Integrity,
+    dims: BTreeMap<String, DimValue>,
+) -> Labeled<Chunk> {
     Labeled::new(
         Chunk(content.into()),
         Label {
@@ -107,9 +112,10 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         &args(vec![("url", ArgValue::Str("http://news.example".into()))]),
         Chunk(fixtures::INJECTION.into()),
     );
-    let digest = rt
-        .engine
-        .label_completion(&[ModelInput::Inline(web.clone())], Chunk("digest of page".into()));
+    let digest = rt.engine.label_completion(
+        &[ModelInput::Inline(web.clone())],
+        Chunk("digest of page".into()),
+    );
     let email_internal_args = args(vec![
         ("to", ArgValue::Subject(Subject::User("X".into()))),
         ("body", ArgValue::Str("digest".into())),
@@ -127,6 +133,7 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
     let request = ApprovalRequest {
         tainted: call4.value.label.integrity == Integrity::Tainted,
         clock: 10,
+        prompt_len: 0,
     };
     // Witness the abstention directly against the llm approver, rather than inferring it from which
     // approver ended up granting — the latter would pass even if the llm were absent from the chain.
@@ -224,7 +231,11 @@ pub fn run(config_dir: &Path, jsonl: Option<PathBuf>) -> Result<Scenario, String
         rt.approvers
             .get("llm.judge")
             .expect("llm.judge registered")
-            .decide(&ApprovalRequest { tainted: true, clock: 10 }),
+            .decide(&ApprovalRequest {
+                tainted: true,
+                clock: 10,
+                prompt_len: 0
+            }),
         Verdict::Abstain
     );
     let beat7_declass_refused = declassify(&exfil, &rt.declassifiers["san.redact"]).is_err();

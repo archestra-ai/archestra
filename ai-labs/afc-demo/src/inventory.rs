@@ -97,10 +97,12 @@ fn representative_sink(t: &ToolSpec) -> Option<Label> {
         SinkReaders::Public => Readers::Known([Subject::Any].into()),
         SinkReaders::Principal => Readers::Known([Subject::User("X".into())].into()),
         // A written doc is representatively team-shared; a recipient is representatively an outsider.
-        SinkReaders::FromArgAcl(_) => Readers::Known(
-            [Subject::User("X".into()), Subject::Team("eng".into())].into(),
-        ),
-        SinkReaders::FromArgRecipient(_) => Readers::Known([Subject::User("external".into())].into()),
+        SinkReaders::FromArgAcl(_) => {
+            Readers::Known([Subject::User("X".into()), Subject::Team("eng".into())].into())
+        }
+        SinkReaders::FromArgRecipient(_) => {
+            Readers::Known([Subject::User("external".into())].into())
+        }
     };
     let mut dims = std::collections::BTreeMap::new();
     for (id, sd) in &sink.dims {

@@ -108,6 +108,7 @@ import {
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
   useConversationShare,
   useForkConversation,
@@ -1485,6 +1486,20 @@ export function ChatPageContent({
     });
   }, []);
 
+  // Stop the in-flight response. Wired to the submit button's Stop face in
+  // the prompt input; also pauses queue auto-drain (see ChatSessionHook).
+  const handleStopStreaming = () => {
+    if (conversationId) {
+      // Set the cache flag first, THEN close the connection so the
+      // connection-close handler on the backend finds the flag.
+      stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+        stop?.();
+      });
+    } else {
+      stop?.();
+    }
+  };
+
   const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
     message,
     e,
@@ -1493,20 +1508,39 @@ export function ChatPageContent({
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
-      if (conversationId) {
-        // Set the cache flag first, THEN close the connection so the
-        // connection-close handler on the backend finds the flag.
-        stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
-          stop?.();
-        });
-      } else {
-        stop?.();
+      // A submit while a response is in-flight queues the message; the
+      // conversation's ChatSessionHook sends it once the turn settles.
+      // (Stopping is the submit button's onClick, not a form submit.)
+      if (!conversationId) {
+        handleStopStreaming();
+        // Throw to keep the textarea and draft intact — see onSubmit
+        // contract in ArchestraPromptInputProps.
+        throw new Error("stop-not-submit");
       }
-      // Throw to keep the textarea and draft intact — see onSubmit contract
-      // in ArchestraPromptInputProps. The submit button doubles as Stop while
-      // streaming; treating that click as an accepted submit would clear any
-      // follow-up the user had already started typing.
-      throw new Error("stop-not-submit");
+      if (message.files && message.files.length > 0) {
+        toast.error(
+          "Attachments can't be queued. Wait for the current response to finish, then send.",
+        );
+        // Keep the typed text, draft, and attachments for a later submit.
+        throw new Error("attachments-not-queueable");
+      }
+      const queueText = message.text?.trim();
+      if (!queueText && !options?.skill) {
+        // Nothing to queue (Enter on an empty composer while streaming).
+        throw new Error("empty-queue-submit");
+      }
+      chatMessageQueue.enqueue(conversationId, {
+        text: message.text ?? "",
+        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
+      });
+      trackEvent("message_queued", {
+        conversationId,
+        agentId: conversation?.agentId ?? undefined,
+        messageLength: message.text?.length ?? 0,
+      });
+      // Returning normally clears the textarea and draft, like a send.
+      return;
     }
 
     const { kind: connectivityKind } = connectivity.state;
@@ -2459,6 +2493,7 @@ export function ChatPageContent({
                         <div className="max-w-4xl mx-auto space-y-3">
                           <ArchestraPromptInput
                             onSubmit={handleSubmit}
+                            onStop={handleStopStreaming}
                             status={status}
                             selectedModel={conversation?.modelId ?? ""}
                             onModelChange={handleModelChange}

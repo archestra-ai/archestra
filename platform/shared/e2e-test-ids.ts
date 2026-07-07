@@ -118,6 +118,10 @@ export const E2eTestId = {
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
   ChatPromptTextarea: "chat-prompt-textarea",
+  // Queue of messages composed while a response was in-flight
+  ChatMessageQueue: "chat-message-queue",
+  ChatMessageQueueItem: "chat-message-queue-item",
+  ChatMessageQueueRemoveButton: "chat-message-queue-remove-button",
   // Chat sidebar item status indicators
   ChatItemGeneratingIndicator: "chat-item-generating-indicator",
   ChatItemUnreadIndicator: "chat-item-unread-indicator",

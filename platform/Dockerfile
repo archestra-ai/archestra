@@ -369,7 +369,11 @@ RUN apk add --no-cache supervisor && \
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
            /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
-           /usr/lib/python*/ensurepip
+           /usr/lib/python*/ensurepip && \
+    # CVE-2026-23949: jaraco-context 5.3.0 (fixed in 6.1.0). Vendored inside py3-setuptools
+    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
+    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/jaraco/context.py \
+           /usr/lib/python*/site-packages/setuptools/_vendor/jaraco.context-*.dist-info
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

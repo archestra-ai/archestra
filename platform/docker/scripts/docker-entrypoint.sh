@@ -339,6 +339,24 @@ EOSQL
             CREATE EXTENSION IF NOT EXISTS vector;
 EOSQL
 
+        # Restore the pre-seeded schema baked into this image at build time
+        # (see the Dockerfile db-seed stage) so the backend's boot-time
+        # `drizzle-kit migrate` is a ~1-2s no-op instead of replaying every
+        # migration file on first boot. The seed was generated from this same
+        # image's migrations directory, so it cannot drift from the code —
+        # and migrate still runs unconditionally at boot as the safety net.
+        # Restored as the app user (matching what migrate would produce) in a
+        # single transaction: any failure rolls back to an empty database and
+        # boot falls back to the normal full migration run.
+        if [ -f /app/db-seed/seed.sql.gz ]; then
+            echo "Restoring pre-seeded database schema..."
+            if gunzip -c /app/db-seed/seed.sql.gz | psql -v ON_ERROR_STOP=1 --single-transaction --quiet --username ${POSTGRES_USER} --dbname ${POSTGRES_DB}; then
+                echo "Database schema pre-seeded; boot-time migrations will be a no-op"
+            else
+                echo "WARNING: seed restore failed and was rolled back; full migrations will run at boot"
+            fi
+        fi
+
         # Stop PostgreSQL
         su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -w stop
 

@@ -76,6 +76,16 @@ inputs:
     description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
     required: false
     default: ""
+  seed-e2e-database:
+    description: |
+      Seed the deployed PostgreSQL from the pre-migrated snapshot baked into the
+      platform image (/app/db-seed), so the platform pod's boot-time
+      `drizzle-kit migrate` is a no-op instead of replaying every migration.
+      Best-effort: if the snapshot is missing or does not match this checkout's
+      migrations directory, the deploy proceeds unseeded and boot falls back to
+      the normal full migration run.
+    required: false
+    default: "false"
 
 outputs:
   backend-url:
@@ -383,9 +393,62 @@ runs:
         fi
         echo "All images loaded into Kind successfully"
 
+    # Seed the e2e database from the platform image so boot-time migrations
+    # no-op. The image bakes a pg_dump of its own fully-migrated schema (see
+    # the Dockerfile db-seed stage); extract it, verify it matches THIS
+    # checkout's migrations directory (drift guard — the image is built from
+    # the same SHA, so a mismatch means something is badly wrong), and ship it
+    # to the bitnami postgres pod as an initdb scriptsSecret together with the
+    # restore hook script. Every failure path is soft: we simply skip the
+    # --set, postgres boots unseeded, and the platform pod runs the normal
+    # full `drizzle-kit migrate` at boot.
+    - name: Seed e2e database from platform image snapshot
+      id: db-seed
+      if: ${{ inputs.seed-e2e-database == 'true' }}
+      shell: bash
+      env:
+        PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
+        PLATFORM_CONTEXT: ${{ inputs.platform-context }}
+      run: |
+        SEED_DIR=$(mktemp -d)
+        skip_seeding() {
+          echo "::warning::$1 - deploying without a database seed (full migrate at boot)"
+          exit 0
+        }
+
+        CID=$(docker create "${PLATFORM_IMAGE_TAG}") || skip_seeding "could not create container from ${PLATFORM_IMAGE_TAG}"
+        if ! docker cp "${CID}:/app/db-seed/seed.sql.gz" "${SEED_DIR}/archestra-e2e-seed.dump.gz" ||
+           ! docker cp "${CID}:/app/db-seed/migrations.sha256" "${SEED_DIR}/migrations.sha256"; then
+          docker rm "${CID}" >/dev/null || true
+          skip_seeding "platform image has no baked db seed"
+        fi
+        docker rm "${CID}" >/dev/null || true
+
+        # Same hash recipe as platform/docker/scripts/generate-db-seed.sh:
+        # migration SQL + journal only (co-located *.test.ts files are excluded
+        # from the image build context), NUL-delimited because some migration
+        # filenames contain spaces.
+        CHECKOUT_HASH=$(cd "${PLATFORM_CONTEXT}/backend/src/database/migrations" \
+          && find . -type f \( -name '*.sql' -o -path './meta/_journal.json' \) -print0 \
+          | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')
+        BAKED_HASH=$(cat "${SEED_DIR}/migrations.sha256")
+        if [ "${CHECKOUT_HASH}" != "${BAKED_HASH}" ]; then
+          skip_seeding "baked db seed (${BAKED_HASH}) does not match checkout migrations (${CHECKOUT_HASH})"
+        fi
+
+        if ! kubectl create secret generic archestra-e2e-db-seed \
+          --from-file="archestra-e2e-seed.sh=${GITHUB_WORKSPACE}/.github/scripts/e2e-db-seed-initdb.sh" \
+          --from-file="archestra-e2e-seed.dump.gz=${SEED_DIR}/archestra-e2e-seed.dump.gz"; then
+          skip_seeding "could not create the db seed secret"
+        fi
+
+        echo "Database seed secret created (migrations hash ${BAKED_HASH})"
+        echo "helm-set=postgresql.primary.initdb.scriptsSecret=archestra-e2e-db-seed" >> "${GITHUB_OUTPUT}"
+
     - name: Deploy with Helm
       shell: bash
       env:
+        DB_SEED_HELM_SET: ${{ steps.db-seed.outputs.helm-set }}
         HELM_CHART_REF: ${{ inputs.helm-chart-ref }}
         HELM_CHART_VERSION: ${{ inputs.helm-chart-version }}
         PLATFORM_CONTEXT: ${{ inputs.platform-context }}
@@ -405,6 +468,12 @@ runs:
           for pair in "${PAIRS[@]}"; do
             EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${pair}"
           done
+        fi
+
+        # Point the postgres subchart at the db seed secret when the seeding
+        # step above produced one (empty = deploy unseeded, full migrate at boot).
+        if [ -n "${DB_SEED_HELM_SET:-}" ]; then
+          EXTRA_SET_FLAGS="${EXTRA_SET_FLAGS} --set ${DB_SEED_HELM_SET}"
         fi
 
         E2E_DEPS_SET_FLAGS=""

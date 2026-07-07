@@ -302,7 +302,6 @@ claude`,
       supportedProviders: ["anthropic"],
       build: ({ url }) => ({
         kind: "steps",
-        note: "Claude Desktop's third-party inference needs an API key, so calls bill at pay-as-you-go API token rates — it can't reuse a Claude Pro or Max subscription. Connect Claude Code instead to keep using a subscription.",
         steps: [
           {
             title: "Enable developer mode",

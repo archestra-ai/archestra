@@ -8,7 +8,7 @@ lastUpdated: 2026-07-07
 
 ![The Connection page with Claude Code selected, showing the one-time setup command](/docs/automated_screenshots/platform-claude-code-example_connect-page.webp)
 
-The Connection page lets you connect your local coding agent to Archestra with a single command. You pick the client — Claude Code, Codex, etc. and the page gives you a setup script to paste and run in your terminal.
+The Connection page lets you connect your local coding agent to Archestra with a single command. You pick the client — Claude Code, Codex, etc., and the page gives you a setup script to paste and run in your terminal.
 
 On macOS and Linux the command is `curl -fsSL <url> | bash`. On Windows it is `irm <url> | iex`. Running it configures the client in place.
 
@@ -107,7 +107,7 @@ The `copilot` CLI must be on your `PATH`.
 
 For a full walkthrough, see [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example).
 
-> **Note:** Claude Desktop's third-party inference needs an Anthropic API key (or an Archestra virtual key), so its calls bill at pay-as-you-go API token rates. It cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
+> **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
 
 Claude Desktop is a desktop app, so you apply every change in its UI — there is no script and nothing on disk to back up.
 
@@ -129,4 +129,4 @@ Selecting **Any Client** gives copy-paste instructions instead of a one-command 
 
 ## Use Case
 
-Acme's Archestra administrator onboards engineering team members with one link to the Connection page. Acme engineers using Claude Code, Codex, etc. run the script from the connection page to integrate with Archestra. Now Acme managers can control inference costs, govern tool use, see LLM traffic logs, share skills, MCP registry, etc. while their engineers keep using tools that make them productive the most.
+Acme's Archestra administrator onboards engineering team members with one link to the Connection page. Acme engineers using Claude Code, Codex, etc. run the script from the connection page to integrate with Archestra. Now Acme managers can control inference costs, govern tool use, see LLM traffic logs, share skills, MCP registry, etc. while their engineers keep using the tools that make them most productive.

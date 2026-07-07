@@ -26,7 +26,7 @@ Screenshots live in /docs/automated_screenshots/platform-claude-desktop-example_
 Don't restate obvious UI; keep it short.
 -->
 
-> **Note:** Claude Desktop's third-party inference needs an Anthropic API key (or an Archestra virtual key), so its calls bill at pay-as-you-go API token rates. It cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
+> **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
 
 ## Step 1. Download the configuration profile
 

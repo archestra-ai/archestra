@@ -371,6 +371,27 @@ RUN apk add --no-cache supervisor && \
            /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
            /usr/lib/python*/ensurepip
 
+# CVE-2026-23949: jaraco.context 5.3.0, also vendored inside py3-setuptools.
+# Unlike the vendored wheel above it can't be deleted — jaraco.text imports
+# jaraco.context at setuptools/pkg_resources import time — so replace it with
+# the fixed 6.1.0 wheel from PyPI, pinned by sha256. 6.1.0 ships jaraco/context
+# as a package directory (5.3.0 was a single context.py module), hence the
+# directory copy.
+RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
+        "https://files.pythonhosted.org/packages/8d/48/aa685dbf1024c7bd82bede569e3a85f82c32fd3d79ba5fea578f0159571a/jaraco_context-6.1.0-py3-none-any.whl" && \
+    echo "a43b5ed85815223d0d3cfdb6d7ca0d2bc8946f28f30b6f3216bda070f68badda  /tmp/jaraco_context-6.1.0-py3-none-any.whl" | sha256sum -c - && \
+    VENDOR=$(echo /usr/lib/python3*/site-packages/setuptools/_vendor) && \
+    python3 -m zipfile -e /tmp/jaraco_context-6.1.0-py3-none-any.whl /tmp/jaraco_context && \
+    rm -rf "$VENDOR"/jaraco/context.py \
+           "$VENDOR"/jaraco/__pycache__/context.* \
+           "$VENDOR"/jaraco.context-*.dist-info && \
+    cp -r /tmp/jaraco_context/jaraco/context "$VENDOR"/jaraco/context && \
+    cp -r /tmp/jaraco_context/jaraco_context-6.1.0.dist-info "$VENDOR"/ && \
+    rm -rf /tmp/jaraco_context /tmp/jaraco_context-6.1.0-py3-none-any.whl && \
+    # sanity check: the swapped-in module must keep the setuptools import chain intact
+    python3 -c "import pkg_resources, setuptools" && \
+    supervisord --version
+
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
     chown -R postgres:postgres /var/lib/postgresql /run/postgresql

@@ -343,36 +343,29 @@ jobs:
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
+  #
+  # One 32vcpu environment instead of sharded 16vcpu ones: with ~2.2min of
+  # merge-queue tests, a second Kind environment duplicated ~4min of setup to
+  # split ~1min of test time — one bigger runner (playwright workers: "90%"
+  # scales with it) makes the gate's critical path the single environment and
+  # deletes the shard machinery. The job ID keeps its historical name; the
+  # required-check context is "Merge E2E Test Reports", not this job.
   platform-e2e-tests-shards:
-    # Per-shard check names never match a required-check context (the
-    # "Platform E2E Tests" fan-in below carries the required check), so the
-    # shard-count suffix here is display-only and safe to keep accurate.
-    name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
-    # Deliberately NO `needs: [platform-e2e-build]`: the shards start alongside
-    # the image build and do all image-independent setup (checkout, pnpm, Kind
+    name: Platform E2E Tests
+    # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
+    # the image build and does all image-independent setup (checkout, pnpm, Kind
     # cluster, MCP dependency images) while the build runs. Setup Archestra
     # Platform then polls the registry (image-pull-timeout-seconds) until the
     # freshly pushed image appears; fork PRs poll for the build artifact in the
     # load steps below. This overlap takes ~2.5 min off the merge-queue critical
-    # path. Trade-off: if the build fails, the shards burn the poll deadline
+    # path. Trade-off: if the build fails, this job burns the poll deadline
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    # Observed worst-case shard wall-clock is ~10 min (setup + tests); 30 caps a
-    # hung run instead of letting it burn a 16vcpu runner for the GitHub default.
+    runs-on: blacksmith-32vcpu-ubuntu-2404
+    # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
+    # hung run instead of letting it burn a 32vcpu runner for the GitHub default.
     timeout-minutes: 30
-    strategy:
-      # A failing shard must not cancel its siblings: a cancelled leg would
-      # collapse the matrix result to "cancelled" and produce a partial report.
-      fail-fast: false
-      matrix:
-        # Two shards: with image reuse (tree tags) and the @nightly trim, an
-        # environment costs ~$0.10 and the gate's critical path is what
-        # matters — splitting the ~2.2min of merge-queue tests across two
-        # parallel environments keeps the whole e2e gate fast. Drop to [1] to
-        # trade ~1min of latency for one fewer 16vcpu environment per attempt.
-        shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -443,7 +436,6 @@ jobs:
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
-          shard: "--shard=${{ matrix.shard }}/2"
           # Same event split for tags: merge queue / label runs also grep-invert
           # the @nightly-tagged wide matrices (chat LLM providers, IdP
           # role-mapping/team-sync) down to their representatives; the schedule
@@ -455,7 +447,9 @@ jobs:
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-shard-${{ matrix.shard }}
+          # Suffixed so the report job's blob-report-* download glob (which
+          # also matches the quickstart leg's artifact) picks it up.
+          name: blob-report-tests
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -525,10 +519,8 @@ jobs:
 
       - name: Fail if non-quickstart E2E tests failed
         if: ${{ always() && steps.e2e.outcome == 'failure' }}
-        env:
-          SHARD: ${{ matrix.shard }}
         run: |
-          echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
+          echo "The non-quickstart E2E run failed."
           exit 1
 
   # NOTE: there is deliberately no separate "Platform E2E Tests" fan-in job. The

@@ -129,9 +129,7 @@ const chatsNavItems: NavItem[] = [
     url: "/connection",
     icon: Cable,
     customIsActive: (pathname: string) => pathname.startsWith("/connection"),
-    beta: true,
     dotKey: "nav:connect",
-    badgeLabel: "Beta",
   },
 ];
 

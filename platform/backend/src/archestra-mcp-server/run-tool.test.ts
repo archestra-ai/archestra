@@ -1899,11 +1899,12 @@ describe("run_tool", () => {
     });
   });
 
-  // A single-key wrapper object ({"value": …}, {"item": […]}, {"$text": …})
-  // around a param the target schema declares scalar/array is unwrapped before
-  // policy evaluation, the structural pre-check, and dispatch — and the repair
-  // is disclosed on the result. Anything the schema could accept as sent is
-  // never touched.
+  // A single-key wrapper object (any key — {"value": …}, {"appId": …},
+  // {"my-app": …}) or the two-key {type:"text",text} content block around a param
+  // the target schema declares scalar/array is unwrapped before policy
+  // evaluation, the structural pre-check, and dispatch — and the repair is
+  // disclosed on the result. The guard is on the declared type only; anything the
+  // schema could accept as sent is never touched.
   describe("schema-aware envelope repair", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
 
@@ -2232,7 +2233,7 @@ describe("run_tool", () => {
       expect(result.content).toEqual([{ type: "text", text: "ok" }]);
     });
 
-    test("does not repair multi-key objects, unknown envelope keys, or mismatched inner types", async ({
+    test("does not repair multi-key objects or mismatched inner types", async ({
       makeAgentTool,
       makeInternalMcpCatalog,
       makeTool,
@@ -2249,9 +2250,8 @@ describe("run_tool", () => {
       await makeAgentTool(testAgent.id, tool.id);
 
       const nonRepairable = [
-        { value: "x", extra: "y" }, // multi-key
-        { wrapped: "x" }, // unknown single key
-        { value: 123 }, // inner type does not match the declared string
+        { value: "x", extra: "y" }, // multi-key, not the {type,text} content block
+        { value: 123 }, // single-key but inner type does not match the declared string
       ];
       for (const sent of nonRepairable) {
         vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
@@ -2519,8 +2519,7 @@ describe("run_tool", () => {
           "name",
           { type: "text", text: "x", cache_control: { type: "ephemeral" } },
         ],
-        ["name", { type: "image", text: "x" }], // wrong content-block type
-        ["name", { type: "text" }], // no text field
+        ["name", { type: "image", text: "x" }], // two keys, wrong content-block type
         ["name", { type: "text", text: { nested: true } }], // non-string text on a string param
         ["obj", { type: "text", text: "x" }], // object-declared param is never repairable
       ];
@@ -2552,6 +2551,117 @@ describe("run_tool", () => {
         expect(repairedParams).toEqual([]);
         expect(toolArgs).toEqual({ p: wrapped });
       }
+    });
+
+    test("unwraps a single-key wrapper keyed by an arbitrary string", () => {
+      const schema = {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          description: { type: "string" },
+          tools: { type: "array" },
+          version: { type: "integer" },
+          enabled: { type: "boolean" },
+        },
+      };
+      // The exact shape kimi looped on: every scalar wrapped under the app-name
+      // string, which no envelope allow-list would have matched.
+      const { repairedParams, toolArgs } =
+        runToolInternals.repairEnvelopedToolArgs({
+          toolArgs: {
+            name: { "standup-notes-app": "standup-notes-app" },
+            description: { "standup-notes-app": "A personal standup notepad." },
+            tools: { "standup-notes-app": [] },
+            version: { anything: "5" },
+            enabled: { whatever: "true" },
+          },
+          schema,
+        });
+
+      expect(repairedParams.sort()).toEqual([
+        "description",
+        "enabled",
+        "name",
+        "tools",
+        "version",
+      ]);
+      expect(toolArgs).toEqual({
+        name: "standup-notes-app",
+        description: "A personal standup notepad.",
+        tools: [],
+        version: 5,
+        enabled: true,
+      });
+    });
+
+    test("unwraps a single-key {type: X} object as a plain wrapper", () => {
+      // A one-key object named `type` is a single-key wrapper, not a content
+      // block (which is exactly two keys {type, text}). Its sole value unwraps.
+      const schema = {
+        type: "object",
+        properties: { name: { type: "string" } },
+      };
+      for (const [wrapped, expected] of [
+        [{ type: "text" }, "text"],
+        [{ type: "image" }, "image"],
+        [{ type: "tool_use" }, "tool_use"],
+      ] as Array<[Record<string, unknown>, string]>) {
+        const { repairedParams, toolArgs } =
+          runToolInternals.repairEnvelopedToolArgs({
+            toolArgs: { name: wrapped },
+            schema,
+          });
+        expect(repairedParams).toEqual(["name"]);
+        expect(toolArgs).toEqual({ name: expected });
+      }
+    });
+
+    test("guard is declared-type only: unwraps values that violate non-type constraints (the target validates the rest)", () => {
+      // The repair gates on the declared `type` only, never enum/const/items/
+      // tuple/additionalProperties. The wrapper object is invalid against the
+      // scalar/array type regardless, the inner value is the model's own, and the
+      // target tool enforces the remaining constraints at dispatch — so unwrapping
+      // an inner value that satisfies the type but breaks a non-type constraint is
+      // safe and expected, matching the pre-existing allow-listed behavior.
+      const schema = {
+        type: "object",
+        properties: {
+          mode: { type: "string", enum: ["dry_run"] },
+          kind: { type: "string", const: "fixed" },
+          rows: { type: "array", items: { type: "string", enum: ["open"] } },
+          pair: {
+            type: "array",
+            items: [{ type: "string" }, { type: "number" }],
+          },
+          count: { type: "integer", minimum: 10 },
+        },
+      };
+      const { repairedParams, toolArgs } =
+        runToolInternals.repairEnvelopedToolArgs({
+          toolArgs: {
+            mode: { value: "delete" }, // not in enum
+            kind: { k: "loose" }, // not the const
+            rows: { items: ["deleted"] }, // item not in enum
+            pair: { p: ["only-one"] }, // violates tuple shape
+            count: { c: "3" }, // below minimum
+          },
+          schema,
+        });
+
+      expect(repairedParams.sort()).toEqual([
+        "count",
+        "kind",
+        "mode",
+        "pair",
+        "rows",
+      ]);
+      expect(toolArgs).toEqual({
+        mode: "delete",
+        kind: "loose",
+        rows: ["deleted"],
+        pair: ["only-one"],
+        count: 3,
+      });
     });
 
     test("suppresses the repair note when the built-in call is denied by a gate, but keeps it when the call reaches validation", async ({

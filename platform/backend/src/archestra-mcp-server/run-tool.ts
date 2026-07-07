@@ -425,9 +425,10 @@ async function dispatchTool({
       ? assignedMatches[0].parameters
       : undefined;
 
-  // Schema-aware envelope repair: unwrap {"value": …}-style single-key
-  // wrappers around params the schema declares scalar/array (see
-  // repairEnvelopedToolArgs). Disclosed via a note appended to the result.
+  // Schema-aware envelope repair: unwrap single-key wrapper objects (any key)
+  // and the two-key {type:"text",text} content block around params the schema
+  // declares scalar/array (see repairEnvelopedToolArgs). Disclosed via a note
+  // appended to the result.
   const { repairedParams, toolArgs: toolInput } = repairEnvelopedToolArgs({
     toolArgs: args.tool_args ?? {},
     schema: targetSchema,
@@ -716,12 +717,6 @@ function placeholderForSchema(schema: unknown, depth: number): string {
   }
 }
 
-// Envelope keys weak models wrap scalar/array params in, e.g.
-// {"appId": {"value": "abc"}} or {"tools": {"item": [...]}}. A wrapper keyed
-// by the param's own name (e.g. {"appId": {"appId": "abc"}}) is the same
-// anti-pattern and is accepted alongside these keys.
-const ENVELOPE_KEYS = new Set(["value", "$text", "item", "text"]);
-
 /** Param types the repair may unwrap to — a literal declared `type` only. */
 type RepairableDeclaredType =
   | "string"
@@ -732,10 +727,11 @@ type RepairableDeclaredType =
 
 /**
  * Deterministic repair for the wrapper anti-patterns weak models produce when
- * calling run_tool: a scalar/array param wrapped in an object like `{"value": …}`,
- * `{"$text": …}`, `{"item": […]}` or `{"text": …}`, keyed by the param's own
- * name (`{"appId": {"appId": …}}`), or as the Anthropic text content block
- * `{"type":"text","text": …}` leaked from message content into tool_args.
+ * calling run_tool: a scalar/array param wrapped in a single-key object — the key
+ * can be anything, from a known envelope word (`{"value": …}`, `{"$text": …}`) to
+ * the param's own name (`{"appId": {"appId": …}}`) to an arbitrary string the
+ * model fixates on (`{"my-app": "my-app"}`) — or as the Anthropic text content
+ * block `{"type":"text","text": …}` (exactly two keys) leaked from message content.
  * A top-level tool_args entry is unwrapped only when ALL hold:
  *  - the tool's schema literally declares the param's `type` as
  *    string/number/integer/boolean/array (no type arrays, no
@@ -744,11 +740,17 @@ type RepairableDeclaredType =
  *    envelopeInnerValue);
  *  - the inner value matches the declared type, or is a numeric/boolean string
  *    the declared type parses cleanly (see coerceInnerToDeclaredType).
- * Under those conditions the as-sent value (an object) is provably invalid
- * against the declared type, so the repair can never rewrite a call the
- * schema could accept. Anything else — object-typed params, loose/absent
- * types, unrecognized multi-key objects, unknown envelope keys — is left
- * untouched, and a call with nothing to repair passes through as the same object.
+ * The guard is on the declared *type* only — it deliberately does not check
+ * `enum`/`const`/`items`/tuple/`additionalProperties`; the target tool applies its
+ * complete schema at dispatch, so an inner value that satisfies the type but
+ * violates a non-type constraint is rejected downstream exactly as the wrapper
+ * object would be. The unwrapped value is the model's own inner value, never a
+ * fabricated one, so repair delivers the model's intended `param = X` call. Under
+ * those conditions the as-sent value (an object) is provably invalid against the
+ * declared scalar/array type, so the repair can never rewrite a call the schema
+ * could accept. Anything else — object-typed params, loose/absent types,
+ * unrecognized multi-key objects — is left untouched, and a call with nothing to
+ * repair passes through as the same object.
  */
 function repairEnvelopedToolArgs(params: {
   toolArgs: Record<string, unknown>;
@@ -766,7 +768,6 @@ function repairEnvelopedToolArgs(params: {
   for (const [key, value] of Object.entries(toolArgs)) {
     const unwrapped = unwrapEnvelope({
       value,
-      paramName: key,
       propertySchema: properties[key],
     });
     if (unwrapped) {
@@ -784,14 +785,13 @@ function repairEnvelopedToolArgs(params: {
 /** The unwrapped inner value, or null when the entry does not qualify. */
 function unwrapEnvelope(params: {
   value: unknown;
-  paramName: string;
   propertySchema: unknown;
 }): { inner: unknown } | null {
-  const { paramName, propertySchema, value } = params;
+  const { propertySchema, value } = params;
   if (!isRecord(value)) {
     return null;
   }
-  const candidate = envelopeInnerValue(value, paramName);
+  const candidate = envelopeInnerValue(value);
   if (!candidate) {
     return null;
   }
@@ -819,8 +819,10 @@ function unwrapEnvelope(params: {
 /**
  * The inner value from a recognized wrapper shape, or null when `value` is not
  * a wrapper. Two shapes qualify:
- *  - single-key envelope: exactly one key that is from ENVELOPE_KEYS or equal to
- *    the param name — e.g. `{"value": X}`, `{"$text": X}`, `{"appId": {"appId": X}}`;
+ *  - single-key wrapper: any object with exactly one key — its sole value is the
+ *    candidate, whatever the key is named (`{"value": X}`, `{"appId": X}`,
+ *    `{"my-app": X}`). The key name carries no meaning; weak models wrap under an
+ *    arbitrary string, so an allow-list would miss the common cases.
  *  - Anthropic text content block: exactly the two keys `{type, text}` with
  *    `type === "text"` — e.g. `{"type":"text","text":X}`, the shape weak models
  *    leak from message content into tool_args.
@@ -830,13 +832,9 @@ function unwrapEnvelope(params: {
  */
 function envelopeInnerValue(
   value: Record<string, unknown>,
-  paramName: string,
 ): { inner: unknown } | null {
   const keys = Object.keys(value);
-  if (
-    keys.length === 1 &&
-    (keys[0] === paramName || ENVELOPE_KEYS.has(keys[0]))
-  ) {
+  if (keys.length === 1) {
     return { inner: value[keys[0]] };
   }
   if (keys.length === 2 && value.type === "text" && "text" in value) {

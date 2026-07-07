@@ -22,6 +22,15 @@ A script can set up three things, in any combination you selected on the page:
 
 The exact commands and files differ per client — see [Supported Clients](#supported-clients) below.
 
+## Attribution Headers
+
+When it wires up the LLM proxy for Claude Code or Claude Desktop, the script adds two Archestra headers to every model request:
+
+- **X-Archestra-Agent-Id** names the client — Claude Code or Claude Desktop — so the proxy logs show which tool made each call. It carries no secret.
+- **X-Archestra-Virtual-Key** attributes the request to you. In passthrough mode your own provider credential still pays for inference; this key just tells the proxy whose request it is. Treat it as a secret.
+
+For Claude Code the script writes these into `ANTHROPIC_CUSTOM_HEADERS` in `~/.claude/settings.json`; for Claude Desktop they go in the Custom headers field. The merge replaces only these two lines, so any other headers you set stay put.
+
 ## Idempotence and Backups
 
 You can run the command as many times as you want. Nothing stacks up.

@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-07
 ---
 
 <!--
@@ -75,3 +75,5 @@ Claude Desktop opens Archestra's consent screen in your browser; sign in and cli
 ## Done
 
 Claude Desktop's inference and tools now run through Archestra, with its guardrails and observability.
+
+For full documentation of the connection setup script see the [Connection Page](/docs/platform-connection).

@@ -88,13 +88,6 @@ const nextConfig: NextConfig = {
         destination: "/llm/models",
         permanent: true,
       },
-      // The MCP Registry graduated out of beta — the beta routes moved up to
-      // /mcp/registry.
-      {
-        source: "/mcp/registry/beta/:path*",
-        destination: "/mcp/registry/:path*",
-        permanent: true,
-      },
     ];
   },
   async rewrites() {

@@ -624,6 +624,8 @@ const NavSecondary = ({
   );
 };
 
+// The app-wide navigation sidebar. (Comment added to exercise the e2e image
+// build path with a frontend-layer change — see PR description.)
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();

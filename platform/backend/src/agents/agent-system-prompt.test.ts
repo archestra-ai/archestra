@@ -4,7 +4,6 @@ import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
@@ -281,17 +280,17 @@ describe("buildAgentSystemPrompt", () => {
   });
 
   // The app tools are hidden from tools/list in search_and_run_only mode, so
-  // the tool-loading section must name them verbatim (run_tool only accepts
-  // names the model has seen) — but only when the agent can dispatch them.
-  test("names the app-authoring tools in the tool-loading instruction only when they are assigned", async ({
+  // the tool-loading section names scaffold_app verbatim (run_tool only
+  // accepts names the model has seen) — unconditionally, with no dispatch-gate
+  // mirroring: a non-dispatchable name is refused by run_tool with a clear
+  // error at call time.
+  test("names scaffold_app in the tool-loading instruction regardless of assignment", async ({
     makeAgent,
     makeUser,
     makeMember,
-    seedAndAssignArchestraTools,
   }) => {
     const user = await makeUser();
     const scaffoldAppName = brand(TOOL_SCAFFOLD_APP_SHORT_NAME);
-    const renderAppName = brand(TOOL_RENDER_APP_SHORT_NAME);
 
     const searchAgent = await makeAgent({
       systemPrompt: "Base.",
@@ -304,22 +303,13 @@ describe("buildAgentSystemPrompt", () => {
       userId: user.id,
     };
 
-    // no app tools assigned → no app steering (and no tool names to dispatch)
-    const withoutApps = await buildAgentSystemPrompt({
+    // nothing assigned — the steering still names the build entry point
+    const searchPrompt = await buildAgentSystemPrompt({
       ...common,
       agent: searchAgent,
       agentId: searchAgent.id,
     });
-    expect(withoutApps).not.toContain(scaffoldAppName);
-
-    await seedAndAssignArchestraTools(searchAgent.id);
-    const withApps = await buildAgentSystemPrompt({
-      ...common,
-      agent: searchAgent,
-      agentId: searchAgent.id,
-    });
-    expect(withApps).toContain(scaffoldAppName);
-    expect(withApps).toContain(renderAppName);
+    expect(searchPrompt).toContain(scaffoldAppName);
 
     // full mode has no tool-loading section, so no app steering either
     const fullAgent = await makeAgent({
@@ -327,72 +317,12 @@ describe("buildAgentSystemPrompt", () => {
       toolExposureMode: "full",
       organizationId: searchAgent.organizationId,
     });
-    await seedAndAssignArchestraTools(fullAgent.id);
     const fullPrompt = await buildAgentSystemPrompt({
       ...common,
       agent: fullAgent,
       agentId: fullAgent.id,
     });
     expect(fullPrompt).not.toContain(scaffoldAppName);
-  });
-
-  // run_tool dispatches unassigned built-ins for access-all-tools agents (the
-  // dynamic relaxation), so the steering must fire for them without any
-  // assignment — that is the main population of search_and_run_only agents.
-  test("names the app-authoring tools for an access-all-tools agent with nothing assigned", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    const user = await makeUser();
-    const agent = await makeAgent({
-      systemPrompt: "Base.",
-      accessAllTools: true,
-    });
-    await makeMember(user.id, agent.organizationId);
-
-    const prompt = await buildAgentSystemPrompt({
-      agent,
-      mcpTools: {},
-      organizationId: agent.organizationId,
-      userId: user.id,
-      agentId: agent.id,
-    });
-    expect(agent.toolExposureMode).toBe("search_and_run_only");
-    expect(prompt).toContain(brand(TOOL_SCAFFOLD_APP_SHORT_NAME));
-    expect(prompt).toContain(brand(TOOL_RENDER_APP_SHORT_NAME));
-  });
-
-  // RBAC runs before the assignment gate at dispatch, so a user whose role
-  // cannot execute the app tools must get no steering even when they are
-  // assigned to the agent.
-  test("omits the app-authoring steering for a user without app permissions", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-    makeCustomRole,
-    seedAndAssignArchestraTools,
-  }) => {
-    const user = await makeUser();
-    const agent = await makeAgent({
-      systemPrompt: "Base.",
-      toolExposureMode: "search_and_run_only",
-    });
-    const role = await makeCustomRole(agent.organizationId, {
-      permission: { agent: ["read"] },
-    });
-    await makeMember(user.id, agent.organizationId, { role: role.role });
-    await seedAndAssignArchestraTools(agent.id);
-
-    const prompt = await buildAgentSystemPrompt({
-      agent,
-      mcpTools: {},
-      organizationId: agent.organizationId,
-      userId: user.id,
-      agentId: agent.id,
-    });
-    expect(prompt).toContain("must be discovered");
-    expect(prompt).not.toContain(brand(TOOL_SCAFFOLD_APP_SHORT_NAME));
   });
 
   test("appends the hook session context last", async ({

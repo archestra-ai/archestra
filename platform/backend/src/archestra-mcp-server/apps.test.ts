@@ -444,45 +444,6 @@ describe("read_app / edit_app", () => {
     expect(updatedVersion).toBe(2);
   });
 
-  test("edit_app accepts old_string/new_string as aliases for old_str/new_str", async () => {
-    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
-    const edited = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-      {
-        appId,
-        baseVersion: version,
-        edits: [{ old_string: "v1", new_string: "aliased" }],
-      },
-      context,
-    );
-    expect(edited.isError).toBe(false);
-    const head = await readApp(appId);
-    expect(structured(head).html).toBe("<h1>aliased</h1>");
-  });
-
-  test("edit_app prefers the canonical key when both it and the alias are present", async () => {
-    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
-    const edited = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-      {
-        appId,
-        baseVersion: version,
-        edits: [
-          {
-            old_str: "v1",
-            new_str: "canonical",
-            old_string: "IGNORED",
-            new_string: "IGNORED",
-          },
-        ],
-      },
-      context,
-    );
-    expect(edited.isError).toBe(false);
-    const head = await readApp(appId);
-    expect(structured(head).html).toBe("<h1>canonical</h1>");
-  });
-
   test("read_app returns the stored html and metadata for head and a pinned version", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
@@ -985,9 +946,8 @@ describe("read_app / edit_app", () => {
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
 
-    // The old_string/new_string aliases accepted at call time via preprocess
-    // must not leak into the published item schema — it stays the canonical
-    // closed object so search_tools and error feedback show only old_str/new_str.
+    // The item schema is the canonical closed object, so search_tools and
+    // error feedback show only old_str/new_str.
     const item = schema.properties.edits.items;
     expect(Object.keys(item.properties).sort()).toEqual(["new_str", "old_str"]);
     expect(item.additionalProperties).toBe(false);

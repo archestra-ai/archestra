@@ -130,3 +130,28 @@ describe("Copilot CLI connection client", () => {
     expect(client.iconOverride).toBeUndefined();
   });
 });
+
+describe("Claude Desktop connection client", () => {
+  it("warns that inference bills at API rates and cannot reuse a subscription", () => {
+    const client = CONNECT_CLIENTS.find((c) => c.id === "claude-desktop");
+    if (!client) throw new Error("Claude Desktop client is missing");
+    if (client.proxy.kind !== "custom") {
+      throw new Error("Claude Desktop proxy support should be custom");
+    }
+
+    const instruction = client.proxy.build({
+      provider: "anthropic",
+      providerLabel: "Anthropic",
+      url: "http://localhost:9000/v1/anthropic/default",
+      tokenPlaceholder: "<your-anthropic-api-key>",
+      proxyName: "default",
+    });
+
+    // The proxy note surfaces the surprise: Claude Desktop can't proxy a
+    // Pro/Max subscription like Claude Code, so it bills at API token rates.
+    expect(instruction.note).toContain("API token rates");
+    expect(instruction.note).toContain(
+      "can't reuse a Claude Pro or Max subscription",
+    );
+  });
+});

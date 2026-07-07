@@ -107,6 +107,8 @@ The `copilot` CLI must be on your `PATH`.
 
 For a full walkthrough, see [Using Claude Desktop (Cowork)](/docs/platform-claude-desktop-example).
 
+> **Note:** Claude Desktop's third-party inference needs an Anthropic API key (or an Archestra virtual key), so its calls bill at pay-as-you-go API token rates. It cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
+
 Claude Desktop is a desktop app, so you apply every change in its UI — there is no script and nothing on disk to back up.
 
 - **MCP gateway** — enable Developer Mode, open Developer → Configure Third-Party Inference, add a blank managed MCP server, and paste the gateway URL. Sign in once in your browser.

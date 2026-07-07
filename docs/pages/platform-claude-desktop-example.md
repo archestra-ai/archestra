@@ -26,6 +26,8 @@ Screenshots live in /docs/automated_screenshots/platform-claude-desktop-example_
 Don't restate obvious UI; keep it short.
 -->
 
+> **Note:** This routes Claude Desktop's inference through an Anthropic API key, billed at pay-as-you-go API token rates. Claude Desktop can't reuse a Claude Pro or Max subscription for third-party inference — for that, connect [Claude Code](/docs/platform-claude-code-example) in passthrough mode instead.
+
 ## Step 1. Download the configuration profile
 
 On the **Connect** page, choose **Claude Desktop**, check the selections under **Review the setup**, and click **Download configuration**.

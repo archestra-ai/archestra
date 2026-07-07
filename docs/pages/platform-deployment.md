@@ -814,7 +814,7 @@ The following environment variables can be used to configure Archestra Platform.
   - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
   - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
-- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`). Its only product effect is selecting the beta Connect and MCP Registry page variants (`/connection_beta`, `/mcp/registry/beta`). The code sandbox and agent hooks are enabled whenever a Dagger runner host is configured (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`).
+- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`). Its only product effect is selecting the beta Connect page variant (`/connection_beta`). The code sandbox and agent hooks are enabled whenever a Dagger runner host is configured (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`).
   - Default: `false`
   - Values: `true`, `false`
 

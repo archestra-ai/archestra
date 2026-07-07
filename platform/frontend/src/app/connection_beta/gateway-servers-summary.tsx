@@ -207,7 +207,7 @@ function ServerRowItem({ server }: { server: ServerRow }) {
   return (
     <li>
       <Link
-        href={`/mcp/registry/beta/${server.catalogId}`}
+        href={`/mcp/registry/${server.catalogId}`}
         className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted/60"
       >
         {inner}

@@ -38,7 +38,7 @@ export function McpRegistryServerDetailPage({ name }: { name: string }) {
   return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" asChild>
-        <Link href="/mcp/registry/beta">
+        <Link href="/mcp/registry">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to MCP Registry
         </Link>

@@ -100,7 +100,7 @@ describe("GatewayServersSummary", () => {
 
     // each server links to its catalog detail page, in the same tab
     const githubLink = screen.getByRole("link", { name: /GitHub/ });
-    expect(githubLink).toHaveAttribute("href", "/mcp/registry/beta/c-github");
+    expect(githubLink).toHaveAttribute("href", "/mcp/registry/c-github");
     expect(githubLink).not.toHaveAttribute("target");
   });
 
@@ -147,7 +147,7 @@ describe("GatewayServersSummary", () => {
     expect(screen.getByText(/91 tools/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /GitHub/ })).toHaveAttribute(
       "href",
-      "/mcp/registry/beta/c-github",
+      "/mcp/registry/c-github",
     );
   });
 

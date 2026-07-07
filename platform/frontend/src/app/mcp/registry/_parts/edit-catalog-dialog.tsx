@@ -3,12 +3,7 @@ import { Check, Loader2, ShieldAlert, ShieldX } from "lucide-react";
 import { useState } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
+import { DialogFooter, DialogStickyFooter } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   getCatalogMutationErrorCode,
@@ -25,16 +20,6 @@ import { transformFormToApiData } from "./mcp-catalog-form.utils";
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
   onClose: () => void;
-}
-
-export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
-  return (
-    <Dialog open={!!item} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl h-[85vh] flex flex-col overflow-hidden">
-        {item && <EditCatalogContent item={item} onClose={onClose} />}
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 /** Centered spinner while the edit-permission check resolves. */
@@ -72,6 +57,17 @@ interface EditCatalogContentProps {
   onDirtyChange?: (isDirty: boolean) => void;
   /** Ref to imperatively trigger form submission */
   submitRef?: React.MutableRefObject<(() => Promise<void>) | null>;
+  /**
+   * Replaces the default Discard/Save footer. Rendered inside the form, so a
+   * `type="submit"` button triggers the save. Used by the setup wizard to keep
+   * a single primary CTA per step.
+   */
+  footer?: (ctx: {
+    isDirty: boolean;
+    isSaving: boolean;
+    hasBlockingErrors: boolean;
+    onReset: () => void;
+  }) => React.ReactNode;
 }
 
 export function EditCatalogContent({
@@ -80,6 +76,7 @@ export function EditCatalogContent({
   keepOpenOnSave = false,
   onDirtyChange,
   submitRef,
+  footer,
 }: EditCatalogContentProps) {
   // Authorization gate for the edit form itself — covers every entry point
   // (the settings dialog's Configuration page, a shared `?edit=<id>` deep link,
@@ -188,6 +185,14 @@ export function EditCatalogContent({
         submitRef={submitRef}
         affectedServerCount={affectedServerCount}
         footer={({ isDirty, onReset, hasBlockingErrors }) => {
+          if (footer) {
+            return footer({
+              isDirty,
+              isSaving: updateMutation.isPending,
+              hasBlockingErrors,
+              onReset,
+            });
+          }
           if (keepOpenOnSave && !isDirty) return null;
           const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
           return (

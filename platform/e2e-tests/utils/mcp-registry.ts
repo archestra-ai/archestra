@@ -25,7 +25,9 @@ async function filterMcpRegistryByName(
   await searchInput.fill(catalogItemName);
 }
 
-export async function openAddMcpServerDialog(page: Page): Promise<void> {
+/** Clicks "Add MCP Server" on the registry list, which navigates to the
+ * routed /mcp/registry/new setup wizard. */
+export async function goToAddMcpServerPage(page: Page): Promise<void> {
   await clickButton({
     page,
     options: { name: "Add MCP Server" },
@@ -51,7 +53,14 @@ export async function waitForInstallDialog(
 }
 
 export async function installMcpServer(page: Page): Promise<void> {
-  await clickButton({ page, options: { name: "Install" } });
+  // Scope to the open install dialog — pages like the setup wizard's "Test
+  // connection" step render their own "Install" button behind the dialog.
+  await page
+    .getByRole("dialog")
+    .filter({ visible: true })
+    .last()
+    .getByRole("button", { name: "Install", disabled: false })
+    .click();
   await page.waitForLoadState("domcontentloaded");
 }
 

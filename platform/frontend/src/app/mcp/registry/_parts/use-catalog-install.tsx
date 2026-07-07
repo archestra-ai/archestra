@@ -45,17 +45,17 @@ import websocketService from "@/lib/websocket/websocket";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
-} from "../../_parts/local-server-install-dialog";
+} from "./local-server-install-dialog";
+import type { CatalogItem } from "./mcp-server-card";
 import {
   NoAuthInstallDialog,
   type NoAuthInstallResult,
-} from "../../_parts/no-auth-install-dialog";
+} from "./no-auth-install-dialog";
 import {
   RemoteServerInstallDialog,
   type RemoteServerInstallResult,
-} from "../../_parts/remote-server-install-dialog";
-import type { McpServerInstallScope } from "../../_parts/select-mcp-server-credential-type-and-teams";
-import type { CatalogItem } from "./mcp-server-card";
+} from "./remote-server-install-dialog";
+import type { McpServerInstallScope } from "./select-mcp-server-credential-type-and-teams";
 
 export interface UseCatalogInstallResult {
   /** Add a personal connection (skips dialog when no config is needed). */
@@ -154,7 +154,7 @@ export function useCatalogInstall(opts?: {
     ): Promise<boolean> => {
       const connectUrl = await getEnterpriseManagedInstallConnectUrl({
         catalogItem,
-        redirectTo: "/mcp/registry/beta",
+        redirectTo: "/mcp/registry",
       });
       if (!connectUrl) {
         return true;

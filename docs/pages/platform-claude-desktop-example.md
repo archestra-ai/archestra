@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-07
 ---
 
 <!--
@@ -25,6 +25,8 @@ configuration profile. Cover:
 Screenshots live in /docs/automated_screenshots/platform-claude-desktop-example_*.
 Don't restate obvious UI; keep it short.
 -->
+
+> **Note:** Claude Desktop's third-party inference cannot reuse a Claude Pro or Max subscription. To keep paying through a subscription, connect Claude Code in passthrough mode instead.
 
 ## Step 1. Download the configuration profile
 
@@ -75,3 +77,7 @@ Claude Desktop opens Archestra's consent screen in your browser; sign in and cli
 ## Done
 
 Claude Desktop's inference and tools now run through Archestra, with its guardrails and observability.
+
+## Next Step
+
+Explore full local agents connection docs: [Connect Your Agents](/docs/platform-connection).

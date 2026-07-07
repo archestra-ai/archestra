@@ -173,20 +173,6 @@ RUN set -eux; \
     rm -f picomatch-4.0.4.tgz; \
     grep -q '"version": "4.0.4"' "$target/package.json"
 
-# pre-seed the database schema: replay every Drizzle migration against a
-# throwaway PostgreSQL and pg_dump the result. The runtime entrypoint (and the
-# CI e2e postgres initdb hook) restores this dump into a fresh database so the
-# boot-time `drizzle-kit migrate` is a ~1-2s no-op instead of replaying all
-# migration files (~40-50s on CI, most of the quickstart first boot). Built
-# from `deps` so it only re-runs when dependencies, the drizzle config, or the
-# migrations directory change — ordinary source edits reuse the cached layer.
-FROM deps AS db-seed
-RUN apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec
-COPY backend/drizzle.config.ts backend/
-COPY backend/src/database/migrations backend/src/database/migrations
-COPY docker/scripts/generate-db-seed.sh /generate-db-seed.sh
-RUN sh /generate-db-seed.sh /app/db-seed
-
 # <----- Builder base stage ----->
 FROM base AS builder-base
 WORKDIR /app
@@ -430,13 +416,6 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 # the runtime `pnpm install`.
 COPY --from=builder /prod/backend ./backend
 RUN chmod +x /app/backend/scripts/start-production.sh
-
-# Pre-seeded database snapshot (generated in the db-seed stage from this same
-# build's migrations). The entrypoint restores it on first init of the bundled
-# internal database, and CI extracts it to seed the e2e Helm postgres, so
-# boot-time `drizzle-kit migrate` (still run unconditionally as the safety
-# net) finds nothing to apply. External-database deployments never touch it.
-COPY --from=db-seed /app/db-seed ./db-seed
 
 # Copy built frontend
 COPY --from=builder /app/frontend/public ./frontend/public

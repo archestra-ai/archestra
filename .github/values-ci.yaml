@@ -149,13 +149,6 @@ postgresql:
   # Vault provides the connection URL, but we still deploy the PostgreSQL subchart.
   external_database_url: "from_vault"
   enabled: true
-  # The chart's `:latest` tag makes Kubernetes default the pull policy to
-  # Always, which re-pulled ~200MB from Docker Hub on the web-boot critical
-  # path of every e2e run. CI preloads the image into Kind
-  # (setup-archestra-platform "Cache PostgreSQL image"), so pin to
-  # IfNotPresent to actually use the preloaded copy.
-  image:
-    pullPolicy: IfNotPresent
   auth:
     database: archestra_dev
     username: archestra

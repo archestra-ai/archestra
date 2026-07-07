@@ -367,12 +367,11 @@ jobs:
       # collapse the matrix result to "cancelled" and produce a partial report.
       fail-fast: false
       matrix:
-        # Two shards: with image reuse (tree tags), the pre-seeded database,
-        # and the @nightly trim, an environment costs ~$0.10 and the gate's
-        # critical path is what matters — splitting the ~2.2min of merge-queue
-        # tests across two parallel environments keeps the whole e2e gate
-        # under ~5.5min. Drop to [1] to trade ~1min of latency for one fewer
-        # 16vcpu environment per attempt.
+        # Two shards: with image reuse (tree tags) and the @nightly trim, an
+        # environment costs ~$0.10 and the gate's critical path is what
+        # matters — splitting the ~2.2min of merge-queue tests across two
+        # parallel environments keeps the whole e2e gate fast. Drop to [1] to
+        # trade ~1min of latency for one fewer 16vcpu environment per attempt.
         shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -434,10 +433,6 @@ jobs:
           platform-context: ./platform
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
           image-pull-timeout-seconds: "900"
-          # Boot the e2e database from the pre-migrated snapshot baked into the
-          # platform image so drizzle-kit migrate at pod boot is a no-op
-          # (~40-50s off the Helm deploy wait). Soft-fails to a full migrate.
-          seed-e2e-database: "true"
 
       - name: Run all non-quickstart E2E tests
         id: e2e

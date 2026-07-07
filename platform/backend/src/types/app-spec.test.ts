@@ -13,9 +13,11 @@ describe("AppSpecSchema published JSON schema", () => {
 
   test("every field carries a non-empty description", () => {
     for (const field of ["summary", "features", "data", "ui", "tools"]) {
-      const description = jsonSchema.properties[field]?.description;
-      expect(description, `${field} must have a description`).toBeTruthy();
-      expect(description?.trim().length).toBeGreaterThan(0);
+      const description = jsonSchema.properties[field]?.description?.trim();
+      expect(
+        description,
+        `${field} must have a non-empty description`,
+      ).toBeTruthy();
     }
   });
 });

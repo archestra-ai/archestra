@@ -741,7 +741,7 @@ test("does NOT synthesize an interrupted result for an approved tool call (the S
 
   // Sanity: the approval-response the SDK needs to resume execution is present.
   const approvalResponses = modelMessages
-    .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
     .filter((p) => (p as { type?: string }).type === "tool-approval-response");
   expect(approvalResponses).toHaveLength(1);
 
@@ -751,14 +751,14 @@ test("does NOT synthesize an interrupted result for an approved tool call (the S
   // assistant content; if a future SDK stopped doing so the exclusion would
   // silently break and drop the approved call again.
   const approvalRequests = modelMessages
-    .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
     .filter((p) => (p as { type?: string }).type === "tool-approval-request");
   expect(approvalRequests).toHaveLength(1);
 
   // The bug: a synthetic error-text tool-result is fabricated for the approved
   // call, so the SDK's collectToolApprovals skips executing it.
   const fabricated = modelMessages
-    .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
     .find(
       (p) =>
         (p as { type?: string }).type === "tool-result" &&

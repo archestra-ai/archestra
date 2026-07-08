@@ -362,7 +362,7 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-32vcpu-ubuntu-2404
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
     # hung run instead of letting it burn a 32vcpu runner for the GitHub default.
     timeout-minutes: 30

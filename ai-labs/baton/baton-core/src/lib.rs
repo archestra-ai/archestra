@@ -65,12 +65,12 @@ impl fmt::Display for ToolName {
 
 pub use authority::{Authority, AuthorityName, Ruling};
 pub use contract::{
-    AttentionRule, AudienceRule, Breach, FlowRequest, Requirements, ToolContract, TrustRequirement,
+    AttentionRule, AudienceRule, Breach, Requirements, ToolContract, ToolRequest, TrustRequirement,
     Unprovable, Verdict, Violation,
 };
 pub use dimension::{Attention, Audience, Effect, Effects, Trust, UserId};
 pub use engine::{
-    BlockReason, Decision, InvalidContract, Permit, PolicyEngine, StalePermit, UnknownPolicy,
+    BlockReason, Decision, InvalidContract, Permit, PolicyEngine, RejectedPermit, UnknownPolicy,
 };
 pub use label::{AuditEntry, Label};
-pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, Turn};
+pub use turn::{Actor, InvalidTurn, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn};

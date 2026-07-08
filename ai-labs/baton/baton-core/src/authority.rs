@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::contract::{FlowRequest, Violation};
+use crate::contract::{ToolRequest, Violation};
 use crate::label::Label;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub trait Authority {
     /// rather than blocking on them.
     fn adjudicate(
         &self,
-        request: &FlowRequest,
+        request: &ToolRequest,
         context: &Label,
         violations: &[Violation],
     ) -> Ruling;

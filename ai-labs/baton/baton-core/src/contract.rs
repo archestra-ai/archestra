@@ -10,7 +10,7 @@ use crate::label::Label;
 
 /// A concrete tool invocation the policy is asked to authorize.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FlowRequest {
+pub struct ToolRequest {
     pub tool: ToolName,
     /// Readers this call would expose context to (e.g. e-mail recipients).
     /// Empty for tools that do not egress context to people; an
@@ -18,7 +18,7 @@ pub struct FlowRequest {
     pub recipients: BTreeSet<UserId>,
 }
 
-impl FlowRequest {
+impl ToolRequest {
     pub fn new(tool: ToolName) -> Self {
         Self {
             tool,
@@ -208,7 +208,7 @@ pub struct ToolContract {
 }
 
 impl Requirements {
-    pub fn check(&self, context: &Label, request: &FlowRequest) -> Verdict {
+    pub fn check(&self, context: &Label, request: &ToolRequest) -> Verdict {
         let mut violations = Vec::new();
 
         if let Some(required) = self.trust {
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn all_requirements_met_allows() {
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         assert_eq!(
             email_requirements().check(&private_trusted_context(), &request),
             Verdict::Allow
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn suspicious_context_is_a_breach_but_unknown_is_unprovable() {
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
 
         let suspicious = Label {
             trust: Trust::Suspicious,
@@ -360,7 +360,7 @@ mod tests {
             trust: Some(TrustRequirement::NotSuspicious),
             ..Requirements::default()
         };
-        let request = FlowRequest::new(ToolName::new("notes.append"));
+        let request = ToolRequest::new(ToolName::new("notes.append"));
 
         let unknown = Label {
             trust: Trust::Unknown,
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn recipient_outside_audience_reports_the_diff() {
         let request =
-            FlowRequest::exposing(ToolName::new("email.send"), [user("bob"), user("charlie")]);
+            ToolRequest::exposing(ToolName::new("email.send"), [user("bob"), user("charlie")]);
         assert_eq!(
             email_requirements().check(&private_trusted_context(), &request),
             Verdict::Escalate(vec![Violation::Breach(Breach::AudienceExceeds {
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn egress_without_recipients_is_a_breach() {
-        let none_declared = FlowRequest::new(ToolName::new("email.send"));
+        let none_declared = ToolRequest::new(ToolName::new("email.send"));
         assert_eq!(
             email_requirements().check(&private_trusted_context(), &none_declared),
             Verdict::Escalate(vec![Violation::Breach(Breach::UndeclaredRecipients)])
@@ -408,7 +408,7 @@ mod tests {
             audience: Audience::Unknown,
             ..private_trusted_context()
         };
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         assert_eq!(
             email_requirements().check(&context, &request),
             Verdict::Escalate(vec![Violation::Unprovable(Unprovable::AudienceUnknown)])
@@ -421,7 +421,7 @@ mod tests {
             audience: Audience::Public,
             ..private_trusted_context()
         };
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("stranger")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("stranger")]);
         assert_eq!(
             email_requirements().check(&context, &request),
             Verdict::Allow
@@ -434,7 +434,7 @@ mod tests {
             attention: AttentionRule::ExplicitConfirmation,
             ..Requirements::default()
         };
-        let request = FlowRequest::new(ToolName::new("db.drop"));
+        let request = ToolRequest::new(ToolName::new("db.drop"));
 
         let unconfirmed = Label::identity();
         assert_eq!(
@@ -469,7 +469,7 @@ mod tests {
             forbid_prior_effects: BTreeSet::from([Effect::Mutation]),
             ..Requirements::default()
         };
-        let request = FlowRequest::new(ToolName::new("report.generate"));
+        let request = ToolRequest::new(ToolName::new("report.generate"));
 
         let mutated = Label {
             effects: Effects::declared([Effect::Mutation, Effect::Egress]),

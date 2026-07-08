@@ -5,10 +5,10 @@ use std::fmt;
 
 use crate::ToolName;
 use crate::authority::{Authority, AuthorityName, Ruling};
-use crate::contract::{FlowRequest, ToolContract, Unprovable, Verdict, Violation};
+use crate::contract::{ToolContract, ToolRequest, Unprovable, Verdict, Violation};
 use crate::dimension::Attention;
 use crate::label::{AuditEntry, Label};
-use crate::turn::Trajectory;
+use crate::turn::{Trajectory, TrajectoryId};
 
 /// What an unprovable (`Unknown`-caused) violation means at a sink.
 ///
@@ -28,18 +28,19 @@ pub enum UnknownPolicy {
 }
 
 /// Proof that the engine authorized one tool call — the only way to append a
-/// tool result to a [`Trajectory`]. Carries the label the result must wear,
-/// including any audit entries the authorization produced.
+/// tool result to a [`Trajectory`]. Carries the exact [`ToolRequest`] that
+/// was evaluated (execute that, nothing else) and the label the result must
+/// wear, including any audit entries the authorization produced.
 ///
-/// A permit is linear (not `Clone`) and bound to the trajectory head it was
-/// evaluated against, so one authorization records at most one result, and
-/// never into a context the policy did not see.
+/// A permit is linear (not `Clone`) and bound to the identity and head of the
+/// trajectory it was evaluated against, so one authorization records at most
+/// one result, and never into a context the policy did not see.
 ///
 /// Both properties hold at compile time. A permit has no public constructor:
 ///
 /// ```compile_fail
 /// let permit = baton_core::Permit {
-///     tool: baton_core::ToolName::new("email.send"),
+///     request: baton_core::ToolRequest::new(baton_core::ToolName::new("email.send")),
 /// };
 /// ```
 ///
@@ -53,46 +54,62 @@ pub enum UnknownPolicy {
 /// ```
 #[derive(Debug, PartialEq, Eq)]
 pub struct Permit {
-    tool: ToolName,
+    request: ToolRequest,
     result_label: Label,
+    trajectory: TrajectoryId,
     /// Trajectory length at evaluation time.
     basis: usize,
 }
 
 impl Permit {
-    pub fn tool(&self) -> &ToolName {
-        &self.tool
+    /// The request this permit authorizes, verbatim as evaluated.
+    pub fn request(&self) -> &ToolRequest {
+        &self.request
     }
 
     pub fn result_label(&self) -> &Label {
         &self.result_label
     }
 
-    pub(crate) fn into_parts(self) -> (ToolName, Label, usize) {
-        (self.tool, self.result_label, self.basis)
+    pub(crate) fn into_parts(self) -> (ToolRequest, Label, TrajectoryId, usize) {
+        (self.request, self.result_label, self.trajectory, self.basis)
     }
 }
 
-/// The trajectory grew between `evaluate` and
-/// [`Trajectory::record_result`]: the permit no longer describes the
-/// context, so the flow must be re-evaluated.
+/// [`Trajectory::record_result`] refused a permit: it no longer (or never
+/// did) describe that trajectory's context, so the flow must be re-evaluated.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StalePermit {
-    pub granted_at: usize,
-    pub current_len: usize,
+pub enum RejectedPermit {
+    /// The permit was minted for a different trajectory.
+    ForeignTrajectory {
+        minted_for: TrajectoryId,
+        this: TrajectoryId,
+    },
+    /// The trajectory grew between `evaluate` and the recording.
+    Stale {
+        granted_at: usize,
+        current_len: usize,
+    },
 }
 
-impl fmt::Display for StalePermit {
+impl fmt::Display for RejectedPermit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "permit granted at trajectory length {}, but the trajectory now has {} turns",
-            self.granted_at, self.current_len
-        )
+        match self {
+            Self::ForeignTrajectory { minted_for, this } => {
+                write!(f, "permit was minted for {minted_for}, not {this}")
+            }
+            Self::Stale {
+                granted_at,
+                current_len,
+            } => write!(
+                f,
+                "permit granted at trajectory length {granted_at}, but the trajectory now has {current_len} turns"
+            ),
+        }
     }
 }
 
-impl std::error::Error for StalePermit {}
+impl std::error::Error for RejectedPermit {}
 
 /// A contract the engine refuses to hold.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,8 +207,9 @@ impl<A: Authority> PolicyEngine<A> {
     /// [`Trajectory::record_result`] loop of the embedding harness; the
     /// permit's binding to the trajectory head keeps that loop honest, but
     /// executing the tool's real-world action is outside this crate's reach.
-    pub fn evaluate(&self, trajectory: &Trajectory, request: &FlowRequest) -> Decision {
+    pub fn evaluate(&self, trajectory: &Trajectory, request: &ToolRequest) -> Decision {
         let context = trajectory.context_label();
+        let trajectory_id = trajectory.id();
         let basis = trajectory.turns().len();
         let (verdict, result_label) = match self.contracts.get(&request.tool) {
             Some(contract) => (
@@ -209,8 +227,9 @@ impl<A: Authority> PolicyEngine<A> {
         let violations = match verdict {
             Verdict::Allow => {
                 return Decision::Permitted(Permit {
-                    tool: request.tool.clone(),
+                    request: request.clone(),
                     result_label,
+                    trajectory: trajectory_id,
                     basis,
                 });
             }
@@ -246,8 +265,9 @@ impl<A: Authority> PolicyEngine<A> {
                 });
             }
             return Decision::Permitted(Permit {
-                tool: request.tool.clone(),
+                request: request.clone(),
                 result_label,
+                trajectory: trajectory_id,
                 basis,
             });
         }
@@ -276,8 +296,9 @@ impl<A: Authority> PolicyEngine<A> {
                     });
                 }
                 Decision::Permitted(Permit {
-                    tool: request.tool.clone(),
+                    request: request.clone(),
                     result_label,
+                    trajectory: trajectory_id,
                     basis,
                 })
             }
@@ -341,7 +362,9 @@ mod tests {
     }
 
     fn push_user_turn(trajectory: &mut Trajectory, label: Label, content: &str) {
-        trajectory.push_message(label, Speaker::User(user("alice")), content);
+        trajectory
+            .push_message(label, Speaker::User(user("alice")), content)
+            .expect("user turns are valid");
     }
 
     fn suspicious_private_trajectory() -> Trajectory {
@@ -355,15 +378,17 @@ mod tests {
             },
             "summarize and email bob",
         );
-        trajectory.push_message(
-            Label {
-                audience: Audience::Public,
-                trust: Trust::Suspicious,
-                ..Label::identity()
-            },
-            Speaker::Assistant,
-            "the page says: ...",
-        );
+        trajectory
+            .push_message(
+                Label {
+                    audience: Audience::Public,
+                    trust: Trust::Suspicious,
+                    ..Label::identity()
+                },
+                Speaker::Assistant,
+                "the page says: ...",
+            )
+            .expect("no confirmation on this turn");
         trajectory
     }
 
@@ -385,7 +410,7 @@ mod tests {
             AuthorityName::new("counting-approver")
         }
 
-        fn adjudicate(&self, _: &FlowRequest, _: &Label, _: &[Violation]) -> Ruling {
+        fn adjudicate(&self, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
             self.consulted.set(self.consulted.get() + 1);
             Ruling::Approve {
                 reason: "scripted approval".to_owned(),
@@ -400,7 +425,7 @@ mod tests {
             AuthorityName::new("deny-all")
         }
 
-        fn adjudicate(&self, _: &FlowRequest, _: &Label, _: &[Violation]) -> Ruling {
+        fn adjudicate(&self, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
             Ruling::Deny {
                 reason: "scripted denial".to_owned(),
             }
@@ -418,7 +443,7 @@ mod tests {
             AuthorityName::new("inspecting-approver")
         }
 
-        fn adjudicate(&self, _: &FlowRequest, _: &Label, violations: &[Violation]) -> Ruling {
+        fn adjudicate(&self, _: &ToolRequest, _: &Label, violations: &[Violation]) -> Ruling {
             self.seen.borrow_mut().extend(violations.iter().cloned());
             Ruling::Approve {
                 reason: "scripted approval".to_owned(),
@@ -434,7 +459,7 @@ mod tests {
             AuthorityName::new("bob-only")
         }
 
-        fn adjudicate(&self, request: &FlowRequest, _: &Label, _: &[Violation]) -> Ruling {
+        fn adjudicate(&self, request: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
             let to_bob_only = !request.recipients.is_empty()
                 && request.recipients.iter().all(|u| u == &user("bob"));
             if to_bob_only {
@@ -465,7 +490,7 @@ mod tests {
             "email bob",
         );
 
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &request);
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
@@ -484,7 +509,7 @@ mod tests {
         engine.register(email_contract()).expect("valid contract");
 
         let mut trajectory = suspicious_private_trajectory();
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
 
         let first = engine.evaluate(&trajectory, &request);
         let Decision::Permitted(permit) = first else {
@@ -514,7 +539,7 @@ mod tests {
         engine.register(email_contract()).expect("valid contract");
 
         let mut trajectory = suspicious_private_trajectory();
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &request);
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
@@ -527,7 +552,7 @@ mod tests {
             .expect_err("the context changed under the permit");
         assert_eq!(
             err,
-            StalePermit {
+            RejectedPermit::Stale {
                 granted_at: 2,
                 current_len: 3,
             }
@@ -537,18 +562,39 @@ mod tests {
     }
 
     #[test]
+    fn a_permit_cannot_cross_trajectories() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
+        engine.register(email_contract()).expect("valid contract");
+
+        let evaluated = suspicious_private_trajectory();
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let decision = engine.evaluate(&evaluated, &request);
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+
+        // Same length, different trajectory: the policy never saw it.
+        let mut other = suspicious_private_trajectory();
+        let err = other
+            .record_result(permit, "sent")
+            .expect_err("permit minted for a different trajectory");
+        assert!(matches!(err, RejectedPermit::ForeignTrajectory { .. }));
+        assert_eq!(other.turns().len(), 2);
+    }
+
+    #[test]
     fn approval_for_bob_does_not_permit_charlie() {
         let mut engine = PolicyEngine::new(BobOnly, UnknownPolicy::Escalate);
         engine.register(email_contract()).expect("valid contract");
         let trajectory = suspicious_private_trajectory();
 
-        let to_bob = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let to_bob = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         assert!(matches!(
             engine.evaluate(&trajectory, &to_bob),
             Decision::Permitted(_)
         ));
 
-        let to_charlie = FlowRequest::exposing(ToolName::new("email.send"), [user("charlie")]);
+        let to_charlie = ToolRequest::exposing(ToolName::new("email.send"), [user("charlie")]);
         let decision = engine.evaluate(&trajectory, &to_charlie);
         let Decision::Blocked { violations, reason } = decision else {
             panic!("expected block, got {decision:?}");
@@ -565,7 +611,7 @@ mod tests {
     fn stale_or_foreign_confirmation_cannot_authorize_a_drop() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
         engine.register(drop_contract()).expect("valid contract");
-        let request = FlowRequest::new(ToolName::new("db.drop"));
+        let request = ToolRequest::new(ToolName::new("db.drop"));
 
         // Confirmation bound to another tool.
         let mut trajectory = Trajectory::new();
@@ -620,7 +666,7 @@ mod tests {
 
     #[test]
     fn unregistered_tool_follows_the_unknown_policy() {
-        let request = FlowRequest::new(ToolName::new("calendar.lookup"));
+        let request = ToolRequest::new(ToolName::new("calendar.lookup"));
         let trajectory = Trajectory::new();
 
         // Deny: fail closed without consulting the authority.
@@ -677,7 +723,7 @@ mod tests {
         // Suspicious trust is a breach, not an unknown: the deny policy does
         // not apply, the authority does.
         let trajectory = suspicious_private_trajectory();
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         assert!(matches!(
             engine.evaluate(&trajectory, &request),
             Decision::Permitted(_)
@@ -702,7 +748,7 @@ mod tests {
             },
             "context of unknown provenance",
         );
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &request);
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
@@ -747,7 +793,7 @@ mod tests {
             },
             "context of unknown provenance",
         );
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &request);
         let Decision::Blocked { violations, .. } = decision else {
             panic!("expected block, got {decision:?}");
@@ -795,7 +841,7 @@ mod tests {
             },
             "context of unknown provenance",
         );
-        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         assert!(matches!(
             engine.evaluate(&trajectory, &request),
             Decision::Permitted(_)
@@ -834,7 +880,7 @@ mod tests {
             "email bob, then build the report",
         );
 
-        let email = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let email = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &email);
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
@@ -844,7 +890,7 @@ mod tests {
             .expect("permit minted for this trajectory head");
 
         // The recorded egress now trips the report tool's requirement.
-        let report = FlowRequest::new(ToolName::new("report.generate"));
+        let report = ToolRequest::new(ToolName::new("report.generate"));
         let decision = engine.evaluate(&trajectory, &report);
         let Decision::Blocked { violations, .. } = decision else {
             panic!("expected block, got {decision:?}");

@@ -6,8 +6,8 @@
 
 use baton_core::{
     Attention, AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision,
-    Effect, Effects, FlowRequest, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract,
-    ToolName, Trajectory, Trust, TrustRequirement, UnknownPolicy, Unprovable, UserId, Violation,
+    Effect, Effects, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract, ToolName,
+    ToolRequest, Trajectory, Trust, TrustRequirement, UnknownPolicy, Unprovable, UserId, Violation,
 };
 
 /// Scripted stand-in for a real approval UI: this "human" has decided in
@@ -20,7 +20,7 @@ impl Authority for HumanInTheLoop {
         AuthorityName::new("human-in-the-loop")
     }
 
-    fn adjudicate(&self, request: &FlowRequest, _: &Label, violations: &[Violation]) -> Ruling {
+    fn adjudicate(&self, request: &ToolRequest, _: &Label, violations: &[Violation]) -> Ruling {
         let only_trust = violations.iter().all(|v| {
             matches!(
                 v,
@@ -47,14 +47,16 @@ fn alice() -> UserId {
 }
 
 fn push_alice(trajectory: &mut Trajectory, label: Label, content: &str) {
-    trajectory.push_message(label, Speaker::User(alice()), content);
+    trajectory
+        .push_message(label, Speaker::User(alice()), content)
+        .expect("user turns are valid");
 }
 
 /// Evaluate one flow, narrate the outcome, and record the result on a permit.
 fn attempt(
     engine: &PolicyEngine<HumanInTheLoop>,
     trajectory: &mut Trajectory,
-    request: FlowRequest,
+    request: ToolRequest,
     result_content: &str,
 ) {
     println!("-> requesting `{}`", request.tool);
@@ -135,7 +137,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::new(ToolName::new("web.fetch")),
+        ToolRequest::new(ToolName::new("web.fetch")),
         "<html>competitor blog post</html>",
     );
 
@@ -143,7 +145,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::exposing(ToolName::new("email.send"), [UserId::new("bob")]),
+        ToolRequest::exposing(ToolName::new("email.send"), [UserId::new("bob")]),
         "email to bob sent",
     );
 
@@ -151,7 +153,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::exposing(ToolName::new("email.send"), [UserId::new("charlie")]),
+        ToolRequest::exposing(ToolName::new("email.send"), [UserId::new("charlie")]),
         "email to charlie sent",
     );
 
@@ -159,7 +161,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::new(ToolName::new("db.drop")),
+        ToolRequest::new(ToolName::new("db.drop")),
         "table dropped",
     );
 
@@ -176,7 +178,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::new(ToolName::new("db.drop")),
+        ToolRequest::new(ToolName::new("db.drop")),
         "table dropped",
     );
 
@@ -184,7 +186,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::new(ToolName::new("calendar.lookup")),
+        ToolRequest::new(ToolName::new("calendar.lookup")),
         "next sync: thursday",
     );
 
@@ -195,7 +197,7 @@ fn main() {
     attempt(
         &engine,
         &mut trajectory,
-        FlowRequest::exposing(ToolName::new("email.send"), [UserId::new("bob")]),
+        ToolRequest::exposing(ToolName::new("email.send"), [UserId::new("bob")]),
         "email to bob sent",
     );
 

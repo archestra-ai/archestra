@@ -34,6 +34,23 @@ impl fmt::Display for UserId {
     }
 }
 
+/// The sink-side proof for one dimension: three-valued, not a lattice
+/// comparison. `Holds` when the context satisfies the requirement,
+/// `Fails(witness)` when it provably does not (the witness is exactly what is
+/// wrong — the offending readers, the too-low trust, the present forbidden
+/// effects), and `Unprovable` when `Unknown` blocked the proof either way.
+///
+/// This is where `Unknown` is *incomparable* — the opposite of its definite
+/// position in the taint fold. Resolving an `Unprovable` is an explicit
+/// [`crate::engine::UnknownPolicy`] or [`crate::authority::Authority`]
+/// decision, never a cast.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Adequacy<W> {
+    Holds,
+    Fails(W),
+    Unprovable,
+}
+
 /// Who is allowed to read a piece of data.
 ///
 /// The fold is the most-restrictive combine (the confidentiality meet):
@@ -62,6 +79,26 @@ impl Audience {
             (Self::Public, x) | (x, Self::Public) => x,
             (Self::Readers(a), Self::Readers(b)) => {
                 Self::Readers(a.intersection(&b).cloned().collect())
+            }
+        }
+    }
+
+    /// Adequacy of this audience for a set of recipients: are they all
+    /// already allowed readers? `Public` holds for anyone; `Unknown` cannot
+    /// bound anyone (so `Unprovable`, never silently treated as `Public`);
+    /// `Readers` holds iff no recipient falls outside, and the `Fails`
+    /// witness is exactly the recipients outside the set.
+    pub(crate) fn covers(&self, recipients: &BTreeSet<UserId>) -> Adequacy<BTreeSet<UserId>> {
+        match self {
+            Self::Unknown => Adequacy::Unprovable,
+            Self::Public => Adequacy::Holds,
+            Self::Readers(allowed) => {
+                let outside: BTreeSet<UserId> = recipients.difference(allowed).cloned().collect();
+                if outside.is_empty() {
+                    Adequacy::Holds
+                } else {
+                    Adequacy::Fails(outside)
+                }
             }
         }
     }
@@ -135,6 +172,19 @@ impl Trust {
             }
         }
     }
+
+    /// Adequacy of this trust for a floor. A known judgement at or above the
+    /// floor holds; a lower one `Fails`, carrying the actual (too-low)
+    /// judgement as witness. `Unknown` never satisfies any bar — unpacking it
+    /// is an explicit policy/authority decision, never a comparison — so it
+    /// is `Unprovable`.
+    pub(crate) fn at_least(self, floor: KnownTrust) -> Adequacy<KnownTrust> {
+        match self {
+            Self::Known(actual) if actual >= floor => Adequacy::Holds,
+            Self::Known(actual) => Adequacy::Fails(actual),
+            Self::Unknown => Adequacy::Unprovable,
+        }
+    }
 }
 
 impl fmt::Display for Trust {
@@ -187,6 +237,25 @@ impl Effects {
             (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
             (Self::Declared(a), Self::Declared(b)) => {
                 Self::Declared(a.union(&b).copied().collect())
+            }
+        }
+    }
+
+    /// Adequacy against a forbidden set: none of `forbidden` may already be
+    /// present. `Unknown` effects cannot attest the absence of anything (an
+    /// unannotated tool ran), so they are `Unprovable`. `Declared` holds iff
+    /// the intersection is empty, and the `Fails` witness is exactly the
+    /// forbidden effects that are present.
+    pub(crate) fn avoids(&self, forbidden: &BTreeSet<Effect>) -> Adequacy<BTreeSet<Effect>> {
+        match self {
+            Self::Unknown => Adequacy::Unprovable,
+            Self::Declared(present) => {
+                let hit: BTreeSet<Effect> = forbidden.intersection(present).copied().collect();
+                if hit.is_empty() {
+                    Adequacy::Holds
+                } else {
+                    Adequacy::Fails(hit)
+                }
             }
         }
     }
@@ -297,5 +366,72 @@ mod tests {
         );
         assert_eq!(mutation.combine(Effects::Unknown), Effects::Unknown);
         assert_eq!(Effects::none().combine(Effects::none()), Effects::none());
+    }
+
+    fn users(ids: &[&str]) -> BTreeSet<UserId> {
+        ids.iter().map(|id| user(id)).collect()
+    }
+
+    #[test]
+    fn audience_covers_over_the_three_values() {
+        assert_eq!(
+            Audience::Public.covers(&users(&["stranger"])),
+            Adequacy::Holds
+        );
+        assert_eq!(
+            Audience::Unknown.covers(&users(&["bob"])),
+            Adequacy::Unprovable
+        );
+
+        let ab = Audience::readers([user("alice"), user("bob")]);
+        assert_eq!(ab.covers(&users(&["bob"])), Adequacy::Holds);
+        assert_eq!(ab.covers(&users(&["alice", "bob"])), Adequacy::Holds);
+        assert_eq!(
+            ab.covers(&users(&["bob", "charlie"])),
+            Adequacy::Fails(users(&["charlie"]))
+        );
+    }
+
+    #[test]
+    fn trust_at_least_over_the_three_values() {
+        assert_eq!(
+            Trust::TRUSTED.at_least(KnownTrust::Trusted),
+            Adequacy::Holds
+        );
+        assert_eq!(
+            Trust::TRUSTED.at_least(KnownTrust::Suspicious),
+            Adequacy::Holds
+        );
+        assert_eq!(
+            Trust::SUSPICIOUS.at_least(KnownTrust::Suspicious),
+            Adequacy::Holds
+        );
+        assert_eq!(
+            Trust::SUSPICIOUS.at_least(KnownTrust::Trusted),
+            Adequacy::Fails(KnownTrust::Suspicious)
+        );
+        assert_eq!(
+            Trust::Unknown.at_least(KnownTrust::Suspicious),
+            Adequacy::Unprovable
+        );
+        assert_eq!(
+            Trust::Unknown.at_least(KnownTrust::Trusted),
+            Adequacy::Unprovable
+        );
+    }
+
+    #[test]
+    fn effects_avoids_over_the_three_values() {
+        let forbidden = BTreeSet::from([Effect::Mutation]);
+        assert_eq!(Effects::none().avoids(&forbidden), Adequacy::Holds);
+        assert_eq!(
+            Effects::declared([Effect::Egress]).avoids(&forbidden),
+            Adequacy::Holds
+        );
+        assert_eq!(
+            Effects::declared([Effect::Mutation, Effect::Egress]).avoids(&forbidden),
+            Adequacy::Fails(BTreeSet::from([Effect::Mutation]))
+        );
+        assert_eq!(Effects::Unknown.avoids(&forbidden), Adequacy::Unprovable);
     }
 }

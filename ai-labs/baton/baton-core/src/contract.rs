@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::ToolName;
-use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
+use crate::dimension::{Adequacy, Effect, KnownTrust, UserId};
 use crate::label::Label;
 
 /// A concrete tool invocation the policy is asked to authorize.
@@ -203,15 +203,20 @@ impl Requirements {
         confirmation: Option<&ToolName>,
         request: &ToolRequest,
     ) -> Verdict {
+        // An ordered Writer, not commutative validation: the emission order
+        // (trust, audience, attention, effects) is an observable part of the
+        // contract, so each arm pushes in turn. The per-dimension order
+        // semantics live beside each combine in `dimension.rs`; this is only
+        // the composition and the structural (non-dimension) arms.
         let mut violations = Vec::new();
 
         if let Some(required) = self.trust {
-            match context.trust {
-                Trust::Known(actual) if actual >= required => {}
-                Trust::Unknown => {
+            match context.trust.at_least(required) {
+                Adequacy::Holds => {}
+                Adequacy::Unprovable => {
                     violations.push(Violation::Unprovable(Unprovable::TrustUnknown));
                 }
-                Trust::Known(actual) => {
+                Adequacy::Fails(actual) => {
                     violations.push(Violation::Breach(Breach::TrustBelow { required, actual }));
                 }
             }
@@ -223,18 +228,13 @@ impl Requirements {
                 if request.recipients.is_empty() {
                     violations.push(Violation::Breach(Breach::UndeclaredRecipients));
                 } else {
-                    match &context.audience {
-                        Audience::Unknown => {
+                    match context.audience.covers(&request.recipients) {
+                        Adequacy::Holds => {}
+                        Adequacy::Unprovable => {
                             violations.push(Violation::Unprovable(Unprovable::AudienceUnknown));
                         }
-                        Audience::Public => {}
-                        Audience::Readers(allowed) => {
-                            let outside: BTreeSet<UserId> =
-                                request.recipients.difference(allowed).cloned().collect();
-                            if !outside.is_empty() {
-                                violations
-                                    .push(Violation::Breach(Breach::AudienceExceeds { outside }));
-                            }
+                        Adequacy::Fails(outside) => {
+                            violations.push(Violation::Breach(Breach::AudienceExceeds { outside }));
                         }
                     }
                 }
@@ -259,21 +259,13 @@ impl Requirements {
         }
 
         if !self.forbid_prior_effects.is_empty() {
-            match &context.effects {
-                Effects::Unknown => {
+            match context.effects.avoids(&self.forbid_prior_effects) {
+                Adequacy::Holds => {}
+                Adequacy::Unprovable => {
                     violations.push(Violation::Unprovable(Unprovable::EffectsUnknown));
                 }
-                Effects::Declared(present) => {
-                    let hit: BTreeSet<Effect> = self
-                        .forbid_prior_effects
-                        .intersection(present)
-                        .copied()
-                        .collect();
-                    if !hit.is_empty() {
-                        violations.push(Violation::Breach(Breach::ForbiddenPriorEffects {
-                            effects: hit,
-                        }));
-                    }
+                Adequacy::Fails(effects) => {
+                    violations.push(Violation::Breach(Breach::ForbiddenPriorEffects { effects }));
                 }
             }
         }
@@ -289,6 +281,7 @@ impl Requirements {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dimension::{Audience, Effects, Trust};
 
     fn user(id: &str) -> UserId {
         UserId::new(id)

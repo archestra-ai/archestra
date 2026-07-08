@@ -213,21 +213,11 @@ runs:
         fi
         echo "All MCP dependency images fetched successfully"
 
-    # Deploy the platform-image-INDEPENDENT e2e dependency stack (Vault,
-    # Keycloak, WireMock, MCP servers) HERE — before the platform image wait
-    # and the Kind image loads below — so its pods boot while that work runs
-    # instead of adding to the merge-queue critical path after. Submitting the
-    # chart before the MCP fixture images are loaded is fine: those pods sit
-    # in ImagePull retry until the loads land (exactly how the "background"
-    # install mode already behaves), and Vault/Keycloak/WireMock pull their
-    # images from public registries independently of our loads. Vault gates
-    # the platform pod (its vault-secrets init container), so the foreground
-    # mode waits for it in "Deploy with Helm", right before the platform
-    # chart installs — by then it has had the whole image-load window to boot.
-    #
-    # Only the foreground+deps path (the merge-queue shards) takes this branch;
-    # the "background" install mode keeps deploying inside "Deploy with Helm"
-    # (see below).
+    # Install the e2e dependency chart first so its pods (Keycloak, WireMock,
+    # Vault, MCP fixtures) boot while the image pulls and Kind loads below run.
+    # Pods whose images arrive via those loads simply retry their image pulls
+    # until then. Vault readiness is checked later, right before the platform
+    # chart installs (its init container needs Vault).
     - name: Deploy e2e dependencies (overlaps image pulls and Kind loads)
       if: ${{ inputs.deploy-e2e-dependencies == 'true' && inputs.e2e-dependencies-install-mode == 'foreground' }}
       shell: bash
@@ -286,10 +276,9 @@ runs:
           done
         }
 
-        # In-cluster-pull mode: the Kind node pulls the platform image itself,
-        # so the host only needs to know the tag EXISTS before deploying —
-        # poll the manifest (no layer download) instead of pulling, preserving
-        # the build-may-still-be-pushing wait.
+        # In-cluster-pull mode: the node pulls the image itself, so the host
+        # only waits for the tag to exist in the registry (the build job may
+        # still be pushing it).
         wait_for_manifest() {
           local image="$1"
           local deadline=$(( $(date +%s) + PULL_TIMEOUT_SECONDS ))
@@ -307,11 +296,9 @@ runs:
           done
         }
 
-        # Once the manifest exists, start the node's own pull in the
-        # background so it overlaps the remaining setup (loads, helm installs)
-        # instead of starting when the web pod schedules. No wait: kubelet's
-        # later pull request coalesces with the in-flight one, and if this
-        # fails for any reason kubelet just pulls as usual.
+        # Start the node's pull in the background so it overlaps the rest of
+        # the setup. When the pod later schedules, kubelet's pull joins the one
+        # already in flight — and if this failed, kubelet pulls as usual.
         prewarm_node_pull() {
           wait_for_manifest "${PLATFORM_IMAGE_TAG}" || return 1
           docker exec "${KIND_CLUSTER_NAME}-control-plane" \
@@ -369,10 +356,8 @@ runs:
           PIDS+=($!)
         fi
 
-        # MCP fixture images load here for BOTH install modes: the e2e-tests
-        # chart is already submitted (foreground: step above; background:
-        # concurrently in "Deploy with Helm") and its fixture pods retry their
-        # image pulls until these loads land.
+        # The fixture pods are already deployed and retry their image pulls
+        # until these loads land.
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           MCP_OAUTH_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-example-oauth-server:0.0.1"
           MCP_JWKS_IMAGE="europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-jwks-keycloak:0.0.3"
@@ -456,12 +441,9 @@ runs:
         E2E_PID=""
         if [ "${DEPLOY_E2E_DEPS}" == "true" ]; then
           if [ "${E2E_DEPS_INSTALL_MODE}" = "foreground" ]; then
-            # Already installed in the earlier "Deploy e2e dependencies" step
-            # (its pods booted while the images were pulled and loaded). Vault
-            # gates the platform pod's vault-secrets init container, so gate
-            # the platform install on it HERE — after the image loads, which
-            # gave it the whole window to come up, this is normally already
-            # satisfied.
+            # The dependency chart was installed earlier; only wait for Vault
+            # here because the platform pod's init container needs it. By now
+            # it has usually finished booting.
             echo "e2e-tests chart already deployed earlier (overlapped the image loads)."
             if [ "${E2E_DEPS_WAIT_FOR_VAULT}" = "true" ]; then
               echo "Waiting for Vault pod before platform deploy..."

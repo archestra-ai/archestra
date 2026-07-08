@@ -199,13 +199,11 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      # Slim variant for the e2e shards: identical image minus the ~352MB
-      # dagger-engine.tar that only quickstart consumes (target unified-slim is
-      # the parent stage of the default target, so every layer is already in
-      # the builder cache from the full build above — this is a manifest-only
-      # push that takes seconds). Uses blacksmith-build-push directly instead
-      # of build-docker-image to avoid re-running the builder setup the full
-      # build just did in this job.
+      # Slim variant for the e2e shards: the same image minus the ~352MB
+      # Dagger engine tar that only quickstart uses. Every layer is already in
+      # the builder cache from the full build above, so this push takes
+      # seconds. (blacksmith-build-push directly: the builder is already set
+      # up from the full build.)
       - name: Build slim Platform image (shards, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/blacksmith-build-push
@@ -232,11 +230,9 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
-      # Same tree-OID reuse scheme as the Platform image above: the MCP server
-      # base image changes rarely, yet its ~100s per-run rebuild sat on the
-      # merge-queue critical path (quickstart `needs` this job, so it could not
-      # start until this leg finished). On a tree match the SHA tag is a
-      # seconds-long registry-side manifest copy instead.
+      # Same tree-based reuse as the Platform image above. This image rarely
+      # changes, and quickstart waits for this job — so on a match, a
+      # seconds-long registry retag replaces the ~100s rebuild.
       - name: Resolve MCP server base image reuse
         id: mcp-base-reuse
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -263,9 +259,8 @@ jobs:
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
-      # The builder is only needed when actually building — on a reuse hit it
-      # was ~85s of setup+teardown for nothing (the imagetools calls in the
-      # reuse step talk straight to the registry). Fork PRs always build.
+      # The builder is only needed for an actual build; the reuse check above
+      # talks straight to the registry. Fork PRs always build.
       - name: Setup Blacksmith Builder
         if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
         uses: ./.github/actions/setup-blacksmith-builder
@@ -340,13 +335,11 @@ jobs:
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
   #
-  # One 16vcpu environment instead of two sharded ones: with ~2min of
-  # merge-queue tests, a second Kind environment duplicated ~4min of setup to
-  # split ~1min of test time — and 32vcpu measured identical test time to
-  # 16vcpu (the serial spec groups are the floor, not worker count), so one
-  # 16vcpu runner makes the gate's critical path the single environment and
-  # deletes the shard machinery. The job ID keeps its historical name; the
-  # required-check context is "Merge E2E Test Reports", not this job.
+  # One 16vcpu environment, no sharding: every extra shard pays the full
+  # ~4min environment setup again to split a few minutes of tests, and bigger
+  # runners don't speed the tests up either (the serial spec groups set the
+  # floor). The job ID keeps its old name; the required check is
+  # "Merge E2E Test Reports", not this job.
   platform-e2e-tests-shards:
     name: Platform E2E Tests
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
@@ -510,9 +503,8 @@ jobs:
           echo "=== Recent Cluster Events ==="
           kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true
 
-      # NOTE: no "kind delete cluster" teardown. Blacksmith runners are
-      # ephemeral VMs, so the cluster dies with the job; deleting it explicitly
-      # cost ~25-30s of shard wall time for pure hygiene.
+      # No "kind delete cluster" teardown: the runner VM is thrown away after
+      # the job anyway.
 
       - name: Fail if non-quickstart E2E tests failed
         if: ${{ always() && steps.e2e.outcome == 'failure' }}

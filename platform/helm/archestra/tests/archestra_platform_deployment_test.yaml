@@ -549,7 +549,7 @@ tests:
       archestra.codeRuntime.dagger.runnerHost: tcp://old:1234
     asserts:
       - failedTemplate:
-          errorMessage: "Configuration error: archestra.codeRuntime.dagger.* was removed. The chart no longer deploys a Dagger Engine — the backend provisions one per organization through the Kubernetes API. To run your own engine instead, set archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the platform ServiceAccount pods/get + pods/exec in that engine's namespace. To disable the code sandbox, set archestra.codeRuntime.enabled=false."
+          errorMessage: "Configuration error: archestra.codeRuntime.dagger.* was removed. The chart no longer deploys a Dagger Engine — the backend provisions one per organization through the Kubernetes API. To run your own engine instead, set archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the platform ServiceAccount `get` on `pods` and `create` on `pods/exec` in that engine's namespace. To disable the code sandbox, set archestra.codeRuntime.enabled=false."
 
   - it: should fail loudly when the removed dagger subchart values are still set
     set:

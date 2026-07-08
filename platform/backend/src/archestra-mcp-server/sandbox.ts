@@ -1391,12 +1391,18 @@ interface UserContext {
 }
 
 /**
- * Resolve the Dagger runtime target for the calling agent. A bound agent routes
- * to its Environment's per-env engine (carrying that environment's egress
- * policy); an unbound agent routes to its organization's default engine. Returns
- * undefined — meaning "use the process-default engine" — when an operator has
- * configured an explicit BYO runner host, or when the caller/org can't be
- * resolved.
+ * Resolve the Dagger runtime target for the calling agent.
+ *
+ * An agent bound to an Environment always routes to that environment's own
+ * engine, carrying its egress policy. An operator-supplied runner host does NOT
+ * override that: running such an agent on the shared engine would give its code
+ * that engine's egress and silently defeat the environment's network isolation,
+ * so this fails closed instead.
+ *
+ * An unbound agent routes to its organization's default engine, unless a runner
+ * host is configured — then it returns undefined, meaning "use the process-default
+ * engine", and no org-default engine is provisioned. Also returns undefined when
+ * the caller or org can't be resolved.
  */
 async function resolveEnvironmentTarget(
   context: ArchestraContext,

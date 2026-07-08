@@ -535,6 +535,35 @@ describe("reconcileOrganizationDefault", () => {
     mockCreateK8sClients.mockReturnValue(clients as never);
   });
 
+  // A bring-your-own runner host serves every unbound run, so an org-default
+  // engine would be a privileged pod nothing routes to. Per-environment engines
+  // must keep being provisioned: bound agents run on their own engine so the
+  // environment's egress policy still applies.
+  it("provisions no org-default engine when a BYO runner host is set, but still provisions per-environment engines", async () => {
+    const original = config.daggerRuntime.runnerHost;
+    (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+      "tcp://byo:1234";
+    try {
+      const org = makeOrg({ id: "org-byo" });
+      vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+
+      await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
+      expect(
+        clients.appsApi.createNamespacedStatefulSet,
+      ).not.toHaveBeenCalled();
+      expect(clients.coreApi.createNamespacedConfigMap).not.toHaveBeenCalled();
+
+      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
+        makeEnv({ namespace: "release-ns" }),
+      );
+      expect(clients.appsApi.createNamespacedStatefulSet).toHaveBeenCalledTimes(
+        1,
+      );
+    } finally {
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost = original;
+    }
+  });
+
   // Routing and provisioning must never disagree about where the engine lives:
   // both resolve the namespace through engineNamespace(), so an invalid stored
   // value sends the StatefulSet and the kube-pod:// target to the same fallback.

@@ -755,7 +755,7 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of an existing Dagger engine, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Set it to run your own engine: Archestra sends every sandbox to that address and creates no engines. It also enables the code runtime on its own, so this is the only way to run the sandbox without Kubernetes. Leave it unset to let Archestra manage the engines.
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of an existing Dagger engine, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Set it to run your own engine: Archestra sends agents without an environment to that address and creates no default engine. An agent bound to an environment still runs on that environment's own engine, which Archestra creates and which needs Kubernetes — so without Kubernetes, leave agents unbound. Setting this also enables the code runtime on its own. Leave it unset to let Archestra manage every engine.
   - Default: unset
   - Values: a `tcp://` or `kube-pod://` URL
 

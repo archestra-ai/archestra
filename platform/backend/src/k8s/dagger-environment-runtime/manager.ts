@@ -205,11 +205,18 @@ class DaggerEnvironmentRuntimeManager {
    * Provision (or update) an organization's default engine — the runtime for
    * agents with no environment. It carries no policy override, so the org's
    * `defaultNetworkPolicy` (or unrestricted, when unset) governs its egress.
+   *
+   * An operator-supplied runner host already serves every run from an unbound
+   * agent (`resolveEnvironmentTarget` returns no target for them), so a default
+   * engine would be a privileged pod nothing ever routes to. Per-environment
+   * engines are still provisioned in that mode: an environment-bound agent runs
+   * on its own engine, never on the shared one, so its egress policy holds.
    */
   async reconcileOrganizationDefault(
     organization: Organization,
   ): Promise<void> {
     if (!this.isEnabled()) return;
+    if (config.daggerRuntime.runnerHost) return;
     await this.reconcileEngine({
       engineId: deriveOrgEngineId(organization.id),
       organizationId: organization.id,

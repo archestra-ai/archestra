@@ -664,10 +664,15 @@ test.describe("Identity Provider Team Sync E2E", () => {
       timeout: 10000,
     });
 
-    // Also verify the group appears in the current mappings list (not just the input)
-    await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
-      { timeout: 5000 },
-    );
+    // Also verify the group appears in the current mappings list (not just the
+    // input). Scope to the mapping row: the dialog also shows the "Latest ID
+    // Token Claims" debug panel, whose decoded claims JSON can contain the same
+    // group name and would make a dialog-wide text match strict-mode ambiguous.
+    await expect(
+      page
+        .getByTestId(E2eTestId.TeamExternalGroupMappingRow)
+        .filter({ hasText: externalGroup }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Close the dialog - use first() to target the text button, not the X icon
     await clickButton({

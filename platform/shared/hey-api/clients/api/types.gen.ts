@@ -15813,10 +15813,25 @@ export type CreateAppResponses = {
         templateId: string | null;
         mcpServerId: string | null;
         spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
             summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
             features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
             data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
             ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
             tools: Array<string>;
         } | null;
         latestVersion: number;
@@ -16710,10 +16725,25 @@ export type GetAppResponses = {
         templateId: string | null;
         mcpServerId: string | null;
         spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
             summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
             features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
             data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
             ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
             tools: Array<string>;
         } | null;
         latestVersion: number;
@@ -16839,10 +16869,25 @@ export type UpdateAppResponses = {
         templateId: string | null;
         mcpServerId: string | null;
         spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
             summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
             features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
             data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
             ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
             tools: Array<string>;
         } | null;
         latestVersion: number;
@@ -16956,10 +17001,25 @@ export type GetAppVersionsResponses = {
         } | null;
         contentHash: string;
         spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
             summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
             features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
             data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
             ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
             tools: Array<string>;
         } | null;
         createdAt: string;
@@ -17068,10 +17128,25 @@ export type GetAppVersionResponses = {
         } | null;
         contentHash: string;
         spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
             summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
             features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
             data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
             ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
             tools: Array<string>;
         } | null;
         createdAt: string;

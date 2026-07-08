@@ -5,9 +5,9 @@
 //! Run with `cargo run --example demo`.
 
 use baton_core::{
-    Actor, Attention, AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach,
-    Decision, Effect, Effects, FlowRequest, Label, LabeledTurn, PolicyEngine, Requirements, Ruling,
-    ToolContract, ToolName, Trajectory, Trust, Turn, UnknownPolicy, Unprovable, UserId, Violation,
+    Attention, AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision,
+    Effect, Effects, FlowRequest, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract,
+    ToolName, Trajectory, Trust, TrustRequirement, UnknownPolicy, Unprovable, UserId, Violation,
 };
 
 /// Scripted stand-in for a real approval UI: this "human" has decided in
@@ -25,13 +25,11 @@ impl Authority for HumanInTheLoop {
             matches!(
                 v,
                 Violation::Breach(Breach::TrustBelow { .. })
-                    | Violation::Unprovable(Unprovable::TrustUnknown { .. })
+                    | Violation::Unprovable(Unprovable::TrustUnknown)
             )
         });
-        let to_bob_only = request
-            .exposes_to
-            .as_ref()
-            .is_some_and(|r| !r.is_empty() && r.iter().all(|u| u.as_str() == "bob"));
+        let to_bob_only = !request.recipients.is_empty()
+            && request.recipients.iter().all(|u| u.as_str() == "bob");
         if only_trust && to_bob_only {
             Ruling::Approve {
                 reason: "reviewed the draft, it is fine to send to bob".to_owned(),
@@ -48,14 +46,8 @@ fn alice() -> UserId {
     UserId::new("alice")
 }
 
-fn user_turn(label: Label, content: &str) -> LabeledTurn {
-    LabeledTurn {
-        label,
-        turn: Turn {
-            actor: Actor::User(alice()),
-            content: content.to_owned(),
-        },
-    }
+fn push_alice(trajectory: &mut Trajectory, label: Label, content: &str) {
+    trajectory.push_message(label, Speaker::User(alice()), content);
 }
 
 /// Evaluate one flow, narrate the outcome, and record the result on a permit.
@@ -73,7 +65,9 @@ fn attempt(
             for entry in &permit.result_label().audit {
                 println!("   audit + {entry}");
             }
-            trajectory.record_result(permit, result_content);
+            trajectory
+                .record_result(permit, result_content)
+                .expect("nothing was appended between evaluate and record");
         }
         Decision::Blocked { violations, reason } => {
             println!("   BLOCKED ({reason})");
@@ -99,7 +93,7 @@ fn main() {
     engine.register(ToolContract {
         name: ToolName::new("email.send"),
         requires: Requirements {
-            min_trust: Some(Trust::Trusted),
+            trust: Some(TrustRequirement::Trusted),
             audience: AudienceRule::RecipientsWithinContext,
             ..Requirements::default()
         },
@@ -123,13 +117,14 @@ fn main() {
     let mut trajectory = Trajectory::new();
 
     println!("== 1. Alice asks; the shared doc is readable by alice and bob ==");
-    trajectory.push(user_turn(
+    push_alice(
+        &mut trajectory,
         Label {
             audience: Audience::readers([alice(), UserId::new("bob")]),
             ..Label::identity()
         },
         "Summarize the quarterly doc against what competitors say online, email it to Bob.",
-    ));
+    );
 
     println!("== 2. Fetching the web taints trust, not the audience bound ==");
     attempt(
@@ -164,14 +159,15 @@ fn main() {
     );
 
     println!("== 6. Alice explicitly confirms db.drop; the confirmation is bound to that tool ==");
-    trajectory.push(user_turn(
+    push_alice(
+        &mut trajectory,
         Label {
             audience: Audience::readers([alice(), UserId::new("bob")]),
             attention: Attention::High(ToolName::new("db.drop")),
             ..Label::identity()
         },
         "Yes, drop the staging table.",
-    ));
+    );
     attempt(
         &engine,
         &mut trajectory,

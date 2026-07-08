@@ -10,7 +10,8 @@
 //! - Every turn in a [`turn::Trajectory`] carries a [`label::Label`] — a
 //!   product of independent dimensions ([`dimension`]), each with its own
 //!   combine algebra. Turns never walk alone: there is no API to append an
-//!   unlabeled turn.
+//!   unlabeled turn, and a tool result only enters by consuming the
+//!   [`engine::Permit`] the policy minted for it.
 //! - The context label is the fold of all turn labels
 //!   ([`turn::Trajectory::context_label`]). Taint propagates through the fold,
 //!   not through per-call bookkeeping.
@@ -64,10 +65,10 @@ impl fmt::Display for ToolName {
 
 pub use authority::{Authority, AuthorityName, Ruling};
 pub use contract::{
-    AttentionRule, AudienceRule, Breach, FlowRequest, Requirements, ToolContract, Unprovable,
-    Verdict, Violation,
+    AttentionRule, AudienceRule, Breach, FlowRequest, Requirements, ToolContract, TrustRequirement,
+    Unprovable, Verdict, Violation,
 };
 pub use dimension::{Attention, Audience, Effect, Effects, Trust, UserId};
-pub use engine::{BlockReason, Decision, Permit, PolicyEngine, UnknownPolicy};
+pub use engine::{BlockReason, Decision, Permit, PolicyEngine, StalePermit, UnknownPolicy};
 pub use label::{AuditEntry, Label};
-pub use turn::{Actor, LabeledTurn, Trajectory, Turn};
+pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, Turn};

@@ -13,22 +13,44 @@ use crate::label::Label;
 pub struct FlowRequest {
     pub tool: ToolName,
     /// Readers this call would expose context to (e.g. e-mail recipients).
-    /// `None` for tools that do not egress context to people.
-    pub exposes_to: Option<BTreeSet<UserId>>,
+    /// Empty for tools that do not egress context to people; an
+    /// audience-guarded sink with an empty set is a [`Breach`].
+    pub recipients: BTreeSet<UserId>,
 }
 
 impl FlowRequest {
     pub fn new(tool: ToolName) -> Self {
         Self {
             tool,
-            exposes_to: None,
+            recipients: BTreeSet::new(),
         }
     }
 
-    pub fn exposing(tool: ToolName, readers: impl IntoIterator<Item = UserId>) -> Self {
+    pub fn exposing(tool: ToolName, recipients: impl IntoIterator<Item = UserId>) -> Self {
         Self {
             tool,
-            exposes_to: Some(readers.into_iter().collect()),
+            recipients: recipients.into_iter().collect(),
+        }
+    }
+}
+
+/// A trust floor a contract may demand. Deliberately not [`Trust`] itself:
+/// `Unknown` is an epistemic state, not a bar one can set, so "unknown
+/// suffices" cannot be expressed by accident — leniency has to be spelled
+/// out as [`TrustRequirement::NotSuspicious`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrustRequirement {
+    /// Provenance must be affirmatively trusted; `Unknown` is unprovable.
+    Trusted,
+    /// Only definite adversarial influence violates; `Unknown` passes.
+    NotSuspicious,
+}
+
+impl fmt::Display for TrustRequirement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Trusted => write!(f, "trusted"),
+            Self::NotSuspicious => write!(f, "not-suspicious"),
         }
     }
 }
@@ -53,7 +75,7 @@ pub enum AttentionRule {
 /// What a tool demands of the context label before it may run.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Requirements {
-    pub min_trust: Option<Trust>,
+    pub trust: Option<TrustRequirement>,
     pub audience: AudienceRule,
     pub attention: AttentionRule,
     /// Effects that must not already have happened in the context.
@@ -64,13 +86,18 @@ pub struct Requirements {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Breach {
     TrustBelow {
-        required: Trust,
+        required: TrustRequirement,
         actual: Trust,
     },
     /// The non-empty diff `recipients − context.audience`.
     AudienceExceeds {
         outside: BTreeSet<UserId>,
     },
+    /// An audience-guarded sink was called with no recipients at all. The
+    /// caller definitionally has this data, so its absence is an integration
+    /// bug, not an annotation gap — a breach, never softened by
+    /// [`crate::engine::UnknownPolicy`].
+    UndeclaredRecipients,
     ConfirmationMissing {
         tool: ToolName,
     },
@@ -96,6 +123,9 @@ impl fmt::Display for Breach {
                 }
                 Ok(())
             }
+            Self::UndeclaredRecipients => {
+                write!(f, "audience-guarded sink called with no recipients")
+            }
             Self::ConfirmationMissing { tool } => {
                 write!(f, "no explicit user confirmation for `{tool}`")
             }
@@ -119,13 +149,8 @@ impl fmt::Display for Breach {
 /// knowledge differently from proven violations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Unprovable {
-    TrustUnknown {
-        required: Trust,
-    },
+    TrustUnknown,
     AudienceUnknown,
-    /// An audience-guarded sink declared no recipients: fail closed rather
-    /// than let the empty set satisfy the subset check.
-    NoDeclaredRecipients,
     EffectsUnknown,
     /// The tool has no registered contract at all.
     NoContract {
@@ -136,13 +161,10 @@ pub enum Unprovable {
 impl fmt::Display for Unprovable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TrustUnknown { required } => {
-                write!(f, "context trust unknown, cannot prove {required}")
+            Self::TrustUnknown => {
+                write!(f, "context trust unknown, cannot prove it is trusted")
             }
             Self::AudienceUnknown => write!(f, "context audience unknown, cannot bound recipients"),
-            Self::NoDeclaredRecipients => {
-                write!(f, "audience-guarded sink declared no recipients")
-            }
             Self::EffectsUnknown => write!(f, "context effects unknown"),
             Self::NoContract { tool } => write!(f, "tool `{tool}` has no contract"),
         }
@@ -175,6 +197,9 @@ pub enum Verdict {
 ///
 /// The output label is per-result provenance only; taint from the context the
 /// call was made in propagates through the trajectory fold, not through here.
+/// An output label must not carry [`Attention::High`]: a tool result is not a
+/// user confirmation, and a contract that re-arms an explicit-confirmation
+/// gate from its own output would defeat that gate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolContract {
     pub name: ToolName,
@@ -192,14 +217,17 @@ impl Requirements {
     pub fn check(&self, context: &Label, request: &FlowRequest) -> Verdict {
         let mut violations = Vec::new();
 
-        if let Some(required) = self.min_trust {
-            match context.trust {
-                actual if actual >= required => {}
-                Trust::Unknown => {
-                    violations.push(Violation::Unprovable(Unprovable::TrustUnknown { required }));
+        if let Some(required) = self.trust {
+            match (required, context.trust) {
+                (_, Trust::Trusted) | (TrustRequirement::NotSuspicious, Trust::Unknown) => {}
+                (TrustRequirement::Trusted, Trust::Unknown) => {
+                    violations.push(Violation::Unprovable(Unprovable::TrustUnknown));
                 }
-                actual => {
-                    violations.push(Violation::Breach(Breach::TrustBelow { required, actual }));
+                (_, Trust::Suspicious) => {
+                    violations.push(Violation::Breach(Breach::TrustBelow {
+                        required,
+                        actual: Trust::Suspicious,
+                    }));
                 }
             }
         }
@@ -207,22 +235,21 @@ impl Requirements {
         match self.audience {
             AudienceRule::Unrestricted => {}
             AudienceRule::RecipientsWithinContext => {
-                match (&request.exposes_to, &context.audience) {
-                    (None, _) => {
-                        violations.push(Violation::Unprovable(Unprovable::NoDeclaredRecipients));
-                    }
-                    (Some(recipients), _) if recipients.is_empty() => {
-                        violations.push(Violation::Unprovable(Unprovable::NoDeclaredRecipients));
-                    }
-                    (Some(_), Audience::Unknown) => {
-                        violations.push(Violation::Unprovable(Unprovable::AudienceUnknown));
-                    }
-                    (Some(_), Audience::Public) => {}
-                    (Some(recipients), Audience::Readers(allowed)) => {
-                        let outside: BTreeSet<UserId> =
-                            recipients.difference(allowed).cloned().collect();
-                        if !outside.is_empty() {
-                            violations.push(Violation::Breach(Breach::AudienceExceeds { outside }));
+                if request.recipients.is_empty() {
+                    violations.push(Violation::Breach(Breach::UndeclaredRecipients));
+                } else {
+                    match &context.audience {
+                        Audience::Unknown => {
+                            violations.push(Violation::Unprovable(Unprovable::AudienceUnknown));
+                        }
+                        Audience::Public => {}
+                        Audience::Readers(allowed) => {
+                            let outside: BTreeSet<UserId> =
+                                request.recipients.difference(allowed).cloned().collect();
+                            if !outside.is_empty() {
+                                violations
+                                    .push(Violation::Breach(Breach::AudienceExceeds { outside }));
+                            }
                         }
                     }
                 }
@@ -284,7 +311,7 @@ mod tests {
 
     fn email_requirements() -> Requirements {
         Requirements {
-            min_trust: Some(Trust::Trusted),
+            trust: Some(TrustRequirement::Trusted),
             audience: AudienceRule::RecipientsWithinContext,
             ..Requirements::default()
         }
@@ -318,7 +345,7 @@ mod tests {
         assert_eq!(
             email_requirements().check(&suspicious, &request),
             Verdict::Escalate(vec![Violation::Breach(Breach::TrustBelow {
-                required: Trust::Trusted,
+                required: TrustRequirement::Trusted,
                 actual: Trust::Suspicious,
             })])
         );
@@ -329,8 +356,33 @@ mod tests {
         };
         assert_eq!(
             email_requirements().check(&unknown, &request),
-            Verdict::Escalate(vec![Violation::Unprovable(Unprovable::TrustUnknown {
-                required: Trust::Trusted,
+            Verdict::Escalate(vec![Violation::Unprovable(Unprovable::TrustUnknown)])
+        );
+    }
+
+    #[test]
+    fn not_suspicious_floor_is_explicitly_lenient_about_unknown() {
+        let requirements = Requirements {
+            trust: Some(TrustRequirement::NotSuspicious),
+            ..Requirements::default()
+        };
+        let request = FlowRequest::new(ToolName::new("notes.append"));
+
+        let unknown = Label {
+            trust: Trust::Unknown,
+            ..Label::identity()
+        };
+        assert_eq!(requirements.check(&unknown, &request), Verdict::Allow);
+
+        let suspicious = Label {
+            trust: Trust::Suspicious,
+            ..Label::identity()
+        };
+        assert_eq!(
+            requirements.check(&suspicious, &request),
+            Verdict::Escalate(vec![Violation::Breach(Breach::TrustBelow {
+                required: TrustRequirement::NotSuspicious,
+                actual: Trust::Suspicious,
             })])
         );
     }
@@ -348,22 +400,11 @@ mod tests {
     }
 
     #[test]
-    fn egress_without_recipients_fails_closed() {
+    fn egress_without_recipients_is_a_breach() {
         let none_declared = FlowRequest::new(ToolName::new("email.send"));
         assert_eq!(
             email_requirements().check(&private_trusted_context(), &none_declared),
-            Verdict::Escalate(vec![Violation::Unprovable(
-                Unprovable::NoDeclaredRecipients
-            )])
-        );
-
-        let empty: [UserId; 0] = [];
-        let empty_declared = FlowRequest::exposing(ToolName::new("email.send"), empty);
-        assert_eq!(
-            email_requirements().check(&private_trusted_context(), &empty_declared),
-            Verdict::Escalate(vec![Violation::Unprovable(
-                Unprovable::NoDeclaredRecipients
-            )])
+            Verdict::Escalate(vec![Violation::Breach(Breach::UndeclaredRecipients)])
         );
     }
 

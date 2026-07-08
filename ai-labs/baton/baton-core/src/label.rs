@@ -7,11 +7,14 @@ use crate::authority::AuthorityName;
 use crate::contract::Violation;
 use crate::dimension::{Attention, Audience, Effects, Trust};
 
-/// One record in the append-only audit dimension.
+/// One record in the audit dimension.
 ///
 /// Every loosening leaves a trace here; folds concatenate traces in turn
 /// order, so the context label carries the full history of exceptions that
-/// shaped it.
+/// shaped it. Append-only holds by construction within this crate — nothing
+/// here ever removes an entry — but a [`Label`] is plain data, so protecting
+/// audit integrity from the surrounding process is the embedding harness's
+/// job.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditEntry {
     /// An authority explicitly waived a violation for one flow.

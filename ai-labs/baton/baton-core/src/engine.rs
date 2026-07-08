@@ -29,10 +29,16 @@ pub enum UnknownPolicy {
 /// Proof that the engine authorized one tool call — the only way to append a
 /// tool result to a [`Trajectory`]. Carries the label the result must wear,
 /// including any audit entries the authorization produced.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// A permit is linear (not `Clone`) and bound to the trajectory head it was
+/// evaluated against, so one authorization records at most one result, and
+/// never into a context the policy did not see.
+#[derive(Debug, PartialEq, Eq)]
 pub struct Permit {
     tool: ToolName,
     result_label: Label,
+    /// Trajectory length at evaluation time.
+    basis: usize,
 }
 
 impl Permit {
@@ -44,10 +50,31 @@ impl Permit {
         &self.result_label
     }
 
-    pub(crate) fn into_parts(self) -> (ToolName, Label) {
-        (self.tool, self.result_label)
+    pub(crate) fn into_parts(self) -> (ToolName, Label, usize) {
+        (self.tool, self.result_label, self.basis)
     }
 }
+
+/// The trajectory grew between `evaluate` and
+/// [`Trajectory::record_result`]: the permit no longer describes the
+/// context, so the flow must be re-evaluated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StalePermit {
+    pub granted_at: usize,
+    pub current_len: usize,
+}
+
+impl fmt::Display for StalePermit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "permit granted at trajectory length {}, but the trajectory now has {} turns",
+            self.granted_at, self.current_len
+        )
+    }
+}
+
+impl std::error::Error for StalePermit {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockReason {
@@ -70,7 +97,7 @@ impl fmt::Display for BlockReason {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Decision {
     Permitted(Permit),
     Blocked {
@@ -110,8 +137,15 @@ impl<A: Authority> PolicyEngine<A> {
     /// A tool with no registered contract is first-class: calling it is
     /// itself unprovable ([`Unprovable::NoContract`]) and its output label is
     /// all-`Unknown`, which then poisons the context fold.
+    ///
+    /// `evaluate` is pure — it neither consumes a confirmation nor records
+    /// effects. Enforcement is the evaluate → execute →
+    /// [`Trajectory::record_result`] loop of the embedding harness; the
+    /// permit's binding to the trajectory head keeps that loop honest, but
+    /// executing the tool's real-world action is outside this crate's reach.
     pub fn evaluate(&self, trajectory: &Trajectory, request: &FlowRequest) -> Decision {
         let context = trajectory.context_label();
+        let basis = trajectory.turns().len();
         let (verdict, result_label) = match self.contracts.get(&request.tool) {
             Some(contract) => (
                 contract.check(&context, request),
@@ -130,6 +164,7 @@ impl<A: Authority> PolicyEngine<A> {
                 return Decision::Permitted(Permit {
                     tool: request.tool.clone(),
                     result_label,
+                    basis,
                 });
             }
             Verdict::Escalate(violations) => violations,
@@ -141,6 +176,7 @@ impl<A: Authority> PolicyEngine<A> {
 
         let mut result_label = result_label;
         let mut escalating = breaches;
+        let mut audited_unknowns = Vec::new();
         match self.unknown_policy {
             UnknownPolicy::Escalate => escalating.extend(unprovable),
             UnknownPolicy::Deny => {
@@ -152,25 +188,31 @@ impl<A: Authority> PolicyEngine<A> {
                     };
                 }
             }
-            UnknownPolicy::AllowWithAudit => {
-                if !unprovable.is_empty() {
-                    result_label.audit.push(AuditEntry::UnverifiedFlow {
-                        tool: request.tool.clone(),
-                        unknowns: unprovable,
-                    });
-                }
-            }
+            UnknownPolicy::AllowWithAudit => audited_unknowns = unprovable,
         }
 
         if escalating.is_empty() {
+            if !audited_unknowns.is_empty() {
+                result_label.audit.push(AuditEntry::UnverifiedFlow {
+                    tool: request.tool.clone(),
+                    unknowns: audited_unknowns,
+                });
+            }
             return Decision::Permitted(Permit {
                 tool: request.tool.clone(),
                 result_label,
+                basis,
             });
         }
 
         match self.authority.adjudicate(request, &context, &escalating) {
             Ruling::Approve { reason } => {
+                if !audited_unknowns.is_empty() {
+                    result_label.audit.push(AuditEntry::UnverifiedFlow {
+                        tool: request.tool.clone(),
+                        unknowns: audited_unknowns,
+                    });
+                }
                 let authority = self.authority.name();
                 for violation in escalating {
                     result_label.audit.push(AuditEntry::Declassified {
@@ -182,15 +224,21 @@ impl<A: Authority> PolicyEngine<A> {
                 Decision::Permitted(Permit {
                     tool: request.tool.clone(),
                     result_label,
+                    basis,
                 })
             }
-            Ruling::Deny { reason } => Decision::Blocked {
-                violations: escalating,
-                reason: BlockReason::DeniedByAuthority {
-                    authority: self.authority.name(),
-                    reason,
-                },
-            },
+            Ruling::Deny { reason } => {
+                // Report the full picture: the audited unknowns did not cause
+                // the block, but they were part of this flow's evaluation.
+                escalating.extend(audited_unknowns);
+                Decision::Blocked {
+                    violations: escalating,
+                    reason: BlockReason::DeniedByAuthority {
+                        authority: self.authority.name(),
+                        reason,
+                    },
+                }
+            }
         }
     }
 }
@@ -201,9 +249,9 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::contract::{AttentionRule, AudienceRule, Breach, Requirements};
+    use crate::contract::{AttentionRule, AudienceRule, Breach, Requirements, TrustRequirement};
     use crate::dimension::{Attention, Audience, Effect, Effects, Trust, UserId};
-    use crate::turn::{Actor, LabeledTurn, Turn};
+    use crate::turn::Speaker;
 
     fn user(id: &str) -> UserId {
         UserId::new(id)
@@ -213,7 +261,7 @@ mod tests {
         ToolContract {
             name: ToolName::new("email.send"),
             requires: Requirements {
-                min_trust: Some(Trust::Trusted),
+                trust: Some(TrustRequirement::Trusted),
                 audience: AudienceRule::RecipientsWithinContext,
                 ..Requirements::default()
             },
@@ -238,37 +286,30 @@ mod tests {
         }
     }
 
-    fn user_turn(label: Label, content: &str) -> LabeledTurn {
-        LabeledTurn {
-            label,
-            turn: Turn {
-                actor: Actor::User(user("alice")),
-                content: content.to_owned(),
-            },
-        }
+    fn push_user_turn(trajectory: &mut Trajectory, label: Label, content: &str) {
+        trajectory.push_message(label, Speaker::User(user("alice")), content);
     }
 
     fn suspicious_private_trajectory() -> Trajectory {
         let mut trajectory = Trajectory::new();
-        trajectory.push(user_turn(
+        push_user_turn(
+            &mut trajectory,
             Label {
                 audience: Audience::readers([user("alice"), user("bob")]),
                 trust: Trust::Trusted,
                 ..Label::identity()
             },
             "summarize and email bob",
-        ));
-        trajectory.push(LabeledTurn {
-            label: Label {
+        );
+        trajectory.push_message(
+            Label {
                 audience: Audience::Public,
                 trust: Trust::Suspicious,
                 ..Label::identity()
             },
-            turn: Turn {
-                actor: Actor::Tool(ToolName::new("web.fetch")),
-                content: "<html>".to_owned(),
-            },
-        });
+            Speaker::Assistant,
+            "the page says: ...",
+        );
         trajectory
     }
 
@@ -321,10 +362,8 @@ mod tests {
         }
 
         fn adjudicate(&self, request: &FlowRequest, _: &Label, _: &[Violation]) -> Ruling {
-            let to_bob_only = request
-                .exposes_to
-                .as_ref()
-                .is_some_and(|r| !r.is_empty() && r.iter().all(|u| u == &user("bob")));
+            let to_bob_only = !request.recipients.is_empty()
+                && request.recipients.iter().all(|u| u == &user("bob"));
             if to_bob_only {
                 Ruling::Approve {
                     reason: "reviewed for bob".to_owned(),
@@ -344,13 +383,14 @@ mod tests {
         engine.register(email_contract());
 
         let mut trajectory = Trajectory::new();
-        trajectory.push(user_turn(
+        push_user_turn(
+            &mut trajectory,
             Label {
                 audience: Audience::readers([user("alice"), user("bob")]),
                 ..Label::identity()
             },
             "email bob",
-        ));
+        );
 
         let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &request);
@@ -362,6 +402,7 @@ mod tests {
             Effects::declared([Effect::Egress])
         );
         assert!(permit.result_label().audit.is_empty());
+        assert_eq!(engine.authority.consulted.get(), 0);
     }
 
     #[test]
@@ -376,20 +417,50 @@ mod tests {
         let Decision::Permitted(permit) = first else {
             panic!("expected permit, got {first:?}");
         };
-        let declassifications: Vec<_> = permit
+        let declassifications = permit
             .result_label()
             .audit
             .iter()
             .filter(|e| matches!(e, AuditEntry::Declassified { .. }))
-            .collect();
-        assert_eq!(declassifications.len(), 1);
-        trajectory.record_result(permit, "sent");
+            .count();
+        assert_eq!(declassifications, 1);
+        trajectory
+            .record_result(permit, "sent")
+            .expect("permit minted for this trajectory head");
 
         // The identical flow escalates again: the approval waived one flow,
         // not the trust breach itself.
         let second = engine.evaluate(&trajectory, &request);
         assert!(matches!(second, Decision::Permitted(_)));
         assert_eq!(engine.authority.consulted.get(), 2);
+    }
+
+    #[test]
+    fn a_permit_goes_stale_when_the_trajectory_moves_on() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
+        engine.register(email_contract());
+
+        let mut trajectory = suspicious_private_trajectory();
+        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let decision = engine.evaluate(&trajectory, &request);
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+
+        push_user_turn(&mut trajectory, Label::identity(), "wait, one more thing");
+
+        let err = trajectory
+            .record_result(permit, "sent")
+            .expect_err("the context changed under the permit");
+        assert_eq!(
+            err,
+            StalePermit {
+                granted_at: 2,
+                current_len: 3,
+            }
+        );
+        // Nothing was appended by the failed recording.
+        assert_eq!(trajectory.turns().len(), 3);
     }
 
     #[test]
@@ -425,13 +496,14 @@ mod tests {
 
         // Confirmation bound to another tool.
         let mut trajectory = Trajectory::new();
-        trajectory.push(user_turn(
+        push_user_turn(
+            &mut trajectory,
             Label {
                 attention: Attention::High(ToolName::new("email.send")),
                 ..Label::identity()
             },
             "yes, send it",
-        ));
+        );
         assert!(matches!(
             engine.evaluate(&trajectory, &request),
             Decision::Blocked { .. }
@@ -439,14 +511,15 @@ mod tests {
 
         // Correct confirmation, but a later turn already reset attention.
         let mut trajectory = Trajectory::new();
-        trajectory.push(user_turn(
+        push_user_turn(
+            &mut trajectory,
             Label {
                 attention: Attention::High(ToolName::new("db.drop")),
                 ..Label::identity()
             },
             "yes, drop it",
-        ));
-        trajectory.push(user_turn(Label::identity(), "unrelated chatter"));
+        );
+        push_user_turn(&mut trajectory, Label::identity(), "unrelated chatter");
         assert!(matches!(
             engine.evaluate(&trajectory, &request),
             Decision::Blocked { .. }
@@ -454,13 +527,14 @@ mod tests {
 
         // Fresh confirmation for exactly this tool.
         let mut trajectory = Trajectory::new();
-        trajectory.push(user_turn(
+        push_user_turn(
+            &mut trajectory,
             Label {
                 attention: Attention::High(ToolName::new("db.drop")),
                 ..Label::identity()
             },
             "yes, drop it",
-        ));
+        );
         let decision = engine.evaluate(&trajectory, &request);
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
@@ -523,26 +597,139 @@ mod tests {
     }
 
     #[test]
-    fn allow_with_audit_still_escalates_breaches() {
-        let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::AllowWithAudit);
+    fn deny_policy_with_breaches_only_still_escalates() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Deny);
         engine.register(email_contract());
 
-        // Unknown audience (unprovable, allowed by policy) plus a trust
-        // breach (escalated, denied by the authority): the breach wins.
+        // Suspicious trust is a breach, not an unknown: the deny policy does
+        // not apply, the authority does.
+        let trajectory = suspicious_private_trajectory();
+        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        assert!(matches!(
+            engine.evaluate(&trajectory, &request),
+            Decision::Permitted(_)
+        ));
+        assert_eq!(engine.authority.consulted.get(), 1);
+    }
+
+    #[test]
+    fn one_approval_declassifies_a_mixed_escalation() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
+        engine.register(email_contract());
+
+        // Suspicious trust (breach) + unknown audience (unprovable), both
+        // escalated, both declassified by the single approval.
         let mut trajectory = Trajectory::new();
-        trajectory.push(user_turn(
+        push_user_turn(
+            &mut trajectory,
             Label {
                 audience: Audience::Unknown,
                 trust: Trust::Suspicious,
                 ..Label::identity()
             },
             "context of unknown provenance",
-        ));
+        );
+        let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let decision = engine.evaluate(&trajectory, &request);
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+        let declassified: Vec<_> = permit
+            .result_label()
+            .audit
+            .iter()
+            .filter_map(|e| match e {
+                AuditEntry::Declassified { violation, .. } => Some(violation.clone()),
+                AuditEntry::UnverifiedFlow { .. } => None,
+            })
+            .collect();
+        assert_eq!(declassified.len(), 2);
+        assert!(
+            declassified
+                .iter()
+                .any(|v| matches!(v, Violation::Breach(_)))
+        );
+        assert!(
+            declassified
+                .iter()
+                .any(|v| matches!(v, Violation::Unprovable(Unprovable::AudienceUnknown)))
+        );
+    }
+
+    #[test]
+    fn allow_with_audit_still_escalates_breaches_and_reports_unknowns_on_block() {
+        let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::AllowWithAudit);
+        engine.register(email_contract());
+
+        // Unknown audience (unprovable, allowed by policy) plus a trust
+        // breach (escalated, denied by the authority): the breach wins, and
+        // the blocked decision still reports the audited unknown.
+        let mut trajectory = Trajectory::new();
+        push_user_turn(
+            &mut trajectory,
+            Label {
+                audience: Audience::Unknown,
+                trust: Trust::Suspicious,
+                ..Label::identity()
+            },
+            "context of unknown provenance",
+        );
         let request = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
         let decision = engine.evaluate(&trajectory, &request);
         let Decision::Blocked { violations, .. } = decision else {
             panic!("expected block, got {decision:?}");
         };
-        assert!(violations.iter().all(|v| matches!(v, Violation::Breach(_))));
+        assert!(violations.iter().any(|v| matches!(v, Violation::Breach(_))));
+        assert!(
+            violations
+                .iter()
+                .any(|v| matches!(v, Violation::Unprovable(Unprovable::AudienceUnknown)))
+        );
+    }
+
+    #[test]
+    fn recorded_effects_feed_later_requirement_checks() {
+        let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
+        engine.register(email_contract());
+        engine.register(ToolContract {
+            name: ToolName::new("report.generate"),
+            requires: Requirements {
+                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                ..Requirements::default()
+            },
+            output_label: Label::identity(),
+        });
+
+        let mut trajectory = Trajectory::new();
+        push_user_turn(
+            &mut trajectory,
+            Label {
+                audience: Audience::readers([user("alice"), user("bob")]),
+                ..Label::identity()
+            },
+            "email bob, then build the report",
+        );
+
+        let email = FlowRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let decision = engine.evaluate(&trajectory, &email);
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+        trajectory
+            .record_result(permit, "sent")
+            .expect("permit minted for this trajectory head");
+
+        // The recorded egress now trips the report tool's requirement.
+        let report = FlowRequest::new(ToolName::new("report.generate"));
+        let decision = engine.evaluate(&trajectory, &report);
+        let Decision::Blocked { violations, .. } = decision else {
+            panic!("expected block, got {decision:?}");
+        };
+        assert_eq!(
+            violations,
+            vec![Violation::Breach(Breach::ForbiddenPriorEffects {
+                effects: BTreeSet::from([Effect::Egress]),
+            })]
+        );
     }
 }

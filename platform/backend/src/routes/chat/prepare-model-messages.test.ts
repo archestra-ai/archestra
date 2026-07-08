@@ -767,6 +767,103 @@ test("does NOT synthesize an interrupted result for an approved tool call (the S
   expect(fabricated).toBeUndefined();
 });
 
+test("does NOT synthesize an interrupted result for a declined tool call (the SDK denies it on resume)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // The user declined the approval. Like an approved call, the SDK's
+  // approval-resume owns the outcome — it produces the denial itself — so the
+  // call must be left result-less; a synthetic "interrupted" result would
+  // pre-empt that and the model would see the wrong reason.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "delete the file" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "filesystem__delete",
+          toolCallId: "call-declined",
+          state: "approval-responded",
+          input: { path: "/tmp/x" },
+          approval: { id: "approval-1", approved: false },
+        },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const fabricated = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .find(
+      (p) =>
+        (p as { type?: string }).type === "tool-result" &&
+        (p as { toolCallId?: string }).toolCallId === "call-declined",
+    );
+  expect(fabricated).toBeUndefined();
+});
+
+test("excludes every approved call when a turn carries multiple approvals", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // The model requested two tools in one turn and the user approved both. The
+  // exclusion must apply per-call, not just to the first, so neither approved
+  // call is stranded with a synthetic result.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "do both" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "tool_a",
+          toolCallId: "call-a",
+          state: "approval-responded",
+          input: {},
+          approval: { id: "approval-a", approved: true },
+        },
+        {
+          type: "dynamic-tool",
+          toolName: "tool_b",
+          toolCallId: "call-b",
+          state: "approval-responded",
+          input: {},
+          approval: { id: "approval-b", approved: true },
+        },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const toolResults = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .filter((p) => (p as { type?: string }).type === "tool-result");
+  expect(toolResults).toHaveLength(0);
+});
+
 test("merges synthetic results into an existing tool message when only some calls resolved", async ({
   makeAgent,
   makeConversation,

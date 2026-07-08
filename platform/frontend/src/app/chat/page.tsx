@@ -1906,16 +1906,28 @@ export function ChatPageContent({
               // Await the persist before the first message sends below: the
               // backend rebuilds the tool set from the DB, so a fire-and-forget
               // PUT could lose the race and run turn one with the just-declined
-              // tool still enabled.
-              await updateEnabledToolsMutation.mutateAsync({
+              // tool still enabled. This mutation resolves with null (it does not
+              // throw) on API failure, so branch on the result rather than a
+              // catch.
+              const persisted = await updateEnabledToolsMutation.mutateAsync({
                 conversationId: newConversation.id,
                 toolIds: newEnabledToolIds,
               });
-              // Clear only after the selection is persisted — a failed PUT or an
-              // unresolved base (empty tool fetch) leaves the pending action to
-              // retry on the next new conversation rather than silently dropping
-              // the decline.
-              clearPendingActions();
+              if (persisted) {
+                // Clear the pending action only once the selection is durable.
+                clearPendingActions();
+              } else {
+                // Persist failed: undo the optimistic cache so it matches the DB,
+                // and keep the pending action to retry on the next new
+                // conversation rather than silently dropping the decline.
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    "conversation",
+                    newConversation.id,
+                    "enabled-tools",
+                  ],
+                });
+              }
             }
           } catch {
             // Leave pending actions intact on failure; the first turn falls back

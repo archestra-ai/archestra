@@ -1,20 +1,21 @@
 //! Toy end-to-end run: an agent summarizes a shared doc, fetches a web page,
 //! e-mails people, drops a table, and calls an unannotated tool — with every
-//! flow checked against the folded context label.
+//! flow checked against the folded context label and routed to a two-member
+//! authority panel composed as a plain tuple.
 //!
 //! Run with `cargo run --example demo`.
 
 use baton_core::{
     AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision, Effect,
-    Effects, Grant, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract,
-    ToolName, ToolRequest, Trajectory, Trust, UnknownPolicy, Unprovable, UserId, Violation,
+    Effects, Grant, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, TaintPolicy,
+    ToolContract, ToolName, ToolRequest, Trajectory, Trust, UnknownPolicy, UserId, Violation,
 };
 
-/// Scripted stand-in for a real approval UI: this "human" has decided in
-/// advance to approve exactly one thing — sending the web-tainted summary to
-/// Bob — and to deny everything else that reaches them. Its mandate is broad
-/// (it is willing to consider trust, audience, effect, and confirmation
-/// escalations); its `adjudicate` is where the actual judgement lives.
+/// Scripted stand-in for a real approval UI. This "human" is mandated for
+/// trust and audience escalations (not confirmations, not effect waivers): it
+/// vouches for the provenance of a flow and for who may read it. It signs off
+/// on anything that reaches it *unless* the flow would expose data to someone
+/// outside the current audience.
 struct HumanInTheLoop;
 
 impl HumanInTheLoop {
@@ -30,8 +31,8 @@ impl HumanInTheLoop {
                 .into_iter()
                 .collect(),
             ),
-            effects: Some([Effect::Mutation, Effect::Egress].into_iter().collect()),
-            confirms: true,
+            effects: None,
+            confirms: false,
         }
     }
 }
@@ -46,30 +47,56 @@ impl Authority for HumanInTheLoop {
     fn adjudicate(
         &self,
         _: &Grant,
-        request: &ToolRequest,
+        _: &ToolRequest,
         _: &Label,
         violations: &[Violation],
     ) -> Ruling {
-        let only_trust = violations.iter().all(|v| {
-            matches!(
-                v,
-                Violation::Breach(Breach::TrustBelow { .. })
-                    | Violation::Unprovable(Unprovable::TrustUnknown)
-            )
-        });
-        let to_bob_only = !request.recipients.is_empty()
-            && request.recipients.iter().all(|u| u.as_str() == "bob");
-        if only_trust && to_bob_only {
-            Ruling::Approve {
-                reason: "reviewed the draft, it is fine to send to bob".to_owned(),
+        let exposes_outsiders = violations
+            .iter()
+            .any(|v| matches!(v, Violation::Breach(Breach::AudienceExceeds { .. })));
+        if exposes_outsiders {
+            Ruling::Deny {
+                reason: "not comfortable exposing this outside the audience".to_owned(),
             }
         } else {
-            Ruling::Deny {
-                reason: "not comfortable approving this".to_owned(),
+            Ruling::Approve {
+                reason: "reviewed the provenance, it is fine to proceed".to_owned(),
             }
         }
     }
 }
+
+/// An on-call admin, mandated only for confirmations: it can stand in for the
+/// end user's explicit confirmation of a sensitive action. (Confirmation is
+/// just one authority among several.)
+struct OnCallAdmin;
+
+impl OnCallAdmin {
+    fn mandate() -> Grant {
+        Grant {
+            confirms: true,
+            ..Grant::empty()
+        }
+    }
+}
+
+impl Authority for OnCallAdmin {
+    fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
+        Self::mandate()
+            .covers(needed)
+            .then(|| AuthorityName::new("on-call-admin"))
+    }
+
+    fn adjudicate(&self, _: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
+        Ruling::Approve {
+            reason: "on-call admin authorizes this action".to_owned(),
+        }
+    }
+}
+
+/// The panel: consulted left to right, first covering mandate decides. Pure
+/// tuple composition — no `Box<dyn>`.
+type Panel = (HumanInTheLoop, OnCallAdmin);
 
 fn alice() -> UserId {
     UserId::new("alice")
@@ -81,7 +108,7 @@ fn push_alice(trajectory: &mut Trajectory, label: Label, content: &str) {
 
 /// Evaluate one flow, narrate the outcome, and record the result on a permit.
 fn attempt(
-    engine: &PolicyEngine<HumanInTheLoop>,
+    engine: &PolicyEngine<Panel>,
     trajectory: &mut Trajectory,
     request: ToolRequest,
     result_content: &str,
@@ -109,7 +136,11 @@ fn attempt(
 }
 
 fn main() {
-    let mut engine = PolicyEngine::new(HumanInTheLoop, UnknownPolicy::AllowWithAudit);
+    // AllowWithAudit for unprovable gaps; the taint knob on so a degrading
+    // step is flagged and signed off rather than propagating silently.
+    let mut engine =
+        PolicyEngine::new((HumanInTheLoop, OnCallAdmin), UnknownPolicy::AllowWithAudit)
+            .with_taint_policy(TaintPolicy::Escalate);
     let contracts = [
         ToolContract {
             name: ToolName::new("web.fetch"),
@@ -143,6 +174,14 @@ fn main() {
                 ..Label::identity()
             },
         },
+        ToolContract {
+            name: ToolName::new("report.generate"),
+            requires: Requirements {
+                forbid_prior_effects: [Effect::Egress].into_iter().collect(),
+                ..Requirements::default()
+            },
+            output_label: Label::identity(),
+        },
     ];
     for contract in contracts {
         engine.register(contract);
@@ -160,7 +199,9 @@ fn main() {
         "Summarize the quarterly doc against what competitors say online, email it to Bob.",
     );
 
-    println!("== 2. Fetching the web taints trust, not the audience bound ==");
+    println!(
+        "== 2. Fetching the web degrades trust; the taint knob makes the human acknowledge it =="
+    );
     attempt(
         &engine,
         &mut trajectory,
@@ -168,7 +209,7 @@ fn main() {
         "<html>competitor blog post</html>",
     );
 
-    println!("== 3. Email to Bob: trust breach escalates, the human approves ==");
+    println!("== 3. Email to Bob: trust breach → routed to the human by its trust mandate ==");
     attempt(
         &engine,
         &mut trajectory,
@@ -176,7 +217,7 @@ fn main() {
         "email to bob sent",
     );
 
-    println!("== 4. Email to Charlie: he is outside the context audience ==");
+    println!("== 4. Email to Charlie: outside the audience → the human denies ==");
     attempt(
         &engine,
         &mut trajectory,
@@ -184,22 +225,8 @@ fn main() {
         "email to charlie sent",
     );
 
-    println!("== 5. db.drop without explicit confirmation ==");
-    attempt(
-        &engine,
-        &mut trajectory,
-        ToolRequest::new(ToolName::new("db.drop")),
-        "table dropped",
-    );
-
-    println!("== 6. Alice explicitly confirms db.drop; the confirmation is bound to that tool ==");
-    trajectory.push_message(
-        Label {
-            audience: Audience::readers([alice(), UserId::new("bob")]),
-            ..Label::identity()
-        },
-        Speaker::confirming(alice(), ToolName::new("db.drop")),
-        "Yes, drop the staging table.",
+    println!(
+        "== 5. db.drop without confirmation → routed to the on-call admin by its confirms mandate =="
     );
     attempt(
         &engine,
@@ -208,23 +235,23 @@ fn main() {
         "table dropped",
     );
 
-    println!("== 7. An unannotated tool: allowed by policy, on the record, poisons the fold ==");
+    println!("== 6. report.generate forbids prior egress, which the context now carries ==");
+    println!("      the need is an effect waiver — no authority's mandate covers it ==");
+    attempt(
+        &engine,
+        &mut trajectory,
+        ToolRequest::new(ToolName::new("report.generate")),
+        "report built",
+    );
+
+    println!(
+        "== 7. An unannotated tool: audited through by policy, taint acknowledged, poisons the fold =="
+    );
     attempt(
         &engine,
         &mut trajectory,
         ToolRequest::new(ToolName::new("calendar.lookup")),
         "next sync: thursday",
-    );
-
-    println!(
-        "== 8. Email to Bob again: the audience is now unprovable (audited through), \
-         and the trust breach still needs the human =="
-    );
-    attempt(
-        &engine,
-        &mut trajectory,
-        ToolRequest::exposing(ToolName::new("email.send"), [UserId::new("bob")]),
-        "email to bob sent",
     );
 
     println!("== Final context and full audit trail ==");

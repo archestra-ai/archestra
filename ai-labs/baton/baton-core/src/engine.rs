@@ -125,6 +125,22 @@ impl fmt::Display for RejectedPermit {
 
 impl std::error::Error for RejectedPermit {}
 
+/// [`PolicyEngine::register`] refused a contract: a contract for that tool is
+/// already registered. Contracts are the policy boundary, so a silent replace
+/// could weaken policy unnoticed — registration fails loudly instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateContract {
+    pub tool: ToolName,
+}
+
+impl fmt::Display for DuplicateContract {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "a contract for `{}` is already registered", self.tool)
+    }
+}
+
+impl std::error::Error for DuplicateContract {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockReason {
     DeniedByAuthority {
@@ -205,8 +221,17 @@ impl<A: Authority> PolicyEngine<A> {
         self
     }
 
-    pub fn register(&mut self, contract: ToolContract) {
+    /// Register a tool's contract. Fails if one is already registered for that
+    /// tool: contracts are the policy boundary, so an accidental replace is an
+    /// error, not a silent overwrite.
+    pub fn register(&mut self, contract: ToolContract) -> Result<(), DuplicateContract> {
+        if self.contracts.contains_key(&contract.name) {
+            return Err(DuplicateContract {
+                tool: contract.name,
+            });
+        }
         self.contracts.insert(contract.name.clone(), contract);
+        Ok(())
     }
 
     /// Evaluate one requested flow against the folded context. Violations
@@ -773,7 +798,7 @@ mod tests {
     fn clean_flow_is_permitted_without_the_authority() {
         let counting = CountingApprover::new();
         let mut engine = PolicyEngine::new(counting, UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let mut trajectory = Trajectory::new();
         push_user_turn(
@@ -801,7 +826,7 @@ mod tests {
     #[test]
     fn approval_is_one_shot_and_never_loosens_the_context() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let mut trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -831,7 +856,7 @@ mod tests {
     #[test]
     fn a_permit_goes_stale_when_the_trajectory_moves_on() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let mut trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -859,7 +884,7 @@ mod tests {
     #[test]
     fn a_permit_cannot_cross_trajectories() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let evaluated = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -880,7 +905,7 @@ mod tests {
     #[test]
     fn approval_for_bob_does_not_permit_charlie() {
         let mut engine = PolicyEngine::new(BobOnly, UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
         let trajectory = suspicious_private_trajectory();
 
         let to_bob = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -905,7 +930,7 @@ mod tests {
     #[test]
     fn stale_or_foreign_confirmation_cannot_authorize_a_drop() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
-        engine.register(drop_contract());
+        engine.register(drop_contract()).unwrap();
         let request = ToolRequest::new(ToolName::new("db.drop"));
 
         // Confirmation bound to another tool.
@@ -953,7 +978,7 @@ mod tests {
     #[test]
     fn recording_the_result_ends_the_confirmation() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
-        engine.register(drop_contract());
+        engine.register(drop_contract()).unwrap();
         let request = ToolRequest::new(ToolName::new("db.drop"));
 
         let mut trajectory = Trajectory::new();
@@ -1035,7 +1060,7 @@ mod tests {
     #[test]
     fn deny_policy_with_breaches_only_still_escalates() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Deny);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         // Suspicious trust is a breach, not an unknown: the deny policy does
         // not apply, the authority does.
@@ -1051,7 +1076,7 @@ mod tests {
     #[test]
     fn one_approval_declassifies_a_mixed_escalation() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         // Suspicious trust (breach) + unknown audience (unprovable), both
         // grant-fixable and both resolved by the single minted grant, recorded
@@ -1095,7 +1120,7 @@ mod tests {
     #[test]
     fn allow_with_audit_still_escalates_breaches_and_reports_unknowns_on_block() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::AllowWithAudit);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         // Unknown audience (unprovable, allowed by policy) plus a trust
         // breach (escalated, denied by the authority): the breach wins, and
@@ -1127,7 +1152,7 @@ mod tests {
     fn the_authority_sees_audited_unknowns_alongside_breaches() {
         let mut engine =
             PolicyEngine::new(InspectingApprover::default(), UnknownPolicy::AllowWithAudit);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let mut trajectory = Trajectory::new();
         push_user_turn(
@@ -1156,15 +1181,17 @@ mod tests {
     #[test]
     fn recorded_effects_feed_later_requirement_checks() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
-        engine.register(email_contract());
-        engine.register(ToolContract {
-            name: ToolName::new("report.generate"),
-            requires: Requirements {
-                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
-                ..Requirements::default()
-            },
-            output_label: Label::identity(),
-        });
+        engine.register(email_contract()).unwrap();
+        engine
+            .register(ToolContract {
+                name: ToolName::new("report.generate"),
+                requires: Requirements {
+                    forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                    ..Requirements::default()
+                },
+                output_label: Label::identity(),
+            })
+            .unwrap();
 
         let mut trajectory = Trajectory::new();
         push_user_turn(
@@ -1202,7 +1229,7 @@ mod tests {
     #[test]
     fn structural_violation_blocks_without_consulting() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         // An audience-guarded sink called with no recipients is a structural
         // integration bug (UndeclaredRecipients); no authority may override.
@@ -1227,7 +1254,7 @@ mod tests {
         // blocked as NoCompetentAuthority before anyone is consulted.
         let authority = Mandated::new("confirms-only", confirms_mandate(), true);
         let mut engine = PolicyEngine::new(authority, UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -1246,7 +1273,7 @@ mod tests {
         };
         let with_email = || {
             let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-            engine.register(email_contract());
+            engine.register(email_contract()).unwrap();
             engine
         };
         let context = |label: Label| {
@@ -1296,14 +1323,16 @@ mod tests {
 
         // ForbiddenPriorEffects: context already carries the forbidden effect.
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(ToolContract {
-            name: ToolName::new("report.generate"),
-            requires: Requirements {
-                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
-                ..Requirements::default()
-            },
-            output_label: Label::identity(),
-        });
+        engine
+            .register(ToolContract {
+                name: ToolName::new("report.generate"),
+                requires: Requirements {
+                    forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                    ..Requirements::default()
+                },
+                output_label: Label::identity(),
+            })
+            .unwrap();
         let egressed = context(Label {
             effects: Effects::declared([Effect::Egress]),
             ..Label::identity()
@@ -1318,7 +1347,7 @@ mod tests {
 
         // ConfirmationMissing: db.drop with no pending confirmation.
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(drop_contract());
+        engine.register(drop_contract()).unwrap();
         assert!(matches!(
             engine.evaluate(
                 &Trajectory::new(),
@@ -1335,8 +1364,8 @@ mod tests {
             Mandated::new("confirms-auth", confirms_mandate(), true),
         );
         let mut engine = PolicyEngine::new(panel, UnknownPolicy::Escalate);
-        engine.register(email_contract());
-        engine.register(drop_contract());
+        engine.register(email_contract()).unwrap();
+        engine.register(drop_contract()).unwrap();
 
         let signed_by = |permit: &Permit| -> Vec<String> {
             permit
@@ -1430,7 +1459,7 @@ mod tests {
     fn taint_allow_does_not_flag_a_degrading_flow() {
         // Default TaintPolicy::Allow: a degrading fetch permits silently.
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(fetch_contract());
+        engine.register(fetch_contract()).unwrap();
         let decision = engine.evaluate(
             &Trajectory::new(),
             &ToolRequest::new(ToolName::new("web.fetch")),
@@ -1446,7 +1475,7 @@ mod tests {
     fn taint_escalate_flags_and_signs_off_a_degrading_flow() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate)
             .with_taint_policy(TaintPolicy::Escalate);
-        engine.register(fetch_contract());
+        engine.register(fetch_contract()).unwrap();
         let decision = engine.evaluate(
             &Trajectory::new(),
             &ToolRequest::new(ToolName::new("web.fetch")),
@@ -1467,11 +1496,13 @@ mod tests {
     fn taint_escalate_ignores_a_non_degrading_flow() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate)
             .with_taint_policy(TaintPolicy::Escalate);
-        engine.register(ToolContract {
-            name: ToolName::new("noop.tool"),
-            requires: Requirements::default(),
-            output_label: Label::identity(),
-        });
+        engine
+            .register(ToolContract {
+                name: ToolName::new("noop.tool"),
+                requires: Requirements::default(),
+                output_label: Label::identity(),
+            })
+            .unwrap();
         let decision = engine.evaluate(
             &Trajectory::new(),
             &ToolRequest::new(ToolName::new("noop.tool")),
@@ -1511,7 +1542,7 @@ mod tests {
             Mandated::new("second", trust_mandate(), true),
         );
         let mut engine = PolicyEngine::new(panel, UnknownPolicy::Escalate);
-        engine.register(email_contract());
+        engine.register(email_contract()).unwrap();
 
         let trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -1525,5 +1556,20 @@ mod tests {
         ));
         assert_eq!(engine.authority.0.consulted.get(), 1);
         assert_eq!(engine.authority.1.consulted.get(), 0);
+    }
+
+    #[test]
+    fn registering_a_duplicate_contract_is_refused() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
+        engine.register(email_contract()).unwrap();
+        let err = engine
+            .register(email_contract())
+            .expect_err("a second contract for the same tool must be refused");
+        assert_eq!(
+            err,
+            DuplicateContract {
+                tool: ToolName::new("email.send"),
+            }
+        );
     }
 }

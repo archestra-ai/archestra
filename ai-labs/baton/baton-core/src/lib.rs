@@ -70,7 +70,8 @@ pub use contract::{
 };
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    BlockReason, Decision, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
+    BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy,
+    UnknownPolicy,
 };
 pub use label::{AuditEntry, Grant, Label};
 pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn};

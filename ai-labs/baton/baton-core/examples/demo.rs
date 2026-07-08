@@ -186,7 +186,7 @@ fn main() {
         },
     ];
     for contract in contracts {
-        engine.register(contract);
+        engine.register(contract).expect("no duplicate contract");
     }
 
     let mut trajectory = Trajectory::new();

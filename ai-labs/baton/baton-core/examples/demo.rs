@@ -6,21 +6,50 @@
 
 use baton_core::{
     AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision, Effect,
-    Effects, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract,
+    Effects, Grant, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract,
     ToolName, ToolRequest, Trajectory, Trust, UnknownPolicy, Unprovable, UserId, Violation,
 };
 
 /// Scripted stand-in for a real approval UI: this "human" has decided in
 /// advance to approve exactly one thing — sending the web-tainted summary to
-/// Bob — and to deny everything else that reaches them.
+/// Bob — and to deny everything else that reaches them. Its mandate is broad
+/// (it is willing to consider trust, audience, effect, and confirmation
+/// escalations); its `adjudicate` is where the actual judgement lives.
 struct HumanInTheLoop;
 
+impl HumanInTheLoop {
+    fn mandate() -> Grant {
+        Grant {
+            trust: Some(KnownTrust::Trusted),
+            audience: Some(
+                [
+                    UserId::new("alice"),
+                    UserId::new("bob"),
+                    UserId::new("charlie"),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            effects: Some([Effect::Mutation, Effect::Egress].into_iter().collect()),
+            confirms: true,
+        }
+    }
+}
+
 impl Authority for HumanInTheLoop {
-    fn name(&self) -> AuthorityName {
-        AuthorityName::new("human-in-the-loop")
+    fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
+        Self::mandate()
+            .covers(needed)
+            .then(|| AuthorityName::new("human-in-the-loop"))
     }
 
-    fn adjudicate(&self, request: &ToolRequest, _: &Label, violations: &[Violation]) -> Ruling {
+    fn adjudicate(
+        &self,
+        _: &Grant,
+        request: &ToolRequest,
+        _: &Label,
+        violations: &[Violation],
+    ) -> Ruling {
         let only_trust = violations.iter().all(|v| {
             matches!(
                 v,

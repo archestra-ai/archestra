@@ -171,6 +171,43 @@ impl fmt::Display for Violation {
     }
 }
 
+/// Where a violation sits on the *fixability* axis, orthogonal to the
+/// breach/unprovable *provability* axis: what an authority can do about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Fixability {
+    /// A grant can cover it (a lift for the label dimensions, `confirms` for
+    /// attention).
+    GrantFixable,
+    /// Nothing to lift — one cannot attest a negative over `Unknown` effects,
+    /// nor conjure a missing contract. An authority may only accept the fact
+    /// on the record.
+    AcknowledgeOnly,
+    /// An integration bug (the caller definitionally holds the data); no
+    /// authority may override it.
+    Structural,
+}
+
+impl Violation {
+    pub(crate) fn fixability(&self) -> Fixability {
+        match self {
+            Self::Breach(Breach::UndeclaredRecipients) => Fixability::Structural,
+            Self::Breach(
+                Breach::TrustBelow { .. }
+                | Breach::AudienceExceeds { .. }
+                | Breach::ForbiddenPriorEffects { .. }
+                | Breach::ConfirmationMissing { .. }
+                | Breach::ConfirmationForOtherTool { .. },
+            )
+            | Self::Unprovable(Unprovable::TrustUnknown | Unprovable::AudienceUnknown) => {
+                Fixability::GrantFixable
+            }
+            Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => {
+                Fixability::AcknowledgeOnly
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub enum Verdict {

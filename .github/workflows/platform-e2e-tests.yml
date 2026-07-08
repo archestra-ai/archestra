@@ -432,6 +432,10 @@ jobs:
           # build artifact since only one variant travels as an artifact.
           platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
+          # Trusted runs: the Kind node pulls the (public) registry image
+          # itself when the pod schedules — no host pull, no ~77s kind-load.
+          # Fork PRs load a local artifact tag, which must be kind-loaded.
+          platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
           image-pull-timeout-seconds: "900"
 

@@ -1,9 +1,15 @@
 //! Label dimensions and their combine algebra.
 //!
 //! Each dimension defines its own `combine`: how two values merge when data
-//! from two sources meets in one context. [`crate::label::Label::join`]
+//! from two sources meets in one context. [`crate::label::Label::combine`]
 //! applies these per dimension; nothing else in the crate invents merge
 //! semantics.
+//!
+//! Per data dimension the combine is a commutative, idempotent semilattice,
+//! and `Unknown` has a definite position in each (absorbing for audience and
+//! effects; between `Trusted` and `Suspicious` for trust). This is the taint
+//! fold — distinct from the sink-side adequacy relation, where `Unknown` is
+//! instead incomparable.
 
 use std::collections::BTreeSet;
 use std::fmt;

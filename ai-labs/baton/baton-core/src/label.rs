@@ -1,4 +1,19 @@
-//! [`Label`]: the metadata that travels with every turn, and its join.
+//! [`Label`]: the metadata that travels with every turn, and its combine.
+//!
+//! The crate has two distinct algebraic objects over the same dimensions;
+//! keeping them apart is load-bearing:
+//!
+//! - **Taint fold** — how provenance *combines* as turns meet. Per data
+//!   dimension this is a commutative, idempotent semilattice (see
+//!   [`crate::dimension`]); `Unknown` has a definite position in each. The
+//!   whole [`Label`] is **not** a join-semilattice: it is a monoid whose
+//!   product is (that semilattice product over audience/trust/effects) × a
+//!   non-commutative Writer log for `audit`. So the whole-label operation is
+//!   [`Label::combine`] (monoid append), not a lattice join.
+//! - **Adequacy relation** — the *proof* at a sink: is this context good
+//!   enough for this flow? That is a three-valued decision, not a lattice
+//!   comparison, and lives beside each dimension's combine
+//!   ([`crate::dimension`]) and in [`crate::contract`].
 
 use std::fmt;
 
@@ -65,7 +80,7 @@ pub struct Label {
 }
 
 impl Label {
-    /// Identity of [`Label::join`]: neutral in every dimension.
+    /// Identity of [`Label::combine`]: neutral in every dimension.
     pub fn identity() -> Self {
         Self {
             audience: Audience::Public,
@@ -86,10 +101,12 @@ impl Label {
         }
     }
 
-    /// Per-dimension combine. Order matters only for `audit` (append), so
-    /// fold trajectories in turn order to keep the trail chronological.
+    /// Monoid append: the semilattice product over audience/trust/effects
+    /// times the Writer log for `audit`. Commutative in the three data
+    /// dimensions; **not** in `audit`, which appends — so fold trajectories in
+    /// turn order to keep the trail chronological.
     #[must_use]
-    pub fn join(self, newer: Self) -> Self {
+    pub fn combine(self, newer: Self) -> Self {
         let mut audit = self.audit;
         audit.extend(newer.audit);
         Self {
@@ -101,7 +118,7 @@ impl Label {
     }
 
     pub fn fold(labels: impl IntoIterator<Item = Self>) -> Self {
-        labels.into_iter().fold(Self::identity(), Self::join)
+        labels.into_iter().fold(Self::identity(), Self::combine)
     }
 }
 
@@ -141,11 +158,11 @@ mod tests {
             effects: Effects::declared([Effect::Egress]),
             audit: vec![audit_entry("x")],
         };
-        assert_eq!(Label::identity().join(label.clone()), label);
+        assert_eq!(Label::identity().combine(label.clone()), label);
     }
 
     #[test]
-    fn join_combines_every_dimension() {
+    fn combine_merges_every_dimension() {
         let private_trusted = Label {
             audience: Audience::readers([UserId::new("alice"), UserId::new("bob")]),
             trust: Trust::TRUSTED,
@@ -158,15 +175,15 @@ mod tests {
             effects: Effects::declared([Effect::Mutation]),
             audit: vec![audit_entry("second")],
         };
-        let joined = private_trusted.join(public_suspicious);
+        let combined = private_trusted.combine(public_suspicious);
         assert_eq!(
-            joined.audience,
+            combined.audience,
             Audience::readers([UserId::new("alice"), UserId::new("bob")])
         );
-        assert_eq!(joined.trust, Trust::SUSPICIOUS);
-        assert_eq!(joined.effects, Effects::declared([Effect::Mutation]));
+        assert_eq!(combined.trust, Trust::SUSPICIOUS);
+        assert_eq!(combined.effects, Effects::declared([Effect::Mutation]));
         assert_eq!(
-            joined.audit,
+            combined.audit,
             vec![audit_entry("first"), audit_entry("second")]
         );
     }

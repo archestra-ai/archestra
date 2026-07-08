@@ -751,12 +751,12 @@ export function isLikelyArchestraToolName(
     return false;
   }
 
-  const allowedServerNames = getAllowedServerNames(options);
-
-  // Longest-match the trailing segment(s) against a known short name so a short
-  // name that ever contains `__` still matches. `tailStart >= 1` guarantees at
-  // least one preceding segment to carry the server name, which also excludes
-  // bare short names.
+  // Try each trailing-segment span as a candidate short name (from the longest
+  // tail down to the last segment alone), requiring an allowed server name in
+  // the segments that precede it. `tailStart >= 1` guarantees at least one
+  // preceding segment to carry the server name, which also excludes bare short
+  // names. This is a membership test, not a disambiguation: any matching span
+  // wins, so the iteration order does not affect the result.
   for (let tailStart = 1; tailStart < segments.length; tailStart++) {
     const candidateShortName = segments
       .slice(tailStart)
@@ -766,7 +766,7 @@ export function isLikelyArchestraToolName(
     }
     const precedesShortName = segments
       .slice(0, tailStart)
-      .some((segment) => allowedServerNames.has(segment));
+      .some((segment) => isAllowedServerName(segment, options));
     if (precedesShortName) {
       return true;
     }
@@ -848,7 +848,7 @@ function parseArchestraToolName(params: {
     separatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
   );
 
-  if (!getAllowedServerNames(options).has(serverName)) {
+  if (!isAllowedServerName(serverName, options)) {
     return { serverName: null, toolName: rawToolName };
   }
 
@@ -856,20 +856,18 @@ function parseArchestraToolName(params: {
 }
 
 /**
- * Server names accepted as "one of ours": the org's (possibly branded) server
- * name, plus the default `archestra` unless the caller opts out via
- * `includeDefaultPrefix: false`.
+ * Whether `serverName` is accepted as "one of ours": the org's (possibly
+ * branded) server name, or the default `archestra` unless the caller opts out
+ * via `includeDefaultPrefix: false`. A direct comparison rather than a Set —
+ * it runs on every tool-name parse, so it must not allocate.
  */
-function getAllowedServerNames(
+function isAllowedServerName(
+  serverName: string,
   options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },
-): Set<string> {
-  const allowedServerNames = new Set<string>([
-    getArchestraMcpServerName(options),
-  ]);
-
-  if (options?.includeDefaultPrefix !== false) {
-    allowedServerNames.add(ARCHESTRA_MCP_SERVER_NAME);
-  }
-
-  return allowedServerNames;
+): boolean {
+  return (
+    serverName === getArchestraMcpServerName(options) ||
+    (options?.includeDefaultPrefix !== false &&
+      serverName === ARCHESTRA_MCP_SERVER_NAME)
+  );
 }

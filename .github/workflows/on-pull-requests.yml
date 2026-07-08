@@ -507,7 +507,12 @@ jobs:
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        run: node --no-memory-protection-keys node_modules/vitest/vitest.mjs run --shard="${SHARD}/4"
+        run: |
+          # Self-hosted mac runners execute several shards concurrently on one
+          # machine; uncapped vitest worker pools oversubscribe its cores and
+          # the PGlite setup hooks blow their 60s timeout. Cap workers there.
+          if [ "$RUNNER_OS" = "macOS" ]; then WORKERS="--maxWorkers=3"; else WORKERS=""; fi
+          node --no-memory-protection-keys node_modules/vitest/vitest.mjs run --shard="${SHARD}/4" $WORKERS
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
@@ -643,6 +648,10 @@ jobs:
           )
           HELM_UNITTEST_EXTRACT_DIR="$(mktemp -d)"
           HELM_PLUGINS_DIR="$(helm env HELM_PLUGINS)"
+          # Persistent self-hosted runners may carry a previously installed
+          # copy of the plugin under either name; helm refuses to load two
+          # plugins claiming "unittest", so clear both before installing.
+          rm -rf "${HELM_PLUGINS_DIR}/unittest" "${HELM_PLUGINS_DIR}/helm-unittest"
           mkdir -p "${HELM_PLUGINS_DIR}/unittest"
           tar -xzf "/tmp/${HELM_UNITTEST_ARCHIVE}" -C "${HELM_UNITTEST_EXTRACT_DIR}"
           cp -R "${HELM_UNITTEST_EXTRACT_DIR}/." "${HELM_PLUGINS_DIR}/unittest"

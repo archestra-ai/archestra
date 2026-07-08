@@ -57,4 +57,33 @@ describe("resolveEnabledToolIds", () => {
       }),
     ).toEqual([]);
   });
+
+  // An unresolved base (agent has no tools yet, or the tool fetch fell back to
+  // []) resolves to empty even with a disable action — which is exactly why the
+  // replay caller guards on a non-empty base and skips persisting this.
+  test("a disable action on an empty base stays empty", () => {
+    expect(
+      resolveEnabledToolIds({
+        hasCustomSelection: false,
+        enabledToolIds: [],
+        allToolIds: [],
+        pendingActions: [disablePlaywright],
+      }),
+    ).toEqual([]);
+  });
+
+  // enable and disable actions both thread through, applied in order on the base.
+  test("enable and disable actions apply in order on top of the base", () => {
+    expect(
+      resolveEnabledToolIds({
+        hasCustomSelection: false,
+        enabledToolIds: [],
+        allToolIds: ["a", "b", "c"],
+        pendingActions: [
+          { type: "disableAll", toolIds: ["b", "c"] },
+          { type: "enable", toolId: "c" },
+        ],
+      }),
+    ).toEqual(["a", "c"]);
+  });
 });

@@ -132,6 +132,7 @@ impl fmt::Display for BlockReason {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[must_use = "a dropped Decision means the flow was neither executed nor blocked"]
 pub enum Decision {
     Permitted(Permit),
     Blocked {

@@ -172,6 +172,7 @@ impl fmt::Display for Violation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub enum Verdict {
     Allow,
     Escalate(Vec<Violation>),

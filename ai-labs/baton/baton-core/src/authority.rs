@@ -5,7 +5,7 @@ use std::fmt;
 use crate::contract::{ToolRequest, Violation};
 use crate::label::Label;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AuthorityName(String);
 
 impl AuthorityName {

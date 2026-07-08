@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 /// A user known to the surrounding system (ACLs, directories, ...).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UserId(String);
 
 impl UserId {

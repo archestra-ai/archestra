@@ -44,7 +44,7 @@ pub mod turn;
 use std::fmt;
 
 /// Identifier of a tool exposed to the agent.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ToolName(String);
 
 impl ToolName {

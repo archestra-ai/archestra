@@ -64,7 +64,7 @@ pub struct LabeledTurn {
 
 /// Identity of one trajectory instance, unique within the process; permits
 /// are bound to it so an authorization cannot cross trajectories.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TrajectoryId(u64);
 
 impl TrajectoryId {

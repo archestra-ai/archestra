@@ -46,6 +46,7 @@ import {
   autoReinstallServer,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
+  reloadToolsForServer,
   requiresNewUserInputForReinstall,
 } from "./mcp-reinstall";
 
@@ -1470,6 +1471,81 @@ describe("mcp-reinstall", () => {
       const updated = await getServer(server.id);
       expect(updated.name).toBe(`Test Catalog-${user.id}`);
       expect(updated.reinstallRequired).toBe(false);
+    });
+  });
+
+  describe("reloadToolsForServer", () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    test("re-discovers tools without a restart: updates schemas, adds new, removes gone", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        name: "Reload Catalog",
+        serverType: "remote",
+      });
+      const server = await makeMcpServer({
+        catalogId: catalog.id,
+        name: "Reload Catalog",
+      });
+
+      const getTools = vi.spyOn(McpServerModel, "getToolsFromServer");
+
+      getTools.mockResolvedValueOnce([
+        {
+          name: "kept_tool",
+          description: "old",
+          inputSchema: {
+            type: "object",
+            properties: { a: { type: "string" } },
+          },
+        },
+        {
+          name: "removed_tool",
+          description: "bye",
+          inputSchema: { type: "object" },
+        },
+      ]);
+      const first = await reloadToolsForServer(server);
+      expect(first.created).toBe(2);
+
+      getTools.mockResolvedValueOnce([
+        {
+          name: "kept_tool",
+          description: "new",
+          inputSchema: {
+            type: "object",
+            properties: { b: { type: "number" } },
+          },
+        },
+        {
+          name: "new_tool",
+          description: "fresh",
+          inputSchema: { type: "object" },
+        },
+      ]);
+      const second = await reloadToolsForServer(server);
+
+      expect(second.updated).toBe(1);
+      expect(second.created).toBe(1);
+      expect(second.deleted).toBe(1);
+
+      const tools = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, catalog.id));
+      const rawNames = tools.map((t) => t.rawName).sort();
+      expect(rawNames).toEqual(["kept_tool", "new_tool"]);
+
+      const kept = tools.find((t) => t.rawName === "kept_tool");
+      expect(kept?.description).toBe("new");
+      expect(kept?.parameters).toEqual({
+        type: "object",
+        properties: { b: { type: "number" } },
+      });
     });
   });
 

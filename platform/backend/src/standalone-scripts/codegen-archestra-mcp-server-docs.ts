@@ -86,6 +86,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   deploy_mcp_server: ToolGroup.MCPServers,
   list_mcp_server_deployments: ToolGroup.MCPServers,
   get_mcp_server_logs: ToolGroup.MCPServers,
+  reload_mcp_server_tools: ToolGroup.MCPServers,
   create_mcp_server_installation_request: ToolGroup.MCPServers,
 
   create_team: ToolGroup.Teams,
@@ -118,6 +119,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   delete_trusted_data_policy: ToolGroup.Policies,
 
   bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
+  bulk_remove_tools_from_agents: ToolGroup.ToolAssignment,
   bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
 
   query_knowledge_sources: ToolGroup.KnowledgeManagement,
@@ -370,7 +372,7 @@ The Archestra MCP Server is a built-in MCP server that ships with the platform a
 
 Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
 
-Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
+Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base or connector](/docs/platform-knowledge) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
 
 All Archestra tools are prefixed with \`archestra__\`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
 
@@ -378,7 +380,7 @@ ${formatToolLink("query_knowledge_sources")} is an exception: its output is trea
 
 ## Auth
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
 
 ${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
 

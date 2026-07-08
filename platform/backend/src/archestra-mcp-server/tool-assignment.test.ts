@@ -11,6 +11,7 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 
 const AGENTS_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_agents`;
 const GATEWAYS_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_assign_tools_to_mcp_gateways`;
+const REMOVE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}bulk_remove_tools_from_agents`;
 
 describe("tool assignment tool execution", () => {
   let testAgent: Agent;
@@ -207,6 +208,156 @@ describe("tool assignment tool execution", () => {
         errorType: "not_found",
       },
     ]);
+  });
+});
+
+describe("bulk_remove_tools_from_agents tool execution", () => {
+  let orgId: string;
+  let mockContext: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
+    const org = await makeOrganization();
+    orgId = org.id;
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const ctxAgent = await makeAgent({
+      name: "Ctx Agent",
+      organizationId: org.id,
+    });
+    mockContext = {
+      agent: { id: ctxAgent.id, name: ctxAgent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+  });
+
+  test("removes an assigned tool from a Custom-mode agent (deletes the junction row)", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      name: "Custom Agent",
+      organizationId: orgId,
+      accessAllTools: false,
+    });
+    const tool = await makeTool({ name: "remove_me" });
+    await makeAgentTool(agent.id, tool.id);
+
+    const result = await executeArchestraTool(
+      REMOVE_TOOL,
+      { removals: [{ agentId: agent.id, toolId: tool.id }] },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([{ agentId: agent.id, toolId: tool.id }]);
+  });
+
+  test("reports notAssigned when the tool was not assigned (Custom mode)", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      name: "Empty Agent",
+      organizationId: orgId,
+      accessAllTools: false,
+    });
+    const tool = await makeTool({ name: "never_assigned" });
+
+    const result = await executeArchestraTool(
+      REMOVE_TOOL,
+      { removals: [{ agentId: agent.id, toolId: tool.id }] },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.notAssigned).toEqual([
+      { agentId: agent.id, toolId: tool.id },
+    ]);
+    expect(parsed.succeeded).toEqual([]);
+  });
+
+  test("excludes the tool for an Auto-tool (accessAllTools) agent instead of deleting", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      name: "Auto Agent",
+      organizationId: orgId,
+      accessAllTools: true,
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId: orgId });
+    const tool = await makeTool({
+      name: "github__excluded",
+      catalogId: catalog.id,
+    });
+
+    const result = await executeArchestraTool(
+      REMOVE_TOOL,
+      { removals: [{ agentId: agent.id, toolId: tool.id }] },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.succeeded).toEqual([{ agentId: agent.id, toolId: tool.id }]);
+
+    const exclusions = await db
+      .select()
+      .from(schema.agentExcludedToolsTable)
+      .where(
+        and(
+          eq(schema.agentExcludedToolsTable.agentId, agent.id),
+          eq(schema.agentExcludedToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(exclusions).toHaveLength(1);
+  });
+
+  test("enforces target agent modify permission", async ({
+    makeAgent,
+    makeMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, orgId, { role: "member" });
+    const owner = await makeUser();
+    await makeMember(owner.id, orgId, { role: "admin" });
+    const protectedAgent = await makeAgent({
+      name: "Protected Personal Agent",
+      organizationId: orgId,
+      authorId: owner.id,
+      scope: "personal",
+    });
+    const tool = await makeTool({ name: "protected_remove_tool" });
+
+    const memberContext: ArchestraContext = {
+      agent: mockContext.agent,
+      userId: member.id,
+      organizationId: orgId,
+    };
+
+    const result = await executeArchestraTool(
+      REMOVE_TOOL,
+      { removals: [{ agentId: protectedAgent.id, toolId: tool.id }] },
+      memberContext,
+    );
+
+    expect(result.isError).toBe(false);
+    const parsed = JSON.parse((result.content[0] as any).text);
+    expect(parsed.failed).toEqual([
+      {
+        agentId: protectedAgent.id,
+        toolId: tool.id,
+        error: "You can only manage your own personal agents",
+      },
+    ]);
+    expect(parsed.succeeded).toEqual([]);
   });
 });
 

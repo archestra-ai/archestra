@@ -96,17 +96,15 @@ const onboardingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId }, reply) => {
-      const organization = await OrganizationModel.getById(organizationId);
-      // Another admin already submitted — resolve cleanly without a duplicate
-      // website record.
-      if (organization?.onboardingSurveyCompletedAt != null) {
-        return reply.send({ ok: true });
+      // Atomically claim the survey for this org; only the caller that flips
+      // the flag forwards, so two admins submitting concurrently can't create a
+      // duplicate website record. Best-effort forward: the flag is set either
+      // way, so an unreachable website (airgapped deployments) never re-nags.
+      const isFirstSubmission =
+        await OrganizationModel.markOnboardingSurveyCompleted(organizationId);
+      if (isFirstSubmission) {
+        await forwardSurveyToWebsite(body);
       }
-
-      // Best-effort forward: the admin answered, so record it and never ask
-      // again even when the website is unreachable (airgapped deployments).
-      await forwardSurveyToWebsite(body);
-      await OrganizationModel.markOnboardingSurveyCompleted(organizationId);
       return reply.send({ ok: true });
     },
   );

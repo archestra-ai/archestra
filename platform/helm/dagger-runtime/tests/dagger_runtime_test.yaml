@@ -39,8 +39,19 @@ tests:
           path: spec.selector.name
           value: dagger-runtime-engine
 
-  - it: does not create NetworkPolicies by default
+  - it: creates the egress NetworkPolicy by default
     template: networkpolicy.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: spec.podSelector.matchLabels.name
+          value: dagger-runtime-engine
+
+  - it: does not create NetworkPolicies when disabled
+    template: networkpolicy.yaml
+    set:
+      networkPolicy.create: false
     asserts:
       - hasDocuments:
           count: 0
@@ -78,10 +89,8 @@ tests:
           path: spec.ingress[0].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
           value: archestra-prod
 
-  - it: restricts egress to DNS and public HTTPS by default
+  - it: allows DNS and all-ports public egress by default
     template: networkpolicy.yaml
-    set:
-      networkPolicy.create: true
     asserts:
       - equal:
           path: spec.egress[0].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
@@ -93,8 +102,10 @@ tests:
           path: spec.egress[0].ports[0].port
           value: 53
       - equal:
-          path: spec.egress[1].ports[0].port
-          value: 443
+          path: spec.egress[1].to[0].ipBlock.cidr
+          value: 0.0.0.0/0
+      - notExists:
+          path: spec.egress[1].ports
       - contains:
           path: spec.egress[1].to[0].ipBlock.except
           content: 169.254.0.0/16

@@ -1,7 +1,6 @@
 import type { ModelInputModality } from "@archestra/shared";
 import type { drive_v3 } from "googleapis";
 import { google } from "googleapis";
-import JSZip from "jszip";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -21,6 +20,8 @@ import {
   traverseFolders,
 } from "../folder-traversal";
 import { parsePdfBuffer } from "../pdf-utils";
+import { extractTextFromPptx } from "../pptx-text-extractor";
+import { extractTextFromXlsx } from "../xlsx-text-extractor";
 
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_CONTENT_LENGTH = 500_000; // 500 KB text limit per document
@@ -42,8 +43,18 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   ".yml",
 ]);
 
-// Binary file extensions we can extract text from using libraries
-const SUPPORTED_BINARY_EXTENSIONS = new Set([".docx", ".pdf", ".pptx"]);
+// Binary formats we can extract text from with libraries. Keyed by the
+// canonical mimeType Drive reports so a file is recognized by what it IS, even
+// when its name has no extension; the extension is only a fallback.
+type BinaryFormat = ".pdf" | ".docx" | ".pptx" | ".xlsx";
+const BINARY_MIME_TYPES: Record<string, BinaryFormat> = {
+  "application/pdf": ".pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    ".docx",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    ".pptx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+};
 
 // Image file extensions supported for multimodal embedding
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
@@ -63,11 +74,28 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-// Google Workspace MIME types that can be exported as text
+// Image mimeTypes we support (mirror of IMAGE_MIME_TYPES values) — lets us
+// recognize images by mimeType, not just by filename extension.
+const SUPPORTED_IMAGE_MIME_TYPES = new Set(Object.values(IMAGE_MIME_TYPES));
+
+// Google Workspace native files exported as plain text (one logical document).
 const GOOGLE_DOC_MIME_TYPES: Record<string, string> = {
   "application/vnd.google-apps.document": "text/plain",
-  "application/vnd.google-apps.spreadsheet": "text/csv",
   "application/vnd.google-apps.presentation": "text/plain",
+};
+
+// Google Workspace native files exported as a binary Office format instead of
+// text, then run through the same extractor as an uploaded file. A Google Sheet
+// exported as CSV is only its FIRST sheet, so export .xlsx and read every sheet.
+const GOOGLE_BINARY_EXPORTS: Record<
+  string,
+  { exportMimeType: string; format: BinaryFormat }
+> = {
+  "application/vnd.google-apps.spreadsheet": {
+    exportMimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    format: ".xlsx",
+  },
 };
 
 /** Narrowed Drive file type – the fields listed in our $select queries. */
@@ -342,16 +370,34 @@ export class GoogleDriveConnector extends BaseConnector {
         );
       }
 
-      const files = (res.data.files ?? []).filter((file: DriveFile) =>
-        isSupportedFile(file, supportsImages),
-      );
+      // Partition the page into files we can ingest and files whose type is not
+      // ingestable. The latter are tracked as skipped (not silently dropped) so
+      // the run reports "N found, M imported, K unsupported" — otherwise the
+      // total counts every Drive file but only supported types are imported.
+      const allFiles = res.data.files ?? [];
+      const files: DriveFile[] = [];
+      for (const file of allFiles) {
+        if (isSupportedFile(file, supportsImages)) {
+          files.push(file);
+        } else {
+          this.trackSkipped({
+            itemId: file.id ?? "unknown",
+            name: file.name ?? "unknown",
+            reason: "unsupported_file_type",
+          });
+        }
+      }
 
       const documents: ConnectorDocument[] = [];
 
       for (const file of files) {
         const doc = await this.safeItemFetch({
           fetch: async () => {
-            const result = await this.downloadFileContent(drive, file);
+            const result = await this.downloadFileContent(
+              drive,
+              file,
+              supportsImages,
+            );
             // Skip files with no extractable content or media to avoid indexing
             // title-only documents that provide no search value.
             if (!result.text.trim() && !result.mediaContent) return null;
@@ -366,7 +412,6 @@ export class GoogleDriveConnector extends BaseConnector {
 
       // Advance the monotonic high-water mark using all results (not just
       // filtered ones) so the checkpoint moves past unsupported files.
-      const allFiles = res.data.files ?? [];
       const lastFile = allFiles[allFiles.length - 1];
       const lastModified = lastFile?.modifiedTime;
 
@@ -394,6 +439,7 @@ export class GoogleDriveConnector extends BaseConnector {
       yield {
         documents,
         failures: this.flushFailures(),
+        skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
           type: "gdrive",
           itemUpdatedAt: progress.maxLastModified
@@ -493,23 +539,24 @@ export class GoogleDriveConnector extends BaseConnector {
     } = params;
     const useSharedDriveApi = hasSharedDriveTarget(config);
 
+    // The query is identical for every page of this folder — build it once.
+    let query = `'${escapeDriveQueryValue(folderId)}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
+    if (syncFrom) {
+      query += ` and modifiedTime >= '${escapeDriveQueryValue(syncFrom)}'`;
+    }
+    if (config.fileTypes && config.fileTypes.length > 0) {
+      const mimeFilters = config.fileTypes
+        .map((ext) => `name contains '${escapeDriveQueryValue(ext)}'`)
+        .join(" or ");
+      query += ` and (${mimeFilters})`;
+    }
+
     let pageToken: string | undefined;
     let hasMore = true;
     let batchIndex = 0;
 
     while (hasMore) {
       await this.rateLimit();
-
-      let query = `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`;
-      if (syncFrom) {
-        query += ` and modifiedTime >= '${syncFrom}'`;
-      }
-      if (config.fileTypes && config.fileTypes.length > 0) {
-        const mimeFilters = config.fileTypes
-          .map((ext) => `name contains '${ext}'`)
-          .join(" or ");
-        query += ` and (${mimeFilters})`;
-      }
 
       let res: FileListResponse;
       try {
@@ -529,16 +576,34 @@ export class GoogleDriveConnector extends BaseConnector {
         );
       }
 
-      const files = (res.data.files ?? []).filter((file: DriveFile) =>
-        isSupportedFile(file, supportsImages),
-      );
+      // Partition the page into files we can ingest and files whose type is not
+      // ingestable. The latter are tracked as skipped (not silently dropped) so
+      // the run reports "N found, M imported, K unsupported" — otherwise the
+      // total counts every Drive file but only supported types are imported.
+      const allFiles = res.data.files ?? [];
+      const files: DriveFile[] = [];
+      for (const file of allFiles) {
+        if (isSupportedFile(file, supportsImages)) {
+          files.push(file);
+        } else {
+          this.trackSkipped({
+            itemId: file.id ?? "unknown",
+            name: file.name ?? "unknown",
+            reason: "unsupported_file_type",
+          });
+        }
+      }
 
       const documents: ConnectorDocument[] = [];
 
       for (const file of files) {
         const doc = await this.safeItemFetch({
           fetch: async () => {
-            const result = await this.downloadFileContent(drive, file);
+            const result = await this.downloadFileContent(
+              drive,
+              file,
+              supportsImages,
+            );
             if (!result.text.trim() && !result.mediaContent) return null;
             return fileToDocument(file, result.text, result.mediaContent);
           },
@@ -549,7 +614,6 @@ export class GoogleDriveConnector extends BaseConnector {
         if (doc) documents.push(doc);
       }
 
-      const allFiles = res.data.files ?? [];
       const lastFile = allFiles[allFiles.length - 1];
       const lastModified = lastFile?.modifiedTime;
 
@@ -578,6 +642,7 @@ export class GoogleDriveConnector extends BaseConnector {
       yield {
         documents,
         failures: this.flushFailures(),
+        skipped: this.flushSkipped(),
         checkpoint: buildCheckpoint({
           type: "gdrive",
           itemUpdatedAt: progress.maxLastModified
@@ -602,7 +667,7 @@ export class GoogleDriveConnector extends BaseConnector {
     do {
       await this.rateLimit();
       const res = (await drive.files.list({
-        q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        q: `'${escapeDriveQueryValue(parentId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
         pageSize: 1000,
         pageToken,
         fields: "nextPageToken,files(id,name)",
@@ -625,21 +690,22 @@ export class GoogleDriveConnector extends BaseConnector {
   private async downloadFileContent(
     drive: drive_v3.Drive,
     file: DriveFile,
+    supportsImages: boolean,
   ): Promise<{
     text: string;
     mediaContent?: { mimeType: string; data: string };
   }> {
-    const mimeType = file.mimeType ?? "";
     const fileName = file.name ?? "";
     const fileId = file.id;
     if (!fileId) return { text: "" };
 
+    const resolved = resolveDriveFile(file, supportsImages);
+
     // Google Workspace documents: export as text
-    const exportMimeType = GOOGLE_DOC_MIME_TYPES[mimeType];
-    if (exportMimeType) {
+    if (resolved?.kind === "google") {
       try {
         const res = await drive.files.export(
-          { fileId, mimeType: exportMimeType },
+          { fileId, mimeType: resolved.exportMimeType },
           { responseType: "text" },
         );
         const text =
@@ -656,25 +722,44 @@ export class GoogleDriveConnector extends BaseConnector {
       }
     }
 
-    const ext = getFileExtension(fileName);
+    // Google Sheets (and any other Workspace type worth exporting as Office
+    // bytes): export the binary format and extract every sheet — a CSV export
+    // would be the first sheet only.
+    if (resolved?.kind === "google-binary") {
+      try {
+        const res = await drive.files.export(
+          { fileId, mimeType: resolved.exportMimeType },
+          { responseType: "arraybuffer" },
+        );
+        const buffer = Buffer.from(res.data as ArrayBuffer);
+        const text = await extractTextFromBinary(buffer, resolved.format);
+        return { text: text.slice(0, MAX_CONTENT_LENGTH) };
+      } catch (error) {
+        this.log.debug(
+          { fileId, fileName, error: extractErrorMessage(error) },
+          "Google Drive: failed to export Google Workspace file as Office bytes",
+        );
+        return { text: "" };
+      }
+    }
 
     // Plain text files: download and read as text
-    if (SUPPORTED_TEXT_EXTENSIONS.has(ext)) {
+    if (resolved?.kind === "text") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
       return {
         text: buffer.toString("utf-8").slice(0, MAX_CONTENT_LENGTH),
       };
     }
 
-    // Binary files (.docx, .pdf, .pptx): download as buffer and extract text
-    if (SUPPORTED_BINARY_EXTENSIONS.has(ext)) {
+    // Binary files (.docx, .pdf, .pptx, .xlsx): download and extract text
+    if (resolved?.kind === "binary") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
-      const text = await extractTextFromBinary(buffer, ext);
+      const text = await extractTextFromBinary(buffer, resolved.format);
       return { text: text.slice(0, MAX_CONTENT_LENGTH) };
     }
 
     // Image files: download as base64 for multimodal embedding
-    if (SUPPORTED_IMAGE_EXTENSIONS.has(ext)) {
+    if (resolved?.kind === "image") {
       const buffer = await this.downloadFileBuffer(drive, fileId);
       if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
         this.log.debug(
@@ -683,13 +768,12 @@ export class GoogleDriveConnector extends BaseConnector {
         );
         return { text: "" };
       }
-      const imageMimeType = IMAGE_MIME_TYPES[ext] ?? "application/octet-stream";
       const data = buffer.toString("base64");
-      return { text: "", mediaContent: { mimeType: imageMimeType, data } };
+      return { text: "", mediaContent: { mimeType: resolved.mimeType, data } };
     }
 
     this.log.debug(
-      { fileName, ext, mimeType },
+      { fileName, mimeType: file.mimeType },
       "Google Drive: skipping unsupported file type",
     );
     return { text: "" };
@@ -700,7 +784,10 @@ export class GoogleDriveConnector extends BaseConnector {
     fileId: string,
   ): Promise<Buffer> {
     const res = await drive.files.get(
-      { fileId, alt: "media" },
+      // acknowledgeAbuse lets us download files Google has flagged as potentially
+      // abusive (often false positives on a user's own drive); without it those
+      // return 403 cannotDownloadAbusiveFile and the file is never indexed.
+      { fileId, alt: "media", acknowledgeAbuse: true },
       { responseType: "arraybuffer" },
     );
     return Buffer.from(res.data as ArrayBuffer);
@@ -739,18 +826,18 @@ function buildFileQuery(
 
   // If a folderId is set, scope to direct children of that folder
   if (config.folderId) {
-    parts.push(`'${config.folderId}' in parents`);
+    parts.push(`'${escapeDriveQueryValue(config.folderId)}' in parents`);
   }
 
   // Incremental sync filter
   if (syncFrom) {
-    parts.push(`modifiedTime >= '${syncFrom}'`);
+    parts.push(`modifiedTime >= '${escapeDriveQueryValue(syncFrom)}'`);
   }
 
   // File type filter
   if (config.fileTypes && config.fileTypes.length > 0) {
     const fileTypeFilters = config.fileTypes
-      .map((ext) => `name contains '${ext}'`)
+      .map((ext) => `name contains '${escapeDriveQueryValue(ext)}'`)
       .join(" or ");
     parts.push(`(${fileTypeFilters})`);
   }
@@ -758,18 +845,83 @@ function buildFileQuery(
   return parts.join(" and ");
 }
 
-function isSupportedFile(file: DriveFile, supportsImages: boolean): boolean {
+/**
+ * Escape a value for interpolation into a Google Drive query string literal
+ * (the single-quoted operand of `'<id>' in parents`, `name contains '<ext>'`,
+ * etc.). Drive's grammar uses `\` as the in-string escape char, so backslashes
+ * and single quotes must be escaped to keep a value from breaking out of its
+ * quotes and altering the query. Folder IDs and connector config are
+ * admin-authored (not end-user input), so this is defense-in-depth rather than
+ * a known injection vector.
+ */
+function escapeDriveQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+type ResolvedDriveFile =
+  | { kind: "google"; exportMimeType: string }
+  | { kind: "google-binary"; exportMimeType: string; format: BinaryFormat }
+  | { kind: "binary"; format: BinaryFormat }
+  | { kind: "image"; mimeType: string }
+  | { kind: "text" }
+  | null;
+
+/**
+ * Decide how to ingest a Drive file, keyed on its mimeType first and falling
+ * back to the filename extension. Drive reliably reports mimeType, so this
+ * recognizes supported files (PDFs, Office docs, images, text) even when the
+ * name has no extension — which the old extension-only check silently skipped.
+ * Returns null for types we cannot extract text/media from.
+ */
+function resolveDriveFile(
+  file: DriveFile,
+  supportsImages: boolean,
+): ResolvedDriveFile {
   const mimeType = file.mimeType ?? "";
-
-  // Google Workspace documents are always supported (we export them)
-  if (GOOGLE_DOC_MIME_TYPES[mimeType]) return true;
-
   const ext = getFileExtension(file.name ?? "");
-  return (
-    SUPPORTED_TEXT_EXTENSIONS.has(ext) ||
-    SUPPORTED_BINARY_EXTENSIONS.has(ext) ||
-    (supportsImages && SUPPORTED_IMAGE_EXTENSIONS.has(ext))
-  );
+
+  // Google Sheets export as .xlsx (a CSV export is the first sheet only), then
+  // go through the same extractor as an uploaded spreadsheet.
+  const binaryExport = GOOGLE_BINARY_EXPORTS[mimeType];
+  if (binaryExport) return { kind: "google-binary", ...binaryExport };
+
+  // Other Google Workspace native files are exported as text.
+  const exportMimeType = GOOGLE_DOC_MIME_TYPES[mimeType];
+  if (exportMimeType) return { kind: "google", exportMimeType };
+
+  // Binary formats we extract with libraries (PDF/DOCX/PPTX/XLSX).
+  const format = binaryFormatFor(mimeType, ext);
+  if (format) return { kind: "binary", format };
+
+  // Images for multimodal embedding, only when the model accepts them.
+  if (supportsImages) {
+    const imageMimeType = SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)
+      ? mimeType
+      : SUPPORTED_IMAGE_EXTENSIONS.has(ext)
+        ? IMAGE_MIME_TYPES[ext]
+        : undefined;
+    if (imageMimeType) return { kind: "image", mimeType: imageMimeType };
+  }
+
+  // Plain-text files: any text/* mimeType, or a known text extension.
+  if (mimeType.startsWith("text/") || SUPPORTED_TEXT_EXTENSIONS.has(ext)) {
+    return { kind: "text" };
+  }
+
+  return null;
+}
+
+function isSupportedFile(file: DriveFile, supportsImages: boolean): boolean {
+  return resolveDriveFile(file, supportsImages) !== null;
+}
+
+function binaryFormatFor(mimeType: string, ext: string): BinaryFormat | null {
+  const byMime = BINARY_MIME_TYPES[mimeType];
+  if (byMime) return byMime;
+  if (ext === ".pdf" || ext === ".docx" || ext === ".pptx" || ext === ".xlsx") {
+    return ext;
+  }
+  return null;
 }
 
 function getFileExtension(name: string): string {
@@ -812,9 +964,9 @@ function fileToDocument(
 
 async function extractTextFromBinary(
   buffer: Buffer,
-  ext: string,
+  format: BinaryFormat,
 ): Promise<string> {
-  switch (ext) {
+  switch (format) {
     case ".docx": {
       return extractTextFromDocx(buffer);
     }
@@ -824,33 +976,8 @@ async function extractTextFromBinary(
     case ".pptx": {
       return extractTextFromPptx(buffer);
     }
-    default:
-      return "";
-  }
-}
-
-async function extractTextFromPptx(buffer: Buffer): Promise<string> {
-  const zip = await JSZip.loadAsync(buffer);
-  const parts: string[] = [];
-
-  const slideFiles = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
-    .sort((a, b) => {
-      const numA = Number.parseInt(a.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      const numB = Number.parseInt(b.match(/slide(\d+)/)?.[1] ?? "0", 10);
-      return numA - numB;
-    });
-
-  for (const slidePath of slideFiles) {
-    const xml = await zip.files[slidePath].async("text");
-    const texts = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g);
-    if (texts) {
-      const slideText = texts
-        .map((text: string) => text.replace(/<[^>]*>/g, ""))
-        .join(" ");
-      if (slideText.trim()) parts.push(slideText.trim());
+    case ".xlsx": {
+      return extractTextFromXlsx(buffer);
     }
   }
-
-  return parts.join("\n\n");
 }

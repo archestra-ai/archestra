@@ -57,29 +57,64 @@ const restrictedDomains: NetworkPolicy = {
 };
 
 describe("buildDaggerEgressPolicies (reuses MCP machinery for the dagger engine)", () => {
-  it("manages nothing for an unrestricted environment", () => {
-    expect(
-      buildDaggerEgressPolicies({
-        environmentId: ENV_ID,
-        effectivePolicy: effective({
-          egressMode: "unrestricted",
-          domainPreset: "none",
-          allowedDomains: [],
-          allowedCidrs: [],
-        }),
-        capabilities: caps({}),
+  it("applies an open-egress floor for an unrestricted environment", () => {
+    const policies = buildDaggerEgressPolicies({
+      environmentId: ENV_ID,
+      effectivePolicy: effective({
+        egressMode: "unrestricted",
+        domainPreset: "none",
+        allowedDomains: [],
+        allowedCidrs: [],
       }),
-    ).toEqual([]);
+      capabilities: caps({}),
+    });
+    expect(policies).toHaveLength(1);
+    expect(policies[0].kind).toBe("NetworkPolicy");
+    const np = policies[0].object as unknown as PolicyManifest;
+
+    // scoped to the per-environment dagger engine pod
+    expect(np.spec.podSelector?.matchLabels).toEqual(
+      daggerEnginePodLabels(ENV_ID),
+    );
+    expect(np.spec.policyTypes).toEqual(["Egress"]);
+
+    const egress = np.spec.egress as Array<{
+      to?: Array<{ ipBlock?: { cidr?: string; except?: string[] } }>;
+      ports?: unknown;
+    }>;
+    const json = JSON.stringify(egress);
+    // private ranges blocked
+    expect(json).toContain("169.254.0.0/16");
+    expect(json).toContain("10.0.0.0/8");
+    expect(json).toContain("fc00::/7");
+
+    // DNS allowed to any resolver: a :53 rule with no destination selector
+    const dns = egress.find((r) => r.ports !== undefined && r.to === undefined);
+    expect(dns).toBeDefined();
+
+    // the public IPv4 rule allows ALL ports (no port cap)
+    const publicV4 = egress.find((r) =>
+      r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
+    );
+    expect(publicV4).toBeDefined();
+    expect(publicV4?.ports).toBeUndefined();
+    expect(publicV4?.to?.[0].ipBlock?.except).toContain("169.254.0.0/16");
   });
 
-  it("manages nothing when the environment has no policy (built-in)", () => {
-    expect(
-      buildDaggerEgressPolicies({
-        environmentId: ENV_ID,
-        effectivePolicy: effective(null),
-        capabilities: caps({}),
-      }),
-    ).toEqual([]);
+  it("applies the open-egress floor when the environment has no policy (built-in)", () => {
+    const policies = buildDaggerEgressPolicies({
+      environmentId: ENV_ID,
+      effectivePolicy: effective(null),
+      capabilities: caps({}),
+    });
+    expect(policies).toHaveLength(1);
+    expect(policies[0].kind).toBe("NetworkPolicy");
+    const np = policies[0].object as unknown as PolicyManifest;
+    expect(np.spec.podSelector?.matchLabels).toEqual(
+      daggerEnginePodLabels(ENV_ID),
+    );
+    // private ranges blocked in the built-in default too
+    expect(JSON.stringify(np.spec.egress)).toContain("169.254.0.0/16");
   });
 
   it("emits a deny-all-egress NetworkPolicy for egressMode=off", () => {

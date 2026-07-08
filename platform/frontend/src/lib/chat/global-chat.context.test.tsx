@@ -88,6 +88,13 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
+// Bespoke factory (not the canonical __mocks__ one): this file partially
+// mocks @/lib/config/config above, which the canonical mock's importActual
+// chain would break on. Beta off means message-queue draining stays inert.
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => false,
+}));
+
 describe("ChatProvider retries", () => {
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 

@@ -82,6 +82,7 @@ export const RouteId = {
   DeleteMcpServer: "deleteMcpServer",
   ReauthenticateMcpServer: "reauthenticateMcpServer",
   ReinstallMcpServer: "reinstallMcpServer",
+  ReloadMcpServerTools: "reloadMcpServerTools",
   GetMcpServerInstallationStatus: "getMcpServerInstallationStatus",
   // MCP Gateway Routes
   McpGatewayGet: "mcpGatewayGet",
@@ -140,6 +141,7 @@ export const RouteId = {
   DeleteRole: "deleteRole",
 
   // Tool Routes
+  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
   GetUnassignedTools: "getUnassignedTools",

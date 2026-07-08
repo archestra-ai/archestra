@@ -687,6 +687,12 @@ export function AgentDialog({
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
+  // The tools editor's live selection (pending edits included), so the
+  // exclusions editor's seed treats a just-checked-but-unsaved built-in as
+  // assigned instead of disabling it.
+  const [pendingSelectedToolIds, setPendingSelectedToolIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
@@ -1306,9 +1312,7 @@ export function AgentDialog({
                   <p className="pt-2 text-sm text-muted-foreground">
                     {agent.description}.{" "}
                     <ExternalDocsLink
-                      href={getDocsUrl(
-                        DocsPage.PlatformBuiltInAgentsPolicyConfig,
-                      )}
+                      href={getDocsUrl(DocsPage.PlatformBuiltInSubagents)}
                       className="underline"
                       showIcon={false}
                     >
@@ -1727,6 +1731,7 @@ export function AgentDialog({
                           ref={agentToolExclusionsEditorRef}
                           agentId={agent?.id}
                           seedDefaultExclusions={seedDefaultExclusions}
+                          pendingAssignedToolIds={pendingSelectedToolIds}
                           onStateChange={setExclusionsState}
                         />
                       </div>
@@ -1766,6 +1771,7 @@ export function AgentDialog({
                             assignmentScope={scope}
                             assignmentTeamIds={assignedTeamIds}
                             onSelectedCountChange={setSelectedToolsCount}
+                            onSelectedToolIdsChange={setPendingSelectedToolIds}
                             environmentScopingEnabled={
                               environmentScopingEnabled
                             }

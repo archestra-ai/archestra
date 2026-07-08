@@ -77,7 +77,17 @@ jobs:
           app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
 
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      # release-please runs in TWO invocations (releases first, then PRs) instead of one.
+      # A single invocation creates the GitHub release for a just-merged release PR as a
+      # DRAFT (no git tag yet) and then immediately builds the next release PR in the same
+      # process. That PR build looks up the manifest version's tag (e.g. platform-v1.3.3),
+      # finds nothing, loses its "commits since last release" anchor, and walks deep
+      # history — where old `Release-As: 1.3.0` commits force the new PR to a bogus stale
+      # version with a months-long changelog (self-healing only on the next push to main).
+      # Splitting lets us create the git tag for the draft release BEFORE the PR build, so
+      # the version calculation is always anchored to the real latest release.
+      - name: Create releases for merged release PRs
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         if: ${{ !inputs.publish_existing_release }}
         id: release-please
         with:
@@ -85,14 +95,60 @@ jobs:
           config-file: .github/release-please/release-please-config.json
           manifest-file: .github/release-please/.release-please-manifest.json
           target-branch: ${{ github.ref_name }}
+          skip-github-pull-request: true
+
+      # release-please creates the GitHub release as a DRAFT ("draft": true in
+      # release-please-config.json) so it stays hidden until every artifact is built and
+      # pushed. It is published (draft -> published) by the publish-github-release job
+      # once all artifacts are ready.
+      #
+      # We do NOT toggle a published release back to draft: GitHub's immutable-releases
+      # feature rejects that ("state cannot be changed when release is immutable", HTTP
+      # 422), which is what previously failed the release-please job and silently skipped
+      # every downstream image/chart publish job.
+      #
+      # Draft releases don't create the underlying git tag, but downstream build jobs
+      # check out the tag ref (checkout_ref) and release-please needs the tag to exist
+      # when calculating the next version (otherwise it creates bogus PRs with stale
+      # versions). So we create the tag ourselves, pinned to the release commit, before
+      # the next release PR is built below.
+      - name: Create git tag for draft release
+        if: ${{ steps.release-please.outputs['platform--release_created'] == 'true' && !inputs.publish_existing_release }}
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ steps.release-please.outputs['platform--tag_name'] }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Tag ${TAG_NAME} already exists; nothing to do."
+          else
+            gh api "repos/${GH_REPO}/git/refs" \
+              -f ref="refs/tags/${TAG_NAME}" \
+              -f sha="${RELEASE_SHA}"
+            echo "Created tag ${TAG_NAME} -> ${RELEASE_SHA}"
+          fi
+
+      - name: Create or update the next release PR
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        if: ${{ !inputs.publish_existing_release }}
+        id: release-please-pr
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          config-file: .github/release-please/release-please-config.json
+          manifest-file: .github/release-please/.release-please-manifest.json
+          target-branch: ${{ github.ref_name }}
+          skip-github-release: true
 
       - name: Log release-please outputs
         # HACK to get toJson to sorta print the output to the console without failing this job
         continue-on-error: true
         env:
-          OUTPUTS: ${{ toJson(steps.release-please.outputs) }}
+          RELEASE_OUTPUTS: ${{ toJson(steps.release-please.outputs) }}
+          PR_OUTPUTS: ${{ toJson(steps.release-please-pr.outputs) }}
         run: |
-          echo "$OUTPUTS"
+          echo "$RELEASE_OUTPUTS"
+          echo "$PR_OUTPUTS"
 
       - name: Resolve release to publish
         id: resolve-release
@@ -130,37 +186,6 @@ jobs:
             echo "tag_name=${ACTION_TAG_NAME}"
             echo "checkout_ref=${ACTION_TAG_NAME}"
           } >> "${GITHUB_OUTPUT}"
-
-      # release-please creates the GitHub release as a DRAFT ("draft": true in
-      # release-please-config.json) so it stays hidden until every artifact is built and
-      # pushed. It is published (draft -> published) by the publish-github-release job
-      # once all artifacts are ready.
-      #
-      # We do NOT toggle a published release back to draft: GitHub's immutable-releases
-      # feature rejects that ("state cannot be changed when release is immutable", HTTP
-      # 422), which is what previously failed the release-please job and silently skipped
-      # every downstream image/chart publish job.
-      #
-      # Draft releases don't create the underlying git tag, but downstream build jobs
-      # check out the tag ref (checkout_ref) and release-please needs the tag to exist
-      # when calculating the next version (otherwise it creates bogus PRs with stale
-      # versions). So we create the tag ourselves, pinned to the release commit.
-      - name: Create git tag for draft release
-        if: steps.resolve-release.outputs.should_publish == 'true' && !inputs.publish_existing_release
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ steps.resolve-release.outputs.tag_name }}
-          RELEASE_SHA: ${{ github.sha }}
-        run: |
-          if gh api "repos/${GH_REPO}/git/ref/tags/${TAG_NAME}" >/dev/null 2>&1; then
-            echo "Tag ${TAG_NAME} already exists; nothing to do."
-          else
-            gh api "repos/${GH_REPO}/git/refs" \
-              -f ref="refs/tags/${TAG_NAME}" \
-              -f sha="${RELEASE_SHA}"
-            echo "Created tag ${TAG_NAME} -> ${RELEASE_SHA}"
-          fi
 
   build-and-push-mcp-server-docker-image:
     name: Build and push MCP Server Docker image

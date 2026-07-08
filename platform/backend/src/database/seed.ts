@@ -344,6 +344,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewSandboxToolsToAgents(newlyCreatedToolNames);
   // A brand-new built-in tool must not silently reach existing All-tools-mode
   // agents: pre-exclude it for them. Runs after the assignment backfills above
   // so a tool those just assigned is skipped (assignments beat the pre-fill);

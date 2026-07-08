@@ -1,6 +1,10 @@
 import { describe, expect, test } from "@/test";
 import type { ConnectorSyncBatch, ConnectorType } from "@/types";
-import { BaseConnector, buildCheckpoint } from "./base-connector";
+import {
+  BaseConnector,
+  buildCheckpoint,
+  extractErrorMessage,
+} from "./base-connector";
 
 /**
  * Concrete subclass that exposes protected methods for testing.
@@ -416,5 +420,31 @@ describe("BaseConnector", () => {
 
       expect(called).toBe(false);
     });
+  });
+});
+
+describe("extractErrorMessage", () => {
+  test("surfaces the Google API reason from a gaxios-shaped 403", () => {
+    const error = {
+      message: "Request failed with status code 403",
+      response: {
+        data: {
+          error: {
+            code: 403,
+            message: "The download of this file is prohibited.",
+            errors: [{ reason: "cannotDownloadAbusiveFile" }],
+          },
+        },
+      },
+    };
+    expect(extractErrorMessage(error)).toBe(
+      "403 cannotDownloadAbusiveFile: The download of this file is prohibited.",
+    );
+  });
+
+  test("falls back to error.message for a plain Error", () => {
+    expect(extractErrorMessage(new Error("Invalid PDF structure"))).toBe(
+      "Invalid PDF structure",
+    );
   });
 });

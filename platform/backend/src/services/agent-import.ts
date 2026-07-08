@@ -122,6 +122,10 @@ export async function importAgentFromPayload(
       suggestedPrompts: data.suggestedPrompts,
     },
     userId,
+    // The payload's tools (step 8) are the imported agent's authoritative
+    // assignment set; don't let create's default assignment force built-ins the
+    // payload lacked onto the imported agent.
+    { skipCreationDefaultTools: true },
   );
 
   // 8. Resolve and assign tools (after agent creation)

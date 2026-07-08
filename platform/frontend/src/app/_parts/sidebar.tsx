@@ -60,7 +60,6 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { useOnce } from "@/lib/hooks/use-once";
@@ -130,20 +129,13 @@ const chatsNavItems: NavItem[] = [
     url: "/connection",
     icon: Cable,
     customIsActive: (pathname: string) => pathname.startsWith("/connection"),
-    beta: true,
     dotKey: "nav:connect",
   },
 ];
 
 /** Which tab a route belongs to; null = no opinion (keep the current tab). */
 function routeSidebarMode(pathname: string): SidebarMode | null {
-  const chatPrefixes = [
-    "/chat",
-    "/projects",
-    "/apps",
-    "/connection",
-    "/connection_beta",
-  ];
+  const chatPrefixes = ["/chat", "/projects", "/apps", "/connection"];
   if (
     chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
@@ -655,44 +647,21 @@ export function AppSidebar() {
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
-  // ARCHESTRA_BETA master switch — when on, the new connection page is the
-  // default Connect destination.
-  const betaEnabled = useFeature("betaEnabled") === true;
   // Onboarding red dots: unseen nav items for this user (RBAC/flag filtered).
   const { unseenKeys, showChatsDot, showStudioDot, markSeen } =
     useNavOnboarding();
 
-  // Connect requires both MCP gateway and LLM proxy read permissions, and
-  // points at its beta route when ARCHESTRA_BETA is on.
+  // Connect requires both MCP gateway and LLM proxy read permissions.
   const filteredChatsNavItems = React.useMemo(
     () =>
-      chatsNavItems
-        .filter((item) => {
-          if (item.title === "Connect") return showConnect;
-          return true;
-        })
-        .map((item) => {
-          if (item.title === "Connect" && betaEnabled) {
-            return { ...item, url: "/connection_beta" };
-          }
-          return item;
-        }),
-    [showConnect, betaEnabled],
+      chatsNavItems.filter((item) => {
+        if (item.title === "Connect") return showConnect;
+        return true;
+      }),
+    [showConnect],
   );
 
-  // With ARCHESTRA_BETA on, some nav items point at their beta routes.
-  const filteredNavGroups = React.useMemo(() => {
-    const betaNavUrls: Record<string, string> = {
-      "MCP Registry": "/mcp/registry/beta",
-    };
-    return contentNavGroups.map((group) => ({
-      ...group,
-      items: group.items.map((item) => {
-        const betaUrl = betaEnabled ? betaNavUrls[item.title] : undefined;
-        return betaUrl ? { ...item, url: betaUrl } : item;
-      }),
-    }));
-  }, [betaEnabled]);
+  const filteredNavGroups = contentNavGroups;
 
   return (
     <Sidebar collapsible="icon">

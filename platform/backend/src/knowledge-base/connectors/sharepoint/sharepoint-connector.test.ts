@@ -326,8 +326,8 @@ describe("SharePointConnector", () => {
               file: { mimeType: "image/jpeg" },
             },
             {
-              ...makeDriveItem("item-3", "spreadsheet.xlsx"),
-              file: { mimeType: "application/vnd.openxmlformats" },
+              ...makeDriveItem("item-3", "archive.zip"),
+              file: { mimeType: "application/zip" },
             },
           ],
         })

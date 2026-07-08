@@ -39,6 +39,8 @@ export const TOOL_DEPLOY_MCP_SERVER_SHORT_NAME = "deploy_mcp_server";
 export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME =
   "list_mcp_server_deployments";
 export const TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME = "get_mcp_server_logs";
+export const TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME =
+  "reload_mcp_server_tools";
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME =
   "create_mcp_server_installation_request";
 export const TOOL_CREATE_TEAM_SHORT_NAME = "create_team";
@@ -82,6 +84,8 @@ export const TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME =
   "delete_trusted_data_policy";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME =
   "bulk_assign_tools_to_agents";
+export const TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME =
+  "bulk_remove_tools_from_agents";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME =
   "bulk_assign_tools_to_mcp_gateways";
 export const TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME =
@@ -176,6 +180,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_DEPLOY_MCP_SERVER_SHORT_NAME,
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME,
+  TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_CREATE_TEAM_SHORT_NAME,
   TOOL_GET_TEAM_SHORT_NAME,
@@ -204,6 +209,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME,
   TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
+  TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_CREATE_KNOWLEDGE_BASE_SHORT_NAME,
@@ -573,13 +579,17 @@ export function getCreationDefaultArchestraToolShortNames(params: {
  * agent is created in (or switched to) All-tools mode, every unassigned
  * built-in tool is pre-added to its exclusion list EXCEPT this set: the
  * search_tools/run_tool dispatch surface that All-tools mode runs on, the
- * sandbox runtime + persistent-files tools, and query_knowledge_sources.
+ * sandbox runtime + persistent-files tools, the skill tools, and
+ * query_knowledge_sources. Skill tools are part of the default agent surface
+ * (every org gets the opt-in enabled at startup), so pre-disabling them for
+ * All-tools agents would diverge from what a newly created agent gets.
  */
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+  ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

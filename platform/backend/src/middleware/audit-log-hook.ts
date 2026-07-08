@@ -280,6 +280,12 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // do not mutate org state — exclude them to avoid false-positive audit noise.
   { kind: "exact", value: "/api/skills/github/discover" },
   { kind: "exact", value: "/api/skills/github/preview" },
+  // Read-only embedding connection test: probes the provider but mutates no org
+  // state. Auditing it recorded a misleading "Success" outcome on failed probes.
+  {
+    kind: "exact",
+    value: "/api/organization/knowledge-settings/test-embedding",
+  },
 ];
 
 function isDenylisted(url: string): boolean {

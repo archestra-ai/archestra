@@ -3,12 +3,8 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-06-30
+lastUpdated: 2026-07-03
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
 
@@ -154,7 +150,7 @@ Identity Providers (IdPs) configured in Archestra can also be used to authentica
 
 After authentication, the gateway resolves credentials for the upstream MCP server. If the upstream server has its own credentials configured (e.g., a GitHub PAT or OAuth token), those are used. If no upstream credentials are configured, the gateway propagates the original JWT as an `Authorization: Bearer` header, enabling end-to-end identity propagation where the upstream server validates the same JWT against the IdP's JWKS. See [End-to-End JWKS](#end-to-end-jwks-without-gateway) below for how to build servers that consume propagated JWTs.
 
-This credential resolution enables a powerful workflow: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools seamlessly — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-mcp-server-authentication) work with JWKS authentication.
+This credential resolution supports a common setup: an admin installs upstream MCP servers (GitHub, Jira, etc.) with service credentials once, and any user who authenticates via their org's IdP can access those tools — the gateway resolves the appropriate upstream token automatically. Both [static and per-user credentials](#upstream-mcp-server-authentication) work with JWKS authentication.
 
 #### How It Works
 

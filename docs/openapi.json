@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.82"
+    "version": "1.3.3"
   },
   "components": {
     "schemas": {
@@ -13,7 +13,9 @@
         "enum": [
           3072,
           1536,
-          768
+          1024,
+          768,
+          384
         ]
       },
       "LocalConfigEnvironmentDefaultInput": {
@@ -17222,7 +17224,9 @@
         "enum": [
           3072,
           1536,
-          768
+          1024,
+          768,
+          384
         ]
       },
       "LocalConfigEnvironmentDefault": {
@@ -36268,6 +36272,10 @@
                                 "name": {
                                   "type": "string"
                                 },
+                                "rawName": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
                                 "parameters": {
                                   "anyOf": [
                                     {
@@ -36350,6 +36358,7 @@
                                 "catalogId",
                                 "delegateToAgentId",
                                 "name",
+                                "rawName",
                                 "description",
                                 "meta",
                                 "clonedPendingDiscovery",
@@ -37402,6 +37411,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -37484,6 +37497,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -38275,6 +38289,10 @@
                             "name": {
                               "type": "string"
                             },
+                            "rawName": {
+                              "nullable": true,
+                              "type": "string"
+                            },
                             "parameters": {
                               "anyOf": [
                                 {
@@ -38357,6 +38375,7 @@
                             "catalogId",
                             "delegateToAgentId",
                             "name",
+                            "rawName",
                             "description",
                             "meta",
                             "clonedPendingDiscovery",
@@ -39066,6 +39085,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -39148,6 +39171,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -39857,6 +39881,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -39939,6 +39967,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -40992,6 +41021,10 @@
                               "name": {
                                 "type": "string"
                               },
+                              "rawName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "parameters": {
                                 "anyOf": [
                                   {
@@ -41074,6 +41107,7 @@
                               "catalogId",
                               "delegateToAgentId",
                               "name",
+                              "rawName",
                               "description",
                               "meta",
                               "clonedPendingDiscovery",
@@ -41830,6 +41864,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -41912,6 +41950,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -42921,6 +42960,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -43003,6 +43046,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -43996,6 +44040,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -44078,6 +44126,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -45983,6 +46032,10 @@
                           "name": {
                             "type": "string"
                           },
+                          "rawName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "parameters": {
                             "anyOf": [
                               {
@@ -46065,6 +46118,7 @@
                           "catalogId",
                           "delegateToAgentId",
                           "name",
+                          "rawName",
                           "description",
                           "meta",
                           "clonedPendingDiscovery",
@@ -49737,6 +49791,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "rawName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "parameters": {
                         "anyOf": [
                           {
@@ -49833,6 +49891,7 @@
                       "catalogId",
                       "delegateToAgentId",
                       "name",
+                      "rawName",
                       "description",
                       "meta",
                       "clonedPendingDiscovery",
@@ -60594,6 +60653,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "rawName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "parameters": {
                         "anyOf": [
                           {
@@ -60676,6 +60739,7 @@
                       "catalogId",
                       "delegateToAgentId",
                       "name",
+                      "rawName",
                       "description",
                       "meta",
                       "clonedPendingDiscovery",
@@ -80104,6 +80168,7 @@
                                     "authentication",
                                     "permission_denied",
                                     "invalid_request",
+                                    "provider_insufficient_balance",
                                     "not_found",
                                     "context_too_long",
                                     "request_too_large",
@@ -80867,6 +80932,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -81601,6 +81667,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -82376,6 +82443,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -84887,6 +84955,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -86264,6 +86333,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -87954,6 +88024,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -88712,6 +88783,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -89462,6 +89534,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -90222,6 +90295,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -96968,6 +97042,26 @@
                     },
                     "tokenStart": {
                       "type": "string"
+                    },
+                    "creditWarning": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "insufficient_balance",
+                            "unverified"
+                          ]
+                        },
+                        "keyName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "keyName"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -97275,6 +97369,26 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "creditWarning": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "insufficient_balance",
+                            "unverified"
+                          ]
+                        },
+                        "keyName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "keyName"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -112929,6 +113043,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -113890,6 +114005,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -114559,6 +114675,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -115217,6 +115334,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -115746,6 +115864,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -116286,6 +116405,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -118777,6 +118897,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -119317,6 +119438,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -119857,6 +119979,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -120397,6 +120520,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -120937,6 +121061,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -121477,6 +121602,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -122017,6 +122143,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -122557,6 +122684,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -123086,6 +123214,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -123615,6 +123744,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -124155,6 +124285,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -124695,6 +124826,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -127406,6 +127538,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -127946,6 +128079,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -128720,6 +128854,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -129681,6 +129816,7 @@
                                             "authentication",
                                             "permission_denied",
                                             "invalid_request",
+                                            "provider_insufficient_balance",
                                             "not_found",
                                             "context_too_long",
                                             "request_too_large",
@@ -131723,6 +131859,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -132684,6 +132821,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -133353,6 +133491,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -134011,6 +134150,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -134540,6 +134680,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -135080,6 +135221,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -137571,6 +137713,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -138111,6 +138254,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -138651,6 +138795,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -139191,6 +139336,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -139731,6 +139877,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -140271,6 +140418,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -140811,6 +140959,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -141351,6 +141500,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -141880,6 +142030,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -142409,6 +142560,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -142949,6 +143101,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -143489,6 +143642,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -146200,6 +146354,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -146740,6 +146895,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -147514,6 +147670,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -148475,6 +148632,7 @@
                                       "authentication",
                                       "permission_denied",
                                       "invalid_request",
+                                      "provider_insufficient_balance",
                                       "not_found",
                                       "context_too_long",
                                       "request_too_large",
@@ -162159,7 +162317,8 @@
                               "success",
                               "completed_with_errors",
                               "failed",
-                              "partial"
+                              "partial",
+                              "superseded"
                             ]
                           },
                           "lastSyncError": {
@@ -164281,7 +164440,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "lastSyncError": {
@@ -165466,7 +165626,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "lastSyncError": {
@@ -167421,7 +167582,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "lastSyncError": {
@@ -171090,7 +171252,8 @@
                               "success",
                               "completed_with_errors",
                               "failed",
-                              "partial"
+                              "partial",
+                              "superseded"
                             ]
                           },
                           "startedAt": {
@@ -171547,7 +171710,8 @@
                         "success",
                         "completed_with_errors",
                         "failed",
-                        "partial"
+                        "partial",
+                        "superseded"
                       ]
                     },
                     "startedAt": {
@@ -174660,6 +174824,26 @@
                           }
                         ]
                       },
+                      "defaultParameters": {
+                        "nullable": true,
+                        "type": "object",
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          ]
+                        }
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -174774,6 +174958,7 @@
                       "customPricePerMillionCacheWrite",
                       "ignored",
                       "embeddingDimensions",
+                      "defaultParameters",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -175248,6 +175433,26 @@
                         }
                       ]
                     },
+                    "defaultParameters": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -175285,6 +175490,7 @@
                     "customPricePerMillionCacheWrite",
                     "ignored",
                     "embeddingDimensions",
+                    "defaultParameters",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
@@ -191828,6 +192034,294 @@
                     "oauthRefreshFailedAt",
                     "createdAt",
                     "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "mcpServerInstallation:create"
+          ]
+        }
+      }
+    },
+    "/api/mcp_server/{id}/reload-tools": {
+      "post": {
+        "operationId": "reloadMcpServerTools",
+        "tags": [
+          "MCP Server"
+        ],
+        "description": "Re-discover an MCP server's tools from the live server and refresh the stored tool catalog without reinstalling\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:create`: Install MCP servers from the registry",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "number"
+                    },
+                    "updated": {
+                      "type": "number"
+                    },
+                    "unchanged": {
+                      "type": "number"
+                    },
+                    "deleted": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "updated",
+                    "unchanged",
+                    "deleted"
                   ],
                   "additionalProperties": false
                 }
@@ -218222,7 +218716,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Mark organization onboarding as complete\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Mark organization onboarding as complete\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Customize organization appearance, authentication, etc",
         "requestBody": {
           "required": true,
           "content": {
@@ -219020,9 +219514,10 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
         }
       }
     },
@@ -219876,7 +220371,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Get all members of the organization\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:read`: View organization members and their roles",
+        "description": "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -220138,10 +220633,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "member:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -229582,6 +230076,7 @@
                                   "authentication",
                                   "permission_denied",
                                   "invalid_request",
+                                  "provider_insufficient_balance",
                                   "not_found",
                                   "context_too_long",
                                   "request_too_large",
@@ -250165,6 +250660,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "rawName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "parameters": {
                         "anyOf": [
                           {
@@ -250280,6 +250779,7 @@
                       "catalogId",
                       "delegateToAgentId",
                       "name",
+                      "rawName",
                       "description",
                       "meta",
                       "clonedPendingDiscovery",
@@ -251055,6 +251555,295 @@
       }
     },
     "/api/tools/{id}": {
+      "get": {
+        "operationId": "getTool",
+        "tags": [
+          "Tools"
+        ],
+        "description": "Get a single tool's policy-editor fields (id, name, parameters) by id, scoped to what the caller can access\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "parameters": {
+                      "anyOf": [
+                        {
+                          "description": "\n    https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217\n\n    The parameters the functions accepts, described as a JSON Schema object. See the\n    [guide](https://platform.openai.com/docs/guides/function-calling) for examples,\n    and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for\n    documentation about the format.\n\n    Omitting parameters defines a function with an empty parameter list.\n  ",
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "toolPolicy:read"
+          ]
+        }
+      },
       "delete": {
         "operationId": "deleteTool",
         "tags": [

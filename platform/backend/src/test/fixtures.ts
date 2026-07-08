@@ -368,12 +368,22 @@ async function makeTool(
   overrides: Partial<
     Pick<
       Tool,
-      "name" | "description" | "parameters" | "catalogId" | "agentId" | "meta"
+      | "name"
+      | "rawName"
+      | "description"
+      | "parameters"
+      | "catalogId"
+      | "agentId"
+      | "meta"
     >
   > = {},
 ): Promise<Tool> {
+  const name =
+    overrides.name ?? `test-tool-${crypto.randomUUID().substring(0, 8)}`;
   const toolData = {
-    name: `test-tool-${crypto.randomUUID().substring(0, 8)}`,
+    name,
+    // Mirror production: catalog-backed tools carry the raw upstream name.
+    rawName: ToolModel.unslugifyName(name),
     description: "Test tool description",
     parameters: {},
     ...overrides,
@@ -1212,14 +1222,26 @@ async function makeKnowledgeBaseConnector(
 async function makeConnectorRun(
   connectorId: string,
   overrides: Partial<
-    Pick<InsertConnectorRun, "status" | "startedAt" | "documentsProcessed">
+    Pick<
+      InsertConnectorRun,
+      | "status"
+      | "startedAt"
+      | "documentsProcessed"
+      | "leaseOwner"
+      | "leaseExpiresAt"
+      | "leaseEpoch"
+    >
   > = {},
 ): Promise<ConnectorRun> {
   const [result] = await db
     .insert(schema.connectorRunsTable)
     .values({
+      // Default to a terminal status: the single-flight unique index allows only
+      // one "running" run per connector, so tests that create several runs for a
+      // connector must not all be running. Pass `status: "running"` explicitly
+      // (one per connector) when a live run is needed.
+      status: "success",
       connectorId,
-      status: "running",
       startedAt: new Date(),
       ...overrides,
     })

@@ -2317,6 +2317,35 @@ export default class K8sDeployment {
             namespace: this.namespace,
           });
 
+        // SELF-HEAL: a Deployment created before the catalog-stable selector fix
+        // (#6340) still labels its pods with the per-install `mcpServer.id`, while
+        // the shared Service's selector is now reconciled to the catalog-stable id
+        // (getPodSelectorServerId). For multitenant catalogs those differ, so the
+        // Service selects zero pods, has no Endpoints, and every connect/read fails
+        // with ECONNREFUSED ("fetch failed"). A Deployment's `spec.selector` is
+        // immutable, so the only way to realign the pod labels is delete+recreate.
+        const existingSelectorId =
+          existingDeployment.spec?.selector?.matchLabels?.["mcp-server-id"];
+        const desiredSelectorId = this.getSystemLabels()["mcp-server-id"];
+        if (existingSelectorId && existingSelectorId !== desiredSelectorId) {
+          logger.warn(
+            {
+              deploymentName: this.deploymentName,
+              existingSelectorId,
+              desiredSelectorId,
+            },
+            `Deployment ${this.deploymentName} has a stale mcp-server-id selector; ` +
+              "recreating it so its pod labels match the Service selector",
+          );
+          await this.k8sAppsApi.deleteNamespacedDeployment({
+            name: this.deploymentName,
+            namespace: this.namespace,
+          });
+          await this.waitForDeploymentAbsent();
+          // Recreate from scratch with the correct catalog-stable pod labels.
+          return this.startOrCreateDeployment(resolvedImagePullSecretNames);
+        }
+
         if (existingDeployment.status?.availableReplicas) {
           this.state = "running";
 
@@ -3069,6 +3098,35 @@ export default class K8sDeployment {
           ? ` (last image pull error: ${lastImagePullError})`
           : ""
       }`,
+    );
+  }
+
+  /**
+   * Poll until the Deployment is fully gone (404). Used before recreating a
+   * Deployment whose immutable selector drifted — creating the replacement while
+   * the old object is still terminating would 409 ("already exists"). Bounded so
+   * a stuck finalizer can't hang the reconcile forever.
+   */
+  private async waitForDeploymentAbsent(
+    maxAttempts = 30,
+    intervalMs = 1000,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        await this.k8sAppsApi.readNamespacedDeployment({
+          name: this.deploymentName,
+          namespace: this.namespace,
+        });
+      } catch (error: unknown) {
+        if (isK8sNotFoundError(error)) {
+          return;
+        }
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    throw new Error(
+      `Deployment ${this.deploymentName} was not deleted after ${maxAttempts} attempts`,
     );
   }
 

@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
+import { hostname } from "node:os";
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import type { ModelInputModality } from "@archestra/shared";
 import type pino from "pino";
+import config from "@/config";
 import defaultLogger from "@/logging";
 import {
   ConnectorRunModel,
@@ -13,6 +16,7 @@ import { taskQueueService } from "@/task-queue";
 import type {
   AclEntry,
   ConnectorDocument,
+  ConnectorRun,
   KnowledgeBaseConnector,
 } from "@/types";
 import { chunkDocument } from "./chunker";
@@ -24,6 +28,13 @@ import {
 import { getConnector } from "./connectors/registry";
 import { resolveEmbeddingConfig } from "./kb-llm-client";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
+
+/**
+ * Identity of this worker process, used as the connector-run lease owner. The
+ * fencing epoch (not this string) is what enforces correctness; the owner is a
+ * human-readable tie-breaker and heartbeat guard.
+ */
+const WORKER_ID = `${hostname()}#${process.pid}`;
 
 /**
  * Service that orchestrates the sync of data from external connectors
@@ -48,6 +59,96 @@ class ConnectorSyncService {
       throw new Error(`Connector not found: ${connectorId}`);
     }
 
+    // Single-flight: claim the connector's one running-run slot and take a
+    // liveness lease. If another worker holds a live lease we skip — no second
+    // execution runs concurrently. A run whose lease has expired (crashed/hung
+    // owner) is reclaimed inside claim() before we take over.
+    const leaseTtlSeconds = config.kb.connectorRunLeaseTtlSeconds;
+    const claim = await ConnectorRunModel.claim({
+      connectorId,
+      owner: WORKER_ID,
+      leaseTtlSeconds,
+    });
+    if (claim.outcome === "busy") {
+      log.info(
+        { connectorId },
+        "A sync is already running for this connector; skipping duplicate run",
+      );
+      return { runId: "", status: "skipped" };
+    }
+
+    const run = claim.run;
+    const epoch = run.leaseEpoch;
+
+    const runLog = log.child({
+      runId: run.id,
+      connectorId,
+      connectorName: connector.name,
+      connectorType: connector.connectorType,
+    });
+
+    // Heartbeat: renew the lease across the whole ingest phase so the reaper
+    // never mistakes this live run for an orphan. Renewal is fenced by owner +
+    // epoch; a `false` result means we were reclaimed.
+    //
+    // Invariant: the heartbeat interval must stay well under the lease TTL
+    // (defaults 90s interval / 300s TTL, ~3.3x) so that a couple of missed
+    // beats — a GC pause or a slow batch — don't expire a live run. The sync
+    // also yields to the event loop between batches, so a CPU-heavy batch can't
+    // starve this timer for long. claim() already seeded the lease to now()+TTL,
+    // but we fire one beat immediately so the lease is refreshed from the moment
+    // ingest begins rather than only after the first interval elapses.
+    const beat = () => {
+      ConnectorRunModel.renewLease({
+        runId: run.id,
+        owner: WORKER_ID,
+        epoch,
+        leaseTtlSeconds,
+      })
+        .then((held) => {
+          if (!held) runLog.warn("Connector run lease lost during heartbeat");
+        })
+        .catch((error) => {
+          runLog.warn(
+            { error: extractErrorMessage(error) },
+            "Connector run heartbeat failed",
+          );
+        });
+    };
+    beat();
+    const heartbeat = setInterval(
+      beat,
+      config.kb.connectorRunHeartbeatIntervalSeconds * 1000,
+    );
+    // `.unref()` so the timer can't keep the process alive on its own.
+    heartbeat.unref();
+
+    try {
+      return await this.runClaimedSync({
+        connector,
+        run,
+        epoch,
+        runLog,
+        options,
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
+  private async runClaimedSync(params: {
+    connector: KnowledgeBaseConnector;
+    run: ConnectorRun;
+    epoch: number;
+    runLog: pino.Logger;
+    options?: {
+      getLogOutput?: () => string;
+      maxDurationMs?: number;
+    };
+  }): Promise<{ runId: string; status: string }> {
+    const { connector, run, epoch, runLog, options } = params;
+    const connectorId = connector.id;
+
     // Load credentials from secrets manager
     const [credentials, documentAcl] = await Promise.all([
       resolveConnectorCredentials(connector),
@@ -56,52 +157,18 @@ class ConnectorSyncService {
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
-
-    // Interrupt any stale "running" runs left by previous attempts
-    const interrupted =
-      await ConnectorRunModel.interruptActiveRuns(connectorId);
-    if (interrupted > 0) {
-      log.info(
-        {
-          connectorId,
-          connectorName: connector.name,
-          connectorType: connector.connectorType,
-          interrupted,
-        },
-        "Interrupted stale running runs",
-      );
-    }
-
-    // Create a connector run record
-    const run = await ConnectorRunModel.create({
-      connectorId,
-      status: "running",
-      startedAt: new Date(),
-      documentsProcessed: 0,
-      documentsIngested: 0,
-    });
-
-    // Bind runId, connectorName, and connectorType to logger so every log line in this sync includes them
-    const runLog = log.child({
-      runId: run.id,
-      connectorId,
-      connectorName: connector.name,
-      connectorType: connector.connectorType,
-    });
-
-    // Propagate the run-scoped logger into the connector implementation
     if (connectorImpl instanceof BaseConnector) {
       connectorImpl.setLogger(runLog);
     }
 
-    // Update connector lastSyncStatus to running.
-    // Also set lastSyncAt optimistically so the scheduler doesn't re-trigger
-    // this connector while batch_embedding tasks are still running (the task
-    // queue marks connector_sync as "completed" before embeddings finish, but
-    // lastSyncAt is only finalized by the last batch_embedding task).
+    // Mark the connector running. lastSyncAt is set to the run's own startedAt
+    // (not a fresh Date) so the finalization guard `connector.lastSyncAt >
+    // run.startedAt` only fires for a genuinely newer run — not this run's own
+    // optimistic write, which previously left the connector stuck "running"
+    // after slow syncs.
     await KnowledgeBaseConnectorModel.update(connectorId, {
       lastSyncStatus: "running",
-      lastSyncAt: new Date(),
+      lastSyncAt: run.startedAt,
     });
 
     let documentsProcessed = 0;
@@ -135,7 +202,11 @@ class ConnectorSyncService {
       });
 
       if (totalItems !== null && totalItems > 0) {
-        await ConnectorRunModel.update(run.id, { totalItems });
+        await ConnectorRunModel.updateIfOwned({
+          runId: run.id,
+          epoch,
+          data: { totalItems },
+        });
         runLog.info({ totalItems }, "Estimated total items");
       }
     } catch (error) {
@@ -156,6 +227,30 @@ class ConnectorSyncService {
       });
 
       for await (const batch of syncGenerator) {
+        // Fence the payload writes and refresh the lease at each batch boundary.
+        // renewLease is owner+epoch fenced: a `false` result means we were
+        // reclaimed, so we stop BEFORE writing this batch's kb_documents/kb_chunks
+        // — a zombie owner can't keep touching rows a newer run now owns (the
+        // payload writes are now fenced at the same batch granularity as the
+        // bookkeeping). Renewing here — synchronously, coupled to actual work —
+        // also means a slow batch's liveness doesn't hinge on the heartbeat timer
+        // alone, which a CPU-blocked event loop starves: every batch starts with a
+        // full lease TTL of headroom. (A single batch that blocks longer than the
+        // TTL can still be reclaimed — inherent to a lease-based scheme.)
+        const stillHeld = await ConnectorRunModel.renewLease({
+          runId: run.id,
+          owner: WORKER_ID,
+          epoch,
+          leaseTtlSeconds: config.kb.connectorRunLeaseTtlSeconds,
+        });
+        if (!stillHeld) {
+          runLog.info(
+            { documentsProcessed, documentsIngested },
+            "Run lease lost (reclaimed); stopping before ingesting the next batch",
+          );
+          return { runId: run.id, status: "superseded" };
+        }
+
         const ingestedDocumentIds: string[] = [];
         for (const doc of batch.documents) {
           documentsProcessed++;
@@ -215,19 +310,41 @@ class ConnectorSyncService {
           }
         }
 
-        // Update run progress + flush logs after each batch
-        await ConnectorRunModel.update(run.id, {
-          documentsProcessed,
-          documentsIngested,
-          itemErrors,
-          itemsSkipped,
-          logs: options?.getLogOutput?.() ?? null,
+        // Update run progress + flush logs after each batch, fenced by the
+        // lease epoch. A null result means we were reclaimed (lease expired /
+        // superseded), so stop cooperatively rather than resurrecting a dead
+        // run or clobbering the connector checkpoint a newer run now owns.
+        const stillOwned = await ConnectorRunModel.updateIfOwned({
+          runId: run.id,
+          epoch,
+          data: {
+            documentsProcessed,
+            documentsIngested,
+            itemErrors,
+            itemsSkipped,
+            logs: options?.getLogOutput?.() ?? null,
+          },
         });
 
-        // Update connector checkpoint
-        await KnowledgeBaseConnectorModel.update(connectorId, {
+        if (!stillOwned) {
+          runLog.info(
+            { documentsProcessed, documentsIngested },
+            "Run lease lost (reclaimed); stopping sync",
+          );
+          return { runId: run.id, status: "superseded" };
+        }
+
+        // Advance the connector checkpoint, gated atomically on this run still
+        // being active so a reclaimed zombie owner cannot regress it.
+        await KnowledgeBaseConnectorModel.setCheckpointIfRunActive({
+          connectorId,
+          runId: run.id,
           checkpoint: batch.checkpoint,
         });
+
+        // Yield so the heartbeat timer (and other tasks) get to run between
+        // batches even when a batch did CPU-heavy chunking with few awaits.
+        await yieldToEventLoop();
 
         // Check time budget: stop early if we've used 90% of maxDurationMs and there's more data
         if (options?.maxDurationMs && batch.hasMore) {
@@ -247,27 +364,37 @@ class ConnectorSyncService {
         }
       }
 
-      // Set totalBatches so batch_embedding handlers can coordinate
+      // Set totalBatches so batch_embedding handlers can coordinate (fenced).
       if (batchCount > 0) {
-        await ConnectorRunModel.update(run.id, { totalBatches: batchCount });
+        await ConnectorRunModel.updateIfOwned({
+          runId: run.id,
+          epoch,
+          data: { totalBatches: batchCount },
+        });
       }
 
       if (stoppedEarly) {
-        // Partial completion — will be continued by a follow-up run
-        await ConnectorRunModel.update(run.id, {
-          status: "partial",
-          completedAt: new Date(),
-          documentsProcessed,
-          documentsIngested,
-          itemErrors,
-          itemsSkipped,
-          logs: options?.getLogOutput?.() ?? null,
+        // Partial completion — will be continued by a follow-up run.
+        const updated = await ConnectorRunModel.updateIfOwned({
+          runId: run.id,
+          epoch,
+          data: {
+            status: "partial",
+            completedAt: new Date(),
+            documentsProcessed,
+            documentsIngested,
+            itemErrors,
+            itemsSkipped,
+            logs: options?.getLogOutput?.() ?? null,
+          },
         });
 
-        await KnowledgeBaseConnectorModel.update(connectorId, {
-          lastSyncStatus: "partial",
-          lastSyncError: null,
-        });
+        if (updated) {
+          await KnowledgeBaseConnectorModel.update(connectorId, {
+            lastSyncStatus: "partial",
+            lastSyncError: null,
+          });
+        }
 
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.rag.reportConnectorSync({
@@ -287,32 +414,42 @@ class ConnectorSyncService {
       }
 
       if (batchCount === 0) {
-        // No documents ingested — finalize immediately
+        // No documents ingested — finalize immediately.
         const now = new Date();
         const finalStatus =
           itemErrors > 0 ? "completed_with_errors" : "success";
-        await ConnectorRunModel.update(run.id, {
-          status: finalStatus,
-          completedAt: now,
-          documentsProcessed,
-          documentsIngested,
-          itemErrors,
-          itemsSkipped,
-          logs: options?.getLogOutput?.() ?? null,
+        const updated = await ConnectorRunModel.updateIfOwned({
+          runId: run.id,
+          epoch,
+          data: {
+            status: finalStatus,
+            completedAt: now,
+            documentsProcessed,
+            documentsIngested,
+            itemErrors,
+            itemsSkipped,
+            logs: options?.getLogOutput?.() ?? null,
+          },
         });
 
-        await KnowledgeBaseConnectorModel.update(connectorId, {
-          lastSyncStatus: finalStatus,
-          lastSyncAt: now,
-          lastSyncError: null,
-        });
+        if (updated) {
+          await KnowledgeBaseConnectorModel.update(connectorId, {
+            lastSyncStatus: finalStatus,
+            lastSyncAt: now,
+            lastSyncError: null,
+          });
+        }
       } else {
-        // Batches were enqueued — update progress but leave status as "running"
-        // The last batch_embedding task will finalize the run
-        await ConnectorRunModel.update(run.id, {
-          documentsProcessed,
-          documentsIngested,
-          logs: options?.getLogOutput?.() ?? null,
+        // Batches were enqueued — update progress but leave status as "running";
+        // the last batch_embedding task finalizes the run.
+        await ConnectorRunModel.updateIfOwned({
+          runId: run.id,
+          epoch,
+          data: {
+            documentsProcessed,
+            documentsIngested,
+            logs: options?.getLogOutput?.() ?? null,
+          },
         });
 
         // Handle edge case: all batches may have completed before totalBatches was set.
@@ -353,22 +490,30 @@ class ConnectorSyncService {
     } catch (error) {
       const errorMessage = extractErrorMessage(error);
 
-      await ConnectorRunModel.update(run.id, {
-        status: "failed",
-        completedAt: new Date(),
-        documentsProcessed,
-        documentsIngested,
-        itemErrors,
-        itemsSkipped,
-        error: errorMessage,
-        logs: options?.getLogOutput?.() ?? null,
+      // Fenced: only mark this run failed (and mirror to the connector) while we
+      // still own it. If it was reclaimed mid-flight, a newer run owns the state.
+      const failed = await ConnectorRunModel.updateIfOwned({
+        runId: run.id,
+        epoch,
+        data: {
+          status: "failed",
+          completedAt: new Date(),
+          documentsProcessed,
+          documentsIngested,
+          itemErrors,
+          itemsSkipped,
+          error: errorMessage,
+          logs: options?.getLogOutput?.() ?? null,
+        },
       });
 
-      await KnowledgeBaseConnectorModel.update(connectorId, {
-        lastSyncStatus: "failed",
-        lastSyncError: errorMessage,
-        lastSyncAt: new Date(),
-      });
+      if (failed) {
+        await KnowledgeBaseConnectorModel.update(connectorId, {
+          lastSyncStatus: "failed",
+          lastSyncError: errorMessage,
+          lastSyncAt: new Date(),
+        });
+      }
 
       const durationSeconds = (Date.now() - startTime) / 1000;
       metrics.rag.reportConnectorSync({
@@ -401,6 +546,14 @@ class ConnectorSyncService {
     const { doc, connectorId, connectorType, organizationId, acl, log } =
       params;
 
+    // Extracted text (PDF/OOXML, or a plain-text file mis-decoded as UTF-8) can
+    // contain NUL bytes, which Postgres text columns reject — the whole document
+    // insert would otherwise fail and the document be lost. Sanitize once here so
+    // the row, its content hash, and its chunks all derive from the same clean
+    // text (and the hash stays stable, so a later clean re-sync still dedupes).
+    const content = stripNullBytes(doc.content);
+    const title = stripNullBytes(doc.title);
+
     // Include media data in hash so unchanged images are properly skipped.
     const hashInput = doc.mediaContent
       ? `${doc.mediaContent.mimeType}:${doc.mediaContent.data}` +
@@ -409,10 +562,10 @@ class ConnectorSyncService {
             JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
           : "")
       : doc.metadata
-        ? doc.content +
+        ? content +
           "\n" +
           JSON.stringify(doc.metadata, Object.keys(doc.metadata).sort())
-        : doc.content;
+        : content;
     const contentHash = createHash("sha256").update(hashInput).digest("hex");
 
     // Lookup existing document by connector + source ID
@@ -431,8 +584,8 @@ class ConnectorSyncService {
         if (existingChunkCount === 0) {
           await this.chunkAndStore({
             documentId: existing.id,
-            title: doc.title,
-            content: doc.content,
+            title,
+            content,
             mediaContent: doc.mediaContent,
             metadata: doc.metadata,
             connectorType,
@@ -466,8 +619,8 @@ class ConnectorSyncService {
 
       // Content has changed — update existing document
       await KbDocumentModel.update(existing.id, {
-        title: doc.title,
-        content: doc.content,
+        title,
+        content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
         acl,
@@ -479,8 +632,8 @@ class ConnectorSyncService {
       await KbChunkModel.deleteByDocument(existing.id);
       await this.chunkAndStore({
         documentId: existing.id,
-        title: doc.title,
-        content: doc.content,
+        title,
+        content,
         mediaContent: doc.mediaContent,
         metadata: doc.metadata,
         connectorType,
@@ -503,8 +656,8 @@ class ConnectorSyncService {
       organizationId,
       sourceId: doc.id,
       connectorId,
-      title: doc.title,
-      content: doc.content,
+      title,
+      content,
       contentHash,
       sourceUrl: doc.sourceUrl,
       acl,
@@ -513,8 +666,8 @@ class ConnectorSyncService {
 
     await this.chunkAndStore({
       documentId: created.id,
-      title: doc.title,
-      content: doc.content,
+      title,
+      content,
       mediaContent: doc.mediaContent,
       metadata: doc.metadata,
       connectorType,
@@ -605,3 +758,14 @@ class ConnectorSyncService {
 }
 
 export const connectorSyncService = new ConnectorSyncService();
+
+/**
+ * Remove NUL (U+0000) bytes from a string. Postgres `text`/`jsonb` columns
+ * cannot store NUL and node-postgres throws when a bound parameter contains one,
+ * which would fail an entire document insert. Binary text extraction (PDF, OOXML)
+ * and plain-text files mis-decoded as UTF-8 routinely emit NUL. Returns the input
+ * unchanged (same reference) when there is nothing to strip — the common case.
+ */
+function stripNullBytes(text: string): string {
+  return text.includes("\u0000") ? text.replaceAll("\u0000", "") : text;
+}

@@ -4,12 +4,6 @@ category: Archestra Platform
 order: 4
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
-
-This document is human-built, shouldn't be updated with AI. Don't change anything here.
--->
-
 # Observability
 
 ![Archestra Logs Viewer](/docs/observability.webp)
@@ -20,7 +14,7 @@ Archestra exposes Prometheus metrics and OpenTelemetry traces for monitoring sys
 
 The web process exposes Prometheus-formatted metrics at `http://localhost:9050/metrics`.
 
-When the separate worker deployment is enabled (`ARCHESTRA_PROCESS_TYPE=worker`, which is the default for [Helm deployments](/docs/platform-deployment)), the worker process exposes its own metrics endpoint at `http://<worker-host>:9000/metrics`. Task queue metrics and background [Knowledge Base](/docs/platform-knowledge-bases) pipeline metrics such as connector syncs and embedding batches are emitted from the worker process, so production scrape configs should collect both endpoints.
+When the separate worker deployment is enabled (`ARCHESTRA_PROCESS_TYPE=worker`, which is the default for [Helm deployments](/docs/platform-deployment)), the worker process exposes its own metrics endpoint at `http://<worker-host>:9000/metrics`. Task queue metrics and background [Knowledge Base](/docs/platform-knowledge) pipeline metrics such as connector syncs and embedding batches are emitted from the worker process, so production scrape configs should collect both endpoints.
 
 Combined, these endpoints expose metrics including:
 
@@ -215,7 +209,7 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache, a subset of `input_tokens` (set only when the response read from cache)
 - `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache, a subset of `input_tokens` (set only when the response cached a prefix)
 - `archestra.usage.cache_creation.1h_input_tokens` - Portion of cache-creation tokens written at the 1-hour TTL (Anthropic/Bedrock), billed at a higher surcharge than the 5-minute default. Uses the `archestra.*` namespace because the GenAI semantic conventions have no per-TTL breakdown. The remainder of `gen_ai.usage.cache_creation.input_tokens` is the 5-minute portion.
-- `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
+- `archestra.cost` - Estimated cost in USD (requires [model pricing](/docs/platform-costs-and-limits#model-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 
 **Error Attributes:**

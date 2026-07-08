@@ -81,10 +81,17 @@ export default function AgentSettingsPage() {
     data: allModels,
     isPending: modelsLoading,
     isLoadingError: isModelsLoadError,
+    isPlaceholderData,
     refetch: refetchModels,
   } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
+
+  // `useLlmModels` uses `keepPreviousData`, so after a key switch `data` still
+  // holds the previous key's models (isPlaceholderData). Treat that as loading
+  // for the new key so the admin can't save a model from the old provider
+  // against the new provider's key.
+  const modelsPending = modelsLoading || isPlaceholderData;
 
   const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
@@ -181,7 +188,7 @@ export default function AgentSettingsPage() {
   };
 
   const modelItems = useMemo(() => {
-    if (!allModels) return [];
+    if (!allModels || isPlaceholderData) return [];
     return allModels.map((model) => ({
       value: model.dbId,
       model: model.displayName ?? model.id,
@@ -190,7 +197,7 @@ export default function AgentSettingsPage() {
       isFree: model.isFree,
       isBest: model.isBest,
     }));
-  }, [allModels]);
+  }, [allModels, isPlaceholderData]);
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -273,7 +280,7 @@ export default function AgentSettingsPage() {
                     placeholder={
                       !selectedApiKeyId
                         ? "Select API key first..."
-                        : modelsLoading
+                        : modelsPending
                           ? "Loading models..."
                           : "Select model..."
                     }
@@ -281,7 +288,7 @@ export default function AgentSettingsPage() {
                     disabled={
                       isSaving ||
                       !hasPermission ||
-                      modelsLoading ||
+                      modelsPending ||
                       !selectedApiKeyId
                     }
                   />

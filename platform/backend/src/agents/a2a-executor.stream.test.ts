@@ -201,6 +201,36 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(textPart?.text).toBe("Answer. Done.");
   });
 
+  test("strips Qwen-style <think> blocks so reasoning does not leak into the A2A reply", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    primeAgent(
+      modelEmitting(
+        textChunks("<think>The user wants a task.</think>Created the task."),
+      ),
+    );
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Created the task.");
+    expect(result.text).not.toContain("<think>");
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
+    );
+    expect(textPart?.text).toBe("Created the task.");
+  });
+
   test("substitutes a notice when a thinking-only turn strips to nothing", async ({
     makeOrganization,
     makeUser,

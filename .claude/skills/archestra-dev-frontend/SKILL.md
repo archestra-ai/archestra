@@ -12,7 +12,7 @@ Use this skill before changing files under `platform/frontend/` or frontend-faci
 Run commands from `platform/` unless specifically instructed otherwise.
 
 ```bash
-pnpm codegen:api-client
+pnpm codegen   # regenerates the OpenAPI spec and the API client
 pnpm type-check
 pnpm lint
 pnpm test
@@ -30,7 +30,7 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 ## API clients
 
 - Frontend `.query.ts` files should never use `fetch()` directly.
-- Run `pnpm codegen:api-client` first to ensure the generated SDK is up to date.
+- Run `pnpm codegen` first to ensure the generated SDK is up to date (`codegen:api-client` alone only exists inside `@archestra/shared` and needs the env var: `CODEGEN=true pnpm --filter @archestra/shared codegen:api-client` — without `CODEGEN=true` it reads a live `localhost:9000` instead of the committed spec).
 - Use generated SDK methods instead of manual API calls for type safety and consistency.
 - Reuse API types from `@archestra/shared`, especially `archestraApiTypes` types such as `archestraApiTypes.CreateXxxData["body"]` and `archestraApiTypes.GetXxxResponses["200"]`.
 - Do not define duplicate frontend API types when generated/shared types already exist.

@@ -45,6 +45,9 @@ export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   const loginSucceeded = !finalUrl.includes("/auth/sign-in");
 
   if (!loginSucceeded) {
+    // The final URL carries better-auth's ?error=…&error_description=… from a
+    // failed SSO callback — log it so CI output shows the actual failure mode.
+    console.log(`SSO login did not produce a session; final URL: ${finalUrl}`);
     const errorToast = ssoPage.locator('[role="alert"]').first();
     const errorText = await errorToast.textContent().catch(() => null);
     if (errorText && !errorText.includes("Default Admin Credentials Enabled")) {

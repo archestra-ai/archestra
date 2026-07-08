@@ -504,23 +504,55 @@ export function LlmProviderApiKeyForm({
     form.setValue("vaultSecretKey", null);
   }, [form, scope]);
 
+  // Clear provider-specific credentials when the provider changes, so a key (or
+  // base URL / AWS credential) typed for one provider can't be submitted against
+  // another. Create only — the provider picker is disabled while editing. Skips
+  // the initial render via the ref so it never wipes prefilled defaults.
+  const prevProviderRef = useRef(provider);
+  useEffect(() => {
+    if (isEditMode || prevProviderRef.current === provider) return;
+    prevProviderRef.current = provider;
+    form.setValue("apiKey", null);
+    form.setValue("baseUrl", null);
+    form.setValue("inferenceBaseUrl", null);
+    form.setValue("extraHeaders", []);
+    form.setValue("vaultSecretPath", null);
+    form.setValue("vaultSecretKey", null);
+    form.setValue("awsAccessKeyId", null);
+    form.setValue("awsSecretAccessKey", null);
+    form.setValue("awsSessionToken", null);
+    // Reset the Bedrock auth method too: a stale "iam" would otherwise keep the
+    // API key input hidden after switching to a non-Bedrock provider.
+    form.setValue("bedrockAuthMethod", "api-key");
+  }, [form, isEditMode, provider]);
+
   const vaultSecretSelector =
     scope === "team" ? (
       <InlineVaultSecretSelector
         teamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onSecretPathChange={(value) => form.setValue("vaultSecretPath", value)}
-        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+        onSecretPathChange={(value) =>
+          form.setValue("vaultSecretPath", value, { shouldDirty: true })
+        }
+        onSecretKeyChange={(value) =>
+          form.setValue("vaultSecretKey", value, { shouldDirty: true })
+        }
       />
     ) : (
       <ExternalSecretSelector
         selectedTeamId={teamId}
         selectedSecretPath={form.getValues("vaultSecretPath")}
         selectedSecretKey={form.getValues("vaultSecretKey")}
-        onTeamChange={(value) => form.setValue("teamId", value)}
-        onSecretChange={(value) => form.setValue("vaultSecretPath", value)}
-        onSecretKeyChange={(value) => form.setValue("vaultSecretKey", value)}
+        onTeamChange={(value) =>
+          form.setValue("teamId", value, { shouldDirty: true })
+        }
+        onSecretChange={(value) =>
+          form.setValue("vaultSecretPath", value, { shouldDirty: true })
+        }
+        onSecretKeyChange={(value) =>
+          form.setValue("vaultSecretKey", value, { shouldDirty: true })
+        }
       />
     );
 
@@ -621,6 +653,7 @@ export function LlmProviderApiKeyForm({
                   form.setValue(
                     "bedrockAuthMethod",
                     value as "api-key" | "sigv4" | "iam",
+                    { shouldDirty: true },
                   )
                 }
               >
@@ -848,9 +881,9 @@ export function LlmProviderApiKeyForm({
               value={scope}
               options={visibilityOptions}
               onValueChange={(nextScope) => {
-                form.setValue("scope", nextScope);
+                form.setValue("scope", nextScope, { shouldDirty: true });
                 if (nextScope !== "team") {
-                  form.setValue("teamId", null);
+                  form.setValue("teamId", null, { shouldDirty: true });
                 }
               }}
             >
@@ -875,7 +908,9 @@ export function LlmProviderApiKeyForm({
                   <Label htmlFor="llm-provider-api-key-team">Team</Label>
                   <Select
                     value={teamId ?? undefined}
-                    onValueChange={(value) => form.setValue("teamId", value)}
+                    onValueChange={(value) =>
+                      form.setValue("teamId", value, { shouldDirty: true })
+                    }
                     disabled={isPending || !canReadTeams || teams.length === 0}
                   >
                     <SelectTrigger
@@ -911,7 +946,7 @@ export function LlmProviderApiKeyForm({
                 id="llm-provider-api-key-is-primary"
                 checked={form.watch("isPrimary")}
                 onCheckedChange={(checked) =>
-                  form.setValue("isPrimary", checked)
+                  form.setValue("isPrimary", checked, { shouldDirty: true })
                 }
                 disabled={isPending || Boolean(existingPrimaryKey)}
               />

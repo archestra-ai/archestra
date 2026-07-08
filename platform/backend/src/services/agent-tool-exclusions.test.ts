@@ -1,13 +1,17 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  getArchestraToolFullName,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
+  TOOL_WHOAMI_SHORT_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema } from "@/database";
 import { AgentExcludedToolModel, ToolModel } from "@/models";
@@ -60,6 +64,37 @@ describe("agentToolExclusionsService", () => {
     expect(await agentToolExclusionsService.getExclusions(agent.id)).toEqual({
       excludedToolIds: [tool.id],
     });
+  });
+
+  test("addExclusions unions with existing exclusions and dedupes", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const toolA = await makeTool({ name: "github__a", catalogId: catalog.id });
+    const toolB = await makeTool({ name: "github__b", catalogId: catalog.id });
+
+    await agentToolExclusionsService.addExclusions({
+      agentId: agent.id,
+      organizationId,
+      toolIds: [toolA.id],
+    });
+    // toolA is already excluded and repeated — the union must dedupe.
+    const result = await agentToolExclusionsService.addExclusions({
+      agentId: agent.id,
+      organizationId,
+      toolIds: [toolB.id, toolA.id],
+    });
+
+    expect([...result.excludedToolIds].sort()).toEqual(
+      [toolA.id, toolB.id].sort(),
+    );
+    expect(
+      [
+        ...(await agentToolExclusionsService.getExclusions(agent.id))
+          .excludedToolIds,
+      ].sort(),
+    ).toEqual([toolA.id, toolB.id].sort());
   });
 
   test("evicts the cached chat MCP client after a successful replace", async ({
@@ -315,6 +350,61 @@ describe("agentToolExclusionsService", () => {
           sets,
         ),
       ).toBe(false);
+    });
+
+    test("Archestra built-in exclusions match by short name, so the default alias can't bypass a branded exclusion", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      // White-labeled deployment: the built-in row stores a branded name, but
+      // dispatch (run_tool / the gateway) reaches the same tool by the default
+      // `archestra__` alias. Both must resolve to the same short-name key.
+      const brandedName = "acme__whoami";
+      const defaultAliasName = getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME);
+      expect(brandedName).not.toBe(defaultAliasName);
+      const shortNameSpy = vi
+        .spyOn(archestraMcpBranding, "getToolShortName")
+        .mockImplementation((name: string) =>
+          name === brandedName || name === defaultAliasName
+            ? TOOL_WHOAMI_SHORT_NAME
+            : null,
+        );
+      try {
+        await makeInternalMcpCatalog({
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          organizationId,
+        });
+        const branded = await makeTool({
+          name: brandedName,
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        });
+        await agentToolExclusionsService.replaceExclusions({
+          agentId: agent.id,
+          organizationId,
+          excludedToolIds: [branded.id],
+        });
+
+        const sets = await agentToolExclusionsService.getExclusionSets(
+          agent.id,
+        );
+        // Matched under the branded name the row stores...
+        expect(
+          isToolIdentityExcluded(
+            { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: brandedName },
+            sets,
+          ),
+        ).toBe(true);
+        // ...and under the default-prefix alias run_tool / the gateway resolve
+        // to, which must NOT bypass the exclusion on a white-labeled deployment.
+        expect(
+          isToolIdentityExcluded(
+            { catalogId: ARCHESTRA_MCP_CATALOG_ID, name: defaultAliasName },
+            sets,
+          ),
+        ).toBe(true);
+      } finally {
+        shortNameSpy.mockRestore();
+      }
     });
 
     test("getActiveExclusionSets is empty when accessAllTools is off", async ({

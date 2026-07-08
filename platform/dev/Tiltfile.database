@@ -32,9 +32,12 @@ helm_remote(
     'metrics.enabled=true',
     'metrics.service.ports.metrics=9187',
 
-    # Increase resource limits to prevent health check timeouts
-    # https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
-    'primary.resourcesPreset=small',
+    # pgvector work is memory-hungry: a knowledge-base sync inserts thousands of
+    # embedding vectors in bursts, and HNSW index maintenance on those inserts
+    # spiked Postgres past the "small" preset's 768Mi limit and OOM-killed it
+    # (exit 137, repeated restarts). "large" (~3Gi limit) gives the headroom.
+    # Preset ladder: https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl#L24C4-L24C9
+    'primary.resourcesPreset=large',
 
     # Increase probe timeout to accommodate slower responses
     'primary.livenessProbe.timeoutSeconds=10',

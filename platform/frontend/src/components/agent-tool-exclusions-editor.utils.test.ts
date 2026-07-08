@@ -154,20 +154,22 @@ describe("buildInitialEntries", () => {
 
 describe("computeDefaultExclusionToolIds", () => {
   const builtInTools = [
-    // Pre-fill-exempt: query_knowledge_sources and the sandbox/file tools,
-    // plus the meta dispatch tools (covered below with a branded prefix).
+    // Pre-fill-exempt: query_knowledge_sources, the sandbox/file tools, and
+    // the skill tools, plus the meta dispatch tools (covered below with a
+    // branded prefix).
     { id: "t-knowledge", name: "archestra__query_knowledge_sources" },
     { id: "t-run-command", name: "archestra__run_command" },
+    { id: "t-list-skills", name: "archestra__list_skills" },
     { id: "t-whoami", name: "acme__whoami" },
     { id: "t-artifact", name: "archestra__artifact_write" },
-    { id: "t-list-skills", name: "archestra__list_skills" },
+    { id: "t-create-agent", name: "archestra__create_agent" },
   ];
 
   it("excludes every unassigned tool outside the exempt set", () => {
     expect(computeDefaultExclusionToolIds({ builtInTools })).toEqual([
       "t-whoami",
       "t-artifact",
-      "t-list-skills",
+      "t-create-agent",
     ]);
   });
 
@@ -179,6 +181,8 @@ describe("computeDefaultExclusionToolIds", () => {
           { id: "t-run", name: `acme__${TOOL_RUN_TOOL_SHORT_NAME}` },
           { id: "t-cmd", name: "acme__run_command" },
           { id: "t-save", name: "acme__save_file" },
+          { id: "t-skills", name: "acme__list_skills" },
+          { id: "t-load-skill", name: "acme__load_skill" },
         ],
       }),
     ).toEqual([]);
@@ -188,7 +192,7 @@ describe("computeDefaultExclusionToolIds", () => {
     expect(
       computeDefaultExclusionToolIds({
         builtInTools,
-        assignedToolIds: new Set(["t-artifact", "t-list-skills"]),
+        assignedToolIds: new Set(["t-artifact", "t-create-agent"]),
       }),
     ).toEqual(["t-whoami"]);
   });
@@ -199,7 +203,7 @@ describe("computeDefaultExclusionToolIds", () => {
         builtInTools,
         assumedAssignedShortNames: new Set(["whoami", "artifact_write"]),
       }),
-    ).toEqual(["t-list-skills"]);
+    ).toEqual(["t-create-agent"]);
   });
 });
 

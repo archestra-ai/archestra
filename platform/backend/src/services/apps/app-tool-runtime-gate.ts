@@ -133,6 +133,7 @@ export async function gateAppToolCall(params: {
   const resolvedToolName = tool.toolName;
   const refusal = await enforceAppRuntimeInvocationPolicy({
     resolvedToolName,
+    resolvedToolId: tool.id,
     displayName: toolName,
     toolInput,
     userId,
@@ -162,6 +163,10 @@ export async function gateAppToolCall(params: {
  */
 export async function enforceAppRuntimeInvocationPolicy(params: {
   resolvedToolName: string;
+  // The id of the resolved tool row the caller will execute. Policy is evaluated
+  // against this exact row instead of a name lookup, which the app-runtime path
+  // (agentId "") could otherwise resolve to a different same-named row.
+  resolvedToolId: string;
   displayName: string;
   toolInput: Record<string, unknown>;
   userId: string;
@@ -170,6 +175,7 @@ export async function enforceAppRuntimeInvocationPolicy(params: {
 }): Promise<{ code: number; reason: string } | null> {
   const {
     resolvedToolName,
+    resolvedToolId,
     displayName,
     toolInput,
     userId,
@@ -187,6 +193,7 @@ export async function enforceAppRuntimeInvocationPolicy(params: {
     [{ toolCallName: resolvedToolName, toolInput }],
     policyContext,
     isContextTrusted,
+    new Map([[resolvedToolName, resolvedToolId]]),
   );
   if (!verdict.isAllowed) {
     return {
@@ -201,6 +208,7 @@ export async function enforceAppRuntimeInvocationPolicy(params: {
         resolvedToolName,
         toolInput,
         policyContext,
+        resolvedToolId,
       );
     if (requiresApproval) {
       return {

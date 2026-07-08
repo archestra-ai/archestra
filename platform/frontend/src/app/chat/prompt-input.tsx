@@ -13,6 +13,7 @@ import {
   supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
+import { XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -34,11 +35,28 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Queue,
+  QueueItem,
+  QueueItemAction,
+  QueueItemActions,
+  QueueItemContent,
+  QueueItemIndicator,
+  QueueList,
+  QueueSection,
+  QueueSectionContent,
+  QueueSectionLabel,
+  QueueSectionTrigger,
+} from "@/components/ai-elements/queue";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
+import {
+  chatMessageQueue,
+  useConversationMessageQueue,
+} from "@/lib/chat/chat-message-queue";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import {
   chatDraftStorageKey,
@@ -99,6 +117,13 @@ export interface ArchestraPromptInputProps
     e: FormEvent<HTMLFormElement>,
     options?: ChatSubmitOptions,
   ) => void | Promise<void>;
+  /**
+   * Stop the in-flight response. When set, the submit button acts as a Stop
+   * button while a response is streaming (a click stops instead of
+   * submitting), so submits during a stream only come from Enter — which
+   * onSubmit queues rather than sends.
+   */
+  onStop?: () => void;
   status: ChatStatus;
   // Tools integration props
   agentId: string;
@@ -146,6 +171,7 @@ const COMPACT_COMMAND: SlashCommand = {
 // Inner component that has access to the controller context
 const PromptInputContent = ({
   onSubmit,
+  onStop,
   status,
   selectedModel,
   onModelChange,
@@ -640,9 +666,64 @@ const PromptInputContent = ({
   );
 
   const submitStatus = status === "error" ? "ready" : status;
+  const isResponseInFlight = status === "submitted" || status === "streaming";
+
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  // When off, the composer behaves as before: Enter is blocked while a
+  // response streams and the submit button stops via the form-submit path.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
+  // Messages queued while a response was in-flight; sent automatically (in
+  // order) by the conversation's chat session once each turn settles.
+  const queuedMessages = useConversationMessageQueue(
+    isMessageQueueEnabled ? conversationId : undefined,
+  );
 
   return (
     <div className="relative">
+      {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
+        <Queue className="mb-2" data-testid={E2eTestId.ChatMessageQueue}>
+          <QueueSection>
+            <QueueSectionTrigger>
+              <QueueSectionLabel
+                count={queuedMessages.length}
+                label={
+                  queuedMessages.length === 1
+                    ? "queued message"
+                    : "queued messages"
+                }
+              />
+            </QueueSectionTrigger>
+            <QueueSectionContent>
+              <QueueList>
+                {queuedMessages.map((queued) => (
+                  <QueueItem
+                    key={queued.id}
+                    className="flex-row items-start gap-2"
+                    data-testid={E2eTestId.ChatMessageQueueItem}
+                  >
+                    <QueueItemIndicator className="mt-1.5 shrink-0" />
+                    <QueueItemContent>
+                      {queued.skill ? `/${queued.skill.name} ` : ""}
+                      {queued.text}
+                    </QueueItemContent>
+                    <QueueItemActions className="shrink-0">
+                      <QueueItemAction
+                        aria-label="Remove queued message"
+                        data-testid={E2eTestId.ChatMessageQueueRemoveButton}
+                        onClick={() =>
+                          chatMessageQueue.remove(conversationId, queued.id)
+                        }
+                      >
+                        <XIcon className="size-3.5" />
+                      </QueueItemAction>
+                    </QueueItemActions>
+                  </QueueItem>
+                ))}
+              </QueueList>
+            </QueueSectionContent>
+          </QueueSection>
+        </Queue>
+      )}
       {isSandboxCommandHintVisible && (
         <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">
           Messages starting with{" "}
@@ -729,8 +810,13 @@ const PromptInputContent = ({
               className="px-4"
               autoFocus
               disabled={submitDisabled || isContextCompacting}
+              // With queueing on and a live conversation, Enter during a
+              // stream submits and the submit handler queues the message.
+              // Otherwise (queueing off, or the new-chat composer while the
+              // conversation is being created) Enter stays blocked.
               disableEnterSubmit={
-                status === "submitted" || status === "streaming"
+                isResponseInFlight &&
+                (!isMessageQueueEnabled || !conversationId)
               }
               onKeyDown={handleTextareaKeyDown}
               data-testid={E2eTestId.ChatPromptTextarea}
@@ -777,6 +863,17 @@ const PromptInputContent = ({
               className="!h-8"
               status={submitStatus}
               disabled={submitDisabled || isContextCompacting}
+              onClick={(event) => {
+                // While a response is in-flight the button shows Stop; a
+                // click stops the stream instead of submitting the form
+                // (which would queue the typed text — see onStop docs). With
+                // queueing off, the click falls through to the form submit,
+                // whose handler stops the stream (the pre-queue behavior).
+                if (isMessageQueueEnabled && onStop && isResponseInFlight) {
+                  event.preventDefault();
+                  onStop();
+                }
+              }}
             />
           </div>
         </PromptInputFooter>
@@ -792,6 +889,7 @@ const PromptInputContent = ({
 
 const ArchestraPromptInput = ({
   onSubmit,
+  onStop,
   status,
   selectedModel,
   onModelChange,
@@ -885,6 +983,7 @@ const ArchestraPromptInput = ({
       >
         <PromptInputContent
           onSubmit={onSubmit}
+          onStop={onStop}
           status={status}
           selectedModel={selectedModel}
           onModelChange={onModelChange}

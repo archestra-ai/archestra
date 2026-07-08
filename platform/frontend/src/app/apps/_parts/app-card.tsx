@@ -283,7 +283,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
   // Standalone run page (chrome-less /a namespace, like the owned /a/[appId]),
   // pinned to this exact install for explicit "open in new tab".
   const runHref = `/a/catalog/${app.catalogId}?install=${encodeURIComponent(app.mcpServerId)}&resource=${encodeURIComponent(app.resourceUri)}`;
-  const serverHref = `/mcp/registry/beta/${app.catalogId}`;
+  const serverHref = `/mcp/registry/${app.catalogId}`;
 
   const handleOpen = async () => {
     setIsOpening(true);

@@ -13,7 +13,7 @@ import {
   InternalMcpCatalogModel,
   ToolModel,
 } from "@/models";
-import { type AgentToolExclusions, ApiError } from "@/types";
+import { type AgentToolExclusions, ApiError, type Tool } from "@/types";
 
 /**
  * Per-agent tool exclusions for Auto-tool mode ("access all tools").
@@ -130,6 +130,63 @@ class AgentToolExclusionsService {
   }
 
   /**
+   * Add tool ids to the agent's excluded-tools set (a union, leaving existing
+   * exclusions in place), then evict the cached chat MCP client after commit.
+   * The current set is re-read INSIDE the same row lock the full replace takes,
+   * so concurrent adds/replaces for one agent can't lose each other's writes.
+   * Used to "remove" a tool from an Auto-tool ("access all tools") agent, where
+   * deleting an assignment row would be a no-op.
+   */
+  async addExclusions(params: {
+    agentId: string;
+    organizationId: string;
+    toolIds: string[];
+  }): Promise<AgentToolExclusions> {
+    const { agentId, organizationId } = params;
+    const toAdd = [...new Set(params.toolIds)];
+
+    await this.validateToolIds(toAdd, organizationId);
+
+    let excludedToolIds: string[] = [];
+    try {
+      await withDbTransaction(async (tx) => {
+        await AgentModel.lockRowForUpdate(agentId, tx);
+        const current = await AgentExcludedToolModel.findToolIdsByAgent(
+          agentId,
+          tx,
+        );
+        excludedToolIds = [...new Set([...current, ...toAdd])];
+        await AgentExcludedToolModel.replaceForAgent(
+          agentId,
+          excludedToolIds,
+          tx,
+        );
+      });
+    } catch (error) {
+      // TOCTOU: a tool deleted between validation and insert surfaces as an FK
+      // violation — map it to a client error instead of a 500.
+      if (isForeignKeyViolation(error)) {
+        throw new ApiError(400, "One or more excluded tools no longer exist");
+      }
+      throw error;
+    }
+
+    const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
+    clearChatMcpClient(agentId);
+
+    logger.info(
+      {
+        agentId,
+        addedCount: toAdd.length,
+        excludedToolCount: excludedToolIds.length,
+      },
+      "Added agent tool exclusions",
+    );
+
+    return { excludedToolIds };
+  }
+
+  /**
    * The agent's exclusion sets for enforcement callers. Does NOT check the
    * agent's accessAllTools setting — use when the caller has already
    * established Auto-tool mode (e.g. via dynamicAccessContext).
@@ -168,6 +225,29 @@ class AgentToolExclusionsService {
       return EMPTY_EXCLUSION_SETS;
     }
     return this.getExclusionSets(agentId);
+  }
+
+  /**
+   * The agent's assigned MCP tools with excluded rows removed, plus the
+   * exclusion sets used to filter them. The single chokepoint every dispatch
+   * surface (gateway tools/list, search_tools, run_tool, resource client
+   * resolution, chat UI hints) shares, so the fetch-then-filter pairing lives in
+   * one place and a future enforcement change lands everywhere at once. Callers
+   * that already loaded the sets pass them in to skip the re-query; the two
+   * queries run in parallel otherwise.
+   */
+  async getFilteredMcpToolsByAgent(
+    agentId: string,
+    preloadedExclusionSets?: AgentToolExclusionSets,
+  ): Promise<{ tools: Tool[]; exclusionSets: AgentToolExclusionSets }> {
+    const [rows, exclusionSets] = await Promise.all([
+      ToolModel.getMcpToolsByAgent(agentId),
+      preloadedExclusionSets ?? this.getActiveExclusionSets(agentId),
+    ]);
+    return {
+      tools: rows.filter((tool) => !isToolRowExcluded(tool, exclusionSets)),
+      exclusionSets,
+    };
   }
 
   // === Private validation helpers ===
@@ -242,8 +322,23 @@ export const agentToolExclusionsService = new AgentToolExclusionsService();
 
 // === Internal helpers ===
 
+/**
+ * Dispatch-identity key for an exclusion match. Archestra built-in rows are
+ * keyed by SHORT name, not the stored row name: on a white-labeled deployment
+ * the row carries a branded prefix (`acme__list_agents`), but dispatch reaches
+ * the same tool by its short name (`run_tool`) or the default alias
+ * (`archestra__list_agents`) too. Normalizing both the build side
+ * (getExclusionSets) and every check side (isToolIdentityExcluded) through this
+ * one helper keeps the branded row, the branded call, and the default-alias
+ * call all matching the same key. Third-party rows are keyed by name verbatim
+ * (their names carry no branding alias).
+ */
 function toolKey(catalogId: string, name: string): string {
-  return `${catalogId}:${name}`;
+  const identityName =
+    catalogId === ARCHESTRA_MCP_CATALOG_ID
+      ? (archestraMcpBranding.getToolShortName(name) ?? name)
+      : name;
+  return `${catalogId}:${identityName}`;
 }
 
 /**

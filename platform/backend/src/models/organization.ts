@@ -2,7 +2,7 @@ import {
   DEFAULT_THEME_ID,
   type OrganizationCustomFont,
 } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -166,13 +166,26 @@ class OrganizationModel {
   }
 
   /**
-   * Record that the first-login onboarding survey was submitted for this
-   * organization; the survey is never shown again once set.
+   * Atomically record that the first-login onboarding survey was submitted for
+   * this organization. Returns true only for the call that actually flipped the
+   * flag (it was previously null), so the caller can forward the survey exactly
+   * once even when two admins submit concurrently. Never shown again once set.
    */
-  static async markOnboardingSurveyCompleted(id: string): Promise<void> {
-    await OrganizationModel.patch(id, {
-      onboardingSurveyCompletedAt: new Date(),
-    });
+  static async markOnboardingSurveyCompleted(id: string): Promise<boolean> {
+    const rows = await db
+      .update(schema.organizationsTable)
+      .set({ onboardingSurveyCompletedAt: new Date() })
+      .where(
+        and(
+          eq(schema.organizationsTable.id, id),
+          isNull(schema.organizationsTable.onboardingSurveyCompletedAt),
+        ),
+      )
+      .returning({ id: schema.organizationsTable.id });
+    if (rows.length > 0) {
+      await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    }
+    return rows.length > 0;
   }
 
   /**

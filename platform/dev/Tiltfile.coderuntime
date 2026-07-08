@@ -7,9 +7,9 @@
 # for MCP server pods. This file only builds the native addon the backend loads.
 # The root Tiltfile loads it when ARCHESTRA_CODE_RUNTIME_ENABLED=true.
 #
-# Because the dev backend runs on the host, it needs the orchestrator wired to
-# the local cluster (ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
-# =true or ARCHESTRA_ORCHESTRATOR_KUBECONFIG) and small engine resources
+# Because the dev backend runs on the host rather than in a pod, it reaches the
+# cluster through a kubeconfig file (ARCHESTRA_ORCHESTRATOR_KUBECONFIG), not the
+# in-pod service account, and it needs small engine resources
 # (ARCHESTRA_DAGGER_RUNTIME_ENGINE_* — a default colima VM can't fit the 8Gi/50Gi
 # production defaults); run-backend-dev.sh sets these when they're unset. Setting
 # an explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST still points the backend

@@ -58,9 +58,13 @@ if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   # production defaults don't). An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
   # points the backend at a pre-existing engine instead and skips all of this.
   if [ -z "${ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST:-}" ]; then
+    # This backend runs on the developer's machine, not in a pod, so it reaches
+    # the cluster through a kubeconfig file. ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG
+    # _FROM_CURRENT_CLUSTER would call loadFromCluster(), which only resolves an
+    # API server address from the in-pod service-account environment.
     if [ -z "${ARCHESTRA_ORCHESTRATOR_KUBECONFIG:-}" ] && \
        [ "${ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER:-}" != "true" ]; then
-      export ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true
+      export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
     fi
     : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST:=500m}"
     : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST:=2Gi}"

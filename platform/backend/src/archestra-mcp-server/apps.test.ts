@@ -1971,19 +1971,27 @@ describe("scaffold_app tools param", () => {
     expect(assignments.map((a) => a.tool.id)).toEqual([assignedRow.id]);
   });
 
-  test("a tool in a catalog with no accessible install is not assignable by name", async ({
+  test("a tool in a visible catalog with no install is assignable by name (auth is enforced at call time)", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    // No install → not discoverable via search_tools, so not assignable by name
-    // either (the resolver matches what the user can actually reach and run).
+    // Discovery follows catalog visibility, so a visible catalog's tool is
+    // assignable even before anyone connects — running it surfaces the
+    // call-time auth-required prompt that tells the user to set up their own
+    // connection.
     const uninstalled = await makeInternalMcpCatalog({ organizationId });
     const orphanName = `orphan__tool_${crypto.randomUUID().slice(0, 8)}`;
-    await makeTool({ name: orphanName, catalogId: uninstalled.id });
+    const orphanRow = await makeTool({
+      name: orphanName,
+      catalogId: uninstalled.id,
+    });
 
     const created = await scaffold({ name: "Orphan", tools: [orphanName] });
-    expect(created.isError).toBe(true);
-    expect((created.content[0] as any).text).toContain("Unknown tool name");
+    expect(created.isError).toBe(false);
+    const assignments = await AppToolModel.getAssignmentsForApp(
+      structured(created).id as string,
+    );
+    expect(assignments.map((a) => a.tool.id)).toEqual([orphanRow.id]);
   });
 
   test("an unassigned, installed tool is not assignable when the agent lacks dynamic access", async ({

@@ -1763,21 +1763,35 @@ class McpClient {
       };
     }
 
-    // Fallback for external IdP users if earlier resolution didn't match
+    // Fallback for external IdP users if earlier resolution didn't match.
+    // Another user's personal install is never eligible — its stored
+    // credentials must not serve other callers; JWKS deployments share
+    // org/team-scoped installs (or ownerless service rows).
     // TODO: works only we are doing end-to-end JWKS pattern.
-    if (tokenAuth.isExternalIdp && allServers.length > 0) {
-      logger.info(
-        {
-          toolName: toolCall.name,
-          catalogId: tool.catalogId,
-          serverId: allServers[0].id,
-        },
-        `Dynamic resolution: using first available server for external IdP user`,
+    if (tokenAuth.isExternalIdp) {
+      const idpFallbackServer = allServers.find(
+        (s) =>
+          !(
+            s.ownerId &&
+            s.ownerId !== tokenAuth.userId &&
+            !s.teamId &&
+            s.scope !== "org"
+          ),
       );
-      return {
-        targetMcpServerId: allServers[0].id,
-        mcpServerName: allServers[0].name,
-      };
+      if (idpFallbackServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: idpFallbackServer.id,
+          },
+          `Dynamic resolution: using first available server for external IdP user`,
+        );
+        return {
+          targetMcpServerId: idpFallbackServer.id,
+          mcpServerName: idpFallbackServer.name,
+        };
+      }
     }
 
     // No server found. Offer a self-service install link only when the caller

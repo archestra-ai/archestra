@@ -673,29 +673,6 @@ class McpServerModel {
   }
 
   /**
-   * Catalog ids the caller has an accessible install of (own personal + team +
-   * org). Distinct from catalog *visibility* (McpCatalogTeamModel): an
-   * org-scoped catalog is visible to every member, but if its only install is
-   * another user's personal server it is absent here. Scopes the search_tools /
-   * run_tool dynamic-discovery space so it cannot reach another user's servers.
-   */
-  static async getAccessibleInstallCatalogIds(
-    userId: string,
-  ): Promise<Set<string>> {
-    const installIds = await McpServerModel.getAccessibleInstallIds(userId);
-    if (installIds.length === 0) return new Set();
-    const rows = await db
-      .select({ catalogId: schema.mcpServersTable.catalogId })
-      .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.id, installIds));
-    const catalogIds = new Set<string>();
-    for (const row of rows) {
-      if (row.catalogId) catalogIds.add(row.catalogId);
-    }
-    return catalogIds;
-  }
-
-  /**
    * The caller's accessible installs keyed by catalog, each `{ mcpServerId,
    * scope }`. Installs are ordered by scope precedence (personal → team → org)
    * then name, giving the Apps listing a stable per-install order.

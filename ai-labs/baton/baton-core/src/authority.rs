@@ -48,56 +48,48 @@ pub enum Ruling {
 /// the static consultation preference — the first member whose mandate covers
 /// the need decides.
 pub trait Authority {
-    /// The name of the member that would cover `needed`, or `None` if this
-    /// authority cannot. This folds coverage and attribution into one pure,
-    /// stable function so the engine both routes and names from the same
-    /// answer; it must return the same result at routing time and at
-    /// delegation time. The empty grant is covered by all (acknowledgment
-    /// competence is universal), so a leaf returns `Some(self.name)` for it.
-    fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName>;
-
-    /// Rule on an escalation the engine has already routed here. `needed` is
-    /// the grant the engine will apply on `Approve`; `violations` is the full
-    /// set found for the flow (under
-    /// [`crate::engine::UnknownPolicy::AllowWithAudit`], policy-audited
-    /// unprovables are included for context even though the policy audits
-    /// them through rather than blocking on them).
-    fn adjudicate(
+    /// Route `needed` to the first member whose declared mandate covers it and
+    /// return that member's name together with its ruling — from a **single
+    /// traversal**, so the audited name is exactly the member that ruled, with
+    /// no reliance on a routing/attribution call agreeing with a separate
+    /// adjudication call. `None` means no member's mandate covers `needed`, and
+    /// in that case no member is consulted — an uncovered flow blocks without
+    /// consulting anyone.
+    ///
+    /// A member is consulted only after its own mandate covers `needed`, so
+    /// coverage stays decidable from declared data before any (possibly
+    /// expensive) judgement runs. The empty grant is covered by all
+    /// (acknowledgment competence is universal). `needed` is the grant the
+    /// engine will apply on `Approve`; `violations` is the full set found for
+    /// the flow (under [`crate::engine::UnknownPolicy::AllowWithAudit`],
+    /// policy-audited unprovables are included for context even though the
+    /// policy audits them through rather than blocking on them).
+    fn rule(
         &self,
         needed: &Grant,
         request: &ToolRequest,
         context: &Label,
         violations: &[Violation],
-    ) -> Ruling;
+    ) -> Option<(AuthorityName, Ruling)>;
 }
 
 /// Static composition: consult members left to right, first covering member
-/// decides. `grant_authority` is first-success `or_else`; `adjudicate`
-/// delegates to whichever member `grant_authority` selected. Because
-/// `grant_authority` is pure and stable, the recorded name is exactly the
-/// member that adjudicates. First-success `or_else` is associative, so
-/// `(a, (b, c))` and `((a, b), c)` route identically — nesting shape does not
-/// matter.
+/// decides. `rule` is first-success `or_else`, so both the name and the ruling
+/// come from the same member in one traversal — attribution is consistent by
+/// construction, even for a stateful member. First-success `or_else` is
+/// associative, so `(a, (b, c))` and `((a, b), c)` route identically — nesting
+/// shape does not matter. A non-covering member returns `None` before its
+/// judgement runs, so it is never consulted.
 impl<A: Authority, B: Authority> Authority for (A, B) {
-    fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-        self.0
-            .grant_authority(needed)
-            .or_else(|| self.1.grant_authority(needed))
-    }
-
-    fn adjudicate(
+    fn rule(
         &self,
         needed: &Grant,
         request: &ToolRequest,
         context: &Label,
         violations: &[Violation],
-    ) -> Ruling {
-        // Sound because the engine calls `adjudicate` only after
-        // `grant_authority(needed).is_some()`, so some member covers `needed`.
-        if self.0.grant_authority(needed).is_some() {
-            self.0.adjudicate(needed, request, context, violations)
-        } else {
-            self.1.adjudicate(needed, request, context, violations)
-        }
+    ) -> Option<(AuthorityName, Ruling)> {
+        self.0
+            .rule(needed, request, context, violations)
+            .or_else(|| self.1.rule(needed, request, context, violations))
     }
 }

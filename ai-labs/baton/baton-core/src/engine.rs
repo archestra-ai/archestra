@@ -340,7 +340,19 @@ impl<A: Authority> PolicyEngine<A> {
             None => Grant::empty(),
         };
 
-        let Some(authority_name) = self.authority.grant_authority(&needed) else {
+        // Route and adjudicate in one traversal: the authority names the
+        // deciding member and returns its ruling together, so attribution is
+        // consistent by construction. `None` means no mandate covers the need
+        // — block without consulting anyone.
+        let full_picture: Vec<Violation> = escalating
+            .iter()
+            .chain(audited_unknowns.iter())
+            .cloned()
+            .collect();
+        let Some((authority_name, ruling)) =
+            self.authority
+                .rule(&needed, request, &context, &full_picture)
+        else {
             escalating.extend(audited_unknowns);
             return Decision::Blocked {
                 violations: escalating,
@@ -348,15 +360,7 @@ impl<A: Authority> PolicyEngine<A> {
             };
         };
 
-        let full_picture: Vec<Violation> = escalating
-            .iter()
-            .chain(audited_unknowns.iter())
-            .cloned()
-            .collect();
-        match self
-            .authority
-            .adjudicate(&needed, request, &context, &full_picture)
-        {
+        match ruling {
             Ruling::Approve { reason } => {
                 // Fail closed (a control-flow check, not a debug_assert that
                 // vanishes in release): the grant must actually clear every
@@ -591,8 +595,8 @@ mod tests {
         }
     }
 
-    /// Approves everything and counts how often it was consulted (i.e.
-    /// `adjudicate`d — routing via `grant_authority` does not count).
+    /// Approves everything within its mandate and counts how often it was
+    /// consulted (i.e. its mandate covered the need and it ruled).
     struct CountingApprover {
         consulted: Cell<usize>,
     }
@@ -606,60 +610,70 @@ mod tests {
     }
 
     impl Authority for CountingApprover {
-        fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-            full_mandate()
-                .covers(needed)
-                .then(|| AuthorityName::new("counting-approver"))
-        }
-
-        fn adjudicate(&self, _: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
-            self.consulted.set(self.consulted.get() + 1);
-            Ruling::Approve {
-                reason: "scripted approval".to_owned(),
-            }
+        fn rule(
+            &self,
+            needed: &Grant,
+            _: &ToolRequest,
+            _: &Label,
+            _: &[Violation],
+        ) -> Option<(AuthorityName, Ruling)> {
+            full_mandate().covers(needed).then(|| {
+                self.consulted.set(self.consulted.get() + 1);
+                (
+                    AuthorityName::new("counting-approver"),
+                    Ruling::Approve {
+                        reason: "scripted approval".to_owned(),
+                    },
+                )
+            })
         }
     }
 
     struct DenyAll;
 
     impl Authority for DenyAll {
-        fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-            full_mandate()
-                .covers(needed)
-                .then(|| AuthorityName::new("deny-all"))
-        }
-
-        fn adjudicate(&self, _: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
-            Ruling::Deny {
-                reason: "scripted denial".to_owned(),
-            }
+        fn rule(
+            &self,
+            needed: &Grant,
+            _: &ToolRequest,
+            _: &Label,
+            _: &[Violation],
+        ) -> Option<(AuthorityName, Ruling)> {
+            full_mandate().covers(needed).then(|| {
+                (
+                    AuthorityName::new("deny-all"),
+                    Ruling::Deny {
+                        reason: "scripted denial".to_owned(),
+                    },
+                )
+            })
         }
     }
 
-    /// Approves everything and records the violations it was shown.
+    /// Approves everything within its mandate and records the violations it
+    /// was shown.
     #[derive(Default)]
     struct InspectingApprover {
         seen: RefCell<Vec<Violation>>,
     }
 
     impl Authority for InspectingApprover {
-        fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-            full_mandate()
-                .covers(needed)
-                .then(|| AuthorityName::new("inspecting-approver"))
-        }
-
-        fn adjudicate(
+        fn rule(
             &self,
-            _: &Grant,
+            needed: &Grant,
             _: &ToolRequest,
             _: &Label,
             violations: &[Violation],
-        ) -> Ruling {
-            self.seen.borrow_mut().extend(violations.iter().cloned());
-            Ruling::Approve {
-                reason: "scripted approval".to_owned(),
-            }
+        ) -> Option<(AuthorityName, Ruling)> {
+            full_mandate().covers(needed).then(|| {
+                self.seen.borrow_mut().extend(violations.iter().cloned());
+                (
+                    AuthorityName::new("inspecting-approver"),
+                    Ruling::Approve {
+                        reason: "scripted approval".to_owned(),
+                    },
+                )
+            })
         }
     }
 
@@ -667,30 +681,27 @@ mod tests {
     struct BobOnly;
 
     impl Authority for BobOnly {
-        fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-            full_mandate()
-                .covers(needed)
-                .then(|| AuthorityName::new("bob-only"))
-        }
-
-        fn adjudicate(
+        fn rule(
             &self,
-            _: &Grant,
+            needed: &Grant,
             request: &ToolRequest,
             _: &Label,
             _: &[Violation],
-        ) -> Ruling {
-            let to_bob_only = !request.recipients.is_empty()
-                && request.recipients.iter().all(|u| u == &user("bob"));
-            if to_bob_only {
-                Ruling::Approve {
-                    reason: "reviewed for bob".to_owned(),
-                }
-            } else {
-                Ruling::Deny {
-                    reason: "only bob was reviewed".to_owned(),
-                }
-            }
+        ) -> Option<(AuthorityName, Ruling)> {
+            full_mandate().covers(needed).then(|| {
+                let to_bob_only = !request.recipients.is_empty()
+                    && request.recipients.iter().all(|u| u == &user("bob"));
+                let ruling = if to_bob_only {
+                    Ruling::Approve {
+                        reason: "reviewed for bob".to_owned(),
+                    }
+                } else {
+                    Ruling::Deny {
+                        reason: "only bob was reviewed".to_owned(),
+                    }
+                };
+                (AuthorityName::new("bob-only"), ruling)
+            })
         }
     }
 
@@ -714,23 +725,26 @@ mod tests {
     }
 
     impl Authority for Mandated {
-        fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-            self.mandate
-                .covers(needed)
-                .then(|| AuthorityName::new(self.name))
-        }
-
-        fn adjudicate(&self, _: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
-            self.consulted.set(self.consulted.get() + 1);
-            if self.approve {
-                Ruling::Approve {
-                    reason: "ok".to_owned(),
-                }
-            } else {
-                Ruling::Deny {
-                    reason: "no".to_owned(),
-                }
-            }
+        fn rule(
+            &self,
+            needed: &Grant,
+            _: &ToolRequest,
+            _: &Label,
+            _: &[Violation],
+        ) -> Option<(AuthorityName, Ruling)> {
+            self.mandate.covers(needed).then(|| {
+                self.consulted.set(self.consulted.get() + 1);
+                let ruling = if self.approve {
+                    Ruling::Approve {
+                        reason: "ok".to_owned(),
+                    }
+                } else {
+                    Ruling::Deny {
+                        reason: "no".to_owned(),
+                    }
+                };
+                (AuthorityName::new(self.name), ruling)
+            })
         }
     }
 
@@ -1385,12 +1399,16 @@ mod tests {
             ),
             Mandated::new("c", confirms_mandate(), true),
         );
+        let request = ToolRequest::new(ToolName::new("noop"));
+        let context = Label::identity();
         for need in &needs {
-            assert_eq!(
-                left.grant_authority(need),
-                right.grant_authority(need),
-                "need={need:?}"
-            );
+            let left_name = left
+                .rule(need, &request, &context, &[])
+                .map(|(name, _)| name);
+            let right_name = right
+                .rule(need, &request, &context, &[])
+                .map(|(name, _)| name);
+            assert_eq!(left_name, right_name, "need={need:?}");
         }
     }
 
@@ -1480,5 +1498,32 @@ mod tests {
         };
         assert_eq!(reason, BlockReason::UnknownDenied);
         assert_eq!(engine.authority.consulted.get(), 0);
+    }
+
+    #[test]
+    fn first_covering_member_decides_and_is_attributed() {
+        // Both members are mandated for trust; the first denies, the second
+        // would approve. The panel takes the first member's denial, attributes
+        // it to that member, and never consults the second — routing,
+        // attribution, and consultation all agree by construction.
+        let panel = (
+            Mandated::new("first", trust_mandate(), false),
+            Mandated::new("second", trust_mandate(), true),
+        );
+        let mut engine = PolicyEngine::new(panel, UnknownPolicy::Escalate);
+        engine.register(email_contract());
+
+        let trajectory = suspicious_private_trajectory();
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
+        let decision = engine.evaluate(&trajectory, &request);
+        let Decision::Blocked { reason, .. } = decision else {
+            panic!("expected block, got {decision:?}");
+        };
+        assert!(matches!(
+            reason,
+            BlockReason::DeniedByAuthority { authority, .. } if authority.as_str() == "first"
+        ));
+        assert_eq!(engine.authority.0.consulted.get(), 1);
+        assert_eq!(engine.authority.1.consulted.get(), 0);
     }
 }

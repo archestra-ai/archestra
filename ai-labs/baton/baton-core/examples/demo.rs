@@ -38,31 +38,28 @@ impl HumanInTheLoop {
 }
 
 impl Authority for HumanInTheLoop {
-    fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-        Self::mandate()
-            .covers(needed)
-            .then(|| AuthorityName::new("human-in-the-loop"))
-    }
-
-    fn adjudicate(
+    fn rule(
         &self,
-        _: &Grant,
+        needed: &Grant,
         _: &ToolRequest,
         _: &Label,
         violations: &[Violation],
-    ) -> Ruling {
-        let exposes_outsiders = violations
-            .iter()
-            .any(|v| matches!(v, Violation::Breach(Breach::AudienceExceeds { .. })));
-        if exposes_outsiders {
-            Ruling::Deny {
-                reason: "not comfortable exposing this outside the audience".to_owned(),
-            }
-        } else {
-            Ruling::Approve {
-                reason: "reviewed the provenance, it is fine to proceed".to_owned(),
-            }
-        }
+    ) -> Option<(AuthorityName, Ruling)> {
+        Self::mandate().covers(needed).then(|| {
+            let exposes_outsiders = violations
+                .iter()
+                .any(|v| matches!(v, Violation::Breach(Breach::AudienceExceeds { .. })));
+            let ruling = if exposes_outsiders {
+                Ruling::Deny {
+                    reason: "not comfortable exposing this outside the audience".to_owned(),
+                }
+            } else {
+                Ruling::Approve {
+                    reason: "reviewed the provenance, it is fine to proceed".to_owned(),
+                }
+            };
+            (AuthorityName::new("human-in-the-loop"), ruling)
+        })
     }
 }
 
@@ -81,16 +78,21 @@ impl OnCallAdmin {
 }
 
 impl Authority for OnCallAdmin {
-    fn grant_authority(&self, needed: &Grant) -> Option<AuthorityName> {
-        Self::mandate()
-            .covers(needed)
-            .then(|| AuthorityName::new("on-call-admin"))
-    }
-
-    fn adjudicate(&self, _: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Ruling {
-        Ruling::Approve {
-            reason: "on-call admin authorizes this action".to_owned(),
-        }
+    fn rule(
+        &self,
+        needed: &Grant,
+        _: &ToolRequest,
+        _: &Label,
+        _: &[Violation],
+    ) -> Option<(AuthorityName, Ruling)> {
+        Self::mandate().covers(needed).then(|| {
+            (
+                AuthorityName::new("on-call-admin"),
+                Ruling::Approve {
+                    reason: "on-call admin authorizes this action".to_owned(),
+                },
+            )
+        })
     }
 }
 

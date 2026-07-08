@@ -1903,17 +1903,24 @@ export function ChatPageContent({
                 },
               );
 
-              // Update the enabled tools
-              updateEnabledToolsMutation.mutate({
+              // Await the persist before the first message sends below: the
+              // backend rebuilds the tool set from the DB, so a fire-and-forget
+              // PUT could lose the race and run turn one with the just-declined
+              // tool still enabled.
+              await updateEnabledToolsMutation.mutateAsync({
                 conversationId: newConversation.id,
                 toolIds: newEnabledToolIds,
               });
+              // Clear only after the selection is persisted — a failed PUT or an
+              // unresolved base (empty tool fetch) leaves the pending action to
+              // retry on the next new conversation rather than silently dropping
+              // the decline.
+              clearPendingActions();
             }
           } catch {
-            // Silently fail - the default tools will be used
+            // Leave pending actions intact on failure; the first turn falls back
+            // to the agent's default tools.
           }
-          // Clear pending actions regardless of success
-          clearPendingActions();
         }
 
         selectConversation(newConversation.id);

@@ -28,6 +28,19 @@ pub enum UnknownPolicy {
     AllowWithAudit,
 }
 
+/// The source-side taint knob, orthogonal to [`UnknownPolicy`]. `Allow`
+/// (default) is today's behavior: taint propagates silently through the fold.
+/// `Escalate` additionally flags any flow whose output would *degrade* the
+/// context (`context.combine(output) ≠ context` in some dimension) with an
+/// acknowledge-only [`Violation::TaintEntry`], so a degrading step is
+/// recorded (and, if nothing else clears it, signed off by an authority).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TaintPolicy {
+    #[default]
+    Allow,
+    Escalate,
+}
+
 /// Proof that the engine authorized one tool call — the only way to append a
 /// tool result to a [`Trajectory`]. Carries the exact [`ToolRequest`] that
 /// was evaluated (execute that, nothing else) and the label the result must
@@ -171,6 +184,7 @@ pub enum Decision {
 pub struct PolicyEngine<A: Authority> {
     contracts: BTreeMap<ToolName, ToolContract>,
     unknown_policy: UnknownPolicy,
+    taint_policy: TaintPolicy,
     authority: A,
 }
 
@@ -179,8 +193,16 @@ impl<A: Authority> PolicyEngine<A> {
         Self {
             contracts: BTreeMap::new(),
             unknown_policy,
+            taint_policy: TaintPolicy::default(),
             authority,
         }
+    }
+
+    /// Opt into the source-side taint knob (default [`TaintPolicy::Allow`]).
+    #[must_use]
+    pub fn with_taint_policy(mut self, taint_policy: TaintPolicy) -> Self {
+        self.taint_policy = taint_policy;
+        self
     }
 
     pub fn register(&mut self, contract: ToolContract) {
@@ -244,10 +266,25 @@ impl<A: Authority> PolicyEngine<A> {
             ),
         };
 
-        let violations = match verdict {
-            Verdict::Allow => return permit(result_label),
+        let mut violations = match verdict {
+            Verdict::Allow => Vec::new(),
             Verdict::Escalate(violations) => violations,
         };
+
+        // Source-side taint knob (orthogonal to the requirement check): flag a
+        // flow whose output would degrade the context as acknowledge-only.
+        let taint = if self.taint_policy == TaintPolicy::Escalate {
+            taint_entry(&context, &result_label, &request.tool)
+        } else {
+            None
+        };
+        if let Some(taint) = taint {
+            violations.push(taint);
+        }
+
+        if violations.is_empty() {
+            return permit(result_label);
+        }
 
         // Axis: fixability. A structural violation is an integration bug no
         // authority may override — block before consulting anyone.
@@ -447,11 +484,23 @@ fn needed_grant(
                 grant.confirms = true;
             }
             Violation::Breach(Breach::UndeclaredRecipients)
-            | Violation::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => {
-            }
+            | Violation::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. })
+            | Violation::TaintEntry { .. } => {}
         }
     }
     grant
+}
+
+/// If the taint knob is on, flag a flow whose output would degrade the
+/// context: `context.combine(output)` differs from `context` in some
+/// dimension. (Combine is the taint meet, so folding can only keep or worsen
+/// a dimension — any difference is a degradation.)
+fn taint_entry(context: &Label, output: &Label, tool: &ToolName) -> Option<Violation> {
+    let would_be = context.clone().combine(output.clone());
+    let degrades = would_be.audience != context.audience
+        || would_be.trust != context.trust
+        || would_be.effects != context.effects;
+    degrades.then(|| Violation::TaintEntry { tool: tool.clone() })
 }
 
 #[cfg(test)]
@@ -1343,5 +1392,93 @@ mod tests {
                 "need={need:?}"
             );
         }
+    }
+
+    /// A tool whose output degrades trust (Trusted → Suspicious) from a clean
+    /// context, with no requirements of its own.
+    fn fetch_contract() -> ToolContract {
+        ToolContract {
+            name: ToolName::new("web.fetch"),
+            requires: Requirements::default(),
+            output_label: Label {
+                audience: Audience::Public,
+                trust: Trust::SUSPICIOUS,
+                ..Label::identity()
+            },
+        }
+    }
+
+    #[test]
+    fn taint_allow_does_not_flag_a_degrading_flow() {
+        // Default TaintPolicy::Allow: a degrading fetch permits silently.
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
+        engine.register(fetch_contract());
+        let decision = engine.evaluate(
+            &Trajectory::new(),
+            &ToolRequest::new(ToolName::new("web.fetch")),
+        );
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+        assert!(permit.result_label().audit.is_empty());
+        assert_eq!(engine.authority.consulted.get(), 0);
+    }
+
+    #[test]
+    fn taint_escalate_flags_and_signs_off_a_degrading_flow() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate)
+            .with_taint_policy(TaintPolicy::Escalate);
+        engine.register(fetch_contract());
+        let decision = engine.evaluate(
+            &Trajectory::new(),
+            &ToolRequest::new(ToolName::new("web.fetch")),
+        );
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+        // The degrading fetch was acknowledged by an authority (by: Some).
+        assert_eq!(engine.authority.consulted.get(), 1);
+        assert!(permit.result_label().audit.iter().any(|e| matches!(
+            e,
+            AuditEntry::Acknowledged { facts, by: Some(_), .. }
+                if facts.iter().any(|v| matches!(v, Violation::TaintEntry { .. }))
+        )));
+    }
+
+    #[test]
+    fn taint_escalate_ignores_a_non_degrading_flow() {
+        let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate)
+            .with_taint_policy(TaintPolicy::Escalate);
+        engine.register(ToolContract {
+            name: ToolName::new("noop.tool"),
+            requires: Requirements::default(),
+            output_label: Label::identity(),
+        });
+        let decision = engine.evaluate(
+            &Trajectory::new(),
+            &ToolRequest::new(ToolName::new("noop.tool")),
+        );
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+        assert!(permit.result_label().audit.is_empty());
+        assert_eq!(engine.authority.consulted.get(), 0);
+    }
+
+    #[test]
+    fn no_contract_blocks_on_deny_regardless_of_the_taint_knob() {
+        // NoContract is unprovable; UnknownPolicy::Deny fails closed before any
+        // authority, and the taint knob does not change that.
+        let engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Deny)
+            .with_taint_policy(TaintPolicy::Escalate);
+        let decision = engine.evaluate(
+            &Trajectory::new(),
+            &ToolRequest::new(ToolName::new("calendar.lookup")),
+        );
+        let Decision::Blocked { reason, .. } = decision else {
+            panic!("expected block, got {decision:?}");
+        };
+        assert_eq!(reason, BlockReason::UnknownDenied);
+        assert_eq!(engine.authority.consulted.get(), 0);
     }
 }

@@ -160,6 +160,13 @@ impl fmt::Display for Unprovable {
 pub enum Violation {
     Breach(Breach),
     Unprovable(Unprovable),
+    /// The source-side taint knob ([`crate::engine::TaintPolicy::Escalate`])
+    /// flagged this flow: folding the tool's output onto the context would
+    /// degrade a dimension. Acknowledge-only — there is nothing to prove or
+    /// lift, only a fact to record.
+    TaintEntry {
+        tool: ToolName,
+    },
 }
 
 impl fmt::Display for Violation {
@@ -167,6 +174,9 @@ impl fmt::Display for Violation {
         match self {
             Self::Breach(b) => write!(f, "breach: {b}"),
             Self::Unprovable(u) => write!(f, "unprovable: {u}"),
+            Self::TaintEntry { tool } => {
+                write!(f, "taint: flow through `{tool}` degrades the context")
+            }
         }
     }
 }
@@ -201,9 +211,8 @@ impl Violation {
             | Self::Unprovable(Unprovable::TrustUnknown | Unprovable::AudienceUnknown) => {
                 Fixability::GrantFixable
             }
-            Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => {
-                Fixability::AcknowledgeOnly
-            }
+            Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. })
+            | Self::TaintEntry { .. } => Fixability::AcknowledgeOnly,
         }
     }
 }

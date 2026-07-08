@@ -701,6 +701,72 @@ test("synthesizes an interrupted tool result for a tool call parked at approval-
   expect(results[0].output.value).toContain("interrupted");
 });
 
+test("does NOT synthesize an interrupted result for an approved tool call (the SDK executes it on resume)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // Resume turn: the model called a tool that needs approval and the user
+  // approved it. The tool has not executed yet — the AI SDK executes an
+  // approved call itself on this request, but only when no tool-result exists
+  // for the call. Fabricating an "interrupted" result here strands the approval
+  // and the tool silently never runs.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "delete the file" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "filesystem__delete",
+          toolCallId: "call-approved",
+          state: "approval-responded",
+          input: { path: "/tmp/x" },
+          approval: { id: "approval-1", approved: true },
+        },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  // Sanity: the approval-response the SDK needs to resume execution is present.
+  const approvalResponses = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+    .filter((p) => (p as { type?: string }).type === "tool-approval-response");
+  expect(approvalResponses).toHaveLength(1);
+
+  // The exclusion maps approvalId -> toolCallId via the assistant's
+  // tool-approval-request part. convertToModelMessages (not the internal
+  // language-model converter that strips them later) emits it into the
+  // assistant content; if a future SDK stopped doing so the exclusion would
+  // silently break and drop the approved call again.
+  const approvalRequests = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+    .filter((p) => (p as { type?: string }).type === "tool-approval-request");
+  expect(approvalRequests).toHaveLength(1);
+
+  // The bug: a synthetic error-text tool-result is fabricated for the approved
+  // call, so the SDK's collectToolApprovals skips executing it.
+  const fabricated = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+    .find(
+      (p) =>
+        (p as { type?: string }).type === "tool-result" &&
+        (p as { toolCallId?: string }).toolCallId === "call-approved",
+    );
+  expect(fabricated).toBeUndefined();
+});
+
 test("merges synthetic results into an existing tool message when only some calls resolved", async ({
   makeAgent,
   makeConversation,

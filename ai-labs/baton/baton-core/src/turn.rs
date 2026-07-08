@@ -4,13 +4,20 @@ use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::ToolName;
-use crate::dimension::{Attention, UserId};
+use crate::dimension::UserId;
 use crate::engine::{Permit, RejectedPermit};
 use crate::label::Label;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Actor {
-    User(UserId),
+    User {
+        id: UserId,
+        /// An explicit confirmation of one named tool. Structural, not a
+        /// label: only user turns can carry it, so "only the user confirms"
+        /// holds by construction rather than by a runtime check — an
+        /// assistant or tool actor has no such field to forge.
+        confirms: Option<ToolName>,
+    },
     Assistant,
     Tool(ToolName),
 }
@@ -19,8 +26,27 @@ pub enum Actor {
 /// they enter a trajectory only through [`Trajectory::record_result`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Speaker {
-    User(UserId),
+    User {
+        id: UserId,
+        confirms: Option<ToolName>,
+    },
     Assistant,
+}
+
+impl Speaker {
+    pub fn user(id: UserId) -> Self {
+        Self::User { id, confirms: None }
+    }
+
+    /// A user message that explicitly confirms one named tool. The
+    /// confirmation is valid only while this is the newest turn — see
+    /// [`Trajectory::pending_confirmation`].
+    pub fn confirming(id: UserId, tool: ToolName) -> Self {
+        Self::User {
+            id,
+            confirms: Some(tool),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,27 +80,6 @@ impl fmt::Display for TrajectoryId {
     }
 }
 
-/// A message turn the trajectory refuses to hold.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InvalidTurn {
-    /// Only the user can confirm a tool ([`Attention::High`]); an assistant
-    /// turn carrying one would let model output arm a confirmation gate.
-    ConfirmationFromAssistant { tool: ToolName },
-}
-
-impl fmt::Display for InvalidTurn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ConfirmationFromAssistant { tool } => write!(
-                f,
-                "assistant turn carries a confirmation for `{tool}`; only the user can confirm"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for InvalidTurn {}
-
 /// An append-only sequence of labeled turns. There is no way to append a bare
 /// [`Turn`], and a tool-result turn requires consuming a [`Permit`] minted for
 /// this trajectory's current head, so a result cannot enter wearing a label
@@ -104,24 +109,11 @@ impl Trajectory {
         self.id
     }
 
-    /// Append a user or assistant message under its label.
-    ///
-    /// Labels are trusted input from the embedding harness, with one vetted
-    /// exception: a confirmation (`Attention::High`) belongs on user turns
-    /// only, so it is rejected here on assistant turns, as it is in tool
-    /// contracts by [`crate::engine::PolicyEngine::register`]. A `High` in a
-    /// folded context therefore always originates from a user turn.
-    pub fn push_message(
-        &mut self,
-        label: Label,
-        speaker: Speaker,
-        content: impl Into<String>,
-    ) -> Result<(), InvalidTurn> {
-        if let (Speaker::Assistant, Attention::High(tool)) = (&speaker, &label.attention) {
-            return Err(InvalidTurn::ConfirmationFromAssistant { tool: tool.clone() });
-        }
+    /// Append a user or assistant message under its label. Labels are
+    /// trusted input from the embedding harness.
+    pub fn push_message(&mut self, label: Label, speaker: Speaker, content: impl Into<String>) {
         let actor = match speaker {
-            Speaker::User(user) => Actor::User(user),
+            Speaker::User { id, confirms } => Actor::User { id, confirms },
             Speaker::Assistant => Actor::Assistant,
         };
         self.turns.push(LabeledTurn {
@@ -131,7 +123,6 @@ impl Trajectory {
                 content: content.into(),
             },
         });
-        Ok(())
     }
 
     /// Append a tool result under the label the engine granted for it. The
@@ -170,6 +161,28 @@ impl Trajectory {
         &self.turns
     }
 
+    /// The user confirmation currently in force, if any: the newest turn's,
+    /// and only if that turn is a user turn. "A confirmation authorizes the
+    /// immediately following action, never a later one" is structural — any
+    /// appended turn ends it.
+    pub fn pending_confirmation(&self) -> Option<&ToolName> {
+        match self.turns.last() {
+            Some(LabeledTurn {
+                turn:
+                    Turn {
+                        actor:
+                            Actor::User {
+                                confirms: Some(tool),
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            }) => Some(tool),
+            _ => None,
+        }
+    }
+
     /// The folded label of everything currently in context.
     pub fn context_label(&self) -> Label {
         Label::fold(self.turns.iter().map(|t| t.label.clone()))
@@ -179,43 +192,38 @@ impl Trajectory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dimension::{Attention, Audience, Effect, Effects, Trust};
+    use crate::dimension::{Audience, Effect, Effects, Trust};
 
     #[test]
     fn context_label_folds_all_turns() {
         let mut trajectory = Trajectory::new();
-        trajectory
-            .push_message(
-                Label {
-                    audience: Audience::readers([UserId::new("alice"), UserId::new("bob")]),
-                    trust: Trust::Trusted,
-                    ..Label::identity()
-                },
-                Speaker::User(UserId::new("alice")),
-                "summarize the doc",
-            )
-            .expect("valid turn");
-        trajectory
-            .push_message(
-                Label {
-                    audience: Audience::Public,
-                    trust: Trust::Suspicious,
-                    effects: Effects::declared([Effect::Egress]),
-                    ..Label::identity()
-                },
-                Speaker::Assistant,
-                "pasting what the page says: ...",
-            )
-            .expect("valid turn");
+        trajectory.push_message(
+            Label {
+                audience: Audience::readers([UserId::new("alice"), UserId::new("bob")]),
+                trust: Trust::TRUSTED,
+                ..Label::identity()
+            },
+            Speaker::user(UserId::new("alice")),
+            "summarize the doc",
+        );
+        trajectory.push_message(
+            Label {
+                audience: Audience::Public,
+                trust: Trust::SUSPICIOUS,
+                effects: Effects::declared([Effect::Egress]),
+                ..Label::identity()
+            },
+            Speaker::Assistant,
+            "pasting what the page says: ...",
+        );
 
         let context = trajectory.context_label();
         assert_eq!(
             context.audience,
             Audience::readers([UserId::new("alice"), UserId::new("bob")])
         );
-        assert_eq!(context.trust, Trust::Suspicious);
+        assert_eq!(context.trust, Trust::SUSPICIOUS);
         assert_eq!(context.effects, Effects::declared([Effect::Egress]));
-        assert_eq!(context.attention, Attention::Regular);
     }
 
     #[test]
@@ -224,31 +232,25 @@ mod tests {
     }
 
     #[test]
-    fn assistant_turns_cannot_carry_confirmations() {
+    fn a_confirmation_lasts_exactly_one_turn() {
         let mut trajectory = Trajectory::new();
-        let confirmation = Label {
-            attention: Attention::High(ToolName::new("db.drop")),
-            ..Label::identity()
-        };
+        assert_eq!(trajectory.pending_confirmation(), None);
 
-        let err = trajectory
-            .push_message(confirmation.clone(), Speaker::Assistant, "sure, dropping!")
-            .expect_err("model output must not arm a confirmation gate");
-        assert_eq!(
-            err,
-            InvalidTurn::ConfirmationFromAssistant {
-                tool: ToolName::new("db.drop"),
-            }
+        trajectory.push_message(
+            Label::identity(),
+            Speaker::confirming(UserId::new("alice"), ToolName::new("db.drop")),
+            "yes, drop it",
         );
-        assert!(trajectory.turns().is_empty());
+        assert_eq!(
+            trajectory.pending_confirmation(),
+            Some(&ToolName::new("db.drop"))
+        );
 
-        trajectory
-            .push_message(
-                confirmation,
-                Speaker::User(UserId::new("alice")),
-                "yes, drop it",
-            )
-            .expect("the user may confirm");
-        assert_eq!(trajectory.turns().len(), 1);
+        trajectory.push_message(
+            Label::identity(),
+            Speaker::user(UserId::new("alice")),
+            "unrelated chatter",
+        );
+        assert_eq!(trajectory.pending_confirmation(), None);
     }
 }

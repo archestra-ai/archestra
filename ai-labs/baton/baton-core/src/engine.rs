@@ -6,7 +6,6 @@ use std::fmt;
 use crate::ToolName;
 use crate::authority::{Authority, AuthorityName, Ruling};
 use crate::contract::{ToolContract, ToolRequest, Unprovable, Verdict, Violation};
-use crate::dimension::Attention;
 use crate::label::{AuditEntry, Label};
 use crate::turn::{Trajectory, TrajectoryId};
 
@@ -111,29 +110,6 @@ impl fmt::Display for RejectedPermit {
 
 impl std::error::Error for RejectedPermit {}
 
-/// A contract the engine refuses to hold.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InvalidContract {
-    /// The output label carries [`Attention::High`]: a tool result is not a
-    /// user confirmation, and a contract that re-arms an
-    /// explicit-confirmation gate from its own output would defeat that
-    /// gate.
-    ConfirmationInOutputLabel { tool: ToolName },
-}
-
-impl fmt::Display for InvalidContract {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ConfirmationInOutputLabel { tool } => write!(
-                f,
-                "output label of `{tool}` carries a confirmation; a tool result is not a user confirmation"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for InvalidContract {}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BlockReason {
     DeniedByAuthority {
@@ -184,14 +160,8 @@ impl<A: Authority> PolicyEngine<A> {
         }
     }
 
-    pub fn register(&mut self, contract: ToolContract) -> Result<(), InvalidContract> {
-        if matches!(contract.output_label.attention, Attention::High(_)) {
-            return Err(InvalidContract::ConfirmationInOutputLabel {
-                tool: contract.name,
-            });
-        }
+    pub fn register(&mut self, contract: ToolContract) {
         self.contracts.insert(contract.name.clone(), contract);
-        Ok(())
     }
 
     /// The design notes' `(Requirements − Label)`: an empty diff permits,
@@ -209,11 +179,12 @@ impl<A: Authority> PolicyEngine<A> {
     /// executing the tool's real-world action is outside this crate's reach.
     pub fn evaluate(&self, trajectory: &Trajectory, request: &ToolRequest) -> Decision {
         let context = trajectory.context_label();
+        let confirmation = trajectory.pending_confirmation();
         let trajectory_id = trajectory.id();
         let basis = trajectory.turns().len();
         let (verdict, result_label) = match self.contracts.get(&request.tool) {
             Some(contract) => (
-                contract.requires.check(&context, request),
+                contract.requires.check(&context, confirmation, request),
                 contract.output_label.clone(),
             ),
             None => (
@@ -324,8 +295,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::contract::{AttentionRule, AudienceRule, Breach, Requirements, TrustRequirement};
-    use crate::dimension::{Attention, Audience, Effect, Effects, Trust, UserId};
+    use crate::contract::{AttentionRule, AudienceRule, Breach, Requirements};
+    use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
     use crate::turn::Speaker;
 
     fn user(id: &str) -> UserId {
@@ -336,7 +307,7 @@ mod tests {
         ToolContract {
             name: ToolName::new("email.send"),
             requires: Requirements {
-                trust: Some(TrustRequirement::Trusted),
+                trust: Some(KnownTrust::Trusted),
                 audience: AudienceRule::RecipientsWithinContext,
                 ..Requirements::default()
             },
@@ -362,9 +333,7 @@ mod tests {
     }
 
     fn push_user_turn(trajectory: &mut Trajectory, label: Label, content: &str) {
-        trajectory
-            .push_message(label, Speaker::User(user("alice")), content)
-            .expect("user turns are valid");
+        trajectory.push_message(label, Speaker::user(user("alice")), content);
     }
 
     fn suspicious_private_trajectory() -> Trajectory {
@@ -373,22 +342,20 @@ mod tests {
             &mut trajectory,
             Label {
                 audience: Audience::readers([user("alice"), user("bob")]),
-                trust: Trust::Trusted,
+                trust: Trust::TRUSTED,
                 ..Label::identity()
             },
             "summarize and email bob",
         );
-        trajectory
-            .push_message(
-                Label {
-                    audience: Audience::Public,
-                    trust: Trust::Suspicious,
-                    ..Label::identity()
-                },
-                Speaker::Assistant,
-                "the page says: ...",
-            )
-            .expect("no confirmation on this turn");
+        trajectory.push_message(
+            Label {
+                audience: Audience::Public,
+                trust: Trust::SUSPICIOUS,
+                ..Label::identity()
+            },
+            Speaker::Assistant,
+            "the page says: ...",
+        );
         trajectory
     }
 
@@ -478,7 +445,7 @@ mod tests {
     fn clean_flow_is_permitted_without_the_authority() {
         let counting = CountingApprover::new();
         let mut engine = PolicyEngine::new(counting, UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         let mut trajectory = Trajectory::new();
         push_user_turn(
@@ -506,7 +473,7 @@ mod tests {
     #[test]
     fn approval_is_one_shot_and_never_loosens_the_context() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         let mut trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -536,7 +503,7 @@ mod tests {
     #[test]
     fn a_permit_goes_stale_when_the_trajectory_moves_on() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         let mut trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -564,7 +531,7 @@ mod tests {
     #[test]
     fn a_permit_cannot_cross_trajectories() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         let evaluated = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -585,7 +552,7 @@ mod tests {
     #[test]
     fn approval_for_bob_does_not_permit_charlie() {
         let mut engine = PolicyEngine::new(BobOnly, UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
         let trajectory = suspicious_private_trajectory();
 
         let to_bob = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -610,17 +577,14 @@ mod tests {
     #[test]
     fn stale_or_foreign_confirmation_cannot_authorize_a_drop() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
-        engine.register(drop_contract()).expect("valid contract");
+        engine.register(drop_contract());
         let request = ToolRequest::new(ToolName::new("db.drop"));
 
         // Confirmation bound to another tool.
         let mut trajectory = Trajectory::new();
-        push_user_turn(
-            &mut trajectory,
-            Label {
-                attention: Attention::High(ToolName::new("email.send")),
-                ..Label::identity()
-            },
+        trajectory.push_message(
+            Label::identity(),
+            Speaker::confirming(user("alice"), ToolName::new("email.send")),
             "yes, send it",
         );
         assert!(matches!(
@@ -628,14 +592,11 @@ mod tests {
             Decision::Blocked { .. }
         ));
 
-        // Correct confirmation, but a later turn already reset attention.
+        // Correct confirmation, but a later turn already ended it.
         let mut trajectory = Trajectory::new();
-        push_user_turn(
-            &mut trajectory,
-            Label {
-                attention: Attention::High(ToolName::new("db.drop")),
-                ..Label::identity()
-            },
+        trajectory.push_message(
+            Label::identity(),
+            Speaker::confirming(user("alice"), ToolName::new("db.drop")),
             "yes, drop it",
         );
         push_user_turn(&mut trajectory, Label::identity(), "unrelated chatter");
@@ -646,12 +607,9 @@ mod tests {
 
         // Fresh confirmation for exactly this tool.
         let mut trajectory = Trajectory::new();
-        push_user_turn(
-            &mut trajectory,
-            Label {
-                attention: Attention::High(ToolName::new("db.drop")),
-                ..Label::identity()
-            },
+        trajectory.push_message(
+            Label::identity(),
+            Speaker::confirming(user("alice"), ToolName::new("db.drop")),
             "yes, drop it",
         );
         let decision = engine.evaluate(&trajectory, &request);
@@ -718,7 +676,7 @@ mod tests {
     #[test]
     fn deny_policy_with_breaches_only_still_escalates() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Deny);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         // Suspicious trust is a breach, not an unknown: the deny policy does
         // not apply, the authority does.
@@ -734,7 +692,7 @@ mod tests {
     #[test]
     fn one_approval_declassifies_a_mixed_escalation() {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         // Suspicious trust (breach) + unknown audience (unprovable), both
         // escalated, both declassified by the single approval.
@@ -743,7 +701,7 @@ mod tests {
             &mut trajectory,
             Label {
                 audience: Audience::Unknown,
-                trust: Trust::Suspicious,
+                trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
             "context of unknown provenance",
@@ -778,7 +736,7 @@ mod tests {
     #[test]
     fn allow_with_audit_still_escalates_breaches_and_reports_unknowns_on_block() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::AllowWithAudit);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         // Unknown audience (unprovable, allowed by policy) plus a trust
         // breach (escalated, denied by the authority): the breach wins, and
@@ -788,7 +746,7 @@ mod tests {
             &mut trajectory,
             Label {
                 audience: Audience::Unknown,
-                trust: Trust::Suspicious,
+                trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
             "context of unknown provenance",
@@ -807,36 +765,17 @@ mod tests {
     }
 
     #[test]
-    fn register_rejects_a_confirmation_in_the_output_label() {
-        let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
-        let sneaky = ToolContract {
-            name: ToolName::new("db.drop"),
-            requires: Requirements::default(),
-            output_label: Label {
-                attention: Attention::High(ToolName::new("db.drop")),
-                ..Label::identity()
-            },
-        };
-        assert_eq!(
-            engine.register(sneaky),
-            Err(InvalidContract::ConfirmationInOutputLabel {
-                tool: ToolName::new("db.drop"),
-            })
-        );
-    }
-
-    #[test]
     fn the_authority_sees_audited_unknowns_alongside_breaches() {
         let mut engine =
             PolicyEngine::new(InspectingApprover::default(), UnknownPolicy::AllowWithAudit);
-        engine.register(email_contract()).expect("valid contract");
+        engine.register(email_contract());
 
         let mut trajectory = Trajectory::new();
         push_user_turn(
             &mut trajectory,
             Label {
                 audience: Audience::Unknown,
-                trust: Trust::Suspicious,
+                trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
             "context of unknown provenance",
@@ -858,17 +797,15 @@ mod tests {
     #[test]
     fn recorded_effects_feed_later_requirement_checks() {
         let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
-        engine.register(email_contract()).expect("valid contract");
-        engine
-            .register(ToolContract {
-                name: ToolName::new("report.generate"),
-                requires: Requirements {
-                    forbid_prior_effects: BTreeSet::from([Effect::Egress]),
-                    ..Requirements::default()
-                },
-                output_label: Label::identity(),
-            })
-            .expect("valid contract");
+        engine.register(email_contract());
+        engine.register(ToolContract {
+            name: ToolName::new("report.generate"),
+            requires: Requirements {
+                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                ..Requirements::default()
+            },
+            output_label: Label::identity(),
+        });
 
         let mut trajectory = Trajectory::new();
         push_user_turn(

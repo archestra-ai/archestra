@@ -8,8 +8,6 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use crate::ToolName;
-
 /// A user known to the surrounding system (ACLs, directories, ...).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UserId(String);
@@ -82,33 +80,62 @@ impl fmt::Display for Audience {
     }
 }
 
-/// How much the provenance of data is trusted.
-///
-/// Ordered `Suspicious < Unknown < Trusted`; the fold is `min` (least
-/// trusted wins). `Unknown` sits between the two on purpose: it must never
-/// satisfy a `Trusted` requirement (that would treat missing provenance as
-/// safe), but definite evidence of adversarial influence is stronger still,
-/// so `Suspicious ∧ Unknown = Suspicious`.
+/// A trust judgement that has actually been made.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Trust {
+pub enum KnownTrust {
     Suspicious,
-    Unknown,
     Trusted,
 }
 
+impl fmt::Display for KnownTrust {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Suspicious => write!(f, "suspicious"),
+            Self::Trusted => write!(f, "trusted"),
+        }
+    }
+}
+
+/// How much the provenance of data is trusted — if that is known at all.
+///
+/// `Unknown` is structurally separate from the known judgements so nothing
+/// can treat it as "probably fine" by accident: requirements are expressed
+/// over [`KnownTrust`] only, and unpacking `Unknown` into a judgement is
+/// always explicit — an [`crate::engine::UnknownPolicy`] choice or an
+/// [`crate::authority::Authority`] ruling, never a cast.
+///
+/// The fold keeps the strongest bad evidence: definite suspicion dominates
+/// missing knowledge, which dominates trust
+/// (`Suspicious ∧ Unknown = Suspicious`, `Trusted ∧ Unknown = Unknown`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Trust {
+    Known(KnownTrust),
+    Unknown,
+}
+
 impl Trust {
+    pub const TRUSTED: Self = Self::Known(KnownTrust::Trusted);
+    pub const SUSPICIOUS: Self = Self::Known(KnownTrust::Suspicious);
+
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        self.min(other)
+        match (self, other) {
+            (Self::Known(KnownTrust::Suspicious), _) | (_, Self::Known(KnownTrust::Suspicious)) => {
+                Self::Known(KnownTrust::Suspicious)
+            }
+            (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
+            (Self::Known(KnownTrust::Trusted), Self::Known(KnownTrust::Trusted)) => {
+                Self::Known(KnownTrust::Trusted)
+            }
+        }
     }
 }
 
 impl fmt::Display for Trust {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Suspicious => write!(f, "suspicious"),
+            Self::Known(known) => write!(f, "{known}"),
             Self::Unknown => write!(f, "unknown"),
-            Self::Trusted => write!(f, "trusted"),
         }
     }
 }
@@ -177,35 +204,6 @@ impl fmt::Display for Effects {
     }
 }
 
-/// Whether the user is explicitly paying attention right now.
-///
-/// `High` is an explicit confirmation bound to one named tool, and only the
-/// *most recent* turn's attention counts (`combine` keeps the newer value):
-/// a confirmation authorizes the immediately following action, never a later
-/// one and never a different tool. There is no `Unknown` here — the absence
-/// of a confirmation is a definite `Regular`, not missing metadata.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Attention {
-    Regular,
-    High(ToolName),
-}
-
-impl Attention {
-    #[must_use]
-    pub fn combine(self, newer: Self) -> Self {
-        newer
-    }
-}
-
-impl fmt::Display for Attention {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Regular => write!(f, "regular"),
-            Self::High(tool) => write!(f, "high({tool})"),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,14 +267,14 @@ mod tests {
 
     #[test]
     fn trust_least_trusted_wins() {
-        assert_eq!(Trust::Trusted.combine(Trust::Suspicious), Trust::Suspicious);
-        assert_eq!(Trust::Trusted.combine(Trust::Trusted), Trust::Trusted);
+        assert_eq!(Trust::TRUSTED.combine(Trust::SUSPICIOUS), Trust::SUSPICIOUS);
+        assert_eq!(Trust::TRUSTED.combine(Trust::TRUSTED), Trust::TRUSTED);
     }
 
     #[test]
     fn trust_unknown_sits_between() {
-        assert_eq!(Trust::Trusted.combine(Trust::Unknown), Trust::Unknown);
-        assert_eq!(Trust::Unknown.combine(Trust::Suspicious), Trust::Suspicious);
+        assert_eq!(Trust::TRUSTED.combine(Trust::Unknown), Trust::Unknown);
+        assert_eq!(Trust::Unknown.combine(Trust::SUSPICIOUS), Trust::SUSPICIOUS);
     }
 
     #[test]
@@ -289,12 +287,5 @@ mod tests {
         );
         assert_eq!(mutation.combine(Effects::Unknown), Effects::Unknown);
         assert_eq!(Effects::none().combine(Effects::none()), Effects::none());
-    }
-
-    #[test]
-    fn attention_newest_wins_in_both_directions() {
-        let high = Attention::High(ToolName::new("db.drop"));
-        assert_eq!(high.clone().combine(Attention::Regular), Attention::Regular);
-        assert_eq!(Attention::Regular.combine(high.clone()), high);
     }
 }

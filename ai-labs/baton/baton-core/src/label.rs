@@ -5,7 +5,7 @@ use std::fmt;
 use crate::ToolName;
 use crate::authority::AuthorityName;
 use crate::contract::Violation;
-use crate::dimension::{Attention, Audience, Effects, Trust};
+use crate::dimension::{Audience, Effects, Trust};
 
 /// One record in the audit dimension.
 ///
@@ -50,14 +50,17 @@ impl fmt::Display for AuditEntry {
     }
 }
 
-/// The product of all dimensions: what a piece of data *is* from the policy's
-/// point of view.
+/// The product of all data dimensions: what a piece of data *is* from the
+/// policy's point of view.
+///
+/// User confirmations are deliberately not here — they are a property of the
+/// interaction, not of data, and live structurally on user turns
+/// ([`crate::turn::Actor::User`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Label {
     pub audience: Audience,
     pub trust: Trust,
     pub effects: Effects,
-    pub attention: Attention,
     pub audit: Vec<AuditEntry>,
 }
 
@@ -66,9 +69,8 @@ impl Label {
     pub fn identity() -> Self {
         Self {
             audience: Audience::Public,
-            trust: Trust::Trusted,
+            trust: Trust::TRUSTED,
             effects: Effects::none(),
-            attention: Attention::Regular,
             audit: Vec::new(),
         }
     }
@@ -80,14 +82,12 @@ impl Label {
             audience: Audience::Unknown,
             trust: Trust::Unknown,
             effects: Effects::Unknown,
-            attention: Attention::Regular,
             audit: Vec::new(),
         }
     }
 
-    /// Per-dimension combine. Order matters for `attention` (newest wins) and
-    /// `audit` (append), so `join` is deliberately not commutative: fold
-    /// trajectories in turn order.
+    /// Per-dimension combine. Order matters only for `audit` (append), so
+    /// fold trajectories in turn order to keep the trail chronological.
     #[must_use]
     pub fn join(self, newer: Self) -> Self {
         let mut audit = self.audit;
@@ -96,7 +96,6 @@ impl Label {
             audience: self.audience.combine(newer.audience),
             trust: self.trust.combine(newer.trust),
             effects: self.effects.combine(newer.effects),
-            attention: self.attention.combine(newer.attention),
             audit,
         }
     }
@@ -110,11 +109,10 @@ impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "audience={} trust={} effects={} attention={} audit=[{}]",
+            "audience={} trust={} effects={} audit=[{}]",
             self.audience,
             self.trust,
             self.effects,
-            self.attention,
             self.audit.len()
         )
     }
@@ -139,9 +137,8 @@ mod tests {
     fn identity_is_neutral() {
         let label = Label {
             audience: Audience::readers([UserId::new("alice")]),
-            trust: Trust::Suspicious,
+            trust: Trust::SUSPICIOUS,
             effects: Effects::declared([Effect::Egress]),
-            attention: Attention::Regular,
             audit: vec![audit_entry("x")],
         };
         assert_eq!(Label::identity().join(label.clone()), label);
@@ -151,16 +148,14 @@ mod tests {
     fn join_combines_every_dimension() {
         let private_trusted = Label {
             audience: Audience::readers([UserId::new("alice"), UserId::new("bob")]),
-            trust: Trust::Trusted,
+            trust: Trust::TRUSTED,
             effects: Effects::none(),
-            attention: Attention::High(ToolName::new("db.drop")),
             audit: vec![audit_entry("first")],
         };
         let public_suspicious = Label {
             audience: Audience::Public,
-            trust: Trust::Suspicious,
+            trust: Trust::SUSPICIOUS,
             effects: Effects::declared([Effect::Mutation]),
-            attention: Attention::Regular,
             audit: vec![audit_entry("second")],
         };
         let joined = private_trusted.join(public_suspicious);
@@ -168,26 +163,12 @@ mod tests {
             joined.audience,
             Audience::readers([UserId::new("alice"), UserId::new("bob")])
         );
-        assert_eq!(joined.trust, Trust::Suspicious);
+        assert_eq!(joined.trust, Trust::SUSPICIOUS);
         assert_eq!(joined.effects, Effects::declared([Effect::Mutation]));
-        assert_eq!(joined.attention, Attention::Regular);
         assert_eq!(
             joined.audit,
             vec![audit_entry("first"), audit_entry("second")]
         );
-    }
-
-    #[test]
-    fn fold_keeps_last_attention_only() {
-        let confirm = Label {
-            attention: Attention::High(ToolName::new("db.drop")),
-            ..Label::identity()
-        };
-        let later = Label::identity();
-        let folded = Label::fold([Label::identity(), confirm.clone(), later]);
-        assert_eq!(folded.attention, Attention::Regular);
-        let folded = Label::fold([Label::identity(), confirm]);
-        assert_eq!(folded.attention, Attention::High(ToolName::new("db.drop")));
     }
 
     #[test]

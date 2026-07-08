@@ -5,9 +5,9 @@
 //! Run with `cargo run --example demo`.
 
 use baton_core::{
-    Attention, AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision,
-    Effect, Effects, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract, ToolName,
-    ToolRequest, Trajectory, Trust, TrustRequirement, UnknownPolicy, Unprovable, UserId, Violation,
+    AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision, Effect,
+    Effects, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, ToolContract,
+    ToolName, ToolRequest, Trajectory, Trust, UnknownPolicy, Unprovable, UserId, Violation,
 };
 
 /// Scripted stand-in for a real approval UI: this "human" has decided in
@@ -47,9 +47,7 @@ fn alice() -> UserId {
 }
 
 fn push_alice(trajectory: &mut Trajectory, label: Label, content: &str) {
-    trajectory
-        .push_message(label, Speaker::User(alice()), content)
-        .expect("user turns are valid");
+    trajectory.push_message(label, Speaker::user(alice()), content);
 }
 
 /// Evaluate one flow, narrate the outcome, and record the result on a permit.
@@ -89,14 +87,14 @@ fn main() {
             requires: Requirements::default(),
             output_label: Label {
                 audience: Audience::Public,
-                trust: Trust::Suspicious,
+                trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
         },
         ToolContract {
             name: ToolName::new("email.send"),
             requires: Requirements {
-                trust: Some(TrustRequirement::Trusted),
+                trust: Some(KnownTrust::Trusted),
                 audience: AudienceRule::RecipientsWithinContext,
                 ..Requirements::default()
             },
@@ -118,7 +116,7 @@ fn main() {
         },
     ];
     for contract in contracts {
-        engine.register(contract).expect("demo contracts are valid");
+        engine.register(contract);
     }
 
     let mut trajectory = Trajectory::new();
@@ -166,13 +164,12 @@ fn main() {
     );
 
     println!("== 6. Alice explicitly confirms db.drop; the confirmation is bound to that tool ==");
-    push_alice(
-        &mut trajectory,
+    trajectory.push_message(
         Label {
             audience: Audience::readers([alice(), UserId::new("bob")]),
-            attention: Attention::High(ToolName::new("db.drop")),
             ..Label::identity()
         },
+        Speaker::confirming(alice(), ToolName::new("db.drop")),
         "Yes, drop the staging table.",
     );
     attempt(

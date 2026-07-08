@@ -8,8 +8,8 @@ const disablePlaywright: PendingToolAction = {
 };
 
 describe("resolveEnabledToolIds", () => {
-  // RED: the bug. Declining a subset on a fresh (non-custom) conversation must
-  // keep every other tool enabled, not collapse to an empty allowlist.
+  // Declining a subset on a fresh (non-custom) conversation must keep every
+  // other tool enabled, not collapse to an empty allowlist.
   test("disabling a subset on a non-custom conversation keeps the other tools", () => {
     expect(
       resolveEnabledToolIds({
@@ -21,8 +21,8 @@ describe("resolveEnabledToolIds", () => {
     ).toEqual(["a", "b"]);
   });
 
-  // Pin: a real custom selection is authoritative — its stored ids are the base,
-  // NOT the agent's full set.
+  // A real custom selection is authoritative — its stored ids are the base,
+  // not the agent's full set.
   test("a custom selection uses its stored ids as the base", () => {
     expect(
       resolveEnabledToolIds({
@@ -34,7 +34,7 @@ describe("resolveEnabledToolIds", () => {
     ).toEqual(["a"]);
   });
 
-  // Pin: no pending actions + non-custom → the default is every tool enabled.
+  // No pending actions + non-custom → the default is every tool enabled.
   test("no custom selection and no pending actions enables all tools", () => {
     expect(
       resolveEnabledToolIds({
@@ -45,8 +45,8 @@ describe("resolveEnabledToolIds", () => {
     ).toEqual(["a", "b", "playwright"]);
   });
 
-  // Pin: a custom selection that genuinely enabled zero tools stays empty — the
-  // fix must not turn a real empty allowlist back into "all tools".
+  // A custom selection that genuinely enabled zero tools stays empty — a real
+  // empty allowlist must not be inflated back into "all tools".
   test("a custom selection of zero tools stays empty", () => {
     expect(
       resolveEnabledToolIds({

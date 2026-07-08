@@ -344,10 +344,11 @@ jobs:
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
   #
-  # One 32vcpu environment instead of sharded 16vcpu ones: with ~2.2min of
+  # One 16vcpu environment instead of two sharded ones: with ~2min of
   # merge-queue tests, a second Kind environment duplicated ~4min of setup to
-  # split ~1min of test time — one bigger runner (playwright workers: "90%"
-  # scales with it) makes the gate's critical path the single environment and
+  # split ~1min of test time — and 32vcpu measured identical test time to
+  # 16vcpu (the serial spec groups are the floor, not worker count), so one
+  # 16vcpu runner makes the gate's critical path the single environment and
   # deletes the shard machinery. The job ID keeps its historical name; the
   # required-check context is "Merge E2E Test Reports", not this job.
   platform-e2e-tests-shards:
@@ -364,7 +365,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
-    # hung run instead of letting it burn a 32vcpu runner for the GitHub default.
+    # hung run instead of letting it burn a 16vcpu runner for the GitHub default.
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.

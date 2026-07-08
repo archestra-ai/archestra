@@ -174,6 +174,23 @@ describe("organizationDefaultTarget", () => {
       )?.namespace,
     ).toBe("archestra-release");
   });
+
+  // Rows written before the namespace was validated can hold anything. Such a
+  // value would fail the Kubernetes create and be rejected by the kube-pod://
+  // target's UUID/RFC1123 validation, wedging every sandbox run for that org.
+  it.each([
+    ["Team-A", "uppercase"],
+    ["a.b.example.com", "dots"],
+    ["x".repeat(64), "over 63 characters"],
+    ["-leading-hyphen", "leading hyphen"],
+    ["under_score", "underscore"],
+  ])("falls back to the release namespace for a stored %s namespace (%s)", (namespace) => {
+    expect(
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+        makeOrg({ defaultEnvironmentNamespace: namespace }),
+      )?.namespace,
+    ).toBe("archestra-release");
+  });
 });
 
 describe("buildEngineStatefulSet", () => {
@@ -516,6 +533,29 @@ describe("reconcileOrganizationDefault", () => {
     mockGetClusterDnsIps.mockResolvedValue(["10.0.0.10"]);
     mockLoadKubeConfig.mockReturnValue({ kubeConfig: {} } as never);
     mockCreateK8sClients.mockReturnValue(clients as never);
+  });
+
+  // Routing and provisioning must never disagree about where the engine lives:
+  // both resolve the namespace through engineNamespace(), so an invalid stored
+  // value sends the StatefulSet and the kube-pod:// target to the same fallback.
+  it("provisions into the release namespace when the stored namespace is invalid, matching the routing target", async () => {
+    const org = makeOrg({
+      id: "org-bad",
+      defaultEnvironmentNamespace: "Team-A",
+    });
+    vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+    const target =
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(org);
+
+    await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
+
+    expect(target?.namespace).toBe("release-ns");
+    expect(
+      clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0].namespace,
+    ).toBe("release-ns");
+    expect(
+      clients.coreApi.createNamespacedConfigMap.mock.calls[0][0].namespace,
+    ).toBe("release-ns");
   });
 
   it("provisions the derived engine + config in the org's namespace, applies the unrestricted floor when the org sets no policy", async () => {

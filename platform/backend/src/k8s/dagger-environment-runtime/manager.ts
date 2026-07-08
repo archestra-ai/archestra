@@ -15,7 +15,12 @@ import {
 import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
-import type { Environment, NetworkPolicy, Organization } from "@/types";
+import {
+  type Environment,
+  KubernetesNamespaceSchema,
+  type NetworkPolicy,
+  type Organization,
+} from "@/types";
 import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
@@ -174,7 +179,15 @@ class DaggerEnvironmentRuntimeManager {
       }
     }
     const organization = await OrganizationModel.getById(organizationId);
-    if (organization) await this.reconcileOrganizationDefault(organization);
+    if (!organization) return;
+    try {
+      await this.reconcileOrganizationDefault(organization);
+    } catch (error) {
+      logger.error(
+        { err: error, organizationId },
+        "[DaggerEnvRuntime] failed to reconcile organization default engine",
+      );
+    }
   }
 
   /** Provision (or update) one environment's engine pod + egress policy. */
@@ -257,8 +270,25 @@ class DaggerEnvironmentRuntimeManager {
   // release namespace), so an engine only ever lands where the chart already
   // grants RBAC: a declared `environmentNamespaces` namespace or the release
   // namespace. No namespace is created at runtime.
+  //
+  // A stored namespace can predate the RFC1123 validation on the write path, and
+  // it had no runtime effect until engines moved into code. An invalid one would
+  // now fail the Kubernetes create AND be rejected by the `kube-pod://` target's
+  // NAPI validator, breaking every sandbox run for that org. Fall back to the
+  // release namespace — the behaviour those installs already had — rather than
+  // wedging them. Provisioning and routing both resolve through here, so they
+  // cannot disagree about where the engine lives.
   private engineNamespace(namespace: string | null | undefined): string {
-    return namespace?.trim() || getK8sNamespace();
+    const trimmed = namespace?.trim();
+    if (!trimmed) return getK8sNamespace();
+    if (!KubernetesNamespaceSchema.safeParse(trimmed).success) {
+      logger.warn(
+        { namespace: trimmed },
+        "[DaggerEnvRuntime] stored namespace is not a valid Kubernetes namespace; using the release namespace",
+      );
+      return getK8sNamespace();
+    }
+    return trimmed;
   }
 
   // Threads the org default so a target that carries no override still locks

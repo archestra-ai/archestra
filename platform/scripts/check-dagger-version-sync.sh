@@ -18,7 +18,9 @@ engine_image_tag() {
 
 docker_version="$(sed -n 's/^ARG DAGGER_VERSION=v\{0,1\}\([0-9][^[:space:]]*\)$/\1/p' "$dockerfile")"
 cargo_version="$(sed -n 's/^dagger-sdk = "=\([0-9][^"]*\)"$/\1/p' "$cargo_toml")"
-engine_image_version="$(sed -n 's#^const ENGINE_IMAGE = "registry.dagger.io/engine:v\([0-9][^"]*\)";$#\1#p' "$manager_ts")"
+# tolerate reformatting around the constant (indentation, spacing, a trailing
+# comment); only the image tag itself is pinned.
+engine_image_version="$(sed -n 's#^[[:space:]]*const[[:space:]][[:space:]]*ENGINE_IMAGE[[:space:]]*=[[:space:]]*"registry.dagger.io/engine:v\([0-9][^"]*\)".*#\1#p' "$manager_ts")"
 quickstart_version="$(engine_image_tag "$quickstart_manifest")"
 bench_dagger_version="$(engine_image_tag "$bench_dagger_compose")"
 

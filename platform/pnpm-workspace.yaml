@@ -11,10 +11,10 @@ packages:
 
 catalog:
   ai: ^6.0.193
-  better-auth: 1.6.11
-  "@better-auth/core": 1.6.11
-  "@better-auth/oauth-provider": 1.6.11
-  "@better-auth/sso": 1.6.11
+  better-auth: 1.6.13
+  "@better-auth/core": 1.6.13
+  "@better-auth/oauth-provider": 1.6.13
+  "@better-auth/sso": 1.6.13
   typescript: ^6.0.2
   # TS 7 beta (Go-based `tsgo`) publishes daily dev builds. minimumReleaseAge
   # (7 days) acts as the safety net — pnpm rejects builds younger than that,

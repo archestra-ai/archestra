@@ -654,6 +654,49 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     );
   });
 
+  test("a run reuses the cached tool set instead of refetching from the gateway", async () => {
+    const { agent, org, baseParams, gatewayClient } = await setupChatToolEnv();
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    const params = { ...baseParams, delegationChain: agent.id };
+    await chatClient.getChatMcpTools(params);
+    await chatClient.getChatMcpTools(params);
+
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+  });
+
+  test("clearChatMcpClient purges tool entries whose key carries a delegation chain", async () => {
+    const { agent, user, org, conversation, baseParams, gatewayClient } =
+      await setupChatToolEnv();
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    const params = {
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    };
+    await chatClient.getChatMcpTools(params);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+
+    // Invalidation matches tool-cache keys by their `<agentId>:` prefix, so a
+    // chain appended to the key must not push the agent id out of that prefix.
+    chatClient.clearChatMcpClient(agent.id);
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, conversation?.id),
+      gatewayClient,
+    );
+
+    await chatClient.getChatMcpTools(params);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+  });
+
   test("tools cached for one delegation chain never serve another chain", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv();
     const { targetAgent, delegationTool } = await makeAssignedDelegationTool({

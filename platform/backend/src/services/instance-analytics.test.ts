@@ -32,6 +32,7 @@ describe("instanceAnalyticsService", () => {
   });
 
   afterEach(() => {
+    instanceAnalyticsService.stop();
     config.analytics = originalAnalyticsConfig;
     config.api.version = originalAppVersion;
     vi.unstubAllGlobals();
@@ -43,7 +44,7 @@ describe("instanceAnalyticsService", () => {
   }) => {
     const organization = await makeOrganization();
 
-    await instanceAnalyticsService.trackStartup();
+    await instanceAnalyticsService.start();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     for (const [, init] of fetchMock.mock.calls) {
@@ -92,10 +93,10 @@ describe("instanceAnalyticsService", () => {
     makeOrganization,
   }) => {
     await makeOrganization();
-    await instanceAnalyticsService.trackStartup();
+    await instanceAnalyticsService.start();
     fetchMock.mockClear();
 
-    await instanceAnalyticsService.trackStartup();
+    await instanceAnalyticsService.start();
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -104,7 +105,7 @@ describe("instanceAnalyticsService", () => {
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
-    await instanceAnalyticsService.trackStartup();
+    await instanceAnalyticsService.start();
     fetchMock.mockClear();
 
     await OrganizationModel.updateAnalyticsState({
@@ -114,10 +115,57 @@ describe("instanceAnalyticsService", () => {
       ),
     });
 
-    await instanceAnalyticsService.trackStartup();
+    await instanceAnalyticsService.start();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(capturedEventNames()).toEqual(["instance_heartbeat"]);
+  });
+
+  test("keeps sending daily heartbeats while the process stays up", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    vi.useFakeTimers();
+    try {
+      await instanceAnalyticsService.start();
+      expect(capturedEventNames()).toEqual([
+        "instance_started",
+        "instance_heartbeat",
+      ]);
+      fetchMock.mockClear();
+
+      await vi.advanceTimersByTimeAsync(23 * 60 * 60 * 1000);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
+      expect(capturedEventNames()).toEqual(["instance_heartbeat"]);
+    } finally {
+      instanceAnalyticsService.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  test("recovers on a later check when the startup capture fails", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockRejectedValueOnce(new Error("network down"));
+      await expect(instanceAnalyticsService.start()).rejects.toThrow(
+        "network down",
+      );
+      fetchMock.mockClear();
+
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(capturedEventNames()).toEqual([
+        "instance_started",
+        "instance_heartbeat",
+      ]);
+    } finally {
+      instanceAnalyticsService.stop();
+      vi.useRealTimers();
+    }
   });
 
   test("does nothing when analytics is disabled", async () => {
@@ -126,7 +174,7 @@ describe("instanceAnalyticsService", () => {
       enabled: false,
     };
 
-    await instanceAnalyticsService.trackStartup();
+    await instanceAnalyticsService.start();
 
     expect(fetchMock).not.toHaveBeenCalled();
   });

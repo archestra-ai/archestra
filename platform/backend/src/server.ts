@@ -1096,7 +1096,7 @@ const startWebServer = async () => {
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
-    instanceAnalyticsService.trackStartup().catch((error) => {
+    instanceAnalyticsService.start().catch((error) => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
@@ -1362,6 +1362,8 @@ function registerWebServerShutdown(
       }
 
       mcpToolsRefreshManager.stop();
+
+      instanceAnalyticsService.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"

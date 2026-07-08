@@ -1,7 +1,9 @@
 import config from "@/config";
+import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 
 const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const HEARTBEAT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const CAPTURE_TIMEOUT_MS = 10_000;
 const INSTANCE_STARTED_EVENT = "instance_started";
 const INSTANCE_HEARTBEAT_EVENT = "instance_heartbeat";
@@ -17,6 +19,8 @@ type InstanceAnalyticsConfig = {
 };
 
 class InstanceAnalyticsService {
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+
   constructor(
     private readonly options: {
       analyticsConfig?: InstanceAnalyticsConfig;
@@ -26,8 +30,38 @@ class InstanceAnalyticsService {
     } = {},
   ) {}
 
-  async trackStartup(): Promise<void> {
-    const analyticsConfig = this.options.analyticsConfig ?? config.analytics;
+  // The hourly re-check is what makes instance_heartbeat a daily signal for
+  // long-running instances: with a startup-only capture, an always-on
+  // deployment reports once at boot and then never again until its next
+  // restart, so "active instances" charts only count restarts.
+  async start(): Promise<void> {
+    const analyticsConfig = this.getAnalyticsConfig();
+    if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
+
+    if (!this.heartbeatTimer) {
+      this.heartbeatTimer = setInterval(() => {
+        this.captureDueEvents().catch((error) => {
+          logger.warn(
+            { err: error },
+            "Failed to send instance analytics heartbeat",
+          );
+        });
+      }, HEARTBEAT_CHECK_INTERVAL_MS);
+      this.heartbeatTimer.unref();
+    }
+
+    await this.captureDueEvents();
+  }
+
+  stop(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private async captureDueEvents(): Promise<void> {
+    const analyticsConfig = this.getAnalyticsConfig();
     if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
 
     const now = this.getNow();
@@ -93,6 +127,10 @@ class InstanceAnalyticsService {
         `PostHog capture failed with status ${response.status} ${response.statusText}`,
       );
     }
+  }
+
+  private getAnalyticsConfig(): InstanceAnalyticsConfig {
+    return this.options.analyticsConfig ?? config.analytics;
   }
 
   private getFetch(): Fetch {

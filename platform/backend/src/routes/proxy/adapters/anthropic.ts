@@ -1,5 +1,9 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import type { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ANTHROPIC_BILLING_BLOCK_BODY,
+  ANTHROPIC_BILLING_BLOCK_TITLE,
+  ArchestraInternalErrorCode,
+} from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -29,6 +33,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -1300,14 +1305,24 @@ export const anthropicAdapterFactory: LLMProvider<
     } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
   },
 
-  extractInternalCode(_error: unknown): ArchestraInternalErrorCode | undefined {
-    // Anthropic and its compatible gateways signal context overflow only via the
-    // message with no structured code, so there is no structured signal to
-    // classify overflow against.
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // A structured code so the chat mapper (and any client) can name the real
+    // cause instead of a generic "invalid request". Context overflow, by
+    // contrast, has no structured signal, so we don't emit a code for it.
+    if (isAnthropicBalanceTooLow(error)) {
+      return ArchestraInternalErrorCode.ProviderInsufficientBalance;
+    }
     return undefined;
   },
 
   extractErrorMessage(error: unknown): string {
+    // When the key's remaining usage balance is too low, show the same unified
+    // message as the connection page instead of Anthropic's raw text (which
+    // steers the reader into the Console).
+    if (isAnthropicBalanceTooLow(error)) {
+      return `${ANTHROPIC_BILLING_BLOCK_TITLE}. ${ANTHROPIC_BILLING_BLOCK_BODY}`;
+    }
+
     // Anthropic SDK wraps errors as: { error: { error: { message: "..." } } }
     const anthropicMessage = get(error, "error.error.message");
     if (typeof anthropicMessage === "string") {
@@ -1321,6 +1336,17 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/** The SDK nests the provider body as `error.error.{type,message}`. */
+function isAnthropicBalanceTooLow(error: unknown): boolean {
+  return isAnthropicBillingBlock({
+    status: (get(error, "status") ?? get(error, "statusCode")) as
+      | number
+      | undefined,
+    type: get(error, "error.error.type") as string | undefined,
+    message: get(error, "error.error.message") as string | undefined,
+  });
+}
 
 function createAnthropicAzureFoundryFetch(
   baseFetch: typeof globalThis.fetch | undefined,

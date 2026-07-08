@@ -14,6 +14,7 @@ vi.mock("./channel-activation", async (importOriginal) => {
   };
 });
 
+import { ChatErrorCode, ChatErrorMessages } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
@@ -26,6 +27,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
 } from "@/models";
+import { ProviderError } from "@/routes/chat/errors";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
   ChatOpsApprovalDecision,
@@ -410,6 +412,179 @@ describe("ChatOpsManager security validation", () => {
         footer: `🤖 ${agent.name}`,
       }),
     );
+  });
+
+  // ===========================================================================
+  // Transient provider failure auto-retry: web chat renders a retry button for
+  // retryable provider errors; chatops has no interactive affordance, so
+  // executeAndReply re-runs the turn once automatically before giving up.
+  // ===========================================================================
+
+  describe("transient provider failure auto-retry", () => {
+    const transientProviderError = () =>
+      new ProviderError({
+        code: ChatErrorCode.EmptyResponse,
+        message: ChatErrorMessages[ChatErrorCode.EmptyResponse],
+        isRetryable: true,
+      });
+
+    const successfulExecution = () => ({
+      text: "Agent response",
+      messageId: "test-message-id",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "test-message-id",
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: "Agent response" }],
+      },
+    });
+
+    async function setupBoundAgent(fx: {
+      makeUser: (overrides?: { email: string }) => Promise<{ id: string }>;
+      makeOrganization: () => Promise<{ id: string }>;
+      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+      makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+      makeInternalAgent: (overrides: {
+        organizationId: string;
+        teams: string[];
+      }) => Promise<{ id: string; name: string }>;
+    }) {
+      const user = await fx.makeUser({ email: "retry@example.com" });
+      const org = await fx.makeOrganization();
+      const team = await fx.makeTeam(org.id, user.id);
+      await fx.makeTeamMember(team.id, user.id);
+      const agent = await fx.makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+
+      const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "retry@example.com",
+        sendReply: sendReplySpy,
+      });
+      return {
+        manager: makeManagerWith(mockProvider),
+        mockProvider,
+        sendReplySpy,
+      };
+    }
+
+    test("retries once and recovers from a transient provider failure", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const executeSpy = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockRejectedValueOnce(transientProviderError())
+        .mockResolvedValueOnce(successfulExecution());
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.agentResponse).toBe("Agent response");
+      expect(executeSpy).toHaveBeenCalledTimes(2);
+      // No error reply reached the channel — only the successful answer.
+      expect(sendReplySpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("Sorry, I encountered an error"),
+        }),
+      );
+    });
+
+    test("gives up after a single retry and replies with the error", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const executeSpy = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockRejectedValue(transientProviderError());
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(result.success).toBe(false);
+      expect(executeSpy).toHaveBeenCalledTimes(2);
+      expect(sendReplySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("Sorry, I encountered an error"),
+        }),
+      );
+    });
+
+    test("does not retry a non-retryable provider failure", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const executeSpy = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockRejectedValue(
+          new ProviderError({
+            code: ChatErrorCode.InvalidRequest,
+            message: ChatErrorMessages[ChatErrorCode.InvalidRequest],
+            isRetryable: false,
+          }),
+        );
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(result.success).toBe(false);
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(sendReplySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("Sorry, I encountered an error"),
+        }),
+      );
+    });
   });
 
   test("LLM provider rejected the API key - names the key/model used and links to model providers", async ({

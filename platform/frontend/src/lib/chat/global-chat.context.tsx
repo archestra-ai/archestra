@@ -48,6 +48,10 @@ import {
 } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
+  chatMessageQueue,
+  useConversationMessageQueue,
+} from "@/lib/chat/chat-message-queue";
+import {
   isRetryableError,
   parseStructuredChatError,
 } from "@/lib/chat/chat-retry.utils";
@@ -69,6 +73,7 @@ import {
   hasSwapToolErrorInPart,
 } from "@/lib/chat/swap-agent.utils";
 import appConfig from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
@@ -449,6 +454,9 @@ function ChatSessionHook({
   // Track when swap_agent was called so we can auto-poke the new agent on finish
   // Stores the poke text to send, or null if no swap is pending
   const swapAgentPendingRef = useRef<string | null>(null);
+  // A user-initiated Stop pauses queued-message auto-drain (stop means stop);
+  // cleared when the user sends a message again, which resumes the queue.
+  const queueDrainSuspendedRef = useRef(false);
   // Ref to hold sendMessage for use in onFinish callback
   const sendMessageRef = useRef<
     | ((
@@ -527,6 +535,11 @@ function ChatSessionHook({
     ChatSession["earlyToolUiStarts"]
   >({});
   const shouldResume = shouldResumeActiveRun(initialMessages);
+  // Queued-message drain waits for the mount-time resume attempt to settle,
+  // so a queue restored from localStorage never races a still-active run
+  // (which would 409 as a duplicate). resumeStream() resolves both when the
+  // resumed stream ends and immediately when there is nothing to resume.
+  const [resumeSettled, setResumeSettled] = useState(!shouldResume);
 
   const {
     messages,
@@ -591,6 +604,9 @@ function ChatSessionHook({
       // perpetually "running" tool. Drop those dangling parts so the live view
       // matches what the backend persists (and a reload would show).
       if (isAbort) {
+        // Stop means stop: don't auto-fire the next queued message right
+        // after the user aborted a turn. Sending again resumes the queue.
+        queueDrainSuspendedRef.current = true;
         // The updater form runs against the SDK's live messages, not this
         // callback's (throttled, possibly stale) closure, so the most recently
         // streamed text is never rolled back.
@@ -958,7 +974,7 @@ function ChatSessionHook({
     }
 
     resumeAttemptedRef.current = true;
-    void resumeStream();
+    Promise.resolve(resumeStream()).finally(() => setResumeSettled(true));
   }, [resumeStream, shouldResume]);
 
   const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
@@ -1003,6 +1019,9 @@ function ChatSessionHook({
     // A new turn: any pending "clear the prior turn's persisted error on a
     // successful retry" intent no longer applies to this turn.
     recoveredPersistedErrorRef.current = false;
+    // A new user message (re)starts the turn pipeline, so queued messages
+    // paused by a Stop may flow again once this turn settles.
+    queueDrainSuspendedRef.current = false;
   }
 
   useEffect(() => {
@@ -1014,6 +1033,84 @@ function ChatSessionHook({
       filterOptimisticToolCalls(stableMessages, current),
     );
   }, [stableMessages, optimisticToolCalls.length]);
+
+  // ---- Queued-message auto-drain -------------------------------------------
+  // Messages submitted while a turn was in-flight wait in a per-conversation
+  // persisted queue (see chat-message-queue.ts). Whenever this session settles
+  // back to "ready", send the oldest one; multi-message queues chain naturally
+  // as each drained turn finishes. Living here (not in the page) means queues
+  // keep draining while the user is viewing another conversation, since
+  // ChatSessionHook instances survive conversation switches.
+  //
+  // Queueing is beta (ARCHESTRA_BETA): with the flag off the hook is passed
+  // no conversation, the snapshot stays empty, and the drain never fires —
+  // even for queues persisted while the flag was on.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
+  const queuedMessages = useConversationMessageQueue(
+    isMessageQueueEnabled ? conversationId : undefined,
+  );
+  // One-at-a-time guard: taking a message re-fires this effect (the queue
+  // snapshot changes) possibly before the SDK's status has left "ready"; the
+  // ref blocks a second send until a status transition confirms the turn
+  // started. Reset on every status change away from "ready".
+  const queueDrainInFlightRef = useRef(false);
+  useEffect(() => {
+    if (status !== "ready") {
+      queueDrainInFlightRef.current = false;
+    }
+  }, [status]);
+  // An unanswered tool approval keeps the turn logically open even though the
+  // SDK reports "ready" — draining would orphan the approval, so wait for the
+  // user's response (the SDK then auto-resubmits and the turn continues).
+  const hasPendingApprovalRequest = stableMessages.some((message) =>
+    message.parts.some(
+      (part) => "state" in part && part.state === "approval-requested",
+    ),
+  );
+  useEffect(() => {
+    if (
+      status !== "ready" ||
+      error ||
+      queuedMessages.length === 0 ||
+      !resumeSettled ||
+      queueDrainInFlightRef.current ||
+      queueDrainSuspendedRef.current ||
+      recoveringRef.current ||
+      swapAgentPendingRef.current ||
+      hasPendingApprovalRequest ||
+      pendingMcpElicitation ||
+      pendingCustomServerToolCall ||
+      contextCompaction.isCompacting
+    ) {
+      return;
+    }
+    const next = chatMessageQueue.takeNext(conversationId);
+    if (!next) {
+      return;
+    }
+    queueDrainInFlightRef.current = true;
+    sendMessageRef.current?.({
+      role: "user",
+      // a bare skill command carries no text; keep an empty text part so the
+      // message is well-formed and the backend can inject the skill
+      parts: [{ type: "text", text: next.text }],
+      metadata: {
+        createdAt: new Date().toISOString(),
+        ...(next.skill ? { skill: next.skill } : {}),
+        ...(next.sandboxCommand ? { sandboxCommand: true as const } : {}),
+      },
+    });
+  }, [
+    status,
+    error,
+    queuedMessages,
+    resumeSettled,
+    hasPendingApprovalRequest,
+    pendingMcpElicitation,
+    pendingCustomServerToolCall,
+    contextCompaction.isCompacting,
+    conversationId,
+  ]);
 
   // A regenerate replaces the failed turn, so any persisted chat-error rows
   // are now stale — the backend never clears them on its own, and left behind

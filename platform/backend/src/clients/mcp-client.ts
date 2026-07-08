@@ -602,23 +602,36 @@ class McpClient {
           options?.elicitationHandler,
         );
 
-        // Determine the actual tool name by stripping the server/catalog prefix.
-        // We prioritize the `catalogName` prefix, which is standard for local MCP servers.
-        // If the tool name doesn't match the catalog prefix, we fall back to the resolved `mcpServerName`.
-        let targetToolName = this.stripServerPrefix(
-          toolCall.name,
-          tool.catalogName || "",
-        );
+        // Determine the actual upstream tool name. Prefer the stored raw name
+        // (tools.raw_name): it is exact even when the slug's server-prefix was
+        // truncated to fit the 64-char cap or the raw name itself contains the
+        // `__` separator. Fall back to prefix-stripping the slug for legacy rows
+        // whose raw_name has not been backfilled/re-synced yet.
+        let targetToolName: string;
+        if (tool.rawName) {
+          targetToolName = tool.rawName;
+        } else {
+          // We prioritize the `catalogName` prefix, which is standard for local
+          // MCP servers. If the tool name doesn't match the catalog prefix, we
+          // fall back to the resolved `mcpServerName`.
+          targetToolName = this.stripServerPrefix(
+            toolCall.name,
+            tool.catalogName || "",
+          );
 
-        if (targetToolName === toolCall.name) {
-          // No prefix match with catalogName; attempt to strip using mcpServerName instead.
-          targetToolName = this.stripServerPrefix(toolCall.name, mcpServerName);
-        }
+          if (targetToolName === toolCall.name) {
+            // No prefix match with catalogName; attempt to strip using mcpServerName instead.
+            targetToolName = this.stripServerPrefix(
+              toolCall.name,
+              mcpServerName,
+            );
+          }
 
-        if (targetToolName === toolCall.name) {
-          // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
-          // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
-          targetToolName = parseFullToolName(toolCall.name).toolName;
+          if (targetToolName === toolCall.name) {
+            // Neither prefix matched (e.g. server name contains MCP_SERVER_TOOL_NAME_SEPARATOR separator).
+            // Fall back to parseFullToolName which uses lastIndexOf to split correctly.
+            targetToolName = parseFullToolName(toolCall.name).toolName;
+          }
         }
 
         const resourceUri = getSyntheticResourceToolUri(tool.meta);
@@ -1348,6 +1361,7 @@ class McpClient {
     if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
         toolName: availableTool.name,
+        rawName: availableTool.rawName,
         mcpServerId: null,
         credentialResolutionMode: "dynamic",
         catalogId: availableTool.catalogId,

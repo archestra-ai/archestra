@@ -814,7 +814,7 @@ The following environment variables can be used to configure Archestra Platform.
   - Requires wildcard DNS (`*.mcp.example.com`) and wildcard TLS certificate pointing to the backend
   - See [MCP Apps Sandbox](#mcp-apps-sandbox) for setup instructions
 
-- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`). Its only product effect is selecting the beta Connect and MCP Registry page variants (`/connection_beta`, `/mcp/registry/beta`). The code sandbox and agent hooks are enabled whenever a Dagger runner host is configured (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`).
+- **`ARCHESTRA_BETA`** - Fallback for per-feature `ARCHESTRA_*_ENABLED` gates (see `betaFeatureEnabled`).
   - Default: `false`
   - Values: `true`, `false`
 
@@ -1248,6 +1248,13 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+
+### MCP Servers
+
+- **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Opt-in periodic re-discovery of installed MCP servers' tools. Every N minutes, each installed server's stored tool list is re-synced from the live server — new tools are added, changed descriptions and input schemas are updated, and removed tools are dropped. No restart or reinstall happens. Tool assignments and policies are preserved.
+  - Default: unset (disabled). Set to `0` to disable explicitly.
+  - Example: `30`
+  - Tools can also be refreshed on demand: from the server's Inspector tab in the MCP Registry, or via `POST /api/mcp_server/:id/reload-tools`.
 
 ### MCP Server Orchestrator
 

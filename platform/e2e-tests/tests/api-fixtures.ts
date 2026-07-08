@@ -307,8 +307,9 @@ const deleteApiKey = async (request: APIRequestContext, keyId: string) =>
 /**
  * Create an identity provider (SSO provider) via the API with OIDC config pointing to Keycloak.
  * Returns the created provider's ID.
+ * (Also exported directly for beforeAll hooks, which cannot use test-scoped fixtures.)
  */
-const createIdentityProvider = async (
+export const createIdentityProvider = async (
   request: APIRequestContext,
   providerId: string,
   options?: {
@@ -328,6 +329,7 @@ const createIdentityProvider = async (
         | "client_secret_basic"
         | "private_key_jwt";
       jwksEndpoint?: string;
+      scopes?: string[];
     };
     enterpriseManagedCredentials?: {
       clientId?: string;
@@ -360,6 +362,7 @@ const createIdentityProvider = async (
       options?.oidcConfig?.tokenEndpointAuthentication,
     jwksEndpoint:
       options?.oidcConfig?.jwksEndpoint ?? KEYCLOAK_OIDC.jwksEndpoint,
+    scopes: options?.oidcConfig?.scopes,
   };
 
   const response = await makeApiRequest({
@@ -388,8 +391,9 @@ const createIdentityProvider = async (
 
 /**
  * Delete an identity provider (SSO provider) via the API.
+ * (Also exported directly for afterAll hooks, which cannot use test-scoped fixtures.)
  */
-const deleteIdentityProvider = async (
+export const deleteIdentityProvider = async (
   request: APIRequestContext,
   id: string,
 ): Promise<void> => {

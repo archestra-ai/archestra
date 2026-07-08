@@ -13,8 +13,11 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
  * services/agent-tool-exclusions.ts.
  */
 class AgentExcludedToolModel {
-  static async findToolIdsByAgent(agentId: string): Promise<string[]> {
-    const rows = await db
+  static async findToolIdsByAgent(
+    agentId: string,
+    tx?: Transaction,
+  ): Promise<string[]> {
+    const rows = await (tx ?? db)
       .select({ toolId: schema.agentExcludedToolsTable.toolId })
       .from(schema.agentExcludedToolsTable)
       .where(eq(schema.agentExcludedToolsTable.agentId, agentId))

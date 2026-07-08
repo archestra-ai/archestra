@@ -46,6 +46,12 @@ type ProductEvents = {
     fileCount: number;
     hasSkill: boolean;
   };
+  /** A message was queued while a response was still streaming. */
+  message_queued: {
+    conversationId?: string;
+    agentId?: string;
+    messageLength: number;
+  };
   /** A suggested-prompt tile was clicked on the new-chat screen. */
   prompt_selected: { agentId?: string; promptLength: number };
   skill_created: { skillId?: string };

@@ -2346,6 +2346,27 @@
       "when": 1783294065959,
       "tag": "0334_loud_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 335,
+      "version": "7",
+      "when": 1783362129115,
+      "tag": "0335_remove-skill-tool-auto-mode-exclusions",
+      "breakpoints": true
+    },
+    {
+      "idx": 336,
+      "version": "7",
+      "when": 1783363575412,
+      "tag": "0336_backfill-sandbox-and-auto-mode-tool-assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 337,
+      "version": "7",
+      "when": 1783388553796,
+      "tag": "0337_nervous_stick",
+      "breakpoints": true
     }
   ]
 }

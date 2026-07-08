@@ -1,5 +1,8 @@
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import { beforeEach, vi } from "vitest";
 import { VirtualApiKeyModel } from "@/models";
+import type { AnthropicCreditVerdict } from "@/routes/chat/model-fetchers/anthropic-credit-probe";
+import { probeAnthropicCredit } from "@/routes/chat/model-fetchers/anthropic-credit-probe";
 import {
   ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
@@ -7,6 +10,20 @@ import {
 } from "@/services/connection-setup";
 import { describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
+
+// The credit probe makes a real network call; stub it so tests are deterministic
+// and offline. Default: every key is usable (so existing binding behavior is
+// unchanged); individual tests override per key value.
+vi.mock("@/routes/chat/model-fetchers/anthropic-credit-probe", () => ({
+  probeAnthropicCredit: vi.fn(),
+}));
+
+const probeMock = vi.mocked(probeAnthropicCredit);
+
+beforeEach(() => {
+  probeMock.mockReset();
+  probeMock.mockResolvedValue("usable");
+});
 
 describe("ensureConnectionVirtualKey", () => {
   test("throws a 400 when no provider API key is configured", async ({
@@ -44,7 +61,7 @@ describe("ensureConnectionVirtualKey", () => {
       provider: "anthropic",
     });
 
-    const firstId = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: firstId } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -63,7 +80,7 @@ describe("ensureConnectionVirtualKey", () => {
       }),
     ]);
 
-    const secondId = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: secondId } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -89,7 +106,7 @@ describe("ensureConnectionVirtualKey", () => {
       { provider: "github-copilot", scope: "personal", userId: user.id },
     );
 
-    const id = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -134,7 +151,7 @@ describe("ensureConnectionVirtualKey", () => {
       { provider: "github-copilot", scope: "personal", userId: otherUser.id },
     );
 
-    const id = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -194,14 +211,14 @@ describe("ensureConnectionVirtualKey", () => {
       { provider: "openai" },
     );
 
-    const id = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
       userTeamIds: [],
       provider: "anthropic",
     });
-    const sameId = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: sameId } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -242,7 +259,7 @@ describe("ensureConnectionVirtualKey", () => {
       { provider: "anthropic", scope: "org" },
     );
 
-    const id = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -260,7 +277,7 @@ describe("ensureConnectionVirtualKey", () => {
       { provider: "anthropic", scope: "personal", userId: user.id },
     );
 
-    const sameId = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: sameId } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -287,7 +304,7 @@ describe("ensureConnectionVirtualKey", () => {
       provider: "anthropic",
     });
 
-    const firstId = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: firstId } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -296,7 +313,7 @@ describe("ensureConnectionVirtualKey", () => {
     });
     await VirtualApiKeyModel.delete(firstId);
 
-    const secondId = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: secondId } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,
@@ -307,6 +324,229 @@ describe("ensureConnectionVirtualKey", () => {
     expect(
       (await readVirtualKeyValue(secondId))?.startsWith(ARCHESTRA_TOKEN_PREFIX),
     ).toBe(true);
+  });
+});
+
+describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
+  // Drive verdicts by the decrypted key value (the probe's first argument).
+  function verdictByApiKey(map: Record<string, AnthropicCreditVerdict>) {
+    probeMock.mockImplementation(
+      async (apiKey: string) => map[apiKey] ?? "usable",
+    );
+  }
+
+  test("binds a secondary key with balance when the resolved key is exhausted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    // Personal key outranks the org key in resolution, but it's out of credit.
+    const personalKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
+      { provider: "anthropic", scope: "personal", userId: user.id },
+    );
+    const orgKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "funded-key" } })).id,
+      { provider: "anthropic", scope: "org" },
+    );
+    verdictByApiKey({ "exhausted-key": "exhausted", "funded-key": "usable" });
+
+    const { virtualApiKeyId, creditWarning } = await ensureConnectionVirtualKey(
+      {
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "anthropic",
+      },
+    );
+
+    expect(creditWarning).toBeUndefined();
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).toEqual([expect.objectContaining({ providerApiKeyId: orgKey.id })]);
+    // The exhausted resolved key was not bound.
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).not.toContainEqual(
+      expect.objectContaining({ providerApiKeyId: personalKey.id }),
+    );
+  });
+
+  test("falls through to a usable key when the resolved key is unverifiable", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+
+    await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
+      { provider: "anthropic", scope: "personal", userId: user.id },
+    );
+    const orgKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "funded-key" } })).id,
+      { provider: "anthropic", scope: "org" },
+    );
+    verdictByApiKey({
+      "inconclusive-key": "inconclusive",
+      "funded-key": "usable",
+    });
+
+    const { virtualApiKeyId, creditWarning } = await ensureConnectionVirtualKey(
+      {
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "anthropic",
+      },
+    );
+
+    expect(creditWarning).toBeUndefined();
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).toEqual([expect.objectContaining({ providerApiKeyId: orgKey.id })]);
+  });
+
+  test("warns 'insufficient_balance' and still provisions when every key is exhausted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const orgKey = await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
+      { provider: "anthropic", scope: "org" },
+    );
+    verdictByApiKey({ "exhausted-key": "exhausted" });
+
+    const { virtualApiKeyId, creditWarning } = await ensureConnectionVirtualKey(
+      {
+        organizationId: org.id,
+        userId: user.id,
+        userEmail: user.email,
+        userTeamIds: [],
+        provider: "anthropic",
+      },
+    );
+
+    expect(creditWarning).toEqual({ kind: "insufficient_balance" });
+    // Setup is never blocked — the resolved key is still bound.
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
+    ).toEqual([expect.objectContaining({ providerApiKeyId: orgKey.id })]);
+  });
+
+  test("warns 'unverified' when every probe is inconclusive", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
+      { provider: "anthropic", scope: "org" },
+    );
+    verdictByApiKey({ "inconclusive-key": "inconclusive" });
+
+    const { creditWarning } = await ensureConnectionVirtualKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      userTeamIds: [],
+      provider: "anthropic",
+    });
+
+    expect(creditWarning).toEqual({ kind: "unverified" });
+  });
+
+  test("prefers 'insufficient_balance' over 'unverified' when both occur", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
+      { provider: "anthropic", scope: "personal", userId: user.id },
+    );
+    await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
+      { provider: "anthropic", scope: "org" },
+    );
+    verdictByApiKey({
+      "exhausted-key": "exhausted",
+      "inconclusive-key": "inconclusive",
+    });
+
+    const { creditWarning } = await ensureConnectionVirtualKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      userTeamIds: [],
+      provider: "anthropic",
+    });
+
+    expect(creditWarning).toEqual({ kind: "insufficient_balance" });
+  });
+
+  test("does not credit-probe non-Anthropic providers", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    await makeLlmProviderApiKey(
+      org.id,
+      (await makeSecret({ secret: { apiKey: "openai-key" } })).id,
+      { provider: "openai", scope: "org" },
+    );
+
+    const { creditWarning } = await ensureConnectionVirtualKey({
+      organizationId: org.id,
+      userId: user.id,
+      userEmail: user.email,
+      userTeamIds: [],
+      provider: "openai",
+    });
+
+    expect(creditWarning).toBeUndefined();
+    expect(probeMock).not.toHaveBeenCalled();
   });
 });
 
@@ -325,7 +565,7 @@ describe("readVirtualKeyValue", () => {
       provider: "anthropic",
     });
 
-    const id = await ensureConnectionVirtualKey({
+    const { virtualApiKeyId: id } = await ensureConnectionVirtualKey({
       organizationId: org.id,
       userId: user.id,
       userEmail: user.email,

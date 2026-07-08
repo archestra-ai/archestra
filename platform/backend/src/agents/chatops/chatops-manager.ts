@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  ChatErrorCode,
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
@@ -23,6 +24,7 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
+import { ProviderError } from "@/routes/chat/errors";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
@@ -1543,14 +1545,36 @@ export class ChatOpsManager {
     }
 
     try {
-      const { result, responseAgent } = await this.executeMessage({
+      const executeParams = {
         agent,
         binding,
         message,
         provider,
         fullMessage,
         userId,
-      });
+      };
+      let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
+      try {
+        execution = await this.executeMessage(executeParams);
+      } catch (error) {
+        // Web chat surfaces transient provider failures as a retry button;
+        // chatops has no interactive affordance, so one automatic retry
+        // stands in for it. The retry re-runs the whole agent turn, exactly
+        // like a user-clicked retry would.
+        if (!isTransientProviderError(error)) {
+          throw error;
+        }
+        logger.info(
+          {
+            messageId: message.messageId,
+            agentId: agent.id,
+            errorCode: error.chatErrorResponse.code,
+          },
+          "[ChatOps] Retrying execution once after a transient provider error",
+        );
+        execution = await this.executeMessage(executeParams);
+      }
+      const { result, responseAgent } = execution;
 
       return await this.replyByMessageExecutionResult({
         agent: responseAgent,
@@ -2212,6 +2236,28 @@ export function buildChatOpsSessionId(
 // Prometheus exemplar labels allow 128 UTF-8 chars total (keys + values).
 // traceID (7+32) + spanID (6+16) = 61; remaining for sessionID key (9) + value = 58.
 const MAX_SESSION_ID_LENGTH = 58;
+
+/**
+ * Codes worth one immediate application-level retry: transient conditions
+ * where a second attempt plausibly succeeds right away. RateLimit is
+ * deliberately excluded even though it's retryable — the SDK already backed
+ * off within the failed attempt, so an immediate re-run would just re-hit the
+ * same window.
+ */
+const CHATOPS_AUTO_RETRYABLE_CODES = new Set<ChatErrorCode>([
+  ChatErrorCode.ServerError,
+  ChatErrorCode.NetworkError,
+  ChatErrorCode.EmptyResponse,
+  ChatErrorCode.IncompleteToolCall,
+]);
+
+function isTransientProviderError(error: unknown): error is ProviderError {
+  return (
+    error instanceof ProviderError &&
+    error.chatErrorResponse.isRetryable &&
+    CHATOPS_AUTO_RETRYABLE_CODES.has(error.chatErrorResponse.code)
+  );
+}
 
 /**
  * Strip bot footer from message text to avoid the LLM repeating it.

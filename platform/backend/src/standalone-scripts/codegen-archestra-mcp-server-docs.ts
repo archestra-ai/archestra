@@ -86,6 +86,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   deploy_mcp_server: ToolGroup.MCPServers,
   list_mcp_server_deployments: ToolGroup.MCPServers,
   get_mcp_server_logs: ToolGroup.MCPServers,
+  reload_mcp_server_tools: ToolGroup.MCPServers,
   create_mcp_server_installation_request: ToolGroup.MCPServers,
 
   create_team: ToolGroup.Teams,
@@ -118,6 +119,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   delete_trusted_data_policy: ToolGroup.Policies,
 
   bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
+  bulk_remove_tools_from_agents: ToolGroup.ToolAssignment,
   bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
 
   query_knowledge_sources: ToolGroup.KnowledgeManagement,

@@ -1097,6 +1097,18 @@ const config = {
       60000,
     ),
   },
+  mcpServer: {
+    /**
+     * Opt-in periodic re-discovery of installed MCP servers' tools. Every N
+     * minutes each installed server's catalog tool snapshot is re-synced from
+     * the live server (add/update/remove — same as the reload-tools endpoint,
+     * no pod restart). Unset or 0 disables the refresher (the default).
+     */
+    toolsRefreshIntervalMinutes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES,
+      0,
+    ),
+  },
   skillMarketplace: {
     endpoint: SKILL_MARKETPLACE_PREFIX,
     /**

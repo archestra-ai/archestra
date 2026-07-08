@@ -171,7 +171,12 @@ jobs:
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          push: "true"
+          # outputs= replaces the push:"true" shorthand to push with zstd-compressed
+          # layers: zstd is ~3-5x faster to decompress than gzip, cutting the e2e
+          # shard's image pull ~15-20s (the pull is dominated by single-threaded gunzip).
+          # (A tree-tag REUSED image keeps whatever compression it was built with;
+          # only fresh builds are guaranteed zstd.)
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
           # Publish under both the commit SHA (what the shards pull) and the
           # tree-OID tag, so a later run of the same ./platform tree reuses this
           # image instead of rebuilding.
@@ -264,7 +269,10 @@ jobs:
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
   platform-e2e-tests-shards:
-    name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
+    # Per-shard check names never match a required-check context (the
+    # "Platform E2E Tests" fan-in below carries the required check), so the
+    # shard-count suffix here is display-only and safe to keep accurate.
+    name: Platform E2E Tests Shard (${{ matrix.shard }}/1)
     # Deliberately NO `needs: [platform-e2e-build]`: the shards start alongside
     # the image build and do all image-independent setup (checkout, pnpm, Kind
     # cluster, MCP dependency images) while the build runs. Setup Archestra
@@ -284,7 +292,14 @@ jobs:
       # collapse the matrix result to "cancelled" and produce a partial report.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        # Single shard, deliberately: each leg pays ~230s of identical
+        # environment setup (Kind + images + Helm) to run ~90s of tests, so a
+        # second shard doubles the setup cost to save ~90s of test time — the
+        # tests are only ~3 min combined and Playwright already parallelizes
+        # within the job (workers: "90%"). The matrix structure is kept so
+        # re-sharding is a one-line change ([1, 2] + --shard=N/2) if test time
+        # ever grows past setup time.
+        shard: [1]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -352,7 +367,7 @@ jobs:
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
-          shard: "--shard=${{ matrix.shard }}/2"
+          shard: "--shard=${{ matrix.shard }}/1"
           extra_args: "--grep-invert '@quickstart'"
           timeout: "20"
 
@@ -433,7 +448,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
-          echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
+          echo "The non-quickstart E2E run (shard ${SHARD}/1) failed."
           exit 1
 
   # NOTE: there is deliberately no separate "Platform E2E Tests" fan-in job. The

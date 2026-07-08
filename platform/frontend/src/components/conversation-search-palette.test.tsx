@@ -191,14 +191,13 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByText("Second conversation")).toBeInTheDocument();
   });
 
-  it("routes Connect to the classic connection page when beta is off", () => {
+  it("routes Connect to the connection page", () => {
     // The Pages nav group (incl. Connect) renders when there are no conversations.
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
       isFetching: false,
     });
-    vi.mocked(useFeature).mockReturnValue(false);
     render(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByText("Connect"));
@@ -206,32 +205,17 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/connection");
   });
 
-  it("routes Connect to the new connection page when ARCHESTRA_BETA is on", () => {
+  it("routes MCP Registry to the registry", () => {
     mockUseConversations.mockReturnValue({
       data: [],
       isLoading: false,
       isFetching: false,
     });
-    vi.mocked(useFeature).mockReturnValue(true);
-    render(<ConversationSearchPalette {...defaultProps} />);
-
-    fireEvent.click(screen.getByText("Connect"));
-
-    expect(mockRouterPush).toHaveBeenCalledWith("/connection_beta");
-  });
-
-  it("routes MCP Registry to the beta registry when ARCHESTRA_BETA is on", () => {
-    mockUseConversations.mockReturnValue({
-      data: [],
-      isLoading: false,
-      isFetching: false,
-    });
-    vi.mocked(useFeature).mockReturnValue(true);
     render(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByText("MCP Registry"));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry/beta");
+    expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry");
   });
 
   it("does not show the recent chats empty state in the full search palette", () => {

@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.3.3](https://github.com/archestra-ai/archestra/compare/platform-v1.3.2...platform-v1.3.3) (2026-07-07)
+
+
+### Features
+
+* **mcp:** promote MCP Registry out of beta; Connect beta badge in sidebar ([#6413](https://github.com/archestra-ai/archestra/issues/6413)) ([cf3cee5](https://github.com/archestra-ai/archestra/commit/cf3cee548d97c19bdff1aa94f02575b2db2d77b9))
+
+
+### Bug Fixes
+
+* **organization:** scope org members endpoint to the caller's visible users ([#6376](https://github.com/archestra-ai/archestra/issues/6376)) ([e54477d](https://github.com/archestra-ai/archestra/commit/e54477d45788ca3650d9cdc56db09d7160441b6c))
+
+## [1.3.2](https://github.com/archestra-ai/archestra/compare/platform-v1.3.1...platform-v1.3.2) (2026-07-07)
+
+
+### Features
+
+* **dagger:** apply egress NetworkPolicy by default across engines ([#6411](https://github.com/archestra-ai/archestra/issues/6411)) ([e0472e4](https://github.com/archestra-ai/archestra/commit/e0472e401f6b7e60ddda70739cb4c15c0db289ea))
+* **mcp:** tool freshness (reload/refresh/auto-refresh), 64-char tool names + raw_name, remove-tool ([#6371](https://github.com/archestra-ai/archestra/issues/6371)) ([1f6d8ee](https://github.com/archestra-ai/archestra/commit/1f6d8ee4b9100dc44c2d3db1ae76cb8ec96d4fc9))
+
+## [1.3.1](https://github.com/archestra-ai/archestra/compare/platform-v1.3.0...platform-v1.3.1) (2026-07-06)
+
+
+### Features
+
+* probe anthropic api keys on the connection page ([#6404](https://github.com/archestra-ai/archestra/issues/6404)) ([55e3159](https://github.com/archestra-ai/archestra/commit/55e3159fd739fae41f52ebfb6f731579e90bcd51))
+
+
+### Bug Fixes
+
+* **mcp-runtime:** self-heal multitenant Deployments with a drifted pod selector ([#6405](https://github.com/archestra-ai/archestra/issues/6405)) ([5f38901](https://github.com/archestra-ai/archestra/commit/5f389019337de21d417188e440f579256fd64d4f))
+* **platform:** default archestra tools for pre-existing agents (skill-tool exemption + sandbox backfill) ([#6400](https://github.com/archestra-ai/archestra/issues/6400)) ([a1f0109](https://github.com/archestra-ai/archestra/commit/a1f01093e31f58511433954475b4439b3f0d1782))
+
 ## [1.3.0](https://github.com/archestra-ai/archestra/compare/platform-v1.2.82...platform-v1.3.0) (2026-07-06)
 
 

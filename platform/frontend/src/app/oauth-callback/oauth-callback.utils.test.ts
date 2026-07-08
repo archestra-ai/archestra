@@ -16,8 +16,8 @@ describe("toInternalReturnPath", () => {
   });
 
   test("resolves a relative path against the origin", () => {
-    expect(toInternalReturnPath("/mcp/registry/beta?x=1", origin)).toBe(
-      "/mcp/registry/beta?x=1",
+    expect(toInternalReturnPath("/mcp/registry?x=1", origin)).toBe(
+      "/mcp/registry?x=1",
     );
   });
 

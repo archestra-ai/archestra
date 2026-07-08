@@ -196,7 +196,7 @@ describe("ExternalAppCard", () => {
 
     expect(
       screen.getByRole("link", { name: /manage mcp server/i }),
-    ).toHaveAttribute("href", "/mcp/registry/beta/cat-1");
+    ).toHaveAttribute("href", "/mcp/registry/cat-1");
   });
 
   it("shows the server's registry icon, falling back to the generic glyph without one", () => {

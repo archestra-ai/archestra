@@ -3,12 +3,14 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-06
 ---
 
 Agent Skills are markdown instruction sets an agent loads on demand. A skill is a `SKILL.md` file plus optional resource files, following the [Agent Skills specification](https://agentskills.io/specification).
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
+
+![The Skills page listing the organization's skills, each with its name, description, source repository, and file count](/docs/automated_screenshots/platform-agent-skills_catalog.webp)
 
 ## Progressive disclosure via two tools
 
@@ -68,6 +70,8 @@ A skill created from chat is **personal** to its author — sharing it with a te
 
 ## Importing from GitHub
 
+![The Add a new skill screen, importing from a GitHub repo, with the skill index searched for ML skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
+
 Paste a repository URL. Any of these work: `owner/repo`, a full https URL, or a `tree/<branch>/<path>` deep link. For private repos, paste a token — it is used for the request and never stored.
 
 For anything bigger than a small repo, narrow the scan with the `path` field and supply a GitHub token. Archestra walks the whole tree by default, and anonymous GitHub calls share a 60-requests/hour limit — discovery on a large monorepo is slow without a path and will rate-limit without a token.
@@ -107,11 +111,11 @@ Some skills only work in specific environments — a Python interpreter, a parti
 
 The two skill tools are plain MCP tools. Any external client — Claude Code, Cursor, Codex, n8n — that connects to an agent's MCP gateway sees them alongside the rest of that agent's tools and gets the same progressive-disclosure flow. A skill authored once in Archestra is reachable from everywhere the agent is plugged in, with no `SKILL.md` copies to keep in sync. To hand skills to a client as portable bundles instead, see [Sharing Skills](./platform-agent-skills-sharing).
 
-## Skills vs agents vs routing
+## Skills vs Agents
 
+We recommend using Skills as default way of customizing agentic workloads. 
 | Primitive        | What it is                                                                              | When to use                                  |
 | ---------------- | --------------------------------------------------------------------------------------- | -------------------------------------------- |
 | **Agent**        | System prompt + tools + knowledge                                                       | Default building block                       |
 | **Sub-agent**    | Agent called by another agent as a helper                                               | Compose specialists under one orchestrator   |
-| **Router agent** | Default agent that hands off via `swap_agent` and returns via `swap_to_default_agent`   | Pick the right specialist at runtime         |
-| **Skill**        | Markdown loaded on demand via `load_skill`                                               | Keep agents generic; attach many specializations |
+| **Skill**        | Markdown + scripts loaded on demand via `load_skill`                                               | Keep agents generic; attach many specializations |

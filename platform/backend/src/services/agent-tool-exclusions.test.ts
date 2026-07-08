@@ -66,6 +66,37 @@ describe("agentToolExclusionsService", () => {
     });
   });
 
+  test("addExclusions unions with existing exclusions and dedupes", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const toolA = await makeTool({ name: "github__a", catalogId: catalog.id });
+    const toolB = await makeTool({ name: "github__b", catalogId: catalog.id });
+
+    await agentToolExclusionsService.addExclusions({
+      agentId: agent.id,
+      organizationId,
+      toolIds: [toolA.id],
+    });
+    // toolA is already excluded and repeated — the union must dedupe.
+    const result = await agentToolExclusionsService.addExclusions({
+      agentId: agent.id,
+      organizationId,
+      toolIds: [toolB.id, toolA.id],
+    });
+
+    expect([...result.excludedToolIds].sort()).toEqual(
+      [toolA.id, toolB.id].sort(),
+    );
+    expect(
+      [
+        ...(await agentToolExclusionsService.getExclusions(agent.id))
+          .excludedToolIds,
+      ].sort(),
+    ).toEqual([toolA.id, toolB.id].sort());
+  });
+
   test("evicts the cached chat MCP client after a successful replace", async ({
     makeInternalMcpCatalog,
     makeTool,

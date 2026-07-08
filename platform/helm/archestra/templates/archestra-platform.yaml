@@ -5,6 +5,18 @@ Validation: Ensure postgresql.enabled=false when using external database
 {{- fail "Configuration error: When postgresql.external_database_url is set, you must also set postgresql.enabled=false to prevent deploying an unused PostgreSQL instance." }}
 {{- end }}
 {{/*
+Validation: Reject removed Dagger values. Helm ignores unknown keys silently, so
+without this an operator still setting them would be reinterpreted without notice
+— a chart-deployed engine becoming code-managed ones, or a runner host quietly
+dropped.
+*/}}
+{{- if hasKey .Values.archestra.codeRuntime "dagger" }}
+{{- fail "Configuration error: archestra.codeRuntime.dagger.* was removed. The chart no longer deploys a Dagger Engine — the backend provisions one per organization through the Kubernetes API. To run your own engine instead, set archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the platform ServiceAccount pods/get + pods/exec in that engine's namespace. To disable the code sandbox, set archestra.codeRuntime.enabled=false." }}
+{{- end }}
+{{- if hasKey .Values "dagger" }}
+{{- fail "Configuration error: the bundled `dagger` subchart values were removed along with the chart-deployed Dagger Engine. Remove the top-level `dagger:` block. Engine sizing is now set through archestra.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_*." }}
+{{- end }}
+{{/*
 Validation: Ensure diagnostics storage supports concurrent pod mounts
 */}}
 {{- $usesChartManagedDiagnosticsClaim := and .Values.archestra.diagnostics.enabled (not .Values.archestra.diagnostics.existingClaimName) }}

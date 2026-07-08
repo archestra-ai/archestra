@@ -105,6 +105,32 @@ describe("buildDaggerEgressPolicies (reuses MCP machinery for the dagger engine)
     expect(publicV4?.to?.[0].ipBlock?.except).toContain("169.254.0.0/16");
   });
 
+  it("blocks operator-supplied CIDRs from the floor's public egress (e.g. cluster Service/Pod ranges outside RFC1918)", () => {
+    const policies = buildDaggerEgressPolicies({
+      environmentId: ENV_ID,
+      effectivePolicy: effective({
+        egressMode: "unrestricted",
+        domainPreset: "none",
+        allowedDomains: [],
+        allowedCidrs: [],
+      }),
+      capabilities: caps({}),
+      additionalDeniedCidrs: ["100.68.0.0/16", "34.118.224.0/20"],
+    });
+    const np = policies[0].object as unknown as PolicyManifest;
+    const egress = np.spec.egress as Array<{
+      to?: Array<{ ipBlock?: { cidr?: string; except?: string[] } }>;
+    }>;
+    const publicV4 = egress.find((r) =>
+      r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
+    );
+    const except = publicV4?.to?.[0].ipBlock?.except ?? [];
+    // built-in ranges still present, operator ranges appended
+    expect(except).toContain("169.254.0.0/16");
+    expect(except).toContain("100.68.0.0/16");
+    expect(except).toContain("34.118.224.0/20");
+  });
+
   it("applies the open-egress floor when the environment has no policy (built-in)", () => {
     const policies = buildDaggerEgressPolicies({
       environmentId: ENV_ID,

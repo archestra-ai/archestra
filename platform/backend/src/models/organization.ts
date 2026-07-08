@@ -281,6 +281,14 @@ class OrganizationModel {
   }
 
   /**
+   * List every organization (full rows). Used to reconcile each org's
+   * code-managed default Dagger engine on startup.
+   */
+  static async listAll(): Promise<Organization[]> {
+    return db.select().from(schema.organizationsTable);
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {

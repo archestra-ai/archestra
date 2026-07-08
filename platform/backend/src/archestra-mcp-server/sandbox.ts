@@ -19,6 +19,7 @@ import {
   ConversationAttachmentModel,
   EnvironmentModel,
   FileNameExistsError,
+  OrganizationModel,
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
 } from "@/models";
@@ -1390,11 +1391,12 @@ interface UserContext {
 }
 
 /**
- * Resolve the Dagger runner host for the calling agent's Environment, so its
- * sandbox runs on that environment's per-env engine (with the environment's
- * egress NetworkPolicy). Returns undefined when the agent has no environment,
- * the environment is missing, or k8s isn't configured — the run then uses the
- * process-default engine.
+ * Resolve the Dagger runtime target for the calling agent. A bound agent routes
+ * to its Environment's per-env engine (carrying that environment's egress
+ * policy); an unbound agent routes to its organization's default engine. Returns
+ * undefined — meaning "use the process-default engine" — when an operator has
+ * configured an explicit BYO runner host, or when the caller/org can't be
+ * resolved.
  */
 async function resolveEnvironmentTarget(
   context: ArchestraContext,
@@ -1404,9 +1406,17 @@ async function resolveEnvironmentTarget(
   if (!agentId || !organizationId) return undefined;
 
   const agent = await AgentModel.findById(agentId);
-  // Unbound agent → no environment isolation requested; the default engine is
-  // the correct runtime.
-  if (!agent?.environmentId) return undefined;
+  if (!agent?.environmentId) {
+    // Unbound agent → the organization's default engine. But when an operator
+    // configured an explicit runner host (a BYO engine), defer to it: returning
+    // undefined routes the run to that process-default engine unchanged.
+    if (config.daggerRuntime.runnerHost) return undefined;
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization) return undefined;
+    return daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      organization,
+    );
+  }
 
   // The agent IS bound to an environment, so its sandbox MUST run on that
   // environment's isolated engine (carrying the environment's egress policy).

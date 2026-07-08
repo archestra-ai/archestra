@@ -101,6 +101,34 @@ describe("PATCH /api/organization/default-environment", () => {
     expect(reloaded?.defaultEnvironmentNamespace).toBe("primary-ns");
   });
 
+  test("rejects a namespace that is not a valid Kubernetes namespace", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    // The namespace becomes the code-managed engine's namespace + kube-pod://
+    // target, so an invalid value (uppercase, dots, >63 chars) must be rejected
+    // at write time — not persisted and later breaking every sandbox run.
+    for (const namespace of ["Team-A", "a.b.example.com", "x".repeat(64)]) {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/default-environment",
+        payload: { namespace },
+      });
+      expect(res.statusCode).toBe(400);
+    }
+
+    // The bad values did not persist.
+    const reloaded = await OrganizationModel.getById(organizationId);
+    expect(reloaded?.defaultEnvironmentNamespace).toBeNull();
+  });
+
   test("omitting a field leaves it unchanged", async ({
     makeUser,
     makeOrganization,

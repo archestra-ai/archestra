@@ -23,6 +23,7 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  isCodeRuntimeEnabled,
   parseActiveChatRunPollIntervalMs,
   parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
@@ -1767,6 +1768,116 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
     expect(
       parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
     ).toBeUndefined();
+  });
+});
+
+describe("isCodeRuntimeEnabled", () => {
+  const base = {
+    runnerHost: undefined,
+    codeRuntimeEnabledEnv: undefined,
+    kubeconfig: undefined,
+    loadKubeconfigFromCurrentCluster: undefined,
+  };
+
+  test("enabled when an explicit runner host is configured, even without k8s", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: "tcp://dagger.dagger.svc.cluster.local:1234",
+      }),
+    ).toBe(true);
+  });
+
+  test("an explicit runner host wins even when the flag is unset", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: "kube-pod://engine?namespace=dagger",
+        codeRuntimeEnabledEnv: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  // The documented kill switch: "To turn it off, set ARCHESTRA_CODE_RUNTIME_ENABLED
+  // =false". It must beat a runner host, or an operator cannot disable the sandbox
+  // on a deployment (quickstart, BYO) that supplies one.
+  test('"false" disables even when an explicit runner host is set', () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "false",
+        runnerHost: "tcp://dagger:1234",
+      }),
+    ).toBe(false);
+  });
+
+  test('"false" disables even with the orchestrator configured', () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "false",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("enabled by the flag when the orchestrator loads the current cluster", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(true);
+  });
+
+  test("enabled by the flag when a kubeconfig path is set", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        kubeconfig: "/home/app/.kube/config",
+      }),
+    ).toBe(true);
+  });
+
+  test("the flag alone (no orchestrator) does not enable", () => {
+    expect(
+      isCodeRuntimeEnabled({ ...base, codeRuntimeEnabledEnv: "true" }),
+    ).toBe(false);
+  });
+
+  test("the orchestrator alone (no flag) does not enable", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("a whitespace-only kubeconfig is not configured", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        kubeconfig: "   ",
+      }),
+    ).toBe(false);
+  });
+
+  test('a non-"true" flag value does not enable', () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "1",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("nothing configured stays off", () => {
+    expect(isCodeRuntimeEnabled(base)).toBe(false);
   });
 });
 

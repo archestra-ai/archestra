@@ -203,15 +203,11 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
   value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
 {{- end }}
-{{- if .Values.archestra.codeRuntime.enabled }}
+{{/* always emitted: "false" is the backend kill switch, and it must reach the
+     backend even when a runner host arrives through archestra.env. */}}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
 - name: ARCHESTRA_CODE_RUNTIME_ENABLED
-  value: "true"
-{{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST") }}
-- name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-  value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
-{{- end }}
+  value: {{ .Values.archestra.codeRuntime.enabled | quote }}
 {{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
@@ -255,52 +251,6 @@ An explicit archestra.env value overrides the injection.
   valueFrom:
     {{- toYaml .valueFrom | nindent 4 }}
 {{- end }}
-{{- end }}
-
-{{/*
-dagger runner host for the code execution runtime.
-*/}}
-{{- define "archestra-platform.codeRuntimeDaggerRunnerHost" -}}
-{{- $runnerHost := .Values.archestra.codeRuntime.dagger.runnerHost -}}
-{{- if $runnerHost -}}
-{{- $runnerHost -}}
-{{- else -}}
-{{- $pod := .Values.archestra.codeRuntime.dagger.pod -}}
-{{- $namespace := include "archestra-platform.codeRuntimeDaggerPodNamespace" . -}}
-{{- $runnerHost = printf "kube-pod://%s?namespace=%s&container=%s" ($pod.name | urlquery) ($namespace | urlquery) ($pod.container | urlquery) -}}
-{{- with $pod.context -}}
-{{- $runnerHost = printf "%s&context=%s" $runnerHost (. | urlquery) -}}
-{{- end -}}
-{{- $runnerHost -}}
-{{- end -}}
-{{- end }}
-
-{{/*
-namespace containing the Dagger Engine pod.
-*/}}
-{{- define "archestra-platform.codeRuntimeDaggerPodNamespace" -}}
-{{- $namespace := .Values.archestra.codeRuntime.dagger.pod.namespace -}}
-{{- if $namespace -}}
-{{- $namespace -}}
-{{- else if .Values.archestra.codeRuntime.dagger.managed.enabled -}}
-{{- .Release.Namespace -}}
-{{- else -}}
-dagger
-{{- end -}}
-{{- end }}
-
-{{/*
-namespace where the code-runtime kube-pod RBAC should be created.
-*/}}
-{{- define "archestra-platform.codeRuntimeDaggerRbacNamespace" -}}
-{{- default (include "archestra-platform.codeRuntimeDaggerPodNamespace" .) .Values.archestra.codeRuntime.dagger.rbac.namespace -}}
-{{- end }}
-
-{{/*
-service account name for the managed Dagger Engine pod.
-*/}}
-{{- define "archestra-platform.codeRuntimeDaggerServiceAccountName" -}}
-{{- default "dagger-runtime" .Values.dagger.engine.existingServiceAccount.name -}}
 {{- end }}
 
 {{/*
@@ -354,11 +304,12 @@ ServiceAccount name for the Archestra Platform
 
 {{/*
 RBAC rules granting the platform ServiceAccount the permissions it needs to
-manage MCP server workloads AND the per-environment Dagger sandbox engine
-(StatefulSet + engine-config ConfigMap + egress NetworkPolicy, reached via
-pods/exec + pods/attach) in a namespace. Shared by the release-namespace Role
-and the per-namespace Roles generated from rbac.environmentNamespaces, so both
-grant exactly the same access (no drift).
+manage MCP server workloads AND the Dagger sandbox engines it provisions per
+environment and per organization (StatefulSet + engine-config ConfigMap + egress
+NetworkPolicy, reached via pods/exec + pods/attach) in a namespace. The chart
+deploys no engine itself; this Role is what lets the backend create them. Shared
+by the release-namespace Role and the per-namespace Roles generated from
+rbac.environmentNamespaces, so both grant exactly the same access (no drift).
 */}}
 {{- define "archestra-platform.mcpManagerRules" -}}
 - apiGroups: [""]

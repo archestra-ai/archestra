@@ -66,7 +66,7 @@ The sandbox is container isolation on a shared engine. It keeps one user's code 
 
 Each container runs as a non-root user, with no host mounts and no backend environment variables inside. CPU, memory, and wall-clock caps bound every command. A sandbox belongs to one user and one conversation, so an agent cannot reach another conversation's files.
 
-Network access is on, because installers like uv and npm need it. Egress follows the [environment's network policy](./platform-environments), applied to the Dagger engine pod. Leave that policy unrestricted and the engine can reach link-local and cloud-metadata endpoints — restrict it in production.
+Network access is on, because installers like uv and npm need it. Egress follows the [environment's network policy](./platform-environments), applied to the Dagger engine pod. With no policy set, an engine reaches the public internet, but not private, link-local, or cloud-metadata addresses. Set a policy to narrow it further.
 
 The engine pod itself runs privileged and as root. Building containers is what requires that, so schedule it on nodes where those permissions are acceptable.
 
@@ -76,7 +76,11 @@ Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 
 
 ## Enabling the Sandbox
 
-The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm values — the second is what stops the managed Dagger engine pod from being deployed. A manual deployment needs a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. `ARCHESTRA_CODE_RUNTIME_ENABLED` only controls whether local dev, quickstart, and Helm deploy the embedded Dagger engine. See [Deployment](./platform-deployment#code-sandbox) for the full list.
+The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or `archestra.codeRuntime.enabled=false` in Helm values. That setting wins over everything else.
+
+A manual deployment sets `ARCHESTRA_CODE_RUNTIME_ENABLED=true`. On Kubernetes, Archestra then creates one Dagger engine per organization. Point it at the cluster with `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`, or with `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true` when the backend runs inside the cluster.
+
+To run your own engine instead, set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` to its address — a `tcp://` or `kube-pod://` URL. Archestra then uses that engine and creates none. This is the only option without Kubernetes. See [Deployment](./platform-deployment#code-sandbox) for the full list.
 
 Running a command needs the `sandbox:execute` permission. See [Access Control](./platform-access-control).
 

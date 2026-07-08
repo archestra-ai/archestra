@@ -12,6 +12,7 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import config from "@/config";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
   ConversationAttachmentModel,
   ConversationModel,
@@ -216,6 +217,52 @@ describe("sandbox tools (runtime enabled)", () => {
         cwd: undefined,
         timeoutSeconds: undefined,
       });
+    });
+
+    test("routes an unbound agent to its organization's default engine when no BYO host is set", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost = undefined;
+      const orgTarget = {
+        environmentId: "11111111-1111-4111-8111-111111111111",
+        namespace: "team-ns",
+      };
+      const targetSpy = vi
+        .spyOn(daggerEnvironmentRuntimeManager, "organizationDefaultTarget")
+        .mockReturnValue(orgTarget);
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(targetSpy).toHaveBeenCalled();
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: orgTarget }),
+      );
+    });
+
+    test("defers an unbound agent to an explicit BYO runner host without an org target", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+        "tcp://dagger:1234";
+      const targetSpy = vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "organizationDefaultTarget",
+      );
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(targetSpy).not.toHaveBeenCalled();
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: undefined }),
+      );
     });
 
     test("surfaces the truncation warning before stdout", async () => {

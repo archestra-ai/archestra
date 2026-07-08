@@ -15,7 +15,8 @@ import {
 import logger from "@/logging";
 import { EnvironmentModel, OrganizationModel } from "@/models";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
-import type { Environment } from "@/types";
+import type { Environment, NetworkPolicy, Organization } from "@/types";
+import { uuidv5 } from "@/utils/uuid";
 import {
   buildDaggerEgressPolicies,
   type DaggerEgressPolicyObject,
@@ -31,16 +32,26 @@ const ALL_POLICY_KINDS: PolicyKind[] = [
   "ApplicationNetworkPolicy",
 ];
 
+/**
+ * The minimal identity + policy inputs to provision one Dagger engine. A
+ * per-environment engine (keyed by the environment id, carrying the
+ * environment's own network policy) and an organization's default engine
+ * (keyed by a derived id, no override so the org default applies) both reduce
+ * to this.
+ */
+interface EngineReconcileTarget {
+  engineId: string;
+  organizationId: string;
+  namespace: string;
+  networkPolicyOverride: NetworkPolicy | null;
+}
+
 const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.5";
 const ENGINE_CONTAINER = "dagger-engine";
-// Per-env buildkit cache PVC size; matches the default engine's chart PVC.
-const ENGINE_CACHE_SIZE = "50Gi";
-// Engine resources mirror the dagger-runtime chart — we run few per-env engines,
-// so the chart's sizing applies directly. No CPU limit (build throughput), also
-// per the chart; the memory limit caps a runaway build so it can't OOM the node.
-const ENGINE_CPU_REQUEST = "2";
-const ENGINE_MEMORY_REQUEST = "8Gi";
-const ENGINE_MEMORY_LIMIT = "16Gi";
+// Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
+// come from config so small/local clusters can override the production defaults.
+// No CPU limit (build throughput); the memory limit caps a runaway build so it
+// can't OOM the node.
 // Mirrors the chart engine config: disables insecure root capabilities and
 // bounds the buildkit GC so the cache PVC can't fill unreclaimed. Read by the
 // engine from /etc/dagger/engine.json.
@@ -73,14 +84,31 @@ class DaggerEnvironmentRuntimeManager {
     if (!isK8sConfigured()) return undefined;
     return {
       environmentId: environment.id,
-      namespace: this.engineNamespace(environment),
+      namespace: this.engineNamespace(environment.namespace),
     };
   }
 
   /**
-   * Provision every environment's engine on startup so environment-bound agents
-   * never route to a pod that was never created (the create/update path only
-   * covers environments touched after boot). Best-effort; never throws.
+   * The isolation target for an organization's default engine — the runtime an
+   * agent with no environment routes to. The engine id is derived from the org
+   * id (a non-UUID string) so the address is still a valid `kube-pod://` UUID
+   * target; the engine is provisioned by `reconcileOrganizationDefault`.
+   */
+  organizationDefaultTarget(
+    organization: Organization,
+  ): EnvironmentTarget | undefined {
+    if (!isK8sConfigured()) return undefined;
+    return {
+      environmentId: deriveOrgEngineId(organization.id),
+      namespace: this.engineNamespace(organization.defaultEnvironmentNamespace),
+    };
+  }
+
+  /**
+   * Provision every environment's engine and every organization's default
+   * engine on startup, so an agent never routes to a pod that was never created
+   * (the create/update paths only cover rows touched after boot). Best-effort;
+   * never throws.
    */
   async reconcileAll(): Promise<void> {
     if (!this.isEnabled()) return;
@@ -104,9 +132,33 @@ class DaggerEnvironmentRuntimeManager {
         );
       }
     }
+
+    let organizations: Organization[];
+    try {
+      organizations = await OrganizationModel.listAll();
+    } catch (error) {
+      logger.error(
+        { err: error },
+        "[DaggerEnvRuntime] startup reconcile: failed to list organizations",
+      );
+      return;
+    }
+    for (const organization of organizations) {
+      try {
+        await this.reconcileOrganizationDefault(organization);
+      } catch (error) {
+        logger.error(
+          { err: error, organizationId: organization.id },
+          "[DaggerEnvRuntime] startup reconcile failed for organization default",
+        );
+      }
+    }
   }
 
-  /** Provision (or update) the engine + egress policy for every environment. */
+  /**
+   * Provision (or update) every engine for one organization — its environments
+   * and its default engine. Best-effort per item.
+   */
   async reconcileAllForOrganization(organizationId: string): Promise<void> {
     if (!this.isEnabled()) return;
     const environments =
@@ -121,36 +173,64 @@ class DaggerEnvironmentRuntimeManager {
         );
       }
     }
+    const organization = await OrganizationModel.getById(organizationId);
+    if (organization) await this.reconcileOrganizationDefault(organization);
   }
 
   /** Provision (or update) one environment's engine pod + egress policy. */
   async reconcileEnvironment(environment: Environment): Promise<void> {
     if (!this.isEnabled()) return;
-    const namespace = this.engineNamespace(environment);
+    await this.reconcileEngine({
+      engineId: environment.id,
+      organizationId: environment.organizationId,
+      namespace: this.engineNamespace(environment.namespace),
+      networkPolicyOverride: environment.networkPolicy,
+    });
+  }
+
+  /**
+   * Provision (or update) an organization's default engine — the runtime for
+   * agents with no environment. It carries no policy override, so the org's
+   * `defaultNetworkPolicy` (or unrestricted, when unset) governs its egress.
+   */
+  async reconcileOrganizationDefault(
+    organization: Organization,
+  ): Promise<void> {
+    if (!this.isEnabled()) return;
+    await this.reconcileEngine({
+      engineId: deriveOrgEngineId(organization.id),
+      organizationId: organization.id,
+      namespace: this.engineNamespace(organization.defaultEnvironmentNamespace),
+      networkPolicyOverride: null,
+    });
+  }
+
+  private async reconcileEngine(target: EngineReconcileTarget): Promise<void> {
+    const { engineId, namespace } = target;
     const { kubeConfig } = loadKubeConfig();
     const clients = createK8sClients(kubeConfig, namespace);
 
     // Must precede the StatefulSet: a new engine pod mounts this ConfigMap and
     // would be stuck in ContainerCreating (failed mount) if it didn't exist yet.
-    await this.applyEngineConfig(clients.coreApi, environment, namespace);
-    await this.applyEngineStatefulSet(clients.appsApi, environment, namespace);
+    await this.applyEngineConfig(clients.coreApi, engineId, namespace);
+    await this.applyEngineStatefulSet(clients.appsApi, engineId, namespace);
 
-    const effectivePolicy =
-      await this.resolveEngineEffectivePolicy(environment);
+    const effectivePolicy = await this.resolveEngineEffectivePolicy(target);
     const capabilities = (await getK8sCapabilities()).networkPolicy;
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       clients.coreApi,
     );
     const policies = buildDaggerEgressPolicies({
-      environmentId: environment.id,
+      environmentId: engineId,
       effectivePolicy,
       capabilities,
       clusterDnsIps,
+      additionalDeniedCidrs: config.daggerRuntime.engine.additionalDeniedCidrs,
     });
     const policyName = constructManagedNetworkPolicyName(
-      daggerEngineDeploymentName(environment.id),
+      daggerEngineDeploymentName(engineId),
     );
-    // Delete any managed policy kind no longer desired (e.g. the environment was
+    // Delete any managed policy kind no longer desired (e.g. the policy was
     // relaxed to unrestricted → empty list → drop the restrictive policy; or the
     // cluster's provider changed) so a stale object can't keep governing the pod.
     const desiredKinds = new Set(policies.map((p) => p.kind));
@@ -159,12 +239,13 @@ class DaggerEnvironmentRuntimeManager {
 
     logger.info(
       {
-        environmentId: environment.id,
+        engineId,
+        organizationId: target.organizationId,
         namespace,
         egressMode: effectivePolicy.policy?.egressMode ?? "none",
         policies: policies.map((p) => p.kind),
       },
-      "[DaggerEnvRuntime] reconciled environment engine",
+      "[DaggerEnvRuntime] reconciled engine",
     );
   }
 
@@ -172,61 +253,59 @@ class DaggerEnvironmentRuntimeManager {
     return config.skillsSandbox.enabled && isK8sConfigured();
   }
 
-  // Mirrors the MCP runtime's resolution (the environment's namespace, else the
-  // release namespace), so a per-env engine only ever lands where the chart
-  // already grants RBAC: a declared `environmentNamespaces` namespace or the
-  // release namespace. No namespace is created at runtime.
-  private engineNamespace(environment: Environment): string {
-    return environment.namespace?.trim() || getK8sNamespace();
+  // Mirrors the MCP runtime's resolution (the configured namespace, else the
+  // release namespace), so an engine only ever lands where the chart already
+  // grants RBAC: a declared `environmentNamespaces` namespace or the release
+  // namespace. No namespace is created at runtime.
+  private engineNamespace(namespace: string | null | undefined): string {
+    return namespace?.trim() || getK8sNamespace();
   }
 
-  // Threads the org default so an environment that inherits a restricted
-  // organization policy locks down the engine too — parity with the MCP server
-  // runtime, which passes the same default. Without it, such an environment
-  // resolves to the unrestricted built-in policy and the sandbox egresses freely.
-  private async resolveEngineEffectivePolicy(environment: Environment) {
-    const organization = await OrganizationModel.getById(
-      environment.organizationId,
-    );
+  // Threads the org default so a target that carries no override still locks
+  // down the engine when the organization sets a restricted default policy —
+  // parity with the MCP server runtime. Without it, such a target resolves to
+  // the unrestricted built-in policy and the sandbox egresses freely.
+  private async resolveEngineEffectivePolicy(target: EngineReconcileTarget) {
+    const organization = await OrganizationModel.getById(target.organizationId);
     return resolveEffectiveNetworkPolicy({
-      organizationId: environment.organizationId,
-      environmentId: environment.id,
-      environmentNetworkPolicy: environment.networkPolicy,
+      organizationId: target.organizationId,
+      environmentId: target.engineId,
+      environmentNetworkPolicy: target.networkPolicyOverride,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
   }
 
   private async applyEngineStatefulSet(
     appsApi: k8s.AppsV1Api,
-    environment: Environment,
+    engineId: string,
     namespace: string,
   ): Promise<void> {
     try {
       await appsApi.createNamespacedStatefulSet({
         namespace,
-        body: this.buildEngineStatefulSet(environment, namespace),
+        body: this.buildEngineStatefulSet(engineId, namespace),
       });
     } catch (error) {
       if (!isConflict(error)) throw error;
       // Engine already exists — left as-is. Image/resource changes do NOT roll
       // out on reconcile (a deliberate limitation: the engine is long-lived and
       // rarely changes; bumping ENGINE_IMAGE needs a manual StatefulSet delete).
-      // The per-reconcile mutation an environment actually drives — its egress
-      // policy — is applied below via the NetworkPolicy, not the engine spec.
+      // The per-reconcile mutation a target actually drives — its egress policy
+      // — is applied below via the NetworkPolicy, not the engine spec.
     }
   }
 
   private async applyEngineConfig(
     coreApi: k8s.CoreV1Api,
-    environment: Environment,
+    engineId: string,
     namespace: string,
   ): Promise<void> {
-    const name = engineConfigMapName(environment.id);
+    const name = engineConfigMapName(engineId);
     const body: k8s.V1ConfigMap = {
       metadata: {
         name,
         namespace,
-        labels: daggerEnginePodLabels(environment.id),
+        labels: daggerEnginePodLabels(engineId),
       },
       data: { "engine.json": ENGINE_CONFIG_JSON },
     };
@@ -239,11 +318,12 @@ class DaggerEnvironmentRuntimeManager {
   }
 
   private buildEngineStatefulSet(
-    environment: Environment,
+    engineId: string,
     namespace: string,
   ): k8s.V1StatefulSet {
-    const name = daggerEngineDeploymentName(environment.id);
-    const labels = daggerEnginePodLabels(environment.id);
+    const name = daggerEngineDeploymentName(engineId);
+    const labels = daggerEnginePodLabels(engineId);
+    const engine = config.daggerRuntime.engine;
     return {
       apiVersion: "apps/v1",
       kind: "StatefulSet",
@@ -267,10 +347,10 @@ class DaggerEnvironmentRuntimeManager {
                 securityContext: { privileged: true },
                 resources: {
                   requests: {
-                    cpu: ENGINE_CPU_REQUEST,
-                    memory: ENGINE_MEMORY_REQUEST,
+                    cpu: engine.cpuRequest,
+                    memory: engine.memoryRequest,
                   },
-                  limits: { memory: ENGINE_MEMORY_LIMIT },
+                  limits: { memory: engine.memoryLimit },
                 },
                 volumeMounts: [
                   { name: "varlib", mountPath: "/var/lib/dagger" },
@@ -288,23 +368,29 @@ class DaggerEnvironmentRuntimeManager {
               { name: "run", emptyDir: { medium: "Memory" } },
               {
                 name: "config",
-                configMap: { name: engineConfigMapName(environment.id) },
+                configMap: { name: engineConfigMapName(engineId) },
               },
             ],
           },
         },
         // Persistent buildkit cache (warm base + layers): the single replica gets
         // its own PVC that re-attaches across restarts, so the engine reuses its
-        // warm base instead of cold-rebuilding (matches the default engine's PVC).
+        // warm base instead of cold-rebuilding.
         volumeClaimTemplates: [
           {
             metadata: { name: "varlib" },
             spec: {
               accessModes: ["ReadWriteOnce"],
-              resources: { requests: { storage: ENGINE_CACHE_SIZE } },
+              resources: { requests: { storage: engine.cacheStorage } },
             },
           },
         ],
+        // Keep the cache PVC when the StatefulSet is deleted or scaled to zero,
+        // so tearing down an engine doesn't discard its warm buildkit cache.
+        persistentVolumeClaimRetentionPolicy: {
+          whenDeleted: "Retain",
+          whenScaled: "Retain",
+        },
       },
     };
   }
@@ -425,8 +511,22 @@ class DaggerEnvironmentRuntimeManager {
   }
 }
 
-function engineConfigMapName(environmentId: string): string {
-  return `${daggerEngineDeploymentName(environmentId)}-config`;
+function engineConfigMapName(engineId: string): string {
+  return `${daggerEngineDeploymentName(engineId)}-config`;
+}
+
+// Fixed namespace for deriving an organization's default-engine id. Arbitrary
+// but constant, so the derived id is stable across restarts and processes.
+const ORG_DEFAULT_ENGINE_NAMESPACE = "a7c3e0d2-6b1f-4e8a-9c5d-2f0b8e4a1d63";
+
+/**
+ * Stable engine id for an organization's default Dagger engine. Organization
+ * ids are non-UUID strings, but the `kube-pod://` engine address and its NAPI
+ * validator require a canonical UUID, so derive one deterministically from the
+ * org id. Distinct from any real environment id (a random v4 UUID).
+ */
+function deriveOrgEngineId(organizationId: string): string {
+  return uuidv5(organizationId, ORG_DEFAULT_ENGINE_NAMESPACE);
 }
 
 const CRD_COORDS: Record<

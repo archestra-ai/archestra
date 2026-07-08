@@ -287,6 +287,19 @@ class SandboxRuntimeService {
     this.lastInitAttemptAt = Date.now();
     this.setStatus("initializing");
 
+    // Per-organization mode (no explicit runner host): there is no process-
+    // default engine to warm. Each unbound run carries its own org-default
+    // target whose session warms lazily on first use, so there is nothing to
+    // health-check at init — mark ready. A broken per-org engine still surfaces
+    // at that run rather than being hidden.
+    if (!config.daggerRuntime.runnerHost) {
+      this.setStatus("ready");
+      logger.info(
+        "[SandboxRuntime] ready — per-organization engines warm on first use",
+      );
+      return;
+    }
+
     try {
       const { checkSession } = await loadNative();
       await checkSession({ traceparent: getTraceparent() });

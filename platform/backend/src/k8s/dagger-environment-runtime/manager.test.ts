@@ -36,6 +36,7 @@ vi.mock("@/models/organization", () => ({
   default: { getById: vi.fn() },
 }));
 
+import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
@@ -45,7 +46,8 @@ import {
   loadKubeConfig,
 } from "@/k8s/shared";
 import OrganizationModel from "@/models/organization";
-import type { Environment } from "@/types";
+import type { Environment, Organization } from "@/types";
+import { isUuid } from "@/utils/uuid";
 import { daggerEnvironmentRuntimeManager } from "./manager";
 
 const mockIsK8sConfigured = vi.mocked(isK8sConfigured);
@@ -63,6 +65,15 @@ function makeEnv(overrides: Partial<Environment> = {}): Environment {
     networkPolicy: null,
     ...overrides,
   } as unknown as Environment;
+}
+
+function makeOrg(overrides: Partial<Organization> = {}): Organization {
+  return {
+    id: "default-org",
+    defaultEnvironmentNamespace: null,
+    defaultNetworkPolicy: null,
+    ...overrides,
+  } as unknown as Organization;
 }
 
 describe("environmentTargetForEnvironment", () => {
@@ -113,14 +124,90 @@ describe("environmentTargetForEnvironment", () => {
   });
 });
 
+describe("organizationDefaultTarget", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetK8sNamespace.mockReturnValue("archestra-release");
+    mockIsK8sConfigured.mockReturnValue(true);
+  });
+
+  it("returns undefined when Kubernetes is not configured", () => {
+    mockIsK8sConfigured.mockReturnValue(false);
+    expect(
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(makeOrg()),
+    ).toBeUndefined();
+  });
+
+  it("derives a canonical UUID engine id from the non-UUID org id", () => {
+    const target = daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      makeOrg(),
+    );
+    expect(target?.environmentId).toBeDefined();
+    // The org id ("default-org") is not a UUID, but the engine id must be one so
+    // the kube-pod:// address passes its NAPI UUID validation.
+    expect(isUuid(target?.environmentId ?? "")).toBe(true);
+  });
+
+  it("derives the same id for the same org and different ids for different orgs", () => {
+    const a1 = daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      makeOrg({ id: "org-a" }),
+    )?.environmentId;
+    const a2 = daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      makeOrg({ id: "org-a" }),
+    )?.environmentId;
+    const b = daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      makeOrg({ id: "org-b" }),
+    )?.environmentId;
+    expect(a1).toBe(a2);
+    expect(a1).not.toBe(b);
+  });
+
+  it("uses the org's default namespace, else the release namespace", () => {
+    expect(
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+        makeOrg({ defaultEnvironmentNamespace: "ns-team" }),
+      )?.namespace,
+    ).toBe("ns-team");
+    expect(
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+        makeOrg({ defaultEnvironmentNamespace: null }),
+      )?.namespace,
+    ).toBe("archestra-release");
+  });
+});
+
 describe("buildEngineStatefulSet", () => {
+  const ENGINE_ID = "abcdef00-1111-2222-3333-444455556666";
   function build(): k8s.V1StatefulSet {
     return (
       daggerEnvironmentRuntimeManager as unknown as {
-        buildEngineStatefulSet(e: Environment, ns: string): k8s.V1StatefulSet;
+        buildEngineStatefulSet(engineId: string, ns: string): k8s.V1StatefulSet;
       }
-    ).buildEngineStatefulSet(makeEnv({ namespace: "ns-x" }), "ns-x");
+    ).buildEngineStatefulSet(ENGINE_ID, "ns-x");
   }
+
+  it("sources engine resources from config so small clusters can override them", () => {
+    const engine = config.daggerRuntime.engine;
+    const original = { ...engine };
+    Object.assign(engine, {
+      cpuRequest: "500m",
+      memoryRequest: "2Gi",
+      memoryLimit: "4Gi",
+      cacheStorage: "10Gi",
+    });
+    try {
+      const sts = build();
+      const container = sts.spec?.template.spec?.containers[0];
+      expect(container?.resources?.requests?.cpu).toBe("500m");
+      expect(container?.resources?.requests?.memory).toBe("2Gi");
+      expect(container?.resources?.limits?.memory).toBe("4Gi");
+      expect(
+        sts.spec?.volumeClaimTemplates?.[0].spec?.resources?.requests?.storage,
+      ).toBe("10Gi");
+    } finally {
+      Object.assign(engine, original);
+    }
+  });
 
   it("persists /var/lib/dagger on a per-replica PVC, not an emptyDir", () => {
     const sts = build();
@@ -129,6 +216,12 @@ describe("buildEngineStatefulSet", () => {
     expect(vct[0].metadata?.name).toBe("varlib");
     expect(vct[0].spec?.accessModes).toEqual(["ReadWriteOnce"]);
     expect(vct[0].spec?.resources?.requests?.storage).toBe("50Gi");
+    // The cache PVC must survive engine deletion/scale-down so a teardown
+    // doesn't discard the warm buildkit cache.
+    expect(sts.spec?.persistentVolumeClaimRetentionPolicy).toEqual({
+      whenDeleted: "Retain",
+      whenScaled: "Retain",
+    });
 
     const podSpec = sts.spec?.template.spec;
     expect(
@@ -181,26 +274,35 @@ describe("buildEngineStatefulSet", () => {
 });
 
 describe("resolveEngineEffectivePolicy", () => {
-  function resolve(env: Environment) {
+  function resolve(target: {
+    engineId: string;
+    organizationId: string;
+    networkPolicyOverride: unknown;
+  }) {
     return (
       daggerEnvironmentRuntimeManager as unknown as {
         resolveEngineEffectivePolicy(
-          e: Environment,
+          t: unknown,
         ): Promise<{ source: string; policy: unknown }>;
       }
-    ).resolveEngineEffectivePolicy(env);
+    ).resolveEngineEffectivePolicy(target);
   }
 
-  it("inherits the restricted org default when the env has no own policy", async () => {
-    // Without threading the org default, an env with no own policy resolves to
+  it("inherits the restricted org default when the target carries no override", async () => {
+    // Without threading the org default, a target with no override resolves to
     // the unrestricted built-in (source "built_in") and the engine egresses
     // freely. Asserting the real resolver returns the org default proves the wire.
+    // This is the org-default engine's path (it always carries a null override).
     const defaultNetworkPolicy = { egressMode: "restricted" };
     vi.mocked(OrganizationModel.getById).mockResolvedValue({
       defaultNetworkPolicy,
     } as never);
 
-    const result = await resolve(makeEnv({ networkPolicy: null }));
+    const result = await resolve({
+      engineId: "abcdef00-1111-2222-3333-444455556666",
+      organizationId: "org-1",
+      networkPolicyOverride: null,
+    });
 
     expect(result).toEqual({
       source: "organization_default",
@@ -208,15 +310,17 @@ describe("resolveEngineEffectivePolicy", () => {
     });
   });
 
-  it("uses the env's own policy over the org default", async () => {
+  it("uses the target's own override policy over the org default", async () => {
     const ownPolicy = { egressMode: "restricted", allowedDomains: ["a.test"] };
     vi.mocked(OrganizationModel.getById).mockResolvedValue({
       defaultNetworkPolicy: { egressMode: "off" },
     } as never);
 
-    const result = await resolve(
-      makeEnv({ networkPolicy: ownPolicy as never }),
-    );
+    const result = await resolve({
+      engineId: "abcdef00-1111-2222-3333-444455556666",
+      organizationId: "org-1",
+      networkPolicyOverride: ownPolicy,
+    });
 
     expect(result).toEqual({ source: "environment", policy: ownPolicy });
   });
@@ -363,5 +467,116 @@ describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetw
     expect(
       clients.customObjectsApi.replaceNamespacedCustomObject,
     ).not.toHaveBeenCalled();
+  });
+});
+
+describe("reconcileOrganizationDefault", () => {
+  const k8sCapabilities = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: false,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: false,
+    provider: "kubernetes-network-policy",
+    supportsFqdn: false,
+    supportsHttpMethods: false,
+    message: null,
+  };
+
+  function makeFakeClients() {
+    return {
+      namespace: "test-ns",
+      coreApi: {
+        createNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+        replaceNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+      },
+      appsApi: {
+        createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
+      },
+      networkingApi: {
+        createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+        replaceNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+        deleteNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
+      },
+      customObjectsApi: {
+        deleteNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      },
+    };
+  }
+
+  let clients: ReturnType<typeof makeFakeClients>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clients = makeFakeClients();
+    mockIsK8sConfigured.mockReturnValue(true);
+    mockGetK8sNamespace.mockReturnValue("release-ns");
+    mockGetK8sCapabilities.mockResolvedValue({
+      networkPolicy: k8sCapabilities,
+    } as never);
+    mockGetClusterDnsIps.mockResolvedValue(["10.0.0.10"]);
+    mockLoadKubeConfig.mockReturnValue({ kubeConfig: {} } as never);
+    mockCreateK8sClients.mockReturnValue(clients as never);
+  });
+
+  it("provisions the derived engine + config in the org's namespace, applies the unrestricted floor when the org sets no policy", async () => {
+    const org = makeOrg({
+      id: "org-x",
+      defaultEnvironmentNamespace: "team-ns",
+      defaultNetworkPolicy: null,
+    });
+    vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+    const engineId =
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+        org,
+      )?.environmentId;
+
+    await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
+
+    expect(clients.coreApi.createNamespacedConfigMap).toHaveBeenCalledTimes(1);
+    const stsCall =
+      clients.appsApi.createNamespacedStatefulSet.mock.calls[0][0];
+    expect(stsCall.namespace).toBe("team-ns");
+    expect(stsCall.body.metadata.name).toBe(`dagger-engine-${engineId}`);
+    // With no org policy the engine still gets the unrestricted-egress floor every
+    // per-env engine gets: public internet allowed, private/link-local/metadata
+    // ranges blocked (the 0.0.0.0/0 rule carries an `except` list, not allow-all).
+    const npBody =
+      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    const publicRule = npBody.spec.egress.find(
+      (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
+        r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
+    );
+    expect(publicRule.to[0].ipBlock.except.length).toBeGreaterThan(0);
+  });
+
+  it("applies the org default egress policy to the default engine", async () => {
+    const org = makeOrg({
+      id: "org-y",
+      defaultNetworkPolicy: {
+        egressMode: "restricted",
+        domainPreset: "none",
+        allowedDomains: ["registry.npmjs.org"],
+        allowedCidrs: [],
+      },
+    });
+    vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+
+    await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
+
+    expect(
+      clients.networkingApi.createNamespacedNetworkPolicy,
+    ).toHaveBeenCalledTimes(1);
+    // Assert the org's OWN restricted policy was applied, not the unrestricted
+    // floor a null policy produces: the floor allows all public egress via a
+    // 0.0.0.0/0-with-except rule, so a genuinely restricted policy must NOT carry
+    // one — and must still have egress rules (it isn't a no-op).
+    const npBody =
+      clients.networkingApi.createNamespacedNetworkPolicy.mock.calls[0][0].body;
+    expect(npBody.spec.egress.length).toBeGreaterThan(0);
+    const hasPublicAllow = npBody.spec.egress.some(
+      (r: { to?: { ipBlock?: { cidr: string } }[] }) =>
+        r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
+    );
+    expect(hasPublicAllow).toBe(false);
   });
 });

@@ -1281,8 +1281,8 @@ const startWebServer = async () => {
       );
     });
 
-    // Eagerly provision a per-environment Dagger engine + egress policy for every
-    // environment, so environment-bound agents don't route to a non-existent pod.
+    // Eagerly provision a Dagger engine + egress policy for every environment and
+    // every organization's default, so no agent routes to a non-existent pod.
     void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Initialize incoming email provider (if configured)
@@ -1650,7 +1650,8 @@ const startWorker = async () => {
       );
     });
 
-    // Eagerly provision per-environment Dagger engines + egress policies.
+    // Eagerly provision per-environment and per-organization Dagger engines +
+    // egress policies.
     void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Worker server for Kubernetes probes, Prometheus scraping,

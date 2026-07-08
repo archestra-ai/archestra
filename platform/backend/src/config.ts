@@ -1224,6 +1224,46 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
 /**
+ * Whether the code execution sandbox is enabled.
+ *
+ * - `ARCHESTRA_CODE_RUNTIME_ENABLED=false` is the documented kill switch and
+ *   wins over everything, including an operator-supplied runner host.
+ * - Otherwise an explicit Dagger runner host (a BYO engine) turns it on, with no
+ *   Kubernetes needed — this covers `tcp://` and the quickstart image.
+ * - Otherwise `ARCHESTRA_CODE_RUNTIME_ENABLED=true` plus a configured
+ *   orchestrator turns it on, and the backend provisions a per-organization
+ *   engine in code. Kubernetes is required because that mode has to create
+ *   StatefulSets and reach them over `kube-pod://`; without it no engine can
+ *   exist, so the runtime would report ready and then fail on the first command.
+ *   Requiring the explicit flag also keeps an orchestrator configured purely for
+ *   MCP server pods from silently provisioning privileged Dagger engines.
+ *
+ * The K8s-configured test mirrors `isK8sConfigured()` (`k8s/shared.ts`) but is
+ * computed from raw env here: `k8s/shared.ts` imports this config module at load,
+ * so importing it back would be a circular dependency.
+ *
+ * @public — exported for testability
+ */
+export const isCodeRuntimeEnabled = ({
+  runnerHost,
+  codeRuntimeEnabledEnv,
+  kubeconfig,
+  loadKubeconfigFromCurrentCluster,
+}: {
+  runnerHost: string | undefined;
+  codeRuntimeEnabledEnv: string | undefined;
+  kubeconfig: string | undefined;
+  loadKubeconfigFromCurrentCluster: string | undefined;
+}): boolean => {
+  if (codeRuntimeEnabledEnv === "false") return false;
+  if (runnerHost !== undefined) return true;
+  const k8sConfigured =
+    loadKubeconfigFromCurrentCluster === "true" ||
+    (kubeconfig?.trim().length ?? 0) > 0;
+  return codeRuntimeEnabledEnv === "true" && k8sConfigured;
+};
+
+/**
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
@@ -1337,21 +1377,31 @@ const hackathonGallery: {
   ),
 };
 
-// the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host: it runs when a host is
-// configured and stays off otherwise — presence of the host is the switch. it
-// is independent of the skills *read* feature — skills can be listed/activated/
-// read with the sandbox off.
+// The code execution sandbox (run_command / upload_file / download_file, plus
+// skill activation-mounts) runs on a Dagger engine. Two ways it turns on:
+//   1. An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST — an operator-
+//      supplied engine (BYO tcp:// or external kube-pod://). When set it both
+//      enables the sandbox and serves as the process-default engine.
+//   2. ARCHESTRA_CODE_RUNTIME_ENABLED=true with the orchestrator (Kubernetes)
+//      configured — the backend then provisions a per-organization engine in
+//      code and routes each unbound run to its org's engine.
+// It is independent of the skills *read* feature — skills can be listed/
+// activated/read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
   process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 );
-const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
-
-// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
-// shared session + warm base.
+const skillsSandboxEnabled = isCodeRuntimeEnabled({
+  runnerHost: skillsSandboxDaggerRunnerHost,
+  codeRuntimeEnabledEnv: process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
+  kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+  loadKubeconfigFromCurrentCluster:
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER,
+});
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
+// runnerHost is the optional process-default/BYO engine — unset in the
+// code-managed per-organization mode, where each run carries its own target.
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
-const daggerRuntimeEnabled =
-  skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+const daggerRuntimeEnabled = skillsSandboxEnabled;
 
 // persistent "My Files" byte storage backend; the root is validated (required +
 // absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
@@ -2022,9 +2072,8 @@ const config = {
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
-   * runs when a Dagger runner host is configured
-   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
-   */
+   * On when a Dagger runner host is configured, or `ARCHESTRA_CODE_RUNTIME_ENABLED`
+   * is set with the orchestrator (Kubernetes) configured.   */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
     cpuLimit: parsePositiveInt(
@@ -2059,10 +2108,11 @@ const config = {
     enabled: skillsSandboxEnabled,
   },
   /**
-   * unified Dagger runtime — one shared session with a pre-warmed base
-   * container that hosts the code execution sandbox commands. The Rust crate
-   * (`@archestra/sandbox-rs`) owns the session; this block only carries
-   * enable + connection knobs.
+   * unified Dagger runtime — a per-target pool of pre-warmed base-container
+   * sessions that host the code execution sandbox commands. The Rust crate
+   * (`@archestra/sandbox-rs`) owns the sessions; this block only carries
+   * enable + connection knobs. `runnerHost` is the optional process-default
+   * engine; it is unset in the code-managed per-organization mode.
    */
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
@@ -2079,6 +2129,27 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
+// Resource requests/limits for a code-managed engine StatefulSet (K8s
+    // quantity strings). Production defaults; override down for small/local
+    // clusters that can't schedule the full engine.
+    engine: {
+      cpuRequest:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
+      memoryRequest:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "8Gi",
+      memoryLimit:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "16Gi",
+      cacheStorage:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
+      // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress
+      // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set
+      // to the cluster's Service/Pod CIDRs when they fall outside RFC1918 so
+      // sandboxed code can't reach in-cluster ClusterIP services.
+      additionalDeniedCidrs: parseCommaSeparatedList(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS ??
+          "",
+      ),
+    },
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the

@@ -55,6 +55,7 @@ import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
+import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
@@ -556,6 +557,39 @@ export const createFastifyInstance = () =>
         );
         return reply.status(coerced.statusCode).send({
           error: { message: coerced.message, type: coerced.type },
+        });
+      }
+
+      // Transient database connectivity failures (DNS lookup, connection
+      // refused during a database restart, pool connect timeouts) that
+      // survived the retry budget are availability incidents, not bugs in
+      // whichever route happened to be in flight. Respond with a retryable
+      // 503 instead of a 500, and group them in error tracking by root
+      // cause rather than by the query text the ORM wraps them in.
+      const transientDbErrorCode = getTransientDbErrorCode(error);
+      if (transientDbErrorCode) {
+        this.log.error(
+          {
+            ...requestContext,
+            error: error.message,
+            statusCode: 503,
+            dbErrorCode: transientDbErrorCode,
+          },
+          "HTTP 503 database temporarily unavailable",
+        );
+
+        captureServerException(request, error, {
+          error_type: "db_unavailable",
+          db_error_code: transientDbErrorCode,
+          status_code: 503,
+          $exception_fingerprint: `db-transient/${transientDbErrorCode}`,
+        });
+
+        return reply.status(503).send({
+          error: {
+            message: "Database temporarily unavailable, please retry",
+            type: "api_service_unavailable_error",
+          },
         });
       }
 

@@ -69,6 +69,8 @@ pub use contract::{
     Unprovable, Verdict, Violation,
 };
 pub use dimension::{Attention, Audience, Effect, Effects, Trust, UserId};
-pub use engine::{BlockReason, Decision, Permit, PolicyEngine, StalePermit, UnknownPolicy};
+pub use engine::{
+    BlockReason, Decision, InvalidContract, Permit, PolicyEngine, StalePermit, UnknownPolicy,
+};
 pub use label::{AuditEntry, Label};
 pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, Turn};

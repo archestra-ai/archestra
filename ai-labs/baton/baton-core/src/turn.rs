@@ -49,6 +49,11 @@ impl Trajectory {
     }
 
     /// Append a user or assistant message under its label.
+    ///
+    /// Labels are trusted input from the embedding harness. In particular, a
+    /// confirmation (`Attention::High`) belongs on user turns only: the
+    /// engine rejects it in tool contracts, and the harness must not stamp
+    /// it on assistant turns — an assistant is not the user.
     pub fn push_message(&mut self, label: Label, speaker: Speaker, content: impl Into<String>) {
         let actor = match speaker {
             Speaker::User(user) => Actor::User(user),

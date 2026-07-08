@@ -44,6 +44,10 @@ pub enum Ruling {
 pub trait Authority {
     fn name(&self) -> AuthorityName;
 
+    /// `violations` is the full set found for the flow. Under
+    /// [`crate::engine::UnknownPolicy::AllowWithAudit`], unprovable entries
+    /// are included for context even though the policy audits them through
+    /// rather than blocking on them.
     fn adjudicate(
         &self,
         request: &FlowRequest,

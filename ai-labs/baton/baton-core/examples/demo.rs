@@ -81,38 +81,43 @@ fn attempt(
 
 fn main() {
     let mut engine = PolicyEngine::new(HumanInTheLoop, UnknownPolicy::AllowWithAudit);
-    engine.register(ToolContract {
-        name: ToolName::new("web.fetch"),
-        requires: Requirements::default(),
-        output_label: Label {
-            audience: Audience::Public,
-            trust: Trust::Suspicious,
-            ..Label::identity()
+    let contracts = [
+        ToolContract {
+            name: ToolName::new("web.fetch"),
+            requires: Requirements::default(),
+            output_label: Label {
+                audience: Audience::Public,
+                trust: Trust::Suspicious,
+                ..Label::identity()
+            },
         },
-    });
-    engine.register(ToolContract {
-        name: ToolName::new("email.send"),
-        requires: Requirements {
-            trust: Some(TrustRequirement::Trusted),
-            audience: AudienceRule::RecipientsWithinContext,
-            ..Requirements::default()
+        ToolContract {
+            name: ToolName::new("email.send"),
+            requires: Requirements {
+                trust: Some(TrustRequirement::Trusted),
+                audience: AudienceRule::RecipientsWithinContext,
+                ..Requirements::default()
+            },
+            output_label: Label {
+                effects: Effects::declared([Effect::Egress]),
+                ..Label::identity()
+            },
         },
-        output_label: Label {
-            effects: Effects::declared([Effect::Egress]),
-            ..Label::identity()
+        ToolContract {
+            name: ToolName::new("db.drop"),
+            requires: Requirements {
+                attention: AttentionRule::ExplicitConfirmation,
+                ..Requirements::default()
+            },
+            output_label: Label {
+                effects: Effects::declared([Effect::Mutation]),
+                ..Label::identity()
+            },
         },
-    });
-    engine.register(ToolContract {
-        name: ToolName::new("db.drop"),
-        requires: Requirements {
-            attention: AttentionRule::ExplicitConfirmation,
-            ..Requirements::default()
-        },
-        output_label: Label {
-            effects: Effects::declared([Effect::Mutation]),
-            ..Label::identity()
-        },
-    });
+    ];
+    for contract in contracts {
+        engine.register(contract).expect("demo contracts are valid");
+    }
 
     let mut trajectory = Trajectory::new();
 

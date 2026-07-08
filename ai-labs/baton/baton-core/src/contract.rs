@@ -207,12 +207,6 @@ pub struct ToolContract {
     pub output_label: Label,
 }
 
-impl ToolContract {
-    pub fn check(&self, context: &Label, request: &FlowRequest) -> Verdict {
-        self.requires.check(context, request)
-    }
-}
-
 impl Requirements {
     pub fn check(&self, context: &Label, request: &FlowRequest) -> Verdict {
         let mut violations = Vec::new();

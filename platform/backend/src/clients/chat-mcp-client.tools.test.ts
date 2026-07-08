@@ -760,6 +760,52 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
   });
 
+  test("clearing one scope leaves a sibling scope whose key is a string prefix of it", async () => {
+    const { agent, user, org, baseParams, gatewayClient } =
+      await setupChatToolEnv({ isolationKey: "exec-1" });
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    // "exec-1" is a string prefix of "exec-10", so a prefix delete that does not
+    // stop at the ":" separator would reclaim the sibling execution's tools too.
+    const seedClient = (key: string) =>
+      chatClient.__test.setCachedClient(
+        chatClient.__test.getCacheKey(agent.id, user.id, key),
+        gatewayClient,
+      );
+    seedClient("exec-10");
+
+    const chain = `root-agent:${agent.id}`;
+    const shortScope = {
+      ...baseParams,
+      isolationKey: "exec-1",
+      delegationChain: chain,
+    };
+    const longScope = {
+      ...baseParams,
+      isolationKey: "exec-10",
+      delegationChain: chain,
+    };
+
+    await chatClient.getChatMcpTools(shortScope);
+    await chatClient.getChatMcpTools(longScope);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+
+    chatClient.closeChatMcpClient(agent.id, user.id, "exec-1");
+
+    // The sibling execution keeps its cached tools.
+    await chatClient.getChatMcpTools(longScope);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+
+    // The cleared execution refetches.
+    seedClient("exec-1");
+    await chatClient.getChatMcpTools(shortScope);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(3);
+  });
+
   test("tools cached for one delegation chain never serve another chain", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv();
     const { targetAgent, delegationTool } = await makeAssignedDelegationTool({

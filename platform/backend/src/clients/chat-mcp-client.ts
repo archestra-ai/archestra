@@ -1245,10 +1245,8 @@ async function filterToolsByEnabledIds(
  * isolation key, so a scope owns one entry per chain, all sharing this prefix.
  */
 function deleteToolCacheScope(toolCacheKey: string): void {
-  const scoped = [...toolCache.keys()].filter(
-    (key) => key === toolCacheKey || key.startsWith(`${toolCacheKey}:`),
-  );
-  for (const key of scoped) {
-    toolCache.delete(key);
-  }
+  toolCache.delete(toolCacheKey);
+  // The separator keeps the match on a key boundary: isolation key `exec-1`
+  // must not reclaim `exec-10`'s entries.
+  toolCache.deleteByPrefix(`${toolCacheKey}:`);
 }

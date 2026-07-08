@@ -755,6 +755,18 @@ test("does NOT synthesize an interrupted result for an approved tool call (the S
     .filter((p) => (p as { type?: string }).type === "tool-approval-request");
   expect(approvalRequests).toHaveLength(1);
 
+  // The approved tool-call itself must survive — it is what the SDK executes on
+  // resume. A regression that dropped it entirely would also produce no
+  // fabricated result, so assert its presence, not just the absence below.
+  const approvedToolCall = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .find(
+      (p) =>
+        (p as { type?: string }).type === "tool-call" &&
+        (p as { toolCallId?: string }).toolCallId === "call-approved",
+    );
+  expect(approvedToolCall).toBeDefined();
+
   // The bug: a synthetic error-text tool-result is fabricated for the approved
   // call, so the SDK's collectToolApprovals skips executing it.
   const fabricated = modelMessages
@@ -862,6 +874,16 @@ test("excludes every approved call when a turn carries multiple approvals", asyn
     .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
     .filter((p) => (p as { type?: string }).type === "tool-result");
   expect(toolResults).toHaveLength(0);
+
+  // Both approved calls must survive for the SDK to execute — dropping one would
+  // also leave zero fabricated results, so assert presence explicitly.
+  const survivingToolCallIds = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .filter((p) => (p as { type?: string }).type === "tool-call")
+    .map((p) => (p as { toolCallId?: string }).toolCallId);
+  expect(survivingToolCallIds).toEqual(
+    expect.arrayContaining(["call-a", "call-b"]),
+  );
 });
 
 test("merges synthetic results into an existing tool message when only some calls resolved", async ({

@@ -244,9 +244,10 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   );
   // Naming scaffold_app verbatim satisfies run_tool's names-seen-verbatim
   // gate, so the model can start an app build without a search_tools
-  // round-trip. Unconditional: an agent that cannot dispatch it gets a clear
-  // refusal from run_tool, which costs one turn in a rare configuration —
-  // cheaper than mirroring the dispatch gate's assignment/RBAC logic here.
+  // round-trip. Emitted for every search_and_run_only agent regardless of
+  // assignment: an agent that cannot dispatch it gets a clear refusal from
+  // run_tool, which costs one turn in a rare configuration — cheaper than
+  // mirroring the dispatch gate's assignment/RBAC logic here.
   const scaffoldAppName = archestraMcpBranding.getToolName(
     TOOL_SCAFFOLD_APP_SHORT_NAME,
   );

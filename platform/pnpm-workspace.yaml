@@ -15,12 +15,12 @@ catalog:
   "@better-auth/core": 1.6.13
   "@better-auth/oauth-provider": 1.6.13
   "@better-auth/sso": 1.6.13
-  typescript: ^6.0.2
-  # TS 7 beta (Go-based `tsgo`) publishes daily dev builds. minimumReleaseAge
-  # (7 days) acts as the safety net — pnpm rejects builds younger than that,
-  # so tracking `beta` directly is safe: the lock file always resolves to the
-  # newest build that has cleared the quarantine window.
-  "@typescript/native-preview": beta
+  # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
+  # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`
+  # stays on the 6.x API via a shim whose binary is renamed `tsc6` — two packages
+  # cannot both install a `tsc` bin.
+  typescript: "npm:@typescript/typescript6@^6.0.0"
+  typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.3.4
 overrides:
   '@fastify/reply-from': '>=12.6.2'

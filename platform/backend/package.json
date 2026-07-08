@@ -27,7 +27,7 @@
     "knip": "pnpm knip:dev && pnpm knip:production",
     "knip:dev": "knip",
     "knip:production": "knip --production",
-    "type-check": "tsgo --noEmit",
+    "type-check": "tsc --noEmit",
     "check:migrations": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-drizzle-migration-journal.ts && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-sandbox-base-sync.ts",
     "db:generate": "drizzle-kit generate",
@@ -172,13 +172,13 @@
     "@types/node": "^25.5.0",
     "@types/pg": "^8.18.0",
     "@types/ws": "^8.18.1",
-    "@typescript/native-preview": "catalog:",
     "esbuild": "^0.28.1",
     "knip": "^5.85.0",
     "msw": "^2.14.6",
     "tsdown": "^0.21.0",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
+    "typescript-7": "catalog:",
     "vitest": "^4.1.0"
   }
 }

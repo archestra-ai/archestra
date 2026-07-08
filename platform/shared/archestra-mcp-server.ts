@@ -713,6 +713,68 @@ export function getArchestraToolShortName(
   return rawToolName;
 }
 
+/**
+ * Looser sibling of {@link isArchestraMcpServerTool} for the LLM-proxy
+ * auto-discovery filter ONLY — never for tool dispatch, RBAC, or policy
+ * evaluation, which must stay strict (use {@link getArchestraToolShortName}).
+ *
+ * Real MCP clients decorate our gateway tool names with their own labels, e.g.
+ * `archestra_staging__my_mcp_gateway_1234567__run_tool`, where the client
+ * inserts its own MCP-server label between our server name and the tool's short
+ * name. The strict parser splits on the LAST `__` and requires everything
+ * before it to be exactly an allowed server name, so it misses these decorated
+ * twins and they get re-recorded as "discovered" proxy tools — duplicates of
+ * tools we already serve.
+ *
+ * This matcher returns true when, after splitting the full name on
+ * {@link MCP_SERVER_TOOL_NAME_SEPARATOR}:
+ *  1. the trailing segment(s) form a known Archestra tool short name, AND
+ *  2. some earlier segment equals one of the allowed server names (the default
+ *     `archestra` or the org's branded name).
+ *
+ * Bare short names (`run_tool` with no server segment) are intentionally NOT
+ * matched — an unrelated external MCP server could legitimately expose a tool
+ * with the same short name, and there is no server segment to disambiguate.
+ */
+export function isLikelyArchestraToolName(
+  toolName: string,
+  options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },
+): boolean {
+  // The canonical `<server>__<short>` shape is already covered strictly.
+  if (getArchestraToolShortName(toolName, options) !== null) {
+    return true;
+  }
+
+  const segments = toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  // Need at least a server segment plus a short-name segment.
+  if (segments.length < 2) {
+    return false;
+  }
+
+  const allowedServerNames = getAllowedServerNames(options);
+
+  // Longest-match the trailing segment(s) against a known short name so a short
+  // name that ever contains `__` still matches. `tailStart >= 1` guarantees at
+  // least one preceding segment to carry the server name, which also excludes
+  // bare short names.
+  for (let tailStart = 1; tailStart < segments.length; tailStart++) {
+    const candidateShortName = segments
+      .slice(tailStart)
+      .join(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    if (!isArchestraToolShortName(candidateShortName)) {
+      continue;
+    }
+    const precedesShortName = segments
+      .slice(0, tailStart)
+      .some((segment) => allowedServerNames.has(segment));
+    if (precedesShortName) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function getArchestraToolFullName<
   ShortName extends ArchestraToolShortName,
 >(shortName: ShortName): ArchestraToolFullName<ShortName>;
@@ -785,6 +847,22 @@ function parseArchestraToolName(params: {
   const rawToolName = toolName.slice(
     separatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
   );
+
+  if (!getAllowedServerNames(options).has(serverName)) {
+    return { serverName: null, toolName: rawToolName };
+  }
+
+  return { serverName, toolName: rawToolName };
+}
+
+/**
+ * Server names accepted as "one of ours": the org's (possibly branded) server
+ * name, plus the default `archestra` unless the caller opts out via
+ * `includeDefaultPrefix: false`.
+ */
+function getAllowedServerNames(
+  options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },
+): Set<string> {
   const allowedServerNames = new Set<string>([
     getArchestraMcpServerName(options),
   ]);
@@ -793,9 +871,5 @@ function parseArchestraToolName(params: {
     allowedServerNames.add(ARCHESTRA_MCP_SERVER_NAME);
   }
 
-  if (!allowedServerNames.has(serverName)) {
-    return { serverName: null, toolName: rawToolName };
-  }
-
-  return { serverName, toolName: rawToolName };
+  return allowedServerNames;
 }

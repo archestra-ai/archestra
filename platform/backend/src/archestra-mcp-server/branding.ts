@@ -8,6 +8,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
+  isLikelyArchestraToolName,
   POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import config from "@/config";
@@ -79,6 +80,20 @@ class ArchestraMcpBranding {
 
   isToolName(toolName: string): boolean {
     return this.getToolShortName(toolName) !== null;
+  }
+
+  /**
+   * Looser recognizer for the LLM-proxy auto-discovery filter ONLY: matches
+   * gateway tool names that MCP clients have decorated with their own labels
+   * (e.g. `archestra_staging__my_mcp_gateway_1234567__run_tool`), which the
+   * strict {@link isToolName} misses. Never use for dispatch, RBAC, or policy
+   * decisions — those must stay strict.
+   */
+  isLikelyToolName(toolName: string): boolean {
+    return isLikelyArchestraToolName(toolName, {
+      ...this.identity,
+      includeDefaultPrefix: true,
+    });
   }
 
   /**

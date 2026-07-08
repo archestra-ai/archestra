@@ -11,6 +11,7 @@ import {
   getCreationDefaultArchestraToolShortNames,
   isAlwaysExposedArchestraToolShortName,
   isArchestraMcpServerTool,
+  isLikelyArchestraToolName,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -190,6 +191,54 @@ describe("archestra MCP tool names", () => {
     ]) {
       expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(false);
     }
+  });
+});
+
+describe("isLikelyArchestraToolName (loose auto-discovery matcher)", () => {
+  test("matches the canonical default and branded prefixes", () => {
+    expect(isLikelyArchestraToolName("archestra__run_tool")).toBe(true);
+
+    const branding = { appName: "Acme Copilot", fullWhiteLabeling: true };
+    const branded = getArchestraToolFullName("run_tool", branding);
+    expect(isLikelyArchestraToolName(branded, branding)).toBe(true);
+  });
+
+  test("matches names a client decorated between the server name and short name", () => {
+    // Branded server name slugifies to `archestra_staging`; the client appends
+    // its own MCP-server label before the tool short name.
+    const branding = { appName: "Archestra Staging", fullWhiteLabeling: true };
+    expect(
+      isLikelyArchestraToolName(
+        "archestra_staging__my_mcp_gateway_1234567__run_tool",
+        branding,
+      ),
+    ).toBe(true);
+    // The off-brand default server name is still recognized under decoration.
+    expect(
+      isLikelyArchestraToolName(
+        "archestra__my_mcp_gateway_1234567__search_tools",
+        branding,
+      ),
+    ).toBe(true);
+  });
+
+  test("does NOT match a bare short name with no server segment", () => {
+    expect(isLikelyArchestraToolName("run_tool")).toBe(false);
+  });
+
+  test("does NOT match a known short name behind a foreign server segment", () => {
+    expect(isLikelyArchestraToolName("unrelated_server__run_tool")).toBe(false);
+    // Decorated, but no allowed server name anywhere in the segments.
+    expect(
+      isLikelyArchestraToolName(
+        "custom_client_id__mcp-server-my_mcp_gateway__run_tool",
+      ),
+    ).toBe(false);
+  });
+
+  test("does NOT match a genuinely foreign tool whose tail is not a short name", () => {
+    expect(isLikelyArchestraToolName("archestra__list_issues")).toBe(false);
+    expect(isLikelyArchestraToolName("custom__list_issues")).toBe(false);
   });
 });
 

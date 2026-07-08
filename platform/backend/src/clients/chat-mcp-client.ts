@@ -210,7 +210,7 @@ export const __test = {
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
-      toolCache.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+      deleteToolCacheScope(`${CacheKey.ChatMcpTools}-${cacheKey}`);
     } else {
       toolCache.clear();
     }
@@ -457,16 +457,8 @@ export function closeChatMcpClient(
     clientLastValidatedAt.delete(cacheKey);
   }
 
-  // Also clear tool cache for this conversation/execution. An execution holds
-  // one entry per delegation chain it reached this agent through, so reclaim
-  // every chain variant rather than the chainless key alone.
-  const toolCacheKey = getToolCacheKey(agentId, userId, isolationKey);
-  const chainVariants = [...toolCache.keys()].filter(
-    (key) => key === toolCacheKey || key.startsWith(`${toolCacheKey}:`),
-  );
-  for (const key of chainVariants) {
-    toolCache.delete(key);
-  }
+  // Also clear tool cache for this conversation/execution
+  deleteToolCacheScope(getToolCacheKey(agentId, userId, isolationKey));
 }
 
 /**
@@ -1245,4 +1237,18 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+/**
+ * Deletes a scope's tool-cache entry and every per-delegation-chain variant of
+ * it. One agent can run at several depths of a delegation tree under a single
+ * isolation key, so a scope owns one entry per chain, all sharing this prefix.
+ */
+function deleteToolCacheScope(toolCacheKey: string): void {
+  const scoped = [...toolCache.keys()].filter(
+    (key) => key === toolCacheKey || key.startsWith(`${toolCacheKey}:`),
+  );
+  for (const key of scoped) {
+    toolCache.delete(key);
+  }
 }

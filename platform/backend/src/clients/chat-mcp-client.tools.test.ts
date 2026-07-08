@@ -732,6 +732,34 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     expect(gatewayClient.listTools).toHaveBeenCalledTimes(3);
   });
 
+  test("__test.clearToolCache(cacheKey) drops every chain variant for that scope", async () => {
+    const { agent, user, org, conversation, baseParams, gatewayClient } =
+      await setupChatToolEnv();
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
+
+    // Scoped clearing must reclaim chain variants too, or a case leaks tool
+    // entries into the next one.
+    await chatClient.__test.clearToolCache(
+      chatClient.__test.getCacheKey(agent.id, user.id, conversation?.id),
+    );
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+  });
+
   test("tools cached for one delegation chain never serve another chain", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv();
     const { targetAgent, delegationTool } = await makeAssignedDelegationTool({

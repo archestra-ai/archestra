@@ -217,7 +217,9 @@ describe("A2A delegation loop safeguards", () => {
     // Nested executes settle inside-out, so the refusal is the first to land.
     const refusals = toolResults.filter((r) => r.isError);
     expect(refusals).toHaveLength(1);
-    expect(errorText(refusals[0])).toMatch(/already in this delegation chain/i);
+    expect(errorText(refusals[0])).toMatch(
+      /already in the current delegation chain/i,
+    );
 
     expect(result.text).toBe("ok");
   });

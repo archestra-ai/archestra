@@ -457,9 +457,16 @@ export function closeChatMcpClient(
     clientLastValidatedAt.delete(cacheKey);
   }
 
-  // Also clear tool cache for this conversation/execution
+  // Also clear tool cache for this conversation/execution. An execution holds
+  // one entry per delegation chain it reached this agent through, so reclaim
+  // every chain variant rather than the chainless key alone.
   const toolCacheKey = getToolCacheKey(agentId, userId, isolationKey);
-  toolCache.delete(toolCacheKey);
+  const chainVariants = [...toolCache.keys()].filter(
+    (key) => key === toolCacheKey || key.startsWith(`${toolCacheKey}:`),
+  );
+  for (const key of chainVariants) {
+    toolCache.delete(key);
+  }
 }
 
 /**

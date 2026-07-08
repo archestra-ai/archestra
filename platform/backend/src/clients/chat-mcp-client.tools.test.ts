@@ -697,6 +697,41 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
   });
 
+  test("closeChatMcpClient purges tool entries for every chain in the execution", async () => {
+    const isolationKey = "headless-exec-close";
+    const { agent, user, org, baseParams, gatewayClient } =
+      await setupChatToolEnv({ isolationKey });
+    await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+
+    // One execution reaches this agent at two depths, so the execution owns two
+    // tool-cache entries. Cleanup must reclaim both, not just a chainless key.
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `root-agent:${agent.id}`,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(2);
+
+    chatClient.closeChatMcpClient(agent.id, user.id, isolationKey);
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, isolationKey),
+      gatewayClient,
+    );
+
+    await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(3);
+  });
+
   test("tools cached for one delegation chain never serve another chain", async () => {
     const { agent, org, baseParams } = await setupChatToolEnv();
     const { targetAgent, delegationTool } = await makeAssignedDelegationTool({

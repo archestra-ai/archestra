@@ -136,6 +136,10 @@ export async function handleDelegation(
     }
   }
 
+  // The caller's ancestor path, which the executor checks for cycles. A root
+  // caller carries no chain yet, so it is the first hop.
+  const parentDelegationChain = context.delegationChain || context.agentId;
+
   try {
     // Use sessionId from context, or fall back to the conversation/execution
     // scope so delegated requests still group together in logs
@@ -161,7 +165,7 @@ export async function handleDelegation(
       userId: userId || "system",
       sessionId,
       // Pass the current delegation chain so the child can extend it
-      parentDelegationChain: context.delegationChain || context.agentId,
+      parentDelegationChain,
       // Propagate the real conversation id (absent in headless executions) and
       // the isolation scope separately: the child must never mistake an
       // execution key for a persisted conversation.
@@ -196,7 +200,7 @@ export async function handleDelegation(
         {
           agentId,
           targetAgentId: delegation.targetAgent.id,
-          delegationChain: context.delegationChain,
+          parentDelegationChain,
         },
         "Agent delegation refused to avoid a delegation loop",
       );

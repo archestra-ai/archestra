@@ -225,12 +225,12 @@ export async function executeA2AMessage(
   const ancestors = parentDelegationChain?.split(":") ?? [];
   if (ancestors.includes(agentId)) {
     throw new DelegationLoopError(
-      `Agent ${agentId} is already in this delegation chain (${delegationChain}). Answer directly instead of delegating back to it.`,
+      "That agent is already in the current delegation chain. Answer directly instead of delegating back to it.",
     );
   }
   if (ancestors.length + 1 > MAX_DELEGATION_DEPTH) {
     throw new DelegationLoopError(
-      `Delegation depth limit of ${MAX_DELEGATION_DEPTH} reached (${delegationChain}). Answer directly instead of delegating further.`,
+      `Delegation depth limit of ${MAX_DELEGATION_DEPTH} reached. Answer directly instead of delegating further.`,
     );
   }
 

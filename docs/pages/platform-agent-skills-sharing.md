@@ -20,7 +20,7 @@ Format: `<app-slug>-<org-slug>-skills` (e.g. `archestra-acme-corp-skills`). The 
 
 ## Who can share
 
-Creating, refreshing, and revoking the marketplace link requires the `skill: admin` permission. Members can install a link that has been shared with them; they cannot create new links.
+Creating, refreshing, and revoking the marketplace link requires the `skill:admin` permission. Members can install a link that has been shared with them; they cannot create new links.
 
 ## Scope and authentication
 

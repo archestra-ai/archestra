@@ -172,6 +172,66 @@ describe("persistTools", () => {
     expect(await ToolModel.findByName("regular-tool")).not.toBeNull();
   });
 
+  test("skips client-decorated gateway tools but discovers foreign look-alikes", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    // White-labeled org: the gateway server name slugifies to `archestra_staging`.
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Archestra Staging",
+      iconLogo: null,
+    });
+
+    const tools = [
+      {
+        // Client inserts its own MCP-server label between our server name and the
+        // tool short name — the shape this fix targets.
+        toolName: "archestra_staging__my_mcp_gateway_1234567__run_tool",
+        toolParameters: { type: "object" },
+        toolDescription: "decorated gateway tool",
+      },
+      {
+        // Same decoration, but under the off-brand default server name.
+        toolName: "archestra__my_mcp_gateway_1234567__search_tools",
+        toolParameters: { type: "object" },
+        toolDescription: "decorated off-brand gateway tool",
+      },
+      {
+        // A known short name behind a foreign server segment — must still be
+        // discovered (no Archestra server name present).
+        toolName: "unrelated_server__run_tool",
+        toolParameters: { type: "object" },
+        toolDescription: "foreign look-alike",
+      },
+      {
+        // A genuinely external tool — must still be discovered.
+        toolName: "custom__list_issues",
+        toolParameters: { type: "object" },
+        toolDescription: "genuine external tool",
+      },
+    ];
+
+    await persistTools(tools, agent.id);
+
+    // Decorated gateway tools are recognized as ours and NOT auto-discovered…
+    expect(
+      await ToolModel.findByName(
+        "archestra_staging__my_mcp_gateway_1234567__run_tool",
+      ),
+    ).toBeNull();
+    expect(
+      await ToolModel.findByName(
+        "archestra__my_mcp_gateway_1234567__search_tools",
+      ),
+    ).toBeNull();
+    // …while foreign look-alikes and genuine external tools still are.
+    expect(
+      await ToolModel.findByName("unrelated_server__run_tool"),
+    ).not.toBeNull();
+    expect(await ToolModel.findByName("custom__list_issues")).not.toBeNull();
+  });
+
   test("skips agent delegation tools (agent__*)", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 

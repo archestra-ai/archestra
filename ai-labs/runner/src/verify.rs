@@ -271,15 +271,64 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let verifier = tmp.path().join("verifier.py");
         // Importing the staged helper proves it lands beside the verifier on pytest's sys.path.
-        tokio::fs::write(&verifier, "import bench_verifier\ndef test_ok(): assert True\n")
-            .await
-            .unwrap();
+        tokio::fs::write(
+            &verifier,
+            "import bench_verifier\ndef test_ok(): assert True\n",
+        )
+        .await
+        .unwrap();
 
         // deps = [] still gets pytest via uv (no ambient pytest assumed).
         let task = make_task(tmp.path(), "verifier.py", vec![]);
         let outcome = run_verifier(&task, b"{}", None, None, 120.0).await.unwrap();
         assert!(outcome.passed, "stderr: {}", outcome.stderr);
         assert!(!outcome.timed_out);
+    }
+
+    #[tokio::test]
+    async fn test_tool_calls_decodes_run_tool_and_keeps_args_raw() {
+        if !uv_available() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let verifier = tmp.path().join("verifier.py");
+        // The strict-oracle contract: only the run_tool envelope is decoded; a
+        // wrapper shape inside tool_args reaches the verifier untouched, a
+        // direct call passes through as-is, and a run_tool call with no
+        // tool_name is skipped.
+        tokio::fs::write(
+            &verifier,
+            r#"from bench_verifier import tool_calls
+
+def test_raw_args():
+    calls = list(tool_calls())
+    assert calls == [
+        ("deepwiki__ask", {"appId": {"value": "a1"}}),
+        ("archestra__scaffold_app", {"name": "x"}),
+    ]
+"#,
+        )
+        .await
+        .unwrap();
+
+        let state = serde_json::json!({
+            "tool_calls": [
+                {"name": "archestra__run_tool", "input": {"tool_name": "deepwiki__ask", "tool_args": {"appId": {"value": "a1"}}}},
+                {"name": "archestra__scaffold_app", "input": {"name": "x"}},
+                {"name": "archestra__run_tool", "input": {"tool_args": {"dropped": true}}},
+            ]
+        })
+        .to_string();
+
+        let task = make_task(tmp.path(), "verifier.py", vec![]);
+        let outcome = run_verifier(&task, b"{}", None, Some(state.as_bytes()), 120.0)
+            .await
+            .unwrap();
+        assert!(
+            outcome.passed,
+            "stdout: {}\nstderr: {}",
+            outcome.stdout, outcome.stderr
+        );
     }
 
     #[tokio::test]

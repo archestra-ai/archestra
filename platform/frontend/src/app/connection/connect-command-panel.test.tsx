@@ -387,6 +387,51 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
+    it("keeps the full provider tab list after picking GitHub Copilot", async () => {
+      // Copilot forces virtual-key auth, but only while it is selected. It
+      // must not overwrite the stored auth mode — that would filter every
+      // keyless provider out of the tabs until the next page load.
+      availableKeysMock.mockReturnValue({ data: [] });
+      const copilotCli = findClient("copilot-cli");
+      const { rerender } = renderPanel({ client: copilotCli });
+
+      // All supported providers are offered before the pick.
+      expect(
+        await screen.findByRole("button", { name: "OpenAI" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "GitHub Copilot" }),
+      ).toBeVisible();
+
+      // Picking Copilot lands in the URL provider prop.
+      rerender(
+        <ConnectCommandPanel
+          {...renderPanelProps({
+            client: copilotCli,
+            urlProvider: "github-copilot",
+          })}
+        />,
+      );
+      await screen.findByRole("button", { name: /Sign in with GitHub/i });
+      // The other providers stay offered so the user can switch back.
+      expect(screen.getByRole("button", { name: "OpenAI" })).toBeVisible();
+
+      // Switching back generates a passthrough command again.
+      rerender(
+        <ConnectCommandPanel
+          {...renderPanelProps({ client: copilotCli, urlProvider: "openai" })}
+        />,
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            provider: "openai",
+            proxyAuth: "provider-key",
+          }),
+        ),
+      );
+    });
+
     it("generates the command normally once a Copilot key exists", async () => {
       availableKeysMock.mockReturnValue({
         data: [{ provider: "github-copilot" }],

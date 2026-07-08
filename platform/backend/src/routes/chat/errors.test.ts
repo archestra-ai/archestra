@@ -379,7 +379,7 @@ describe("mapProviderError - Anthropic", () => {
       const error = createAnthropicError(
         400,
         "api_validation_error",
-        "Anthropic API key remaining usage balance is too low. Please contact your administrator or try again later.",
+        "Provider API key remaining usage balance is too low. Please contact your administrator or try again later.",
         ArchestraInternalErrorCode.ProviderInsufficientBalance,
       );
       const result = mapProviderError(error, "anthropic");

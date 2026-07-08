@@ -22,10 +22,14 @@ import { ApiError } from "@/types";
  *   out of credit or over a usage/spend limit (do-not-retry).
  * - `unverified` — every probe was inconclusive (transient errors after retries —
  *   retry-friendly).
+ *
+ * `keyName` is the display name of the provider API key the verdict is about
+ * (the first key that probed exhausted, else the first that was inconclusive),
+ * so the UI can tell the user which key to fix.
  */
 export type ConnectionCreditWarning =
-  | { kind: "insufficient_balance" }
-  | { kind: "unverified" };
+  | { kind: "insufficient_balance"; keyName: string }
+  | { kind: "unverified"; keyName: string };
 
 /** How many Anthropic keys we'll credit-probe before giving up (bounds cost/latency). */
 const MAX_CREDIT_PROBE_CANDIDATES = 4;
@@ -305,6 +309,8 @@ async function resolvePreferredProviderKey(params: {
 /** The minimum a key needs for a credit probe: its id + how to reach Anthropic. */
 interface CreditProbeCandidate {
   id: string;
+  /** Display name, surfaced in the credit warning so the user knows which key failed. */
+  name: string;
   secretId: string | null;
   baseUrl: string | null;
   inferenceBaseUrl: string | null;
@@ -344,27 +350,30 @@ async function selectAnthropicKeyByCredit(params: {
   ].slice(0, MAX_CREDIT_PROBE_CANDIDATES);
 
   // A definitive "balance too low" beats a transient one; `unverified` is the
-  // fallback if we only saw inconclusive probes.
-  let sawExhausted = false;
-  let sawInconclusive = false;
+  // fallback if we only saw inconclusive probes. Remember which key produced
+  // each verdict first (the resolved key leads the candidate order) so the
+  // warning can name it.
+  let exhaustedKeyName: string | null = null;
+  let inconclusiveKeyName: string | null = null;
   for (const candidate of candidates) {
     const verdict = await probeCandidateCredit(candidate);
     if (verdict === "usable") {
       return { keyToBind: candidate };
     }
     if (verdict === "exhausted") {
-      sawExhausted = true;
+      exhaustedKeyName ??= candidate.name;
     } else if (verdict === "inconclusive") {
-      sawInconclusive = true;
+      inconclusiveKeyName ??= candidate.name;
     }
     // `skipped` (revoked secret): not usable, keep looking.
   }
 
-  const creditWarning: ConnectionCreditWarning | undefined = sawExhausted
-    ? { kind: "insufficient_balance" }
-    : sawInconclusive
-      ? { kind: "unverified" }
-      : undefined;
+  const creditWarning: ConnectionCreditWarning | undefined =
+    exhaustedKeyName !== null
+      ? { kind: "insufficient_balance", keyName: exhaustedKeyName }
+      : inconclusiveKeyName !== null
+        ? { kind: "unverified", keyName: inconclusiveKeyName }
+        : undefined;
 
   return { keyToBind: resolvedKey, creditWarning };
 }

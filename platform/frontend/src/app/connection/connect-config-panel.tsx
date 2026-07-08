@@ -172,16 +172,6 @@ export function ConnectConfigPanel({
                 />
               </EditorField>
             }
-            detail={
-              <Alert variant="info">
-                <Info />
-                <AlertDescription>
-                  Claude Desktop's third-party inference cannot reuse a Claude
-                  Pro or Max subscription. To keep paying through a
-                  subscription, connect Claude Code in passthrough mode instead.
-                </AlertDescription>
-              </Alert>
-            }
           >
             Route{" "}
             <span className="font-medium text-foreground">
@@ -247,15 +237,25 @@ export function ConnectConfigPanel({
       </WizardStep>
 
       <WizardStep n={3} title="Download your configuration profile">
-        <ConfigDownloadStep
-          baseUrl={baseUrl}
-          llmProxyId={proxy.id}
-          gateway={
-            gateway
-              ? { slug: gatewaySlug ?? gateway.id, name: gateway.name }
-              : null
-          }
-        />
+        <div className="flex flex-col gap-3">
+          <Alert variant="info">
+            <Info />
+            <AlertDescription>
+              Claude Desktop's third-party inference cannot reuse a Claude Pro
+              or Max subscription. To keep paying through a subscription,
+              connect Claude Code in passthrough mode instead.
+            </AlertDescription>
+          </Alert>
+          <ConfigDownloadStep
+            baseUrl={baseUrl}
+            llmProxyId={proxy.id}
+            gateway={
+              gateway
+                ? { slug: gatewaySlug ?? gateway.id, name: gateway.name }
+                : null
+            }
+          />
+        </div>
       </WizardStep>
 
       <WizardStep

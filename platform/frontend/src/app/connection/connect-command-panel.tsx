@@ -223,12 +223,14 @@ export function ConnectCommandPanel({
   const needsPerUserConnect =
     providerIsPerUser && !configuredProviders.has(provider);
 
-  // Force virtual-key auth for per-user providers (no passthrough tab).
-  useEffect(() => {
-    if (providerIsPerUser && proxyAuth !== "virtual-key") {
-      setProxyAuth("virtual-key");
-    }
-  }, [providerIsPerUser, proxyAuth]);
+  // Per-user providers always use virtual-key auth (no passthrough tab). This
+  // is derived rather than written back into `proxyAuth`: overwriting the
+  // stored choice would flip the panel into virtual-key mode for good, which
+  // filters keyless providers out of the tabs — so picking GitHub Copilot
+  // once would hide the other providers until the next page load.
+  const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
+    ? "virtual-key"
+    : proxyAuth;
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The selected proxy may exist without a usable provider (e.g. virtual-key
@@ -292,7 +294,7 @@ export function ConnectCommandPanel({
     gatewayId: gateway?.id ?? null,
     proxyId: proxyActive ? proxy.id : null,
     provider: proxyActive ? provider : null,
-    proxyAuth: proxyActive ? proxyAuth : null,
+    proxyAuth: proxyActive ? effectiveProxyAuth : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
   });
@@ -590,7 +592,7 @@ export function ConnectCommandPanel({
             >
               {!provider ? (
                 noVirtualKeyMessage
-              ) : proxyAuth === "virtual-key" ? (
+              ) : effectiveProxyAuth === "virtual-key" ? (
                 <>
                   Route{" "}
                   <span className="font-medium text-foreground">
@@ -680,6 +682,7 @@ export function ConnectCommandPanel({
 
       <WizardStep n={3} title="Run the setup script" last={!showOAuthStep}>
         <div className="flex flex-col gap-3">
+          <CreditWarningNotice warning={result?.creditWarning} />
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
               <div className="flex items-center gap-1 border-b border-[#1f2937] px-3">
@@ -726,7 +729,6 @@ export function ConnectCommandPanel({
                 onRetry={() => runGeneration(inputsKey)}
               />
             )}
-            <CreditWarningNotice warning={result?.creditWarning} />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">

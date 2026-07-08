@@ -1,8 +1,8 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import {
-  ANTHROPIC_BILLING_BLOCK_BODY,
-  ANTHROPIC_BILLING_BLOCK_TITLE,
   ArchestraInternalErrorCode,
+  PROVIDER_BILLING_BLOCK_BODY,
+  PROVIDER_BILLING_BLOCK_TITLE,
 } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
@@ -1320,7 +1320,7 @@ export const anthropicAdapterFactory: LLMProvider<
     // message as the connection page instead of Anthropic's raw text (which
     // steers the reader into the Console).
     if (isAnthropicBalanceTooLow(error)) {
-      return `${ANTHROPIC_BILLING_BLOCK_TITLE}. ${ANTHROPIC_BILLING_BLOCK_BODY}`;
+      return `${PROVIDER_BILLING_BLOCK_TITLE}. ${PROVIDER_BILLING_BLOCK_BODY}`;
     }
 
     // Anthropic SDK wraps errors as: { error: { error: { message: "..." } } }

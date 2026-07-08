@@ -52,7 +52,8 @@ describe("ConnectConfigPanel — Claude Desktop subscription note", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Short-circuit the download step's provisioning; the subscription note
-    // lives on the proxy row in the Review step above it and renders regardless.
+    // opens the download step but sits outside the provisioning flow, so it
+    // renders regardless.
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);

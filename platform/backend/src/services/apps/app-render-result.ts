@@ -19,7 +19,7 @@ export function buildAppRenderResult(app: App): CallToolResult {
   };
   return structuredSuccessResult(
     summary,
-    `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone page: /a/${app.id}`,
+    `${JSON.stringify(summary, null, 2)}\nWill render inline when opened in chat; standalone page: /a/${app.id}`,
   );
 }
 
@@ -40,7 +40,7 @@ export function buildExternalAppRenderResult(params: {
   _meta: { ui: { resourceUri: string; mcpServerId: string } };
 } {
   return {
-    content: `${params.label}\nRendered inline when viewed in chat.`,
+    content: `${params.label}\nWill render inline when opened in chat.`,
     _meta: {
       ui: {
         resourceUri: params.resourceUri,

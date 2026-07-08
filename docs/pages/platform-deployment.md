@@ -70,16 +70,16 @@ Running the platform without Kubernetes (or its alternatives) is also possible. 
 
 ### Using External PostgreSQL
 
-To use an external PostgreSQL database, pass the `DATABASE_URL` environment variable:
+To use an external PostgreSQL database, pass the `ARCHESTRA_DATABASE_URL` environment variable. `DATABASE_URL` is still accepted as a fallback.
 
 ```bash
 docker pull archestra/platform:latest;
 docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
-  -e DATABASE_URL=postgresql://user:password@host:5432/database \
+  -e ARCHESTRA_DATABASE_URL=postgresql://user:password@host:5432/database \
   archestra/platform
 ```
 
-⚠️ **Important**: If you don't specify `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
+⚠️ **Important**: If you don't specify `ARCHESTRA_DATABASE_URL` or `DATABASE_URL`, PostgreSQL will run inside the container for you. This approach is meant for **development and tinkering purposes only** and is **not intended for production**, as the data is not persisted when the container stops.
 
 ## Helm Deployment
 
@@ -828,6 +828,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: unset
   - Values: a `tcp://` or `kube-pod://` URL
 
+- **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for Dagger sandboxes. Leave unset to use the default `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim` image.
+  - Default: unset
+  - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
+
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
   - Default: `false`
   - Values: `true`, `false`
@@ -1001,7 +1005,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 These environment variables set the default base URL for each LLM provider. Per-key base URLs configured in **Settings > LLM API Keys** take precedence over these defaults. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication) for details on per-key base URLs and virtual API keys.
 
-- **`ARCHESTRA_AI_BASE_URL`** - Override the OpenAI API base URL.
+- **`ARCHESTRA_OPENAI_BASE_URL`** - Override the OpenAI API base URL.
   - Default: `https://api.openai.com/v1`
   - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
 
@@ -1372,7 +1376,7 @@ These environment variables configure the ChatOps feature, which allows users to
   - Example: `88888dd-d6a1-4fd6-8783-b2f4931be17b`
   - This is the Application (client) ID from your Azure Bot registration
 
-- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_PASSWORD`** - Azure Bot App Password (Client Secret).
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_APP_SECRET`** - Azure Bot App Secret (Client Secret).
   - Required when: `ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`
   - Note: Keep this value secure; do not commit to version control
   - This is the client secret from your Azure Bot registration

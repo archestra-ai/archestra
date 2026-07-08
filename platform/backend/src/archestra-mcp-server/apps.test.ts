@@ -419,6 +419,31 @@ describe("read_app / edit_app", () => {
     );
   }
 
+  test("scaffold and edit results name the head version to pass as the next baseVersion", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `App ${crypto.randomUUID().slice(0, 8)}` },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    // The result text carries a next-baseVersion hint derived from this value;
+    // the hint is instruction prose, so only the structured contract is pinned.
+    const createdVersion = structured(created).latestVersion as number;
+    expect(createdVersion).toBe(1);
+
+    const appId = structured(created).id as string;
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    if (!seeded) {
+      throw new Error("seeded head version missing");
+    }
+    const updated = await editApp(appId, 1, [
+      { old_str: seeded.html, new_str: "<h1>v2</h1>" },
+    ]);
+    expect(updated.isError).toBe(false);
+    const updatedVersion = structured(updated).latestVersion as number;
+    expect(updatedVersion).toBe(2);
+  });
+
   test("read_app returns the stored html and metadata for head and a pinned version", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
@@ -446,6 +471,99 @@ describe("read_app / edit_app", () => {
     const noVersion = await readApp(appId, 99);
     expect(noVersion.isError).toBe(true);
     expect((noVersion.content[0] as any).text).toContain("no version 99");
+  });
+
+  function readAppWindow(appId: string, params: Record<string, number>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId, ...params },
+      context,
+    );
+  }
+
+  test("read_app returns a character window with metadata when offset/limit are passed", async () => {
+    // Window content uses non-hex letters so it can never collide with the
+    // random hex suffix in the scaffolded app name that rides the text header.
+    const html = "<div>ghijklmnop</div>";
+    const { appId } = await scaffoldWithHtml(html);
+
+    const window = await readAppWindow(appId, { offset: 5, limit: 4 });
+    expect(window.isError).toBe(false);
+    expect(structured(window).html).toBe(html.slice(5, 9));
+    expect(structured(window).offset).toBe(5);
+    expect(structured(window).totalChars).toBe(html.length);
+    expect(structured(window).hasMore).toBe(true);
+    // byteSize stays the full document's, never the window's
+    expect(structured(window).byteSize).toBe(Buffer.byteLength(html, "utf8"));
+    // the windowed slice (and only it) rides the text content
+    expect((window.content[0] as any).text).toContain(html.slice(5, 9));
+    expect((window.content[0] as any).text).not.toContain("<div>");
+
+    // offset alone reads to the end of the document
+    const tail = await readAppWindow(appId, { offset: 5 });
+    expect(structured(tail).html).toBe(html.slice(5));
+    expect(structured(tail).hasMore).toBe(false);
+
+    // limit alone reads from the start
+    const headWindow = await readAppWindow(appId, { limit: 5 });
+    expect(structured(headWindow).html).toBe(html.slice(0, 5));
+    expect(structured(headWindow).offset).toBe(0);
+    expect(structured(headWindow).hasMore).toBe(true);
+  });
+
+  test("read_app clamps an offset past the end to an empty window, not an error", async () => {
+    const html = "<h1>short</h1>";
+    const { appId } = await scaffoldWithHtml(html);
+    const result = await readAppWindow(appId, { offset: 10_000, limit: 5 });
+    expect(result.isError).toBe(false);
+    expect(structured(result).html).toBe("");
+    expect(structured(result).offset).toBe(html.length);
+    expect(structured(result).totalChars).toBe(html.length);
+    expect(structured(result).hasMore).toBe(false);
+  });
+
+  test("read_app windows never split a surrogate pair", async () => {
+    // "😀" is one astral character = two UTF-16 code units at indices 5-6.
+    const html = "<div>😀</div>";
+    const { appId } = await scaffoldWithHtml(html);
+
+    // end lands between the pair's halves → the window extends by one unit
+    const head = await readAppWindow(appId, { offset: 0, limit: 6 });
+    expect(structured(head).html).toBe("<div>😀");
+    expect(structured(head).hasMore).toBe(true);
+
+    // paging from the reported next position starts on a whole character
+    const next = structured(head).offset + structured(head).html.length;
+    const tail = await readAppWindow(appId, { offset: next });
+    expect(structured(tail).html).toBe("</div>");
+    expect(structured(head).html + structured(tail).html).toBe(html);
+
+    // an offset pointed inside the pair advances past its second half
+    const midPair = await readAppWindow(appId, { offset: 6 });
+    expect(structured(midPair).html).toBe("</div>");
+    expect(structured(midPair).offset).toBe(7);
+  });
+
+  test("read_app accepts limit 0 as a pure size probe", async () => {
+    const html = "<h1>probe</h1>";
+    const { appId } = await scaffoldWithHtml(html);
+    const result = await readAppWindow(appId, { offset: 0, limit: 0 });
+    expect(result.isError).toBe(false);
+    expect(structured(result).html).toBe("");
+    expect(structured(result).offset).toBe(0);
+    expect(structured(result).totalChars).toBe(html.length);
+    expect(structured(result).hasMore).toBe(true);
+  });
+
+  test("read_app full read (no offset/limit) reports full-document metadata", async () => {
+    const html = "<h1>full</h1>";
+    const { appId } = await scaffoldWithHtml(html);
+    const result = await readApp(appId);
+    expect(result.isError).toBe(false);
+    expect(structured(result).html).toBe(html);
+    expect(structured(result).offset).toBe(0);
+    expect(structured(result).totalChars).toBe(html.length);
+    expect(structured(result).hasMore).toBe(false);
   });
 
   test("read_app/edit_app respect per-app visibility", async ({
@@ -584,13 +702,32 @@ describe("read_app / edit_app", () => {
     ).toBe("<pre>aaa</pre>");
   });
 
-  test("a no-op edit (old_str === new_str) is rejected", async () => {
+  test("a batch of only no-op edits (old_str === new_str) is skipped without a new version", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>same</h1>");
     const result = await editApp(appId, version, [
       { old_str: "same", new_str: "same" },
     ]);
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("identical");
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, version))?.html,
+    ).toBe("<h1>same</h1>");
+  });
+
+  test("a no-op edit amid real edits is skipped while the rest apply", async () => {
+    const { appId, version } = await scaffoldWithHtml(
+      "<div>alpha beta gamma</div>",
+    );
+    const result = await editApp(appId, version, [
+      { old_str: "alpha", new_str: "ALPHA" },
+      { old_str: "beta", new_str: "beta" }, // no-op → skipped
+      { old_str: "gamma", new_str: "GAMMA" },
+    ]);
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(version + 1);
+    const head = await AppVersionModel.findByAppAndVersion(appId, version + 1);
+    expect(head?.html).toBe("<div>ALPHA beta GAMMA</div>");
   });
 
   test("an edit that injects SDK bootstrap markers is rejected", async () => {
@@ -797,6 +934,15 @@ describe("read_app / edit_app", () => {
     );
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
+
+    // The item schema is the canonical closed object, so search_tools and
+    // error feedback show only old_str/new_str.
+    const item = schema.properties.edits.items;
+    expect(Object.keys(item.properties).sort()).toEqual(["new_str", "old_str"]);
+    expect(item.additionalProperties).toBe(false);
+    expect(item.required).toEqual(
+      expect.arrayContaining(["old_str", "new_str"]),
+    );
   });
 
   test("replacementHtml replaces the whole document without old_str matching", async () => {

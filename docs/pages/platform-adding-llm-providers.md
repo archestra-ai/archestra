@@ -217,15 +217,14 @@ The backend matrix covers:
 
 The preferred test seam is the provider client created by `adapterFactory.createClient()`. Return a fake SDK-shaped client from the test and let the real route, handler, policy, persistence, and metrics code run around it.
 
-#### Proxy E2E Tests
+#### Proxy Test Coverage
 
-The current proxy e2e files are:
+The current proxy coverage files are:
 
 | File | Description |
 | ---- | ----------- |
-| `e2e-tests/tests/llm-proxy/tool-invocation.spec.ts` | End-to-end policy enforcement against the running stack. |
 | `e2e-tests/tests/llm-proxy/jwks-auth.spec.ts` | Auth and JWKS smoke coverage. |
-| `e2e-tests/tests/llm-proxy/virtual-api-keys.spec.ts` | Virtual key routing and custom base URL behavior. |
+| `frontend/tests-integration/virtual-api-keys.spec.ts` | Virtual key routing and custom base URL behavior. |
 | `.github/values-ci.yaml` | Add provider base URL overrides when the remaining e2e coverage needs WireMock for that provider. |
 
 For built-in chat coverage, add provider entries to `e2e-tests/tests/chat.spec.ts`.

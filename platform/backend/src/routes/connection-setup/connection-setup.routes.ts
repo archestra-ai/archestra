@@ -108,6 +108,8 @@ const CreateConnectionSetupBodySchema = z.object({
  */
 const ConnectionCreditWarningSchema = z.object({
   kind: z.enum(["insufficient_balance", "unverified"]),
+  /** Display name of the provider API key the warning is about. */
+  keyName: z.string(),
 });
 
 const CreateConnectionSetupResponseSchema = z.object({

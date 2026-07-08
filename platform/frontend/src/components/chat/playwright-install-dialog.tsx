@@ -21,9 +21,9 @@ import {
   useProfileToolsWithIds,
   useUpdateConversationEnabledTools,
 } from "@/lib/chat/chat.query";
+import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import {
   addPendingAction,
-  applyPendingActions,
   getPendingActions,
   PENDING_TOOL_STATE_CHANGE_EVENT,
 } from "@/lib/chat/pending-tool-state";
@@ -80,19 +80,16 @@ export function usePlaywrightSetupRequired(
   // Mirrors the logic in ChatToolsDisplay including pending actions for pre-conversation state
   // biome-ignore lint/correctness/useExhaustiveDependencies: pendingActionsVersion triggers recompute when localStorage changes
   const currentEnabledToolIds = useMemo(() => {
-    if (conversationId && enabledToolsData?.hasCustomSelection) {
-      return enabledToolsData.enabledToolIds;
-    }
-    const defaultIds = profileTools.map((t) => t.id);
-
-    if (!conversationId && agentId) {
-      const pendingActions = getPendingActions(agentId);
-      if (pendingActions.length > 0) {
-        return applyPendingActions(defaultIds, pendingActions);
-      }
-    }
-
-    return defaultIds;
+    const hasCustomSelection = Boolean(
+      conversationId && enabledToolsData?.hasCustomSelection,
+    );
+    return resolveEnabledToolIds({
+      hasCustomSelection,
+      enabledToolIds: enabledToolsData?.enabledToolIds ?? [],
+      allToolIds: profileTools.map((t) => t.id),
+      pendingActions:
+        !conversationId && agentId ? getPendingActions(agentId) : [],
+    });
   }, [
     conversationId,
     enabledToolsData,

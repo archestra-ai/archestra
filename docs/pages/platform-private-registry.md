@@ -24,7 +24,7 @@ An MCP server usually moves through this lifecycle:
 
 This separation lets admins curate a small approved catalog while still allowing each user or team to connect with their own credentials.
 
-Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/apps/:id`.
+Entries that expose a UI carry an **App** badge. Each [owned MCP App](./platform-apps) is also backed by its own registry entry: it appears here as a read-only card (visible to users with `app:read`) whose pencil manages the app's server settings — visibility, environment, assigned tools, and deletion — while authoring stays at `/a/:id`.
 
 ## Server Configuration
 

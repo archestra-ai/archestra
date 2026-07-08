@@ -6,15 +6,13 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
+import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import {
   parseAuthRequired,
   parseExpiredAuth,
   parsePolicyDenied,
 } from "@/lib/chat/mcp-error-ui";
-import {
-  applyPendingActions,
-  type PendingToolAction,
-} from "@/lib/chat/pending-tool-state";
+import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
 
 /**
  * Compute the default set of enabled tool IDs for a conversation.
@@ -48,17 +46,14 @@ export function getCurrentEnabledToolIds({
   defaultEnabledToolIds: string[];
   pendingActions: PendingToolAction[];
 }): string[] {
-  if (conversationId && hasCustomSelection) {
-    return enabledToolIds;
-  }
-
-  const baseIds = defaultEnabledToolIds;
-
-  if (!conversationId && pendingActions.length > 0) {
-    return applyPendingActions(baseIds, pendingActions);
-  }
-
-  return baseIds;
+  return resolveEnabledToolIds({
+    hasCustomSelection: Boolean(conversationId && hasCustomSelection),
+    enabledToolIds,
+    allToolIds: defaultEnabledToolIds,
+    // Pending actions are a pre-conversation concept; once a conversation
+    // exists its stored selection is authoritative.
+    pendingActions: conversationId ? [] : pendingActions,
+  });
 }
 
 export function getToolErrorText({

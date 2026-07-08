@@ -245,7 +245,7 @@ Each LLM API key has a **scope** that controls who can use it:
 
 You can create **multiple keys per provider per scope** (e.g. two personal Anthropic keys with different base URLs). Mark one key as **Primary** to control which key is preferred when resolving. If no key is marked primary, the oldest key is used.
 
-When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a provider key, it follows this priority: personal key > team key > organization-wide key > environment variable. If multiple keys exist in the same scope for a provider, the primary key is selected first; otherwise, the oldest key is selected.
+When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a provider key, it follows this priority: conversation key > agent configured key > personal key > team key > organization-wide key > environment variable. If multiple keys exist in the same scope for a provider, the primary key is selected first; otherwise, the oldest key is selected.
 
 ## Custom Base URLs
 

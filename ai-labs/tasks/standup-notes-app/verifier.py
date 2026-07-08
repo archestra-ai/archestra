@@ -8,7 +8,7 @@ signal. Two stages of edits on one app should leave a single app at a bumped ver
 
 import json
 
-from bench_verifier import result, state
+from bench_verifier import result, state, tool_calls
 
 _PREFIX = "standup-notes-app-"
 
@@ -24,12 +24,8 @@ def _owned_apps() -> list[dict]:
 
 def _authoring_blob() -> str:
     parts: list[str] = []
-    for call in state().get("tool_calls", []):
-        name = call.get("name")
-        inp = call.get("input") or {}
-        if name == "archestra__run_tool":
-            name, inp = inp.get("tool_name"), (inp.get("tool_args") or {})
-        if name and (name.endswith("__edit_app") or name.endswith("__scaffold_app") or name.endswith("__refine_app")):
+    for name, inp in tool_calls():
+        if name.endswith("__edit_app") or name.endswith("__scaffold_app") or name.endswith("__refine_app"):
             parts.append(json.dumps(inp))
     return "\n".join(parts)
 

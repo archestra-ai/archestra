@@ -5,6 +5,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { CatalogTeamAccessLevel } from "@/types/catalog-team-level";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import { team } from "./team";
 
@@ -17,6 +18,9 @@ const mcpCatalogTeamsTable = pgTable(
     teamId: text("team_id")
       .notNull()
       .references(() => team.id, { onDelete: "cascade" }),
+    // NULL means `write` — assignments predating per-team levels keep the
+    // capability their team already had.
+    level: text("level").$type<CatalogTeamAccessLevel>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

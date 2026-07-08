@@ -12,6 +12,20 @@ import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
+type TeamAccess = NonNullable<McpCatalogFormValues["teams"]>[number];
+
+/**
+ * Reconcile the team picker's id list with the levels already chosen. A team
+ * added to the selection starts at `use`, the least privilege it can hold.
+ */
+export function mergeTeamSelection(
+  current: TeamAccess[],
+  selectedIds: string[],
+): TeamAccess[] {
+  const levels = new Map(current.map((team) => [team.id, team.level]));
+  return selectedIds.map((id) => ({ id, level: levels.get(id) ?? "use" }));
+}
+
 // Transform function to convert form values to API format
 export function transformFormToApiData(
   values: McpCatalogFormValues,
@@ -507,8 +521,8 @@ export function transformCatalogItemToFormValues(
     labels: item.labels ?? [],
     // Scope
     scope: (item.scope as AgentScope) ?? "org",
-    // Teams
-    teams: item.teams?.map((t) => t.id) ?? [],
+    // Teams, each with the access level it holds on this item
+    teams: item.teams?.map((t) => ({ id: t.id, level: t.level })) ?? [],
     // Deployment environment (null = the default environment)
     environmentId: item.environmentId ?? null,
   } as McpCatalogFormValues;

@@ -148553,11 +148553,19 @@
                             },
                             "name": {
                               "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
                             }
                           },
                           "required": [
                             "id",
-                            "name"
+                            "name",
+                            "level"
                           ],
                           "additionalProperties": false
                         }
@@ -149409,7 +149417,31 @@
                   "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        }
+                      ]
                     }
                   },
                   "oauthClientSecretVaultPath": {
@@ -150026,11 +150058,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -150933,11 +150973,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -151757,7 +151805,31 @@
                   "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        }
+                      ]
                     }
                   },
                   "oauthClientSecretVaultPath": {
@@ -152382,11 +152454,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -154427,11 +154507,19 @@
                             },
                             "name": {
                               "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
                             }
                           },
                           "required": [
                             "id",
-                            "name"
+                            "name",
+                            "level"
                           ],
                           "additionalProperties": false
                         }
@@ -155335,11 +155423,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -244143,6 +244239,13 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "myRole": {
+                            "type": "string",
+                            "enum": [
+                              "admin",
+                              "member"
+                            ]
                           }
                         },
                         "required": [
@@ -244604,6 +244707,13 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "myRole": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
                     }
                   },
                   "required": [
@@ -244976,6 +245086,13 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "myRole": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
                     }
                   },
                   "required": [
@@ -245399,6 +245516,13 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "myRole": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
                     }
                   },
                   "required": [

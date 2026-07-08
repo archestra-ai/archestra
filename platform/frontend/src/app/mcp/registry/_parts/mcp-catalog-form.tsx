@@ -101,6 +101,7 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import {
+  mergeTeamSelection,
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
@@ -581,11 +582,6 @@ export function McpCatalogForm({
   const { data: isAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
-  // Sharing to teams needs mcpRegistry:team-admin (admins bypass) plus team:read
-  // to populate the picker. Mirrors the agent/skill visibility gating.
-  const { data: isTeamAdmin } = useHasPermissions({
-    mcpRegistry: ["team-admin"],
-  });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   // All teams for a full admin, otherwise only the user's own teams (the only
   // ones the backend lets a non-admin assign).
@@ -593,6 +589,9 @@ export function McpCatalogForm({
     isResourceAdmin: !!isAdmin,
     enabled: !!canReadTeams,
   });
+  // Sharing with a team requires administering it (admins bypass), matching the
+  // backend gate. `myRole` is populated only on the caller's own teams.
+  const administersATeam = (teams ?? []).some((t) => t.myRole === "admin");
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
   const defaultEnvironment = useDefaultEnvironment();
@@ -659,7 +658,21 @@ export function McpCatalogForm({
   }
   const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
-  const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
+  const selectedTeams = form.watch("teams") ?? [];
+  // A team-scoped item may be shared with teams the editor doesn't belong to,
+  // which the assignable-teams picker never lists — take their names from the
+  // item so the access rows never fall back to a raw id.
+  const teamNameById = useMemo(
+    () =>
+      new Map([
+        ...(initialValues?.teams ?? []).map(
+          (t) => [t.id, t.name] as [string, string],
+        ),
+        ...(teams ?? []).map((t) => [t.id, t.name] as [string, string]),
+      ]),
+    [initialValues, teams],
+  );
+  const canShareWithTeams = (isAdmin ?? false) || administersATeam;
   // Shared items are one-way: an item that is already team/org-scoped cannot be
   // demoted back to personal (mirrors the agent dialog).
   const initialScope = initialValues?.scope;
@@ -708,13 +721,14 @@ export function McpCatalogForm({
         disabledReason: !canReadTeams
           ? "Team sharing is unavailable without team:read permission."
           : !canShareWithTeams
-            ? "You need mcpRegistry:team-admin permission to share with teams."
+            ? "You need to be an admin of a team to share with it."
             : "Create a team first to share this MCP server.",
       },
       {
         value: "org",
         label: "Organization",
-        description: "Anyone in your organization can access this MCP server.",
+        description:
+          "Everyone in your organization can use this MCP server. Only admins can modify it.",
         icon: Globe,
         disabled: !isAdmin,
         disabledReason: "Only admins can make MCP servers organization-wide.",
@@ -1034,24 +1048,83 @@ export function McpCatalogForm({
                         }}
                       >
                         {currentScope === "team" && (
-                          <div className="space-y-2">
-                            <Label>Teams</Label>
-                            <MultiSelectCombobox
-                              options={
-                                teams?.map((t) => ({
-                                  label: t.name,
-                                  value: t.id,
-                                })) ?? []
-                              }
-                              value={form.watch("teams") ?? []}
-                              onChange={(ids) =>
-                                form.setValue("teams", ids, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              placeholder="Select teams..."
-                              emptyMessage="No teams found"
-                            />
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              <Label>Teams</Label>
+                              <MultiSelectCombobox
+                                options={
+                                  teams?.map((t) => ({
+                                    label: t.name,
+                                    value: t.id,
+                                  })) ?? []
+                                }
+                                value={selectedTeams.map((t) => t.id)}
+                                onChange={(ids) =>
+                                  form.setValue(
+                                    "teams",
+                                    mergeTeamSelection(selectedTeams, ids),
+                                    {
+                                      shouldDirty: true,
+                                    },
+                                  )
+                                }
+                                placeholder="Select teams..."
+                                emptyMessage="No teams found"
+                              />
+                            </div>
+                            {selectedTeams.length > 0 && (
+                              <div className="space-y-2">
+                                <Label>Access</Label>
+                                {selectedTeams.map((selected) => (
+                                  <div
+                                    key={selected.id}
+                                    className="flex items-center justify-between gap-3"
+                                  >
+                                    <span className="truncate text-sm">
+                                      {teamNameById.get(selected.id) ??
+                                        selected.id}
+                                    </span>
+                                    <Select
+                                      value={selected.level}
+                                      onValueChange={(level) =>
+                                        form.setValue(
+                                          "teams",
+                                          selectedTeams.map((t) =>
+                                            t.id === selected.id
+                                              ? {
+                                                  ...t,
+                                                  level: level as
+                                                    | "use"
+                                                    | "write",
+                                                }
+                                              : t,
+                                          ),
+                                          { shouldDirty: true },
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="w-44">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="use">Use</SelectItem>
+                                        <SelectItem value="write">
+                                          Manage
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                ))}
+                                <FormDescription>
+                                  <strong>Use</strong> — members can find this
+                                  MCP server, install it for themselves, and use
+                                  shared connections. <strong>Manage</strong>{" "}
+                                  additionally lets the team&apos;s admins edit
+                                  it, change its environment, and manage
+                                  sharing.
+                                </FormDescription>
+                              </div>
+                            )}
                           </div>
                         )}
                       </VisibilitySelector>

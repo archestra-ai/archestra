@@ -7,6 +7,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
+import {
+  getCatalogWriteMembershipTeamIds,
+  requireMcpCatalogModifyPermission,
+} from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
@@ -194,8 +198,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Fetch catalog item FIRST to determine server type
       let catalogItem = null;
       if (serverData.catalogId) {
+        const { success: isCatalogAdmin } = await hasPermission(
+          { mcpServerInstallation: ["admin"] },
+          headers,
+        );
+
+        // Installing requires `use` on the item. Scoping the lookup denies a
+        // caller the item's scope does not admit before any secret is resolved,
+        // and answers exactly as it does for an item that does not exist — so an
+        // install attempt never reveals another user's personal-scope item.
         catalogItem = await InternalMcpCatalogModel.findById(
           serverData.catalogId,
+          {
+            userId: user.id,
+            isAdmin: isCatalogAdmin,
+            organizationId,
+          },
         );
 
         if (!catalogItem) {
@@ -237,6 +255,22 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           headers,
         });
+
+        // A shared install of a team-scoped item becomes the connection other
+        // members resolve through, so creating one is a write on the item —
+        // `use` alone installs only for oneself.
+        if (catalogItem.scope === "team" && serverData.scope !== "personal") {
+          requireMcpCatalogModifyPermission({
+            checker: { isAdmin: isCatalogAdmin },
+            scope: catalogItem.scope,
+            authorId: catalogItem.authorId,
+            catalogTeams: catalogItem.teams,
+            writeMembershipTeamIds: isCatalogAdmin
+              ? []
+              : await getCatalogWriteMembershipTeamIds(user.id),
+            userId: user.id,
+          });
+        }
 
         // Enforce the governing environment's allowlist regex against the
         // non-secret, free-text config values the user supplied.

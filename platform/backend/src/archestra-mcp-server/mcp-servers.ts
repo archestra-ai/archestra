@@ -18,6 +18,7 @@ import { z } from "zod";
 import {
   assertMcpCatalogTeams,
   authorizeMcpCatalogScope,
+  getCatalogWriteMembershipTeamIds,
   getMcpCatalogPermissionChecker,
   requireMcpCatalogModifyPermission,
 } from "@/auth/mcp-catalog-permissions";
@@ -730,17 +731,20 @@ async function handleEditMcpDescription(
       (newTeamIds.length !== existingTeamIds.length ||
         !newTeamIds.every((teamId) => existingTeamIds.includes(teamId)));
     try {
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(context.userId);
-      // Gate at the item's current scope (lets a team-admin member edit a team
-      // item; blocks editing someone else's personal item)…
+      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
+        ? [[], []]
+        : await Promise.all([
+            TeamModel.getUserTeamIds(context.userId),
+            getCatalogWriteMembershipTeamIds(context.userId),
+          ]);
+      // Gate at the item's current scope (lets an admin of one of the item's
+      // `write` teams edit it; blocks editing someone else's personal item)…
       requireMcpCatalogModifyPermission({
         checker,
         scope: existing.scope,
         authorId: existing.authorId,
-        catalogTeamIds: existingTeamIds,
-        userTeamIds,
+        catalogTeams: existing.teams,
+        writeMembershipTeamIds,
         userId: context.userId,
       });
       // …then gate the target scope/teams only when they actually change.
@@ -751,6 +755,7 @@ async function handleEditMcpDescription(
           authorId: existing.authorId,
           requestedTeamIds: newTeamIds,
           userTeamIds,
+          writeMembershipTeamIds,
           userId: context.userId,
         });
         await assertMcpCatalogTeams({
@@ -875,10 +880,10 @@ async function handleEditMcpConfig(
         checker,
         scope: existing.scope,
         authorId: existing.authorId,
-        catalogTeamIds: existing.teams.map((t) => t.id),
-        userTeamIds: checker.isAdmin
+        catalogTeams: existing.teams,
+        writeMembershipTeamIds: checker.isAdmin
           ? []
-          : await TeamModel.getUserTeamIds(context.userId),
+          : await getCatalogWriteMembershipTeamIds(context.userId),
         userId: context.userId,
       });
     } catch (error) {
@@ -1041,14 +1046,19 @@ async function handleCreateMcpServer(
       organizationId,
     });
     try {
+      const [userTeamIds, writeMembershipTeamIds] = checker.isAdmin
+        ? [[], []]
+        : await Promise.all([
+            TeamModel.getUserTeamIds(context.userId),
+            getCatalogWriteMembershipTeamIds(context.userId),
+          ]);
       authorizeMcpCatalogScope({
         checker,
         scope,
         authorId: context.userId,
         requestedTeamIds: teamIdsForScope,
-        userTeamIds: checker.isAdmin
-          ? []
-          : await TeamModel.getUserTeamIds(context.userId),
+        userTeamIds,
+        writeMembershipTeamIds,
         userId: context.userId,
       });
       await assertMcpCatalogTeams({
@@ -1216,6 +1226,30 @@ async function handleDeployMcpServer(
     });
     if (authError) {
       return errorResult(authError);
+    }
+
+    // A shared install of a team-scoped item becomes the connection other
+    // members resolve through, so creating one is a write on the item (mirrors
+    // the REST install route).
+    if (catalogItem.scope === "team" && scope !== "personal") {
+      try {
+        requireMcpCatalogModifyPermission({
+          checker: { isAdmin },
+          scope: catalogItem.scope,
+          authorId: catalogItem.authorId,
+          catalogTeams: catalogItem.teams,
+          writeMembershipTeamIds: isAdmin
+            ? []
+            : await getCatalogWriteMembershipTeamIds(context.userId),
+          userId: context.userId,
+        });
+      } catch (error) {
+        return errorResult(
+          error instanceof Error
+            ? error.message
+            : "Failed to authorize shared install.",
+        );
+      }
     }
 
     const existingServers = await McpServerModel.findByCatalogId(

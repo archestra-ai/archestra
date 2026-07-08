@@ -1,6 +1,7 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
+  mergeTeamSelection,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
@@ -395,7 +396,7 @@ describe("transformFormToApiData", () => {
       localConfigVaultKey: "",
       labels: [],
       scope: "team",
-      teams: ["team-1"],
+      teams: [{ id: "team-1", level: "use" }],
     };
 
     const result = transformFormToApiData(values);
@@ -1057,5 +1058,60 @@ describe("buildCloneFormValues", () => {
     } as never);
 
     expect(values.oauthConfig?.client_secret).toBe("keep-me");
+  });
+});
+
+describe("team access levels", () => {
+  it("hydrates each team's stored level into the form", () => {
+    const values = transformCatalogItemToFormValues({
+      name: "srv",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      scope: "team",
+      teams: [
+        { id: "t1", name: "platform", level: "write" },
+        { id: "t2", name: "data", level: "use" },
+      ],
+      labels: [],
+    } as never);
+
+    expect(values.teams).toEqual([
+      { id: "t1", level: "write" },
+      { id: "t2", level: "use" },
+    ]);
+  });
+
+  it("sends each team's level to the API", () => {
+    const data = transformFormToApiData({
+      name: "srv",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      scope: "team",
+      teams: [
+        { id: "t1", level: "write" },
+        { id: "t2", level: "use" },
+      ],
+      labels: [],
+    } as never);
+
+    expect(data.teams).toEqual([
+      { id: "t1", level: "write" },
+      { id: "t2", level: "use" },
+    ]);
+  });
+
+  it("keeps chosen levels when the selection changes, defaulting new teams to use", () => {
+    const merged = mergeTeamSelection(
+      [
+        { id: "t1", level: "write" },
+        { id: "t2", level: "use" },
+      ],
+      ["t1", "t3"],
+    );
+
+    expect(merged).toEqual([
+      { id: "t1", level: "write" },
+      { id: "t3", level: "use" },
+    ]);
   });
 });

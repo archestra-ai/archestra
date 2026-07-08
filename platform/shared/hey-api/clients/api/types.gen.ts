@@ -38973,6 +38973,7 @@ export type GetInternalMcpCatalogResponses = {
         teams: Array<{
             id: string;
             name: string;
+            level: 'use' | 'write';
         }>;
         authorName?: string | null;
         toolCount: number;
@@ -39103,7 +39104,10 @@ export type CreateInternalMcpCatalogItemData = {
             key: string;
             value: string;
         }>;
-        teams?: Array<string>;
+        teams?: Array<string | {
+            id: string;
+            level?: 'use' | 'write';
+        }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -39312,6 +39316,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         teams: Array<{
             id: string;
             name: string;
+            level: 'use' | 'write';
         }>;
         authorName?: string | null;
     };
@@ -39611,6 +39616,7 @@ export type GetInternalMcpCatalogItemResponses = {
         teams: Array<{
             id: string;
             name: string;
+            level: 'use' | 'write';
         }>;
         authorName?: string | null;
     };
@@ -39734,7 +39740,10 @@ export type UpdateInternalMcpCatalogItemData = {
             key: string;
             value: string;
         }>;
-        teams?: Array<string>;
+        teams?: Array<string | {
+            id: string;
+            level?: 'use' | 'write';
+        }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -39945,6 +39954,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         teams: Array<{
             id: string;
             name: string;
+            level: 'use' | 'write';
         }>;
         authorName?: string | null;
     };
@@ -40423,6 +40433,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         teams: Array<{
             id: string;
             name: string;
+            level: 'use' | 'write';
         }>;
         authorName?: string | null;
     }>;
@@ -40637,6 +40648,7 @@ export type ApproveCatalogItemImageResponses = {
         teams: Array<{
             id: string;
             name: string;
+            level: 'use' | 'write';
         }>;
         authorName?: string | null;
     };
@@ -64168,6 +64180,7 @@ export type GetTeamsResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            myRole?: 'admin' | 'member';
         }>;
         pagination: {
             currentPage: number;
@@ -64290,6 +64303,7 @@ export type CreateTeamResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        myRole?: 'admin' | 'member';
     };
 };
 
@@ -64481,6 +64495,7 @@ export type GetTeamResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        myRole?: 'admin' | 'member';
     };
 };
 
@@ -64597,6 +64612,7 @@ export type UpdateTeamResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        myRole?: 'admin' | 'member';
     };
 };
 

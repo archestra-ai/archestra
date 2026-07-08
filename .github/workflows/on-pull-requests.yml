@@ -573,7 +573,12 @@ jobs:
       - name: Install Chromium for Playwright
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         # --with-deps needs apt; macOS has no system deps to install.
-        run: pnpm --filter @frontend exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} chromium
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            pnpm --filter @frontend exec playwright install --with-deps chromium
+          else
+            pnpm --filter @frontend exec playwright install chromium
+          fi
 
       - name: Install Chromium system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true' && runner.os == 'Linux'

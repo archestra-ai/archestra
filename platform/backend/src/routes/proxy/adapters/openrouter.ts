@@ -363,8 +363,13 @@ function hasRefusal(refusal: string | null | undefined): boolean {
 }
 
 function throwEmptyOpenrouterResponseError(): never {
+  // Tagged with the normalized internal code so downstream consumers can
+  // recognize this known-transient upstream condition: error reporting drops
+  // it as expected noise, and the chat error mapper surfaces it as the
+  // retryable EmptyResponse card instead of a generic server error.
   throw new ApiError(
     503,
     "OpenRouter returned an empty response without content or tool calls",
+    ArchestraInternalErrorCode.UpstreamEmptyResponse,
   );
 }

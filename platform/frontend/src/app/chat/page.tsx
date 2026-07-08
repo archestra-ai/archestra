@@ -93,6 +93,7 @@ import {
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
 import {
+  fetchAgentMcpTools,
   fetchConversationEnabledTools,
   invalidateConversationFileQueries,
   useCompactConversation,
@@ -108,6 +109,7 @@ import {
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
   useConversationShare,
   useForkConversation,
@@ -119,6 +121,7 @@ import {
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
@@ -127,7 +130,6 @@ import {
 } from "@/lib/chat/pending-chat-handoff-files";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import {
-  applyPendingActions,
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
@@ -136,7 +138,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -985,6 +987,8 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
 
   // A scheduled run's transcript is persisted only when it completes, so a run
   // opened while still running seeds the live chat session empty. When the run
@@ -1485,6 +1489,20 @@ export function ChatPageContent({
     });
   }, []);
 
+  // Stop the in-flight response. Wired to the submit button's Stop face in
+  // the prompt input; also pauses queue auto-drain (see ChatSessionHook).
+  const handleStopStreaming = () => {
+    if (conversationId) {
+      // Set the cache flag first, THEN close the connection so the
+      // connection-close handler on the backend finds the flag.
+      stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+        stop?.();
+      });
+    } else {
+      stop?.();
+    }
+  };
+
   const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
     message,
     e,
@@ -1493,20 +1511,40 @@ export function ChatPageContent({
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
-      if (conversationId) {
-        // Set the cache flag first, THEN close the connection so the
-        // connection-close handler on the backend finds the flag.
-        stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
-          stop?.();
-        });
-      } else {
-        stop?.();
+      // With queueing on, a submit while a response is in-flight queues the
+      // message; the conversation's ChatSessionHook sends it once the turn
+      // settles. (Stopping is the submit button's onClick, not a form
+      // submit.) With queueing off, the submit button doubles as Stop.
+      if (!isMessageQueueEnabled || !conversationId) {
+        handleStopStreaming();
+        // Throw to keep the textarea and draft intact — see onSubmit
+        // contract in ArchestraPromptInputProps.
+        throw new Error("stop-not-submit");
       }
-      // Throw to keep the textarea and draft intact — see onSubmit contract
-      // in ArchestraPromptInputProps. The submit button doubles as Stop while
-      // streaming; treating that click as an accepted submit would clear any
-      // follow-up the user had already started typing.
-      throw new Error("stop-not-submit");
+      if (message.files && message.files.length > 0) {
+        toast.error(
+          "Attachments can't be queued. Wait for the current response to finish, then send.",
+        );
+        // Keep the typed text, draft, and attachments for a later submit.
+        throw new Error("attachments-not-queueable");
+      }
+      const queueText = message.text?.trim();
+      if (!queueText && !options?.skill) {
+        // Nothing to queue (Enter on an empty composer while streaming).
+        throw new Error("empty-queue-submit");
+      }
+      chatMessageQueue.enqueue(conversationId, {
+        text: message.text ?? "",
+        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
+      });
+      trackEvent("message_queued", {
+        conversationId,
+        agentId: conversation?.agentId ?? undefined,
+        messageLength: message.text?.length ?? 0,
+      });
+      // Returning normally clears the textarea and draft, like a send.
+      return;
     }
 
     const { kind: connectivityKind } = connectivity.state;
@@ -1864,18 +1902,31 @@ export function ChatPageContent({
           // Get the default enabled tools from the conversation (backend sets these)
           // We need to fetch them first to apply our pending actions on top
           try {
-            // The backend creates conversation with default enabled tools
-            // We need to apply pending actions to modify that default
-            const enabledToolsResult = await fetchConversationEnabledTools(
-              newConversation.id,
-            );
-            if (enabledToolsResult?.data) {
-              const baseEnabledToolIds =
-                enabledToolsResult.data.enabledToolIds || [];
-              const newEnabledToolIds = applyPendingActions(
-                baseEnabledToolIds,
+            // Fetch the conversation's default enabled-tools and the CURRENT
+            // agent's tool set fresh — fetching the agent's tools here (rather
+            // than reading a keepPreviousData hook) avoids persisting a previous
+            // agent's tool IDs right after an agent switch.
+            const [enabledToolsResult, agentTools] = await Promise.all([
+              fetchConversationEnabledTools(newConversation.id),
+              fetchAgentMcpTools(initialAgentId),
+            ]);
+            const allToolIds = agentTools.map((t) => t.id);
+            // A fresh conversation carries no custom selection, so the pending
+            // actions must apply on top of the agent's full tool set — not the
+            // GET's empty array, which would turn "disable a subset" into
+            // "enable nothing" and drop every tool. Without that set (agent has
+            // no tools, or the fetch failed) the base is unknown, so leave the
+            // conversation on its default rather than persist an empty allowlist.
+            const canResolveBase =
+              enabledToolsResult?.data?.hasCustomSelection ||
+              allToolIds.length > 0;
+            if (enabledToolsResult?.data && canResolveBase) {
+              const newEnabledToolIds = resolveEnabledToolIds({
+                hasCustomSelection: enabledToolsResult.data.hasCustomSelection,
+                enabledToolIds: enabledToolsResult.data.enabledToolIds || [],
+                allToolIds,
                 pendingActions,
-              );
+              });
 
               // Pre-populate the query cache so useConversationEnabledTools
               // immediately sees the correct state when conversationId is set.
@@ -1889,17 +1940,36 @@ export function ChatPageContent({
                 },
               );
 
-              // Update the enabled tools
-              updateEnabledToolsMutation.mutate({
+              // Await the persist before the first message sends below: the
+              // backend rebuilds the tool set from the DB, so a fire-and-forget
+              // PUT could lose the race and run turn one with the just-declined
+              // tool still enabled. This mutation resolves with null (it does not
+              // throw) on API failure, so branch on the result rather than a
+              // catch.
+              const persisted = await updateEnabledToolsMutation.mutateAsync({
                 conversationId: newConversation.id,
                 toolIds: newEnabledToolIds,
               });
+              if (persisted) {
+                // Clear the pending action only once the selection is durable.
+                clearPendingActions();
+              } else {
+                // Persist failed: undo the optimistic cache so it matches the DB,
+                // and keep the pending action to retry on the next new
+                // conversation rather than silently dropping the decline.
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    "conversation",
+                    newConversation.id,
+                    "enabled-tools",
+                  ],
+                });
+              }
             }
           } catch {
-            // Silently fail - the default tools will be used
+            // Leave pending actions intact on failure; the first turn falls back
+            // to the agent's default tools.
           }
-          // Clear pending actions regardless of success
-          clearPendingActions();
         }
 
         selectConversation(newConversation.id);
@@ -2459,6 +2529,7 @@ export function ChatPageContent({
                         <div className="max-w-4xl mx-auto space-y-3">
                           <ArchestraPromptInput
                             onSubmit={handleSubmit}
+                            onStop={handleStopStreaming}
                             status={status}
                             selectedModel={conversation?.modelId ?? ""}
                             onModelChange={handleModelChange}

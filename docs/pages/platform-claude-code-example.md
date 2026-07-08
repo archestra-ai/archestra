@@ -3,7 +3,7 @@ title: Using Claude Code Max Subscription
 category: Examples
 order: 10
 description: Route Claude Code through Archestra while your Claude subscription keeps paying for inference
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-07
 ---
 
 <!--
@@ -50,3 +50,7 @@ Claude Code opens Archestra's consent screen in your browser; sign in and click 
 ## All Set
 
 Claude Code now runs through Archestra — its MCP orchestrator, guardrails, and observability — while your Claude subscription keeps paying for inference.
+
+## Next Step
+
+Explore full local agents connection docs: [Connect Your Agents](/docs/platform-connection).

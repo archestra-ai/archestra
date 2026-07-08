@@ -29,6 +29,13 @@ export const ArchestraInternalErrorCode = {
    * the balance is topped up or the limit resets.
    */
   ProviderInsufficientBalance: "provider_insufficient_balance",
+  /**
+   * The upstream provider finished a completion without producing any content
+   * or tool calls (e.g. OpenRouter occasionally streams an empty turn). A
+   * transient provider-side condition: the proxy returns it as a retryable 503
+   * and the chat mapper surfaces it as the retryable EmptyResponse card.
+   */
+  UpstreamEmptyResponse: "upstream_empty_response",
 } as const;
 
 export type ArchestraInternalErrorCode =

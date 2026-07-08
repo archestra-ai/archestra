@@ -95904,10 +95904,14 @@
                             "insufficient_balance",
                             "unverified"
                           ]
+                        },
+                        "keyName": {
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "kind"
+                        "kind",
+                        "keyName"
                       ],
                       "additionalProperties": false
                     }
@@ -96227,10 +96231,14 @@
                             "insufficient_balance",
                             "unverified"
                           ]
+                        },
+                        "keyName": {
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "kind"
+                        "kind",
+                        "keyName"
                       ],
                       "additionalProperties": false
                     }

@@ -187,10 +187,15 @@ function getToolCacheKey(
   agentId: string,
   userId: string,
   isolationKey?: string,
+  delegationChain?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
   if (isolationKey) parts.push(isolationKey);
+  // One agent can run at several depths of a delegation tree, concurrently and
+  // under one isolation key. Each depth needs its own entry: the tools close
+  // over the chain, which the executor reads to detect delegation cycles.
+  if (delegationChain) parts.push(delegationChain);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -819,7 +824,12 @@ export async function getChatMcpTools({
   repeatTracker?: ToolCallRepeatTracker;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
-  const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
+  const toolCacheKey = getToolCacheKey(
+    agentId,
+    userId,
+    scopeKey,
+    delegationChain,
+  );
   const shouldUseToolCache = !abortSignal;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)

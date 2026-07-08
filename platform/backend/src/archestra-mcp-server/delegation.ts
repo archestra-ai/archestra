@@ -2,6 +2,7 @@ import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { DelegationLoopError } from "@/agents/errors";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import { AgentTeamModel, ToolModel } from "@/models";
@@ -189,6 +190,17 @@ export async function handleDelegation(
         "Agent delegation was aborted",
       );
       throw error;
+    }
+    if (error instanceof DelegationLoopError) {
+      logger.info(
+        {
+          agentId,
+          targetAgentId: delegation.targetAgent.id,
+          delegationChain: context.delegationChain,
+        },
+        "Agent delegation refused to avoid a delegation loop",
+      );
+      return errorResult(error.message);
     }
     logger.error(
       { error, agentId, targetAgentId: delegation.targetAgent.id },

@@ -194,20 +194,8 @@ const testConfigs: ChatProviderTestConfig[] = [
 // failing all retries. Tracked from https://github.com/archestra-ai/archestra/actions/runs/26950850016.
 const skippedProviders = new Set<string>(["cerebras", "cohere"]);
 
-// Merge-queue / run-e2e label runs keep one representative per streaming
-// format: anthropic (SSE) and openai (OpenAI-compatible, which all the other
-// providers reuse). Every provider drives the identical UI flow against the
-// same WireMock stub, so the rest are tagged @nightly and only run on the
-// scheduled nightly / workflow_dispatch runs, which drop the @nightly
-// grep-invert (see .github/workflows/platform-e2e-tests.yml).
-const mergeQueueProviders = new Set<string>(["anthropic", "openai"]);
-
 for (const config of testConfigs) {
-  const describeOptions = mergeQueueProviders.has(config.providerName)
-    ? {}
-    : { tag: "@nightly" };
-
-  test.describe(`Chat-UI-${config.providerName}`, describeOptions, () => {
+  test.describe(`Chat-UI-${config.providerName}`, () => {
     if (skippedProviders.has(config.providerName)) {
       test.skip();
     }

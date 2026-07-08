@@ -3,13 +3,9 @@ name: Platform E2E Tests
 # Runs automatically in merge queue as the required E2E gate.
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
-# Merge-queue / label runs keep the queue fast with representative coverage:
-# chromium only, minus the @nightly-tagged wide matrices. The nightly schedule
-# (and manual workflow_dispatch, which matches it) runs full coverage:
-# firefox + webkit projects (the @firefox/@webkit-tagged tests), the full chat
-# LLM-provider matrix (merge queue keeps anthropic + openai as the SSE and
-# OpenAI-compatible representatives), and the IdP role-mapping/team-sync
-# variants (merge queue keeps the OIDC round-trip + RP-initiated logout).
+# Merge-queue / label runs cover chromium only; the nightly schedule (and
+# manual workflow_dispatch, which matches it) additionally runs the firefox +
+# webkit projects, which only carry the @firefox/@webkit-tagged tests.
 on:
   workflow_dispatch:
   schedule:
@@ -441,11 +437,7 @@ jobs:
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
-          # Same event split for tags: merge queue / label runs also grep-invert
-          # the @nightly-tagged wide matrices (chat LLM providers, IdP
-          # role-mapping/team-sync) down to their representatives; the schedule
-          # and workflow_dispatch run them all.
-          extra_args: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--grep-invert ''@quickstart''' || '--grep-invert ''@quickstart|@nightly''' }}
+          extra_args: "--grep-invert '@quickstart'"
           timeout: "20"
 
       - name: Upload blob report

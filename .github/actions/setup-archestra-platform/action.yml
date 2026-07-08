@@ -76,6 +76,16 @@ inputs:
     description: "Additional Helm --set flags (comma-separated key=value pairs, e.g. 'archestra.env.FOO=bar,archestra.replicaCount=1')"
     required: false
     default: ""
+  platform-image-in-cluster-pull:
+    description: |
+      "true" = skip the host pull and kind-load of the platform image; the
+      Kind node's containerd pulls it straight from the (publicly readable)
+      registry when the pod schedules, overlapping scheduling instead of
+      blocking setup. Only valid when platform-image-tag is a registry ref
+      (trusted runs). Fork PRs with artifact-loaded local tags and
+      build-platform-image mode keep the default host pull + kind-load path.
+    required: false
+    default: "false"
 
 outputs:
   backend-url:
@@ -250,6 +260,7 @@ runs:
         PLATFORM_IMAGE_TAG: ${{ inputs.platform-image-tag }}
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         PULL_TIMEOUT_SECONDS: ${{ inputs.image-pull-timeout-seconds }}
+        IN_CLUSTER_PULL: ${{ inputs.platform-image-in-cluster-pull }}
       run: |
         # Pull an image unless it is already in the local daemon (e.g. loaded
         # from a build artifact on fork PRs). Retries until the deadline so the
@@ -274,8 +285,33 @@ runs:
           done
         }
 
+        # In-cluster-pull mode: the Kind node pulls the platform image itself,
+        # so the host only needs to know the tag EXISTS before deploying —
+        # poll the manifest (no layer download) instead of pulling, preserving
+        # the build-may-still-be-pushing wait.
+        wait_for_manifest() {
+          local image="$1"
+          local deadline=$(( $(date +%s) + PULL_TIMEOUT_SECONDS ))
+          while true; do
+            if docker buildx imagetools inspect "${image}" > /dev/null 2>&1; then
+              echo "Manifest for ${image} is available in the registry"
+              return 0
+            fi
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "Timed out waiting for the ${image} manifest to appear"
+              return 1
+            fi
+            echo "Manifest for ${image} not available yet, retrying in 10s..."
+            sleep 10
+          done
+        }
+
         PIDS=()
-        wait_and_pull "${PLATFORM_IMAGE_TAG}" &
+        if [ "${IN_CLUSTER_PULL}" = "true" ]; then
+          wait_for_manifest "${PLATFORM_IMAGE_TAG}" &
+        else
+          wait_and_pull "${PLATFORM_IMAGE_TAG}" &
+        fi
         PIDS+=($!)
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           wait_and_pull "${MCP_SERVER_BASE_IMAGE_TAG}" &
@@ -300,12 +336,20 @@ runs:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
         DEPLOY_E2E_DEPS: ${{ inputs.deploy-e2e-dependencies }}
+        IN_CLUSTER_PULL: ${{ inputs.platform-image-in-cluster-pull }}
       run: |
         PIDS=()
 
-        echo "Loading platform image into Kind..."
-        kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
-        PIDS+=($!)
+        if [ "${IN_CLUSTER_PULL}" = "true" ]; then
+          # The Kind node pulls the platform image straight from the public
+          # registry when the pod schedules — no host copy to stream into
+          # containerd.
+          echo "Skipping platform image kind load (in-cluster registry pull)"
+        else
+          echo "Loading platform image into Kind..."
+          kind load docker-image "${PLATFORM_IMAGE_TAG}" --name "${KIND_CLUSTER_NAME}" &
+          PIDS+=($!)
+        fi
 
         if [ -n "${MCP_SERVER_BASE_IMAGE_TAG}" ]; then
           echo "Loading MCP server base image into Kind..."

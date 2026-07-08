@@ -27,10 +27,10 @@ impl fmt::Display for AuthorityName {
 /// The outcome of an escalation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ruling {
-    /// Waive the presented violations *for this flow only*. Each waived
-    /// violation becomes an audited declassification on the result label;
-    /// the context itself is never loosened, so an identical later flow
-    /// escalates again.
+    /// Approve the flow: the engine applies the minted grant, rechecks it
+    /// closed, and records the declassification *for this flow only*. The
+    /// stored context is never loosened, so an identical later flow escalates
+    /// again.
     Approve {
         reason: String,
     },

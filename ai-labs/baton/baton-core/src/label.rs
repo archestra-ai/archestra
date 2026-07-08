@@ -33,17 +33,25 @@ use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 /// job.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuditEntry {
-    /// An authority explicitly waived a violation for one flow.
+    /// An authority minted a [`Grant`] that resolved a set of grant-fixable
+    /// violations for one flow (check-transient — the stored context is never
+    /// loosened).
     Declassified {
-        violation: Violation,
+        grant: Grant,
+        resolved: Vec<Violation>,
         authority: AuthorityName,
         reason: String,
     },
-    /// [`crate::engine::UnknownPolicy::AllowWithAudit`] let unprovable
-    /// requirements through.
-    UnverifiedFlow {
+    /// An acknowledge-only fact accepted on the record — a missing contract or
+    /// unprovable effects, which no grant can lift. `by` names the signer:
+    /// `Some` when an authority signed off (under
+    /// [`crate::engine::UnknownPolicy::Escalate`]), `None` when the policy
+    /// audited it through without consulting anyone (under
+    /// [`crate::engine::UnknownPolicy::AllowWithAudit`]).
+    Acknowledged {
         tool: ToolName,
-        unknowns: Vec<Violation>,
+        facts: Vec<Violation>,
+        by: Option<AuthorityName>,
     },
 }
 
@@ -51,14 +59,24 @@ impl fmt::Display for AuditEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Declassified {
-                violation,
+                resolved,
                 authority,
                 reason,
-            } => write!(f, "declassified by {authority} ({reason}): {violation}"),
-            Self::UnverifiedFlow { tool, unknowns } => {
-                write!(f, "unverified flow through `{tool}`:")?;
-                for u in unknowns {
-                    write!(f, " [{u}]")?;
+                ..
+            } => {
+                write!(f, "declassified by {authority} ({reason}):")?;
+                for v in resolved {
+                    write!(f, " [{v}]")?;
+                }
+                Ok(())
+            }
+            Self::Acknowledged { tool, facts, by } => {
+                match by {
+                    Some(authority) => write!(f, "acknowledged by {authority} through `{tool}`:")?,
+                    None => write!(f, "unverified flow through `{tool}`:")?,
+                }
+                for v in facts {
+                    write!(f, " [{v}]")?;
                 }
                 Ok(())
             }
@@ -249,7 +267,8 @@ mod tests {
 
     fn audit_entry(reason: &str) -> AuditEntry {
         AuditEntry::Declassified {
-            violation: Violation::Unprovable(Unprovable::AudienceUnknown),
+            grant: Grant::empty(),
+            resolved: vec![Violation::Unprovable(Unprovable::AudienceUnknown)],
             authority: AuthorityName::new("test"),
             reason: reason.to_owned(),
         }

@@ -23,8 +23,8 @@ pub enum UnknownPolicy {
     Escalate,
     /// Fail closed.
     Deny,
-    /// Let the flow through, recording an [`AuditEntry::UnverifiedFlow`] on
-    /// the result label.
+    /// Let the flow through, recording an unsigned
+    /// [`AuditEntry::Acknowledged`] (`by: None`) on the result label.
     AllowWithAudit,
 }
 
@@ -285,9 +285,10 @@ impl<A: Authority> PolicyEngine<A> {
 
         if escalating.is_empty() {
             if !audited_unknowns.is_empty() {
-                result_label.audit.push(AuditEntry::UnverifiedFlow {
+                result_label.audit.push(AuditEntry::Acknowledged {
                     tool: request.tool.clone(),
-                    unknowns: audited_unknowns,
+                    facts: audited_unknowns,
+                    by: None,
                 });
             }
             return permit(result_label);
@@ -325,9 +326,10 @@ impl<A: Authority> PolicyEngine<A> {
                 // grant-fixable gap it targeted. Acknowledge-only violations
                 // and policy-audited unknowns are expected to remain and are
                 // not targeted, so we check only the targeted set.
-                let targeted: Vec<&Violation> = escalating
+                let targeted: Vec<Violation> = escalating
                     .iter()
                     .filter(|v| v.fixability() == Fixability::GrantFixable)
+                    .cloned()
                     .collect();
                 if !targeted.is_empty() {
                     let lifted = context.lift(&needed);
@@ -343,7 +345,7 @@ impl<A: Authority> PolicyEngine<A> {
                     let uncovered = match &reverdict {
                         Verdict::Allow => false,
                         Verdict::Escalate(remaining) => {
-                            remaining.iter().any(|v| targeted.contains(&v))
+                            remaining.iter().any(|v| targeted.contains(v))
                         }
                     };
                     if uncovered {
@@ -355,17 +357,33 @@ impl<A: Authority> PolicyEngine<A> {
                     }
                 }
 
-                if !audited_unknowns.is_empty() {
-                    result_label.audit.push(AuditEntry::UnverifiedFlow {
-                        tool: request.tool.clone(),
-                        unknowns: audited_unknowns,
+                // Record one declassification for the grant-fixable gaps the
+                // grant resolved, and acknowledgment entries for the rest:
+                // acknowledge-only members the authority signed off on
+                // (`by: Some`), then policy-audited unknowns (`by: None`).
+                let (resolved, acknowledged): (Vec<Violation>, Vec<Violation>) = escalating
+                    .into_iter()
+                    .partition(|v| v.fixability() == Fixability::GrantFixable);
+                if !resolved.is_empty() {
+                    result_label.audit.push(AuditEntry::Declassified {
+                        grant: needed,
+                        resolved,
+                        authority: authority_name.clone(),
+                        reason,
                     });
                 }
-                for violation in escalating {
-                    result_label.audit.push(AuditEntry::Declassified {
-                        violation,
-                        authority: authority_name.clone(),
-                        reason: reason.clone(),
+                if !acknowledged.is_empty() {
+                    result_label.audit.push(AuditEntry::Acknowledged {
+                        tool: request.tool.clone(),
+                        facts: acknowledged,
+                        by: Some(authority_name),
+                    });
+                }
+                if !audited_unknowns.is_empty() {
+                    result_label.audit.push(AuditEntry::Acknowledged {
+                        tool: request.tool.clone(),
+                        facts: audited_unknowns,
+                        by: None,
                     });
                 }
                 permit(result_label)
@@ -941,11 +959,12 @@ mod tests {
         assert_eq!(permit.result_label().effects, Effects::Unknown);
         assert_eq!(
             permit.result_label().audit,
-            vec![AuditEntry::UnverifiedFlow {
+            vec![AuditEntry::Acknowledged {
                 tool: ToolName::new("calendar.lookup"),
-                unknowns: vec![Violation::Unprovable(Unprovable::NoContract {
+                facts: vec![Violation::Unprovable(Unprovable::NoContract {
                     tool: ToolName::new("calendar.lookup"),
                 })],
+                by: None,
             }]
         );
     }
@@ -972,7 +991,8 @@ mod tests {
         engine.register(email_contract());
 
         // Suspicious trust (breach) + unknown audience (unprovable), both
-        // escalated, both declassified by the single approval.
+        // grant-fixable and both resolved by the single minted grant, recorded
+        // in one Declassified entry.
         let mut trajectory = Trajectory::new();
         push_user_turn(
             &mut trajectory,
@@ -988,23 +1008,22 @@ mod tests {
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
         };
-        let declassified: Vec<_> = permit
+        let declassifications: Vec<&Vec<Violation>> = permit
             .result_label()
             .audit
             .iter()
             .filter_map(|e| match e {
-                AuditEntry::Declassified { violation, .. } => Some(violation.clone()),
-                AuditEntry::UnverifiedFlow { .. } => None,
+                AuditEntry::Declassified { resolved, .. } => Some(resolved),
+                AuditEntry::Acknowledged { .. } => None,
             })
             .collect();
-        assert_eq!(declassified.len(), 2);
+        // A single grant, one Declassified entry, both violations resolved.
+        assert_eq!(declassifications.len(), 1);
+        let resolved = declassifications[0];
+        assert_eq!(resolved.len(), 2);
+        assert!(resolved.iter().any(|v| matches!(v, Violation::Breach(_))));
         assert!(
-            declassified
-                .iter()
-                .any(|v| matches!(v, Violation::Breach(_)))
-        );
-        assert!(
-            declassified
+            resolved
                 .iter()
                 .any(|v| matches!(v, Violation::Unprovable(Unprovable::AudienceUnknown)))
         );
@@ -1265,7 +1284,7 @@ mod tests {
                     AuditEntry::Declassified { authority, .. } => {
                         Some(authority.as_str().to_owned())
                     }
-                    AuditEntry::UnverifiedFlow { .. } => None,
+                    AuditEntry::Acknowledged { .. } => None,
                 })
                 .collect()
         };

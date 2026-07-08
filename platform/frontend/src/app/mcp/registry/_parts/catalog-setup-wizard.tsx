@@ -525,20 +525,25 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
   const tools = toolsData?.data ?? [];
   const total = toolsData?.pagination.total ?? tools.length;
 
-  const refreshToolsButton = reloadTarget && (
+  const refreshToolsButton = (
     <PermissionButton
       permissions={{ mcpServerInstallation: ["create"] }}
       variant="outline"
       size="sm"
-      disabled={reloadTools.isPending}
+      disabled={reloadTools.isPending || !reloadTarget}
       onClick={() =>
+        reloadTarget &&
         reloadTools.mutate({
           id: reloadTarget.id,
           name: item.name,
           catalogId: item.id,
         })
       }
-      tooltip="Re-sync the registry's tool catalog from the live server so this list shows its current tools"
+      tooltip={
+        reloadTarget
+          ? "Re-sync the registry's tool catalog from the live server so this list shows its current tools"
+          : "Connect this server first — refreshing tools needs a live connection"
+      }
     >
       {reloadTools.isPending ? (
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -561,9 +566,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
             appear once the server is reachable.
           </EmptyDescription>
         </EmptyHeader>
-        {refreshToolsButton && (
-          <EmptyContent>{refreshToolsButton}</EmptyContent>
-        )}
+        <EmptyContent>{refreshToolsButton}</EmptyContent>
       </Empty>
     );
   }

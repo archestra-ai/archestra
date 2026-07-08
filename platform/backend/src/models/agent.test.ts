@@ -17,6 +17,7 @@ import AgentModel from "./agent";
 import AgentExcludedToolModel from "./agent-excluded-tool";
 import AgentToolModel from "./agent-tool";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
+import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import ModelModel from "./model";
 import OrganizationModel from "./organization";
@@ -1287,6 +1288,97 @@ describe("AgentModel", () => {
         true,
       );
       expect(resultByTeam.data).toHaveLength(4);
+    });
+
+    test("populates lastUsedAt from the MCP tool-call log and sorts by it", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+
+      const gatewayA = await AgentModel.create({
+        name: "Gateway A",
+        teams: [],
+        scope: "org",
+      });
+      const gatewayB = await AgentModel.create({
+        name: "Gateway B",
+        teams: [],
+        scope: "org",
+      });
+      await AgentModel.create({
+        name: "Gateway Never Used",
+        teams: [],
+        scope: "org",
+      });
+
+      const older = new Date("2026-07-01T10:00:00Z");
+      const newer = new Date("2026-07-05T10:00:00Z");
+      const newest = new Date("2026-07-06T10:00:00Z");
+
+      // Gateway A has two calls; lastUsedAt must be the most recent one, and
+      // any logged method (not just tools/call) counts as usage.
+      await McpToolCallModel.create({
+        agentId: gatewayA.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        toolCall: null,
+        toolResult: null,
+        createdAt: older,
+      });
+      await McpToolCallModel.create({
+        agentId: gatewayA.id,
+        mcpServerName: "test-server",
+        method: "tools/list",
+        toolCall: null,
+        toolResult: null,
+        createdAt: newest,
+      });
+      await McpToolCallModel.create({
+        agentId: gatewayB.id,
+        mcpServerName: "test-server",
+        method: "tools/call",
+        toolCall: null,
+        toolResult: null,
+        createdAt: newer,
+      });
+
+      const result = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        undefined,
+        {},
+        admin.id,
+        true,
+      );
+      const byName = new Map(result.data.map((a) => [a.name, a]));
+      expect(byName.get("Gateway A")?.lastUsedAt).toEqual(newest);
+      expect(byName.get("Gateway B")?.lastUsedAt).toEqual(newer);
+      expect(byName.get("Gateway Never Used")?.lastUsedAt).toBeNull();
+
+      const sortedDesc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "desc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(sortedDesc.data.map((a) => a.name)).toEqual([
+        "Gateway A",
+        "Gateway B",
+        "Gateway Never Used",
+      ]);
+
+      const sortedAsc = await AgentModel.findAllPaginated(
+        { limit: 10, offset: 0 },
+        { sortBy: "lastUsedAt", sortDirection: "asc" },
+        {},
+        admin.id,
+        true,
+      );
+      expect(sortedAsc.data.map((a) => a.name)).toEqual([
+        "Gateway Never Used",
+        "Gateway B",
+        "Gateway A",
+      ]);
     });
 
     test("sortBy knowledgeSourcesCount orders by combined knowledge base and connector count", async ({

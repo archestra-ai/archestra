@@ -35967,7 +35967,8 @@
                 "toolsCount",
                 "subagentsCount",
                 "knowledgeSourcesCount",
-                "team"
+                "team",
+                "lastUsedAt"
               ]
             },
             "in": "query",
@@ -36500,6 +36501,11 @@
                           },
                           "sandboxAvailable": {
                             "type": "boolean"
+                          },
+                          "lastUsedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -37639,6 +37645,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -38517,6 +38528,11 @@
                       },
                       "sandboxAvailable": {
                         "type": "boolean"
+                      },
+                      "lastUsedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -39313,6 +39329,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -40109,6 +40130,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -41249,6 +41275,11 @@
                         },
                         "sandboxAvailable": {
                           "type": "boolean"
+                        },
+                        "lastUsedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
                         }
                       },
                       "required": [
@@ -42092,6 +42123,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -43188,6 +43224,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -44268,6 +44309,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -46260,6 +46306,11 @@
                     },
                     "sandboxAvailable": {
                       "type": "boolean"
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [

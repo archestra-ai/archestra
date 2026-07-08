@@ -10841,7 +10841,7 @@ export type GetAgentsData = {
         status?: 'active' | 'deleted';
         limit?: number;
         offset?: number;
-        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team';
+        sortBy?: 'name' | 'createdAt' | 'toolsCount' | 'subagentsCount' | 'knowledgeSourcesCount' | 'team' | 'lastUsedAt';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/agents';
@@ -11018,6 +11018,7 @@ export type GetAgentsResponses = {
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
+            lastUsedAt?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -11260,6 +11261,7 @@ export type CreateAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -11467,6 +11469,7 @@ export type GetAllAgentsResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     }>;
 };
 
@@ -11649,6 +11652,7 @@ export type GetDefaultMcpGatewayResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -11831,6 +11835,7 @@ export type GetDefaultLlmProxyResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -12092,6 +12097,7 @@ export type ImportAgentResponses = {
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
             sandboxAvailable?: boolean;
+            lastUsedAt?: string | null;
         };
         warnings: Array<{
             type: 'tool' | 'knowledgeBase' | 'connector' | 'delegation';
@@ -12367,6 +12373,7 @@ export type GetAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -12602,6 +12609,7 @@ export type UpdateAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -12786,6 +12794,7 @@ export type CloneAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 
@@ -13312,6 +13321,7 @@ export type RestoreAgentResponses = {
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
         sandboxAvailable?: boolean;
+        lastUsedAt?: string | null;
     };
 };
 

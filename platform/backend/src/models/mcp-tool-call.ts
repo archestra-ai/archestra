@@ -10,6 +10,7 @@ import {
   ilike,
   inArray,
   lte,
+  max,
   or,
   type SQL,
   sql,
@@ -297,6 +298,33 @@ class McpToolCallModel {
       .select({ total: count() })
       .from(schema.mcpToolCallsTable);
     return result.total;
+  }
+
+  /**
+   * Batch-load the timestamp of the most recent MCP call (any method) per
+   * agent. Agents with no recorded calls are absent from the returned map.
+   */
+  static async getLastCallAtForAgents(
+    agentIds: string[],
+  ): Promise<Map<string, Date>> {
+    if (agentIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        agentId: schema.mcpToolCallsTable.agentId,
+        lastCallAt: max(schema.mcpToolCallsTable.createdAt),
+      })
+      .from(schema.mcpToolCallsTable)
+      .where(inArray(schema.mcpToolCallsTable.agentId, agentIds))
+      .groupBy(schema.mcpToolCallsTable.agentId);
+
+    const lastCallMap = new Map<string, Date>();
+    for (const row of rows) {
+      if (row.agentId && row.lastCallAt) {
+        lastCallMap.set(row.agentId, row.lastCallAt);
+      }
+    }
+    return lastCallMap;
   }
 
   /**

@@ -1,3 +1,4 @@
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import type {
   ErrorEvent,
   EventHint,
@@ -155,6 +156,15 @@ const initSentry = async (): Promise<void> => {
       // Filter out ApiError instances with 4xx status codes
       if (error instanceof ApiError) {
         if (error.statusCode >= 400 && error.statusCode < 500) {
+          return null;
+        }
+        // Known-transient upstream conditions (e.g. the provider streamed an
+        // empty completion) are handled: the client receives a retryable 503.
+        // They indicate provider flakiness, not a bug, so don't report them.
+        if (
+          error.internalCode ===
+          ArchestraInternalErrorCode.UpstreamEmptyResponse
+        ) {
           return null;
         }
       }

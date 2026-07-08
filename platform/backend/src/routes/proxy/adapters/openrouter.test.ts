@@ -33,6 +33,11 @@ function expectRetryableEmptyResponseError(error: unknown): void {
   expect((error as Error).message).toBe(
     "OpenRouter returned an empty response without content or tool calls",
   );
+  // The normalized code lets error reporting drop this known-transient
+  // condition and the chat mapper classify it as a retryable empty turn.
+  expect((error as ApiError).internalCode).toBe(
+    ArchestraInternalErrorCode.UpstreamEmptyResponse,
+  );
 }
 
 describe("OpenrouterResponseAdapter", () => {

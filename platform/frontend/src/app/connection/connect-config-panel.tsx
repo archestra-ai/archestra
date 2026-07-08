@@ -1,7 +1,7 @@
 "use client";
 
 import { providerDisplayNames } from "@archestra/shared";
-import { AlertTriangle, Check, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, Download, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
@@ -11,6 +11,7 @@ import {
   CreditWarningNotice,
 } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -171,6 +172,16 @@ export function ConnectConfigPanel({
                 />
               </EditorField>
             }
+            detail={
+              <Alert variant="info">
+                <Info />
+                <AlertDescription>
+                  Claude Desktop's third-party inference cannot reuse a Claude
+                  Pro or Max subscription. To keep paying through a
+                  subscription, connect Claude Code in passthrough mode instead.
+                </AlertDescription>
+              </Alert>
+            }
           >
             Route{" "}
             <span className="font-medium text-foreground">
@@ -326,6 +337,16 @@ export function ConnectConfigPanel({
 // ===================================================================
 // Internal pieces
 // ===================================================================
+
+/** Amber advisory box — inference-billing warning and the sensitive-file note. */
+function AmberNotice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-[12.5px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <span>{children}</span>
+    </div>
+  );
+}
 
 type EditableRow = "gateway" | "proxy" | "endpoint" | "platform";
 
@@ -492,13 +513,10 @@ function ConfigDownloadStep({
   return (
     <div className="flex flex-col gap-3">
       <CreditWarningNotice warning={state.creditWarning} />
-      <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-[12.5px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-        <span>
-          The configuration file contains sensitive values in plain text. Do not
-          share it.
-        </span>
-      </div>
+      <AmberNotice>
+        The configuration file contains sensitive values in plain text. Do not
+        share it.
+      </AmberNotice>
       <div>
         {/* The button only renders here — after the authenticated user's own
             passthrough + virtual keys were minted via permission-checked

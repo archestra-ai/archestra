@@ -682,6 +682,7 @@ export function ConnectCommandPanel({
 
       <WizardStep n={3} title="Run the setup script" last={!showOAuthStep}>
         <div className="flex flex-col gap-3">
+          <CreditWarningNotice warning={result?.creditWarning} />
           <div className="overflow-hidden rounded-xl border border-[#1f2937] bg-[#0d1117] shadow-lg">
             {providers.length > 1 && proxyActive && (
               <div className="flex items-center gap-1 border-b border-[#1f2937] px-3">
@@ -728,7 +729,6 @@ export function ConnectCommandPanel({
                 onRetry={() => runGeneration(inputsKey)}
               />
             )}
-            <CreditWarningNotice warning={result?.creditWarning} />
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">

@@ -26988,6 +26988,7 @@ export type CreateConnectionSetupResponses = {
         tokenStart: string;
         creditWarning?: {
             kind: 'insufficient_balance' | 'unverified';
+            keyName: string;
         };
     };
 };
@@ -27077,6 +27078,7 @@ export type CreateConnectionVirtualKeyResponses = {
         name: string;
         creditWarning?: {
             kind: 'insufficient_balance' | 'unverified';
+            keyName: string;
         };
     };
 };

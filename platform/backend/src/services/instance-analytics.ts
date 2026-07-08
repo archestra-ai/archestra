@@ -2,8 +2,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 
-const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const HEARTBEAT_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000;
 const CAPTURE_TIMEOUT_MS = 10_000;
 const INSTANCE_STARTED_EVENT = "instance_started";
 const INSTANCE_HEARTBEAT_EVENT = "instance_heartbeat";
@@ -30,27 +29,28 @@ class InstanceAnalyticsService {
     } = {},
   ) {}
 
-  // The hourly re-check is what makes instance_heartbeat a daily signal for
-  // long-running instances: with a startup-only capture, an always-on
-  // deployment reports once at boot and then never again until its next
-  // restart, so "active instances" charts only count restarts.
+  // instance_heartbeat is a stateless hourly ping carrying the instance id;
+  // dashboards count unique ids per day (DAU semantics), so restarts and
+  // extra replicas can only duplicate events, never inflate the daily count.
+  // Deliberately no send-once-per-day dedup state: a startup-only or
+  // DB-deduped capture undercounts always-on deployments.
   async start(): Promise<void> {
     const analyticsConfig = this.getAnalyticsConfig();
     if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
 
     if (!this.heartbeatTimer) {
       this.heartbeatTimer = setInterval(() => {
-        this.captureDueEvents().catch((error) => {
+        this.captureHeartbeat().catch((error) => {
           logger.warn(
             { err: error },
             "Failed to send instance analytics heartbeat",
           );
         });
-      }, HEARTBEAT_CHECK_INTERVAL_MS);
+      }, HEARTBEAT_INTERVAL_MS);
       this.heartbeatTimer.unref();
     }
 
-    await this.captureDueEvents();
+    await this.captureHeartbeat();
   }
 
   stop(): void {
@@ -60,11 +60,10 @@ class InstanceAnalyticsService {
     }
   }
 
-  private async captureDueEvents(): Promise<void> {
+  private async captureHeartbeat(): Promise<void> {
     const analyticsConfig = this.getAnalyticsConfig();
     if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
 
-    const now = this.getNow();
     const state = await OrganizationModel.getAnalyticsState();
 
     if (!state.analyticsInstanceStartedAt) {
@@ -75,21 +74,15 @@ class InstanceAnalyticsService {
       });
       await OrganizationModel.updateAnalyticsState({
         id: state.id,
-        analyticsInstanceStartedAt: now,
+        analyticsInstanceStartedAt: this.getNow(),
       });
     }
 
-    if (shouldSendHeartbeat(state.analyticsInstanceLastHeartbeatAt, now)) {
-      await this.capture({
-        analyticsConfig,
-        event: INSTANCE_HEARTBEAT_EVENT,
-        distinctId: state.analyticsInstanceId,
-      });
-      await OrganizationModel.updateAnalyticsState({
-        id: state.id,
-        analyticsInstanceLastHeartbeatAt: now,
-      });
-    }
+    await this.capture({
+      analyticsConfig,
+      event: INSTANCE_HEARTBEAT_EVENT,
+      distinctId: state.analyticsInstanceId,
+    });
   }
 
   private async capture({
@@ -143,12 +136,6 @@ class InstanceAnalyticsService {
 }
 
 export const instanceAnalyticsService = new InstanceAnalyticsService();
-
-function shouldSendHeartbeat(lastHeartbeatAt: Date | null, now: Date): boolean {
-  if (!lastHeartbeatAt) return true;
-
-  return now.getTime() - lastHeartbeatAt.getTime() >= HEARTBEAT_INTERVAL_MS;
-}
 
 function getCaptureUrl(analyticsConfig: InstanceAnalyticsConfig): string {
   return new URL("/capture/", analyticsConfig.posthog.host).toString();

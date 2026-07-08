@@ -39,7 +39,7 @@ describe("instanceAnalyticsService", () => {
     vi.restoreAllMocks();
   });
 
-  test("captures started and heartbeat once for a new installation", async ({
+  test("captures started and heartbeat for a new installation", async ({
     makeOrganization,
   }) => {
     const organization = await makeOrganization();
@@ -86,42 +86,22 @@ describe("instanceAnalyticsService", () => {
     ]);
     expect(state.analyticsInstanceId).toEqual(expect.any(String));
     expect(state.analyticsInstanceStartedAt).toBeInstanceOf(Date);
-    expect(state.analyticsInstanceLastHeartbeatAt).toBeInstanceOf(Date);
   });
 
-  test("does not recapture before the heartbeat window elapses", async ({
+  test("resends the heartbeat but not started on restart", async ({
     makeOrganization,
   }) => {
     await makeOrganization();
     await instanceAnalyticsService.start();
+    instanceAnalyticsService.stop();
     fetchMock.mockClear();
 
     await instanceAnalyticsService.start();
 
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  test("captures heartbeat after 24 hours without recapturing started", async ({
-    makeOrganization,
-  }) => {
-    const organization = await makeOrganization();
-    await instanceAnalyticsService.start();
-    fetchMock.mockClear();
-
-    await OrganizationModel.updateAnalyticsState({
-      id: organization.id,
-      analyticsInstanceLastHeartbeatAt: new Date(
-        Date.now() - 24 * 60 * 60 * 1000,
-      ),
-    });
-
-    await instanceAnalyticsService.start();
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(capturedEventNames()).toEqual(["instance_heartbeat"]);
   });
 
-  test("keeps sending daily heartbeats while the process stays up", async ({
+  test("sends a heartbeat every hour while the process stays up", async ({
     makeOrganization,
   }) => {
     await makeOrganization();
@@ -134,11 +114,13 @@ describe("instanceAnalyticsService", () => {
       ]);
       fetchMock.mockClear();
 
-      await vi.advanceTimersByTimeAsync(23 * 60 * 60 * 1000);
-      expect(fetchMock).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
 
-      await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
-      expect(capturedEventNames()).toEqual(["instance_heartbeat"]);
+      expect(capturedEventNames()).toEqual([
+        "instance_heartbeat",
+        "instance_heartbeat",
+        "instance_heartbeat",
+      ]);
     } finally {
       instanceAnalyticsService.stop();
       vi.useRealTimers();
@@ -158,6 +140,7 @@ describe("instanceAnalyticsService", () => {
       fetchMock.mockClear();
 
       await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+
       expect(capturedEventNames()).toEqual([
         "instance_started",
         "instance_heartbeat",

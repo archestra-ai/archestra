@@ -261,6 +261,7 @@ runs:
         MCP_SERVER_BASE_IMAGE_TAG: ${{ inputs.mcp-server-base-image-tag }}
         PULL_TIMEOUT_SECONDS: ${{ inputs.image-pull-timeout-seconds }}
         IN_CLUSTER_PULL: ${{ inputs.platform-image-in-cluster-pull }}
+        KIND_CLUSTER_NAME: ${{ inputs.kind-cluster-name }}
       run: |
         # Pull an image unless it is already in the local daemon (e.g. loaded
         # from a build artifact on fork PRs). Retries until the deadline so the
@@ -306,9 +307,20 @@ runs:
           done
         }
 
+        # Once the manifest exists, start the node's own pull in the
+        # background so it overlaps the remaining setup (loads, helm installs)
+        # instead of starting when the web pod schedules. No wait: kubelet's
+        # later pull request coalesces with the in-flight one, and if this
+        # fails for any reason kubelet just pulls as usual.
+        prewarm_node_pull() {
+          wait_for_manifest "${PLATFORM_IMAGE_TAG}" || return 1
+          docker exec "${KIND_CLUSTER_NAME}-control-plane" \
+            crictl pull "${PLATFORM_IMAGE_TAG}" >/dev/null 2>&1 &
+        }
+
         PIDS=()
         if [ "${IN_CLUSTER_PULL}" = "true" ]; then
-          wait_for_manifest "${PLATFORM_IMAGE_TAG}" &
+          prewarm_node_pull &
         else
           wait_and_pull "${PLATFORM_IMAGE_TAG}" &
         fi

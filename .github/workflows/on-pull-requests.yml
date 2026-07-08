@@ -22,7 +22,7 @@ jobs:
     name: Release Freeze Check
     # Always run so it can be a required status check - passes immediately for
     # non-release-please PRs and merge queue runs.
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read # Required to inspect the repository context for release-please PRs.
       pull-requests: write # Required to request changes on frozen release PRs.
@@ -85,7 +85,7 @@ jobs:
 
   license-compliance-check:
     name: License Compliance Check
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read
     defaults:
@@ -126,7 +126,7 @@ jobs:
 
   supply-chain-policy:
     name: Supply Chain Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read
     steps:
@@ -143,7 +143,7 @@ jobs:
 
   docs-image-policy:
     name: Docs Image Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read
     steps:
@@ -158,7 +158,7 @@ jobs:
 
   docs-links:
     name: Docs Link Check
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read
     steps:
@@ -173,7 +173,7 @@ jobs:
 
   migration-kit-checks:
     name: Migration Kit Checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read
     steps:
@@ -194,7 +194,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
       pull-requests: write # Required for dependency-review-action PR comments.
@@ -221,7 +221,7 @@ jobs:
   dependency-review-merge-group:
     name: Dependency Review
     if: ${{ github.event_name == 'merge_group' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions: {}
     steps:
       - name: Skip dependency review for merge queue
@@ -232,7 +232,7 @@ jobs:
   # or on-demand via the "run-e2e" PR label.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-16vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     # Backstop: every check here finishes in well under 10m, but leaked
     # test-runner processes (vitest fork workers / esbuild) occasionally orphan
     # and hold the step's log pipe open, leaving a *finished* job hanging until
@@ -362,6 +362,8 @@ jobs:
 
           # Generate migrations and ensure no new migrations are created
           echo "Checking for missing database migrations..."
+          # macOS self-hosted runners have no coreutils `timeout`; SIGALRM kills the child there.
+          command -v timeout >/dev/null || timeout() { perl -e 'alarm shift; exec @ARGV' -- "${1%s}" "${@:2}"; }
           set +e
           if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
             output=$(cat /tmp/db_generate_output.txt)
@@ -396,7 +398,7 @@ jobs:
   # operates on the committed lockfile.
   platform-rust-checks:
     name: Platform Rust Checks
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-4vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -416,6 +418,7 @@ jobs:
           rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
       - name: Install Rust musl toolchain dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Verify Dagger version sync
@@ -424,11 +427,13 @@ jobs:
       - name: Rust musl checks
         working-directory: ./platform/archestra-rs
         env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
+          # macOS self-hosted runners have the messense cross toolchain preinstalled.
+          CC_x86_64_unknown_linux_musl: ${{ runner.os == 'Linux' && 'musl-gcc' || 'x86_64-unknown-linux-musl-gcc' }}
         run: |
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
       - name: Install cargo-deny
+        if: runner.os == 'Linux'
         run: cargo install cargo-deny --locked
 
       - name: Rust dependency policy
@@ -441,7 +446,7 @@ jobs:
   # takes the suite off the workflow's critical path.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-16vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
     timeout-minutes: 15
@@ -508,7 +513,7 @@ jobs:
   # can require a single check ("Backend Unit Tests") regardless of shard count.
   backend-unit-tests-gate:
     name: Backend Unit Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     if: always()
     needs: [backend-unit-tests]
     permissions: {}
@@ -525,7 +530,7 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-4vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read
     defaults:
@@ -556,6 +561,9 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
+        # useblacksmith/cache requires blacksmith runners; macOS self-hosted
+        # runners keep the browser cache on their persistent disk instead.
+        if: runner.os == 'Linux'
         id: playwright-cache
         uses: ./.github/actions/github-cache
         with:
@@ -564,10 +572,11 @@ jobs:
 
       - name: Install Chromium for Playwright
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter @frontend exec playwright install --with-deps chromium
+        # --with-deps needs apt; macOS has no system deps to install.
+        run: pnpm --filter @frontend exec playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} chromium
 
       - name: Install Chromium system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        if: steps.playwright-cache.outputs.cache-hit == 'true' && runner.os == 'Linux'
         run: pnpm --filter @frontend exec playwright install-deps chromium
 
       - name: Run integration tests
@@ -591,7 +600,7 @@ jobs:
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'blacksmith-2vcpu-ubuntu-2404' || fromJSON('["self-hosted", "mac-mini-1"]') }}
     permissions:
       contents: read # Required to checkout the repository and lint/package the Helm chart.
     defaults:
@@ -610,7 +619,12 @@ jobs:
       - name: Tests
         run: |
           HELM_UNITTEST_VERSION="1.0.3"
-          HELM_UNITTEST_ARCHIVE="helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            HELM_UNITTEST_ARCHIVE="helm-unittest-macos-arm64-${HELM_UNITTEST_VERSION}.tgz"
+            sha256sum() { shasum -a 256 "$@"; }
+          else
+            HELM_UNITTEST_ARCHIVE="helm-unittest-linux-amd64-${HELM_UNITTEST_VERSION}.tgz"
+          fi
           HELM_UNITTEST_BASE_URL="https://github.com/helm-unittest/helm-unittest/releases/download/v${HELM_UNITTEST_VERSION}"
           curl -fsSL -o /tmp/helm-unittest-checksum.sha "${HELM_UNITTEST_BASE_URL}/helm-unittest-checksum.sha"
           curl -fsSL -o "/tmp/${HELM_UNITTEST_ARCHIVE}" "${HELM_UNITTEST_BASE_URL}/${HELM_UNITTEST_ARCHIVE}"

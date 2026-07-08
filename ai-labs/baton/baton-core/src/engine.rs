@@ -623,6 +623,36 @@ mod tests {
     }
 
     #[test]
+    fn recording_the_result_ends_the_confirmation() {
+        let mut engine = PolicyEngine::new(DenyAll, UnknownPolicy::Escalate);
+        engine.register(drop_contract());
+        let request = ToolRequest::new(ToolName::new("db.drop"));
+
+        let mut trajectory = Trajectory::new();
+        trajectory.push_message(
+            Label::identity(),
+            Speaker::confirming(user("alice"), ToolName::new("db.drop")),
+            "yes, drop it",
+        );
+
+        let decision = engine.evaluate(&trajectory, &request);
+        let Decision::Permitted(permit) = decision else {
+            panic!("expected permit, got {decision:?}");
+        };
+        trajectory
+            .record_result(permit, "table dropped")
+            .expect("permit minted for this trajectory head");
+
+        // The tool result is now the newest turn: the confirmation is spent,
+        // and running the same tool again needs a fresh one.
+        assert_eq!(trajectory.pending_confirmation(), None);
+        assert!(matches!(
+            engine.evaluate(&trajectory, &request),
+            Decision::Blocked { .. }
+        ));
+    }
+
+    #[test]
     fn unregistered_tool_follows_the_unknown_policy() {
         let request = ToolRequest::new(ToolName::new("calendar.lookup"));
         let trajectory = Trajectory::new();

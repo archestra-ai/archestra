@@ -268,13 +268,17 @@ mod tests {
     #[test]
     fn trust_least_trusted_wins() {
         assert_eq!(Trust::TRUSTED.combine(Trust::SUSPICIOUS), Trust::SUSPICIOUS);
+        assert_eq!(Trust::SUSPICIOUS.combine(Trust::TRUSTED), Trust::SUSPICIOUS);
         assert_eq!(Trust::TRUSTED.combine(Trust::TRUSTED), Trust::TRUSTED);
     }
 
     #[test]
     fn trust_unknown_sits_between() {
         assert_eq!(Trust::TRUSTED.combine(Trust::Unknown), Trust::Unknown);
+        assert_eq!(Trust::Unknown.combine(Trust::TRUSTED), Trust::Unknown);
         assert_eq!(Trust::Unknown.combine(Trust::SUSPICIOUS), Trust::SUSPICIOUS);
+        assert_eq!(Trust::SUSPICIOUS.combine(Trust::Unknown), Trust::SUSPICIOUS);
+        assert_eq!(Trust::Unknown.combine(Trust::Unknown), Trust::Unknown);
     }
 
     #[test]

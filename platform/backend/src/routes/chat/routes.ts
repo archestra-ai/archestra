@@ -980,6 +980,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // onStepFinish callbacks must not emit usage events.
                 let hasCommittedResult = false;
 
+                // The committed turn's last step finishReason, captured for the
+                // abortive-turn tracker (which taps the UI stream and can't see
+                // it) so a `length`-truncated tool call surfaces the
+                // non-retryable ToolCallOutputTruncated error, not a futile
+                // "retrying may help".
+                let lastFinishReason: string | null = null;
+
                 const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
@@ -1080,6 +1087,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     if (!hasCommittedResult) {
                       return;
                     }
+                    // Fires for the truncated step before the tracker's flush,
+                    // so this holds the finishReason the tracker keys off.
+                    lastFinishReason = finishReason;
                     writer.write({
                       type: "data-token-usage",
                       data: {
@@ -1385,7 +1395,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           ) {
                             return null;
                           }
-                          const mappedError = buildAbortiveTurnError(provider);
+                          const mappedError = buildAbortiveTurnError(
+                            provider,
+                            lastFinishReason,
+                          );
                           activeRunError = mappedError.message;
                           return {
                             type: "error",

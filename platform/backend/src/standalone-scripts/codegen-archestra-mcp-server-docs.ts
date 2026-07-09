@@ -152,6 +152,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   load_skill: ToolGroup.Skills,
   create_skill: ToolGroup.Skills,
   update_skill: ToolGroup.Skills,
+  edit_skill: ToolGroup.Skills,
 
   run_command: ToolGroup.SkillSandbox,
   download_file: ToolGroup.SkillSandbox,

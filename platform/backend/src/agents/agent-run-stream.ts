@@ -172,7 +172,14 @@ export async function runAgentStream(params: {
 
     if (probe.kind === "abortive") {
       abortiveToolCallAttempts++;
-      if (abortiveToolCallAttempts < MAX_ABORTIVE_TOOL_CALL_ATTEMPTS) {
+      // A `length` truncation is deterministic in the tool-call payload size —
+      // retrying re-truncates. Only retry a non-length abortive turn (a
+      // transient mid-stream drop); surface a `length` one immediately.
+      const isDeterministicTruncation = probe.finishReason === "length";
+      if (
+        !isDeterministicTruncation &&
+        abortiveToolCallAttempts < MAX_ABORTIVE_TOOL_CALL_ATTEMPTS
+      ) {
         logger.warn(
           {
             ...logContext,
@@ -185,14 +192,18 @@ export async function runAgentStream(params: {
         result = runAttempt();
         continue;
       }
-      // Exhausted: surface the abortive turn through the merge so the
-      // abortive-turn tracker emits IncompleteToolCall (unchanged end state).
+      // Exhausted (or a deterministic `length` truncation): surface the abortive
+      // turn through the merge so the abortive-turn tracker emits the mapped
+      // error (ToolCallOutputTruncated for `length`, else IncompleteToolCall).
       logger.warn(
         {
           ...logContext,
+          finishReason: probe.finishReason,
+          rawFinishReason: probe.rawFinishReason,
           attempts: abortiveToolCallAttempts,
+          deterministicTruncation: isDeterministicTruncation,
         },
-        "[AbortiveToolCall] retries exhausted, surfacing incomplete tool call",
+        "[AbortiveToolCall] surfacing incomplete tool call",
       );
       return { result, getCapturedStreamError: () => capturedStreamError };
     }

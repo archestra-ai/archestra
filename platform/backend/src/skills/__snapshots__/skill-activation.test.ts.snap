@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`formatSkillActivation > pins the full activation text with the sandbox hint 1`] = `
-"<skill_content name="Research">
+"<skill_content name="Research" version="1">
 Do research.
 </skill_content>
 <skill_compatibility>Python 3.11</skill_compatibility>
@@ -16,7 +16,7 @@ Inspect any resource with archestra__load_skill (passing its path) before re-imp
 `;
 
 exports[`formatSkillActivation > pins the full activation text without the sandbox hint 1`] = `
-"<skill_content name="Research">
+"<skill_content name="Research" version="1">
 Do research.
 </skill_content>
 <skill_resources>

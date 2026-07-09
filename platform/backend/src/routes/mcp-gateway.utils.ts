@@ -188,7 +188,10 @@ export async function createAgentServer(
   );
   const { server } = mcpServer;
 
-  const agent = await AgentModel.findById(agentId);
+  // Slim lookup: this runs on every stateless gateway request, and the tool
+  // handlers below only read scalar agent config plus labels — never the
+  // tools/teams/knowledge/connector hydration `findById` performs.
+  const agent = await AgentModel.findGatewayAgentById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
@@ -1454,7 +1457,7 @@ export async function validateExternalIdpToken(
 ): Promise<TokenAuthResult | null> {
   try {
     // Look up the agent to check if it has an identity provider configured
-    const agent = await AgentModel.findById(profileId);
+    const agent = await AgentModel.findGatewayAgentById(profileId);
     if (!agent?.identityProviderId) {
       return null;
     }

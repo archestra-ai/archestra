@@ -228,16 +228,141 @@ export function shouldUseAwsApplicationNetworkPolicy(params: {
   effectivePolicy?: EffectiveNetworkPolicy | null;
   capabilities?: K8sNetworkPolicyCapabilities | null;
 }): boolean {
+  // On the AWS VPC CNI a plain NetworkPolicy is accepted but not enforced, so a
+  // restricted policy must use ApplicationNetworkPolicy even when its allow-list
+  // is CIDR-only (no domains) — otherwise the deny baseline blocks all its egress.
   return (
     params.capabilities?.ciliumNetworkPolicy !== true &&
     params.capabilities?.gkeFqdnNetworkPolicy !== true &&
     params.capabilities?.awsApplicationNetworkPolicy === true &&
-    params.effectivePolicy?.policy?.egressMode === "restricted" &&
-    networkPolicyDomains(params.effectivePolicy.policy).length > 0
+    params.effectivePolicy?.policy?.egressMode === "restricted"
   );
 }
 
+export function buildUnrestrictedFloorPolicy(params: {
+  name: string;
+  podSelectorLabels: Record<string, string>;
+  labels: Record<string, string>;
+}): k8s.V1NetworkPolicy {
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: params.podSelectorLabels },
+      policyTypes: ["Egress"],
+      egress: buildFloorEgressRules(),
+    },
+  };
+}
+
+export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
+  name: string;
+  podSelectorLabels: Record<string, string>;
+  labels: Record<string, string>;
+}): Record<string, unknown> {
+  return {
+    apiVersion: "networking.k8s.aws/v1alpha1",
+    kind: "ApplicationNetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: params.podSelectorLabels },
+      policyTypes: ["Egress"],
+      egress: buildFloorEgressRules(),
+    },
+  };
+}
+
+export function buildEgressBaselineNetworkPolicy(params: {
+  name: string;
+  labels: Record<string, string>;
+}): k8s.V1NetworkPolicy {
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: BASELINE_POD_SELECTOR_LABELS },
+      policyTypes: ["Egress"],
+      egress: [],
+    },
+  };
+}
+
+export function buildEgressBaselineAwsApplicationNetworkPolicy(params: {
+  name: string;
+  labels: Record<string, string>;
+}): Record<string, unknown> {
+  return {
+    apiVersion: "networking.k8s.aws/v1alpha1",
+    kind: "ApplicationNetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: BASELINE_POD_SELECTOR_LABELS },
+      policyTypes: ["Egress"],
+      egress: [],
+    },
+  };
+}
+
+/**
+ * True when the cluster's enforcing dataplane is the AWS VPC CNI, where a plain
+ * `NetworkPolicy` is accepted but not enforced — the deny base and unrestricted
+ * floor must be emitted as `ApplicationNetworkPolicy` to take effect.
+ */
+export function isAwsApplicationNetworkPolicyProvider(
+  capabilities?: K8sNetworkPolicyCapabilities | null,
+): boolean {
+  return capabilities?.provider === "aws-application-network-policy";
+}
+
 // === Internal helpers ===
+
+const BASELINE_POD_SELECTOR_LABELS = { app: "mcp-server" };
+
+// Reserved/private ranges the unrestricted floor excludes from open public egress.
+const FLOOR_DENIED_IPV4_CIDRS = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "169.254.0.0/16",
+  "100.64.0.0/10",
+  "127.0.0.0/8",
+  "0.0.0.0/32",
+];
+const FLOOR_DENIED_IPV6_CIDRS = ["::1/128", "fc00::/7", "fe80::/10"];
+
+// DNS to any resolver + all public egress with the reserved ranges above blocked.
+// Shared by the plain NetworkPolicy and AWS ApplicationNetworkPolicy floor
+// variants — ApplicationNetworkPolicy supports all standard NetworkPolicy fields.
+function buildFloorEgressRules(): k8s.V1NetworkPolicyEgressRule[] {
+  return [
+    {
+      ports: [
+        { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
+        { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
+      ],
+    },
+    {
+      to: [{ ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } }],
+    },
+    {
+      to: [{ ipBlock: { cidr: "::/0", except: FLOOR_DENIED_IPV6_CIDRS } }],
+    },
+  ];
+}
 
 function buildKubernetesEgressRules(
   policy: NonNullable<EffectiveNetworkPolicy["policy"]>,

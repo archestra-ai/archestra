@@ -22,6 +22,7 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -60,6 +61,9 @@ export class McpServerRuntimeManager {
   private k8sExec?: k8s.Exec;
   private namespace: string = "default";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
+  // Per-namespace in-flight ensure of the egress default-deny baseline, so
+  // concurrent deploys share one call; cleared on start() to re-assert on re-init.
+  private egressBaselineByNamespace: Map<string, Promise<void>> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
   // Callbacks for initialization events
@@ -136,6 +140,7 @@ export class McpServerRuntimeManager {
 
     try {
       this.status = "initializing";
+      this.egressBaselineByNamespace.clear();
       logger.info("Initializing Kubernetes MCP Server Runtime...");
 
       // Verify K8s connectivity
@@ -224,6 +229,30 @@ export class McpServerRuntimeManager {
       this.onRuntimeStartupError(new Error(errorMsg));
       throw error;
     }
+  }
+
+  private ensureEgressBaseline(
+    namespace: string,
+    capabilities: K8sNetworkPolicyCapabilities,
+  ): Promise<void> {
+    let ensured = this.egressBaselineByNamespace.get(namespace);
+    if (!ensured) {
+      const networkingApi = this.k8sNetworkingApi;
+      const customObjectsApi = this.k8sCustomObjectsApi;
+      if (!networkingApi || !customObjectsApi) return Promise.resolve();
+      ensured = ensureEgressBaselineNetworkPolicy({
+        networkingApi,
+        customObjectsApi,
+        namespace,
+        capabilities,
+      }).then((succeeded) => {
+        // Don't cache a failed attempt as done — drop it so the next deploy in
+        // this namespace retries rather than leaving pods without the baseline.
+        if (!succeeded) this.egressBaselineByNamespace.delete(namespace);
+      });
+      this.egressBaselineByNamespace.set(namespace, ensured);
+    }
+    return ensured;
   }
 
   private async resolveNamespaceForCatalog(
@@ -453,6 +482,22 @@ export class McpServerRuntimeManager {
         }
       }
 
+      const deploymentNamespace = await this.resolveNamespaceForCatalog(
+        catalogItem,
+        options?.networkPolicyResolutionCache,
+      );
+      const networkPolicyCapabilities =
+        options?.networkPolicyCapabilities ??
+        (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
+          .networkPolicy;
+
+      // Ensure the namespace default-deny baseline before the pod exists, so an
+      // un-reconciled or apply-failed pod is denied by default rather than open.
+      await this.ensureEgressBaseline(
+        deploymentNamespace,
+        networkPolicyCapabilities,
+      );
+
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
@@ -461,10 +506,7 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(
-          catalogItem,
-          options?.networkPolicyResolutionCache,
-        ),
+        namespace: deploymentNamespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
@@ -473,10 +515,7 @@ export class McpServerRuntimeManager {
           catalogItem,
           cache: options?.networkPolicyResolutionCache,
         }),
-        networkPolicyCapabilities:
-          options?.networkPolicyCapabilities ??
-          (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
-            .networkPolicy,
+        networkPolicyCapabilities,
         k8sExec: this.k8sExec,
       });
 

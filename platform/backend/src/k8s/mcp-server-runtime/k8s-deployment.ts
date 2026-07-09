@@ -14,6 +14,7 @@ import config from "@/config";
 import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
   ensureStringIsRfc1123Compliant,
+  isK8sConflictError,
   isK8sNotFoundError,
   sanitizeLabelValue,
   sanitizeMetadataLabels,
@@ -36,7 +37,10 @@ import {
   buildManagedCiliumNetworkPolicy,
   buildManagedGkeFqdnNetworkPolicy,
   buildManagedNetworkPolicy,
+  buildUnrestrictedFloorAwsApplicationNetworkPolicy,
+  buildUnrestrictedFloorPolicy,
   constructManagedNetworkPolicyName,
+  isAwsApplicationNetworkPolicyProvider,
   shouldManageK8sNetworkPolicy,
   shouldUseAwsApplicationNetworkPolicy,
   shouldUseCiliumNetworkPolicy,
@@ -187,14 +191,6 @@ async function fetchPlatformPodSpec(
     platformPodSpecCache = { fetched: true, spec: null };
     return null;
   }
-}
-
-function isK8sConflictError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  return (
-    ("statusCode" in error && error.statusCode === 409) ||
-    ("code" in error && error.code === 409)
-  );
 }
 
 function resetPlatformPodSpecCache(): void {
@@ -419,7 +415,7 @@ export default class K8sDeployment {
     const policyName = this.getK8sNetworkPolicyName();
 
     if (!shouldManageK8sNetworkPolicy(this.effectiveNetworkPolicy)) {
-      await this.deleteK8sNetworkPolicy();
+      await this.applyUnrestrictedFloorNetworkPolicy(policyName);
       return;
     }
 
@@ -504,12 +500,81 @@ export default class K8sDeployment {
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sNetworkingApi = this.requireK8sNetworkingApi();
-    const networkPolicy = buildManagedNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    await this.upsertKubernetesNetworkPolicy(
+      policyName,
+      buildManagedNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+      }),
+    );
+  }
+
+  /**
+   * Apply the always-on SSRF floor for `unrestricted`/built-in pods: allow DNS +
+   * public egress with private/link-local/metadata ranges blocked. Emitted as an
+   * `ApplicationNetworkPolicy` on AWS VPC CNI (where a plain `NetworkPolicy` is
+   * accepted but not enforced), otherwise a plain `NetworkPolicy`. Deletes the
+   * non-selected policy kinds so relaxing from a restricted Cilium/GKE/AWS policy
+   * removes the stale object.
+   */
+  private async applyUnrestrictedFloorNetworkPolicy(
+    policyName: string,
+  ): Promise<void> {
+    const labels = {
+      app: "mcp-server",
+      "app.kubernetes.io/managed-by": "archestra",
+      "archestra.io/resource": "mcp-network-policy",
+      "archestra.io/network-policy-source":
+        this.effectiveNetworkPolicy?.source ?? "built_in",
+    };
+
+    if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
+      await this.upsertManagedCustomPolicy({
+        resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+        policyName,
+        body: buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+          name: policyName,
+          podSelectorLabels: this.getSystemLabels(),
+          labels,
+        }),
+      });
+      await Promise.all([
+        this.deleteKubernetesNetworkPolicy(policyName),
+        this.deleteCiliumNetworkPolicy(policyName),
+        this.deleteGkeFqdnNetworkPolicy(policyName),
+      ]);
+      await this.cleanupStaleManagedNetworkPolicies({
+        desiredPolicyName: policyName,
+        desiredCustomPolicy: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+      });
+      return;
+    }
+
+    await this.upsertKubernetesNetworkPolicy(
+      policyName,
+      buildUnrestrictedFloorPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        labels,
+      }),
+    );
+    await Promise.all([
+      this.deleteCiliumNetworkPolicy(policyName),
+      this.deleteGkeFqdnNetworkPolicy(policyName),
+      this.deleteAwsApplicationNetworkPolicy(policyName),
+    ]);
+    await this.cleanupStaleManagedNetworkPolicies({
+      desiredPolicyName: policyName,
+      keepKubernetesPolicy: true,
     });
+  }
+
+  private async upsertKubernetesNetworkPolicy(
+    policyName: string,
+    networkPolicy: k8s.V1NetworkPolicy,
+  ): Promise<void> {
+    const k8sNetworkingApi = this.requireK8sNetworkingApi();
 
     try {
       try {

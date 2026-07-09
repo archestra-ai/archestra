@@ -15,6 +15,7 @@ import K8sDeployment, {
   resetPlatformNodeSelectorCache,
   resetPlatformTolerationsCache,
 } from "./k8s-deployment";
+import { buildEgressBaselineNetworkPolicy } from "./network-policy";
 
 // Helper function to create a K8sDeployment instance with mocked dependencies
 function createK8sDeploymentInstance(
@@ -4665,6 +4666,214 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       name: "mcp-egress-generated-stale",
       namespace: "default",
     });
+  });
+
+  const PLAIN_CAPS = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: false,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: false,
+    provider: "kubernetes" as const,
+    supportsFqdn: false,
+    supportsHttpMethods: false,
+    message: null,
+  };
+  const AWS_CAPS = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: false,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: true,
+    provider: "aws-application-network-policy" as const,
+    supportsFqdn: true,
+    supportsHttpMethods: false,
+    message: null,
+  };
+  const POLICY_NAME = "mcp-egress-mcp-mcp-test-server";
+  const FLOOR_EGRESS = [
+    {
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    },
+    {
+      to: [
+        {
+          ipBlock: {
+            cidr: "0.0.0.0/0",
+            except: [
+              "10.0.0.0/8",
+              "172.16.0.0/12",
+              "192.168.0.0/16",
+              "169.254.0.0/16",
+              "100.64.0.0/10",
+              "127.0.0.0/8",
+              "0.0.0.0/32",
+            ],
+          },
+        },
+      ],
+    },
+    {
+      to: [
+        {
+          ipBlock: {
+            cidr: "::/0",
+            except: ["::1/128", "fc00::/7", "fe80::/10"],
+          },
+        },
+      ],
+    },
+  ];
+
+  test("applies the SSRF floor as a plain NetworkPolicy for an unrestricted policy", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const policy = policies.get(POLICY_NAME);
+    expect(policy?.spec?.policyTypes).toEqual(["Egress"]);
+    expect(policy?.spec?.egress).toEqual(FLOOR_EGRESS);
+  });
+
+  test("applies the SSRF floor for a built-in (null) policy — the case the union bug silently opened", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+  });
+
+  test("emits the floor as an ApplicationNetworkPolicy on AWS and removes the plain NetworkPolicy", async () => {
+    const { api: networkingApi, policies: kubernetesPolicies } =
+      makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    expect(anp?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: POLICY_NAME,
+      namespace: "default",
+    });
+    expect([...kubernetesPolicies.keys()]).not.toContain(POLICY_NAME);
+  });
+
+  test("emits a restricted CIDR-only allow-list as an ApplicationNetworkPolicy on AWS", async () => {
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    const egress = (anp?.spec?.egress ?? []) as Array<{
+      to?: Array<{ ipBlock?: { cidr?: string } }>;
+    }>;
+    expect(
+      egress.some((rule) =>
+        rule.to?.some((peer) => peer.ipBlock?.cidr === "203.0.113.0/24"),
+      ),
+    ).toBe(true);
+  });
+
+  test("reconciles in place when relaxing from a restricted policy to the unrestricted floor", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+    expect(policies.get(POLICY_NAME)?.spec?.egress).not.toEqual(FLOOR_EGRESS);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([POLICY_NAME]);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+  });
+
+  test("reconciles in place when tightening from the unrestricted floor to off (deny-all)", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "off" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([POLICY_NAME]);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual([]);
+  });
+
+  test("the namespace default-deny baseline survives per-pod policy cleanup", async () => {
+    const baseline = buildEgressBaselineNetworkPolicy({
+      name: "mcp-server-egress-baseline",
+      labels: {
+        "app.kubernetes.io/managed-by": "archestra",
+        "archestra.io/resource": "mcp-egress-baseline",
+      },
+    });
+    const { api, policies } = makeStatefulNetworkingApi([baseline]);
+
+    // Applying a per-pod floor runs cleanupStaleManagedNetworkPolicies over the
+    // namespace; the baseline's distinct resource label and broad app-only
+    // selector must keep it out of that sweep.
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect(policies.get("mcp-server-egress-baseline")).toBeDefined();
+    expect(api.deleteNamespacedNetworkPolicy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-server-egress-baseline" }),
+    );
   });
 });
 

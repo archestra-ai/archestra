@@ -1,7 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
 
@@ -522,6 +522,96 @@ describe("McpAppContainer inline height (via McpAppSection)", () => {
         content: [{ type: "text", text: "some result" }],
       }),
     );
+  });
+});
+
+describe("McpAppContainer sandbox timeout recovery", () => {
+  const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  const SANDBOX_ORIGIN = "http://127.0.0.1:9000";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function renderTimedApp(connect: () => Promise<void>) {
+    const { AppBridge } = await import(
+      "@modelcontextprotocol/ext-apps/app-bridge"
+    );
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    const iframe = document.querySelector("iframe");
+    if (!iframe) throw new Error("iframe did not mount");
+    const bridge = (AppBridge as ReturnType<typeof vi.fn>).mock.instances.at(
+      -1,
+    ) as { connect: ReturnType<typeof vi.fn> } | undefined;
+    if (!bridge) throw new Error("bridge did not initialize");
+    bridge.connect.mockImplementation(connect);
+    return { bridge, iframe };
+  }
+
+  function dispatchReady(iframe: HTMLIFrameElement, origin: string) {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: iframe.contentWindow,
+        origin,
+        data: { method: SANDBOX_PROXY_READY },
+      }),
+    );
+  }
+
+  it("clears a timeout after the same sandbox connects late", async () => {
+    let resolveConnect: () => void = () => {};
+    const connectPromise = new Promise<void>((resolve) => {
+      resolveConnect = resolve;
+    });
+    const { bridge, iframe } = await renderTimedApp(() => connectPromise);
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    act(() => dispatchReady(iframe, "https://invalid.example"));
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    act(() => dispatchReady(iframe, SANDBOX_ORIGIN));
+    expect(bridge.connect).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveConnect();
+      await connectPromise;
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps an error visible when the late connection fails", async () => {
+    const { iframe } = await renderTimedApp(() =>
+      Promise.reject(new Error("late connection failed")),
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    await act(async () => {
+      dispatchReady(iframe, SANDBOX_ORIGIN);
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,4 @@
-import { randomInt, timingSafeEqual } from "node:crypto";
-import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
+import { randomInt } from "node:crypto";
 import logger from "@/logging";
 import {
   OAuthAccessTokenModel,
@@ -18,21 +17,29 @@ import {
  * all of a user's grants across every MCP server entry and device at once —
  * and benign replays are routine: a backend restart severs all connections
  * simultaneously, so a client whose token-exchange response was lost mid-
- * flight, or a second process holding the same stored refresh token, replays
- * the rotated token within seconds. One replay then forces interactive
- * re-auth for every entry.
+ * flight replays the rotated token within seconds. One replay then forces
+ * interactive re-auth for every entry.
  *
- * This module intercepts the two replay-sensitive endpoints before they reach
+ * The blast radius is a property of PUBLIC clients: only they share one
+ * product-wide client_id (via CIMD), so their family spans every gateway and
+ * device. Confidential clients each register a unique client_id, so
+ * better-auth's family invalidation is naturally contained to that one client.
+ * The shield therefore intervenes only for public clients and lets confidential
+ * clients keep better-auth's authenticated path unchanged — which also keeps
+ * all client-secret verification inside better-auth.
+ *
+ * This module guards the two replay-sensitive endpoints before they reach
  * better-auth:
  *
- * - {@link shieldRefreshTokenGrant}: a replay inside a short grace window is
- *   treated as the rotation race it is — a fresh token pair is re-issued for
- *   the same grant and better-auth is never consulted. A replay beyond the
- *   window is still treated as a theft signal, but invalidation is scoped to
- *   the replayed grant's lineage instead of the whole (client, user) family.
- * - {@link shieldRevocationRequest}: RFC 7009 revocation of a refresh token is
- *   handled here in full (idempotently — revoking an already-revoked token is
- *   a 200 no-op, where better-auth would family-invalidate).
+ * - {@link shieldRefreshTokenGrant}: for a public client, a replay inside a
+ *   short grace window is treated as the rotation race it is — a fresh token
+ *   pair is re-issued for the same grant. A replay beyond the window is still a
+ *   theft signal, but invalidation is scoped to the replayed grant's lineage
+ *   instead of the whole (client, user) family.
+ * - {@link shieldRevocationRequest}: makes RFC 7009 revocation idempotent —
+ *   revoking an already-revoked or unknown token is a 200 no-op, where
+ *   better-auth would 400 and family-invalidate. Valid tokens forward to
+ *   better-auth (which authenticates the client and revokes the single token).
  */
 
 /**
@@ -56,7 +63,6 @@ type OAuthEndpointInterception =
 export async function shieldRefreshTokenGrant(params: {
   refreshToken: string | undefined;
   clientId: string | undefined;
-  clientSecret: string | undefined;
 }): Promise<OAuthEndpointInterception> {
   const { refreshToken, clientId } = params;
   if (!refreshToken || !clientId) {
@@ -79,17 +85,17 @@ export async function shieldRefreshTokenGrant(params: {
     return { action: "forward" };
   }
 
-  // Replayed (already-rotated) refresh token: never forward past this point,
-  // or better-auth deletes the whole (client, user) token family.
-  if (!(await authenticateShieldedClient(clientId, params.clientSecret))) {
-    return {
-      action: "respond",
-      statusCode: 401,
-      body: {
-        error: "invalid_client",
-        error_description: "client authentication failed",
-      },
-    };
+  // Replayed (already-rotated) refresh token. Only public clients suffer the
+  // cross-gateway family wipe (shared CIMD client_id); a confidential client's
+  // family is confined to its own unique client_id, so let better-auth handle
+  // it — that also keeps client-secret verification inside better-auth. If the
+  // client can't be resolved, treat it as public (fail safe: never forward a
+  // replay into the family wipe).
+  const client = await OAuthClientModel.findByClientId(clientId);
+  const isConfidential =
+    !!client?.clientSecret && client.clientSecret !== "none";
+  if (isConfidential) {
+    return { action: "forward" };
   }
 
   const revokedAgoMs = Date.now() - row.revoked.getTime();
@@ -126,17 +132,17 @@ export async function shieldRefreshTokenGrant(params: {
 }
 
 /**
- * Decide how an RFC 7009 revocation request should be handled. Refresh tokens
- * are revoked here in full; access tokens and unknown-to-us tokens follow the
- * returned action (`forward` only for tokens better-auth can revoke without
- * family invalidation).
+ * Decide how an RFC 7009 revocation request should be handled. Only the
+ * already-revoked case is intercepted — the one input for which better-auth
+ * family-invalidates — plus unknown tokens (RFC 7009 §2.2 wants a 200 no-op,
+ * where better-auth returns 400). Everything else forwards to better-auth,
+ * which authenticates the client and revokes the single token without touching
+ * the family. Client-secret verification therefore stays inside better-auth.
  */
 export async function shieldRevocationRequest(params: {
   token: string | undefined;
-  clientId: string | undefined;
-  clientSecret: string | undefined;
 }): Promise<OAuthEndpointInterception> {
-  const { token, clientId } = params;
+  const { token } = params;
   if (!token) {
     // RFC 7009 §2.1 requires `token`; better-auth rejects the request without
     // touching any token row.
@@ -159,43 +165,19 @@ export async function shieldRevocationRequest(params: {
     return { action: "respond", statusCode: 200, body: {} };
   }
 
-  if (!clientId || row.clientId !== clientId) {
-    // RFC 7009 treats a token the client is not entitled to revoke like an
-    // invalid token: 200 without acting.
-    logger.warn(
-      { presentedClientId: clientId, userId: row.userId },
-      "[oauth-refresh-replay] revocation request for a refresh token bound to a different client — ignored",
+  if (row.revoked) {
+    // Already-revoked refresh token — the only revoke input better-auth
+    // answers with family invalidation. RFC 7009: a no-op 200. Never forward.
+    logger.info(
+      { userId: row.userId },
+      "[oauth-refresh-replay] revocation of an already-revoked refresh token — 200 no-op (not forwarded to better-auth's family invalidation)",
     );
     return { action: "respond", statusCode: 200, body: {} };
   }
-  if (!(await authenticateShieldedClient(clientId, params.clientSecret))) {
-    return {
-      action: "respond",
-      statusCode: 401,
-      body: {
-        error: "invalid_client",
-        error_description: "client authentication failed",
-      },
-    };
-  }
 
-  // Revoke race-safely; on a lost race (or an already-revoked token) another
-  // revocation has already done the work — idempotent 200, never the
-  // family invalidation better-auth performs on this path.
-  const revoked = await OAuthRefreshTokenModel.revokeByIdWhenActive(row.id);
-  const accessTokensDeleted = await OAuthAccessTokenModel.deleteByRefreshIds([
-    row.id,
-  ]);
-  logger.info(
-    {
-      clientId,
-      userId: row.userId,
-      alreadyRevoked: !revoked,
-      accessTokensDeleted,
-    },
-    "[oauth-refresh-replay] refresh token revoked via RFC 7009 revocation",
-  );
-  return { action: "respond", statusCode: 200, body: {} };
+  // Active refresh token — better-auth authenticates the client and revokes
+  // just this token (no family invalidation on the happy path).
+  return { action: "forward" };
 }
 
 // === Internal helpers ===
@@ -207,36 +189,6 @@ type RefreshTokenRow = NonNullable<
 /** better-auth's default opaque token lifetimes (not overridden in config). */
 const ACCESS_TOKEN_TTL_SECONDS = 3600;
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
-
-/**
- * Authenticate the client presenting a replayed token. Public clients (no
- * stored secret — all DCR/CIMD MCP clients) pass on client_id alone, matching
- * better-auth's own bar. Confidential clients must present the secret whose
- * hash better-auth stored at registration.
- */
-async function authenticateShieldedClient(
-  clientId: string,
-  clientSecret: string | undefined,
-): Promise<boolean> {
-  const client = await OAuthClientModel.findByClientId(clientId);
-  // A refresh row's client_id FK cascades on client deletion, so the client
-  // row exists whenever the token row does; treat a miss as unauthenticated.
-  if (!client) {
-    return false;
-  }
-  const stored = client.clientSecret;
-  if (!stored || stored === "none") {
-    return true;
-  }
-  if (!clientSecret) {
-    return false;
-  }
-  const presented = Buffer.from(hashOauthClientSecret(clientSecret));
-  const expected = Buffer.from(stored);
-  return (
-    presented.length === expected.length && timingSafeEqual(presented, expected)
-  );
-}
 
 /**
  * Re-issue a fresh access + refresh pair for the grant a replayed-in-grace

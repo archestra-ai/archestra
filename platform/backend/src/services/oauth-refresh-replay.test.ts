@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, vi } from "vitest";
+import db, { schema } from "@/database";
 import {
   McpOauthClientModel,
   OAuthAccessTokenModel,
@@ -13,12 +15,12 @@ import {
 import { test } from "@/test";
 
 const CIMD_CLIENT_ID = "https://claude.example.com/.well-known/claude-code";
-const OTHER_CLIENT_ID = "https://other.example.com/.well-known/other-client";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
+/** A public client (no stored secret) — the CIMD/DCR shape. */
 async function makePublicClient(clientId: string) {
   await OAuthClientModel.upsertFromCimd({
     id: crypto.randomUUID(),
@@ -61,7 +63,10 @@ async function seedGrant(params: {
     expiresAt: new Date(Date.now() + 3600 * 1000),
   });
   if (params.revoked) {
-    await OAuthRefreshTokenModel.revokeByIdWhenActive(refreshRow.id);
+    await db
+      .update(schema.oauthRefreshTokensTable)
+      .set({ revoked: new Date() })
+      .where(eq(schema.oauthRefreshTokensTable.id, refreshRow.id));
   }
   return { refreshToken, accessToken, refreshRowId: refreshRow.id };
 }
@@ -92,7 +97,6 @@ describe("shieldRefreshTokenGrant", () => {
     const outcome = await shieldRefreshTokenGrant({
       refreshToken: grant.refreshToken,
       clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
     });
 
     expect(outcome).toEqual({ action: "forward" });
@@ -102,18 +106,16 @@ describe("shieldRefreshTokenGrant", () => {
     const outcome = await shieldRefreshTokenGrant({
       refreshToken: "never-issued",
       clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
     });
 
     expect(outcome).toEqual({ action: "forward" });
   });
 
-  test("forwards a replayed token presented by a different client (nuke-free invalid_client in better-auth)", async ({
+  test("forwards a replay presented by a different client (nuke-free invalid_client in better-auth)", async ({
     makeUser,
   }) => {
     const user = await makeUser();
     await makePublicClient(CIMD_CLIENT_ID);
-    await makePublicClient(OTHER_CLIENT_ID);
     const grant = await seedGrant({
       clientId: CIMD_CLIENT_ID,
       userId: user.id,
@@ -122,10 +124,38 @@ describe("shieldRefreshTokenGrant", () => {
 
     const outcome = await shieldRefreshTokenGrant({
       refreshToken: grant.refreshToken,
-      clientId: OTHER_CLIENT_ID,
-      clientSecret: undefined,
+      clientId: "https://other.example.com/.well-known/other-client",
     });
 
+    expect(outcome).toEqual({ action: "forward" });
+  });
+
+  test("forwards a confidential client's replay to better-auth (unique client_id, contained blast radius)", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: organization.id,
+      name: "Confidential MCP client",
+      grantType: "authorization_code",
+      redirectUris: ["http://localhost:1455/callback"],
+      authorId: user.id,
+    });
+    const grant = await seedGrant({
+      clientId: oauthClient.clientId,
+      userId: user.id,
+      revoked: true,
+    });
+
+    const outcome = await shieldRefreshTokenGrant({
+      refreshToken: grant.refreshToken,
+      clientId: oauthClient.clientId,
+    });
+
+    // A confidential client keeps better-auth's authenticated path — the shield
+    // never verifies client secrets and never re-issues on its behalf.
     expect(outcome).toEqual({ action: "forward" });
   });
 
@@ -149,7 +179,6 @@ describe("shieldRefreshTokenGrant", () => {
     const outcome = await shieldRefreshTokenGrant({
       refreshToken: replayed.refreshToken,
       clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
     });
 
     expect(outcome.action).toBe("respond");
@@ -213,7 +242,6 @@ describe("shieldRefreshTokenGrant", () => {
     const outcome = await shieldRefreshTokenGrant({
       refreshToken: replayed.refreshToken,
       clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
     });
 
     expect(outcome.action).toBe("respond");
@@ -259,7 +287,6 @@ describe("shieldRefreshTokenGrant", () => {
     const outcome = await shieldRefreshTokenGrant({
       refreshToken: replayed.refreshToken,
       clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
     });
 
     expect(outcome.action).toBe("respond");
@@ -269,49 +296,10 @@ describe("shieldRefreshTokenGrant", () => {
     expect(await grantStillExists(replayed.refreshToken)).toBe(false);
     expect(await grantStillExists(otherGrant.refreshToken)).toBe(false);
   });
-
-  test("requires the confidential client's secret before serving a replay", async ({
-    makeUser,
-    makeOrganization,
-  }) => {
-    const user = await makeUser();
-    const organization = await makeOrganization();
-    const { oauthClient, clientSecret } = await McpOauthClientModel.create({
-      organizationId: organization.id,
-      name: "Confidential MCP client",
-      grantType: "authorization_code",
-      redirectUris: ["http://localhost:1455/callback"],
-      authorId: user.id,
-    });
-    const grant = await seedGrant({
-      clientId: oauthClient.clientId,
-      userId: user.id,
-      revoked: true,
-    });
-
-    const rejected = await shieldRefreshTokenGrant({
-      refreshToken: grant.refreshToken,
-      clientId: oauthClient.clientId,
-      clientSecret: "wrong-secret",
-    });
-    expect(rejected.action).toBe("respond");
-    if (rejected.action !== "respond") throw new Error("unreachable");
-    expect(rejected.statusCode).toBe(401);
-    expect(rejected.body.error).toBe("invalid_client");
-
-    const accepted = await shieldRefreshTokenGrant({
-      refreshToken: grant.refreshToken,
-      clientId: oauthClient.clientId,
-      clientSecret,
-    });
-    expect(accepted.action).toBe("respond");
-    if (accepted.action !== "respond") throw new Error("unreachable");
-    expect(accepted.statusCode).toBe(200);
-  });
 });
 
 describe("shieldRevocationRequest", () => {
-  test("revokes an active refresh token and its access tokens, idempotently", async ({
+  test("forwards revocation of an active refresh token to better-auth", async ({
     makeUser,
   }) => {
     const user = await makeUser();
@@ -320,45 +308,42 @@ describe("shieldRevocationRequest", () => {
       clientId: CIMD_CLIENT_ID,
       userId: user.id,
     });
-    const otherGrant = await seedGrant({
+
+    // An active token has no family-wipe risk — better-auth authenticates the
+    // client and revokes just this token, so the shield forwards it.
+    const outcome = await shieldRevocationRequest({
+      token: grant.refreshToken,
+    });
+    expect(outcome).toEqual({ action: "forward" });
+  });
+
+  test("responds 200 to an already-revoked refresh token without wiping the family", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    await makePublicClient(CIMD_CLIENT_ID);
+    const revoked = await seedGrant({
+      clientId: CIMD_CLIENT_ID,
+      userId: user.id,
+      revoked: true,
+    });
+    const sibling = await seedGrant({
       clientId: CIMD_CLIENT_ID,
       userId: user.id,
       referenceId: "mcp-resource:profile-2",
     });
 
-    const first = await shieldRevocationRequest({
-      token: grant.refreshToken,
-      clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
+    // This is the input better-auth answers with a family wipe. The shield
+    // returns an idempotent 200 no-op instead — the sibling grant survives.
+    const outcome = await shieldRevocationRequest({
+      token: revoked.refreshToken,
     });
-    expect(first).toEqual({ action: "respond", statusCode: 200, body: {} });
-
-    const revokedRow = await OAuthRefreshTokenModel.getByTokenHash(
-      OAuthRefreshTokenModel.hashTokenForLookup(grant.refreshToken),
-    );
-    expect(revokedRow?.revoked).not.toBeNull();
-    const accessRow = await OAuthAccessTokenModel.getByTokenHash(
-      OAuthAccessTokenModel.hashTokenForLookup(grant.accessToken),
-    );
-    expect(accessRow).toBeUndefined();
-
-    // Revoking the now-revoked token again is a 200 no-op — the case where
-    // better-auth would delete the whole (client, user) family.
-    const second = await shieldRevocationRequest({
-      token: grant.refreshToken,
-      clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
-    });
-    expect(second).toEqual({ action: "respond", statusCode: 200, body: {} });
-    expect(await grantStillExists(otherGrant.refreshToken)).toBe(true);
+    expect(outcome).toEqual({ action: "respond", statusCode: 200, body: {} });
+    expect(await grantStillExists(sibling.refreshToken)).toBe(true);
   });
 
   test("responds 200 to an unknown token without forwarding", async () => {
-    const outcome = await shieldRevocationRequest({
-      token: "never-issued",
-      clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
-    });
+    const outcome = await shieldRevocationRequest({ token: "never-issued" });
     expect(outcome).toEqual({ action: "respond", statusCode: 200, body: {} });
   });
 
@@ -372,35 +357,7 @@ describe("shieldRevocationRequest", () => {
       userId: user.id,
     });
 
-    const outcome = await shieldRevocationRequest({
-      token: grant.accessToken,
-      clientId: CIMD_CLIENT_ID,
-      clientSecret: undefined,
-    });
+    const outcome = await shieldRevocationRequest({ token: grant.accessToken });
     expect(outcome).toEqual({ action: "forward" });
-  });
-
-  test("ignores a revocation from a client the token is not bound to", async ({
-    makeUser,
-  }) => {
-    const user = await makeUser();
-    await makePublicClient(CIMD_CLIENT_ID);
-    await makePublicClient(OTHER_CLIENT_ID);
-    const grant = await seedGrant({
-      clientId: CIMD_CLIENT_ID,
-      userId: user.id,
-    });
-
-    const outcome = await shieldRevocationRequest({
-      token: grant.refreshToken,
-      clientId: OTHER_CLIENT_ID,
-      clientSecret: undefined,
-    });
-    expect(outcome).toEqual({ action: "respond", statusCode: 200, body: {} });
-
-    const row = await OAuthRefreshTokenModel.getByTokenHash(
-      OAuthRefreshTokenModel.hashTokenForLookup(grant.refreshToken),
-    );
-    expect(row?.revoked).toBeNull();
   });
 });

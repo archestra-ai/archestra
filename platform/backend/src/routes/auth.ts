@@ -529,10 +529,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
               : undefined,
           clientId:
             typeof body.client_id === "string" ? body.client_id : undefined,
-          clientSecret:
-            typeof body.client_secret === "string"
-              ? body.client_secret
-              : undefined,
         });
         if (interception.action === "respond") {
           // A re-issued pair honors the org token-lifetime policy exactly like
@@ -684,12 +680,6 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const interception = await shieldRevocationRequest({
         token: typeof body?.token === "string" ? body.token : undefined,
-        clientId:
-          typeof body?.client_id === "string" ? body.client_id : undefined,
-        clientSecret:
-          typeof body?.client_secret === "string"
-            ? body.client_secret
-            : undefined,
       });
       if (interception.action === "respond") {
         return reply.status(interception.statusCode).send(interception.body);

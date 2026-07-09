@@ -74,25 +74,6 @@ class OAuthRefreshTokenModel {
   }
 
   /**
-   * Mark a refresh token revoked, only if it is still active. The `IS NULL`
-   * guard makes concurrent revocations race-safe: exactly one caller gets the
-   * row back, the rest get null.
-   */
-  static async revokeByIdWhenActive(id: string) {
-    const [row] = await db
-      .update(schema.oauthRefreshTokensTable)
-      .set({ revoked: new Date() })
-      .where(
-        and(
-          eq(schema.oauthRefreshTokensTable.id, id),
-          isNull(schema.oauthRefreshTokensTable.revoked),
-        ),
-      )
-      .returning();
-    return row ?? null;
-  }
-
-  /**
    * List refresh token rows for a (client, user) pair, optionally narrowed to
    * one grant lineage by referenceId or sessionId.
    */

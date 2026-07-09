@@ -1178,30 +1178,31 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ceiling: config.chat.maxOutputTokensCeiling,
                 });
 
-                const { result } = await runAgentStream({
-                  config: streamTextConfig,
-                  recovery: {
-                    logContext: { conversationId },
-                    onEmptyResponseExhausted: async () => {
-                      // Persist before the throw — nothing has merged yet, so the
-                      // stream onError/onFinish won't fire to do it.
-                      if (claimMessagesPersisted()) {
-                        try {
-                          await persistNewMessages(
-                            conversationId,
-                            messages,
-                            "onExecuteError",
-                          );
-                        } catch (persistError) {
-                          logger.error(
-                            { persistError, conversationId },
-                            "Failed to persist messages during empty-response error",
-                          );
+                const { result, getAbortiveFinishReason } =
+                  await runAgentStream({
+                    config: streamTextConfig,
+                    recovery: {
+                      logContext: { conversationId },
+                      onEmptyResponseExhausted: async () => {
+                        // Persist before the throw — nothing has merged yet, so the
+                        // stream onError/onFinish won't fire to do it.
+                        if (claimMessagesPersisted()) {
+                          try {
+                            await persistNewMessages(
+                              conversationId,
+                              messages,
+                              "onExecuteError",
+                            );
+                          } catch (persistError) {
+                            logger.error(
+                              { persistError, conversationId },
+                              "Failed to persist messages during empty-response error",
+                            );
+                          }
                         }
-                      }
+                      },
                     },
-                  },
-                });
+                  });
                 // The committed result's steps finish after this point; allow
                 // their usage events through (discarded attempts already drained).
                 hasCommittedResult = true;
@@ -1395,9 +1396,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           ) {
                             return null;
                           }
+                          // Prefer the probe's finishReason (authoritative when
+                          // the committed turn's onStepFinish fired during the
+                          // probe, before hasCommittedResult); fall back to the
+                          // step-captured one for a turn that opened with content.
                           const mappedError = buildAbortiveTurnError(
                             provider,
-                            lastFinishReason,
+                            getAbortiveFinishReason() ?? lastFinishReason,
                           );
                           activeRunError = mappedError.message;
                           return {

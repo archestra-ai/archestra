@@ -388,17 +388,31 @@ describe("runAgentStream", () => {
     expect(model.doStreamCalls).toHaveLength(2);
   });
 
-  test("does not retry a `length`-truncated tool call (deterministic)", async () => {
+  test("does not retry a `length`-truncated tool call and exposes its finishReason", async () => {
     // A renderable second attempt is provided but must never be reached: a
     // length truncation re-truncates, so it is surfaced on the first attempt.
     const model = modelFor(abortiveLengthChunks(), renderableChunks());
 
-    const { result } = await runAgentStream({
+    const { result, getAbortiveFinishReason } = await runAgentStream({
       config: { model, prompt: "hello" },
     });
     await drain(result);
 
     expect(model.doStreamCalls).toHaveLength(1);
+    // The tracker classifies the abortive turn from this, since onStepFinish may
+    // have fired during the probe (before the caller committed the result).
+    expect(getAbortiveFinishReason()).toBe("length");
+  });
+
+  test("a renderable turn exposes no abortive finishReason", async () => {
+    const model = modelFor(renderableChunks());
+
+    const { result, getAbortiveFinishReason } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(getAbortiveFinishReason()).toBeNull();
   });
 
   test("trims and retries on a context-length rejection when messages are present", async () => {

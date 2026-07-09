@@ -1072,6 +1072,51 @@ describe("skill tool execution", () => {
       expect(row?.latestVersion).toBe(1);
     });
 
+    test("rejects a replacementContent that exceeds the file size cap", async () => {
+      const skill = await seedSkillOrThrow({
+        files: [
+          { path: "references/api.md", content: "# API", kind: "reference" },
+        ],
+      });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          path: "references/api.md",
+          // one past MAX_SKILL_FILE_CONTENT_CHARS
+          replacementContent: "x".repeat(20 * 1024 * 1024),
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("limit");
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
+    });
+
+    test("edits that net back to the original bytes create no new version", async () => {
+      const skill = await seedSkillOrThrow();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          // applied in order: pdftotext -> mutool -> pdftotext (net identical)
+          edits: [
+            { old_str: "pdftotext", new_str: "mutool" },
+            { old_str: "mutool", new_str: "pdftotext" },
+          ],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const row = await SkillModel.findById(skill.id);
+      expect(row?.content).toBe("# PDF Processing\nUse pdftotext.");
+      expect(row?.latestVersion).toBe(1);
+    });
+
     test("rejects passing both edits and replacementContent", async () => {
       await seedSkill();
       const result = await executeArchestraTool(

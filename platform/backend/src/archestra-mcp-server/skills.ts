@@ -17,7 +17,11 @@ import {
   SkillVersionModel,
   TeamModel,
 } from "@/models";
-import { MAX_FILES_PER_SKILL } from "@/skills/github-import";
+import {
+  MAX_FILES_PER_SKILL,
+  MAX_SKILL_FILE_BYTES,
+  MAX_SKILL_FILE_CONTENT_CHARS,
+} from "@/skills/github-import";
 import { parseSkillManifest, SkillParseError } from "@/skills/parser";
 import {
   buildSkillActivationPromptContext,
@@ -534,6 +538,18 @@ const registry = defineArchestraTools([
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
+      }
+
+      // Enforce the same size caps create_skill/update_skill apply via their
+      // input schemas — the edit ops bypass those schemas, so guard the result.
+      const maxChars =
+        targetPath !== null
+          ? MAX_SKILL_FILE_CONTENT_CHARS
+          : MAX_SKILL_FILE_BYTES;
+      if (newTargetContent.length > maxChars) {
+        return errorResult(
+          `The edit would make ${sourceNoun} exceed the ${maxChars}-character limit. Trim it or split it into smaller files.`,
+        );
       }
 
       // Materialize the edit into the existing update path. edit_skill changes

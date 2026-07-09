@@ -2409,6 +2409,13 @@
       "when": 1784298149174,
       "tag": "0343_white_mystique",
       "breakpoints": true
+    },
+    {
+      "idx": 344,
+      "version": "7",
+      "when": 1784449946969,
+      "tag": "0344_elite_harrier",
+      "breakpoints": true
     }
   ]
 }

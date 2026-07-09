@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.5](https://github.com/archestra-ai/archestra/compare/platform-v1.3.4...platform-v1.3.5) (2026-07-09)
+
+
+### Bug Fixes
+
+* **backend:** debounce token lastUsedAt writes and index conversations.project_id ([#6451](https://github.com/archestra-ai/archestra/issues/6451)) ([d0ac388](https://github.com/archestra-ai/archestra/commit/d0ac3888f2918cd90c16847ce3c78584d2d984cc))
+* **backend:** group transient DB connectivity errors and harden query retry ([#6447](https://github.com/archestra-ai/archestra/issues/6447)) ([3b70f45](https://github.com/archestra-ai/archestra/commit/3b70f455086d230494a78efa524116b0fd0e80f3))
+* **helm:** harden the chart against rollout-induced database outages ([#6449](https://github.com/archestra-ai/archestra/issues/6449)) ([9d1d915](https://github.com/archestra-ai/archestra/commit/9d1d915672f2993975253ef2f31da7c4544d9a97))
+
+
+### Performance Improvements
+
+* **backend:** reduce per-request DB load on gateway, auth, and chat replay hot paths ([#6450](https://github.com/archestra-ai/archestra/issues/6450)) ([39a3d0f](https://github.com/archestra-ai/archestra/commit/39a3d0fed90252f56fed02a4d7119454f1dd6a8e))
+
+
+### Miscellaneous Chores
+
+* **dev:** default Tilt local dev to Turbopack for the Next dev server ([#6446](https://github.com/archestra-ai/archestra/issues/6446)) ([fa1eaae](https://github.com/archestra-ai/archestra/commit/fa1eaaef9fc83eaecaa3aea100029cc95342c8d0))
+
 ## [1.3.4](https://github.com/archestra-ai/archestra/compare/platform-v1.3.3...platform-v1.3.4) (2026-07-08)
 
 

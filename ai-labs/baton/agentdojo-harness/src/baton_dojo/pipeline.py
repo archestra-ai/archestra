@@ -30,7 +30,11 @@ def openrouter_api_key() -> str:
         for line in AI_LABS_ENV.read_text().splitlines():
             line = line.strip()
             if line.startswith("OPENROUTER_API_KEY="):
-                return line.split("=", 1)[1].strip()
+                value = line.split("=", 1)[1].strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                    value = value[1:-1]
+                if value:
+                    return value
     raise RuntimeError(
         f"OPENROUTER_API_KEY not set and not found in {AI_LABS_ENV}; "
         "bench mode needs an OpenRouter key"

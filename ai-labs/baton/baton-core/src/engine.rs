@@ -265,7 +265,7 @@ impl<A: Authority> PolicyEngine<A> {
         let confirmation = trajectory.pending_confirmation();
         let trajectory_id = trajectory.id();
         let basis = trajectory.turns().len();
-        debug!(%context, confirmation = ?confirmation, basis, "evaluate: folded context");
+        debug!(%context, confirmation = ?confirmation, basis, "folded context");
 
         let permit = |result_label| {
             Decision::Permitted(Permit {
@@ -289,7 +289,7 @@ impl<A: Authority> PolicyEngine<A> {
                 Label::unknown(),
             ),
         };
-        debug!(has_contract = contract.is_some(), "evaluate: contract lookup");
+        debug!(has_contract = contract.is_some(), "contract lookup");
 
         let mut violations = match verdict {
             Verdict::Allow => Vec::new(),
@@ -304,20 +304,20 @@ impl<A: Authority> PolicyEngine<A> {
             None
         };
         if let Some(taint) = taint {
-            debug!("evaluate: taint flagged (output would degrade context)");
+            debug!("taint flagged (output would degrade context)");
             violations.push(taint);
         }
 
         if violations.is_empty() {
-            debug!("evaluate: permitted (no violations)");
+            debug!("permitted (no violations)");
             return permit(result_label);
         }
-        debug!(violations = ?violations, "evaluate: triaging violations");
+        debug!(violations = ?violations, "triaging violations");
 
         // Axis: fixability. A structural violation is an integration bug no
         // authority may override — block before consulting anyone.
         if violations.iter().any(|v| v.fixability() == Fixability::Structural) {
-            debug!("evaluate: blocked (structural fix required)");
+            debug!("blocked (structural fix required)");
             return Decision::Blocked {
                 violations,
                 reason: BlockReason::RequiresStructuralFix,
@@ -336,14 +336,14 @@ impl<A: Authority> PolicyEngine<A> {
             policy = ?self.unknown_policy,
             unprovable = unprovable.len(),
             breaches = escalating.len(),
-            "evaluate: unknown-policy disposition",
+            "unknown-policy disposition",
         );
         match self.unknown_policy {
             UnknownPolicy::Escalate => escalating.extend(unprovable),
             UnknownPolicy::Deny => {
                 if !unprovable.is_empty() {
                     escalating.extend(unprovable);
-                    debug!("evaluate: blocked (unknown-policy deny)");
+                    debug!("blocked (unknown-policy deny)");
                     return Decision::Blocked {
                         violations: escalating,
                         reason: BlockReason::UnknownDenied,
@@ -355,17 +355,14 @@ impl<A: Authority> PolicyEngine<A> {
 
         if escalating.is_empty() {
             if !audited_unknowns.is_empty() {
-                debug!(
-                    count = audited_unknowns.len(),
-                    "evaluate: acknowledging policy-audited unknowns"
-                );
+                debug!(count = audited_unknowns.len(), "acknowledging policy-audited unknowns");
                 result_label.audit.push(AuditEntry::Acknowledged {
                     tool: request.tool.clone(),
                     facts: audited_unknowns,
                     by: None,
                 });
             }
-            debug!("evaluate: permitted (no escalation)");
+            debug!("permitted (no escalation)");
             return permit(result_label);
         }
 
@@ -377,7 +374,7 @@ impl<A: Authority> PolicyEngine<A> {
             Some(c) => needed_grant(&escalating, request, &c.requires),
             None => Grant::empty(),
         };
-        debug!(grant = ?needed, escalating = ?escalating, "evaluate: derived grant, routing to authority");
+        debug!(grant = ?needed, escalating = ?escalating, "derived grant, routing to authority");
 
         // Route and adjudicate in one traversal: the authority names the
         // deciding member and returns its ruling together, so attribution is
@@ -385,18 +382,18 @@ impl<A: Authority> PolicyEngine<A> {
         // — block without consulting anyone.
         let full_picture: Vec<Violation> = escalating.iter().chain(audited_unknowns.iter()).cloned().collect();
         let Some((authority_name, ruling)) = self.authority.rule(&needed, request, &context, &full_picture) else {
-            debug!("evaluate: blocked (no competent authority)");
+            debug!("blocked (no competent authority)");
             escalating.extend(audited_unknowns);
             return Decision::Blocked {
                 violations: escalating,
                 reason: BlockReason::NoCompetentAuthority,
             };
         };
-        debug!(authority = %authority_name, "evaluate: routed to authority");
+        debug!(authority = %authority_name, "routed to authority");
 
         match ruling {
             Ruling::Approve { reason } => {
-                debug!(authority = %authority_name, "evaluate: authority approved");
+                debug!(authority = %authority_name, "authority approved");
                 // Fail closed (a control-flow check, not a debug_assert that
                 // vanishes in release): the grant must actually clear every
                 // grant-fixable gap it targeted. Acknowledge-only violations
@@ -425,7 +422,7 @@ impl<A: Authority> PolicyEngine<A> {
                     if uncovered {
                         warn!(
                             authority = %authority_name,
-                            "evaluate: recheck failed — grant did not clear targeted gaps, failing closed",
+                            "recheck failed — grant did not clear targeted gaps, failing closed",
                         );
                         escalating.extend(audited_unknowns);
                         return Decision::Blocked {
@@ -433,7 +430,7 @@ impl<A: Authority> PolicyEngine<A> {
                             reason: BlockReason::InternalInvariantFailed,
                         };
                     }
-                    debug!("evaluate: recheck cleared targeted gaps");
+                    debug!("recheck cleared targeted gaps");
                 }
 
                 // Record one declassification for the grant-fixable gaps the
@@ -465,11 +462,11 @@ impl<A: Authority> PolicyEngine<A> {
                         by: None,
                     });
                 }
-                debug!("evaluate: permitted (approved, declassification recorded)");
+                debug!("permitted (authority approved)");
                 permit(result_label)
             }
             Ruling::Deny { reason } => {
-                debug!(authority = %authority_name, reason = %reason, "evaluate: blocked (denied by authority)");
+                debug!(authority = %authority_name, reason = %reason, "blocked (denied by authority)");
                 // Report the full picture: the audited unknowns did not cause
                 // the block, but they were part of this flow's evaluation.
                 escalating.extend(audited_unknowns);

@@ -123,16 +123,20 @@ fn attempt(engine: &PolicyEngine<Panel>, trajectory: &mut Trajectory, request: T
 }
 
 /// `-v` traces the decision path (`debug`), `-vv` also the label algebra
-/// (`trace`); repeated `-v` accumulates. `RUST_LOG` overrides the flag.
+/// (`trace`); the `v`s accumulate whether written `-vv` or `-v -v`, and
+/// `--verbose` counts as one. `RUST_LOG` overrides the flag.
 fn verbosity() -> u8 {
-    std::env::args()
-        .skip(1)
-        .map(|arg| match arg.as_str() {
-            "-v" | "--verbose" => 1,
-            "-vv" => 2,
+    std::env::args().skip(1).fold(0u8, |level, arg| {
+        let bump = match arg.as_str() {
+            "--verbose" => 1,
+            // `-v`, `-vv`, `-vvv`, ...: one step per `v`.
+            s if s.len() > 1 && s.starts_with('-') && s[1..].bytes().all(|b| b == b'v') => {
+                u8::try_from(s.len() - 1).unwrap_or(u8::MAX)
+            }
             _ => 0,
-        })
-        .sum()
+        };
+        level.saturating_add(bump)
+    })
 }
 
 /// Logs go to stderr so this demo's stdout narration stays clean.

@@ -6,6 +6,8 @@ description: How Archestra Platform is priced and licensed
 lastUpdated: 2026-06-23
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Archestra is Open Core software. The base platform is licensed under AGPL-3.0; a subset of Enterprise features is licensed under the Archestra Enterprise License. See the repository [LICENSE router](https://github.com/archestra-ai/archestra/blob/main/LICENSE.md) for how each file, directory, or in-file region is licensed.
 
 ## Free for teams under 30 users

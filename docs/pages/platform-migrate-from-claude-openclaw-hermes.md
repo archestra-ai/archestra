@@ -1,10 +1,12 @@
 ---
-title: Migrate to Archestra
+title: Migrate from Claude, OpenClaw, Hermes
 category: Archestra Platform
 order: 7
 ---
 
-# Migrate to Archestra
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+# Migration Kit
 
 The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
 unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP

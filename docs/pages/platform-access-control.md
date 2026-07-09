@@ -5,6 +5,9 @@ description: "Role-based access control (RBAC) system for managing user permissi
 order: 1
 lastUpdated: 2026-07-03
 ---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
 Run `pnpm codegen:access-control-docs` to regenerate.

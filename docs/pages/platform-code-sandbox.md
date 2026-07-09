@@ -6,6 +6,8 @@ description: A private Linux container where an agent runs code during a chat
 lastUpdated: 2026-07-06
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 The code sandbox is a private Linux container where an agent runs code during a chat. It runs shell commands and Python, isolated from your own infrastructure — no host access, and no network beyond what the agent's [environment](./platform-environments) allows. Each conversation gets its own sandbox, created the first time the agent runs something.
 
 ![A chat where the agent runs a shell command in the sandbox with run_command and reports the result](/docs/automated_screenshots/platform-code-sandbox_run-command.webp)

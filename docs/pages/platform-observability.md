@@ -4,6 +4,8 @@ category: Archestra Platform
 order: 4
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 # Observability
 
 ![Archestra Logs Viewer](/docs/observability.webp)

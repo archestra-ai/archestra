@@ -1,4 +1,4 @@
-# Migrate to Archestra
+# Migrate from Claude, OpenClaw, Hermes
 
 Turn an existing agentic PoC into an [Archestra](https://github.com/archestra-ai/archestra) pilot.
 

@@ -7,6 +7,8 @@ order: 5
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Provider-agnostic concept page covering downstream-credential strategies:
 - Microsoft Entra OBO

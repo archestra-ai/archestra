@@ -6,6 +6,8 @@ description: Route Claude Code through Archestra while your Claude subscription 
 lastUpdated: 2026-07-07
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Walkthrough for the /connection?clientId=claude-code flow: connecting
 Claude Code to Archestra with the one-time setup script, in passthrough mode so

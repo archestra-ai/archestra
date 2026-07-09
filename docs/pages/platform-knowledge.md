@@ -6,6 +6,8 @@ description: Built-in RAG knowledge — Knowledge Bases, connectors, and retriev
 lastUpdated: 2026-07-09
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 A Knowledge Base is a set of connectors that index your data for retrieval. Connectors pull from tools such as Jira, Confluence, GitHub, Notion, SharePoint, Google Drive, and Salesforce. An agent assigned a Knowledge Base can query that data to answer questions. The full RAG stack (chunking, embedding, hybrid search, reranking) runs inside Archestra — no external vector database or separate retrieval service required.
 
 > **Enterprise feature** (team-scoped access control) — see the [Pricing Model](/docs/platform-pricing-model).

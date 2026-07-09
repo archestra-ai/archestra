@@ -7,6 +7,8 @@ order: 7
 lastUpdated: 2026-05-05
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Provider-agnostic page covering team synchronization for any OIDC or SAML SSO
 provider. Linked from per-provider pages (Entra, Okta, etc.) and from the parent

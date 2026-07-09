@@ -6,6 +6,8 @@ description: A shared workspace to organize your work
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 A project is a shared workspace for your chats, files, instructions, and scheduled tasks. Everything saved in a project is available to everyone in it. Projects are private until you share them with teams or the whole organization.
 
 ![A project with its chats, files, and monthly schedule](/docs/automated_screenshots/platform-projects_project-overview.webp)

@@ -6,6 +6,8 @@ description: How deterministic policies stop a prompt-injection attack that Foun
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Microsoft Foundry (Azure AI Foundry) is Microsoft's enterprise platform for building and running AI agents on Azure, with hosted models, connectors, a prompt builder, and LLM-based guardrails.
 
 This example shows why probabilistic guardrails do not reliably stop prompt injection, and how Archestra's deterministic policies do. It uses a real attack against a Foundry agent.

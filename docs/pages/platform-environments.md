@@ -6,6 +6,8 @@ order: 3
 lastUpdated: 2026-07-09
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 This document is the canonical reference for deployment Environments. Include:
 - What an environment is and the implicit "Default" environment (null)

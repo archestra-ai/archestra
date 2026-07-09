@@ -7,6 +7,8 @@ order: 4
 lastUpdated: 2026-07-05
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Provider-agnostic SSO concept page. Covers what SSO is in Archestra, how the
 flow works, callback URL formats, supported protocols, allowed-domain

@@ -257,6 +257,29 @@ tests:
           path: spec.egress
           count: 3
 
+  - it: should add an explicit cluster-DNS egress rule when clusterDnsCidrs is set
+    set:
+      archestra.orchestrator.kubernetes.networkPolicy.create: true
+      archestra.orchestrator.kubernetes.networkPolicy.clusterDnsCidrs:
+        - 10.100.0.10/32
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 4
+      - equal:
+          path: spec.egress[3].to[0].ipBlock.cidr
+          value: 10.100.0.10/32
+      - contains:
+          path: spec.egress[3].ports
+          content:
+            protocol: UDP
+            port: 53
+      - contains:
+          path: spec.egress[3].ports
+          content:
+            protocol: TCP
+            port: 53
+
   - it: should include additional egress rules when configured
     set:
       archestra.orchestrator.kubernetes.networkPolicy.create: true

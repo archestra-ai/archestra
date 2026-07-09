@@ -544,6 +544,16 @@ archestra:
         #     - 203.0.113.0/24     # Documentation range
         additionalDeniedCidrs: []
 
+        # Explicit cluster-DNS resolver CIDR(s) allowed on :53, in addition to the
+        # ports-only DNS rule. Set on clusters whose NetworkPolicy enforcement
+        # ignores a ports-only rule with no `to` (e.g. the AWS VPC CNI
+        # ApplicationNetworkPolicy agent), where the resolver otherwise falls in a
+        # denied private range and DNS resolution breaks. Leave empty elsewhere.
+        # Example:
+        #   clusterDnsCidrs:
+        #     - 10.100.0.10/32
+        clusterDnsCidrs: []
+
         # Additional egress rules to add to the NetworkPolicy.
         # Use this to allow MCP server pods to reach specific internal Kubernetes
         # services that would otherwise be blocked by the private range deny rules.

@@ -73,6 +73,24 @@ spec:
               - ::1/128
               - fc00::/7
               - fe80::/10
+    {{- with .Values.archestra.orchestrator.kubernetes.networkPolicy.clusterDnsCidrs }}
+    # Rule 4: Explicit cluster-resolver DNS allow. Some enforcers (notably the AWS
+    # VPC CNI ApplicationNetworkPolicy agent) ignore the ports-only DNS rule above
+    # because it has no `to`, and the cluster resolver falls inside an
+    # except-denied private range — so name resolution needs the resolver CIDR(s)
+    # spelled out. Additive: the ports-only rule stays for providers that depend
+    # on it (e.g. a link-local NodeLocal DNSCache resolver). Empty by default.
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
     {{- with .Values.archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules }}
     # Additional user-configured egress rules (e.g., to allow specific internal services)
     {{- toYaml . | nindent 4 }}

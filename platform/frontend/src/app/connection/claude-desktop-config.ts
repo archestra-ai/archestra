@@ -14,6 +14,11 @@ import {
  * `X-Archestra-Virtual-Key` custom header (authenticates the Archestra user on
  * the LLM Proxy), while the standard virtual key — minted from the Anthropic
  * provider key — is the static API key used for the upstream call.
+ *
+ * `plugins.marketplaces` registers the org's shared skills as a git-backed
+ * plugin marketplace; Claude Desktop surfaces it in the Directory's
+ * Organization tab, where the user installs the skills. The clone URL embeds a
+ * one-time share token, so it is a secret on par with the inference keys.
  */
 export interface ClaudeDesktopConfigProfile {
   $schemaVersion: 2;
@@ -32,6 +37,15 @@ export interface ClaudeDesktopConfigProfile {
       source: "user";
     }>;
   };
+  plugins?: {
+    marketplaces: Array<{
+      source: "git";
+      url: string;
+      // Rejects the clone if the repo's manifest name differs, so an upstream
+      // rename can't silently swap in another marketplace.
+      expectedName: string;
+    }>;
+  };
 }
 
 /**
@@ -46,6 +60,8 @@ export function buildClaudeDesktopConfigProfile(input: {
   passthroughKey: string;
   virtualKey: string;
   gateway?: { slug: string; name: string } | null;
+  /** Shared-skills marketplace to register; omitted when skills aren't included. */
+  skillMarketplace?: { cloneUrl: string; marketplaceName: string } | null;
 }): ClaudeDesktopConfigProfile {
   const profile: ClaudeDesktopConfigProfile = {
     $schemaVersion: 2,
@@ -77,6 +93,18 @@ export function buildClaudeDesktopConfigProfile(input: {
     };
   }
 
+  if (input.skillMarketplace) {
+    profile.plugins = {
+      marketplaces: [
+        {
+          source: "git",
+          url: input.skillMarketplace.cloneUrl,
+          expectedName: input.skillMarketplace.marketplaceName,
+        },
+      ],
+    };
+  }
+
   return profile;
 }
 
@@ -85,13 +113,14 @@ const SECRET_MASK = "•".repeat(20);
 
 /**
  * A copy of the profile safe to render on screen: the passthrough key (custom
- * headers) and the static API credential are replaced with a mask. The real
- * values only ever leave via the downloaded file.
+ * headers), the static API credential, and the token-bearing marketplace clone
+ * URL are replaced with a mask. The real values only ever leave via the
+ * downloaded file.
  */
 export function maskConfigSecrets(
   profile: ClaudeDesktopConfigProfile,
 ): ClaudeDesktopConfigProfile {
-  return {
+  const masked: ClaudeDesktopConfigProfile = {
     ...profile,
     inference: {
       ...profile.inference,
@@ -108,6 +137,18 @@ export function maskConfigSecrets(
       credential: { ...profile.inference.credential, apiKey: SECRET_MASK },
     },
   };
+
+  if (profile.plugins) {
+    masked.plugins = {
+      // The clone URL embeds a share token; the marketplace name is not secret.
+      marketplaces: profile.plugins.marketplaces.map((m) => ({
+        ...m,
+        url: SECRET_MASK,
+      })),
+    };
+  }
+
+  return masked;
 }
 
 /** Mirrors the connection-setup script token prefix. */

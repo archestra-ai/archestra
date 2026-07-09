@@ -7,7 +7,13 @@ import {
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   OAuthConfirmationDialog,
@@ -40,6 +46,12 @@ import {
 } from "@/lib/mcp/enterprise-managed-install-auth";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import {
+  clearPendingInstall,
+  getPendingInstall,
+  registerPendingInstallReopen,
+  setPendingInstall,
+} from "@/lib/mcp/pending-install";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
 import {
@@ -127,6 +139,13 @@ export function useCatalogInstall(opts?: {
   const [firstInstallationServerIds, setFirstInstallationServerIds] = useState<
     Set<string>
   >(new Set());
+
+  // True once this mount has opened the install dialog straight from the
+  // `?install=` deep link. Lets the durable re-open effect below tell "the deep
+  // link already handled it on this mount" (skip) apart from "the dialog was
+  // torn down and the intent is still pending" (reopen) — on a remount the ref
+  // is fresh, so the re-open effect takes over from the stashed intent.
+  const deepLinkHandledRef = useRef(false);
 
   // Pre-selected team ID when adding a shared connection from manage dialog
   const [preselectedTeamId, setPreselectedTeamId] = useState<string | null>(
@@ -523,6 +542,33 @@ export function useCatalogInstall(opts?: {
     }
   };
 
+  // Open the right install flow for a catalog item, honoring an optional
+  // pre-targeted scope (from the deep link's &scope/&team params). Shared by the
+  // deep-link handler and the durable re-open effect so both open identically.
+  const openInstallForCatalogItem = (
+    catalogItem: CatalogItem,
+    scope?: McpServerInstallScope,
+    teamId?: string,
+  ) => {
+    if (scope === "personal") {
+      addPersonalConnection(catalogItem);
+      return;
+    }
+    if (scope === "team" && teamId) {
+      addSharedConnection(catalogItem, teamId);
+      return;
+    }
+    if (scope === "org") {
+      addOrgConnection(catalogItem);
+      return;
+    }
+    if (catalogItem.serverType === "local") {
+      installLocal(catalogItem);
+    } else {
+      installRemote(catalogItem);
+    }
+  };
+
   // Deep-link: auto-open install dialog when ?install={catalogId} is present.
   // Optional &scope=personal|team|org (and &team={teamId} for team scope)
   // pre-target the connection — used by the item detail page's add-connection
@@ -537,8 +583,23 @@ export function useCatalogInstall(opts?: {
     );
     if (!catalogItem) return;
 
-    const scopeParam = searchParams.get(MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM);
+    const scopeParam = searchParams.get(
+      MCP_CATALOG_INSTALL_SCOPE_QUERY_PARAM,
+    ) as McpServerInstallScope | null;
     const teamParam = searchParams.get(MCP_CATALOG_INSTALL_TEAM_QUERY_PARAM);
+
+    // Persist the intent before touching the URL or opening the dialog. The
+    // dialog is local state and the deep-link param is stripped below, so if the
+    // dialog is torn down before the user acts (a route re-render that remounts
+    // the registry, a full-page return from an OAuth/enterprise connect
+    // redirect, etc.) there would otherwise be nothing left to re-open it — the
+    // user would land on the bare registry and have to find the server by hand.
+    setPendingInstall({
+      catalogId: catalogItem.id,
+      ...(scopeParam ? { scope: scopeParam } : {}),
+      ...(scopeParam === "team" && teamParam ? { teamId: teamParam } : {}),
+    });
+    deepLinkHandledRef.current = true;
 
     // Clear the install params from URL to prevent re-triggering on refresh
     const params = new URLSearchParams(searchParams.toString());
@@ -550,26 +611,54 @@ export function useCatalogInstall(opts?: {
       : pathname;
     router.replace(newUrl, { scroll: false });
 
-    if (scopeParam === "personal") {
-      addPersonalConnection(catalogItem);
-      return;
-    }
-    if (scopeParam === "team" && teamParam) {
-      addSharedConnection(catalogItem, teamParam);
-      return;
-    }
-    if (scopeParam === "org") {
-      addOrgConnection(catalogItem);
+    openInstallForCatalogItem(
+      catalogItem,
+      scopeParam ?? undefined,
+      teamParam ?? undefined,
+    );
+  }, [searchParams, catalogItems, pathname, router]);
+
+  // Durable re-open: if the deep-link dialog was lost before the user acted, the
+  // intent survives in sessionStorage. Once catalog + installs are loaded, and
+  // the deep link did NOT just open the dialog on this mount, re-open it — unless
+  // the connection now exists (fulfilled) or a dialog is already up. Capped so a
+  // genuinely un-openable intent or a close-loop cannot re-open forever.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: install handlers are stable within a render; only react to catalog/install data settling
+  useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+    if (!catalogItems || !installedServers) return;
+
+    const pending = getPendingInstall();
+    if (!pending) return;
+
+    const catalogItem = catalogItems.find(
+      (item) => item.id === pending.catalogId,
+    );
+    if (!catalogItem) {
+      clearPendingInstall();
       return;
     }
 
-    // Trigger the appropriate install dialog
-    if (catalogItem.serverType === "local") {
-      installLocal(catalogItem);
-    } else {
-      installRemote(catalogItem);
+    // Already fulfilled — the caller has an accessible connection for it now.
+    if (installedServers.some((s) => s.catalogId === pending.catalogId)) {
+      clearPendingInstall();
+      return;
     }
-  }, [searchParams, catalogItems, pathname, router]);
+
+    // A dialog is already open for it — don't stack another.
+    if (
+      isDialogOpened("remote-install") ||
+      isDialogOpened("local-install") ||
+      isDialogOpened("oauth") ||
+      isDialogOpened("no-auth")
+    ) {
+      return;
+    }
+
+    if (!registerPendingInstallReopen()) return;
+    deepLinkHandledRef.current = true;
+    openInstallForCatalogItem(catalogItem, pending.scope, pending.teamId);
+  }, [catalogItems, installedServers, isDialogOpened]);
 
   // Resume an enterprise-managed install after linking the configured IdP.
   // biome-ignore lint/correctness/useExhaustiveDependencies: consume the one-shot sessionStorage intent when catalog data becomes available
@@ -771,6 +860,12 @@ export function useCatalogInstall(opts?: {
       // Remember where the install started so the callback returns here
       setOAuthReturnUrl(window.location.href);
 
+      // The user has committed to authorizing; the deep-link intent is now
+      // being fulfilled through the OAuth flow (which has its own return
+      // handling), so drop the pending-install intent to avoid the registry
+      // re-opening this dialog when the OAuth callback returns.
+      clearPendingInstall();
+
       // Redirect to OAuth provider
       window.location.href = authorizationUrl;
     } catch (error) {
@@ -820,6 +915,9 @@ export function useCatalogInstall(opts?: {
       <RemoteServerInstallDialog
         isOpen={isDialogOpened("remote-install")}
         onClose={() => {
+          // User dismissed the deep-linked install — drop the intent so the
+          // durable re-open below does not bring it back.
+          clearPendingInstall();
           closeDialog("remote-install");
           setSelectedCatalogItem(null);
           setPreselectedTeamId(null);
@@ -838,12 +936,16 @@ export function useCatalogInstall(opts?: {
         open={isDialogOpened("oauth")}
         onOpenChange={(open) => {
           if (!open) {
+            // Dismissed (Escape / outside click) — drop the intent so the
+            // durable re-open does not bring it back.
+            clearPendingInstall();
             closeDialog("oauth");
           }
         }}
         serverName={selectedCatalogItem?.name || ""}
         onConfirm={handleOAuthConfirm}
         onCancel={() => {
+          clearPendingInstall();
           closeDialog("oauth");
           setSelectedCatalogItem(null);
           setPreselectedTeamId(null);
@@ -859,6 +961,7 @@ export function useCatalogInstall(opts?: {
       <NoAuthInstallDialog
         isOpen={isDialogOpened("no-auth")}
         onClose={() => {
+          clearPendingInstall();
           closeDialog("no-auth");
           setNoAuthCatalogItem(null);
           setPreselectedTeamId(null);
@@ -877,6 +980,7 @@ export function useCatalogInstall(opts?: {
         <LocalServerInstallDialog
           isOpen={isDialogOpened("local-install")}
           onClose={() => {
+            clearPendingInstall();
             closeDialog("local-install");
             setLocalServerCatalogItem(null);
             setPreselectedTeamId(null);

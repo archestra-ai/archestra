@@ -1401,21 +1401,36 @@ mod tests {
     async fn test_shutdown_all_tears_down_concurrently() {
         let _guard = registry_lock().lock().await;
         // Two real children that trap SIGTERM and take ~2s to exit. Serial teardown would wait ~4s;
-        // concurrent teardown is bounded by the slower single child (~2s). The wall-clock proves the
-        // teardowns overlap (wide margin so it doesn't flake on a loaded CI box), and both process
-        // groups must be reaped.
-        fn spawn_slow_term_child() -> (Arc<Mutex<Option<Child>>>, i32) {
+        // concurrent teardown is bounded by the slower single child (~2s), which the wall-clock proves.
+        // The child blocks in the *shell process itself* (`read` on a test-held stdin), not a forked
+        // `sleep`, so the group SIGTERM interrupts the shell's own read and fires the trap — no
+        // dependency on a grandchild receiving the signal. Readiness is printed only after `trap`, so
+        // the signal can never arrive before the trap exists; that ordering alone makes the teardown
+        // deterministic (~2s) instead of falling through to `kill_child`'s 15s SIGKILL fallback, which
+        // was the flake. The returned `ChildStdin` must be kept alive to keep `read` blocking.
+        async fn spawn_slow_term_child() -> (Arc<Mutex<Option<Child>>>, i32, tokio::process::ChildStdin) {
+            use tokio::io::AsyncBufReadExt;
             let mut cmd = Command::new("sh");
             cmd.arg("-c")
-                .arg("trap 'sleep 2; exit 0' TERM; sleep 30")
-                .process_group(0);
-            let child = cmd.spawn().expect("spawn sh");
+                .arg("trap 'sleep 2; exit 0' TERM; echo ready; read _")
+                .process_group(0)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped());
+            let mut child = cmd.spawn().expect("spawn sh");
             let pid = child.id().expect("child pid") as i32;
-            (Arc::new(Mutex::new(Some(child))), pid)
+            let stdin = child.stdin.take().expect("piped stdin");
+            let stdout = child.stdout.take().expect("piped stdout");
+            let mut ready = String::new();
+            tokio::io::BufReader::new(stdout)
+                .read_line(&mut ready)
+                .await
+                .expect("read readiness marker");
+            assert_eq!(ready.trim_end(), "ready", "child should announce readiness");
+            (Arc::new(Mutex::new(Some(child))), pid, stdin)
         }
 
-        let (proc_a, pid_a) = spawn_slow_term_child();
-        let (proc_b, pid_b) = spawn_slow_term_child();
+        let (proc_a, pid_a, _stdin_a) = spawn_slow_term_child().await;
+        let (proc_b, pid_b, _stdin_b) = spawn_slow_term_child().await;
         for proc in [&proc_a, &proc_b] {
             register(Teardown::Backend {
                 proc: proc.clone(),
@@ -1432,6 +1447,13 @@ mod tests {
         assert!(
             elapsed < Duration::from_millis(3000),
             "teardowns should overlap (~2s), took {elapsed:?}"
+        );
+        // Lower bound: the ~2s floor is the trap's `sleep 2` actually running. A near-instant teardown
+        // would mean a child exited without honoring SIGTERM (e.g. stdin dropped early, EOF-ing `read`),
+        // which would pass the upper bound while proving nothing — this turns that into a real failure.
+        assert!(
+            elapsed > Duration::from_millis(1500),
+            "teardown finished too fast ({elapsed:?}); a trap-honoring child takes ~2s"
         );
         for pid in [pid_a, pid_b] {
             assert!(

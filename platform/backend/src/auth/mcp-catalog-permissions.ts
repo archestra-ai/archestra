@@ -1,9 +1,6 @@
 import { TeamModel } from "@/models";
 import { ApiError } from "@/types";
-import {
-  type CatalogTeamAccessLevel,
-  effectiveCatalogTeamLevel,
-} from "@/types/catalog-team-level";
+import type { CatalogTeamAccessLevel } from "@/types/catalog-team-level";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { isForeignKeyConstraintError } from "@/utils/db";
 import { getPermissionsForUserContext } from "./utils";
@@ -54,7 +51,7 @@ export async function getCatalogWriteMembershipTeamIds(
 
 function writeLevelTeamIds(catalogTeams: CatalogTeamAccess[]): string[] {
   return catalogTeams
-    .filter((team) => effectiveCatalogTeamLevel(team.level) === "write")
+    .filter((team) => team.level === "write")
     .map((team) => team.id);
 }
 
@@ -144,6 +141,10 @@ export function authorizeMcpCatalogScope(params: {
 
     case "team": {
       const { requestedTeamIds } = params;
+      // An empty list is a validation error (a team item needs a team), not an
+      // authorization one — let assertMcpCatalogTeams raise the 400 rather than
+      // masking it with a 403 here.
+      if (requestedTeamIds.length === 0) return;
       const userTeamIdSet = new Set(params.userTeamIds);
       if (requestedTeamIds.some((id) => !userTeamIdSet.has(id))) {
         throw new ApiError(

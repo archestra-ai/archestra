@@ -6,9 +6,6 @@ import { z } from "zod";
  * `use` — discover the item, install it for oneself, resolve tool calls through
  * its shared installs. `write` — everything `use` allows plus modifying the
  * definition; exercisable only by the team's admins.
- *
- * A stored NULL means `write`: rows predating per-team levels carry the
- * capability the team already had.
  */
 export const CatalogTeamAccessLevelSchema = z.enum(["use", "write"]);
 
@@ -16,6 +13,11 @@ export type CatalogTeamAccessLevel = z.infer<
   typeof CatalogTeamAccessLevelSchema
 >;
 
+/**
+ * The level an assignment takes when none is given — on the wire, and as the
+ * column default that backfills rows predating per-team levels. `write` keeps
+ * a team the capability it had before levels existed.
+ */
 export const DEFAULT_CATALOG_TEAM_ACCESS_LEVEL: CatalogTeamAccessLevel =
   "write";
 
@@ -54,11 +56,4 @@ export function normalizeCatalogTeamInput(
     byId.set(assignment.id, assignment);
   }
   return [...byId.values()];
-}
-
-/** Effective level of a stored assignment, resolving NULL to `write`. */
-export function effectiveCatalogTeamLevel(
-  level: CatalogTeamAccessLevel | null | undefined,
-): CatalogTeamAccessLevel {
-  return level ?? DEFAULT_CATALOG_TEAM_ACCESS_LEVEL;
 }

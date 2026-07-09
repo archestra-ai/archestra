@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   CatalogTeamInputSchema,
-  effectiveCatalogTeamLevel,
   normalizeCatalogTeamInput,
 } from "./catalog-team-level";
 
@@ -43,21 +42,6 @@ describe("normalizeCatalogTeamInput", () => {
 
   it("returns an empty list for no teams", () => {
     expect(normalizeCatalogTeamInput([])).toEqual([]);
-  });
-});
-
-describe("effectiveCatalogTeamLevel", () => {
-  it("resolves a stored NULL to write", () => {
-    expect(effectiveCatalogTeamLevel(null)).toBe("write");
-  });
-
-  it("resolves undefined to write", () => {
-    expect(effectiveCatalogTeamLevel(undefined)).toBe("write");
-  });
-
-  it("returns an explicit level unchanged", () => {
-    expect(effectiveCatalogTeamLevel("use")).toBe("use");
-    expect(effectiveCatalogTeamLevel("write")).toBe("write");
   });
 });
 

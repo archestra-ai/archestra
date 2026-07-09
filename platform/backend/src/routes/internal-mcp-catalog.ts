@@ -59,7 +59,6 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
-  effectiveCatalogTeamLevel,
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
@@ -1811,9 +1810,7 @@ function sameTeamAssignments(
   current: CatalogTeamAccess[],
 ): boolean {
   if (requested.length !== current.length) return false;
-  const currentLevels = new Map(
-    current.map((team) => [team.id, effectiveCatalogTeamLevel(team.level)]),
-  );
+  const currentLevels = new Map(current.map((team) => [team.id, team.level]));
   return requested.every((team) => {
     const currentLevel = currentLevels.get(team.id);
     if (currentLevel === undefined) return false;

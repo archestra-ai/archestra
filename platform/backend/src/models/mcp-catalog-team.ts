@@ -4,7 +4,7 @@ import logger from "@/logging";
 import {
   type CatalogTeamAccessLevel,
   type CatalogTeamInput,
-  effectiveCatalogTeamLevel,
+  DEFAULT_CATALOG_TEAM_ACCESS_LEVEL,
   normalizeCatalogTeamInput,
 } from "@/types/catalog-team-level";
 
@@ -126,7 +126,7 @@ class McpCatalogTeamModel {
    * An entry without a `level` keeps the level already stored for that team, so
    * an id-only caller (the agent-callable edit tools, a legacy API client)
    * cannot silently promote a `use` team to `write`. A team assigned for the
-   * first time without a level is stored NULL, which reads back as `write`.
+   * first time without a level takes the default, `write`.
    */
   static async syncCatalogTeams(
     catalogId: string,
@@ -159,7 +159,10 @@ class McpCatalogTeamModel {
           assignments.map(({ id, level }) => ({
             catalogId,
             teamId: id,
-            level: level ?? storedLevels.get(id) ?? null,
+            level:
+              level ??
+              storedLevels.get(id) ??
+              DEFAULT_CATALOG_TEAM_ACCESS_LEVEL,
           })),
         );
       }
@@ -192,7 +195,7 @@ class McpCatalogTeamModel {
     return catalogTeams.map((ct) => ({
       id: ct.teamId,
       name: ct.teamName,
-      level: effectiveCatalogTeamLevel(ct.level),
+      level: ct.level,
     }));
   }
 
@@ -229,7 +232,7 @@ class McpCatalogTeamModel {
       teams.push({
         id: teamId,
         name: teamName,
-        level: effectiveCatalogTeamLevel(level),
+        level,
       });
       teamsMap.set(catalogId, teams);
     }

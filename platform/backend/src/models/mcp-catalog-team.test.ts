@@ -373,7 +373,7 @@ test("syncCatalogTeams stores an explicit level and reads it back", async ({
   expect(detail.level).toBe("use");
 });
 
-test("getTeamDetailsForCatalog resolves a stored NULL level to write", async ({
+test("a team assigned with a bare id defaults to write", async ({
   makeOrganization,
   makeUser,
   makeTeam,
@@ -382,7 +382,7 @@ test("getTeamDetailsForCatalog resolves a stored NULL level to write", async ({
   const user = await makeUser();
   const org = await makeOrganization();
   const team = await makeTeam(org.id, user.id);
-  // A bare id stores NULL — the legacy shape that predates per-team levels.
+  // A bare id carries no level, so it takes the column default.
   const catalog = await makeInternalMcpCatalog({
     scope: "team",
     organizationId: org.id,

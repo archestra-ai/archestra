@@ -376,6 +376,22 @@ describe("mcp-catalog-permissions", () => {
       ).not.toThrow();
     });
 
+    test("an empty team list defers to the validation layer, not a 403", () => {
+      // The 'a team item needs a team' error is a 400 raised by
+      // assertMcpCatalogTeams; the authorization check must not mask it.
+      expect(() =>
+        authorizeMcpCatalogScope({
+          checker: nonAdmin,
+          scope: "team",
+          authorId: "author",
+          requestedTeamIds: [],
+          userTeamIds: ["t1"],
+          writeMembershipTeamIds: [],
+          userId: "author",
+        }),
+      ).not.toThrow();
+    });
+
     test("admin bypasses membership for any team", () => {
       expect(() =>
         authorizeMcpCatalogScope({

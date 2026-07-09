@@ -2374,6 +2374,13 @@
       "when": 1783565829313,
       "tag": "0338_fat_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 339,
+      "version": "7",
+      "when": 1783595547537,
+      "tag": "0339_high_whizzer",
+      "breakpoints": true
     }
   ]
 }

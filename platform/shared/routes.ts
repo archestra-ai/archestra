@@ -14,6 +14,8 @@ export const RouteId = {
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
+  GetAgentSubagentExclusions: "getAgentSubagentExclusions",
+  UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
   GetLabelKeys: "getLabelKeys",
   GetLabelValues: "getLabelValues",
 

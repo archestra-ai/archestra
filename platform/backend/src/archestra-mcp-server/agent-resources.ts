@@ -108,6 +108,12 @@ export const CreateBaseToolArgsSchema = z
       .describe(
         "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings.",
       ),
+    accessAllSubagents: z
+      .boolean()
+      .optional()
+      .describe(
+        "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false.",
+      ),
   })
   .strict();
 
@@ -160,6 +166,11 @@ export const AgentDetailOutputSchema = z.object({
     .describe(
       "Whether search_tools/run_tool may dynamically access every tool the calling user can access.",
     ),
+  accessAllSubagents: z
+    .boolean()
+    .describe(
+      "Whether the agent may delegate to every internal agent the calling user can access.",
+    ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
     .describe("The resource type."),
@@ -207,6 +218,7 @@ export async function handleCreateResource<
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
+    accessAllSubagents?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -285,6 +297,9 @@ export async function handleCreateResource<
     }
     if (args.accessAllTools !== undefined) {
       createParams.accessAllTools = args.accessAllTools;
+    }
+    if (args.accessAllSubagents !== undefined) {
+      createParams.accessAllSubagents = args.accessAllSubagents;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -458,6 +473,7 @@ export async function handleEditResource<
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
+    accessAllSubagents?: boolean;
   },
 >(params: {
   args: TArgs;
@@ -517,6 +533,9 @@ export async function handleEditResource<
     }
     if (args.accessAllTools !== undefined) {
       updateData.accessAllTools = args.accessAllTools;
+    }
+    if (args.accessAllSubagents !== undefined) {
+      updateData.accessAllSubagents = args.accessAllSubagents;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

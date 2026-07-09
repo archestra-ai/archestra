@@ -294,6 +294,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × connector; parent (agent) audited",
   },
+  agentExcludedSubagentsTable: {
+    audited: false,
+    reason: "join: agent × subagent exclusion; parent (agent) audited",
+  },
   agentExcludedToolsTable: {
     audited: false,
     reason: "join: agent × tool exclusion; parent (agent) audited",

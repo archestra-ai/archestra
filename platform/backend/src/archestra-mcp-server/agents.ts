@@ -158,6 +158,12 @@ const EditAgentToolArgsSchema = z
           .describe(
             "Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'.",
           ),
+        accessAllSubagents: z
+          .boolean()
+          .optional()
+          .describe(
+            "Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions).",
+          ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)
           .optional()

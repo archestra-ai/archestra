@@ -825,7 +825,7 @@ The following environment variables can be used to configure Archestra Platform.
 
 By default the Helm chart runs a managed Dagger Engine. `archestra.codeRuntime.enabled` and `archestra.codeRuntime.dagger.managed.enabled` are both on, so the chart deploys the engine as a StatefulSet (`dagger-runtime-engine`) in the release namespace. That pod runs privileged, adds all Linux capabilities, runs as root, and needs a 50Gi `ReadWriteOnce` PVC for its cache. It schedules only on nodes whose pod-security policy allows those settings and where the PVC can bind.
 
-The bundled engine is a convenience, not a requirement. The sandbox reaches its engine over `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, a `tcp://` or `kube-pod://` address. Run the engine however you like — the companion `platform/helm/dagger-runtime` chart, a Docker container, a standalone binary, or a separate cluster — as long as it is a reachable Dagger Engine.
+The bundled engine is a convenience, not a requirement. The sandbox reaches its engine over `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, a `tcp://` or `kube-pod://` address. Run the engine however you like — the companion `platform/helm/dagger-runtime` chart, a Docker container, a standalone binary, or a separate cluster — as long as it is a reachable Dagger Engine. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
 
 If your nodes can't host the managed pod, you have two options:
 

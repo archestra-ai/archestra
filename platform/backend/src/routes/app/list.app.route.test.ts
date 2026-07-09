@@ -129,6 +129,94 @@ describe("GET /api/apps", () => {
     });
   });
 
+  test("treats wildcard characters literally in external app search", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const makeExternalApp = async (params: {
+      catalogName: string;
+      catalogDescription: string;
+      toolName: string;
+      toolDescription: string;
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        name: params.catalogName,
+        description: params.catalogDescription,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: params.toolName,
+        description: params.toolDescription,
+        meta: {
+          _meta: { ui: { resourceUri: `ui://${catalog.id}/app.html` } },
+        },
+      });
+      return catalog;
+    };
+
+    const percentName = await makeExternalApp({
+      catalogName: "100% External",
+      catalogDescription: "Catalog name marker",
+      toolName: "percentname",
+      toolDescription: "Ordinary description",
+    });
+    const underscoreDescription = await makeExternalApp({
+      catalogName: "Underscore Description",
+      catalogDescription: "Contains an _ marker",
+      toolName: "underscoredescription",
+      toolDescription: "Ordinary description",
+    });
+    const backslashToolName = await makeExternalApp({
+      catalogName: "Backslash Tool Name",
+      catalogDescription: "Tool name marker",
+      toolName: "back\\slash",
+      toolDescription: "Ordinary description",
+    });
+    const percentToolDescription = await makeExternalApp({
+      catalogName: "Tool Description Marker",
+      catalogDescription: "Ordinary catalog description",
+      toolName: "percentdescription",
+      toolDescription: "MiXeD needle with a % marker",
+    });
+
+    const searchExternal = async (search: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${encodeURIComponent(search)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json<AppListResponse>();
+      const catalogIds = body.data
+        .filter((item) => item.source === "external")
+        .map((item) => item.catalogId)
+        .sort();
+      return { catalogIds, total: body.pagination.total };
+    };
+
+    expect(await searchExternal("%")).toEqual({
+      catalogIds: [percentName.id, percentToolDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchExternal("_")).toEqual({
+      catalogIds: [underscoreDescription.id],
+      total: 1,
+    });
+    expect(await searchExternal("\\")).toEqual({
+      catalogIds: [backslashToolName.id],
+      total: 1,
+    });
+    expect(await searchExternal("mixed NEEDLE")).toEqual({
+      catalogIds: [percentToolDescription.id],
+      total: 1,
+    });
+  });
+
   test("includes assigned team names for a team-scoped owned app", async ({
     makeApp,
     makeTeam,

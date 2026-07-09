@@ -25,6 +25,7 @@ import type {
   ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -619,6 +620,9 @@ class McpServerModel {
     const { catalogIds, search } = params;
     if (catalogIds.length === 0) return [];
     const searchTerm = search?.trim();
+    const searchPattern = searchTerm
+      ? `%${escapeLikePattern(searchTerm)}%`
+      : undefined;
     const uiResourceUri = toolUiResourceUriSql();
     const rows = await db
       .select({
@@ -643,15 +647,15 @@ class McpServerModel {
           // the platform CSP — never surfaced as external apps.
           ne(schema.internalMcpCatalogTable.serverType, "app"),
           sql`${uiResourceUri} IS NOT NULL`,
-          searchTerm
+          searchPattern
             ? or(
-                ilike(schema.internalMcpCatalogTable.name, `%${searchTerm}%`),
+                ilike(schema.internalMcpCatalogTable.name, searchPattern),
                 ilike(
                   schema.internalMcpCatalogTable.description,
-                  `%${searchTerm}%`,
+                  searchPattern,
                 ),
-                ilike(schema.toolsTable.name, `%${searchTerm}%`),
-                ilike(schema.toolsTable.description, `%${searchTerm}%`),
+                ilike(schema.toolsTable.name, searchPattern),
+                ilike(schema.toolsTable.description, searchPattern),
               )
             : undefined,
         ),

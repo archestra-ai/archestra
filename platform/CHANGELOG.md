@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.3.6](https://github.com/archestra-ai/archestra/compare/platform-v1.3.5...platform-v1.3.6) (2026-07-09)
+
+
+### Features
+
+* **mcp:** per-team access levels on catalog items ([#6439](https://github.com/archestra-ai/archestra/issues/6439)) ([b5c0b05](https://github.com/archestra-ai/archestra/commit/b5c0b05882e9972722fa6187500b7973cf274f12))
+
+
+### Bug Fixes
+
+* **auth:** stop refresh-token replays from wiping a user's whole OAuth token family ([#6438](https://github.com/archestra-ai/archestra/issues/6438)) ([ab09fde](https://github.com/archestra-ai/archestra/commit/ab09fde989a786b1c19ce5e13e8b8964fc421c06))
+* **chat:** show a declined tool with an orange dot, not a stuck blue one ([#6453](https://github.com/archestra-ai/archestra/issues/6453)) ([095492c](https://github.com/archestra-ai/archestra/commit/095492c1d0b8a0fe3ee8124067d466fe3430c99e))
+
+
+### Miscellaneous Chores
+
+* **backend:** drop inert sourceMap and removeComments from tsconfig ([#6455](https://github.com/archestra-ai/archestra/issues/6455)) ([8971a58](https://github.com/archestra-ai/archestra/commit/8971a58273720c5cef5f372ba036a6936791fe46))
+* **deps:** upgrade TypeScript 7 preview to the 7.0 RC ([#6452](https://github.com/archestra-ai/archestra/issues/6452)) ([b1f55c2](https://github.com/archestra-ai/archestra/commit/b1f55c2bbfa9cd3b8c16bf5fcf7c4fc8167b164f))
+* **frontend:** default local dev to the turbopack bundler ([#6456](https://github.com/archestra-ai/archestra/issues/6456)) ([2a4b091](https://github.com/archestra-ai/archestra/commit/2a4b0913741357ba23928c8f6b2fb1c2dd74a914))
+
 ## [1.3.5](https://github.com/archestra-ai/archestra/compare/platform-v1.3.4...platform-v1.3.5) (2026-07-09)
 
 

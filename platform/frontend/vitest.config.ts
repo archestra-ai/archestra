@@ -27,7 +27,16 @@ export default defineConfig({
     // JSDOM-heavy frontend tests need a larger worker heap on Node 24.
     pool: "forks",
     execArgv: ["--max-old-space-size=8192"],
-    // CI runs backend and frontend tests in parallel, so keep jsdom worker pressure low.
+    // Each fork is a separate process with the heap ceiling above, so worker
+    // count multiplies memory. Cap at half the cores so this suite doesn't
+    // exhaust RAM when it runs alongside the shared/type-check/lint tasks —
+    // locally via `turbo test`, and in CI where `check:ci` stacks them on one
+    // runner (which has shown orphaned fork workers when uncapped).
+    maxWorkers: "50%",
+    // Caps concurrent `test.concurrent` cases within a single file (plain
+    // sequential test() is unaffected). Kept as a low guardrail so a future
+    // concurrent suite can't pile jsdom work into one worker; worker count is
+    // capped separately by maxWorkers above.
     maxConcurrency: 2,
   },
 });

@@ -114,9 +114,12 @@ def run_bench(
     print(f"clean utility:        {percent(clean_utility)}")
     print(f"utility under attack: {percent(mean(attacked['utility_results'].values()))}")
     print(f"attack success rate:  {percent(mean(attacked['security_results'].values()))}")
+    # These episodes back the utility/ASR above; with force_rerun=False a pair
+    # already on disk is loaded from cache, so the count is exactly as
+    # cached-or-fresh as those metrics — never a different run's episodes.
     print(
         f"policy-blocked calls: {count_policy_blocks(run_files)} "
-        f"(across this run's {len(run_files)} episodes)"
+        f"(across the {len(run_files)} episodes behind these results)"
     )
     print(f"logs: {logdir_path / pipeline.name / suite_name}")
     return 0

@@ -122,21 +122,15 @@ fn attempt(engine: &PolicyEngine<Panel>, trajectory: &mut Trajectory, request: T
     println!();
 }
 
-/// `-v` traces the decision path (`debug`), `-vv` also the label algebra
-/// (`trace`); the `v`s accumulate whether written `-vv` or `-v -v`, and
-/// `--verbose` counts as one. `RUST_LOG` overrides the flag.
-fn verbosity() -> u8 {
-    std::env::args().skip(1).fold(0u8, |level, arg| {
-        let bump = match arg.as_str() {
-            "--verbose" => 1,
-            // `-v`, `-vv`, `-vvv`, ...: one step per `v`.
-            s if s.len() > 1 && s.starts_with('-') && s[1..].bytes().all(|b| b == b'v') => {
-                u8::try_from(s.len() - 1).unwrap_or(u8::MAX)
-            }
-            _ => 0,
-        };
-        level.saturating_add(bump)
-    })
+/// The `v`s accumulate whether written `-vv` or `-v -v`, and `--verbose`
+/// counts as one — clap's `Count` action.
+#[derive(clap::Parser)]
+#[command(about = "Toy end-to-end IFC policy run.")]
+struct Cli {
+    /// Trace core ops: `-v` the decision path (debug), `-vv` also the label
+    /// algebra (trace). `RUST_LOG` overrides.
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 }
 
 /// Logs go to stderr so this demo's stdout narration stays clean.
@@ -156,7 +150,8 @@ fn init_tracing(verbosity: u8) {
 }
 
 fn main() {
-    init_tracing(verbosity());
+    use clap::Parser;
+    init_tracing(Cli::parse().verbose);
 
     // AllowWithAudit for unprovable gaps; the taint knob on so a degrading
     // step is flagged and signed off rather than propagating silently.

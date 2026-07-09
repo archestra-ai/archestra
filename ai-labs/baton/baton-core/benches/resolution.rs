@@ -203,8 +203,8 @@ fn random_label(rng: &mut TinyRng, users: &[UserId]) -> Label {
 
 fn random_audience(rng: &mut TinyRng, users: &[UserId]) -> Audience {
     match rng.below(6) {
-        0 => Audience::Public,
-        1 => Audience::Unknown,
+        0 => Audience::PUBLIC,
+        1 => Audience::UNKNOWN,
         _ => {
             let reader_count = 1 + rng.below(8);
             Audience::readers(random_user_set(rng, users, reader_count))
@@ -214,7 +214,7 @@ fn random_audience(rng: &mut TinyRng, users: &[UserId]) -> Audience {
 
 fn random_trust(rng: &mut TinyRng) -> Trust {
     match rng.below(4) {
-        0 => Trust::Unknown,
+        0 => Trust::UNKNOWN,
         1 => Trust::SUSPICIOUS,
         _ => Trust::TRUSTED,
     }
@@ -222,7 +222,7 @@ fn random_trust(rng: &mut TinyRng) -> Trust {
 
 fn random_effects(rng: &mut TinyRng) -> Effects {
     match rng.below(5) {
-        0 => Effects::Unknown,
+        0 => Effects::UNKNOWN,
         1 => Effects::declared([Effect::Mutation]),
         2 => Effects::declared([Effect::Egress]),
         3 => Effects::declared([Effect::Mutation, Effect::Egress]),

@@ -410,7 +410,8 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
 {{- if .Values.postgresql.enabled }}
 # Ensure the pgvector extension exists in the application database.
 - name: setup-postgres-extensions
-  image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}
+  {{- /* Honor the digest pin the same way the Bitnami subchart does: with a digest, the tag is informational and the digest wins. */}}
+  image: {{ printf "%s:%s" (.Values.postgresql.image.repository | default "bitnami/postgresql") (.Values.postgresql.image.tag | default "latest") }}{{ with .Values.postgresql.image.digest }}@{{ . }}{{ end }}
   {{- with .Values.archestra.initContainers.resources }}
   resources:
     {{- toYaml . | nindent 4 }}

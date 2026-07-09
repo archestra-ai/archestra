@@ -247,6 +247,7 @@ Environment network policies require the chart's default MCP manager RBAC so Arc
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
 - `archestra.migrationJob.enabled` - Run database migrations in a pre-upgrade Job before rolling web and worker pods (default: true)
+- `archestra.migrationJob.lockTimeout` - PostgreSQL `lock_timeout` for the migration session (default: `5s`). Migrations fail fast instead of blocking live traffic behind a table lock. Set to `null` to disable.
 - `archestra.migrationJob.envFromSecrets` - Optional hook-only secret values, usually only needed when `ARCHESTRA_DATABASE_URL` uses Kubernetes `$(VAR)` expansion
 
 #### HorizontalPodAutoscaler
@@ -462,7 +463,9 @@ helm upgrade archestra-platform \
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
 
-During Helm upgrades, the chart runs `pnpm db:migrate` in a pre-upgrade Job before rolling the web and worker Deployments. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band.
+The bundled PostgreSQL image is pinned by digest, so the database version only changes when the chart updates `postgresql.image.digest`. The bundled instance runs a single replica — it restarts during some upgrades, so use an external database where downtime matters.
+
+During Helm upgrades, the chart runs `pnpm db:migrate` in a pre-upgrade Job before rolling the web and worker Deployments. The Job runs with a PostgreSQL `lock_timeout` (`archestra.migrationJob.lockTimeout`, default `5s`) — a migration that cannot get a table lock fails and retries instead of blocking live traffic. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band.
 
 For external Postgres, the simplest setup is a complete `postgresql.external_database_url`; the chart stores it in a Kubernetes Secret and passes it to the migration Job automatically.
 

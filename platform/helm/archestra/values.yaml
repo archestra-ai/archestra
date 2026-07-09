@@ -348,6 +348,15 @@ archestra:
     backoffLimit: 3
     # Hard cap on Job runtime. Set to null to disable the deadline.
     activeDeadlineSeconds: 600
+    # PostgreSQL lock_timeout for the migration session (via PGOPTIONS). The
+    # pre-upgrade hook runs while the previous release's pods still serve
+    # traffic, so DDL waiting on an ACCESS EXCLUSIVE lock would queue behind
+    # live queries and stall every later query on that table until it gets the
+    # lock. With a lock_timeout the migration fails fast instead (retried per
+    # backoffLimit; the upgrade aborts cleanly rather than freezing traffic).
+    # Accepts any PostgreSQL duration (e.g. "5s", "2500ms"). Set to null to
+    # disable. Ignored when you provide your own PGOPTIONS via migrationJob.env.
+    lockTimeout: 5s
     # Resource requests/limits for the migration container.
     # If not set, inherits from archestra.resources.
     resources: {}
@@ -938,18 +947,37 @@ postgresql:
       scripts:
         grant-superuser.sql: |
           ALTER USER archestra WITH SUPERUSER;
+    # Appended to postgresql.conf. max_connections must cover every backend
+    # pod's connection pool (ARCHESTRA_DATABASE_POOL_MAX, default 50 per pod)
+    # at peak pod count: web + worker replicas PLUS the extra surge pods that
+    # exist mid-rollout (deploymentStrategy maxSurge, default 25% => +1 pod
+    # per Deployment), plus the migration hook and the metrics exporter.
+    # Default sizing: (1 web + 1 worker + 2 surge) x 50 = 200, with headroom.
+    # Scale this up if you raise replicaCount, HPA maxReplicas, or the pool size.
+    extendedConfiguration: |
+      max_connections = 250
     resources:
       requests:
         cpu: "1000m"
         memory: "1Gi"
       limits:
         cpu: "1000m"
-        memory: "1Gi"
+        # Higher than the request: a hard 1Gi ceiling has OOM-killed the
+        # bundled instance under load, and a single-replica database restart
+        # is a full platform outage until it comes back.
+        memory: "2Gi"
   # PostgreSQL exporter sidecar for Prometheus metrics (port 9187)
   # Metrics are scraped by the observability stack (Grafana Alloy or Prometheus)
   # and visualized in the Application Metrics Grafana dashboard (PostgreSQL section)
   metrics:
     enabled: true
+    # Same repository/digest pinning rationale as postgresql.image below: the
+    # subchart default points at the archived "bitnami" repository with a
+    # floating "latest" tag.
+    image:
+      repository: bitnamisecure/postgres-exporter
+      tag: latest
+      digest: sha256:53ab72a1b940d7637e91619f1000da9ebef14bc7dad74321a78731d65c79f55b
     service:
       ports:
         metrics: 9187
@@ -961,6 +989,14 @@ postgresql:
   image:
     repository: bitnamisecure/postgresql
     tag: latest
+    # Bitnami Secure Images only publish a floating "latest" tag for free use,
+    # so pin the exact image by digest: a database must not change versions
+    # whenever its pod happens to be rescheduled onto a new node (a
+    # major-version jump refuses to start against the existing data
+    # directory). This digest is PostgreSQL 18.4.0. Refresh it deliberately
+    # alongside chart updates:
+    #   docker buildx imagetools inspect bitnamisecure/postgresql:latest
+    digest: sha256:91a6c3f4b4d687546c1d07c1ef7c27a5e85e2a0ce8a192fe94cad5bbde0a1aba
   global:
     security:
       allowInsecureImages: true

@@ -191,6 +191,8 @@ async function makeOrganization(
       | "slug"
       | "defaultDiscoveredToolInvocationPolicy"
       | "defaultDiscoveredToolResultPolicy"
+      | "defaultEnvironmentNamespace"
+      | "defaultNetworkPolicy"
     >
   > = {},
 ) {

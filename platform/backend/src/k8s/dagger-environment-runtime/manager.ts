@@ -187,7 +187,8 @@ class DaggerEnvironmentRuntimeManager {
         );
       }
     }
-    const organization = await OrganizationModel.getById(organizationId);
+    const organization =
+      await OrganizationModel.getDefaultEngineTarget(organizationId);
     if (!organization) return;
     try {
       await this.reconcileOrganizationDefault(organization);
@@ -312,12 +313,13 @@ class DaggerEnvironmentRuntimeManager {
   // parity with the MCP server runtime. Without it, such a target resolves to
   // the unrestricted built-in policy and the sandbox egresses freely.
   private async resolveEngineEffectivePolicy(target: EngineReconcileTarget) {
-    const organization = await OrganizationModel.getById(target.organizationId);
+    const defaultNetworkPolicy =
+      await OrganizationModel.getDefaultNetworkPolicy(target.organizationId);
     return resolveEffectiveNetworkPolicy({
       organizationId: target.organizationId,
       environmentId: target.engineId,
       environmentNetworkPolicy: target.networkPolicyOverride,
-      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
+      defaultNetworkPolicy,
     });
   }
 

@@ -33,7 +33,11 @@ vi.mock("@/config", async () =>
 // manager's own import — mocking the barrel does not. resolveEffectiveNetworkPolicy
 // is left real: it's a pure resolver, so asserting its result proves the wiring.
 vi.mock("@/models/organization", () => ({
-  default: { getById: vi.fn() },
+  default: {
+    getDefaultEngineTarget: vi.fn(),
+    getDefaultNetworkPolicy: vi.fn(),
+    listDefaultEngineTargets: vi.fn(),
+  },
 }));
 
 import config from "@/config";
@@ -311,9 +315,9 @@ describe("resolveEngineEffectivePolicy", () => {
     // freely. Asserting the real resolver returns the org default proves the wire.
     // This is the org-default engine's path (it always carries a null override).
     const defaultNetworkPolicy = { egressMode: "restricted" };
-    vi.mocked(OrganizationModel.getById).mockResolvedValue({
-      defaultNetworkPolicy,
-    } as never);
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      defaultNetworkPolicy as never,
+    );
 
     const result = await resolve({
       engineId: "abcdef00-1111-2222-3333-444455556666",
@@ -329,8 +333,8 @@ describe("resolveEngineEffectivePolicy", () => {
 
   it("uses the target's own override policy over the org default", async () => {
     const ownPolicy = { egressMode: "restricted", allowedDomains: ["a.test"] };
-    vi.mocked(OrganizationModel.getById).mockResolvedValue({
-      defaultNetworkPolicy: { egressMode: "off" },
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue({
+      egressMode: "off",
     } as never);
 
     const result = await resolve({
@@ -397,7 +401,9 @@ describe("reconcileEnvironment — applyCustomPolicy upsert (AWS ApplicationNetw
     clients = makeFakeClients();
     mockIsK8sConfigured.mockReturnValue(true);
     mockGetK8sNamespace.mockReturnValue("test-ns");
-    vi.mocked(OrganizationModel.getById).mockResolvedValue(null as never);
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      null,
+    );
     mockGetK8sCapabilities.mockResolvedValue({
       networkPolicy: awsCapabilities,
     } as never);
@@ -545,7 +551,9 @@ describe("reconcileOrganizationDefault", () => {
       "tcp://byo:1234";
     try {
       const org = makeOrg({ id: "org-byo" });
-      vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+      vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+        org.defaultNetworkPolicy as never,
+      );
 
       await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
       expect(
@@ -572,7 +580,9 @@ describe("reconcileOrganizationDefault", () => {
       id: "org-bad",
       defaultEnvironmentNamespace: "Team-A",
     });
-    vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      org.defaultNetworkPolicy as never,
+    );
     const target =
       daggerEnvironmentRuntimeManager.organizationDefaultTarget(org);
 
@@ -593,7 +603,9 @@ describe("reconcileOrganizationDefault", () => {
       defaultEnvironmentNamespace: "team-ns",
       defaultNetworkPolicy: null,
     });
-    vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      org.defaultNetworkPolicy as never,
+    );
     const engineId =
       daggerEnvironmentRuntimeManager.organizationDefaultTarget(
         org,
@@ -628,7 +640,9 @@ describe("reconcileOrganizationDefault", () => {
         allowedCidrs: [],
       },
     });
-    vi.mocked(OrganizationModel.getById).mockResolvedValue(org as never);
+    vi.mocked(OrganizationModel.getDefaultNetworkPolicy).mockResolvedValue(
+      org.defaultNetworkPolicy as never,
+    );
 
     await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(org);
 

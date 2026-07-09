@@ -1765,6 +1765,28 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
   });
 
+  // A blank host is the normal "no sandbox here" case, not a misconfiguration:
+  // it must stay silent. A malformed one is logged. The gate relies on exactly
+  // this distinction to decide whether to fail closed.
+  test("treats a whitespace-only host as unset, without logging an error", () => {
+    vi.mocked(logger.error).mockClear();
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({ enabled: true, envValue: "   " }),
+    ).toBeUndefined();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  test("rejects a supported scheme in the wrong case, and says so", () => {
+    vi.mocked(logger.error).mockClear();
+    expect(
+      parseCodeRuntimeDaggerRunnerHost({
+        enabled: true,
+        envValue: "TCP://dagger:1234",
+      }),
+    ).toBeUndefined();
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   test("should return undefined for unsupported runner hosts", () => {
     expect(
       parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
@@ -1940,6 +1962,27 @@ describe("isCodeRuntimeEnabled", () => {
     ).toBe(false);
   });
 
+  // config.ts derives orchestrator.loadKubeconfigFromCurrentCluster with
+  // `env === "true"`, and k8s/shared.ts's isK8sConfigured() consumes that
+  // boolean. This gate recomputes the predicate from raw env (importing
+  // k8s/shared would be a circular dependency), so it must agree: any value
+  // other than the exact string "true" is NOT the orchestrator being configured.
+  test.each([
+    "TRUE",
+    "1",
+    "yes",
+    "True",
+    " true ",
+  ])("loadKubeconfigFromCurrentCluster=%s does not count as configured", (value) => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: value,
+      }),
+    ).toBe(false);
+  });
+
   test("nothing configured stays off", () => {
     expect(isCodeRuntimeEnabled(base)).toBe(false);
   });
@@ -1966,6 +2009,27 @@ describe("parseEngineDeniedCidrs", () => {
   // NetworkPolicy. The engine StatefulSet is created before its policy, so that
   // leaves a privileged engine running with no egress policy at all. Dropping
   // the bad entry keeps the built-in denials in force.
+  test("trims whitespace around entries", () => {
+    expect(parseEngineDeniedCidrs(" 10.1.0.0/16 , 192.0.2.0/24 ")).toEqual([
+      "10.1.0.0/16",
+      "192.0.2.0/24",
+    ]);
+  });
+
+  test("drops every entry when none is valid, and logs them", () => {
+    vi.mocked(logger.error).mockClear();
+    expect(parseEngineDeniedCidrs("nonsense,also-bad")).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("nonsense"),
+    );
+  });
+
+  // A leading zero makes an octet octal-ambiguous across parsers, so the whole
+  // entry is rejected rather than silently denying a different range.
+  test("rejects an octet with a leading zero", () => {
+    expect(parseEngineDeniedCidrs("010.0.0.0/8")).toEqual([]);
+  });
+
   test.each([
     "not-a-cidr",
     "10.0.0.0", // no prefix

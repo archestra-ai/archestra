@@ -803,6 +803,29 @@ describe("OrganizationModel", () => {
       ).toBeNull();
     });
 
+    test("listDefaultEngineTargets projects every organization to id + namespace", async ({
+      makeOrganization,
+    }) => {
+      const a = await makeOrganization({
+        defaultEnvironmentNamespace: "ns-a",
+      });
+      const b = await makeOrganization({ defaultEnvironmentNamespace: null });
+
+      const targets = await OrganizationModel.listDefaultEngineTargets();
+      const byId = new Map(targets.map((t) => [t.id, t]));
+
+      // toEqual pins the exact key set: a `select()` would carry ~50 more
+      // columns, including the base64 logo fields this projection exists to skip.
+      expect(byId.get(a.id)).toEqual({
+        id: a.id,
+        defaultEnvironmentNamespace: "ns-a",
+      });
+      expect(byId.get(b.id)).toEqual({
+        id: b.id,
+        defaultEnvironmentNamespace: null,
+      });
+    });
+
     // The projections must not drift from the row they replace: an engine whose
     // egress policy silently resolved to null would run unrestricted.
     test("projections agree with the full row", async ({

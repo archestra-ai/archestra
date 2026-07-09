@@ -16,8 +16,10 @@ import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtim
 import {
   ConversationAttachmentModel,
   ConversationModel,
+  EnvironmentModel,
   FileModel,
   FileNameExistsError,
+  OrganizationModel,
   ProjectModel,
   SkillModel,
   SkillSandboxModel,
@@ -141,8 +143,14 @@ describe("sandbox tools (runtime enabled)", () => {
     },
   );
 
+  const originalRunnerHost = config.daggerRuntime.runnerHost;
+
   afterEach(() => {
     vi.restoreAllMocks();
+    // The routing tests write this directly; restoreAllMocks does not undo a
+    // property assignment, so a leaked host would silently reroute later tests.
+    (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+      originalRunnerHost;
   });
 
   async function makeConversationCtx(): Promise<ArchestraContext> {
@@ -260,6 +268,206 @@ describe("sandbox tools (runtime enabled)", () => {
       );
 
       expect(targetSpy).not.toHaveBeenCalled();
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: undefined }),
+      );
+    });
+
+    // A bound agent needs its own conversation: the ctx agent id drives routing.
+    async function boundAgentCtx(
+      makeAgent: (o: Record<string, unknown>) => Promise<Agent>,
+      assignTools: (id: string) => Promise<unknown>,
+      environmentId: string,
+    ): Promise<ArchestraContext> {
+      const bound = await makeAgent({
+        name: "Bound Agent",
+        organizationId,
+        environmentId,
+      });
+      await assignTools(bound.id);
+      const conversation = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: bound.id,
+        title: "Bound",
+      });
+      return {
+        agent: { id: bound.id, name: bound.name },
+        agentId: bound.id,
+        organizationId,
+        userId,
+        conversationId: conversation.id,
+      };
+    }
+
+    // An agent bound to an environment carries that environment's egress policy.
+    // A BYO runner host serves unbound runs only: letting it capture a bound
+    // agent would run the agent's code on the shared engine with unrestricted
+    // egress, silently defeating the environment's network isolation.
+    test("a bound agent runs on its environment's engine even when a BYO runner host is set", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const environment = await EnvironmentModel.create({
+        organizationId,
+        name: "Locked Down",
+        namespace: "env-ns",
+      });
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        environment.id,
+      );
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+        "tcp://byo:1234";
+      const envTarget = { environmentId: environment.id, namespace: "env-ns" };
+      const envSpy = vi
+        .spyOn(
+          daggerEnvironmentRuntimeManager,
+          "environmentTargetForEnvironment",
+        )
+        .mockReturnValue(envTarget);
+      const orgSpy = vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "organizationDefaultTarget",
+      );
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(envSpy).toHaveBeenCalled();
+      expect(orgSpy).not.toHaveBeenCalled();
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: envTarget }),
+      );
+    });
+
+    // findByIdForOrganization scopes by org, so a cross-tenant environment id
+    // resolves to null. The run must fail rather than fall back to the shared
+    // engine, which would execute the agent's code with unrestricted egress.
+    // The specific message is masked by the generic error handler, so assert the
+    // property that matters: nothing was executed.
+    test("a bound agent referencing another organization's environment refuses to run", async ({
+      makeAgent,
+      makeOrganization,
+      seedAndAssignArchestraTools,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const foreign = await EnvironmentModel.create({
+        organizationId: otherOrg.id,
+        name: "Other Org Env",
+        namespace: "other-ns",
+      });
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        foreign.id,
+      );
+      const runSpy = stubRunCommand("sbx-1");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(runSpy).not.toHaveBeenCalled();
+    });
+
+    test("a bound agent refuses to run when its environment engine cannot be resolved", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const environment = await EnvironmentModel.create({
+        organizationId,
+        name: "Unresolvable",
+        namespace: "env-ns",
+      });
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        environment.id,
+      );
+      const runSpy = stubRunCommand("sbx-1");
+      vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "environmentTargetForEnvironment",
+      ).mockReturnValue(undefined);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(runSpy).not.toHaveBeenCalled();
+    });
+
+    // agents.environment_id is ON DELETE SET NULL: deleting an environment
+    // unbinds its agents rather than dangling the reference, so they fall back
+    // to the organization's default engine and its egress policy.
+    test("deleting an environment unbinds its agent onto the org default engine", async ({
+      makeAgent,
+      seedAndAssignArchestraTools,
+    }) => {
+      const environment = await EnvironmentModel.create({
+        organizationId,
+        name: "Doomed",
+        namespace: "env-ns",
+      });
+      const ctx = await boundAgentCtx(
+        makeAgent,
+        seedAndAssignArchestraTools,
+        environment.id,
+      );
+      await EnvironmentModel.delete(environment.id, organizationId);
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost = undefined;
+      const orgTarget = {
+        environmentId: "22222222-2222-4222-8222-222222222222",
+        namespace: "org-ns",
+      };
+      vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "organizationDefaultTarget",
+      ).mockReturnValue(orgTarget);
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ environment: orgTarget }),
+      );
+    });
+
+    test("an unbound agent whose organization row is missing gets no engine", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("sbx-1");
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost = undefined;
+      vi.spyOn(OrganizationModel, "getDefaultEngineTarget").mockResolvedValue(
+        null,
+      );
+      const orgSpy = vi.spyOn(
+        daggerEnvironmentRuntimeManager,
+        "organizationDefaultTarget",
+      );
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+
+      expect(orgSpy).not.toHaveBeenCalled();
       expect(runSpy).toHaveBeenCalledWith(
         expect.objectContaining({ environment: undefined }),
       );

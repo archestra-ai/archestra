@@ -166,6 +166,22 @@ describe("organizationDefaultTarget", () => {
     expect(a1).not.toBe(b);
   });
 
+  // Golden vector. The engine id is a UUIDv5 of the org id under a fixed
+  // namespace constant, and it is the pod's identity: change that constant and
+  // every organization silently re-keys to a new engine, orphaning the running
+  // StatefulSet and stranding its Retain-policy PVC. Determinism within a run
+  // cannot catch that — only a pinned value across releases can. Cross-checked
+  // against an independent uuid5 implementation.
+  it.each([
+    ["org-golden-1", "057d66d6-e4d6-5e5b-9072-ed0f1b5c78c2"],
+    ["org-abc", "76c4c009-e725-55ad-94ac-248c98da59d5"],
+  ])("derives a stable engine id for %s across releases", (id, expected) => {
+    expect(
+      daggerEnvironmentRuntimeManager.organizationDefaultTarget(makeOrg({ id }))
+        ?.environmentId,
+    ).toBe(expected);
+  });
+
   it("uses the org's default namespace, else the release namespace", () => {
     expect(
       daggerEnvironmentRuntimeManager.organizationDefaultTarget(
@@ -539,6 +555,37 @@ describe("reconcileOrganizationDefault", () => {
     mockGetClusterDnsIps.mockResolvedValue(["10.0.0.10"]);
     mockLoadKubeConfig.mockReturnValue({ kubeConfig: {} } as never);
     mockCreateK8sClients.mockReturnValue(clients as never);
+  });
+
+  // isEnabled() gates on both the sandbox flag and Kubernetes being configured.
+  // A disabled runtime that still reconciled would create a privileged engine
+  // pod on a deployment that never opted into running untrusted code.
+  it.each([
+    ["the sandbox flag is off", { sandbox: false, k8s: true }],
+    ["Kubernetes is not configured", { sandbox: true, k8s: false }],
+  ])("provisions nothing when %s", async (_label, { sandbox, k8s }) => {
+    const originalEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = sandbox;
+    mockIsK8sConfigured.mockReturnValue(k8s);
+    try {
+      // Both entry points must stay inert: an environment engine is as
+      // privileged as the org-default one.
+      await daggerEnvironmentRuntimeManager.reconcileOrganizationDefault(
+        makeOrg({ id: "org-off" }),
+      );
+      await daggerEnvironmentRuntimeManager.reconcileEnvironment(
+        makeEnv({ namespace: "release-ns" }),
+      );
+      expect(
+        clients.appsApi.createNamespacedStatefulSet,
+      ).not.toHaveBeenCalled();
+      expect(clients.coreApi.createNamespacedConfigMap).not.toHaveBeenCalled();
+      expect(
+        clients.networkingApi.createNamespacedNetworkPolicy,
+      ).not.toHaveBeenCalled();
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+    }
   });
 
   // A bring-your-own runner host serves every unbound run, so an org-default

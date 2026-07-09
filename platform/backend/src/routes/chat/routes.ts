@@ -714,10 +714,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const normalizedMessagesForLLM =
               normalizeChatMessages(messagesForLLM);
 
-            // Perplexity does NOT support tool calling - it has built-in web search instead
-            // @see https://docs.perplexity.ai/api-reference/chat-completions-post
-            const supportsToolCalling = provider !== "perplexity";
-
             // For Gemini image generation models, enable image output via responseModalities
             // Known image-capable model patterns:
             // - gemini-2.0-flash-exp-image-generation
@@ -909,6 +905,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                   return null;
                 });
+
+                // Omit tools for models that can't take them (e.g. Microsoft
+                // 365 Copilot) instead of letting the provider reject the
+                // turn; an unknown capability is assumed supported. Perplexity
+                // stays hardcoded — its models don't declare capabilities and
+                // it has built-in web search instead of tool calling
+                // (https://docs.perplexity.ai/api-reference/chat-completions-post).
+                const supportsToolCalling =
+                  provider !== "perplexity" &&
+                  modelRow?.supportsToolCalling !== false;
 
                 const { modelMessages, preparedMessages } =
                   await buildModelMessages({

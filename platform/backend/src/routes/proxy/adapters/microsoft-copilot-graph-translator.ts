@@ -28,6 +28,13 @@ export interface GraphChatBody {
 }
 
 /**
+ * The one string the chat error mapper keys on to classify the proxy's tools
+ * rejection as ChatErrorCode.ToolsUnsupported (see routes/chat/errors.ts).
+ */
+export const MICROSOFT_COPILOT_TOOLS_UNSUPPORTED_MESSAGE =
+  "Microsoft Copilot does not support tool calling. Remove the tools from this request (or the MCP tools from this agent), or use a different provider for tool-based workflows.";
+
+/**
  * The Graph Chat API has no tool calling at all, so a request that declares
  * tools must fail loudly — silently dropping them would leave agents' MCP
  * tools doing nothing.
@@ -39,10 +46,7 @@ export function assertNoTools(request: ChatCompletionsRequest): void {
     (request.tool_choice !== undefined && request.tool_choice !== "none") ||
     (Array.isArray(legacyFunctions) && legacyFunctions.length > 0)
   ) {
-    throw new ApiError(
-      400,
-      "Microsoft Copilot does not support tool calling. Remove the tools from this request (or the MCP tools from this agent), or use a different provider for tool-based workflows.",
-    );
+    throw new ApiError(400, MICROSOFT_COPILOT_TOOLS_UNSUPPORTED_MESSAGE);
   }
 }
 

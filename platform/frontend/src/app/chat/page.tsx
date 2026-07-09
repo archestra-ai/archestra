@@ -41,6 +41,7 @@ import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { NoToolsModelNotice } from "@/components/chat/no-tools-model-notice";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
@@ -136,6 +137,7 @@ import {
 } from "@/lib/chat/pending-tool-state";
 import {
   agentRequiresPerUserConnect,
+  agentToolsUnavailableForModel,
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
@@ -775,6 +777,29 @@ export function ChatPageContent({
     conversation?.modelId,
     chatModels,
   ]);
+
+  // A no-tools model (e.g. Microsoft 365 Copilot) paired with a tooled agent
+  // runs tool-less — the backend omits the tools — so an up-front notice
+  // above the composer replaces tools silently never firing.
+  const initialToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === initialAgentId),
+        selectedModelId: initialModel,
+        models: chatModels,
+      }),
+    [internalAgents, initialAgentId, initialModel, chatModels],
+  );
+
+  const conversationToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === conversation?.agentId),
+        selectedModelId: conversation?.modelId,
+        models: chatModels,
+      }),
+    [internalAgents, conversation?.agentId, conversation?.modelId, chatModels],
+  );
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
@@ -2569,6 +2594,9 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
+                            {conversationToolsUnavailable && (
+                              <NoToolsModelNotice />
+                            )}
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               onStop={handleStopStreaming}
@@ -2719,7 +2747,8 @@ export function ChatPageContent({
                           share="chat-composer-morph"
                           default="none"
                         >
-                          <div className="w-full max-w-4xl">
+                          <div className="w-full max-w-4xl space-y-3">
+                            {initialToolsUnavailable && <NoToolsModelNotice />}
                             <ArchestraPromptInput
                               onSubmit={handleInitialSubmit}
                               status={

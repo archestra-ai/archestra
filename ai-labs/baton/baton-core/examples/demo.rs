@@ -122,7 +122,42 @@ fn attempt(engine: &PolicyEngine<Panel>, trajectory: &mut Trajectory, request: T
     println!();
 }
 
+/// `-v` traces the decision path (`debug`), `-vv` also the label algebra
+/// (`trace`); the `v`s accumulate whether written `-vv` or `-v -v`, and
+/// `--verbose` counts as one. `RUST_LOG` overrides the flag.
+fn verbosity() -> u8 {
+    std::env::args().skip(1).fold(0u8, |level, arg| {
+        let bump = match arg.as_str() {
+            "--verbose" => 1,
+            // `-v`, `-vv`, `-vvv`, ...: one step per `v`.
+            s if s.len() > 1 && s.starts_with('-') && s[1..].bytes().all(|b| b == b'v') => {
+                u8::try_from(s.len() - 1).unwrap_or(u8::MAX)
+            }
+            _ => 0,
+        };
+        level.saturating_add(bump)
+    })
+}
+
+/// Logs go to stderr so this demo's stdout narration stays clean.
+fn init_tracing(verbosity: u8) {
+    let default = match verbosity {
+        0 => "warn",
+        1 => "baton_core=debug",
+        _ => "baton_core=trace",
+    };
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default)),
+        )
+        .with_writer(std::io::stderr)
+        .init();
+}
+
 fn main() {
+    init_tracing(verbosity());
+
     // AllowWithAudit for unprovable gaps; the taint knob on so a degrading
     // step is flagged and signed off rather than propagating silently.
     let mut engine = PolicyEngine::new((HumanInTheLoop, OnCallAdmin), UnknownPolicy::AllowWithAudit)

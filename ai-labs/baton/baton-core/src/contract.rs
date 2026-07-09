@@ -4,6 +4,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use tracing::trace;
+
 use crate::ToolName;
 use crate::dimension::{Adequacy, Effect, KnownTrust, UserId};
 use crate::label::Label;
@@ -309,8 +311,10 @@ impl Requirements {
         }
 
         if violations.is_empty() {
+            trace!(tool = %request.tool, "check: allow");
             Verdict::Allow
         } else {
+            trace!(tool = %request.tool, violations = ?violations, "check: escalate");
             Verdict::Escalate(violations)
         }
     }

@@ -346,6 +346,8 @@ name = "baton-core"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

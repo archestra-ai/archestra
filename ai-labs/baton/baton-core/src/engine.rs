@@ -3,6 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use tracing::{debug, warn};
+
 use crate::ToolName;
 use crate::authority::{Authority, AuthorityName, Ruling};
 use crate::contract::{Breach, Fixability, Requirements, ToolContract, ToolRequest, Unprovable, Verdict, Violation};
@@ -221,8 +223,10 @@ impl<A: Authority> PolicyEngine<A> {
     /// error, not a silent overwrite.
     pub fn register(&mut self, contract: ToolContract) -> Result<(), DuplicateContract> {
         if self.contracts.contains_key(&contract.name) {
+            debug!(tool = %contract.name, "register: duplicate contract refused");
             return Err(DuplicateContract { tool: contract.name });
         }
+        debug!(tool = %contract.name, "register: contract registered");
         self.contracts.insert(contract.name.clone(), contract);
         Ok(())
     }
@@ -255,11 +259,13 @@ impl<A: Authority> PolicyEngine<A> {
     /// evaluate → execute → [`Trajectory::record_result`] loop of the
     /// embedding harness; the permit's binding to the trajectory head keeps
     /// that loop honest.
+    #[tracing::instrument(level = "debug", skip_all, fields(tool = %request.tool))]
     pub fn evaluate(&self, trajectory: &Trajectory, request: &ToolRequest) -> Decision {
         let context = trajectory.context_label();
         let confirmation = trajectory.pending_confirmation();
         let trajectory_id = trajectory.id();
         let basis = trajectory.turns().len();
+        debug!(%context, confirmation = ?confirmation, basis, "folded context");
 
         let permit = |result_label| {
             Decision::Permitted(Permit {
@@ -283,6 +289,7 @@ impl<A: Authority> PolicyEngine<A> {
                 Label::unknown(),
             ),
         };
+        debug!(has_contract = contract.is_some(), "contract lookup");
 
         let mut violations = match verdict {
             Verdict::Allow => Vec::new(),
@@ -297,16 +304,20 @@ impl<A: Authority> PolicyEngine<A> {
             None
         };
         if let Some(taint) = taint {
+            debug!("taint flagged (output would degrade context)");
             violations.push(taint);
         }
 
         if violations.is_empty() {
+            debug!("permitted (no violations)");
             return permit(result_label);
         }
+        debug!(violations = ?violations, "triaging violations");
 
         // Axis: fixability. A structural violation is an integration bug no
         // authority may override — block before consulting anyone.
         if violations.iter().any(|v| v.fixability() == Fixability::Structural) {
+            debug!("blocked (structural fix required)");
             return Decision::Blocked {
                 violations,
                 reason: BlockReason::RequiresStructuralFix,
@@ -321,11 +332,18 @@ impl<A: Authority> PolicyEngine<A> {
         let mut result_label = result_label;
         let mut escalating = breaches;
         let mut audited_unknowns = Vec::new();
+        debug!(
+            policy = ?self.unknown_policy,
+            unprovable = unprovable.len(),
+            breaches = escalating.len(),
+            "unknown-policy disposition",
+        );
         match self.unknown_policy {
             UnknownPolicy::Escalate => escalating.extend(unprovable),
             UnknownPolicy::Deny => {
                 if !unprovable.is_empty() {
                     escalating.extend(unprovable);
+                    debug!("blocked (unknown-policy deny)");
                     return Decision::Blocked {
                         violations: escalating,
                         reason: BlockReason::UnknownDenied,
@@ -337,12 +355,14 @@ impl<A: Authority> PolicyEngine<A> {
 
         if escalating.is_empty() {
             if !audited_unknowns.is_empty() {
+                debug!(count = audited_unknowns.len(), "acknowledging policy-audited unknowns");
                 result_label.audit.push(AuditEntry::Acknowledged {
                     tool: request.tool.clone(),
                     facts: audited_unknowns,
                     by: None,
                 });
             }
+            debug!("permitted (no escalation)");
             return permit(result_label);
         }
 
@@ -354,6 +374,7 @@ impl<A: Authority> PolicyEngine<A> {
             Some(c) => needed_grant(&escalating, request, &c.requires),
             None => Grant::empty(),
         };
+        debug!(grant = ?needed, escalating = ?escalating, "derived grant, routing to authority");
 
         // Route and adjudicate in one traversal: the authority names the
         // deciding member and returns its ruling together, so attribution is
@@ -361,15 +382,18 @@ impl<A: Authority> PolicyEngine<A> {
         // — block without consulting anyone.
         let full_picture: Vec<Violation> = escalating.iter().chain(audited_unknowns.iter()).cloned().collect();
         let Some((authority_name, ruling)) = self.authority.rule(&needed, request, &context, &full_picture) else {
+            debug!("blocked (no competent authority)");
             escalating.extend(audited_unknowns);
             return Decision::Blocked {
                 violations: escalating,
                 reason: BlockReason::NoCompetentAuthority,
             };
         };
+        debug!(authority = %authority_name, "routed to authority");
 
         match ruling {
             Ruling::Approve { reason } => {
+                debug!(authority = %authority_name, "authority approved");
                 // Fail closed (a control-flow check, not a debug_assert that
                 // vanishes in release): the grant must actually clear every
                 // grant-fixable gap it targeted. Acknowledge-only violations
@@ -396,12 +420,17 @@ impl<A: Authority> PolicyEngine<A> {
                         Verdict::Escalate(remaining) => remaining.iter().any(|v| targeted.contains(v)),
                     };
                     if uncovered {
+                        warn!(
+                            authority = %authority_name,
+                            "recheck failed — grant did not clear targeted gaps, failing closed",
+                        );
                         escalating.extend(audited_unknowns);
                         return Decision::Blocked {
                             violations: escalating,
                             reason: BlockReason::InternalInvariantFailed,
                         };
                     }
+                    debug!("recheck cleared targeted gaps");
                 }
 
                 // Record one declassification for the grant-fixable gaps the
@@ -433,9 +462,11 @@ impl<A: Authority> PolicyEngine<A> {
                         by: None,
                     });
                 }
+                debug!("permitted (authority approved)");
                 permit(result_label)
             }
             Ruling::Deny { reason } => {
+                debug!(authority = %authority_name, reason = %reason, "blocked (denied by authority)");
                 // Report the full picture: the audited unknowns did not cause
                 // the block, but they were part of this flow's evaluation.
                 escalating.extend(audited_unknowns);

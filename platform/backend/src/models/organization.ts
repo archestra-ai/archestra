@@ -281,11 +281,21 @@ class OrganizationModel {
   }
 
   /**
-   * List every organization (full rows). Used to reconcile each org's
-   * code-managed default Dagger engine on startup.
+   * The fields the code-managed default Dagger engine needs, for every
+   * organization. Projected rather than selecting whole rows: startup reconciles
+   * every organization, and a row carries base64 logos and favicons the engine
+   * has no use for. The engine's egress policy is read separately, per engine.
    */
-  static async listAll(): Promise<Organization[]> {
-    return db.select().from(schema.organizationsTable);
+  static async listDefaultEngineTargets(): Promise<
+    { id: string; defaultEnvironmentNamespace: string | null }[]
+  > {
+    return db
+      .select({
+        id: schema.organizationsTable.id,
+        defaultEnvironmentNamespace:
+          schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.organizationsTable);
   }
 
   /**

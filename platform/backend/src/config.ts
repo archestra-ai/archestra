@@ -1228,8 +1228,11 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
  *
  * - `ARCHESTRA_CODE_RUNTIME_ENABLED=false` is the documented kill switch and
  *   wins over everything, including an operator-supplied runner host.
- * - Otherwise an explicit Dagger runner host (a BYO engine) turns it on, with no
- *   Kubernetes needed — this covers `tcp://` and the quickstart image.
+ * - Otherwise an explicit Dagger runner host turns it on and no engine is
+ *   provisioned in code. Whether that needs Kubernetes depends on the scheme: a
+ *   `kube-pod://` host is reached by exec'ing into a pod (the quickstart image
+ *   does this against its embedded cluster), while a `tcp://` host needs no
+ *   Kubernetes at all and is the only way to run the sandbox without it.
  * - Otherwise `ARCHESTRA_CODE_RUNTIME_ENABLED=true` plus a configured
  *   orchestrator turns it on, and the backend provisions a per-organization
  *   engine in code. Kubernetes is required because that mode has to create

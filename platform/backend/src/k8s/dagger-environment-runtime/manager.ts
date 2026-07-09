@@ -19,7 +19,6 @@ import {
   type Environment,
   KubernetesNamespaceSchema,
   type NetworkPolicy,
-  type Organization,
 } from "@/types";
 import { uuidv5 } from "@/utils/uuid";
 import {
@@ -49,6 +48,16 @@ interface EngineReconcileTarget {
   organizationId: string;
   namespace: string;
   networkPolicyOverride: NetworkPolicy | null;
+}
+
+/**
+ * All an organization's default engine needs: which organization it belongs to
+ * and where it runs. Its egress policy is read per engine, so a full row (with
+ * the logos and favicons an engine never looks at) is never fetched for this.
+ */
+interface OrganizationDefaultEngineTarget {
+  id: string;
+  defaultEnvironmentNamespace: string | null;
 }
 
 const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.5";
@@ -100,7 +109,7 @@ class DaggerEnvironmentRuntimeManager {
    * target; the engine is provisioned by `reconcileOrganizationDefault`.
    */
   organizationDefaultTarget(
-    organization: Organization,
+    organization: OrganizationDefaultEngineTarget,
   ): EnvironmentTarget | undefined {
     if (!isK8sConfigured()) return undefined;
     return {
@@ -138,9 +147,9 @@ class DaggerEnvironmentRuntimeManager {
       }
     }
 
-    let organizations: Organization[];
+    let organizations: OrganizationDefaultEngineTarget[];
     try {
-      organizations = await OrganizationModel.listAll();
+      organizations = await OrganizationModel.listDefaultEngineTargets();
     } catch (error) {
       logger.error(
         { err: error },
@@ -213,7 +222,7 @@ class DaggerEnvironmentRuntimeManager {
    * on its own engine, never on the shared one, so its egress policy holds.
    */
   async reconcileOrganizationDefault(
-    organization: Organization,
+    organization: OrganizationDefaultEngineTarget,
   ): Promise<void> {
     if (!this.isEnabled()) return;
     if (config.daggerRuntime.runnerHost) return;

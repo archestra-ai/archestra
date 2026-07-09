@@ -573,7 +573,6 @@ export function LocalServerInstallDialog({
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={isReinstall || isReauth ? undefined : catalogItem?.id}
-        catalogItem={catalogItem}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}

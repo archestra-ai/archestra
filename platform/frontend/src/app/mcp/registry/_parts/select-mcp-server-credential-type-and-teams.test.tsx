@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
@@ -22,6 +23,8 @@ const installedServers = [
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useMcpServers: () => ({ data: installedServers }),
 }));
+
+vi.mock("@/lib/mcp/internal-mcp-catalog.query");
 
 vi.mock("@/lib/auth/auth.query");
 
@@ -45,6 +48,9 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
       data: [],
       isLoading: false,
     } as unknown as ReturnType<typeof useAssignableTeams>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     vi.mocked(useCanModifyCatalogItem).mockReturnValue({
       canModify: true,
       isLoading: false,
@@ -96,9 +102,7 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
       scope: "team",
       teams: [{ id: "t1", name: "Team One", level: "use" }],
       authorId: "someone-else",
-    } as unknown as Parameters<
-      typeof SelectMcpServerCredentialTypeAndTeams
-    >[0]["catalogItem"];
+    };
 
     beforeEach(() => {
       // Editor: has mcpServerInstallation:update (so the generic team gate
@@ -112,6 +116,10 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         data: [{ id: "t1", name: "Team One" }],
         isLoading: false,
       } as unknown as ReturnType<typeof useAssignableTeams>);
+      // The gate resolves the item from the catalog list by the id it is given.
+      vi.mocked(useInternalMcpCatalog).mockReturnValue({
+        data: [TEAM_CATALOG],
+      } as unknown as ReturnType<typeof useInternalMcpCatalog>);
     });
 
     async function expandAndGetTeamOption() {
@@ -131,7 +139,6 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         <SelectMcpServerCredentialTypeAndTeams
           onTeamChange={vi.fn()}
           catalogId="cat-team"
-          catalogItem={TEAM_CATALOG}
           onScopeChange={onScopeChange}
         />,
       );
@@ -153,7 +160,6 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         <SelectMcpServerCredentialTypeAndTeams
           onTeamChange={vi.fn()}
           catalogId="cat-team"
-          catalogItem={TEAM_CATALOG}
           onScopeChange={vi.fn()}
         />,
       );
@@ -173,7 +179,6 @@ describe("SelectMcpServerCredentialTypeAndTeams", () => {
         <SelectMcpServerCredentialTypeAndTeams
           onTeamChange={vi.fn()}
           catalogId="cat-team"
-          catalogItem={TEAM_CATALOG}
           onScopeChange={vi.fn()}
         />,
       );

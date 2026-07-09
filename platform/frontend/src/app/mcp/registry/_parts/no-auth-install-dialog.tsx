@@ -109,7 +109,6 @@ export function NoAuthInstallDialog({
         onTeamChange={setSelectedTeamId}
         onScopeChange={setScope}
         catalogId={catalogItem.id}
-        catalogItem={catalogItem}
         onCanInstallChange={setCanInstall}
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}

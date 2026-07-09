@@ -338,6 +338,10 @@ dependencies = [
 [[package]]
 name = "baton-core"
 version = "0.1.0"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "bench-dashboard"

@@ -3,6 +3,8 @@
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use tracing::debug;
+
 use crate::ToolName;
 use crate::dimension::UserId;
 use crate::engine::{Permit, RejectedPermit};
@@ -129,17 +131,24 @@ impl Trajectory {
     pub fn record_result(&mut self, permit: Permit, content: impl Into<String>) -> Result<(), RejectedPermit> {
         let (request, label, trajectory, basis) = permit.into_parts();
         if trajectory != self.id {
+            debug!(minted_for = %trajectory, this = %self.id, "record_result: rejected (foreign trajectory)");
             return Err(RejectedPermit::ForeignTrajectory {
                 minted_for: trajectory,
                 this: self.id,
             });
         }
         if basis != self.turns.len() {
+            debug!(
+                granted_at = basis,
+                current_len = self.turns.len(),
+                "record_result: rejected (stale permit)"
+            );
             return Err(RejectedPermit::Stale {
                 granted_at: basis,
                 current_len: self.turns.len(),
             });
         }
+        debug!(tool = %request.tool, basis, "record_result: recorded tool result");
         self.turns.push(LabeledTurn {
             label,
             turn: Turn {

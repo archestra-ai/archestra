@@ -5,5 +5,11 @@ edition = "2024"
 publish = false
 description = "ADT-based information-flow label engine for agent trajectories (prototype)"
 
+[dependencies]
+tracing = "0.1"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+
 [lints]
 workspace = true

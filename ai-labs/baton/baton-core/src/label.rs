@@ -18,6 +18,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use tracing::trace;
+
 use crate::ToolName;
 use crate::authority::AuthorityName;
 use crate::contract::Violation;
@@ -126,6 +128,7 @@ impl Label {
     /// turn order to keep the trail chronological.
     #[must_use]
     pub fn combine(self, newer: Self) -> Self {
+        trace!(older = %self, newer = %newer, "combine");
         let mut audit = self.audit;
         audit.extend(newer.audit);
         Self {
@@ -137,7 +140,9 @@ impl Label {
     }
 
     pub fn fold(labels: impl IntoIterator<Item = Self>) -> Self {
-        labels.into_iter().fold(Self::identity(), Self::combine)
+        let folded = labels.into_iter().fold(Self::identity(), Self::combine);
+        trace!(result = %folded, "fold");
+        folded
     }
 
     /// Apply an authority-minted [`Grant`] to produce a **check-transient**
@@ -180,12 +185,14 @@ impl Label {
             },
             None => self.effects.clone(),
         };
-        Self {
+        let lifted = Self {
             audience,
             trust,
             effects,
             audit: self.audit.clone(),
-        }
+        };
+        trace!(grant = ?grant, base = %self, result = %lifted, "lift");
+        lifted
     }
 }
 

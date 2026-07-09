@@ -2,7 +2,12 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import type { AppListItem, User } from "@/types";
+
+type AppListResponse = {
+  data: AppListItem[];
+  pagination: { total: number };
+};
 
 describe("GET /api/apps", () => {
   let app: FastifyInstanceWithZod;
@@ -47,6 +52,81 @@ describe("GET /api/apps", () => {
       owned.id,
     );
     expect(response.json().pagination.total).toBeGreaterThanOrEqual(1);
+  });
+
+  test("treats wildcard characters literally in owned app search", async ({
+    makeApp,
+  }) => {
+    const percentName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "100% Ready",
+    });
+    const percentDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Percent Description",
+      description: "Contains a % marker",
+    });
+    const underscoreName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Under_score Name",
+    });
+    const underscoreDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Underscore Description",
+      description: "Contains an _ marker",
+    });
+    const backslashName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Back\\slash Name",
+    });
+    const backslashDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Backslash Description",
+      description: "Contains a \\ marker",
+    });
+    await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Plain App",
+      description: "Contains no special marker",
+    });
+
+    const searchOwned = async (search: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${encodeURIComponent(search)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json<AppListResponse>();
+      const ids = body.data
+        .filter((item) => item.source === "owned")
+        .map((item) => item.id)
+        .sort();
+      return { ids, total: body.pagination.total };
+    };
+
+    expect(await searchOwned("%")).toEqual({
+      ids: [percentName.id, percentDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("_")).toEqual({
+      ids: [underscoreName.id, underscoreDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("\\")).toEqual({
+      ids: [backslashName.id, backslashDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("READY")).toEqual({
+      ids: [percentName.id],
+      total: 1,
+    });
   });
 
   test("includes assigned team names for a team-scoped owned app", async ({

@@ -823,12 +823,15 @@ function computeCanonicalStateByPod(
   return canonicalStateByPod;
 }
 
-// The catalog-level "agent connections" setting as a standard settings row:
+// The catalog-level "default credential" setting as a standard settings row:
 // title, a plain-language description that names the current choice, and a
-// dedicated select whose options are self-explanatory. NULL (default) = agents
-// act on behalf of whoever is chatting, using that person's own connection;
-// an mcp_servers.id = agents always use that one connection. Saves on change;
-// gated by the same authorization as editing the catalog item.
+// dedicated select whose options are self-explanatory. It governs every tool
+// assignment that resolves credentials at call time — Auto mode always, and
+// Custom-mode assignments unless a specific connection is pinned on the
+// assignment itself. NULL (default) = agents act on behalf of whoever is
+// calling, using that person's own connection; an mcp_servers.id = agents
+// always use that one connection. Saves on change; gated by the same
+// authorization as editing the catalog item.
 const ON_BEHALF_OF_VALUE = "__on_behalf_of__";
 
 function AgentConnectionsSection({
@@ -857,26 +860,28 @@ function AgentConnectionsSection({
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
       <div className="max-w-xl space-y-1">
-        <h4 className="text-sm font-medium">Agent connections</h4>
+        <h4 className="text-sm font-medium">Default credential</h4>
         <p className="text-sm text-muted-foreground">
           {!pinnedId ? (
             <>
-              Agents act on behalf of whoever is chatting — each person uses
+              Agents connect on behalf of whoever is calling — each person uses
               their own connection if they have one, otherwise a team or
-              organization connection they can access.
+              organization connection they can access. Applies in Auto mode and
+              to Custom tool assignments that resolve at call time.
             </>
           ) : pinRemoved ? (
             <>
-              The selected connection was removed. Agents act on behalf of
-              whoever is chatting until you choose another one.
+              The selected connection was removed. Agents connect on behalf of
+              whoever is calling until you choose another one.
             </>
           ) : (
             <>
-              Agents always connect as{" "}
+              Agents connect as{" "}
               <span className="font-medium text-foreground">
                 {pinnedConnection ? connectionLabel(pinnedConnection) : ""}
               </span>
-              , no matter who is chatting.
+              , no matter who is calling. Applies in Auto mode and to Custom
+              tool assignments that resolve at call time.
             </>
           )}{" "}
           <ExternalDocsLink

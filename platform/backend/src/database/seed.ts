@@ -345,7 +345,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   await ToolModel.backfillNewSandboxToolsToAgents(newlyCreatedToolNames);
-  // A brand-new built-in tool must not silently reach existing All-tools-mode
+  // A brand-new built-in tool must not silently reach existing Auto-mode
   // agents: pre-exclude it for them. Runs after the assignment backfills above
   // so a tool those just assigned is skipped (assignments beat the pre-fill);
   // exempt short names are skipped inside the model method.
@@ -359,7 +359,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
   if (excludedRowCount > 0) {
     logger.info(
       { excludedRowCount, newToolCount: newlyCreatedToolIds.length },
-      "Pre-excluded new built-in tools for All-tools-mode agents",
+      "Pre-excluded new built-in tools for Auto-mode agents",
     );
   }
   logger.info("Seeded Archestra catalog and tools");

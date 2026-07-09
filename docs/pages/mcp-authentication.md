@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-09
 ---
 
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
@@ -199,7 +199,7 @@ Auth credentials are stored in the secrets backend, which uses the database by d
 
 ### Credential Resolution
 
-Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Agent connections** setting.
+Credential resolution decides which installed MCP server credential should be used for a tool call. A tool assignment can either pin a specific installed connection or ask Archestra to resolve a credential at execution time from the caller identity, following the server's **Default credential** setting. Resolve at call time is the default for new assignments; pinning a connection is an explicit choice.
 
 #### Static Credentials
 
@@ -215,7 +215,7 @@ This means a team-shared connection is governed by the team it is shared with, n
 
 #### Resolve at Call Time
 
-When a tool assignment uses "Resolve at call time" (or an agent has **All tools** dynamic access), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Agent connections** setting on the server's Connections page:
+When a tool assignment uses "Resolve at call time" (or an agent is in **Auto** tool mode), Archestra picks the credential at execution time. Which one is used is defined on the MCP server itself — the **Default credential** setting on the server's Credentials tab:
 
 - **On behalf of the user** (default): the chatting identity's own connection takes priority, falling back to a connection it can access. A user token resolves to that user's personal connection, then a connection for a team they belong to, then an org-scoped connection; a team token resolves to that team's connection, then an org-scoped one. A caller with no reachable connection gets an actionable connect prompt.
 - **Always use one account**: every runtime-resolved call goes through the chosen connection, regardless of the caller — a service account. Use this when the whole org or a team should share one upstream account. If that connection is revoked, the server returns to on-behalf-of-the-user resolution.
@@ -224,7 +224,7 @@ When a tool assignment uses "Resolve at call time" (or an agent has **All tools*
 flowchart TD
     A["Tool call arrives<br/>with Gateway Token"] --> B{Assignment resolves<br/>credentials at runtime?}
     B -- No --> C["Use the assignment's<br/>pinned credential"]
-    B -- Yes --> P{Agent connections set to<br/>one shared account?}
+    B -- Yes --> P{Default credential set to<br/>one shared account?}
     P -- Yes --> S["Use that account<br/>(service account)"]
     P -- No --> D{Caller has their<br/>own connection?}
     D -- Yes --> E["Use the caller's<br/>own credential"]

@@ -1495,7 +1495,7 @@ describe("McpClient", () => {
         );
       });
 
-      test("All-tools mode ignores a static assignment pin and uses the server's connection policy", async ({
+      test("Auto tool mode ignores a static assignment pin and uses the server's default-credential policy", async ({
         makeAgent,
         makeMember,
         makeOrganization,
@@ -1504,7 +1504,7 @@ describe("McpClient", () => {
         const org = await makeOrganization();
         const user = await makeUser();
         await makeMember(user.id, org.id, { role: "member" });
-        // Agent in "All tools" mode (access_all_tools = true).
+        // Agent in "Auto" mode (access_all_tools = true).
         const allAgent = await makeAgent({
           name: "All Tools Agent",
           organizationId: org.id,
@@ -2398,7 +2398,7 @@ describe("McpClient", () => {
       }) => {
         const testUser = await makeUser({ email: "alltools-auth@example.com" });
 
-        // A catalog the agent was never assigned a tool from. In "All tools"
+        // A catalog the agent was never assigned a tool from. In "Auto"
         // mode the dispatcher pre-resolves the tool and passes it through as
         // `availableTool`, so the assignment carries no catalogName.
         const dynCatalog = await InternalMcpCatalogModel.create({

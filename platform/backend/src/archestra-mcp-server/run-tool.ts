@@ -501,7 +501,7 @@ async function dispatchTool({
     // by this key; headless executions use their isolation key so
     // concurrent runs never share a session and cleanup can close it.
     // availableTool lets a tool the agent has no assignment for execute in
-    // "All tools" mode; it is only ever set after the dynamic-access gates
+    // "Auto" mode; it is only ever set after the dynamic-access gates
     // above passed, and the MCP server's connection policy still decides
     // which credential the call uses.
     {

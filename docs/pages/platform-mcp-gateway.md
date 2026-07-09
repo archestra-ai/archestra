@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-07-05
+lastUpdated: 2026-07-09
 ---
 
 MCP Gateways are the MCP endpoints you expose to clients such as Cursor, Claude Desktop, Open WebUI, and custom agents. Each gateway presents a curated set of tools through one MCP endpoint, so clients do not need to connect to every MCP server directly.
@@ -30,7 +30,7 @@ An admin picks each gateway tool explicitly. Each assignment can be pinned to a 
 
 Use explicit assignment when different clients need different subsets of the same installed MCP server, or when a gateway should use a shared service-account connection for some tools and caller-specific credentials for others.
 
-A gateway shares the agent **All** / **Custom** **Tools & Knowledge Sources** control. Explicit assignment above is **Custom** mode; **All** mode lets `search_tools`/`run_tool` reach every tool the signed-in user can access (see [Load Tools When Needed](#load-tools-when-needed)). A gateway can also be assigned [knowledge sources](/docs/platform-knowledge#assigning-to-an-agent) under the same setting, giving it a `query_knowledge_sources` tool.
+A gateway shares the agent **Auto** / **Custom** **Tools & Knowledge Sources** control. Explicit assignment above is **Custom** mode; **Auto** mode lets `search_tools`/`run_tool` reach every tool the signed-in user can access (see [Load Tools When Needed](#load-tools-when-needed)). A gateway can also be assigned [knowledge sources](/docs/platform-knowledge#assigning-to-an-agent) under the same setting, giving it a `query_knowledge_sources` tool.
 
 ## Authentication
 
@@ -106,7 +106,7 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
-With **Access all tools** also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. Credentials resolve at call time per the MCP server's **Agent connections** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
+With **Auto** tool mode also enabled, a signed-in user's `search_tools` and `run_tool` reach every MCP catalog tool and knowledge source that user can access. Credentials resolve at call time per the MCP server's **Default credential** setting — on behalf of the user by default, or one shared account when the server is configured that way. Nothing is assigned to the gateway. Sessions authenticated with org or team tokens stay limited to assigned tools, and the org-wide **Dynamic Tool Access** security setting can disable the behavior entirely.
 
 Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 

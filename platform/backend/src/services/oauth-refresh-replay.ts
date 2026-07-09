@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import config from "@/config";
 import logger from "@/logging";
 import {
   OAuthAccessTokenModel,
@@ -43,13 +44,16 @@ import {
  */
 
 /**
- * How long after rotation a replayed refresh token is treated as a benign
- * race rather than theft. Mirrors the bounded "reuse interval" pattern of
- * major OAuth providers.
+ * How long after rotation a replayed refresh token is treated as a benign race
+ * rather than theft, in milliseconds. Mirrors the bounded "reuse interval"
+ * pattern of major OAuth providers. Configurable via
+ * `ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS` (default 60s; 0 disables).
  *
  * @public — exercised by oauth-refresh-replay.test.ts (knip --production ignores tests)
  */
-export const REFRESH_TOKEN_REUSE_GRACE_MS = 60_000;
+export function refreshTokenReuseGraceMs(): number {
+  return config.auth.refreshTokenReuseGraceSeconds * 1000;
+}
 
 type OAuthEndpointInterception =
   | { action: "forward" }
@@ -99,7 +103,7 @@ export async function shieldRefreshTokenGrant(params: {
   }
 
   const revokedAgoMs = Date.now() - row.revoked.getTime();
-  if (revokedAgoMs <= REFRESH_TOKEN_REUSE_GRACE_MS) {
+  if (revokedAgoMs <= refreshTokenReuseGraceMs()) {
     const body = await reissueTokenPair(row);
     logger.warn(
       { clientId, userId: row.userId, revokedAgoMs },

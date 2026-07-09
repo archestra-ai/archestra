@@ -8,7 +8,7 @@ import {
   OAuthRefreshTokenModel,
 } from "@/models";
 import {
-  REFRESH_TOKEN_REUSE_GRACE_MS,
+  refreshTokenReuseGraceMs,
   shieldRefreshTokenGrant,
   shieldRevocationRequest,
 } from "@/services/oauth-refresh-replay";
@@ -80,7 +80,7 @@ async function grantStillExists(refreshToken: string): Promise<boolean> {
 
 function advancePastGraceWindow() {
   vi.useFakeTimers();
-  vi.setSystemTime(Date.now() + REFRESH_TOKEN_REUSE_GRACE_MS + 1000);
+  vi.setSystemTime(Date.now() + refreshTokenReuseGraceMs() + 1000);
 }
 
 describe("shieldRefreshTokenGrant", () => {

@@ -962,6 +962,12 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Set to `false` to allow only pre-registered OAuth clients to run OAuth flows. Runtime self-registration (`POST /api/auth/oauth2/register`) returns `403`, CIMD auto-registration is skipped, and the well-known metadata stops advertising the registration endpoint
   - Pair with manually registered [MCP OAuth clients](/docs/mcp-authentication) (both `client_credentials` and `authorization_code`) when you want to restrict gateway access to a known set of applications
 
+- **`ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS`** - Grace window for the OAuth refresh-token replay shield, in seconds.
+  - Default: `60`
+  - Refresh tokens are single-use and rotated. When a client replays an already-rotated refresh token within this window, it is treated as a benign rotation race (e.g. a token-exchange response lost when the backend restarted, then retried by the client) and a fresh token pair is re-issued, rather than triggering reuse invalidation. A replay after the window is treated as reuse and invalidates that grant
+  - Set to `0` to disable the grace window and treat every replay as reuse immediately
+  - Raising it widens the window in which a replayed token is re-issued rather than rejected; lowering it tightens reuse detection at the cost of recovering fewer benign races
+
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra trusted origins for CORS and authentication, in addition to `ARCHESTRA_FRONTEND_URL`. Setting this variable (even without `ARCHESTRA_FRONTEND_URL`) enables origin validation.
   - Default: None (origin validation is off when neither this nor `ARCHESTRA_FRONTEND_URL` is set)
   - Format: Comma-separated list of origins (e.g., `http://idp.example.com:8080,https://auth.example.com`)

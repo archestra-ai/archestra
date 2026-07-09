@@ -16,13 +16,18 @@
  *     install URL for the catalog item.
  */
 
+import {
+  getArchestraToolFullName,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
+import { TeamTokenModel, UserTokenModel } from "@/models";
+import McpServerUserModel from "@/models/mcp-server-user";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -161,6 +166,110 @@ describe("MCP Gateway - Auth at Call Time", () => {
     expect(textContent).toBeDefined();
     expect(textContent.text).toContain("Authentication required for");
     expect(textContent.text).toContain(CATALOG_NAME);
+    expect(textContent.text).toContain("/mcp/registry?install=");
+    expect(textContent.text).toContain(catalog.id);
+  });
+
+  // Dynamic ("all tools") discovery counterpart: the tool is NOT assigned to
+  // the agent and the caller has no connection of their own — another user's
+  // personal connection is the catalog's only install. The tool must still be
+  // reachable through run_tool, with the auth-required setup prompt returned
+  // at call time (previously the tool silently did not exist for the caller,
+  // so nothing ever told them to connect).
+  test("run_tool on an unconnected per-user catalog returns the auth-required setup prompt", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+
+    // Another org member has connected; the caller has not.
+    const connectedUser = await makeUser();
+    await makeMember(connectedUser.id, org.id);
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "admin" });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "per-user-oauth-test",
+      serverType: "remote",
+      serverUrl: "https://remote.example.com/mcp",
+      scope: "org",
+    });
+    const toolName = "per-user-oauth-test__list_issues";
+    await makeTool({ catalogId: catalog.id, name: toolName });
+
+    const otherInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: connectedUser.id,
+      scope: "personal",
+      teamId: null,
+    });
+    await McpServerUserModel.assignUserToMcpServer(
+      otherInstall.id,
+      connectedUser.id,
+    );
+
+    // All-tools agent; the tool has no agent_tools assignment.
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      accessAllTools: true,
+    });
+
+    const { value: callerToken } = await UserTokenModel.create(
+      caller.id,
+      org.id,
+      "Caller Token",
+    );
+
+    const initResponse = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(callerToken),
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test-client", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+    expect(initResponse.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(callerToken),
+      payload: {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME),
+          arguments: { tool_name: toolName, tool_args: {} },
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const result = response.json();
+    expect(result).toHaveProperty("result");
+    expect(result.result.isError).toBe(true);
+
+    const textContent = result.result.content.find(
+      (c: { type: string }) => c.type === "text",
+    );
+    expect(textContent).toBeDefined();
+    // The actionable auth prompt — not the "tool unavailable" recovery text.
+    expect(textContent.text).toContain("Authentication required for");
     expect(textContent.text).toContain("/mcp/registry?install=");
     expect(textContent.text).toContain(catalog.id);
   });

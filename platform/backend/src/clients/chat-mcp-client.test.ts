@@ -2374,15 +2374,18 @@ describe("buildArchestraToolOutput", () => {
       organizationId: org.id,
       accessAllTools: true,
     });
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    // Another organization's catalog: not visible to the user, so the dynamic
+    // fallback must not attach its UI resource — the boundary the widening
+    // must respect.
+    const otherOrg = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: otherOrg.id,
+    });
     await makeTool({
       name: "excalidraw__create_view",
       catalogId: catalog.id,
       meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
     });
-    // No install (makeMcpServer) for this catalog: the tool is not reachable, so
-    // the dynamic fallback must not attach its UI resource — the boundary the
-    // widening must respect.
 
     const result = await buildArchestraToolOutput({
       response: archestraResponse,

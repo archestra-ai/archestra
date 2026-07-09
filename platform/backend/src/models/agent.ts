@@ -48,6 +48,7 @@ import type {
   AgentScope,
   AgentScopeFilter,
   AgentType,
+  GatewayAgent,
   InsertAgent,
   SortingQuery,
   UpdateAgent,
@@ -1694,6 +1695,29 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
+  }
+
+  /**
+   * Hot-path agent lookup for the MCP gateway: the raw agents row plus labels,
+   * skipping the tools join and the team/knowledge/connector/author/prompt/
+   * resolved-LLM hydration {@link findById} performs. The gateway loads the
+   * agent on every JSON-RPC request only for scalar config (agent type, tool
+   * exposure, passthrough headers, identity provider) and trace-span labels,
+   * so this must stay at two index lookups.
+   */
+  static async findGatewayAgentById(id: string): Promise<GatewayAgent | null> {
+    const [agent] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    if (!agent) {
+      return null;
+    }
+
+    const labels = await AgentLabelModel.getLabelsForAgent(id);
+    return { ...agent, labels };
   }
 
   /**

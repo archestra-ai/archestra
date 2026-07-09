@@ -14,6 +14,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   type McpToolError,
   parseFullToolName,
+  SEEDED_APP_RENDER_META_KEY,
   TimeInMs,
 } from "@archestra/shared";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -1763,21 +1764,35 @@ class McpClient {
       };
     }
 
-    // Fallback for external IdP users if earlier resolution didn't match
+    // Fallback for external IdP users if earlier resolution didn't match.
+    // Another user's personal install is never eligible — its stored
+    // credentials must not serve other callers; JWKS deployments share
+    // org/team-scoped installs (or ownerless service rows).
     // TODO: works only we are doing end-to-end JWKS pattern.
-    if (tokenAuth.isExternalIdp && allServers.length > 0) {
-      logger.info(
-        {
-          toolName: toolCall.name,
-          catalogId: tool.catalogId,
-          serverId: allServers[0].id,
-        },
-        `Dynamic resolution: using first available server for external IdP user`,
+    if (tokenAuth.isExternalIdp) {
+      const idpFallbackServer = allServers.find(
+        (s) =>
+          !(
+            s.ownerId &&
+            s.ownerId !== tokenAuth.userId &&
+            !s.teamId &&
+            s.scope !== "org"
+          ),
       );
-      return {
-        targetMcpServerId: allServers[0].id,
-        mcpServerName: allServers[0].name,
-      };
+      if (idpFallbackServer) {
+        logger.info(
+          {
+            toolName: toolCall.name,
+            catalogId: tool.catalogId,
+            serverId: idpFallbackServer.id,
+          },
+          `Dynamic resolution: using first available server for external IdP user`,
+        );
+        return {
+          targetMcpServerId: idpFallbackServer.id,
+          mcpServerName: idpFallbackServer.name,
+        };
+      }
     }
 
     // No server found. Offer a self-service install link only when the caller
@@ -2355,18 +2370,19 @@ class McpClient {
       structuredContent,
     } = opts;
 
-    // `archestraError` is a platform-reserved envelope: error renderers and the
-    // trusted-data guardrail key off it to identify platform-authored results.
-    // Only createErrorResult sets it, so strip any copy an upstream tool put in
-    // its result metadata — otherwise a hostile server could forge a dispatch
-    // error and slip untrusted output past the injection scan.
+    // `archestraError` and the seeded-app-render marker are platform-reserved
+    // envelopes: error renderers and the trusted-data guardrail key off them to
+    // identify platform-authored results. Only the platform sets them, so strip
+    // any copy an upstream tool put in its result metadata — otherwise a
+    // hostile server could forge a dispatch error or a seeded-render marker and
+    // slip untrusted output past the injection scan.
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
-      _meta: stripReservedArchestraError(_meta),
-      structuredContent: stripReservedArchestraError(structuredContent),
+      _meta: stripReservedPlatformMeta(_meta),
+      structuredContent: stripReservedPlatformMeta(structuredContent),
     };
 
     await this.persistToolCall(
@@ -4125,16 +4141,30 @@ function isAuthRelatedError(errorMessage: string): boolean {
   );
 }
 
-// Remove the platform-reserved `archestraError` key from tool-supplied metadata
-// so it can only ever be present when the platform itself authored it (see
-// createErrorResult). Returns the same reference when nothing was stripped.
-function stripReservedArchestraError(
+// Platform-reserved metadata keys: `archestraError` (set only by
+// createErrorResult) and the seeded-app-render marker (set only by the
+// open-in-chat conversation seeding). Renderers and the trusted-data guardrail
+// key off them to identify platform-authored results.
+const RESERVED_PLATFORM_META_KEYS = [
+  "archestraError",
+  SEEDED_APP_RENDER_META_KEY,
+] as const;
+
+// Remove platform-reserved keys from tool-supplied metadata so they can only
+// ever be present when the platform itself authored them — otherwise a hostile
+// server could forge a dispatch error or a seeded-render marker and slip
+// untrusted output past the injection scan. Returns the same reference when
+// nothing was stripped.
+function stripReservedPlatformMeta(
   meta: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-  if (!meta || !("archestraError" in meta)) {
+  if (!meta || !RESERVED_PLATFORM_META_KEYS.some((key) => key in meta)) {
     return meta;
   }
-  const { archestraError: _reserved, ...rest } = meta;
+  const rest = { ...meta };
+  for (const key of RESERVED_PLATFORM_META_KEYS) {
+    delete rest[key];
+  }
   return rest;
 }
 

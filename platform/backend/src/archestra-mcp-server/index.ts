@@ -9,7 +9,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { ZodError, type ZodType } from "zod";
+import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import {
@@ -83,6 +83,7 @@ import {
 } from "./search-tools";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
+import { toolParamsSkeleton } from "./tool-args-skeleton";
 import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
@@ -94,6 +95,21 @@ export { archestraMcpBranding } from "./branding";
 export { getAgentTools } from "./delegation";
 export { filterToolNamesByPermission } from "./rbac";
 export type { ArchestraContext } from "./types";
+
+/**
+ * Machine-readable descriptor of a tool-args validation failure, attached to
+ * the error result as `_meta.archestraValidation`. Consumed by run_tool's
+ * repair-note gate (run-tool.ts `reachedArgValidation`) to distinguish a
+ * post-gate validation failure from an access denial. Like
+ * `_meta.archestraError` (shared/mcp-tool-error.ts), it is result metadata
+ * and reaches MCP gateway clients; it names only the tool and the issue
+ * code/path set — a subset of the error text beside it.
+ */
+interface ArchestraValidationMeta {
+  /** Resolved target tool (full/branded name), never the run_tool wrapper. */
+  toolName: string;
+  issues: Array<{ code: string; path: string }>;
+}
 
 const toolEntries: Partial<
   Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
@@ -157,6 +173,30 @@ export function getArchestraMcpTools() {
       name: archestraMcpBranding.getToolName(shortName),
     };
   });
+}
+
+/**
+ * JSON input schema of a built-in Archestra tool, resolved by its published
+ * (branding-aware) full name or canonical `archestra__` name — derived from the
+ * same zod schema `tools/list` advertises. Returns undefined for names that are
+ * not built-ins (agent delegations, third-party names). Consumed by run_tool's
+ * schema-aware envelope repair.
+ */
+export function getArchestraToolInputSchema(
+  toolName: string,
+): Record<string, unknown> | undefined {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (!shortName) {
+    return undefined;
+  }
+  const entry = toolEntries[getArchestraToolFullName(shortName)];
+  if (!entry) {
+    return undefined;
+  }
+  return z.toJSONSchema(entry.schema, { io: "input" }) as Record<
+    string,
+    unknown
+  >;
 }
 
 export async function executeArchestraTool(
@@ -232,9 +272,7 @@ export async function executeArchestraTool(
     return result;
   } catch (error) {
     if (error instanceof ZodError) {
-      return errorResult(
-        `Validation error in ${toolName}: ${formatZodError(error)}`,
-      );
+      return zodValidationErrorResult({ toolName, error });
     }
     throw error;
   }
@@ -357,6 +395,7 @@ function validateToolResult(
 /** @public — exported for testability */
 export const __test = {
   validateToolResult,
+  zodValidationErrorResult,
 };
 
 function validateToolArgs(
@@ -371,11 +410,67 @@ function validateToolArgs(
   }
 
   return {
-    error: errorResult(
-      `Validation error in ${toolName}: ${formatZodErrorWithSchema(
-        parsed.error,
-        schema,
-      )}`,
-    ),
+    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
   };
+}
+
+/**
+ * Shared error-result builder for a tool-args ZodError: the per-issue error
+ * text, a schema-derived parameter skeleton so the model can restructure the
+ * call on its first failure (the built-in counterpart of run_tool's
+ * third-party "Send instead:" pre-check), and machine-readable
+ * `_meta.archestraValidation`, which gates run_tool's repair-note disclosure
+ * (run-tool.ts). `toolName` is the resolved dispatch target, so
+ * run_tool-wrapped failures carry the target's name, not the wrapper's.
+ *
+ * `schema` is absent only on the handler-thrown ZodError path: such an error
+ * may come from an internal parse of a different shape, so a skeleton of the
+ * tool's input schema would mislead — those results carry the error text only.
+ */
+function zodValidationErrorResult(params: {
+  toolName: string;
+  error: ZodError;
+  schema?: ZodType;
+}): CallToolResult {
+  const { toolName, error, schema } = params;
+  const details = schema
+    ? formatZodErrorWithSchema(error, schema)
+    : formatZodError(error);
+  const meta: ArchestraValidationMeta = {
+    toolName,
+    issues: error.issues.map((issue) => ({
+      code: issue.code ?? "custom",
+      path: issue.path.map((segment) => String(segment)).join("."),
+    })),
+  };
+  const lines = [`Validation error in ${toolName}: ${details}`];
+  const skeleton = schema ? inputSchemaSkeleton(schema) : null;
+  if (skeleton) {
+    const requiredNote =
+      skeleton.required.length > 0
+        ? `; required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
+        : "";
+    lines.push(
+      `The tool's parameters are shaped like ${skeleton.skeleton} (replace each <…> with a real value${requiredNote}).`,
+    );
+  }
+  return {
+    ...errorResult(lines.join("\n")),
+    _meta: { archestraValidation: meta },
+  };
+}
+
+/**
+ * Top-level parameter skeleton of a tool's Zod input schema, via its published
+ * JSON form. Best-effort: null when the schema cannot be converted or declares
+ * no readable properties — the error text still stands alone.
+ */
+function inputSchemaSkeleton(
+  schema: ZodType,
+): { skeleton: string; required: string[] } | null {
+  try {
+    return toolParamsSkeleton(z.toJSONSchema(schema, { io: "input" }));
+  } catch {
+    return null;
+  }
 }

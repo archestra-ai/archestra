@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Loader2,
   PlugZap,
+  RefreshCw,
   Wand2,
   Wrench,
 } from "lucide-react";
@@ -66,6 +67,7 @@ import {
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
+  useReloadMcpServerTools,
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import {
@@ -445,6 +447,10 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
   const callPolicyMutation = useCallPolicyMutation();
   const resultPolicyMutation = useResultPolicyMutation();
   const autoConfigureMutation = useAutoConfigurePolicies();
+  // Same install the Test Connection step reports on — the reload endpoint
+  // needs a concrete server install, not the catalog item.
+  const { target: reloadTarget } = useTestConnectionTarget(item);
+  const reloadTools = useReloadMcpServerTools();
   // `${toolId}:${field}` entries for in-flight policy updates.
   const [updating, setUpdating] = useState<ReadonlySet<string>>(new Set());
 
@@ -519,6 +525,35 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
   const tools = toolsData?.data ?? [];
   const total = toolsData?.pagination.total ?? tools.length;
 
+  const refreshToolsButton = (
+    <PermissionButton
+      permissions={{ mcpServerInstallation: ["create"] }}
+      variant="outline"
+      size="sm"
+      disabled={reloadTools.isPending || !reloadTarget}
+      onClick={() =>
+        reloadTarget &&
+        reloadTools.mutate({
+          id: reloadTarget.id,
+          name: item.name,
+          catalogId: item.id,
+        })
+      }
+      tooltip={
+        reloadTarget
+          ? "Re-sync the registry's tool catalog from the live server so this list shows its current tools"
+          : "Connect this server first — refreshing tools needs a live connection"
+      }
+    >
+      {reloadTools.isPending ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <RefreshCw className="h-4 w-4" />
+      )}
+      Refresh Tools
+    </PermissionButton>
+  );
+
   if (tools.length === 0) {
     return (
       <Empty className="border py-12">
@@ -531,6 +566,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
             appear once the server is reachable.
           </EmptyDescription>
         </EmptyHeader>
+        <EmptyContent>{refreshToolsButton}</EmptyContent>
       </Empty>
     );
   }
@@ -547,25 +583,28 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
           {tools.length} {tools.length === 1 ? "tool" : "tools"} discovered. Set
           guardrails per tool, or let a subagent configure sensible defaults.
         </p>
-        <PermissionButton
-          permissions={{ agent: ["update"], toolPolicy: ["update"] }}
-          variant="outline"
-          size="sm"
-          onClick={() => configureWithSubagent(tools.map((tool) => tool.id))}
-          disabled={autoConfigureMutation.isPending}
-        >
-          {autoConfigureMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Configuring...
-            </>
-          ) : (
-            <>
-              <Wand2 className="h-4 w-4" />
-              Configure with Subagent
-            </>
-          )}
-        </PermissionButton>
+        <div className="flex flex-wrap items-center gap-2">
+          {refreshToolsButton}
+          <PermissionButton
+            permissions={{ agent: ["update"], toolPolicy: ["update"] }}
+            variant="outline"
+            size="sm"
+            onClick={() => configureWithSubagent(tools.map((tool) => tool.id))}
+            disabled={autoConfigureMutation.isPending}
+          >
+            {autoConfigureMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Configuring...
+              </>
+            ) : (
+              <>
+                <Wand2 className="h-4 w-4" />
+                Configure with Subagent
+              </>
+            )}
+          </PermissionButton>
+        </div>
       </div>
       {tools.length > 5 && (
         <Input

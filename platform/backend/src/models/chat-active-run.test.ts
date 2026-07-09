@@ -85,6 +85,93 @@ test("appends and reads ordered active chat run events", async ({
   ]);
 });
 
+test("readStatusAndEventsAfter returns the run status with events after seq in one read", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // No events yet: status still comes back with an empty event list.
+  const empty = await ActiveChatRunModel.readStatusAndEventsAfter({
+    runId: run?.id ?? "",
+    seq: 0,
+  });
+  expect(empty).toEqual({ status: "running", events: [] });
+
+  await ActiveChatRunModel.appendEvents({
+    runId: run?.id ?? "",
+    seq: 1,
+    payloads: [{ type: "start" }],
+  });
+  await ActiveChatRunModel.appendEvents({
+    runId: run?.id ?? "",
+    seq: 2,
+    payloads: [{ type: "finish", finishReason: "stop" }],
+  });
+  await ActiveChatRunModel.markTerminal({
+    runId: run?.id ?? "",
+    status: "completed",
+  });
+
+  const afterFirst = await ActiveChatRunModel.readStatusAndEventsAfter({
+    runId: run?.id ?? "",
+    seq: 1,
+  });
+  expect(afterFirst?.status).toBe("completed");
+  expect(afterFirst?.events.map((event) => event.seq)).toEqual([2]);
+  expect(afterFirst?.events[0]?.payloads).toEqual([
+    { type: "finish", finishReason: "stop" },
+  ]);
+
+  const all = await ActiveChatRunModel.readStatusAndEventsAfter({
+    runId: run?.id ?? "",
+    seq: 0,
+  });
+  expect(all?.events.map((event) => event.seq)).toEqual([1, 2]);
+});
+
+test("readStatusAndEventsAfter returns null when the run row is gone", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  await ConversationModel.delete(conversation.id, user.id, organization.id);
+
+  await expect(
+    ActiveChatRunModel.readStatusAndEventsAfter({
+      runId: run?.id ?? "",
+      seq: 0,
+    }),
+  ).resolves.toBeNull();
+});
+
 test("appends active chat run events without touching the run every time", async ({
   makeAgent,
   makeConversation,

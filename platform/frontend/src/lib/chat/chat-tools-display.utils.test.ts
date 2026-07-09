@@ -321,5 +321,17 @@ describe("tool display helpers", () => {
         toolResultPart: null,
       }),
     ).toBe("completed");
+
+    // A declined approval is terminal: it must map to "denied" (orange dot), not
+    // fall through to "running" (a blue pulsing dot that never resolves).
+    expect(
+      getCompactToolState({
+        part: {
+          type: "tool-github__create_issue",
+          state: "output-denied",
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe("denied");
   });
 });

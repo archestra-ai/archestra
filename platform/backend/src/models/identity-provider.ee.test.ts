@@ -822,6 +822,40 @@ describe("IdentityProviderModel", () => {
       ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
     });
 
+    test("caches the trusted provider list until an identity provider write clears it", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+
+      // Prime the cache before any custom provider exists.
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+
+      // A row inserted behind the model's back stays invisible while the
+      // cached list is live...
+      const provider = await makeIdentityProvider(org.id, {
+        providerId: "cached-oidc",
+        oidcConfig: { clientId: "client-id" },
+      });
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+
+      // ...a model write clears the cache, so the next read sees it...
+      await IdentityProviderModel.update(provider.id, {}, org.id);
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS, "cached-oidc"]);
+
+      // ...and delete clears it again.
+      await IdentityProviderModel.delete(provider.id, org.id);
+      await expect(
+        IdentityProviderModel.getTrustedAccountLinkingProviderIds(),
+      ).resolves.toEqual([...IDENTITY_TRUSTED_PROVIDER_IDS]);
+    });
+
     test("returns the built-in trusted providers before database initialization", async () => {
       vi.resetModules();
       vi.doMock("@/database", async () => {

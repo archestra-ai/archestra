@@ -6,6 +6,7 @@ import {
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
@@ -276,6 +277,52 @@ describe("buildAgentSystemPrompt", () => {
       agentId: fullAgent.id,
     });
     expect(fullPrompt).not.toContain("must be discovered");
+  });
+
+  // The app tools are hidden from tools/list in search_and_run_only mode, so
+  // the tool-loading section names scaffold_app verbatim (run_tool only
+  // accepts names the model has seen) — unconditionally, with no dispatch-gate
+  // mirroring: a non-dispatchable name is refused by run_tool with a clear
+  // error at call time.
+  test("names scaffold_app in the tool-loading instruction regardless of assignment", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const scaffoldAppName = brand(TOOL_SCAFFOLD_APP_SHORT_NAME);
+
+    const searchAgent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeMember(user.id, searchAgent.organizationId);
+    const common = {
+      mcpTools: {},
+      organizationId: searchAgent.organizationId,
+      userId: user.id,
+    };
+
+    // nothing assigned — the steering still names the build entry point
+    const searchPrompt = await buildAgentSystemPrompt({
+      ...common,
+      agent: searchAgent,
+      agentId: searchAgent.id,
+    });
+    expect(searchPrompt).toContain(scaffoldAppName);
+
+    // full mode has no tool-loading section, so no app steering either
+    const fullAgent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+      organizationId: searchAgent.organizationId,
+    });
+    const fullPrompt = await buildAgentSystemPrompt({
+      ...common,
+      agent: fullAgent,
+      agentId: fullAgent.id,
+    });
+    expect(fullPrompt).not.toContain(scaffoldAppName);
   });
 
   test("appends the hook session context last", async ({

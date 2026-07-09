@@ -4,7 +4,17 @@ import {
   type PaginationQuery,
   type SupportedProvider,
 } from "@archestra/shared";
-import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -26,6 +36,15 @@ const TOKEN_START_LENGTH = 14;
 
 /** Always use DB storage (not BYOS Vault compatible) */
 const FORCE_DB = true;
+
+/**
+ * Minimum age of lastUsedAt before validateToken refreshes it. Every request
+ * on a key validates it, so an unconditional write turns the key row into a
+ * lock hot spot — concurrent requests serialize behind the row lock and can
+ * exceed the statement timeout under bursts. The staleness window collapses a
+ * burst into at most one write.
+ */
+const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
 
 type TeamInfo = { id: string; name: string };
 type ProviderApiKeyInput = {
@@ -537,12 +556,25 @@ class VirtualApiKeyModel {
 
   /**
    * Update last used timestamp.
+   *
+   * Skips the write when lastUsedAt is already fresh (see
+   * {@link LAST_USED_REFRESH_INTERVAL_MS}); concurrent callers that lose the
+   * race re-check the condition after the winner commits and skip too.
    */
   static async updateLastUsed(id: string): Promise<void> {
+    const cutoff = new Date(Date.now() - LAST_USED_REFRESH_INTERVAL_MS);
     await db
       .update(schema.virtualApiKeysTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.virtualApiKeysTable.id, id));
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.id, id),
+          or(
+            isNull(schema.virtualApiKeysTable.lastUsedAt),
+            lt(schema.virtualApiKeysTable.lastUsedAt, cutoff),
+          ),
+        ),
+      );
   }
 
   /**

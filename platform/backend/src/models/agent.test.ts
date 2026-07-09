@@ -3295,6 +3295,44 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("findGatewayAgentById", () => {
+    test("returns the scalar gateway config and labels without full hydration", async () => {
+      const agent = await AgentModel.create({
+        name: "Gateway Hot Path",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+        passthroughHeaders: ["x-correlation-id"],
+        labels: [{ key: "environment", value: "production" }],
+      });
+
+      const fetched = await AgentModel.findGatewayAgentById(agent.id);
+
+      expect(fetched?.id).toBe(agent.id);
+      expect(fetched?.name).toBe("Gateway Hot Path");
+      expect(fetched?.agentType).toBe("mcp_gateway");
+      expect(fetched?.passthroughHeaders).toEqual(["x-correlation-id"]);
+      expect(fetched?.labels).toEqual([
+        expect.objectContaining({ key: "environment", value: "production" }),
+      ]);
+    });
+
+    test("returns null for a soft-deleted agent", async () => {
+      const agent = await AgentModel.create({
+        name: "Soon Deleted Gateway",
+        agentType: "mcp_gateway",
+        scope: "org",
+        teams: [],
+      });
+
+      await AgentModel.delete(agent.id);
+
+      await expect(
+        AgentModel.findGatewayAgentById(agent.id),
+      ).resolves.toBeNull();
+    });
+  });
+
   describe("accessAllTools / toolExposureMode normalization", () => {
     test("create coerces toolExposureMode to search_and_run_only when accessAllTools is true", async () => {
       const agent = await AgentModel.create({

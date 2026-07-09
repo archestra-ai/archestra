@@ -12,8 +12,17 @@ import logger from "@/logging";
 /**
  * Maximum number of retry attempts for transient database errors.
  * Total attempts = MAX_RETRIES + 1 (initial attempt + retries).
+ * The effective limit is usually {@link RETRY_BUDGET_MS}: retries stop as
+ * soon as the next backoff would overrun the time budget.
  */
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 8;
+
+/**
+ * Wall-clock budget for a single retried operation. Sized to ride out a
+ * short database restart or failover instead of giving up within the first
+ * second, while still bounding how long a request can hang on the pool.
+ */
+const RETRY_BUDGET_MS = 15_000;
 
 /** Base delay in milliseconds for exponential backoff */
 const BASE_DELAY_MS = 100;
@@ -40,17 +49,27 @@ const TRANSIENT_PG_CODES = new Set([
 ]);
 
 /**
- * Error message substrings that indicate transient connection issues.
- * These cover errors from node-postgres (pg) and the TCP/socket layer.
+ * Error message substrings that indicate transient connection issues, each
+ * paired with a stable code used to group occurrences in error tracking.
+ * These cover errors from node-postgres (pg), DNS resolution, and the
+ * TCP/socket layer.
  */
-const TRANSIENT_ERROR_PATTERNS = [
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "EPIPE",
-  "ETIMEDOUT",
-  "Connection terminated",
-  "timeout exceeded when trying to connect",
-  "timeout expired",
+const TRANSIENT_ERROR_PATTERNS: ReadonlyArray<{
+  pattern: string;
+  code: string;
+}> = [
+  { pattern: "ECONNREFUSED", code: "ECONNREFUSED" },
+  { pattern: "ECONNRESET", code: "ECONNRESET" },
+  { pattern: "EPIPE", code: "EPIPE" },
+  { pattern: "ETIMEDOUT", code: "ETIMEDOUT" },
+  // Temporary DNS resolution failure (getaddrinfo). By definition retryable.
+  { pattern: "EAI_AGAIN", code: "EAI_AGAIN" },
+  { pattern: "Connection terminated", code: "connection_terminated" },
+  {
+    pattern: "timeout exceeded when trying to connect",
+    code: "pool_connect_timeout",
+  },
+  { pattern: "timeout expired", code: "timeout_expired" },
 ];
 
 /** Maximum depth for cause-chain traversal to guard against circular references */
@@ -63,25 +82,42 @@ const MAX_CAUSE_DEPTH = 5;
  * checks the underlying cause (bounded to {@link MAX_CAUSE_DEPTH} levels).
  * @public — exported for testability
  */
-export function isTransientDbError(error: unknown, depth = 0): boolean {
-  if (!(error instanceof Error)) return false;
-  if (depth > MAX_CAUSE_DEPTH) return false;
+export function isTransientDbError(error: unknown): boolean {
+  return getTransientDbErrorCode(error) !== null;
+}
+
+/**
+ * Resolve a transient database error to a stable, low-cardinality code
+ * (e.g. "EAI_AGAIN", "ECONNREFUSED", "pool_connect_timeout", or a SQLSTATE
+ * connection code). Returns null for non-transient errors.
+ *
+ * Used to fingerprint transient connectivity failures in error tracking so
+ * one outage groups into one issue per root cause instead of one issue per
+ * query that happened to be in flight.
+ */
+export function getTransientDbErrorCode(
+  error: unknown,
+  depth = 0,
+): string | null {
+  if (!(error instanceof Error)) return null;
+  if (depth > MAX_CAUSE_DEPTH) return null;
 
   // Check PostgreSQL error code (set by node-postgres on query errors)
   const pgCode = (error as Error & { code?: string }).code;
-  if (pgCode && TRANSIENT_PG_CODES.has(pgCode)) return true;
+  if (pgCode && TRANSIENT_PG_CODES.has(pgCode)) return pgCode;
 
   // Check error message for known transient patterns
   const message = error.message;
-  if (TRANSIENT_ERROR_PATTERNS.some((pattern) => message.includes(pattern))) {
-    return true;
-  }
+  const matched = TRANSIENT_ERROR_PATTERNS.find(({ pattern }) =>
+    message.includes(pattern),
+  );
+  if (matched) return matched.code;
 
   // DrizzleQueryError wraps the underlying pg error as `cause`
   const cause = (error as Error & { cause?: unknown }).cause;
-  if (cause) return isTransientDbError(cause, depth + 1);
+  if (cause) return getTransientDbErrorCode(cause, depth + 1);
 
-  return false;
+  return null;
 }
 
 /**
@@ -116,16 +152,19 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withDbRetry<T>(
   fn: () => Promise<T>,
-  options?: { maxRetries?: number },
+  options?: { maxRetries?: number; budgetMs?: number },
 ): Promise<T> {
   const maxRetries = options?.maxRetries ?? MAX_RETRIES;
+  const budgetMs = options?.budgetMs ?? RETRY_BUDGET_MS;
+  const startedAt = Date.now();
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
-      if (isTransientDbError(error) && attempt < maxRetries) {
-        const delay = calculateBackoff(attempt);
+      const delay = calculateBackoff(attempt);
+      const withinBudget = Date.now() - startedAt + delay <= budgetMs;
+      if (isTransientDbError(error) && attempt < maxRetries && withinBudget) {
         logger.warn(
           {
             err: error,

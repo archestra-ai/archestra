@@ -28,10 +28,10 @@ We've prepared a docker-compose with local N8N and Archestra:
 ```bash
 # Clone the repository with docker-compose configuration
 git clone https://github.com/archestra-ai/archestra
-cd platform
+cd archestra/platform
 
 # Start N8N and Archestra Platform
-docker-compose -f docker-compose-n8n.yml up
+docker-compose -f dev/docker-compose-n8n.yml up
 
 # Access N8N at http://localhost:5678
 # Archestra Platform runs at http://localhost:3000
@@ -116,12 +116,12 @@ Configure Archestra as a proxy for N8N:
 3. Set "Base URL" as
 
 ```text
-http://platform-archestra-1:9000/v1/openai
+http://archestra:9000/v1/openai
 ```
 
-instead of <https://api.openai.com/v1> (platform-archestra-1 is an in-docker DNS name for Archestra platform launched by docker-compose)
+instead of <https://api.openai.com/v1> (`archestra` is the Docker Compose service name for Archestra Platform)
 
-**Optional:** To use a specific profile, include the profile ID in the URL: `http://platform-archestra-1:9000/v1/openai/{profile-id}`.
+**Optional:** To use a specific profile, include the profile ID in the URL: `http://archestra:9000/v1/openai/{profile-id}`.
 You can create and manage profiles in the Archestra Platform UI at [http://localhost:3000/profiles](http://localhost:3000/profiles).
 
 4. Open the agent in the N8N again and put "hi" to the chat. It will make Archestra discover tools.

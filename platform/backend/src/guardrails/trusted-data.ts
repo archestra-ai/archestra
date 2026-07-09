@@ -1,6 +1,7 @@
 import {
   buildTrustedDataBlockedContentNotice,
   extractMcpToolError,
+  isSeededAppRenderToolResult,
 } from "@archestra/shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -91,7 +92,7 @@ export async function evaluateIfContextIsTrusted(
     toolName: string;
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolResult: any;
-    isPlatformDispatchError: boolean;
+    isPlatformAuthoredResult: boolean;
   }> = [];
 
   for (const message of messages) {
@@ -101,11 +102,16 @@ export async function evaluateIfContextIsTrusted(
           toolCallId: toolCall.id,
           toolName: toolCall.name,
           toolResult: toolCall.content,
-          // A platform-generated `tool_state` envelope (e.g. unknown_tool)
-          // means no upstream tool ran, so the result is our own text with no
-          // external data — it must not flip the context to untrusted.
-          isPlatformDispatchError:
-            extractMcpToolError(toolCall)?.type === "tool_state",
+          // Results the platform itself authored carry no external data and
+          // must not flip the context to untrusted:
+          // - a platform-generated `tool_state` envelope (e.g. unknown_tool)
+          //   means no upstream tool ran, so the result is our own text;
+          // - a seeded app render (open-in-chat conversation seeding) is a
+          //   platform-built render pointer, marked with a reserved `_meta`
+          //   key that mcp-client strips from every live upstream result.
+          isPlatformAuthoredResult:
+            extractMcpToolError(toolCall)?.type === "tool_state" ||
+            isSeededAppRenderToolResult(toolCall.content),
         });
       }
     }
@@ -151,13 +157,13 @@ export async function evaluateIfContextIsTrusted(
 
   // Process evaluation results
   for (let i = 0; i < allToolCalls.length; i++) {
-    const { toolCallId, toolResult, toolName, isPlatformDispatchError } =
+    const { toolCallId, toolResult, toolName, isPlatformAuthoredResult } =
       allToolCalls[i];
-    // A platform dispatch error never reached an upstream tool, so its result
-    // carries no external data. Skip it — otherwise a not-found tool has no
-    // trusted-data evaluation and falls through to the untrusted branch below,
-    // poisoning the session over a benign error.
-    if (isPlatformDispatchError) {
+    // A platform-authored result (dispatch error or seeded app render) never
+    // carries upstream data. Skip it — otherwise it has no trusted-data
+    // evaluation (or no matching policy) and falls through to the untrusted
+    // branch below, poisoning the session over a benign platform message.
+    if (isPlatformAuthoredResult) {
       continue;
     }
     // evaluateBulk() returns a Map keyed by the stringified input index, so we

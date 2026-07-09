@@ -18,9 +18,9 @@ interface ResolvedProviderApiKey {
 
 /**
  * Resolve API key for a provider using priority:
- * agent's configured key > conversation > personal > team > org > environment variable
+ * conversation > agent's configured key > personal > team > org > environment variable
  *
- * When userId is provided: resolves via getCurrentApiKey (agent key > personal > team > org).
+ * When userId is provided: resolves via getCurrentApiKey (conversation > agent key > personal > team > org).
  * When no userId: checks org keys only.
  */
 export async function resolveProviderApiKey(params: {

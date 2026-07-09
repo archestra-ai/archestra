@@ -198,7 +198,7 @@ export function McpAppEntryPill({
   /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
   icon?: React.ReactNode;
   /** Tool-call state for the status dot, matching the tool-call circles. */
-  state?: "running" | "completed" | "error";
+  state?: "running" | "completed" | "error" | "denied";
   /** Runs on every pill click, before the app toggle (e.g. to collapse an
    * expanded tool-call card so only one thing opens under the row). */
   onClick?: () => void;

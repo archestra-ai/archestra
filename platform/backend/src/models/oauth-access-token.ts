@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 class OAuthAccessTokenModel {
@@ -18,6 +18,8 @@ class OAuthAccessTokenModel {
     expiresAt: Date;
     scopes: string[];
     referenceId?: string | null;
+    sessionId?: string | null;
+    refreshId?: string | null;
   }) {
     const [accessToken] = await db
       .insert(schema.oauthAccessTokensTable)
@@ -29,11 +31,28 @@ class OAuthAccessTokenModel {
         expiresAt: params.expiresAt,
         scopes: params.scopes,
         referenceId: params.referenceId ?? null,
+        sessionId: params.sessionId ?? null,
+        refreshId: params.refreshId ?? null,
         createdAt: new Date(),
       })
       .returning();
 
     return accessToken;
+  }
+
+  /**
+   * Delete access tokens minted for the given refresh token rows. Returns the
+   * number of rows removed.
+   */
+  static async deleteByRefreshIds(refreshIds: string[]): Promise<number> {
+    if (refreshIds.length === 0) {
+      return 0;
+    }
+    const rows = await db
+      .delete(schema.oauthAccessTokensTable)
+      .where(inArray(schema.oauthAccessTokensTable.refreshId, refreshIds))
+      .returning({ id: schema.oauthAccessTokensTable.id });
+    return rows.length;
   }
 
   static async createClientCredentialsToken(params: {

@@ -339,15 +339,20 @@ describe("resolveDynamicToolByUiResource", () => {
 
   test("null when the backing tool is not accessible to the user", async ({
     makeInternalMcpCatalog,
+    makeOrganization,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog({ organizationId });
+    // Another organization's catalog is not visible to the user, so its UI
+    // tool must not resolve.
+    const otherOrg = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: otherOrg.id,
+    });
     await makeTool({
       name: "excalidraw__create_view",
       catalogId: catalog.id,
       meta: { _meta: { ui: { resourceUri: RESOURCE_URI } } },
     });
-    // No install (makeMcpServer) → the catalog is not reachable for the user.
 
     const tool = await resolveDynamicToolByUiResource({
       resourceUri: RESOURCE_URI,
@@ -711,11 +716,14 @@ describe("getUnassignedDiscoverableTools", () => {
   });
 });
 
-// Catalog visibility is not install access: an org-scoped catalog is visible to
-// every member, but its tools must only be discoverable/runnable by users who
-// have an accessible install of it (own personal, team, or org) — never via
-// another user's personal install.
-describe("dynamic discovery is scoped to the caller's own installs", () => {
+// Discovery follows catalog visibility, execution follows install access: an
+// org-scoped catalog is visible (and therefore discoverable) to every member
+// even when the member has no connection of their own yet — e.g. a per-user
+// OAuth server the member has not signed in to. What stays install-scoped is
+// execution: the call-time resolver only routes through installs the caller
+// can access (own personal, team, or org — never another user's personal
+// install) and otherwise returns the actionable auth-required setup prompt.
+describe("dynamic discovery follows catalog visibility", () => {
   let agent: Agent;
   let organizationId: string;
   let userId: string;
@@ -733,7 +741,11 @@ describe("dynamic discovery is scoped to the caller's own installs", () => {
     });
   });
 
-  test("getUnassignedDiscoverableTools excludes a tool whose only install is another user's personal server", async ({
+  // The caller has no connection yet, but the catalog is shared with them, so
+  // they can set up their own — dropping the tool from discovery would hide
+  // the call-time auth prompt that tells them to. Another user's connection
+  // being the only install must not make the tool invisible.
+  test("getUnassignedDiscoverableTools includes a tool whose only install is another user's personal server", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -765,12 +777,12 @@ describe("dynamic discovery is scoped to the caller's own installs", () => {
       organizationId,
     });
 
-    expect(tools.map((tool) => tool.name)).not.toContain(
+    expect(tools.map((tool) => tool.name)).toContain(
       "github__search_repositories",
     );
   });
 
-  test("resolveDynamicTool returns null for a tool whose only install is another user's personal server", async ({
+  test("resolveDynamicTool resolves a tool whose only install is another user's personal server (auth is enforced at call time)", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
@@ -802,7 +814,33 @@ describe("dynamic discovery is scoped to the caller's own installs", () => {
       organizationId,
     });
 
-    expect(tool).toBeNull();
+    expect(tool).not.toBeNull();
+    expect(tool?.name).toBe("github__search_repositories");
+  });
+
+  test("getUnassignedDiscoverableTools includes a tool from a visible catalog with no install at all", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      scope: "org",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+
+    const tools = await getUnassignedDiscoverableTools({
+      assignedToolNames: new Set(),
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(tools.map((tool) => tool.name)).toContain(
+      "github__search_repositories",
+    );
   });
 
   test("includes a tool the caller has their own personal install of", async ({
@@ -895,34 +933,6 @@ describe("dynamic discovery is scoped to the caller's own installs", () => {
     });
 
     expect(tools.map((tool) => tool.name)).toContain(
-      "github__search_repositories",
-    );
-  });
-
-  test("excludes a visible catalog that has no install at all, even for an admin caller", async ({
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    // The caller is an org admin (see beforeEach): catalog visibility is broad,
-    // but admins do not bypass the install requirement. With no install of the
-    // catalog, its tools must not enter the discovery space.
-    const catalog = await makeInternalMcpCatalog({
-      organizationId,
-      scope: "org",
-    });
-    await makeTool({
-      name: "github__search_repositories",
-      catalogId: catalog.id,
-    });
-
-    const tools = await getUnassignedDiscoverableTools({
-      assignedToolNames: new Set(),
-      agentId: agent.id,
-      userId,
-      organizationId,
-    });
-
-    expect(tools.map((tool) => tool.name)).not.toContain(
       "github__search_repositories",
     );
   });

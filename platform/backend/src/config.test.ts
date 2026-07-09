@@ -34,6 +34,7 @@ import config, {
   parseLogFormat,
   parseMetricsPort,
   parseProcessType,
+  parseRefreshTokenReuseGraceSeconds,
   parseSampleRate,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
@@ -783,6 +784,31 @@ describe("getOtelExporterOtlpLogEndpoint", () => {
       );
       expect(result).toBe("https://otel.example.com/v1/logs");
     });
+  });
+});
+
+describe("parseRefreshTokenReuseGraceSeconds", () => {
+  test("defaults to 60 when unset, empty, or whitespace", () => {
+    expect(parseRefreshTokenReuseGraceSeconds(undefined)).toBe(60);
+    expect(parseRefreshTokenReuseGraceSeconds("")).toBe(60);
+    expect(parseRefreshTokenReuseGraceSeconds("   ")).toBe(60);
+  });
+
+  test("parses a valid value and trims whitespace", () => {
+    expect(parseRefreshTokenReuseGraceSeconds("120")).toBe(120);
+    expect(parseRefreshTokenReuseGraceSeconds("  30  ")).toBe(30);
+  });
+
+  test("accepts 0 to disable the grace window", () => {
+    expect(parseRefreshTokenReuseGraceSeconds("0")).toBe(0);
+  });
+
+  test("returns default and warns for non-numeric or negative values", () => {
+    expect(parseRefreshTokenReuseGraceSeconds("abc")).toBe(60);
+    expect(parseRefreshTokenReuseGraceSeconds("-5")).toBe(60);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS value "-5", using default 60',
+    );
   });
 });
 

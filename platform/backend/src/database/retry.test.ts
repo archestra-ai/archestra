@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
 
 import {
+  getTransientDbErrorCode,
   installDbErrorSafetyNet,
   isTransientDbError,
   withDbRetry,
@@ -38,6 +39,14 @@ describe("isTransientDbError", () => {
 
   test("detects ETIMEDOUT", () => {
     expect(isTransientDbError(new Error("connect ETIMEDOUT"))).toBe(true);
+  });
+
+  test("detects EAI_AGAIN (temporary DNS resolution failure)", () => {
+    expect(
+      isTransientDbError(
+        new Error("getaddrinfo EAI_AGAIN db.example.internal"),
+      ),
+    ).toBe(true);
   });
 
   test("detects 'Connection terminated'", () => {
@@ -122,6 +131,46 @@ describe("isTransientDbError", () => {
       error = new Error(`wrapper ${i}`, { cause: error });
     }
     expect(isTransientDbError(error)).toBe(false);
+  });
+});
+
+describe("getTransientDbErrorCode", () => {
+  test("returns a stable code for socket-level errors", () => {
+    expect(
+      getTransientDbErrorCode(new Error("connect ECONNREFUSED 10.0.0.1:5432")),
+    ).toBe("ECONNREFUSED");
+    expect(
+      getTransientDbErrorCode(new Error("getaddrinfo EAI_AGAIN db.internal")),
+    ).toBe("EAI_AGAIN");
+  });
+
+  test("maps message patterns to low-cardinality codes", () => {
+    expect(
+      getTransientDbErrorCode(
+        new Error("timeout exceeded when trying to connect"),
+      ),
+    ).toBe("pool_connect_timeout");
+    expect(
+      getTransientDbErrorCode(new Error("Connection terminated unexpectedly")),
+    ).toBe("connection_terminated");
+  });
+
+  test("returns the SQLSTATE code for transient PostgreSQL errors", () => {
+    const error = Object.assign(new Error("db error"), { code: "57P01" });
+    expect(getTransientDbErrorCode(error)).toBe("57P01");
+  });
+
+  test("unwraps the cause chain (DrizzleQueryError pattern)", () => {
+    const drizzleError = new Error("Failed query: select 1", {
+      cause: new Error("getaddrinfo EAI_AGAIN db.internal"),
+    });
+    expect(getTransientDbErrorCode(drizzleError)).toBe("EAI_AGAIN");
+  });
+
+  test("returns null for non-transient errors", () => {
+    expect(getTransientDbErrorCode(new Error("duplicate key"))).toBeNull();
+    expect(getTransientDbErrorCode("not an error")).toBeNull();
+    expect(getTransientDbErrorCode(null)).toBeNull();
   });
 });
 
@@ -211,6 +260,26 @@ describe("withDbRetry", () => {
     const result = await withDbRetry(fn);
     expect(result).toEqual([{ id: 1 }]);
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  test("stops retrying when the time budget is exhausted", async () => {
+    vi.useFakeTimers();
+    const fn = vi
+      .fn()
+      .mockRejectedValue(new Error("connect ECONNREFUSED 10.2.124.50:5432"));
+
+    // Budget allows the first backoff (~100-125ms) but not the second
+    // (~200-250ms on top of ~100-125ms elapsed).
+    const promise = withDbRetry(fn, { maxRetries: 5, budgetMs: 250 });
+    const assertion = expect(promise).rejects.toThrow("ECONNREFUSED");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+
+    // 1 initial + 1 retry, then the budget cuts it off despite maxRetries: 5
+    expect(fn).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 
   test("applies backoff delay between retries", async () => {

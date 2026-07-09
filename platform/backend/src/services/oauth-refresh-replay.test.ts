@@ -281,6 +281,7 @@ describe("shieldRefreshTokenGrant", () => {
       name: "Confidential MCP client",
       grantType: "authorization_code",
       redirectUris: ["http://localhost:1455/callback"],
+      authorId: user.id,
     });
     const grant = await seedGrant({
       clientId: oauthClient.clientId,

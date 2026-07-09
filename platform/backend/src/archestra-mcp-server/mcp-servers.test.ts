@@ -522,6 +522,79 @@ describe("deploy_mcp_server", () => {
     expect(result.isError).toBe(false);
   });
 
+  test("shared team install of a use-level team item is rejected", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamAdmin.id);
+    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: teamAdmin.id,
+      organizationId: org.id,
+    };
+    // Team-scoped item where the admin's team holds only `use`.
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "team",
+      teams: [{ id: team.id, level: "use" }],
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    // A shared team install is the connection others resolve through — a write.
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toMatch(/write access/i);
+  });
+
+  test("shared team install of a write-level team item succeeds", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, teamAdmin.id);
+    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: teamAdmin.id,
+      organizationId: org.id,
+    };
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      scope: "team",
+      teams: [{ id: team.id, level: "write" }],
+    });
+
+    const result = await executeArchestraTool(
+      DEPLOY_TOOL,
+      { catalogId: catalog.id, scope: "team", teamId: team.id },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+  });
+
   test("team install: member of team and non-editor is rejected", async ({
     makeAgent,
     makeCustomRole,

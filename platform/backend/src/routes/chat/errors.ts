@@ -1483,17 +1483,26 @@ function createErrorResponse(
 /**
  * Build the error surfaced when a turn ends with a tool call the model started
  * streaming but never completed — nothing executes and the turn produces no
- * reply. Uses the dedicated retryable IncompleteToolCall code so telemetry and
- * the rendered card distinguish it from a cleanly empty turn (EmptyResponse).
+ * reply. A `length` finishReason means the model hit its output cap mid tool
+ * call (a deterministic, too-large payload): surface the non-retryable
+ * ToolCallOutputTruncated code so the card stops advertising a retry that would
+ * just re-truncate. Any other finishReason keeps the retryable IncompleteToolCall
+ * code (a transient mid-stream drop). Both distinguish it from a cleanly empty
+ * turn (EmptyResponse) for telemetry and the rendered card.
  */
 export function buildAbortiveTurnError(
   provider: SupportedProvider,
+  finishReason?: string | null,
 ): ChatErrorResponse {
+  const code =
+    finishReason === "length"
+      ? ChatErrorCode.ToolCallOutputTruncated
+      : ChatErrorCode.IncompleteToolCall;
   return createErrorResponse(
-    ChatErrorCode.IncompleteToolCall,
+    code,
     provider,
     undefined,
-    ChatErrorMessages[ChatErrorCode.IncompleteToolCall],
+    ChatErrorMessages[code],
     "AbortiveTurn",
     undefined,
   );

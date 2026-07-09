@@ -129,6 +129,7 @@ export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
 export const TOOL_LOAD_SKILL_SHORT_NAME = "load_skill";
 export const TOOL_CREATE_SKILL_SHORT_NAME = "create_skill";
 export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
+export const TOOL_EDIT_SKILL_SHORT_NAME = "edit_skill";
 // code execution sandbox — implicit per-conversation sandbox; the create step
 // is hidden (lazy default).
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
@@ -238,6 +239,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
+  TOOL_EDIT_SKILL_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
@@ -408,6 +410,8 @@ export const TOOL_CREATE_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_SKILL_SHORT_NAME}` as const;
 export const TOOL_UPDATE_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_SKILL_SHORT_NAME}` as const;
+export const TOOL_EDIT_SKILL_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_SKILL_SHORT_NAME}` as const;
 export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
@@ -455,6 +459,7 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
+  TOOL_EDIT_SKILL_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(

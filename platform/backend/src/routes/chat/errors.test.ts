@@ -22,6 +22,7 @@ vi.mock("@sentry/node", () => ({
 import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
+  buildAbortiveTurnError,
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -2115,5 +2116,21 @@ describe("getUnavailableToolErrorDetails", () => {
     expect(getUnavailableToolErrorDetails("some other failure")).toBeNull();
     expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
     expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
+  });
+});
+
+describe("buildAbortiveTurnError", () => {
+  it("maps a `length` truncation to a non-retryable ToolCallOutputTruncated", () => {
+    const result = buildAbortiveTurnError("anthropic", "length");
+    expect(result.code).toBe(ChatErrorCode.ToolCallOutputTruncated);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("keeps a non-length abortive turn as a retryable IncompleteToolCall", () => {
+    for (const finishReason of ["tool-calls", "unknown", null, undefined]) {
+      const result = buildAbortiveTurnError("anthropic", finishReason);
+      expect(result.code).toBe(ChatErrorCode.IncompleteToolCall);
+      expect(result.isRetryable).toBe(true);
+    }
   });
 });

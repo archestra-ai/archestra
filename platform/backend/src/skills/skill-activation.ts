@@ -34,6 +34,7 @@ import type { Skill, SkillFile } from "@/types";
  */
 export function formatSkillActivation({
   skill,
+  version,
   files,
   canRunSandbox,
   promptContext,
@@ -42,6 +43,11 @@ export function formatSkillActivation({
     Skill,
     "name" | "content" | "compatibility" | "allowedTools" | "templated"
   >;
+  /**
+   * The loaded version number, surfaced on the frame so a follow-up `edit_skill`
+   * can pass it as `baseVersion` (its compare-and-set base).
+   */
+  version: number;
   files: Pick<SkillFile, "path" | "kind">[];
   /**
    * Whether the sandbox tools are usable for this caller (feature enabled +
@@ -104,7 +110,7 @@ export function formatSkillActivation({
     : "";
 
   return (
-    `<skill_content name="${escapeXmlAttr(skill.name)}">\n${neutralizeFrameTags(body)}\n</skill_content>` +
+    `<skill_content name="${escapeXmlAttr(skill.name)}" version="${version}">\n${neutralizeFrameTags(body)}\n</skill_content>` +
     compatibility +
     allowedTools +
     resources

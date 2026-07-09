@@ -7,6 +7,8 @@ order: 8
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Six top-level sections, in order:
 1. Register Entra App for SSO          (minimum app reg for sign-in)

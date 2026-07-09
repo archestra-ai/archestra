@@ -6,6 +6,8 @@ description: Route Claude Desktop's inference and tools through Archestra
 lastUpdated: 2026-07-07
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Walkthrough for the /connection?clientId=claude-desktop flow: connecting
 Anthropic's Claude Desktop (Cowork) to Archestra with a single downloadable

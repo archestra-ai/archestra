@@ -50,11 +50,11 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
-  // Full-page app runtimes: the owned standalone /a/[id] and the external
-  // /apps/server/[id]/run. (The /apps gallery itself keeps the shell.)
-  const isAppRuntime =
-    /^\/a\/[^/]+$/.test(pathname) ||
-    /^\/apps\/server\/[^/]+\/run$/.test(pathname);
+  // Full-page app runtimes all live under /a/… (the owned standalone
+  // /a/[appId] and the external /a/catalog/[catalogId]), so the whole
+  // namespace is chrome-less by construction — no per-route regexes to keep in
+  // sync. (The /apps gallery itself keeps the shell.)
+  const isAppRuntime = pathname.startsWith("/a/");
   // Chat and project detail pages are viewport-locked, two-pane layouts
   // (content + right Files sidebar) that scroll each pane independently. They
   // need their children slot bounded to the viewport (min-h-0) so their

@@ -5,6 +5,8 @@ order: 9
 description: Invoke agents over HTTP using the A2A protocol
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent URL. The endpoint follows the [A2A (Agent-to-Agent) 1.0 protocol](https://a2a-protocol.org/) for interoperability with other A2A-compatible callers.
 
 ## Endpoints

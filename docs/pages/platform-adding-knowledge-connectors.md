@@ -6,6 +6,8 @@ description: Developer guide for implementing new Knowledge Base connectors in A
 lastUpdated: 2026-05-05
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 This is a development guide for adding new Knowledge Base connectors to Archestra.
 -->

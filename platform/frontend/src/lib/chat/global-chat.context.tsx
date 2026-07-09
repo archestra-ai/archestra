@@ -40,6 +40,7 @@ import {
   type ChatMcpElicitationRequest,
   McpElicitationDialog,
 } from "@/components/chat/mcp-elicitation-dialog";
+import { collectArchestraToolInvalidations } from "@/lib/chat/archestra-tool-invalidations";
 import {
   useClearChatErrors,
   useConversationUpdatedCacheSync,
@@ -629,6 +630,22 @@ function ChatSessionHook({
       const conversationsSidebarInvalidate = queryClient.invalidateQueries({
         queryKey: ["conversations"],
       });
+
+      // Archestra tools that mutate data server-side inside the chat loop
+      // (e.g. publish_app) bypass the frontend mutation hooks that normally
+      // invalidate the affected caches. Without this, opening the app's
+      // Settings right after a publish serves the cached pre-publish scope
+      // until the staleTime window lapses or a hard refresh. Invalidating
+      // here — on the finished message's successful tool results, not in
+      // onToolCall — guarantees the refetch cannot race the server-side
+      // write (onToolCall fires before the tool executes).
+      for (const queryKey of collectArchestraToolInvalidations({
+        parts: message.parts,
+        getToolShortName: (toolName) =>
+          getCurrentArchestraToolShortName(toolName, appName),
+      })) {
+        queryClient.invalidateQueries({ queryKey });
+      }
 
       // After a swap_agent stop, poke the new agent so it responds.
       // The new /api/chat POST re-reads the conversation from DB and

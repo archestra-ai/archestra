@@ -152,6 +152,7 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
+  edit_skill: { resource: "skill", action: "update" },
   // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
   // assignment. The implicit per-conversation sandbox is created lazily; the
   // create step is not a tool. load_skill (skill:read) mounts a skill into

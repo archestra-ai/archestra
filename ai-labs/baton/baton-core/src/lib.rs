@@ -39,6 +39,7 @@ pub mod contract;
 pub mod dimension;
 pub mod engine;
 pub mod label;
+pub mod preset;
 pub mod turn;
 
 use std::fmt;
@@ -72,4 +73,4 @@ pub use engine::{
     BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
 };
 pub use label::{AuditEntry, Grant, Label};
-pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn};
+pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};

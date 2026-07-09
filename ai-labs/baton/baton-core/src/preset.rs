@@ -187,7 +187,7 @@ impl<T: Ord + Clone> MinLevel<T> {
 /// The classification-like ordered preset (the dual of [`MinLevel`], with no
 /// built-in instance yet). Worse = higher, fold = max, `Unknown` just below
 /// top, adequacy = `at_most(ceiling)` — "most sensitive wins".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MaxLevel<T: Ord> {
     Known(T),
     Unknown,

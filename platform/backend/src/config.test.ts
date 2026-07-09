@@ -1775,6 +1775,7 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
 describe("isCodeRuntimeEnabled", () => {
   const base = {
     runnerHost: undefined,
+    runnerHostEnv: undefined,
     codeRuntimeEnabledEnv: undefined,
     kubeconfig: undefined,
     loadKubeconfigFromCurrentCluster: undefined,
@@ -1785,6 +1786,7 @@ describe("isCodeRuntimeEnabled", () => {
       isCodeRuntimeEnabled({
         ...base,
         runnerHost: "tcp://dagger.dagger.svc.cluster.local:1234",
+        runnerHostEnv: "tcp://dagger.dagger.svc.cluster.local:1234",
       }),
     ).toBe(true);
   });
@@ -1802,12 +1804,73 @@ describe("isCodeRuntimeEnabled", () => {
   // The documented kill switch: "To turn it off, set ARCHESTRA_CODE_RUNTIME_ENABLED
   // =false". It must beat a runner host, or an operator cannot disable the sandbox
   // on a deployment (quickstart, BYO) that supplies one.
+  // A host that is set but malformed parses to `undefined`, which is otherwise
+  // indistinguishable from "unset". Falling through to the k8s path would
+  // provision code-managed engines for an operator who asked for a BYO runner,
+  // while the parser logs "code runtime disabled".
+  test("a malformed runner host disables, it does not fall through to k8s", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: undefined,
+        runnerHostEnv: "http://not-a-dagger-scheme:1234",
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("a blank runner host is 'unset', not malformed", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: undefined,
+        runnerHostEnv: "   ",
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(true);
+  });
+
+  // The contract that matters is the parser and the gate together: the parser is
+  // what turns a malformed host into `undefined` in production.
+  test("parser + gate: a malformed host fails closed end to end", () => {
+    const envValue = "https://dagger.example.com";
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: parseCodeRuntimeDaggerRunnerHost({
+          enabled: true,
+          envValue,
+        }),
+        runnerHostEnv: envValue,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("parser + gate: a supported host enables", () => {
+    const envValue = "kube-pod://engine?namespace=dagger";
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: parseCodeRuntimeDaggerRunnerHost({
+          enabled: true,
+          envValue,
+        }),
+        runnerHostEnv: envValue,
+      }),
+    ).toBe(true);
+  });
+
   test('"false" disables even when an explicit runner host is set', () => {
     expect(
       isCodeRuntimeEnabled({
         ...base,
         codeRuntimeEnabledEnv: "false",
         runnerHost: "tcp://dagger:1234",
+        runnerHostEnv: "tcp://dagger:1234",
       }),
     ).toBe(false);
   });

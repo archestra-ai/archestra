@@ -755,7 +755,7 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of an existing Dagger engine, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Set it to run your own engine: Archestra sends agents without an environment to that address and creates no default engine. An agent bound to an environment still runs on that environment's own engine, which Archestra creates and which needs Kubernetes. A `kube-pod://` host is reached by running a command inside its pod, so it needs Kubernetes as well; only a `tcp://` host runs without it. Setting this also enables the code runtime on its own. Leave it unset to let Archestra manage every engine.
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of an existing Dagger engine, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Set it to run your own engine: Archestra sends agents without an environment to that address and creates no default engine. An agent bound to an environment still runs on that environment's own engine, which Archestra creates and which needs Kubernetes. A `kube-pod://` host is reached by running a command inside its pod, so it needs Kubernetes as well; only a `tcp://` host runs without it. Setting this also enables the code runtime on its own. A value that is not a `tcp://` or `kube-pod://` URL is rejected and turns the code runtime off rather than falling back to an Archestra-managed engine, so a typo cannot silently provision engines you did not ask for. Leave it unset to let Archestra manage every engine.
   - Default: unset
   - Values: a `tcp://` or `kube-pod://` URL
 

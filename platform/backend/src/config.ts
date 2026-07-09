@@ -1276,17 +1276,25 @@ const IPV4_CIDR =
  */
 export const isCodeRuntimeEnabled = ({
   runnerHost,
+  runnerHostEnv,
   codeRuntimeEnabledEnv,
   kubeconfig,
   loadKubeconfigFromCurrentCluster,
 }: {
   runnerHost: string | undefined;
+  runnerHostEnv: string | undefined;
   codeRuntimeEnabledEnv: string | undefined;
   kubeconfig: string | undefined;
   loadKubeconfigFromCurrentCluster: string | undefined;
 }): boolean => {
   if (codeRuntimeEnabledEnv === "false") return false;
   if (runnerHost !== undefined) return true;
+  // A runner host that was set but rejected by the parser reaches here as
+  // `undefined`, indistinguishable from "unset" without the raw value. Falling
+  // through would provision code-managed engines an operator who named a runner
+  // never asked for, contradicting the parser's own "code runtime disabled" log.
+  const runnerHostRejected = (runnerHostEnv?.trim().length ?? 0) > 0;
+  if (runnerHostRejected) return false;
   const k8sConfigured =
     loadKubeconfigFromCurrentCluster === "true" ||
     (kubeconfig?.trim().length ?? 0) > 0;
@@ -1422,6 +1430,7 @@ const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
 );
 const skillsSandboxEnabled = isCodeRuntimeEnabled({
   runnerHost: skillsSandboxDaggerRunnerHost,
+  runnerHostEnv: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
   codeRuntimeEnabledEnv: process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
   kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
   loadKubeconfigFromCurrentCluster:

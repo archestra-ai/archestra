@@ -188,10 +188,12 @@ def format_policy_report(
             failures.append(f"(b) {replay.task_id}: clean flow blocked at {outcome.tool}")
 
     blocked = [replay for replay in injection if injection_blocked_in_time(table, replay)]
+    total_injection = len(injection) + len(unreplayable)
     lines.append(
         f"injection: {len(blocked)}/{len(injection)} scripted attacks blocked at/before "
-        f"their first sink; {len(unreplayable)} without a scripted trace: "
-        f"{', '.join(unreplayable) if unreplayable else '-'}"
+        f"their first sink (hard-checked {len(injection)}/{total_injection} of the suite's "
+        f"injection tasks; {len(unreplayable)} have no scripted trace and are NOT gate-checked: "
+        f"{', '.join(unreplayable) if unreplayable else '-'})"
     )
     for replay in injection:
         ok = injection_blocked_in_time(table, replay)

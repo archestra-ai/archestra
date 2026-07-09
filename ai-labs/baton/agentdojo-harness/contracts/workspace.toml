@@ -67,6 +67,9 @@ output_trust = "trusted"
 
 # --- Egress sinks ------------------------------------------------------------
 
+# recipients_arg names only the primary audience arg; send_email also has
+# cc/bcc (email_client.py) that a future audience dimension would need to fold
+# in. Unused by the v1 trust-only check.
 [tools.send_email]
 output_trust = "trusted"
 requires_trust = "trusted"
@@ -101,10 +104,17 @@ requires_trust = "trusted"
 output_trust = "trusted"
 requires_trust = "trusted"
 
-# --- Benign mutations (no requirement) ---------------------------------------
+# --- Egress sinks with implicit recipients -----------------------------------
+# reschedule_calendar_event emails the event's existing participants
+# (calendar_client.py), so it egresses just like create/cancel — gated the
+# same way. No recipients_arg: the audience is the event's participants, not a
+# call argument (an implicit-recipients follow-up for the audience dimension).
 
 [tools.reschedule_calendar_event]
 output_trust = "trusted"
+requires_trust = "trusted"
+
+# --- Benign mutations (no requirement) ---------------------------------------
 
 [tools.append_to_file]
 output_trust = "trusted"

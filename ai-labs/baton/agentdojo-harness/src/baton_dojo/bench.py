@@ -15,16 +15,34 @@ def mean(values) -> float | None:
     return sum(values) / len(values) if values else None
 
 
-def count_policy_blocks(logdir: Path, pipeline_name: str, suite_name: str) -> int:
-    """Policy-blocked tool calls across every logged episode of this pipeline."""
+def count_policy_blocks(result_files: list[Path]) -> int:
+    """Policy-blocked tool calls across exactly the given episode log files."""
     blocked = 0
-    for result_file in (logdir / pipeline_name / suite_name).rglob("*.json"):
+    for result_file in result_files:
         results = json.loads(result_file.read_text())
         for message in results.get("messages", []):
             error = message.get("error")
             if isinstance(error, str) and error.startswith(POLICY_BLOCK_SENTINEL):
                 blocked += 1
     return blocked
+
+
+def episode_files(logdir: Path, pipeline_name: str, suite_name: str, results, attack_name: str):
+    """The log files for exactly the (user_task, injection_task) pairs in `results`.
+
+    Mirrors agentdojo's own path layout (logging.py): one file per pair, named
+    by the injection task under the attack directory ('none' when no injection).
+    Only files present on disk are returned, so a subset run counts only its
+    own episodes, never a prior invocation's.
+    """
+    base = logdir / pipeline_name / suite_name
+    files = []
+    for user_task_id, injection_task_id in results["utility_results"]:
+        injection = injection_task_id or "none"
+        path = base / user_task_id / attack_name / f"{injection}.json"
+        if path.exists():
+            files.append(path)
+    return files
 
 
 def percent(value: float | None) -> str:
@@ -60,6 +78,7 @@ def run_bench(
     logdir_path = Path(logdir)
 
     clean_utility = None
+    run_files = []
     # The runners log through the active OutputLogger context, like
     # agentdojo's own CLI wraps them.
     with OutputLogger(str(logdir_path)):
@@ -73,6 +92,9 @@ def run_bench(
                 benchmark_version=benchmark_version,
             )
             clean_utility = mean(clean["utility_results"].values())
+            run_files += episode_files(
+                logdir_path, pipeline.name, suite_name, clean, "none"
+            )
 
         attacked = benchmark_suite_with_injections(
             pipeline,
@@ -84,15 +106,17 @@ def run_bench(
             injection_tasks=injection_tasks,
             benchmark_version=benchmark_version,
         )
+        run_files += episode_files(
+            logdir_path, pipeline.name, suite_name, attacked, attack_name
+        )
 
     print(f"\n== {pipeline.name} vs {attack_name} on {suite_name} ({benchmark_version}) ==")
     print(f"clean utility:        {percent(clean_utility)}")
     print(f"utility under attack: {percent(mean(attacked['utility_results'].values()))}")
     print(f"attack success rate:  {percent(mean(attacked['security_results'].values()))}")
     print(
-        "policy-blocked calls: "
-        f"{count_policy_blocks(logdir_path, pipeline.name, suite_name)} "
-        f"(all logged episodes of this pipeline)"
+        f"policy-blocked calls: {count_policy_blocks(run_files)} "
+        f"(across this run's {len(run_files)} episodes)"
     )
     print(f"logs: {logdir_path / pipeline.name / suite_name}")
     return 0

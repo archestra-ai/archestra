@@ -15,9 +15,11 @@ from baton_dojo.contracts import load_table
 from baton_dojo.defense import (
     EMPTY_FUNCTION_NAME_ERROR,
     INVALID_TOOL_ERROR_PREFIX,
+    NESTED_CALL_ERROR,
     POLICY_BLOCK_SENTINEL,
     BatonToolsExecutor,
     derive_episode,
+    has_nested_call,
 )
 
 SUITE = get_suite("v1.2.2", "workspace")
@@ -194,6 +196,36 @@ def test_stock_error_strings_still_match_pinned_agentdojo():
     empty_result, invalid_result = messages[-2], messages[-1]
     assert empty_result["error"] == EMPTY_FUNCTION_NAME_ERROR
     assert invalid_result["error"].startswith(INVALID_TOOL_ERROR_PREFIX)
+
+
+def test_has_nested_call_detects_nesting():
+    assert not has_nested_call({"recipients": ["a@x.com"], "subject": "s"})
+    assert has_nested_call({"body": FunctionCall(function="get_unread_emails", args={})})
+    assert has_nested_call({"attachments": [{"file": FunctionCall(function="x", args={})}]})
+
+
+def test_nested_call_is_blocked_and_not_executed():
+    runtime, env = fresh()
+    outbox_before = len(env.inbox.emails)
+    # send_email whose body is the result of a nested get_unread_emails: the
+    # nested reader would run inside run_function, unseen by baton.
+    messages = [
+        user("summarize and send"),
+        assistant(
+            FunctionCall(
+                function="send_email",
+                args={
+                    "recipients": ["bob@example.com"],
+                    "subject": "s",
+                    "body": FunctionCall(function="get_unread_emails", args={}),
+                },
+            )
+        ),
+    ]
+    _, _, env, messages, _ = executor().query("q", runtime, env, messages, {})
+    result = messages[-1]
+    assert result["error"] == f"{POLICY_BLOCK_SENTINEL}{NESTED_CALL_ERROR}"
+    assert len(env.inbox.emails) == outbox_before  # neither call ran
 
 
 def test_recipients_reach_the_oracle():

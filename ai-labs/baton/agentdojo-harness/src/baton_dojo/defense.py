@@ -14,7 +14,7 @@ from agentdojo.agent_pipeline.tool_execution import (
     is_string_list,
     tool_result_to_str,
 )
-from agentdojo.functions_runtime import FunctionsRuntime
+from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime
 from agentdojo.types import (
     ChatMessage,
     ChatToolResultMessage,
@@ -35,6 +35,26 @@ POLICY_BLOCK_SENTINEL = "Blocked by baton policy: "
 # direction; under-counting would launder taint).
 EMPTY_FUNCTION_NAME_ERROR = "Empty function name provided. Provide a valid function name."
 INVALID_TOOL_ERROR_PREFIX = "Invalid tool "
+
+# A tool argument may itself be a FunctionCall; run_function resolves those
+# recursively (functions_runtime._execute_nested_calls) before the outer body
+# runs, so a nested reader or sink would execute outside baton's view and its
+# taint would launder into the outer call's args. Baton cannot gate a flow it
+# cannot see, so a nested call is refused fail-closed.
+NESTED_CALL_ERROR = "nested tool calls are not permitted under policy"
+
+
+def has_nested_call(args) -> bool:
+    """True if any argument value is (or contains) a FunctionCall."""
+    values = args.values() if isinstance(args, dict) else args
+    for value in values:
+        if isinstance(value, FunctionCall):
+            return True
+        if isinstance(value, dict) and has_nested_call(value):
+            return True
+        if isinstance(value, (list, tuple)) and has_nested_call(value):
+            return True
+    return False
 
 
 def derive_episode(
@@ -132,6 +152,22 @@ class BatonToolsExecutor(ToolsExecutor):
                         tool_call_id=tool_call.id,
                         tool_call=tool_call,
                         error=f"{INVALID_TOOL_ERROR_PREFIX}{tool_call.function} provided.",
+                    )
+                )
+                continue
+
+            # A nested tool call would execute inside run_function without ever
+            # reaching baton; refuse fail-closed rather than gate a flow we
+            # cannot see. Kept before arg coercion — coercion only touches
+            # strings, so it never removes a nested call.
+            if has_nested_call(tool_call.args):
+                tool_call_results.append(
+                    ChatToolResultMessage(
+                        role="tool",
+                        content=[text_content_block_from_string("")],
+                        tool_call_id=tool_call.id,
+                        tool_call=tool_call,
+                        error=f"{POLICY_BLOCK_SENTINEL}{NESTED_CALL_ERROR}",
                     )
                 )
                 continue

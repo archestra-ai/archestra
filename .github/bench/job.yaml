@@ -63,7 +63,7 @@ spec:
             - name: BENCH_ENVS
               value: "basic"
             - name: BENCH_LANES
-              value: "claude-opus-48,claude-sonnet-5,gpt-56-sol,gpt-56-terra,gpt-56-luna,fugu-ultra"
+              value: "claude-fable-5"
             # Dagger runner host is resolved from the live staging Deployment by CI.
             # Setting it also turns on the code sandbox (gated on the host's presence).
             - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST

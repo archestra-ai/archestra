@@ -32,6 +32,11 @@ provider = "openrouter"
 model = "anthropic/claude-sonnet-5"
 
 [[lane]]
+name = "claude-fable-5"
+provider = "openrouter"
+model = "anthropic/claude-fable-5"
+
+[[lane]]
 name = "gpt-56-sol"
 provider = "openrouter"
 model = "openai/gpt-5.6-sol"

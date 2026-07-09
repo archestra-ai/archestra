@@ -34,9 +34,7 @@ impl ChatRunResult {
     /// measurement (`None`) rather than a partial count masquerading as a complete one — the same
     /// "loud, never silent" discipline the cost classification follows.
     pub fn reliable_usage(&self) -> Option<&RunUsage> {
-        (self.usage.had_spend()
-            && !self.usage_fetch_failed
-            && self.usage.rows_with_null_tokens == 0)
+        (self.usage.had_spend() && !self.usage_fetch_failed && self.usage.rows_with_null_tokens == 0)
             .then_some(&self.usage)
     }
 }
@@ -259,8 +257,7 @@ mod tests {
     }
 
     fn stream_from_chunks(chunks: Vec<Vec<u8>>) -> ChatRecordStream {
-        let items: Vec<Result<Bytes, reqwest::Error>> =
-            chunks.into_iter().map(|c| Ok(Bytes::from(c))).collect();
+        let items: Vec<Result<Bytes, reqwest::Error>> = chunks.into_iter().map(|c| Ok(Bytes::from(c))).collect();
         ChatRecordStream {
             stream: Box::pin(futures::stream::iter(items)),
             buf: Vec::new(),
@@ -270,10 +267,7 @@ mod tests {
 
     async fn collect_events(stream: ChatRecordStream) -> Vec<HashMap<String, JsonValue>> {
         use futures::StreamExt;
-        stream
-            .filter_map(|r| async move { r.event })
-            .collect()
-            .await
+        stream.filter_map(|r| async move { r.event }).collect().await
     }
 
     #[tokio::test]
@@ -284,10 +278,7 @@ mod tests {
         let chunks = vec![full[..split].to_vec(), full[split..].to_vec()];
         let events = collect_events(stream_from_chunks(chunks)).await;
         assert_eq!(events.len(), 1);
-        assert_eq!(
-            events[0].get("k"),
-            Some(&JsonValue::String("é".to_string()))
-        );
+        assert_eq!(events[0].get("k"), Some(&JsonValue::String("é".to_string())));
     }
 
     #[tokio::test]
@@ -318,9 +309,6 @@ mod tests {
         let chunks = vec![b"data: {\"k\":\"v\"}".to_vec()];
         let events = collect_events(stream_from_chunks(chunks)).await;
         assert_eq!(events.len(), 1);
-        assert_eq!(
-            events[0].get("k"),
-            Some(&JsonValue::String("v".to_string()))
-        );
+        assert_eq!(events[0].get("k"), Some(&JsonValue::String("v".to_string())));
     }
 }

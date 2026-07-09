@@ -77,9 +77,7 @@ impl Audience {
         match (self, other) {
             (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
             (Self::Public, x) | (x, Self::Public) => x,
-            (Self::Readers(a), Self::Readers(b)) => {
-                Self::Readers(a.intersection(&b).cloned().collect())
-            }
+            (Self::Readers(a), Self::Readers(b)) => Self::Readers(a.intersection(&b).cloned().collect()),
         }
     }
 
@@ -167,9 +165,7 @@ impl Trust {
                 Self::Known(KnownTrust::Suspicious)
             }
             (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
-            (Self::Known(KnownTrust::Trusted), Self::Known(KnownTrust::Trusted)) => {
-                Self::Known(KnownTrust::Trusted)
-            }
+            (Self::Known(KnownTrust::Trusted), Self::Known(KnownTrust::Trusted)) => Self::Known(KnownTrust::Trusted),
         }
     }
 
@@ -235,9 +231,7 @@ impl Effects {
     pub fn combine(self, other: Self) -> Self {
         match (self, other) {
             (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
-            (Self::Declared(a), Self::Declared(b)) => {
-                Self::Declared(a.union(&b).copied().collect())
-            }
+            (Self::Declared(a), Self::Declared(b)) => Self::Declared(a.union(&b).copied().collect()),
         }
     }
 
@@ -311,10 +305,7 @@ mod tests {
 
     #[test]
     fn audience_unknown_is_absorbing() {
-        assert_eq!(
-            Audience::Unknown.combine(Audience::Public),
-            Audience::Unknown
-        );
+        assert_eq!(Audience::Unknown.combine(Audience::Public), Audience::Unknown);
         assert_eq!(
             Audience::readers([user("alice")]).combine(Audience::Unknown),
             Audience::Unknown
@@ -374,14 +365,8 @@ mod tests {
 
     #[test]
     fn audience_covers_over_the_three_values() {
-        assert_eq!(
-            Audience::Public.covers(&users(&["stranger"])),
-            Adequacy::Holds
-        );
-        assert_eq!(
-            Audience::Unknown.covers(&users(&["bob"])),
-            Adequacy::Unprovable
-        );
+        assert_eq!(Audience::Public.covers(&users(&["stranger"])), Adequacy::Holds);
+        assert_eq!(Audience::Unknown.covers(&users(&["bob"])), Adequacy::Unprovable);
 
         let ab = Audience::readers([user("alice"), user("bob")]);
         assert_eq!(ab.covers(&users(&["bob"])), Adequacy::Holds);
@@ -394,40 +379,22 @@ mod tests {
 
     #[test]
     fn trust_at_least_over_the_three_values() {
-        assert_eq!(
-            Trust::TRUSTED.at_least(KnownTrust::Trusted),
-            Adequacy::Holds
-        );
-        assert_eq!(
-            Trust::TRUSTED.at_least(KnownTrust::Suspicious),
-            Adequacy::Holds
-        );
-        assert_eq!(
-            Trust::SUSPICIOUS.at_least(KnownTrust::Suspicious),
-            Adequacy::Holds
-        );
+        assert_eq!(Trust::TRUSTED.at_least(KnownTrust::Trusted), Adequacy::Holds);
+        assert_eq!(Trust::TRUSTED.at_least(KnownTrust::Suspicious), Adequacy::Holds);
+        assert_eq!(Trust::SUSPICIOUS.at_least(KnownTrust::Suspicious), Adequacy::Holds);
         assert_eq!(
             Trust::SUSPICIOUS.at_least(KnownTrust::Trusted),
             Adequacy::Fails(KnownTrust::Suspicious)
         );
-        assert_eq!(
-            Trust::Unknown.at_least(KnownTrust::Suspicious),
-            Adequacy::Unprovable
-        );
-        assert_eq!(
-            Trust::Unknown.at_least(KnownTrust::Trusted),
-            Adequacy::Unprovable
-        );
+        assert_eq!(Trust::Unknown.at_least(KnownTrust::Suspicious), Adequacy::Unprovable);
+        assert_eq!(Trust::Unknown.at_least(KnownTrust::Trusted), Adequacy::Unprovable);
     }
 
     #[test]
     fn effects_avoids_over_the_three_values() {
         let forbidden = BTreeSet::from([Effect::Mutation]);
         assert_eq!(Effects::none().avoids(&forbidden), Adequacy::Holds);
-        assert_eq!(
-            Effects::declared([Effect::Egress]).avoids(&forbidden),
-            Adequacy::Holds
-        );
+        assert_eq!(Effects::declared([Effect::Egress]).avoids(&forbidden), Adequacy::Holds);
         assert_eq!(
             Effects::declared([Effect::Mutation, Effect::Egress]).avoids(&forbidden),
             Adequacy::Fails(BTreeSet::from([Effect::Mutation]))

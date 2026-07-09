@@ -26,10 +26,7 @@ pub enum Actor {
 /// they enter a trajectory only through [`Trajectory::record_result`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Speaker {
-    User {
-        id: UserId,
-        confirms: Option<ToolName>,
-    },
+    User { id: UserId, confirms: Option<ToolName> },
     Assistant,
 }
 
@@ -129,11 +126,7 @@ impl Trajectory {
     /// permit is consumed either way; if it was minted for another trajectory
     /// or the trajectory moved past the head it was minted for, the result is
     /// rejected and the flow must be re-evaluated against the real context.
-    pub fn record_result(
-        &mut self,
-        permit: Permit,
-        content: impl Into<String>,
-    ) -> Result<(), RejectedPermit> {
+    pub fn record_result(&mut self, permit: Permit, content: impl Into<String>) -> Result<(), RejectedPermit> {
         let (request, label, trajectory, basis) = permit.into_parts();
         if trajectory != self.id {
             return Err(RejectedPermit::ForeignTrajectory {
@@ -172,8 +165,7 @@ impl Trajectory {
                     Turn {
                         actor:
                             Actor::User {
-                                confirms: Some(tool),
-                                ..
+                                confirms: Some(tool), ..
                             },
                         ..
                     },
@@ -241,10 +233,7 @@ mod tests {
             Speaker::confirming(UserId::new("alice"), ToolName::new("db.drop")),
             "yes, drop it",
         );
-        assert_eq!(
-            trajectory.pending_confirmation(),
-            Some(&ToolName::new("db.drop"))
-        );
+        assert_eq!(trajectory.pending_confirmation(), Some(&ToolName::new("db.drop")));
 
         trajectory.push_message(
             Label::identity(),

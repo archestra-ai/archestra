@@ -175,9 +175,7 @@ impl Label {
         };
         let effects = match &grant.effects {
             Some(waived) => match &self.effects {
-                Effects::Declared(present) => {
-                    Effects::Declared(present.difference(waived).copied().collect())
-                }
+                Effects::Declared(present) => Effects::Declared(present.difference(waived).copied().collect()),
                 Effects::Unknown => Effects::Unknown,
             },
             None => self.effects.clone(),
@@ -306,10 +304,7 @@ mod tests {
         );
         assert_eq!(combined.trust, Trust::SUSPICIOUS);
         assert_eq!(combined.effects, Effects::declared([Effect::Mutation]));
-        assert_eq!(
-            combined.audit,
-            vec![audit_entry("first"), audit_entry("second")]
-        );
+        assert_eq!(combined.audit, vec![audit_entry("first"), audit_entry("second")]);
     }
 
     #[test]
@@ -426,10 +421,7 @@ mod tests {
                     audience_le(&x.audience, &up.audience),
                     "audience demoted: g={g:?} x={x}"
                 );
-                assert!(
-                    effects_le(&x.effects, &up.effects),
-                    "effects demoted: g={g:?} x={x}"
-                );
+                assert!(effects_le(&x.effects, &up.effects), "effects demoted: g={g:?} x={x}");
             }
         }
     }
@@ -442,11 +434,7 @@ mod tests {
                 ..Grant::empty()
             };
             for x in sample_labels() {
-                assert_eq!(
-                    x.lift(&g).trust.at_least(floor),
-                    Adequacy::Holds,
-                    "floor={floor} x={x}"
-                );
+                assert_eq!(x.lift(&g).trust.at_least(floor), Adequacy::Holds, "floor={floor} x={x}");
             }
         }
     }
@@ -459,11 +447,7 @@ mod tests {
             ..Grant::empty()
         };
         for x in sample_labels() {
-            assert_eq!(
-                x.lift(&g).audience.covers(&recipients),
-                Adequacy::Holds,
-                "x={x}"
-            );
+            assert_eq!(x.lift(&g).audience.covers(&recipients), Adequacy::Holds, "x={x}");
         }
     }
 
@@ -485,11 +469,7 @@ mod tests {
                 effects: present,
                 ..Label::identity()
             };
-            assert_eq!(
-                x.lift(&g).effects.avoids(&forbidden),
-                Adequacy::Holds,
-                "x={x}"
-            );
+            assert_eq!(x.lift(&g).effects.avoids(&forbidden), Adequacy::Holds, "x={x}");
         }
         // Unknown is not cleared — this is precisely why it is
         // acknowledge-only rather than grant-fixable.
@@ -497,10 +477,7 @@ mod tests {
             effects: Effects::Unknown,
             ..Label::identity()
         };
-        assert_eq!(
-            unknown.lift(&g).effects.avoids(&forbidden),
-            Adequacy::Unprovable
-        );
+        assert_eq!(unknown.lift(&g).effects.avoids(&forbidden), Adequacy::Unprovable);
     }
 
     #[test]

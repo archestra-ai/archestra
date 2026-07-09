@@ -5,9 +5,7 @@ use std::fmt;
 
 use crate::ToolName;
 use crate::authority::{Authority, AuthorityName, Ruling};
-use crate::contract::{
-    Breach, Fixability, Requirements, ToolContract, ToolRequest, Unprovable, Verdict, Violation,
-};
+use crate::contract::{Breach, Fixability, Requirements, ToolContract, ToolRequest, Unprovable, Verdict, Violation};
 use crate::label::{AuditEntry, Grant, Label};
 use crate::turn::{Trajectory, TrajectoryId};
 
@@ -100,10 +98,7 @@ pub enum RejectedPermit {
         this: TrajectoryId,
     },
     /// The trajectory grew between `evaluate` and the recording.
-    Stale {
-        granted_at: usize,
-        current_len: usize,
-    },
+    Stale { granted_at: usize, current_len: usize },
 }
 
 impl fmt::Display for RejectedPermit {
@@ -226,9 +221,7 @@ impl<A: Authority> PolicyEngine<A> {
     /// error, not a silent overwrite.
     pub fn register(&mut self, contract: ToolContract) -> Result<(), DuplicateContract> {
         if self.contracts.contains_key(&contract.name) {
-            return Err(DuplicateContract {
-                tool: contract.name,
-            });
+            return Err(DuplicateContract { tool: contract.name });
         }
         self.contracts.insert(contract.name.clone(), contract);
         Ok(())
@@ -313,10 +306,7 @@ impl<A: Authority> PolicyEngine<A> {
 
         // Axis: fixability. A structural violation is an integration bug no
         // authority may override — block before consulting anyone.
-        if violations
-            .iter()
-            .any(|v| v.fixability() == Fixability::Structural)
-        {
+        if violations.iter().any(|v| v.fixability() == Fixability::Structural) {
             return Decision::Blocked {
                 violations,
                 reason: BlockReason::RequiresStructuralFix,
@@ -369,15 +359,8 @@ impl<A: Authority> PolicyEngine<A> {
         // deciding member and returns its ruling together, so attribution is
         // consistent by construction. `None` means no mandate covers the need
         // — block without consulting anyone.
-        let full_picture: Vec<Violation> = escalating
-            .iter()
-            .chain(audited_unknowns.iter())
-            .cloned()
-            .collect();
-        let Some((authority_name, ruling)) =
-            self.authority
-                .rule(&needed, request, &context, &full_picture)
-        else {
+        let full_picture: Vec<Violation> = escalating.iter().chain(audited_unknowns.iter()).cloned().collect();
+        let Some((authority_name, ruling)) = self.authority.rule(&needed, request, &context, &full_picture) else {
             escalating.extend(audited_unknowns);
             return Decision::Blocked {
                 violations: escalating,
@@ -410,9 +393,7 @@ impl<A: Authority> PolicyEngine<A> {
                         .check(&lifted, recheck_confirmation, request);
                     let uncovered = match &reverdict {
                         Verdict::Allow => false,
-                        Verdict::Escalate(remaining) => {
-                            remaining.iter().any(|v| targeted.contains(v))
-                        }
+                        Verdict::Escalate(remaining) => remaining.iter().any(|v| targeted.contains(v)),
                     };
                     if uncovered {
                         escalating.extend(audited_unknowns);
@@ -475,11 +456,7 @@ impl<A: Authority> PolicyEngine<A> {
 /// the `requirements` (for `TrustUnknown`, likewise). Acknowledge-only and
 /// structural violations contribute nothing; a non-empty grant-fixable set
 /// always yields a non-empty grant.
-fn needed_grant(
-    violations: &[Violation],
-    request: &ToolRequest,
-    requirements: &Requirements,
-) -> Grant {
+fn needed_grant(violations: &[Violation], request: &ToolRequest, requirements: &Requirements) -> Grant {
     let mut grant = Grant::empty();
     for violation in violations {
         match violation {
@@ -507,9 +484,7 @@ fn needed_grant(
                     .get_or_insert_with(BTreeSet::new)
                     .extend(effects.iter().copied());
             }
-            Violation::Breach(
-                Breach::ConfirmationMissing { .. } | Breach::ConfirmationForOtherTool { .. },
-            ) => {
+            Violation::Breach(Breach::ConfirmationMissing { .. } | Breach::ConfirmationForOtherTool { .. }) => {
                 grant.confirms = true;
             }
             Violation::Breach(Breach::UndeclaredRecipients)
@@ -526,9 +501,8 @@ fn needed_grant(
 /// a dimension — any difference is a degradation.)
 fn taint_entry(context: &Label, output: &Label, tool: &ToolName) -> Option<Violation> {
     let would_be = context.clone().combine(output.clone());
-    let degrades = would_be.audience != context.audience
-        || would_be.trust != context.trust
-        || would_be.effects != context.effects;
+    let degrades =
+        would_be.audience != context.audience || would_be.trust != context.trust || would_be.effects != context.effects;
     degrades.then(|| Violation::TaintEntry { tool: tool.clone() })
 }
 
@@ -635,13 +609,7 @@ mod tests {
     }
 
     impl Authority for CountingApprover {
-        fn rule(
-            &self,
-            needed: &Grant,
-            _: &ToolRequest,
-            _: &Label,
-            _: &[Violation],
-        ) -> Option<(AuthorityName, Ruling)> {
+        fn rule(&self, needed: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Option<(AuthorityName, Ruling)> {
             full_mandate().covers(needed).then(|| {
                 self.consulted.set(self.consulted.get() + 1);
                 (
@@ -657,13 +625,7 @@ mod tests {
     struct DenyAll;
 
     impl Authority for DenyAll {
-        fn rule(
-            &self,
-            needed: &Grant,
-            _: &ToolRequest,
-            _: &Label,
-            _: &[Violation],
-        ) -> Option<(AuthorityName, Ruling)> {
+        fn rule(&self, needed: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Option<(AuthorityName, Ruling)> {
             full_mandate().covers(needed).then(|| {
                 (
                     AuthorityName::new("deny-all"),
@@ -714,8 +676,8 @@ mod tests {
             _: &[Violation],
         ) -> Option<(AuthorityName, Ruling)> {
             full_mandate().covers(needed).then(|| {
-                let to_bob_only = !request.recipients.is_empty()
-                    && request.recipients.iter().all(|u| u == &user("bob"));
+                let to_bob_only =
+                    !request.recipients.is_empty() && request.recipients.iter().all(|u| u == &user("bob"));
                 let ruling = if to_bob_only {
                     Ruling::Approve {
                         reason: "reviewed for bob".to_owned(),
@@ -750,13 +712,7 @@ mod tests {
     }
 
     impl Authority for Mandated {
-        fn rule(
-            &self,
-            needed: &Grant,
-            _: &ToolRequest,
-            _: &Label,
-            _: &[Violation],
-        ) -> Option<(AuthorityName, Ruling)> {
+        fn rule(&self, needed: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Option<(AuthorityName, Ruling)> {
             self.mandate.covers(needed).then(|| {
                 self.consulted.set(self.consulted.get() + 1);
                 let ruling = if self.approve {
@@ -815,10 +771,7 @@ mod tests {
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
         };
-        assert_eq!(
-            permit.result_label().effects,
-            Effects::declared([Effect::Egress])
-        );
+        assert_eq!(permit.result_label().effects, Effects::declared([Effect::Egress]));
         assert!(permit.result_label().audit.is_empty());
         assert_eq!(engine.authority.consulted.get(), 0);
     }
@@ -909,10 +862,7 @@ mod tests {
         let trajectory = suspicious_private_trajectory();
 
         let to_bob = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
-        assert!(matches!(
-            engine.evaluate(&trajectory, &to_bob),
-            Decision::Permitted(_)
-        ));
+        assert!(matches!(engine.evaluate(&trajectory, &to_bob), Decision::Permitted(_)));
 
         let to_charlie = ToolRequest::exposing(ToolName::new("email.send"), [user("charlie")]);
         let decision = engine.evaluate(&trajectory, &to_charlie);
@@ -969,10 +919,7 @@ mod tests {
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
         };
-        assert_eq!(
-            permit.result_label().effects,
-            Effects::declared([Effect::Mutation])
-        );
+        assert_eq!(permit.result_label().effects, Effects::declared([Effect::Mutation]));
     }
 
     #[test]
@@ -1028,10 +975,7 @@ mod tests {
 
         // Escalate: the authority decides.
         let engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
-        assert!(matches!(
-            engine.evaluate(&trajectory, &request),
-            Decision::Permitted(_)
-        ));
+        assert!(matches!(engine.evaluate(&trajectory, &request), Decision::Permitted(_)));
         assert_eq!(engine.authority.consulted.get(), 1);
 
         // AllowWithAudit: permitted without the authority, but on the record,
@@ -1066,10 +1010,7 @@ mod tests {
         // not apply, the authority does.
         let trajectory = suspicious_private_trajectory();
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
-        assert!(matches!(
-            engine.evaluate(&trajectory, &request),
-            Decision::Permitted(_)
-        ));
+        assert!(matches!(engine.evaluate(&trajectory, &request), Decision::Permitted(_)));
         assert_eq!(engine.authority.consulted.get(), 1);
     }
 
@@ -1150,8 +1091,7 @@ mod tests {
 
     #[test]
     fn the_authority_sees_audited_unknowns_alongside_breaches() {
-        let mut engine =
-            PolicyEngine::new(InspectingApprover::default(), UnknownPolicy::AllowWithAudit);
+        let mut engine = PolicyEngine::new(InspectingApprover::default(), UnknownPolicy::AllowWithAudit);
         engine.register(email_contract()).unwrap();
 
         let mut trajectory = Trajectory::new();
@@ -1165,10 +1105,7 @@ mod tests {
             "context of unknown provenance",
         );
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
-        assert!(matches!(
-            engine.evaluate(&trajectory, &request),
-            Decision::Permitted(_)
-        ));
+        assert!(matches!(engine.evaluate(&trajectory, &request), Decision::Permitted(_)));
 
         let seen = engine.authority.seen.borrow();
         assert!(seen.iter().any(|v| matches!(v, Violation::Breach(_))));
@@ -1268,9 +1205,7 @@ mod tests {
 
     #[test]
     fn each_grant_fixable_kind_derives_a_covering_grant_and_rechecks_clean() {
-        let email_to = |ids: &[&str]| {
-            ToolRequest::exposing(ToolName::new("email.send"), ids.iter().map(|id| user(id)))
-        };
+        let email_to = |ids: &[&str]| ToolRequest::exposing(ToolName::new("email.send"), ids.iter().map(|id| user(id)));
         let with_email = || {
             let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
             engine.register(email_contract()).unwrap();
@@ -1338,10 +1273,7 @@ mod tests {
             ..Label::identity()
         });
         assert!(matches!(
-            engine.evaluate(
-                &egressed,
-                &ToolRequest::new(ToolName::new("report.generate"))
-            ),
+            engine.evaluate(&egressed, &ToolRequest::new(ToolName::new("report.generate"))),
             Decision::Permitted(_)
         ));
 
@@ -1349,10 +1281,7 @@ mod tests {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
         engine.register(drop_contract()).unwrap();
         assert!(matches!(
-            engine.evaluate(
-                &Trajectory::new(),
-                &ToolRequest::new(ToolName::new("db.drop"))
-            ),
+            engine.evaluate(&Trajectory::new(), &ToolRequest::new(ToolName::new("db.drop"))),
             Decision::Permitted(_)
         ));
     }
@@ -1373,9 +1302,7 @@ mod tests {
                 .audit
                 .iter()
                 .filter_map(|e| match e {
-                    AuditEntry::Declassified { authority, .. } => {
-                        Some(authority.as_str().to_owned())
-                    }
+                    AuditEntry::Declassified { authority, .. } => Some(authority.as_str().to_owned()),
                     AuditEntry::Acknowledged { .. } => None,
                 })
                 .collect()
@@ -1393,13 +1320,8 @@ mod tests {
 
         // A confirmation need routes to the confirms-mandated member.
         let mut confirming = Trajectory::new();
-        confirming.push_message(
-            Label::identity(),
-            Speaker::user(user("alice")),
-            "no confirmation yet",
-        );
-        let confirm_flow =
-            engine.evaluate(&confirming, &ToolRequest::new(ToolName::new("db.drop")));
+        confirming.push_message(Label::identity(), Speaker::user(user("alice")), "no confirmation yet");
+        let confirm_flow = engine.evaluate(&confirming, &ToolRequest::new(ToolName::new("db.drop")));
         let Decision::Permitted(permit) = confirm_flow else {
             panic!("expected permit, got {confirm_flow:?}");
         };
@@ -1431,12 +1353,8 @@ mod tests {
         let request = ToolRequest::new(ToolName::new("noop"));
         let context = Label::identity();
         for need in &needs {
-            let left_name = left
-                .rule(need, &request, &context, &[])
-                .map(|(name, _)| name);
-            let right_name = right
-                .rule(need, &request, &context, &[])
-                .map(|(name, _)| name);
+            let left_name = left.rule(need, &request, &context, &[]).map(|(name, _)| name);
+            let right_name = right.rule(need, &request, &context, &[]).map(|(name, _)| name);
             assert_eq!(left_name, right_name, "need={need:?}");
         }
     }
@@ -1460,10 +1378,7 @@ mod tests {
         // Default TaintPolicy::Allow: a degrading fetch permits silently.
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate);
         engine.register(fetch_contract()).unwrap();
-        let decision = engine.evaluate(
-            &Trajectory::new(),
-            &ToolRequest::new(ToolName::new("web.fetch")),
-        );
+        let decision = engine.evaluate(&Trajectory::new(), &ToolRequest::new(ToolName::new("web.fetch")));
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
         };
@@ -1476,10 +1391,7 @@ mod tests {
         let mut engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Escalate)
             .with_taint_policy(TaintPolicy::Escalate);
         engine.register(fetch_contract()).unwrap();
-        let decision = engine.evaluate(
-            &Trajectory::new(),
-            &ToolRequest::new(ToolName::new("web.fetch")),
-        );
+        let decision = engine.evaluate(&Trajectory::new(), &ToolRequest::new(ToolName::new("web.fetch")));
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
         };
@@ -1503,10 +1415,7 @@ mod tests {
                 output_label: Label::identity(),
             })
             .unwrap();
-        let decision = engine.evaluate(
-            &Trajectory::new(),
-            &ToolRequest::new(ToolName::new("noop.tool")),
-        );
+        let decision = engine.evaluate(&Trajectory::new(), &ToolRequest::new(ToolName::new("noop.tool")));
         let Decision::Permitted(permit) = decision else {
             panic!("expected permit, got {decision:?}");
         };
@@ -1518,12 +1427,9 @@ mod tests {
     fn no_contract_blocks_on_deny_regardless_of_the_taint_knob() {
         // NoContract is unprovable; UnknownPolicy::Deny fails closed before any
         // authority, and the taint knob does not change that.
-        let engine = PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Deny)
-            .with_taint_policy(TaintPolicy::Escalate);
-        let decision = engine.evaluate(
-            &Trajectory::new(),
-            &ToolRequest::new(ToolName::new("calendar.lookup")),
-        );
+        let engine =
+            PolicyEngine::new(CountingApprover::new(), UnknownPolicy::Deny).with_taint_policy(TaintPolicy::Escalate);
+        let decision = engine.evaluate(&Trajectory::new(), &ToolRequest::new(ToolName::new("calendar.lookup")));
         let Decision::Blocked { reason, .. } = decision else {
             panic!("expected block, got {decision:?}");
         };

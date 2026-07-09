@@ -127,10 +127,7 @@ fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
 
         // Cross-check the discovered path against run.json's authoritative identity, so a stale or
         // copied run.json cannot silently misattribute its analysis to the wrong rollout.
-        let dir_name = rollout_dir
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
+        let dir_name = rollout_dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         let env_name = rollout_dir
             .parent()
             .and_then(|p| p.file_name())
@@ -167,12 +164,7 @@ fn discover_rollouts(run_dir: &Path) -> Result<Vec<Rollout>> {
 
 /// Deterministic report order shared by `analyze` and `prepare_run_dir`: failures first (so the
 /// reader sees the struggles), then by rollout id. Factored out so the two orderings cannot drift.
-fn rollout_order(
-    a_is_pass: bool,
-    a_id: &RolloutId,
-    b_is_pass: bool,
-    b_id: &RolloutId,
-) -> std::cmp::Ordering {
+fn rollout_order(a_is_pass: bool, a_id: &RolloutId, b_is_pass: bool, b_id: &RolloutId) -> std::cmp::Ordering {
     a_is_pass.cmp(&b_is_pass).then_with(|| a_id.cmp(b_id))
 }
 
@@ -232,10 +224,7 @@ pub fn prepare_run_dir(run_dir: &Path) -> Result<PrepareManifest> {
     // Metrics cover every discovered rollout: unlike `analyze`, `prepare` has no map phase, so there
     // is nothing to exclude. The block is byte-identical to an `analyze` run only when that run also
     // mapped every rollout (no map failures).
-    let metric_pairs: Vec<(RolloutId, RunMeta)> = rollouts
-        .iter()
-        .map(|r| (r.id.clone(), r.meta.clone()))
-        .collect();
+    let metric_pairs: Vec<(RolloutId, RunMeta)> = rollouts.iter().map(|r| (r.id.clone(), r.meta.clone())).collect();
     let metrics = metrics_block(&metric_pairs);
 
     let rollouts = rollouts
@@ -279,10 +268,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
 
     let rollouts = discover_rollouts(&cfg.run_dir)?;
     let total = rollouts.len();
-    note(
-        &mp,
-        format!("● {total} rollouts in {}", cfg.run_dir.display()),
-    );
+    note(&mp, format!("● {total} rollouts in {}", cfg.run_dir.display()));
 
     persist_trajectories(&rollouts)?;
 
@@ -365,9 +351,8 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
     );
 
     // Failures first, then by rollout id — deterministic regardless of map completion order.
-    analyzed.sort_by(|(a_id, a_meta, _), (b_id, b_meta, _)| {
-        rollout_order(a_meta.is_pass(), a_id, b_meta.is_pass(), b_id)
-    });
+    analyzed
+        .sort_by(|(a_id, a_meta, _), (b_id, b_meta, _)| rollout_order(a_meta.is_pass(), a_id, b_meta.is_pass(), b_id));
 
     let metric_pairs: Vec<(RolloutId, RunMeta)> = analyzed
         .iter()
@@ -378,9 +363,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
     // Persist the raw triage records before reduce, in the same failures-first order as the
     // analyses doc; rollouts whose map failed are simply absent (partial artifacts are normal).
     // tmp + rename so the dashboard can never observe a half-written artifact.
-    let rubrics_path = cfg
-        .run_dir
-        .join(format!("trajectory_rubrics_{timestamp}.jsonl"));
+    let rubrics_path = cfg.run_dir.join(format!("trajectory_rubrics_{timestamp}.jsonl"));
     let rubrics_tmp = rubrics_path.with_extension("jsonl.tmp");
     std::fs::write(
         &rubrics_tmp,
@@ -394,20 +377,13 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
         .into_iter()
         .map(|(id, meta, record)| {
             // The cap bounds the rendered section body (what the reducer reads), not the record.
-            let body = analyze::truncate_chars(
-                rubric::render_section(&record),
-                analyze::MAP_ANALYSIS_CAP_CHARS,
-            );
+            let body = analyze::truncate_chars(rubric::render_section(&record), analyze::MAP_ANALYSIS_CAP_CHARS);
             (id, meta.outcome, body)
         })
         .collect();
     let mut analyses_doc = analyze::build_analyses_doc(&metrics, &analyses, run_dir_rel.as_deref());
     if !excluded.is_empty() {
-        let names = excluded
-            .iter()
-            .map(|c| c.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let names = excluded.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(", ");
         analyses_doc = format!(
             "> NOTE: {} rollout(s) failed the map phase and are excluded from this analysis: {names}.\n\n{analyses_doc}",
             excluded.len()
@@ -423,9 +399,7 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
 
     // Persist the paid-for map output before reduce runs: a reduce/provider failure must not throw
     // away every per-rollout summary. The reducer reads its own copy from a temp dir under explore_root.
-    let analyses_path = cfg
-        .run_dir
-        .join(format!("trajectory_analyses_{timestamp}.md"));
+    let analyses_path = cfg.run_dir.join(format!("trajectory_analyses_{timestamp}.md"));
     std::fs::write(&analyses_path, &analyses_doc)
         .wrap_err_with(|| format!("writing analyses to {}", analyses_path.display()))?;
     note(&mp, format!("✓ map output → {}", analyses_path.display()));
@@ -469,12 +443,10 @@ pub async fn analyze(cfg: AnalyzeConfig) -> Result<()> {
     spinner.finish_and_clear();
     let report = result.wrap_err("reduce phase failed")?;
 
-    let out_path = cfg.out.unwrap_or_else(|| {
-        cfg.run_dir
-            .join(format!("trajectory_analysis_{timestamp}.md"))
-    });
-    std::fs::write(&out_path, &report.text)
-        .wrap_err_with(|| format!("writing report to {}", out_path.display()))?;
+    let out_path = cfg
+        .out
+        .unwrap_or_else(|| cfg.run_dir.join(format!("trajectory_analysis_{timestamp}.md")));
+    std::fs::write(&out_path, &report.text).wrap_err_with(|| format!("writing report to {}", out_path.display()))?;
 
     note(
         &mp,
@@ -516,13 +488,7 @@ mod tests {
     #[test]
     fn discovers_rollouts_matching_the_task_lane_glob() {
         let run = tempfile::tempdir().unwrap();
-        write_rollout(
-            run.path(),
-            "basic",
-            "pi",
-            "glm",
-            &run_json("basic", "pi", "glm"),
-        );
+        write_rollout(run.path(), "basic", "pi", "glm", &run_json("basic", "pi", "glm"));
         // A task id that itself contains `__` must still resolve via run.json identity.
         write_rollout(
             run.path(),
@@ -542,10 +508,7 @@ mod tests {
     fn default_lanes_file_sits_beside_the_bench_crate() {
         let p = default_lanes_file();
         assert!(p.ends_with("lanes.toml"));
-        assert_eq!(
-            p.parent().and_then(|d| d.file_name()).unwrap(),
-            "ai-labs"
-        );
+        assert_eq!(p.parent().and_then(|d| d.file_name()).unwrap(), "ai-labs");
     }
 
     #[test]
@@ -579,10 +542,7 @@ mod tests {
         std::fs::create_dir_all(&nested).unwrap();
         // canonicalize both sides so the result is path-separator/realpath agnostic.
         let root_c = root.path().canonicalize().unwrap();
-        assert_eq!(
-            run_dir_rel(&nested, &root_c).as_deref(),
-            Some("experiments/run-1")
-        );
+        assert_eq!(run_dir_rel(&nested, &root_c).as_deref(), Some("experiments/run-1"));
     }
 
     #[test]
@@ -611,13 +571,7 @@ mod tests {
     fn run_json_identity_disagreeing_with_dir_fails() {
         let run = tempfile::tempdir().unwrap();
         // Directory says pi__glm, run.json claims a different task.
-        write_rollout(
-            run.path(),
-            "basic",
-            "pi",
-            "glm",
-            &run_json("basic", "other", "glm"),
-        );
+        write_rollout(run.path(), "basic", "pi", "glm", &run_json("basic", "other", "glm"));
         let err = discover_rollouts(run.path()).unwrap_err();
         assert!(err.to_string().contains("disagrees with its directory"));
     }
@@ -631,16 +585,11 @@ mod tests {
                 task: task.into(),
                 lane: lane.into(),
             };
-            let rec = rubric::parse_triage(judgment)
-                .unwrap()
-                .into_record(&id, outcome);
+            let rec = rubric::parse_triage(judgment).unwrap().into_record(&id, outcome);
             (id, outcome == "passed", rec)
         };
         // Passing rollout listed first so the sort must actually reorder.
-        let mut rows = [
-            record("basic", "a", "x", "passed"),
-            record("basic", "b", "y", "failed"),
-        ];
+        let mut rows = [record("basic", "a", "x", "passed"), record("basic", "b", "y", "failed")];
         rows.sort_by(|a, b| rollout_order(a.1, &a.0, b.1, &b.0));
 
         let jsonl = rubrics_jsonl(rows.iter().map(|(_, _, rec)| rec));
@@ -683,8 +632,7 @@ mod tests {
         // trajectory.md is rendered next to each source jsonl, byte-identical to the full
         // trajectory rendering.
         let glm_dir = run.path().join("basic/pi__glm");
-        let expected =
-            format_to_markdown(&load_trajectory(&glm_dir.join("trajectory.jsonl")).unwrap());
+        let expected = format_to_markdown(&load_trajectory(&glm_dir.join("trajectory.jsonl")).unwrap());
         assert_eq!(
             std::fs::read_to_string(glm_dir.join("trajectory.md")).unwrap(),
             expected
@@ -696,16 +644,8 @@ mod tests {
         assert_eq!(ids, vec!["basic/tau__kimi", "basic/pi__glm"]);
 
         // Each PreparedRollout carries its outcome and a path to its rendered trajectory.
-        let failing = manifest
-            .rollouts
-            .iter()
-            .find(|r| r.id == "basic/tau__kimi")
-            .unwrap();
+        let failing = manifest.rollouts.iter().find(|r| r.id == "basic/tau__kimi").unwrap();
         assert_eq!(failing.outcome, "failed");
-        assert!(
-            failing
-                .trajectory_md
-                .ends_with("basic/tau__kimi/trajectory.md")
-        );
+        assert!(failing.trajectory_md.ends_with("basic/tau__kimi/trajectory.md"));
     }
 }

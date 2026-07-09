@@ -41,9 +41,7 @@ pub fn load_envs(envs_dir: &Path) -> Result<HashMap<String, EnvConfig>, EnvConfi
     entries.sort();
 
     if entries.is_empty() {
-        return Err(EnvConfigError(format!(
-            "no environment files found in {envs_dir:?}"
-        )));
+        return Err(EnvConfigError(format!("no environment files found in {envs_dir:?}")));
     }
 
     let mut envs: HashMap<String, EnvConfig> = HashMap::new();
@@ -72,11 +70,7 @@ pub fn load_envs(envs_dir: &Path) -> Result<HashMap<String, EnvConfig>, EnvConfi
 }
 
 fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
-    let ctx = path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
+    let ctx = path.file_name().unwrap_or_default().to_string_lossy().to_string();
     let data = toml_util::parse_toml_file(path)?;
 
     let env_id = toml_util::req_str(&data, "id", &ctx)?;
@@ -89,14 +83,8 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
     let name = toml_util::req_str_with_default(&data, "name", &ctx, &env_id)?;
     let agent = toml_util::table_with_default(&data, "agent", &ctx)?;
     let agent_ctx = format!("{ctx} [agent]");
-    let agent_name =
-        toml_util::req_str_with_default(&agent, "name", &agent_ctx, format!("{env_id}-agent"))?;
-    let agent_prompt = toml_util::req_str_with_default(
-        &agent,
-        "system_prompt",
-        &agent_ctx,
-        DEFAULT_SYSTEM_PROMPT,
-    )?;
+    let agent_name = toml_util::req_str_with_default(&agent, "name", &agent_ctx, format!("{env_id}-agent"))?;
+    let agent_prompt = toml_util::req_str_with_default(&agent, "system_prompt", &agent_ctx, DEFAULT_SYSTEM_PROMPT)?;
 
     let skills = load_skills(&data, &ctx)?;
     let mcps = load_mcps(&data, &ctx)?;
@@ -121,18 +109,11 @@ fn load_env(path: &Path, root: &Path) -> Result<EnvConfig, EnvConfigError> {
             .join("tasks")
             .join(&task_id)
             .canonicalize()
-            .map_err(|e| {
-                EnvConfigError(format!(
-                    "{ctx}: cannot resolve task dir for {task_id:?}: {e}"
-                ))
-            })?;
+            .map_err(|e| EnvConfigError(format!("{ctx}: cannot resolve task dir for {task_id:?}: {e}")))?;
         tasks.push(super::tasks::load_task(&task_dir)?);
     }
 
-    let tools = tool_names(
-        &toml_util::strs(&data, "tools", &ctx)?,
-        &format!("{ctx} tools"),
-    )?;
+    let tools = tool_names(&toml_util::strs(&data, "tools", &ctx)?, &format!("{ctx} tools"))?;
     let share_backend = toml_util::opt_bool(&data, "share_backend", &ctx, false)?;
     let fixture_mcp = toml_util::opt_bool(&data, "fixture_mcp", &ctx, false)?;
 
@@ -162,8 +143,8 @@ fn load_platform(data: &TomlTable, ctx: &str) -> Result<PlatformConfig, EnvConfi
         &platform_ctx,
         ToolExposureMode::default().as_str(),
     )?;
-    let tool_exposure_mode = ToolExposureMode::from_str(&mode)
-        .map_err(|e| EnvConfigError(format!("{platform_ctx}: {e}")))?;
+    let tool_exposure_mode =
+        ToolExposureMode::from_str(&mode).map_err(|e| EnvConfigError(format!("{platform_ctx}: {e}")))?;
     Ok(PlatformConfig { tool_exposure_mode })
 }
 
@@ -206,9 +187,7 @@ fn load_mcps(data: &TomlTable, ctx: &str) -> Result<Vec<Mcp>, EnvConfigError> {
         let row_ctx = format!("{ctx} [[mcps]][{i}]");
         let name = toml_util::req_str(row, "name", &row_ctx)?;
         if !names.insert(name.clone()) {
-            return Err(EnvConfigError(format!(
-                "{row_ctx}: duplicate MCP name {name:?}"
-            )));
+            return Err(EnvConfigError(format!("{row_ctx}: duplicate MCP name {name:?}")));
         }
         mcps.push(Mcp {
             name,
@@ -239,9 +218,7 @@ fn tool_names(names: &[String], ctx: &str) -> Result<Vec<String>, EnvConfigError
     }
     let unique: std::collections::HashSet<_> = names.iter().collect();
     if unique.len() != names.len() {
-        return Err(EnvConfigError(format!(
-            "{ctx}: duplicate tool name(s) in {names:?}"
-        )));
+        return Err(EnvConfigError(format!("{ctx}: duplicate tool name(s) in {names:?}")));
     }
     Ok(names.to_vec())
 }
@@ -250,13 +227,7 @@ fn tool_names(names: &[String], ctx: &str) -> Result<Vec<String>, EnvConfigError
 mod tests {
     use super::*;
 
-    fn write_env(
-        tmp: &std::path::Path,
-        id: &str,
-        tasks: &[&str],
-        share_backend: bool,
-        tools: &[&str],
-    ) {
+    fn write_env(tmp: &std::path::Path, id: &str, tasks: &[&str], share_backend: bool, tools: &[&str]) {
         let mut content = format!(
             r#"id = "{}"
 name = "{}"
@@ -315,10 +286,7 @@ share_backend = {}
     #[test]
     fn test_platform_defaults_to_search_and_run_only() {
         let env = load_env_with_platform("").unwrap();
-        assert_eq!(
-            env.platform.tool_exposure_mode,
-            ToolExposureMode::SearchAndRunOnly
-        );
+        assert_eq!(env.platform.tool_exposure_mode, ToolExposureMode::SearchAndRunOnly);
     }
 
     #[test]
@@ -329,8 +297,7 @@ share_backend = {}
 
     #[test]
     fn test_platform_unknown_mode_errors() {
-        let err =
-            load_env_with_platform("[platform]\ntool_exposure_mode = \"nope\"\n").unwrap_err();
+        let err = load_env_with_platform("[platform]\ntool_exposure_mode = \"nope\"\n").unwrap_err();
         assert!(err.0.contains("tool_exposure_mode"), "{}", err.0);
         assert!(err.0.contains("nope"), "{}", err.0);
     }
@@ -383,11 +350,7 @@ share_backend = {}
 
     #[test]
     fn test_tool_names_rejects_duplicates() {
-        let err = tool_names(
-            &["create_skill".to_string(), "create_skill".to_string()],
-            "ctx",
-        )
-        .unwrap_err();
+        let err = tool_names(&["create_skill".to_string(), "create_skill".to_string()], "ctx").unwrap_err();
         assert!(err.0.contains("duplicate"));
     }
 }

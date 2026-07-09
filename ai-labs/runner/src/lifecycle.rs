@@ -65,10 +65,7 @@ fn registry() -> &'static std::sync::Mutex<HashMap<u64, Teardown>> {
 fn register(teardown: Teardown) -> u64 {
     static NEXT_ID: AtomicU64 = AtomicU64::new(0);
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-    registry()
-        .lock()
-        .expect("teardown registry")
-        .insert(id, teardown);
+    registry().lock().expect("teardown registry").insert(id, teardown);
     id
 }
 
@@ -88,17 +85,13 @@ pub async fn shutdown_all() {
     if live.is_empty() {
         return;
     }
-    info!(
-        "interrupted: tearing down {} live backend instance(s)",
-        live.len()
-    );
+    info!("interrupted: tearing down {} live backend instance(s)", live.len());
     // Kill process-owning teardowns (backends, the build/log process groups) before removing any
     // worktree: a backend or build spawned from inside a worktree must be dead before its directory is
     // deleted, else `git worktree remove` races a live `node`/`pnpm` reading from it. Within each phase
     // the teardowns run concurrently.
-    let (worktrees, processes): (Vec<Teardown>, Vec<Teardown>) = live
-        .into_iter()
-        .partition(|t| matches!(t, Teardown::Worktree { .. }));
+    let (worktrees, processes): (Vec<Teardown>, Vec<Teardown>) =
+        live.into_iter().partition(|t| matches!(t, Teardown::Worktree { .. }));
     futures::future::join_all(processes.iter().map(|t| t.run())).await;
     futures::future::join_all(worktrees.iter().map(|t| t.run())).await;
 }
@@ -506,12 +499,7 @@ impl Instance {
             &self.base_url,
             self.metrics_port,
             &self.dagger_runner_host,
-            &self
-                .platform
-                .join("dev")
-                .join("bin")
-                .join("dagger")
-                .to_string_lossy(),
+            &self.platform.join("dev").join("bin").join("dagger").to_string_lossy(),
         )
     }
 }
@@ -527,9 +515,7 @@ enum ReadyPoll {
 fn classify_ready_poll<T>(result: Result<T, ClientError>) -> ReadyPoll {
     match result {
         Ok(_) => ReadyPoll::Ready,
-        Err(ClientError::Api(e)) if (400..500).contains(&e.status) => {
-            ReadyPoll::Terminal(e.to_string())
-        }
+        Err(ClientError::Api(e)) if (400..500).contains(&e.status) => ReadyPoll::Terminal(e.to_string()),
         // A broken sandbox cannot recover by retrying (the boot status is frozen during the poll),
         // so abort now instead of burning the whole readiness deadline.
         Err(e @ ClientError::SandboxFatal(_)) => ReadyPoll::Terminal(e.to_string()),
@@ -542,11 +528,7 @@ const ENV_VAR_REF_RE: &str = r"\$\{(\w+)\}|\$(\w+)";
 fn expand_env_refs(value: &str, lookup: &HashMap<String, String>) -> String {
     let re = regex::Regex::new(ENV_VAR_REF_RE).expect("valid regex");
     re.replace_all(value, |caps: &regex::Captures| {
-        let key = caps
-            .get(1)
-            .or_else(|| caps.get(2))
-            .map(|m| m.as_str())
-            .unwrap_or("");
+        let key = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str()).unwrap_or("");
         lookup.get(key).cloned().unwrap_or_default()
     })
     .to_string()
@@ -607,12 +589,9 @@ pub async fn prepare_branch_worktree(
     let pid = std::process::id();
     let temp_ref = format!("refs/archestra-bench/{}-{pid}", slug.replace('.', "-"));
     info!("fetching origin {git_ref} for the backend worktree");
-    git(
-        repo_root,
-        &["fetch", "origin", &format!("{git_ref}:{temp_ref}")],
-    )
-    .await
-    .map_err(|e| LifecycleError::Config(format!("git fetch origin {git_ref} failed: {e}")))?;
+    git(repo_root, &["fetch", "origin", &format!("{git_ref}:{temp_ref}")])
+        .await
+        .map_err(|e| LifecycleError::Config(format!("git fetch origin {git_ref} failed: {e}")))?;
 
     let commit = git(repo_root, &["rev-parse", &temp_ref])
         .await
@@ -627,13 +606,7 @@ pub async fn prepare_branch_worktree(
     let path_str = path.to_string_lossy();
     git(
         repo_root,
-        &[
-            "worktree",
-            "add",
-            "--detach",
-            path_str.as_ref(),
-            commit.as_str(),
-        ],
+        &["worktree", "add", "--detach", path_str.as_ref(), commit.as_str()],
     )
     .await
     .map_err(|e| LifecycleError::Config(format!("git worktree add failed: {e}")))?;
@@ -667,11 +640,7 @@ pub async fn prepare_branch_worktree(
 
 /// Provision the gitignored prereqs a fresh worktree lacks and build it. Split out so
 /// `prepare_branch_worktree` can uniformly remove the worktree on any failure here.
-async fn provision_and_build(
-    source_platform: &Path,
-    wt_platform: &Path,
-    commit: &str,
-) -> Result<(), LifecycleError> {
+async fn provision_and_build(source_platform: &Path, wt_platform: &Path, commit: &str) -> Result<(), LifecycleError> {
     // `.env` (gitignored): copy the dev tree's so the worktree backend reads the same config the dev
     // stack does.
     let src_env = source_platform.join(".env");
@@ -697,9 +666,9 @@ async fn provision_and_build(
     let src_dagger = source_platform.join("dev").join("bin").join("dagger");
     if src_dagger.is_file() {
         let dst_dir = wt_platform.join("dev").join("bin");
-        fs::create_dir_all(&dst_dir).await.map_err(|e| {
-            LifecycleError::Config(format!("creating {} failed: {e}", dst_dir.display()))
-        })?;
+        fs::create_dir_all(&dst_dir)
+            .await
+            .map_err(|e| LifecycleError::Config(format!("creating {} failed: {e}", dst_dir.display())))?;
         let dst = dst_dir.join("dagger");
         let _ = fs::remove_file(&dst).await;
         fs::symlink(&src_dagger, &dst).await.map_err(|e| {
@@ -779,9 +748,10 @@ async fn pnpm(dir: &Path, args: &[&str]) -> Result<(), LifecycleError> {
             ))
         })?;
     let mut guard = KillGroupOnDrop(child.id().map(|p| p as i32));
-    let status = child.wait().await.map_err(|e| {
-        LifecycleError::Config(format!("`pnpm {}` failed to run: {e}", args.join(" ")))
-    })?;
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| LifecycleError::Config(format!("`pnpm {}` failed to run: {e}", args.join(" "))))?;
     guard.disarm();
     if !status.success() {
         return Err(LifecycleError::Config(format!(
@@ -800,12 +770,7 @@ async fn pnpm(dir: &Path, args: &[&str]) -> Result<(), LifecycleError> {
 async fn remove_worktree(repo_root: &Path, path: &Path) {
     info!("removing bench worktree {}", path.display());
     let path_str = path.to_string_lossy();
-    match git(
-        repo_root,
-        &["worktree", "remove", "--force", path_str.as_ref()],
-    )
-    .await
-    {
+    match git(repo_root, &["worktree", "remove", "--force", path_str.as_ref()]).await {
         Ok(_) => {}
         Err(e) => warn!("git worktree remove failed for {}: {e}", path.display()),
     }
@@ -851,10 +816,7 @@ pub fn benchmark_db_name(run_id: &str) -> String {
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect();
     let safe = safe.trim_matches('_');
-    format!(
-        "archestra_bench_{}",
-        if safe.is_empty() { "run" } else { safe }
-    )
+    format!("archestra_bench_{}", if safe.is_empty() { "run" } else { safe })
 }
 
 pub fn libpq_url(db_url: &str) -> String {
@@ -868,8 +830,8 @@ pub fn libpq_url(db_url: &str) -> String {
 }
 
 pub fn with_dbname(db_url: &str, dbname: &str) -> String {
-    let mut parsed = url::Url::parse(db_url)
-        .unwrap_or_else(|_| url::Url::parse(&format!("postgres://localhost/{db_url}")).unwrap());
+    let mut parsed =
+        url::Url::parse(db_url).unwrap_or_else(|_| url::Url::parse(&format!("postgres://localhost/{db_url}")).unwrap());
     parsed.set_path(&format!("/{dbname}"));
     parsed.to_string()
 }
@@ -902,11 +864,7 @@ enum ComposeUpError {
 /// `docker compose -p <project> -f <file> up -d [extra]`, left detached. The shared primitive behind
 /// both bench sidecars (Postgres and the managed Dagger engine); each wraps it with its own
 /// `OnceCell`, error variant, and readiness step.
-async fn compose_up(
-    project: &str,
-    compose_file: &Path,
-    extra: &[&str],
-) -> Result<(), ComposeUpError> {
+async fn compose_up(project: &str, compose_file: &Path, extra: &[&str]) -> Result<(), ComposeUpError> {
     let compose = compose_file.to_string_lossy();
     let output = Command::new("docker")
         .args(["compose", "-p", project, "-f"])
@@ -932,10 +890,7 @@ async fn compose_up(
 /// healthy run pays nothing — the per-instance calls that follow are cache hits. Asserts
 /// preconditions only: it must not create a database, migrate, or spawn a backend. An external
 /// `ARCHESTRA_BENCH_DATABASE_URL` is not probed here (it is first reached at `create_database`).
-pub async fn preflight(
-    repo_root: &Path,
-    platform_dir: Option<&Path>,
-) -> Result<(), LifecycleError> {
+pub async fn preflight(repo_root: &Path, platform_dir: Option<&Path>) -> Result<(), LifecycleError> {
     let platform = resolve_platform_dir(platform_dir, repo_root);
     let (_bench_db_url, managed) = resolve_bench_db_url(&load_platform_env(&platform)?);
     let bench_dev = repo_root.join("ai-labs").join("dev");
@@ -949,30 +904,23 @@ pub async fn preflight(
 async fn ensure_bench_postgres(compose_file: &Path) -> Result<(), LifecycleError> {
     BENCH_PG_READY
         .get_or_try_init(|| async {
-            info!(
-                "ensuring dedicated bench Postgres ({})",
-                compose_file.display()
-            );
+            info!("ensuring dedicated bench Postgres ({})", compose_file.display());
             compose_up(BENCH_PG_COMPOSE_PROJECT, compose_file, &["--wait"])
                 .await
                 .map_err(|e| match e {
                     ComposeUpError::Spawn(e) => LifecycleError::Config(format!(
                         "failed to run `docker compose` for the bench Postgres (is Docker installed and running?): {e}"
                     )),
-                    ComposeUpError::Exit(stderr) => LifecycleError::Postgres(format!(
-                        "could not start the dedicated bench Postgres: {stderr}"
-                    )),
+                    ComposeUpError::Exit(stderr) => {
+                        LifecycleError::Postgres(format!("could not start the dedicated bench Postgres: {stderr}"))
+                    }
                 })
         })
         .await
         .copied()
 }
 
-pub fn bench_postgres_unavailable_message(
-    db_url: &str,
-    managed: bool,
-    _error: impl std::fmt::Display,
-) -> String {
+pub fn bench_postgres_unavailable_message(db_url: &str, managed: bool, _error: impl std::fmt::Display) -> String {
     let location = redacted_db_location(db_url);
     if managed {
         format!(
@@ -1020,8 +968,7 @@ async fn resolve_runner_host(dagger_compose: &Path) -> Result<String, LifecycleE
             let tag = engine_tag(dagger_compose)?;
             let managed_runnable = docker_running().await && image_present(&tag).await;
             // Don't probe k8s once the managed engine is chosen.
-            let k8s_open =
-                !managed_runnable && tcp_open(K8S_DAGGER_PROBE_ADDR, Duration::from_secs(1)).await;
+            let k8s_open = !managed_runnable && tcp_open(K8S_DAGGER_PROBE_ADDR, Duration::from_secs(1)).await;
             match decide_runner(managed_runnable, k8s_open) {
                 RunnerChoice::Managed => {
                     ensure_bench_dagger(dagger_compose).await?;
@@ -1044,10 +991,7 @@ async fn resolve_runner_host(dagger_compose: &Path) -> Result<String, LifecycleE
 async fn ensure_bench_dagger(compose_file: &Path) -> Result<(), LifecycleError> {
     BENCH_DAGGER_READY
         .get_or_try_init(|| async {
-            info!(
-                "ensuring runner-managed Dagger engine ({})",
-                compose_file.display()
-            );
+            info!("ensuring runner-managed Dagger engine ({})", compose_file.display());
             compose_up(BENCH_DAGGER_COMPOSE_PROJECT, compose_file, &[])
                 .await
                 .map_err(|e| match e {
@@ -1099,10 +1043,7 @@ impl DaggerLogsGuard {
 /// NON-FATAL: this is pure diagnostics. If `docker`/compose is missing or the follower fails to
 /// spawn, warn and continue — never fail or block a run on log capture. The follower also joins the
 /// teardown registry, so SIGINT/SIGTERM reaps it even before [`DaggerLogsGuard::stop`] runs.
-pub async fn capture_managed_dagger_logs(
-    dagger_compose: &Path,
-    root_run_dir: &Path,
-) -> Option<DaggerLogsGuard> {
+pub async fn capture_managed_dagger_logs(dagger_compose: &Path, root_run_dir: &Path) -> Option<DaggerLogsGuard> {
     if RESOLVED_RUNNER_HOST.get().map(String::as_str) != Some(MANAGED_DAGGER_HOST) {
         info!("sandbox: engine-log capture is managed-tier only; skipped for the resolved host");
         return None;
@@ -1126,10 +1067,7 @@ async fn spawn_dagger_log_follower(
 ) -> Result<DaggerLogsGuard, std::io::Error> {
     let log_path = root_run_dir.join(DAGGER_ENGINE_LOG_FILE);
     let log_file = std::fs::File::create(&log_path)?;
-    info!(
-        "capturing managed Dagger engine logs ({})",
-        log_path.display()
-    );
+    info!("capturing managed Dagger engine logs ({})", log_path.display());
     let mut cmd = Command::new("docker");
     cmd.args(["compose", "-p", BENCH_DAGGER_COMPOSE_PROJECT, "-f"])
         .arg(dagger_compose)
@@ -1234,10 +1172,7 @@ async fn wait_tcp(addr: &str, total: Duration) -> Result<(), LifecycleError> {
 
 pub fn redacted_db_location(db_url: &str) -> String {
     let parsed = url::Url::parse(db_url).ok();
-    let host = parsed
-        .as_ref()
-        .and_then(|u| u.host_str())
-        .unwrap_or("<unknown-host>");
+    let host = parsed.as_ref().and_then(|u| u.host_str()).unwrap_or("<unknown-host>");
     let port = parsed
         .as_ref()
         .and_then(|u| u.port())
@@ -1263,14 +1198,8 @@ pub fn build_backend_env(
     env.entry("ARCHESTRA_AUTH_SECRET".to_string())
         .or_insert_with(|| DEV_AUTH_SECRET.to_string());
     env.insert("ARCHESTRA_DATABASE_URL".to_string(), db_url.to_string());
-    env.insert(
-        "ARCHESTRA_INTERNAL_API_BASE_URL".to_string(),
-        api_base_url.to_string(),
-    );
-    env.insert(
-        "ARCHESTRA_METRICS_PORT".to_string(),
-        metrics_port.to_string(),
-    );
+    env.insert("ARCHESTRA_INTERNAL_API_BASE_URL".to_string(), api_base_url.to_string());
+    env.insert("ARCHESTRA_METRICS_PORT".to_string(), metrics_port.to_string());
     // These two keys are always force-set (the dev default points the backend at the local Dagger
     // engine), so `/app/.env` cannot steer them — the prod image delivers them through the process
     // env instead, which this honors over the dev default. Setting the runner host is what turns the
@@ -1282,8 +1211,7 @@ pub fn build_backend_env(
     env.insert(RUNNER_HOST_ENV.to_string(), dagger_runner_host.to_string());
     env.insert(
         "ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN".to_string(),
-        env_override("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN")
-            .unwrap_or_else(|| dagger_cli_bin.to_string()),
+        env_override("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN").unwrap_or_else(|| dagger_cli_bin.to_string()),
     );
     env.insert("ARCHESTRA_ANALYTICS".to_string(), "disabled".to_string());
     // Per-rollout projects isolate file ownership so concurrent lanes and successive tasks don't
@@ -1432,10 +1360,7 @@ mod tests {
 
         assert!(!wt.exists(), "worktree removed by the handle");
         assert!(
-            !registry()
-                .lock()
-                .expect("teardown registry")
-                .contains_key(&teardown_id),
+            !registry().lock().expect("teardown registry").contains_key(&teardown_id),
             "teardown deregistered"
         );
     }
@@ -1549,10 +1474,7 @@ mod tests {
             MANAGED_DAGGER_HOST,
             "/dev/dagger",
         );
-        assert_eq!(
-            env.get(RUNNER_HOST_ENV),
-            Some(&MANAGED_DAGGER_HOST.to_string())
-        );
+        assert_eq!(env.get(RUNNER_HOST_ENV), Some(&MANAGED_DAGGER_HOST.to_string()));
         assert_eq!(
             env.get("ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN"),
             Some(&"/dev/dagger".to_string())
@@ -1600,15 +1522,8 @@ mod tests {
     fn test_engine_tag_errors_when_image_absent() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("compose.yml");
-        std::fs::write(
-            &path,
-            "services:\n  bench-dagger:\n    image: postgres:18\n",
-        )
-        .unwrap();
-        assert!(matches!(
-            engine_tag(&path),
-            Err(LifecycleError::DaggerUnavailable(_))
-        ));
+        std::fs::write(&path, "services:\n  bench-dagger:\n    image: postgres:18\n").unwrap();
+        assert!(matches!(engine_tag(&path), Err(LifecycleError::DaggerUnavailable(_))));
     }
 
     #[tokio::test]

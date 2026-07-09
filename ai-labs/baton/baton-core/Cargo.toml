@@ -5,6 +5,5 @@ edition = "2024"
 publish = false
 description = "ADT-based information-flow label engine for agent trajectories (prototype)"
 
-# Standalone on purpose: this is a design prototype, not part of the
-# archestra-bench workspace.
-[workspace]
+[lints]
+workspace = true

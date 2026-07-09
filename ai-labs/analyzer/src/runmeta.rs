@@ -10,10 +10,9 @@ pub use archestra_bench_core::{RolloutId, RunMeta};
 
 pub fn load_run_meta(rollout_dir: &Path) -> Result<RunMeta> {
     let path = rollout_dir.join("run.json");
-    let content = std::fs::read_to_string(&path)
-        .wrap_err_with(|| format!("reading required run.json at {}", path.display()))?;
-    serde_json::from_str(&content)
-        .wrap_err_with(|| format!("parsing run.json at {}", path.display()))
+    let content =
+        std::fs::read_to_string(&path).wrap_err_with(|| format!("reading required run.json at {}", path.display()))?;
+    serde_json::from_str(&content).wrap_err_with(|| format!("parsing run.json at {}", path.display()))
 }
 
 const FAILURE_CLUSTERS: &[&str] = &["format_failed", "no_submission", "agent_error", "failed"];
@@ -76,11 +75,7 @@ pub fn metrics_block(rollouts: &[(RolloutId, RunMeta)]) -> String {
 }
 
 fn pct(num: usize, den: usize) -> f64 {
-    if den == 0 {
-        0.0
-    } else {
-        100.0 * num as f64 / den as f64
-    }
+    if den == 0 { 0.0 } else { 100.0 * num as f64 / den as f64 }
 }
 
 #[cfg(test)]
@@ -115,9 +110,7 @@ mod tests {
 
     #[test]
     fn tolerates_missing_optional_fields() {
-        let m = meta(
-            r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"failed"}"#,
-        );
+        let m = meta(r#"{"env_id":"e","task_id":"t","lane":"l","provider":"p","model":"m","outcome":"failed"}"#);
         assert_eq!(m.turn_count, 0);
         assert!(m.finish_reason.is_none());
         assert!(!m.is_pass());
@@ -152,9 +145,7 @@ mod tests {
                     task: "a".into(),
                     lane: "x".into(),
                 },
-                meta(
-                    r#"{"env_id":"basic","task_id":"a","lane":"x","provider":"p","model":"m","outcome":"passed"}"#,
-                ),
+                meta(r#"{"env_id":"basic","task_id":"a","lane":"x","provider":"p","model":"m","outcome":"passed"}"#),
             ),
             (
                 RolloutId {
@@ -162,9 +153,7 @@ mod tests {
                     task: "a".into(),
                     lane: "y".into(),
                 },
-                meta(
-                    r#"{"env_id":"basic","task_id":"a","lane":"y","provider":"p","model":"m","outcome":"failed"}"#,
-                ),
+                meta(r#"{"env_id":"basic","task_id":"a","lane":"y","provider":"p","model":"m","outcome":"failed"}"#),
             ),
             (
                 RolloutId {

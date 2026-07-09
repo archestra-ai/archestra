@@ -72,22 +72,14 @@ pub async fn ensure_provider_and_models(
     loop {
         let rows = client.list_models().await?;
         let resolved = resolve_models(&rows, models, &key_id);
-        let missing: Vec<String> = models
-            .iter()
-            .filter(|m| !resolved.contains_key(*m))
-            .cloned()
-            .collect();
+        let missing: Vec<String> = models.iter().filter(|m| !resolved.contains_key(*m)).cloned().collect();
         if missing.is_empty() {
             return Ok(resolved);
         }
         let available: Vec<String> = rows
             .iter()
             .filter(|r| r.get("provider").and_then(|v| v.as_str()) == Some(provider))
-            .filter_map(|r| {
-                r.get("modelId")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-            })
+            .filter_map(|r| r.get("modelId").and_then(|v| v.as_str()).map(|s| s.to_string()))
             .collect();
         if !forced {
             info!(
@@ -140,12 +132,8 @@ fn links_key(model: &HashMap<String, serde_json::Value>, key_id: &str) -> bool {
         .get("apiKeys")
         .and_then(|v| v.as_array())
         .map(|keys| {
-            keys.iter().any(|k| {
-                k.as_object()
-                    .and_then(|o| o.get("id"))
-                    .and_then(|v| v.as_str())
-                    == Some(key_id)
-            })
+            keys.iter()
+                .any(|k| k.as_object().and_then(|o| o.get("id")).and_then(|v| v.as_str()) == Some(key_id))
         })
         .unwrap_or(false)
 }
@@ -158,16 +146,10 @@ pub async fn seed_skill_ref(
     cap: Option<usize>,
     scope: &str,
 ) -> Result<Vec<String>, SeedingError> {
-    let discovered = client
-        .discover_github_skills(repo, path, Some(ref_))
-        .await?;
+    let discovered = client.discover_github_skills(repo, path, Some(ref_)).await?;
     let paths: Vec<String> = discovered
         .iter()
-        .filter_map(|s| {
-            s.get("skillPath")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-        })
+        .filter_map(|s| s.get("skillPath").and_then(|v| v.as_str()).map(|s| s.to_string()))
         .collect();
     if paths.is_empty() {
         let location = format!(
@@ -194,9 +176,7 @@ pub async fn seed_skill_ref(
         }
         None => paths.clone(),
     };
-    client
-        .import_github_skills(repo, &selected, scope, Some(ref_))
-        .await?;
+    client.import_github_skills(repo, &selected, scope, Some(ref_)).await?;
     info!("imported {} skills from {}@{}", selected.len(), repo, ref_);
     Ok(selected)
 }
@@ -218,15 +198,11 @@ pub async fn register_remote_mcp(
         })
         .await?;
     let catalog_id = require_str(&catalog, "id", "POST /api/internal_mcp_catalog")?;
-    let server = client
-        .install_mcp(name, &catalog_id, scope, agent_ids)
-        .await?;
+    let server = client.install_mcp(name, &catalog_id, scope, agent_ids).await?;
     let server_id = require_str(&server, "id", "POST /api/mcp_server")?;
     let tools = client.list_mcp_server_tools(&server_id).await?;
     if tools.is_empty() {
-        return Err(SeedingError::McpNoTools {
-            name: name.to_string(),
-        });
+        return Err(SeedingError::McpNoTools { name: name.to_string() });
     }
     Ok(RegisteredMcp { tools })
 }
@@ -240,19 +216,12 @@ pub async fn seed_mcp_fixtures(
     let mut registered = Vec::new();
     for fixture in mcps {
         info!("seeding fixture MCP {}", fixture.name);
-        registered.push(
-            register_remote_mcp(client, &fixture.name, &fixture.server_url, scope, agent_ids)
-                .await?,
-        );
+        registered.push(register_remote_mcp(client, &fixture.name, &fixture.server_url, scope, agent_ids).await?);
     }
     Ok(registered)
 }
 
-fn require_str(
-    obj: &HashMap<String, serde_json::Value>,
-    key: &str,
-    ctx: &str,
-) -> Result<String, SeedingError> {
+fn require_str(obj: &HashMap<String, serde_json::Value>, key: &str, ctx: &str) -> Result<String, SeedingError> {
     match obj.get(key) {
         Some(serde_json::Value::String(s)) if !s.is_empty() => Ok(s.clone()),
         other => Err(SeedingError::SystemExit(format!(

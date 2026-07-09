@@ -25,8 +25,7 @@ use crate::mcp_server::{BenchmarkMcp, Submission};
 use crate::pricing::{self, PriceBook};
 use crate::results::{Outcome, RunCost, RunResult, render_markdown};
 use crate::seeding::{
-    ResolvedModel, ensure_provider_and_models, register_remote_mcp, seed_mcp_fixtures,
-    seed_skill_ref, tool_name,
+    ResolvedModel, ensure_provider_and_models, register_remote_mcp, seed_mcp_fixtures, seed_skill_ref, tool_name,
 };
 use crate::verify::{VerifyOutcome, run_verifier};
 
@@ -46,7 +45,8 @@ const SUBMIT_TOOL_SUFFIX: &str = "__submit_result";
 // server-gated until then). Kept short and tool-agnostic: it nudges submission without naming the
 // search/run meta-tools (Archestra's stock prompt already explains discovery), so a model that solves
 // the task still closes the loop by finding and calling its submit tool instead of replying in prose.
-const SUBMIT_INSTRUCTION: &str = "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
+const SUBMIT_INSTRUCTION: &str =
+    "When you are done, find a tool to submit your final result -- replying in chat does not submit it.";
 // Appended instead of SUBMIT_INSTRUCTION on a non-final stage, where submit_result is still gated.
 // Deliberately says nothing about submitting: a real user does not mention the hand-in protocol until
 // the final ask, so the model learns submission is required only on the final stage. Steers the model
@@ -189,14 +189,12 @@ pub async fn run(
         let envs = load_envs(&envs_dir).map_err(|e| RunError::Config(e.to_string()))?;
         let default_lanes_path = bench_dir.join("lanes.toml");
         let lanes_path = lanes_file.unwrap_or(&default_lanes_path);
-        let lane_list =
-            load_lanes(lanes_path, lanes_filter).map_err(|e| RunError::Config(e.to_string()))?;
+        let lane_list = load_lanes(lanes_path, lanes_filter).map_err(|e| RunError::Config(e.to_string()))?;
         let workers = resolve_workers(max_workers, lane_list.len());
         // Lane keys prefer `platform/.env` over the process env, so the same `.env` that configures the
         // backend also seeds the bench's own provider clients. The `.env` is already a hard requirement of
         // every run (preflight below also loads it).
-        let platform =
-            crate::lifecycle::resolve_platform_dir(effective_platform_dir.as_deref(), &repo_root());
+        let platform = crate::lifecycle::resolve_platform_dir(effective_platform_dir.as_deref(), &repo_root());
         let platform_env = crate::lifecycle::load_platform_env(&platform)?;
         let api_keys = lane_api_keys(&lane_list, &platform_env)?;
 
@@ -249,8 +247,7 @@ pub async fn run(
             .join("ai-labs")
             .join("dev")
             .join("docker-compose.bench-dagger.yml");
-        let dagger_logs =
-            crate::lifecycle::capture_managed_dagger_logs(&dagger_compose, &root_run_dir).await;
+        let dagger_logs = crate::lifecycle::capture_managed_dagger_logs(&dagger_compose, &root_run_dir).await;
 
         let ctx = RunCtx {
             root_run_dir,
@@ -314,19 +311,12 @@ fn pick_key(platform: Option<&str>, process: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn lane_api_keys(
-    lanes: &[Lane],
-    platform_env: &HashMap<String, String>,
-) -> Result<HashMap<String, String>, RunError> {
+fn lane_api_keys(lanes: &[Lane], platform_env: &HashMap<String, String>) -> Result<HashMap<String, String>, RunError> {
     let mut keys = HashMap::new();
     for lane in lanes {
         let key_env = lane.key_env();
         let process = std::env::var(&key_env).ok();
-        let key = pick_key(
-            platform_env.get(&key_env).map(String::as_str),
-            process.as_deref(),
-        )
-        .ok_or_else(|| {
+        let key = pick_key(platform_env.get(&key_env).map(String::as_str), process.as_deref()).ok_or_else(|| {
             RunError::Config(format!(
                 "set {} in platform/.env or the environment to seed lane {:?} ({})",
                 key_env, lane.name, lane.provider
@@ -406,12 +396,7 @@ fn select_envs(
         let tasks: Vec<Task> = match &task_names {
             None => env.tasks.clone(),
             Some(names) => {
-                let tasks: Vec<_> = env
-                    .tasks
-                    .iter()
-                    .filter(|t| names.contains(&t.id))
-                    .cloned()
-                    .collect();
+                let tasks: Vec<_> = env.tasks.iter().filter(|t| names.contains(&t.id)).cloned().collect();
                 matched.extend(tasks.iter().map(|t| t.id.clone()));
                 tasks
             }
@@ -487,8 +472,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     // Setup phase (serial, up front): boot + seed every shared-env backend and keep it alive for the
     // whole run. Isolated lanes boot their own backend lazily inside the worker. A shared env that fails
     // setup is reported as a whole-env infra failure and contributes no stops.
-    let mut shared_setups: Vec<Option<HashMap<String, SharedLaneSetup>>> =
-        plan.iter().map(|_| None).collect();
+    let mut shared_setups: Vec<Option<HashMap<String, SharedLaneSetup>>> = plan.iter().map(|_| None).collect();
     let mut shared_instances: Vec<Instance> = Vec::new();
     let mut shared_fixtures: Vec<FixtureMcp> = Vec::new();
     let mut infra: Vec<RunResult> = Vec::new();
@@ -514,10 +498,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
         for (env_idx, shared) in stops {
             let env_plan = &plan[env_idx];
             if shared {
-                if let Some(setup) = shared_setups[env_idx]
-                    .as_mut()
-                    .and_then(|m| m.remove(&lane.name))
-                {
+                if let Some(setup) = shared_setups[env_idx].as_mut().and_then(|m| m.remove(&lane.name)) {
                     owned.push(EnvStop::Shared {
                         env: env_plan.env.clone(),
                         tasks: env_plan.tasks.clone(),
@@ -563,16 +544,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
                         );
                     }
                     EnvStop::Isolated { env, tasks } => {
-                        out.extend(
-                            run_isolated_lane(
-                                env,
-                                tasks,
-                                lane.clone(),
-                                ctx.clone(),
-                                progress.clone(),
-                            )
-                            .await,
-                        );
+                        out.extend(run_isolated_lane(env, tasks, lane.clone(), ctx.clone(), progress.clone()).await);
                     }
                 }
             }
@@ -593,10 +565,7 @@ async fn execute_plan(plan: Vec<EnvPlan>, ctx: RunCtx, max_workers: usize) -> Ve
     }
 
     progress.finish_and_clear();
-    infra
-        .into_iter()
-        .chain(lane_results.into_iter().flatten())
-        .collect()
+    infra.into_iter().chain(lane_results.into_iter().flatten()).collect()
 }
 
 /// Persistent status line that survives a non-TTY target (piped/CI/`NO_COLOR`), where
@@ -623,29 +592,13 @@ async fn stop_mcps(setups: &[(Lane, String, String, BenchmarkMcp)]) {
 /// the team id. The error is pre-stringified so each caller can route it into its own teardown +
 /// failure-reporting style without re-wrapping (preserving today's raw `e.to_string()` text).
 async fn seed_backend_defaults(client: &EvalClient, env: &EnvConfig) -> Result<String, String> {
-    client
-        .enable_skill_defaults()
-        .await
-        .map_err(|e| e.to_string())?;
-    client
-        .disable_tool_auto_assignment()
-        .await
-        .map_err(|e| e.to_string())?;
-    let team_id = client
-        .create_team("bench")
-        .await
-        .map_err(|e| e.to_string())?;
+    client.enable_skill_defaults().await.map_err(|e| e.to_string())?;
+    client.disable_tool_auto_assignment().await.map_err(|e| e.to_string())?;
+    let team_id = client.create_team("bench").await.map_err(|e| e.to_string())?;
     for sref in &env.skills {
-        seed_skill_ref(
-            client,
-            &sref.repo,
-            sref.path.as_deref(),
-            &sref.ref_,
-            sref.cap,
-            "org",
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        seed_skill_ref(client, &sref.repo, sref.path.as_deref(), &sref.ref_, sref.cap, "org")
+            .await
+            .map_err(|e| e.to_string())?;
     }
     Ok(team_id)
 }
@@ -665,24 +618,14 @@ async fn seed_env_mcps(
         let registered = seed_mcp_fixtures(client, &env.mcps, "org", Some(agent_ids))
             .await
             .map_err(|e| e.to_string())?;
-        mcp_lock::enforce(
-            &ctx.envs_dir,
-            &env.id,
-            &env.mcps,
-            &registered,
-            ctx.update_mcp_lock,
-        )?;
+        mcp_lock::enforce(&ctx.envs_dir, &env.id, &env.mcps, &registered, ctx.update_mcp_lock)?;
     }
 
     if !env.fixture_mcp {
         return Ok(None);
     }
-    let fixture = FixtureMcp::start(FIXTURE_MCP_NAME)
-        .await
-        .map_err(|e| e.to_string())?;
-    if let Err(e) =
-        register_remote_mcp(client, fixture.name(), fixture.base_url(), "org", Some(agent_ids)).await
-    {
+    let fixture = FixtureMcp::start(FIXTURE_MCP_NAME).await.map_err(|e| e.to_string())?;
+    if let Err(e) = register_remote_mcp(client, fixture.name(), fixture.base_url(), "org", Some(agent_ids)).await {
         fixture.stop().await;
         return Err(e.to_string());
     }
@@ -698,18 +641,9 @@ async fn seed_env_mcps(
 async fn setup_shared_env(
     env_plan: &EnvPlan,
     ctx: &RunCtx,
-) -> Result<
-    (
-        Instance,
-        Option<FixtureMcp>,
-        HashMap<String, SharedLaneSetup>,
-    ),
-    String,
-> {
+) -> Result<(Instance, Option<FixtureMcp>, HashMap<String, SharedLaneSetup>), String> {
     let env = &env_plan.env;
-    let log_path = ctx
-        .root_run_dir
-        .join(format!("{}.backend.log", slug(&env.id)));
+    let log_path = ctx.root_run_dir.join(format!("{}.backend.log", slug(&env.id)));
     let mut instance = Instance::new(
         repo_root(),
         ctx.platform_dir.clone(),
@@ -842,8 +776,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await
-    {
+    let (agent_id, submit_tool) = match setup_lane_agent(&client, &env, &lane, &mcp, &team_id).await {
         Ok(s) => s,
         Err(e) => {
             mcp.stop().await;
@@ -852,8 +785,7 @@ async fn run_isolated_lane(
         }
     };
 
-    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await
-    {
+    let fixture_mcp = match seed_env_mcps(&client, &env, &ctx, std::slice::from_ref(&agent_id)).await {
         Ok(fixture) => fixture,
         Err(e) => {
             mcp.stop().await;
@@ -883,12 +815,7 @@ async fn run_isolated_lane(
     results
 }
 
-fn infra_results(
-    env_plan: &EnvPlan,
-    ctx: &RunCtx,
-    progress: &ProgressBar,
-    error: &str,
-) -> Vec<RunResult> {
+fn infra_results(env_plan: &EnvPlan, ctx: &RunCtx, progress: &ProgressBar, error: &str) -> Vec<RunResult> {
     let mut results = Vec::new();
     for lane in &env_plan.lanes {
         results.extend(infra_results_for_lane(
@@ -1012,8 +939,7 @@ async fn setup_lane_agent(
         team_id,
     )
     .await?;
-    let submit_tool =
-        setup_agent_tools(client, &agent_id, mcp.base_url(), &env.tools, mcp.name()).await?;
+    let submit_tool = setup_agent_tools(client, &agent_id, mcp.base_url(), &env.tools, mcp.name()).await?;
     Ok((agent_id, submit_tool))
 }
 
@@ -1026,10 +952,7 @@ fn require_id(value: &HashMap<String, serde_json::Value>, what: &str) -> Result<
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .ok_or_else(|| {
-            RunError::Client(
-                ContractError(format!("{what}: API response missing non-empty string `id`"))
-                    .into(),
-            )
+            RunError::Client(ContractError(format!("{what}: API response missing non-empty string `id`")).into())
         })
 }
 
@@ -1070,10 +993,7 @@ async fn setup_agent_tools(
     extra_tools: &[String],
     mcp_name: &str,
 ) -> Result<String, RunError> {
-    let mut short_names: Vec<String> = REQUIRED_TOOL_SHORT_NAMES
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let mut short_names: Vec<String> = REQUIRED_TOOL_SHORT_NAMES.iter().map(|s| s.to_string()).collect();
     short_names.extend(extra_tools.iter().cloned());
     let tool_ids = resolve_tool_ids(client, &short_names).await?;
     let assignments: Vec<_> = tool_ids
@@ -1093,19 +1013,9 @@ async fn setup_agent_tools(
         )));
     }
 
-    let registered = register_remote_mcp(
-        client,
-        mcp_name,
-        bench_url,
-        "org",
-        Some(&[agent_id.to_string()]),
-    )
-    .await?;
+    let registered = register_remote_mcp(client, mcp_name, bench_url, "org", Some(&[agent_id.to_string()])).await?;
     let submit_tool = find_submit_tool(&registered.tools)?;
-    let allowed: HashSet<String> = extra_tools
-        .iter()
-        .map(|n| format!("archestra__{n}"))
-        .collect();
+    let allowed: HashSet<String> = extra_tools.iter().map(|n| format!("archestra__{n}")).collect();
     strip_mutating_skill_tools(client, agent_id, &allowed).await?;
     assert_agent_tool_surface(client, agent_id, &submit_tool, &allowed).await?;
     Ok(submit_tool)
@@ -1132,16 +1042,10 @@ fn surface_violations(
         .cloned()
         .collect();
     if !missing.is_empty() {
-        violations.push(format!(
-            "missing required tools after assignment: {:?}",
-            missing
-        ));
+        violations.push(format!("missing required tools after assignment: {:?}", missing));
     }
     if !present.contains(submit_tool) {
-        violations.push(format!(
-            "benchmark tool {:?} was not assigned/discovered",
-            submit_tool
-        ));
+        violations.push(format!("benchmark tool {:?} was not assigned/discovered", submit_tool));
     }
     let mutating: HashSet<_> = MUTATING_SKILL_TOOL_SHORT_NAMES
         .iter()
@@ -1179,10 +1083,7 @@ async fn strip_mutating_skill_tools(
     Ok(())
 }
 
-async fn resolve_tool_ids(
-    client: &EvalClient,
-    short_names: &[String],
-) -> Result<HashMap<String, String>, RunError> {
+async fn resolve_tool_ids(client: &EvalClient, short_names: &[String]) -> Result<HashMap<String, String>, RunError> {
     let mut resolved = HashMap::new();
     for short_name in short_names {
         let exact = format!("archestra__{short_name}");
@@ -1212,11 +1113,7 @@ async fn assert_agent_tool_surface(
         .list_agent_tools(agent_id)
         .await?
         .into_iter()
-        .filter_map(|t| {
-            t.get("name")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-        })
+        .filter_map(|t| t.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
         .collect();
     let required: HashSet<_> = REQUIRED_TOOL_SHORT_NAMES
         .iter()
@@ -1299,34 +1196,33 @@ async fn run_one(
     prices: &PriceBook,
 ) -> RunResult {
     let rollout_key = format!("{env_id}/{}/{}", task.id, lane.slug());
-    let artifacts =
-        match RunArtifacts::new(root_run_dir.join(run_subdir(env_id, &task.id, lane))).await {
-            Ok(a) => a,
-            Err(e) => {
-                return RunResult {
-                    env_id: env_id.to_string(),
-                    task_id: task.id.clone(),
-                    lane: lane.name.clone(),
-                    provider: lane.provider.as_str().to_string(),
-                    model: lane.model.clone(),
-                    outcome: Outcome::AgentError,
-                    finish_reason: None,
-                    tool_call_count: 0,
-                    turn_count: 0,
-                    total_tokens: None,
-                    prompt_tokens: None,
-                    completion_tokens: None,
-                    cache_read_tokens: None,
-                    cache_write_tokens: None,
-                    price_model: None,
-                    cost: RunCost::NoSpend,
-                    agent_error: Some(format!("artifact directory error: {e}")),
-                    stage_count: task.stages.len(),
-                    format_attempts: 0,
-                    artifact_dir: None,
-                };
-            }
-        };
+    let artifacts = match RunArtifacts::new(root_run_dir.join(run_subdir(env_id, &task.id, lane))).await {
+        Ok(a) => a,
+        Err(e) => {
+            return RunResult {
+                env_id: env_id.to_string(),
+                task_id: task.id.clone(),
+                lane: lane.name.clone(),
+                provider: lane.provider.as_str().to_string(),
+                model: lane.model.clone(),
+                outcome: Outcome::AgentError,
+                finish_reason: None,
+                tool_call_count: 0,
+                turn_count: 0,
+                total_tokens: None,
+                prompt_tokens: None,
+                completion_tokens: None,
+                cache_read_tokens: None,
+                cache_write_tokens: None,
+                price_model: None,
+                cost: RunCost::NoSpend,
+                agent_error: Some(format!("artifact directory error: {e}")),
+                stage_count: task.stages.len(),
+                format_attempts: 0,
+                artifact_dir: None,
+            };
+        }
+    };
 
     let mut metadata = serde_json::json!({
         "env_id": env_id,
@@ -1375,10 +1271,7 @@ async fn run_one(
         Ok(result) => result,
         Err(e) => {
             let error = format!("infra: {e}");
-            agent_error_result(
-                env_id, lane, task, &error, &artifacts, metadata, None, prices,
-            )
-            .await
+            agent_error_result(env_id, lane, task, &error, &artifacts, metadata, None, prices).await
         }
     }
 }
@@ -1489,19 +1382,10 @@ async fn grade_rollout(
     // the projects `(user_id, name)` / `(org, slug)` indexes without needing collision retries --
     // all lanes share one user.
     let token = uuid::Uuid::new_v4().simple().to_string();
-    let project_id = client
-        .create_project(&format!("{PROJECT_NAME} {token}"))
-        .await?;
+    let project_id = client.create_project(&format!("{PROJECT_NAME} {token}")).await?;
 
-    let mut conversation_id = open_conversation(
-        &client,
-        agent_id,
-        rollout_key,
-        resolved,
-        &project_id,
-        artifacts,
-    )
-    .await?;
+    let mut conversation_id =
+        open_conversation(&client, agent_id, rollout_key, resolved, &project_id, artifacts).await?;
     // Every conversation this rollout drives, in order. `new_conversation` stages append to it;
     // `metadata["conversation_id"]` tracks the current one so run.json points at the conversation that
     // produced the result, and effective-prompt capture runs over all of them after the loop.
@@ -1541,15 +1425,8 @@ async fn grade_rollout(
         // and rediscover it from persistent storage in the next. Rejected on the first stage at load
         // time, since the initial conversation is already created above.
         if stage.new_conversation {
-            conversation_id = open_conversation(
-                &client,
-                agent_id,
-                rollout_key,
-                resolved,
-                &project_id,
-                artifacts,
-            )
-            .await?;
+            conversation_id =
+                open_conversation(&client, agent_id, rollout_key, resolved, &project_id, artifacts).await?;
             conversation_ids.push(conversation_id.clone());
             metadata["conversation_id"] = serde_json::Value::String(conversation_id.clone());
         }
@@ -1631,10 +1508,7 @@ async fn grade_rollout(
         .await?
         {
             artifacts
-                .append(
-                    "submit_nudge_error",
-                    serde_json::json!({"error": nudge_error}),
-                )
+                .append("submit_nudge_error", serde_json::json!({"error": nudge_error}))
                 .await;
         }
     }
@@ -1681,11 +1555,9 @@ async fn grade_rollout(
     // Publish token totals only when the usage is reliable (complete fetch, no telemetry gap); an
     // incomplete sum is reported as no measurement, never a partial count read as complete.
     let reliable = run.reliable_usage().cloned();
-    let token_meta = |value: Option<i64>| -> serde_json::Value {
-        value.map_or(serde_json::Value::Null, serde_json::Value::from)
-    };
-    metadata["finish_reason"] =
-        serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);
+    let token_meta =
+        |value: Option<i64>| -> serde_json::Value { value.map_or(serde_json::Value::Null, serde_json::Value::from) };
+    metadata["finish_reason"] = serde_json::to_value(&run.finish_reason).unwrap_or(serde_json::Value::Null);
     metadata["tool_call_count"] = serde_json::Value::Number((run.tool_calls.len() as i64).into());
     metadata["turn_count"] = serde_json::Value::Number((run.turn_count as i64).into());
     metadata["total_tokens"] = token_meta(reliable.as_ref().map(RunUsage::total_tokens));
@@ -1697,13 +1569,8 @@ async fn grade_rollout(
     let submission = bench_mcp.take_submission(rollout_key).await;
     match submission {
         Submission::FormatFailed(failed) => {
-            metadata["format_errors"] = serde_json::Value::Array(
-                failed
-                    .errors
-                    .into_iter()
-                    .map(serde_json::Value::String)
-                    .collect(),
-            );
+            metadata["format_errors"] =
+                serde_json::Value::Array(failed.errors.into_iter().map(serde_json::Value::String).collect());
             return Ok(finish(
                 env_id,
                 lane,
@@ -1747,13 +1614,9 @@ async fn grade_rollout(
             .await);
         }
         Submission::Accepted(accepted) => {
-            metadata["format_attempts"] =
-                serde_json::Value::Number((accepted.attempts as i64).into());
-            metadata["result"] =
-                serde_json::from_slice(&accepted.payload_bytes).unwrap_or(serde_json::Value::Null);
-            let report_path = artifacts
-                .write_bytes("submission.json", &accepted.payload_bytes)
-                .await;
+            metadata["format_attempts"] = serde_json::Value::Number((accepted.attempts as i64).into());
+            metadata["result"] = serde_json::from_slice(&accepted.payload_bytes).unwrap_or(serde_json::Value::Null);
+            let report_path = artifacts.write_bytes("submission.json", &accepted.payload_bytes).await;
             if let serde_json::Value::Object(map) = metadata
                 && let serde_json::Value::Object(artifacts_map) = map.get_mut("artifacts").unwrap()
             {
@@ -1794,16 +1657,7 @@ async fn grade_rollout(
             };
 
             let state_bytes = if !task.state_rest.is_empty() {
-                match capture_state(
-                    &client,
-                    task,
-                    &runtime,
-                    &run.tool_invocations,
-                    artifacts,
-                    metadata,
-                )
-                .await
-                {
+                match capture_state(&client, task, &runtime, &run.tool_invocations, artifacts, metadata).await {
                     Ok(b) => Some(b),
                     Err(e) => {
                         return Ok(agent_error_result(
@@ -1834,18 +1688,13 @@ async fn grade_rollout(
             save_verifier_artifacts(artifacts, metadata, &outcome).await;
             let passed = outcome.passed;
             if !passed {
-                metadata["verifier_summary"] =
-                    serde_json::Value::String(verifier_summary(&outcome));
+                metadata["verifier_summary"] = serde_json::Value::String(verifier_summary(&outcome));
             }
             return Ok(finish(
                 env_id,
                 lane,
                 task,
-                if passed {
-                    Outcome::Passed
-                } else {
-                    Outcome::Failed
-                },
+                if passed { Outcome::Passed } else { Outcome::Failed },
                 Some(&run),
                 artifacts,
                 metadata,
@@ -1967,13 +1816,7 @@ fn stage_message(stage_text: &str, submission_open: bool) -> String {
 /// (`stop`) without submitting and nudges remain; any error/limit or non-`stop` finish ends the run,
 /// and a recorded submission means we're done. Keeps the runaway bound and the clean-exit guards in
 /// one testable place.
-fn should_nudge(
-    finish_reason: Option<&str>,
-    submitted: bool,
-    had_error: bool,
-    nudges_sent: usize,
-    cap: usize,
-) -> bool {
+fn should_nudge(finish_reason: Option<&str>, submitted: bool, had_error: bool, nudges_sent: usize, cap: usize) -> bool {
     !had_error && !submitted && finish_reason == Some("stop") && nudges_sent < cap
 }
 
@@ -2020,10 +1863,7 @@ async fn drive_stage(
             Ok(None) => break,
             Err(_) => {
                 if stream_parse_error.is_none() {
-                    stream_parse_error = Some(format!(
-                        "chat stream idle for {}s",
-                        STREAM_IDLE_TIMEOUT.as_secs()
-                    ));
+                    stream_parse_error = Some(format!("chat stream idle for {}s", STREAM_IDLE_TIMEOUT.as_secs()));
                 }
                 break;
             }
@@ -2044,11 +1884,11 @@ async fn drive_stage(
                 apply_chat_event(run, &event);
             }
             ChatRecordKind::ParseError if stream_parse_error.is_none() => {
-                stream_parse_error = Some(record.reason.unwrap_or_else(|| {
+                stream_parse_error = Some(
                     record
-                        .raw
-                        .unwrap_or_else(|| "malformed chat stream data".to_string())
-                }));
+                        .reason
+                        .unwrap_or_else(|| record.raw.unwrap_or_else(|| "malformed chat stream data".to_string())),
+                );
             }
             _ => {}
         }
@@ -2073,10 +1913,7 @@ fn combine_errors(first: Option<String>, second: Option<String>) -> Option<Strin
 /// attributed to that conversation (`generated` there), but reaches the final conversation through
 /// the shared project -- the backend dedupes the two buckets by id, so each file appears in exactly
 /// one. `attachments` are harness-staged inputs, never a deliverable.
-fn named_exported_files(
-    files: &HashMap<String, serde_json::Value>,
-    filename: &str,
-) -> Vec<serde_json::Value> {
+fn named_exported_files(files: &HashMap<String, serde_json::Value>, filename: &str) -> Vec<serde_json::Value> {
     ["generated", "projectFiles"]
         .iter()
         .filter_map(|bucket| files.get(*bucket)?.as_array())
@@ -2095,12 +1932,8 @@ async fn resolve_artifact(
     metadata: &mut serde_json::Value,
 ) -> Result<Option<Vec<u8>>, RunError> {
     let artifact_key = task.artifact_key.as_ref().unwrap();
-    let result: serde_json::Value =
-        serde_json::from_slice(payload_bytes).unwrap_or(serde_json::Value::Null);
-    let filename = result
-        .get(artifact_key)
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    let result: serde_json::Value = serde_json::from_slice(payload_bytes).unwrap_or(serde_json::Value::Null);
+    let filename = result.get(artifact_key).and_then(|v| v.as_str()).map(|s| s.to_string());
     let filename = match filename {
         Some(f) if !f.is_empty() => f,
         _ => {
@@ -2190,17 +2023,9 @@ async fn capture_state(
     Ok(data)
 }
 
-async fn save_verifier_artifacts(
-    artifacts: &RunArtifacts,
-    metadata: &mut serde_json::Value,
-    outcome: &VerifyOutcome,
-) {
-    let stdout_path = artifacts
-        .write_text("verifier.stdout.txt", &outcome.stdout)
-        .await;
-    let stderr_path = artifacts
-        .write_text("verifier.stderr.txt", &outcome.stderr)
-        .await;
+async fn save_verifier_artifacts(artifacts: &RunArtifacts, metadata: &mut serde_json::Value, outcome: &VerifyOutcome) {
+    let stdout_path = artifacts.write_text("verifier.stdout.txt", &outcome.stdout).await;
+    let stderr_path = artifacts.write_text("verifier.stderr.txt", &outcome.stderr).await;
     if let serde_json::Value::Object(map) = metadata {
         if let serde_json::Value::Object(artifacts_map) = map.get_mut("artifacts").unwrap() {
             artifacts_map.insert(
@@ -2418,18 +2243,9 @@ impl RunArtifacts {
         let mut seq = self.sequence.lock().await;
         *seq += 1;
         let mut record = serde_json::Map::new();
-        record.insert(
-            "sequence".to_string(),
-            serde_json::Value::Number((*seq as i64).into()),
-        );
-        record.insert(
-            "timestamp".to_string(),
-            serde_json::Value::String(timestamp()),
-        );
-        record.insert(
-            "kind".to_string(),
-            serde_json::Value::String(kind.to_string()),
-        );
+        record.insert("sequence".to_string(), serde_json::Value::Number((*seq as i64).into()));
+        record.insert("timestamp".to_string(), serde_json::Value::String(timestamp()));
+        record.insert("kind".to_string(), serde_json::Value::String(kind.to_string()));
         if let serde_json::Value::Object(map) = data {
             for (k, v) in map {
                 record.insert(k, v);
@@ -2467,8 +2283,7 @@ impl RunArtifacts {
     }
 
     async fn append_error(&self, kind: &str, message: &str) {
-        self.append(kind, serde_json::json!({"error": message}))
-            .await;
+        self.append(kind, serde_json::json!({"error": message})).await;
     }
 
     async fn write_run(&self, metadata: &serde_json::Value) {
@@ -2560,19 +2375,13 @@ impl<'a> StreamCoalescer<'a> {
                     && !text.is_empty()
                 {
                     self.artifacts
-                        .append(
-                            "assistant_text",
-                            serde_json::json!({"id": id, "text": text}),
-                        )
+                        .append("assistant_text", serde_json::json!({"id": id, "text": text}))
                         .await;
                 }
             }
             Some("tool-input-start") => {
                 if let Some(call_id) = event.get("toolCallId").and_then(|v| v.as_str()) {
-                    let name = event
-                        .get("toolName")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
+                    let name = event.get("toolName").and_then(|v| v.as_str()).map(|s| s.to_string());
                     self.tool_input.insert(
                         call_id.to_string(),
                         PartialToolCall {
@@ -2659,14 +2468,9 @@ impl<'a> StreamCoalescer<'a> {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| serde_json::to_string(event).unwrap_or_default());
-                self.artifacts
-                    .append("error", serde_json::json!({"error": text}))
-                    .await;
+                self.artifacts.append("error", serde_json::json!({"error": text})).await;
             }
-            Some("start")
-            | Some("start-step")
-            | Some("data-heartbeat")
-            | Some("data-context-window-estimate") => {}
+            Some("start") | Some("start-step") | Some("data-heartbeat") | Some("data-context-window-estimate") => {}
             _ => {
                 self.artifacts
                     .append("chat_stream", serde_json::json!({"event": event}))
@@ -2679,10 +2483,7 @@ impl<'a> StreamCoalescer<'a> {
         for (id, text) in self.text.drain() {
             if !text.is_empty() {
                 self.artifacts
-                    .append(
-                        "assistant_text",
-                        serde_json::json!({"id": id, "text": text}),
-                    )
+                    .append("assistant_text", serde_json::json!({"id": id, "text": text}))
                     .await;
             }
         }
@@ -2706,11 +2507,7 @@ impl<'a> StreamCoalescer<'a> {
 }
 
 fn text_block_id(event: &HashMap<String, serde_json::Value>) -> String {
-    event
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string()
+    event.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string()
 }
 
 static RUNTIME_PLACEHOLDER: LazyLock<regex::Regex> =
@@ -2732,11 +2529,7 @@ fn rollout_token(rollout_key: &str, model_name: &str) -> String {
         .collect::<String>()
         .trim_matches('-')
         .to_string();
-    let slug = if slug.is_empty() {
-        "model".to_string()
-    } else {
-        slug
-    };
+    let slug = if slug.is_empty() { "model".to_string() } else { slug };
     let digest = format!("{:x}", Sha256::digest(rollout_key.as_bytes()))[..8].to_string();
     format!("{slug}-{digest}")
 }
@@ -2863,9 +2656,7 @@ async fn write_run_config(
         .ok()
         .and_then(|out| {
             if out.status.success() {
-                String::from_utf8(out.stdout)
-                    .ok()
-                    .map(|s| s.trim().to_string())
+                String::from_utf8(out.stdout).ok().map(|s| s.trim().to_string())
             } else {
                 None
             }
@@ -3084,10 +2875,7 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let required: HashSet<String> = ["archestra__todo_write"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let required: HashSet<String> = ["archestra__todo_write"].iter().map(|s| s.to_string()).collect();
         let allowed: HashSet<String> = HashSet::new();
         let v = surface_violations(&present, &required, &allowed, "archestra__submit_result");
         assert!(v.is_empty());
@@ -3132,10 +2920,7 @@ mod tests {
         // `lane_api_keys` consults and uses the parsed `.env`.
         let mut lane = dummy_lane("l1");
         lane.api_key_env = Some("ARCHESTRA_BENCH_TEST_LANE_KEY".to_string());
-        let platform_env = HashMap::from([(
-            "ARCHESTRA_BENCH_TEST_LANE_KEY".to_string(),
-            "from-dotenv".to_string(),
-        )]);
+        let platform_env = HashMap::from([("ARCHESTRA_BENCH_TEST_LANE_KEY".to_string(), "from-dotenv".to_string())]);
         let keys = lane_api_keys(&[lane], &platform_env).unwrap();
         assert_eq!(keys.get("l1"), Some(&"from-dotenv".to_string()));
     }
@@ -3247,10 +3032,7 @@ mod tests {
     #[test]
     fn test_build_run_plan() {
         let envs = vec![
-            (
-                dummy_env("a", vec![dummy_task("t1")]),
-                vec![dummy_task("t1")],
-            ),
+            (dummy_env("a", vec![dummy_task("t1")]), vec![dummy_task("t1")]),
             (dummy_env("b", vec![]), vec![dummy_task("t2")]),
         ];
         let lanes = vec![dummy_lane("l1"), dummy_lane("l2")];
@@ -3266,10 +3048,7 @@ mod tests {
         shared.share_backend = true;
         let isolated = dummy_env("api", vec![dummy_task("t2")]); // share_backend defaults false
         let plan = build_run_plan(
-            vec![
-                (shared, vec![dummy_task("t1")]),
-                (isolated, vec![dummy_task("t2")]),
-            ],
+            vec![(shared, vec![dummy_task("t1")]), (isolated, vec![dummy_task("t2")])],
             vec![dummy_lane("l1"), dummy_lane("l2")],
         );
 
@@ -3320,10 +3099,7 @@ mod tests {
             "tool_call_id": "x", "tool_name": "run_command", "input": {"cmd": "ls"},
         });
         let event: archestra_bench_core::Event = serde_json::from_value(line).unwrap();
-        assert!(matches!(
-            event,
-            archestra_bench_core::Event::ToolCall { .. }
-        ));
+        assert!(matches!(event, archestra_bench_core::Event::ToolCall { .. }));
     }
 
     fn priced_book() -> PriceBook {
@@ -3335,9 +3111,7 @@ mod tests {
     #[tokio::test]
     async fn finish_writes_cost_to_run_json_and_result() {
         let tmp = tempfile::tempdir().unwrap();
-        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
-            .await
-            .unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1")).await.unwrap();
         let mut lane = dummy_lane("l1");
         lane.provider = archestra_bench_core::Provider::Openrouter;
         lane.model = "vendor/cheap".to_string();
@@ -3380,8 +3154,7 @@ mod tests {
         assert_eq!(result.total_tokens, Some(1500));
         // finish owns price_model/cost in run.json (the token split is written upstream by grade_rollout).
         let written: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
-                .unwrap();
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap()).unwrap();
         assert_eq!(written["cost_usd"], 0.002);
         assert_eq!(written["cost_status"], "priced");
         assert_eq!(written["price_model"], "vendor/cheap");
@@ -3390,9 +3163,7 @@ mod tests {
     #[tokio::test]
     async fn finish_marks_spend_unpriced_without_price_model() {
         let tmp = tempfile::tempdir().unwrap();
-        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
-            .await
-            .unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1")).await.unwrap();
         let lane = dummy_lane("l1"); // openai provider, no openrouter_model → no price_model
         let task = dummy_task("t1");
         let run = ChatRunResult {
@@ -3426,8 +3197,7 @@ mod tests {
         assert_eq!(result.cost, RunCost::Unpriced);
         assert_eq!(result.price_model, None);
         let written: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
-                .unwrap();
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap()).unwrap();
         assert_eq!(written["cost_status"], "unpriced");
         assert!(written["cost_usd"].is_null());
     }
@@ -3435,9 +3205,7 @@ mod tests {
     #[tokio::test]
     async fn finish_withholds_token_totals_when_usage_is_incomplete() {
         let tmp = tempfile::tempdir().unwrap();
-        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
-            .await
-            .unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1")).await.unwrap();
         let mut lane = dummy_lane("l1");
         lane.provider = archestra_bench_core::Provider::Openrouter;
         lane.model = "vendor/cheap".to_string();
@@ -3479,9 +3247,7 @@ mod tests {
     #[tokio::test]
     async fn finish_reports_no_spend_when_no_llm_call() {
         let tmp = tempfile::tempdir().unwrap();
-        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1"))
-            .await
-            .unwrap();
+        let artifacts = RunArtifacts::new(tmp.path().join("e__t1__l1")).await.unwrap();
         let mut lane = dummy_lane("l1");
         lane.provider = archestra_bench_core::Provider::Openrouter;
         lane.model = "vendor/cheap".to_string();
@@ -3506,41 +3272,24 @@ mod tests {
         assert_eq!(result.cost, RunCost::NoSpend);
         assert_eq!(result.total_tokens, None);
         let written: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap())
-                .unwrap();
+            serde_json::from_slice(&std::fs::read(artifacts.path.join("run.json")).unwrap()).unwrap();
         assert_eq!(written["cost_status"], "no_spend");
     }
 
     #[tokio::test]
     async fn test_config_json_lists_each_lane_once_across_envs() {
         let envs = vec![
-            (
-                dummy_env("a", vec![dummy_task("t1")]),
-                vec![dummy_task("t1")],
-            ),
-            (
-                dummy_env("b", vec![dummy_task("t2")]),
-                vec![dummy_task("t2")],
-            ),
+            (dummy_env("a", vec![dummy_task("t1")]), vec![dummy_task("t1")]),
+            (dummy_env("b", vec![dummy_task("t2")]), vec![dummy_task("t2")]),
         ];
         let lanes = vec![dummy_lane("l1"), dummy_lane("l2")];
         let plan = build_run_plan(envs, lanes);
         let tmp = tempfile::tempdir().unwrap();
-        write_run_config(
-            tmp.path(),
-            "rid",
-            &plan,
-            2,
-            &PriceBook::default(),
-            "ok",
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        write_run_config(tmp.path(), "rid", &plan, 2, &PriceBook::default(), "ok", None, None)
+            .await
+            .unwrap();
         let config: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(tmp.path().join("config.json")).unwrap())
-                .unwrap();
+            serde_json::from_slice(&std::fs::read(tmp.path().join("config.json")).unwrap()).unwrap();
         let names: Vec<&str> = config["lanes"]
             .as_array()
             .unwrap()
@@ -3550,10 +3299,7 @@ mod tests {
         // two envs, but each lane listed exactly once and in declaration order.
         assert_eq!(names, ["l1", "l2"]);
         // each env records its active tool exposure mode (default here) for reproducibility.
-        assert_eq!(
-            config["environments"][0]["tool_exposure_mode"],
-            "search_and_run_only"
-        );
+        assert_eq!(config["environments"][0]["tool_exposure_mode"], "search_and_run_only");
     }
 
     #[test]
@@ -3575,12 +3321,8 @@ mod tests {
         // Setup failed before any agent existed -- the env's configured flag must still land in
         // run.json, since that is where the analyzer reads it (RunMeta).
         infra_results_for_lane(&env, &env.tasks, &lane, &ctx, &progress, "boom");
-        let run_json = tmp
-            .path()
-            .join(run_subdir("e", "t1", &lane))
-            .join("run.json");
-        let meta: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(run_json).unwrap()).unwrap();
+        let run_json = tmp.path().join(run_subdir("e", "t1", &lane)).join("run.json");
+        let meta: serde_json::Value = serde_json::from_slice(&std::fs::read(run_json).unwrap()).unwrap();
         assert_eq!(meta["tool_exposure_mode"], "full");
         assert_eq!(meta["outcome"], Outcome::AgentError.value());
     }

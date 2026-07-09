@@ -114,10 +114,9 @@ impl fmt::Display for Breach {
             Self::ConfirmationMissing { tool } => {
                 write!(f, "no explicit user confirmation for `{tool}`")
             }
-            Self::ConfirmationForOtherTool {
-                confirmed,
-                requested,
-            } => write!(f, "confirmation was for `{confirmed}`, not `{requested}`"),
+            Self::ConfirmationForOtherTool { confirmed, requested } => {
+                write!(f, "confirmation was for `{confirmed}`, not `{requested}`")
+            }
             Self::ForbiddenPriorEffects { effects } => {
                 write!(f, "context already carries forbidden effects:")?;
                 for e in effects {
@@ -208,11 +207,10 @@ impl Violation {
                 | Breach::ConfirmationMissing { .. }
                 | Breach::ConfirmationForOtherTool { .. },
             )
-            | Self::Unprovable(Unprovable::TrustUnknown | Unprovable::AudienceUnknown) => {
-                Fixability::GrantFixable
+            | Self::Unprovable(Unprovable::TrustUnknown | Unprovable::AudienceUnknown) => Fixability::GrantFixable,
+            Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) | Self::TaintEntry { .. } => {
+                Fixability::AcknowledgeOnly
             }
-            Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. })
-            | Self::TaintEntry { .. } => Fixability::AcknowledgeOnly,
         }
     }
 }
@@ -243,12 +241,7 @@ impl Requirements {
     /// `confirmation` is the trajectory's pending user confirmation
     /// ([`crate::turn::Trajectory::pending_confirmation`]) — structural
     /// context alongside the folded label.
-    pub fn check(
-        &self,
-        context: &Label,
-        confirmation: Option<&ToolName>,
-        request: &ToolRequest,
-    ) -> Verdict {
+    pub fn check(&self, context: &Label, confirmation: Option<&ToolName>, request: &ToolRequest) -> Verdict {
         // An ordered Writer, not commutative validation: the emission order
         // (trust, audience, attention, effects) is an observable part of the
         // contract, so each arm pushes in turn. The per-dimension order
@@ -289,8 +282,7 @@ impl Requirements {
 
         match (self.attention, confirmation) {
             (AttentionRule::NotRequired, _) => {}
-            (AttentionRule::ExplicitConfirmation, Some(confirmed))
-                if *confirmed == request.tool => {}
+            (AttentionRule::ExplicitConfirmation, Some(confirmed)) if *confirmed == request.tool => {}
             (AttentionRule::ExplicitConfirmation, Some(confirmed)) => {
                 violations.push(Violation::Breach(Breach::ConfirmationForOtherTool {
                     confirmed: confirmed.clone(),
@@ -408,16 +400,12 @@ mod tests {
             trust: Trust::SUSPICIOUS,
             ..Label::identity()
         };
-        assert_eq!(
-            requirements.check(&suspicious, None, &request),
-            Verdict::Allow
-        );
+        assert_eq!(requirements.check(&suspicious, None, &request), Verdict::Allow);
     }
 
     #[test]
     fn recipient_outside_audience_reports_the_diff() {
-        let request =
-            ToolRequest::exposing(ToolName::new("email.send"), [user("bob"), user("charlie")]);
+        let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob"), user("charlie")]);
         assert_eq!(
             email_requirements().check(&private_trusted_context(), None, &request),
             Verdict::Escalate(vec![Violation::Breach(Breach::AudienceExceeds {
@@ -455,10 +443,7 @@ mod tests {
             ..private_trusted_context()
         };
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("stranger")]);
-        assert_eq!(
-            email_requirements().check(&context, None, &request),
-            Verdict::Allow
-        );
+        assert_eq!(email_requirements().check(&context, None, &request), Verdict::Allow);
     }
 
     #[test]
@@ -519,9 +504,6 @@ mod tests {
             Verdict::Escalate(vec![Violation::Unprovable(Unprovable::EffectsUnknown)])
         );
 
-        assert_eq!(
-            requirements.check(&Label::identity(), None, &request),
-            Verdict::Allow
-        );
+        assert_eq!(requirements.check(&Label::identity(), None, &request), Verdict::Allow);
     }
 }

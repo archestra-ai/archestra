@@ -1,7 +1,7 @@
-"""Subprocess bridge to the baton-check oracle.
+"""Subprocess bridge to baton-check.
 
 Stateless by design: every check ships the whole episode (user prompt +
-executed calls) and the oracle rebuilds the trajectory from scratch, so no
+executed calls) and baton-check rebuilds the trajectory from scratch, so no
 permits or trajectories ever live across the process boundary.
 """
 
@@ -18,7 +18,7 @@ _binary_cache: Path | None = None
 
 
 class BatonProtocolError(RuntimeError):
-    """The oracle rejected the request (exit 2): caller and oracle disagree."""
+    """baton-check rejected the request (exit 2): caller and baton-check disagree."""
 
 
 @dataclass(frozen=True)

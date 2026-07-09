@@ -1,7 +1,7 @@
 //! Wire types and the replay-then-check semantics.
 //!
 //! One invocation is stateless: the caller sends the full episode so far
-//! (`executed`) plus one `proposed` call; the oracle rebuilds the trajectory
+//! (`executed`) plus one `proposed` call; baton-check rebuilds the trajectory
 //! from scratch, evaluates the proposed call, and reports a decision. Permits
 //! are born and consumed inside this single process run, so their linearity
 //! never crosses the process boundary.
@@ -70,7 +70,7 @@ pub enum TrustIn {
 }
 
 /// Sink requirements. Deliberately no audience rule: every output label this
-/// oracle mints is `Audience::Public` (there is no per-datum audience source
+/// baton-check mints is `Audience::Public` (there is no per-datum audience source
 /// in the wire format yet), and against a public context a
 /// recipients-within-context rule could only ever reject the empty recipient
 /// set — a knob that cannot do what its name promises. Audience arrives
@@ -258,7 +258,7 @@ fn effect_set(effects: &[EffectIn]) -> BTreeSet<Effect> {
     effects.iter().copied().map(Effect::from).collect()
 }
 
-/// A protocol violation: caller and oracle disagree about the episode. Never
+/// A protocol violation: caller and baton-check disagree about the episode. Never
 /// a decision — exit 2 upstream.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProtocolError {
@@ -271,7 +271,7 @@ pub enum ProtocolError {
         index: usize,
         tool: String,
     },
-    /// `record_result` rejected a permit during replay — an oracle bug, since
+    /// `record_result` rejected a permit during replay — a baton-check bug, since
     /// nothing else touches the trajectory between evaluate and record.
     ReplayRejected {
         index: usize,

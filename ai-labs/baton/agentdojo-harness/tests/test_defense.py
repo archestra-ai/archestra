@@ -228,7 +228,7 @@ def test_nested_call_is_blocked_and_not_executed():
     assert len(env.inbox.emails) == outbox_before  # neither call ran
 
 
-def test_recipients_reach_the_oracle():
+def test_recipients_reach_baton_check():
     calls = derive_episode(
         [
             user("x"),

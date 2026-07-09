@@ -1,4 +1,4 @@
-//! Stateless policy oracle over baton-core.
+//! Stateless policy check over baton-core.
 //!
 //! Reads one JSON request from stdin, replays the episode, checks the
 //! proposed call, prints one JSON decision to stdout. Exit 0 with a decision;

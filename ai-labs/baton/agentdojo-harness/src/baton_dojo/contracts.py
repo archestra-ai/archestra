@@ -1,4 +1,4 @@
-"""Load a suite's contract table and turn it into oracle wire format."""
+"""Load a suite's contract table and turn it into baton-check wire format."""
 
 import tomllib
 from dataclasses import dataclass

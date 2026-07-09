@@ -3,7 +3,7 @@ name = "baton-check"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Stateless JSON oracle over baton-core: replay an episode, check one proposed tool call"
+description = "Stateless JSON policy check over baton-core: replay an episode, check one proposed tool call"
 
 # Standalone on purpose, like baton-core: a harness sidecar for the
 # agentdojo-harness prototype, not part of the archestra-bench workspace.

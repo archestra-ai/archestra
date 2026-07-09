@@ -8,12 +8,12 @@ blocks tool calls whose contract the folded context cannot satisfy.
 
 ## Layout
 
-- `../baton-check` — stateless Rust oracle over baton-core: one JSON request
-  (contracts + episode so far + proposed call) in on stdin, one decision out
-  on stdout. Built automatically on first use (`cargo build --release`), or
-  point `BATON_CHECK_BIN` at a binary.
+- `../baton-check` — stateless Rust policy check over baton-core: one JSON
+  request (contracts + episode so far + proposed call) in on stdin, one
+  decision out on stdout. Built automatically on first use
+  (`cargo build --release`), or point `BATON_CHECK_BIN` at a binary.
 - `src/baton_dojo/defense.py` — `BatonToolsExecutor`, a drop-in replacement
-  for AgentDojo's `ToolsExecutor`: consults the oracle before executing each
+  for AgentDojo's `ToolsExecutor`: consults baton-check before executing each
   tool call the LLM emits; blocked calls come back on the normal tool-error
   channel (`Blocked by baton policy: …`) and are never executed. Stateless —
   the episode is re-derived from the message history on every call.

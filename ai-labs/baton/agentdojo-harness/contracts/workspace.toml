@@ -11,7 +11,7 @@
 #   - requires_trust = "trusted": a sink that must not run from a context
 #     tainted by third-party text.
 #   - recipients_arg: which call argument names the people a sink exposes
-#     data to. Carried through to the oracle for the (v2, data-only)
+#     data to. Carried through to baton-check for the (v2, data-only)
 #     audience dimension; unused by the v1 trust-only checks.
 #
 # Every tool of the suite must appear exactly once: under unknown_policy

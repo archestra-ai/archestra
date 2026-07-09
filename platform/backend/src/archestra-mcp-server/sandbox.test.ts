@@ -349,8 +349,6 @@ describe("sandbox tools (runtime enabled)", () => {
     // findByIdForOrganization scopes by org, so a cross-tenant environment id
     // resolves to null. The run must fail rather than fall back to the shared
     // engine, which would execute the agent's code with unrestricted egress.
-    // The specific message is masked by the generic error handler, so assert the
-    // property that matters: nothing was executed.
     test("a bound agent referencing another organization's environment refuses to run", async ({
       makeAgent,
       makeOrganization,
@@ -376,6 +374,7 @@ describe("sandbox tools (runtime enabled)", () => {
       );
 
       expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("refusing to run on the shared runtime");
       expect(runSpy).not.toHaveBeenCalled();
     });
 
@@ -406,6 +405,10 @@ describe("sandbox tools (runtime enabled)", () => {
       );
 
       expect(result.isError).toBe(true);
+      // The operator-facing guidance must survive the tool error handler.
+      expect(textOf(result)).toContain(
+        "Is the orchestrator (Kubernetes) configured?",
+      );
       expect(runSpy).not.toHaveBeenCalled();
     });
 

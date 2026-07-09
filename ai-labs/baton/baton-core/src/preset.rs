@@ -28,8 +28,12 @@ use std::collections::BTreeSet;
 /// wrong), and `Unprovable` when `Unknown` blocked the proof either way — the
 /// point where `Unknown` is *incomparable*, the opposite of its definite
 /// position in the taint fold.
+///
+/// This is the public result type of every preset's adequacy relation. The
+/// built-in dimensions delegate to the presets but keep their own adequacy
+/// methods crate-internal, since only the engine consumes them.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Adequacy<W> {
+pub enum Adequacy<W> {
     Holds,
     Fails(W),
     Unprovable,
@@ -79,7 +83,7 @@ impl<T: Ord + Clone> MeetSet<T> {
     /// inside this set? `All` holds for anything; `Unknown` bounds nothing (so
     /// `Unprovable`, never silently `All`); `Only` holds iff nothing falls
     /// outside, with the `Fails` witness being exactly the members outside.
-    pub(crate) fn covers(&self, need: &BTreeSet<T>) -> Adequacy<BTreeSet<T>> {
+    pub fn covers(&self, need: &BTreeSet<T>) -> Adequacy<BTreeSet<T>> {
         match self {
             Self::Unknown => Adequacy::Unprovable,
             Self::All => Adequacy::Holds,
@@ -122,7 +126,7 @@ impl<T: Ord + Clone> JoinSet<T> {
     /// present. `Unknown` can attest the absence of nothing (so `Unprovable`);
     /// `Has` holds iff the intersection is empty, with the `Fails` witness the
     /// forbidden members that are present.
-    pub(crate) fn avoids(&self, forbidden: &BTreeSet<T>) -> Adequacy<BTreeSet<T>> {
+    pub fn avoids(&self, forbidden: &BTreeSet<T>) -> Adequacy<BTreeSet<T>> {
         match self {
             Self::Unknown => Adequacy::Unprovable,
             Self::Has(present) => {
@@ -169,7 +173,7 @@ impl<T: Ord + Clone> MinLevel<T> {
     /// Adequacy against a floor: a known value at or above the floor holds, a
     /// lower one `Fails` (carrying the actual value), and `Unknown` never
     /// satisfies any bar — unpacking it is an explicit decision, so `Unprovable`.
-    pub(crate) fn at_least(&self, floor: T) -> Adequacy<T> {
+    pub fn at_least(&self, floor: T) -> Adequacy<T> {
         match self {
             Self::Known(actual) if *actual >= floor => Adequacy::Holds,
             Self::Known(actual) => Adequacy::Fails(actual.clone()),
@@ -210,12 +214,7 @@ impl<T: Ord + Clone> MaxLevel<T> {
     /// Adequacy against a ceiling: a known value at or below the ceiling holds,
     /// a higher one `Fails` (carrying the actual value), and `Unknown` is
     /// `Unprovable`.
-    ///
-    /// Reserved: `MaxLevel` has no built-in dimension instance yet (unlike the
-    /// other three presets), so nothing in the crate calls this outside its
-    /// tests until a deployment wires a classification dimension (Step 2).
-    #[allow(dead_code)]
-    pub(crate) fn at_most(&self, ceiling: T) -> Adequacy<T> {
+    pub fn at_most(&self, ceiling: T) -> Adequacy<T> {
         match self {
             Self::Known(actual) if *actual <= ceiling => Adequacy::Holds,
             Self::Known(actual) => Adequacy::Fails(actual.clone()),

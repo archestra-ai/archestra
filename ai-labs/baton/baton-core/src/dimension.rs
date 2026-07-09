@@ -372,6 +372,16 @@ mod tests {
     }
 
     #[test]
+    fn known_trust_bottom_obeys_the_has_bottom_law() {
+        // MinLevel's fold relies on `bottom()` being the Ord-minimum; the
+        // built-in Trust instance must uphold it (Suspicious is least trusted).
+        for t in [KnownTrust::Suspicious, KnownTrust::Trusted] {
+            assert!(KnownTrust::bottom() <= t, "bottom() not <= {t}");
+        }
+        assert_eq!(KnownTrust::bottom(), KnownTrust::Suspicious);
+    }
+
+    #[test]
     fn effects_union_and_unknown_absorbs() {
         let mutation = Effects::declared([Effect::Mutation]);
         let egress = Effects::declared([Effect::Egress]);

@@ -77,6 +77,7 @@ Required RBAC permission: `agent:create`
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
@@ -115,6 +116,7 @@ Required RBAC permission: `agent:read`
 | `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | Yes | How tools are loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | Yes | Whether search_tools/run_tool may dynamically access every tool the calling user can access. |
+| `accessAllSubagents` | `boolean` | Yes | Whether the agent may delegate to every internal agent the calling user can access. |
 | `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
 | `systemPrompt` | `string \| null` | No |  |
 | `teams` | `object[]` | Yes | The teams attached to it. |
@@ -195,6 +197,7 @@ Required RBAC permission: `agent:update`
 | `scope` | `"personal" \| "team" \| "org"` | No | Updated visibility scope for the agent. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only'. |
+| `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). |
 | `suggestedPrompts` | `object[]` | No | Replace the agent's suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown to users for this suggested prompt. |
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |
@@ -226,6 +229,7 @@ Required RBAC permission: `llmProxy:create`
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
 
 
 #### get_llm_proxy
@@ -250,6 +254,7 @@ Required RBAC permission: `llmProxy:read`
 | `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | Yes | How tools are loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | Yes | Whether search_tools/run_tool may dynamically access every tool the calling user can access. |
+| `accessAllSubagents` | `boolean` | Yes | Whether the agent may delegate to every internal agent the calling user can access. |
 | `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
 | `systemPrompt` | `string \| null` | No |  |
 | `teams` | `object[]` | Yes | The teams attached to it. |
@@ -313,6 +318,7 @@ Required RBAC permission: `mcpGateway:create`
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
+| `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
 | `connectorIds` | `string[]` | No | Knowledge connector IDs to assign directly to the agent. Use get_knowledge_connectors first when you need to look up IDs by name. |
 
@@ -339,6 +345,7 @@ Required RBAC permission: `mcpGateway:read`
 | `scope` | `"personal" \| "team" \| "org"` | Yes | The visibility scope. |
 | `toolExposureMode` | `"full" \| "search_and_run_only"` | Yes | How tools are loaded for MCP clients and models. |
 | `accessAllTools` | `boolean` | Yes | Whether search_tools/run_tool may dynamically access every tool the calling user can access. |
+| `accessAllSubagents` | `boolean` | Yes | Whether the agent may delegate to every internal agent the calling user can access. |
 | `agentType` | `"agent" \| "llm_proxy" \| "mcp_gateway" \| "profile"` | Yes | The resource type. |
 | `systemPrompt` | `string \| null` | No |  |
 | `teams` | `object[]` | Yes | The teams attached to it. |

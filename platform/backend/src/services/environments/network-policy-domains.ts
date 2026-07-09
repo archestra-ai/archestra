@@ -53,6 +53,10 @@ const COMMON_DEPENDENCY_DOMAINS = Object.freeze([
   "packagist.org",
   "pkg.go.dev",
   "production.cloudflare.docker.com",
+  // Docker Hub blob (image-layer) backends — Docker rotates these between
+  // CloudFront/R2/S3; without them manifests resolve but layer pulls are blocked.
+  "docker-images-prod.r2.cloudflarestorage.com",
+  "docker-images-prod.s3.dualstack.us-east-1.amazonaws.com",
   "pub.dev",
   "pypa.io",
   "pypi.org",
@@ -103,6 +107,10 @@ const PACKAGE_MANAGER_DOMAINS = Object.freeze([
   "docker.io",
   "*.docker.io",
   "production.cloudflare.docker.com",
+  // Docker Hub blob (image-layer) backends — Docker rotates these between
+  // CloudFront/R2/S3; without them manifests resolve but layer pulls are blocked.
+  "docker-images-prod.r2.cloudflarestorage.com",
+  "docker-images-prod.s3.dualstack.us-east-1.amazonaws.com",
   "yarnpkg.com",
 ]);
 

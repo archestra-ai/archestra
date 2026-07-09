@@ -391,6 +391,25 @@ tests:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: "max_attempts=60"
 
+  - it: pins the setup-postgres-extensions image by digest when postgresql.image.digest is set
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: ^bitnamisecure/postgresql:latest@sha256:[0-9a-f]{64}$
+
+  - it: falls back to the floating tag for setup-postgres-extensions when no digest is pinned
+    documentIndex: 1
+    set:
+      postgresql.image.digest: null
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: bitnamisecure/postgresql:latest
+
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1
     set:
@@ -432,6 +451,10 @@ tests:
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
+            - name: ARCHESTRA_CODE_RUNTIME_ENABLED
+              value: "true"
+            - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+              value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
 
@@ -453,22 +476,8 @@ tests:
             name: CUSTOM_VAR
             value: "custom-value"
 
-  - it: should not set code runtime environment variables by default
+  - it: should set code runtime environment variables by default
     documentIndex: 1
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_CODE_RUNTIME_ENABLED
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-
-  - it: should set code runtime environment variables when enabled
-    documentIndex: 1
-    set:
-      archestra.codeRuntime.enabled: true
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -479,12 +488,36 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
+
+  - it: should not set code runtime environment variables when disabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+
+  - it: should target the external companion-chart namespace when managed Dagger is disabled
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.dagger.managed.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
 
   - it: should support custom code runtime Dagger runner host
     documentIndex: 1
     set:
-      archestra.codeRuntime.enabled: true
       archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.custom.svc.cluster.local:1234
     asserts:
       - contains:
@@ -493,22 +526,9 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: tcp://dagger-runtime.custom.svc.cluster.local:1234
 
-  - it: should use the release namespace for managed code runtime Dagger pod
-    documentIndex: 1
-    set:
-      archestra.codeRuntime.enabled: true
-      archestra.codeRuntime.dagger.managed.enabled: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
-
   - it: should support custom code runtime Dagger pod settings
     documentIndex: 1
     set:
-      archestra.codeRuntime.enabled: true
       archestra.codeRuntime.dagger.pod.name: dagger-engine-3
       archestra.codeRuntime.dagger.pod.namespace: code-runtime
       archestra.codeRuntime.dagger.pod.container: custom-engine

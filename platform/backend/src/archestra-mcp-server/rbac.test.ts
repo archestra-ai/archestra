@@ -208,6 +208,75 @@ describe("checkToolPermission", () => {
     expect(await checkToolPermission(t("download_file"), ctx)).toBeNull();
   });
 
+  test("sandbox:execute alone does not grant the file-store tools", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { sandbox: ["execute"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ name: "Sandbox Agent" });
+
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    for (const tool of [
+      "search_files",
+      "read_file",
+      "save_file",
+      "edit_file",
+      "delete_file",
+    ]) {
+      const denied = await checkToolPermission(t(tool), ctx);
+      expect(denied, tool).not.toBeNull();
+      expect((denied?.content[0] as any).text).toContain(
+        "do not have permission",
+      );
+    }
+  });
+
+  test("file:manage allows the file-store tools but not run_command", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, {
+      permission: { file: ["manage"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ name: "Files Agent" });
+
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    for (const tool of [
+      "search_files",
+      "read_file",
+      "save_file",
+      "edit_file",
+      "delete_file",
+    ]) {
+      expect(await checkToolPermission(t(tool), ctx), tool).toBeNull();
+    }
+    expect(await checkToolPermission(t("run_command"), ctx)).not.toBeNull();
+  });
+
   test("returns null for non-Archestra tool names", async () => {
     const result = await checkToolPermission(
       "some_external_tool",

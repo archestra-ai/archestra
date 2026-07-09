@@ -101,7 +101,37 @@ export const handlers: HttpHandler[] = [
   ...getJson("/health", healthSeed),
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
+  // Onboarding nudges: everything already seen / nothing eligible, so neither
+  // the red dots nor the survey/feedback dialogs interfere with other tests.
+  ...getJson("/api/onboarding/seen-nav-items", {
+    items: [
+      "nav:projects",
+      "nav:apps",
+      "nav:connect",
+      "nav:model-providers",
+      "nav:mcp-registry",
+      "feedback:popup",
+    ],
+  }),
+  ...postJson("/api/onboarding/seen-nav-items", { items: [] }),
+  ...getJson("/api/onboarding/survey-eligibility", { eligible: false }),
+  ...postJson("/api/onboarding/survey", { ok: true }),
+  ...getJson("/api/onboarding/feedback-popup-activation", {
+    activatedAt: null,
+  }),
   ...getJson("/api/organization/mcp-preset-entries", []),
+  ...getJson("/api/projects", []),
+  ...getJson("/api/apps", {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+      hasNext: false,
+      hasPrev: false,
+    },
+  }),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
   ...getJson("/api/environments", {

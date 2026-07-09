@@ -3,12 +3,8 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-07-01
+lastUpdated: 2026-07-03
 ---
-
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
 
 The LLM Proxy supports direct provider API keys, virtual API keys, passthrough virtual keys, OAuth access tokens, and JWKS via an external identity provider.
 
@@ -37,14 +33,7 @@ This is the simplest approach but means the real provider key is sent with every
 
 ## Virtual API Keys
 
-Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra.
-
-### Benefits
-
-- **Key isolation**: Provider keys stay in Archestra; clients only see the virtual token
-- **Revocable**: Delete a virtual key without rotating the underlying provider key
-- **Expirable**: Set an optional expiration date
-- **Per-key base URL**: The underlying provider key can have a custom base URL (e.g., for proxies or self-hosted endpoints)
+Virtual API keys are platform-managed bearer tokens that map to one or more provider API keys stored in Archestra. The real provider keys never leave Archestra — clients only see the virtual token. You can delete a virtual key without rotating the underlying provider key, and set an optional expiration date on it. Each underlying provider key can have a custom base URL, for a proxy or self-hosted endpoint.
 
 ### Creating Virtual Keys
 
@@ -120,7 +109,7 @@ A valid passthrough key authenticates the user at the proxy, but it does not by 
 
 ### Configuring Claude Code and Claude Desktop
 
-The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code's subscription passthrough, the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
+The in-app Connection page wires this header up per platform (macOS, Linux, Windows). For Claude Code passthrough — a Claude subscription on the Anthropic provider, or your own AWS credentials on the Bedrock provider — the one-command setup provisions a passthrough key and merges it into `~/.claude/settings.json`:
 
 ```json
 {
@@ -131,7 +120,7 @@ The in-app Connection page wires this header up per platform (macOS, Linux, Wind
 }
 ```
 
-`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several). Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
+`ANTHROPIC_CUSTOM_HEADERS` takes `Name: Value` pairs (newline-separated for several) and applies to the Bedrock transport too, so the same headers attribute requests routed through a Bedrock proxy. Leave `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_API_KEY` unset so the Claude subscription still authenticates the upstream call — the header only authenticates an Archestra user on an LLM Proxy.
 
 The setup always adds `X-Archestra-Agent-Id` too — a non-secret client identifier (`anthropic_claude_code` for Claude Code, `anthropic_claude_desktop` for Claude Desktop) that attributes each proxied request to the client app in the LLM logs. It rides alongside the passthrough key but is independent of it, so it is present even when no passthrough key is provisioned.
 
@@ -156,6 +145,8 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
 
 You can edit a client_credentials client later to update its name, allowed LLM proxies, or provider key mappings; edit an authorization_code client to update its redirect URIs. The grant type is fixed at creation. Rotate the client secret when the existing secret needs to be replaced.
+
+Each OAuth client also has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `llmOauthClient:team-admin`, organization-wide visibility requires `llmOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which LLM proxies or provider keys the client's tokens can use at runtime.
 
 ### Getting an Access Token
 
@@ -254,7 +245,7 @@ Each LLM API key has a **scope** that controls who can use it:
 
 You can create **multiple keys per provider per scope** (e.g. two personal Anthropic keys with different base URLs). Mark one key as **Primary** to control which key is preferred when resolving. If no key is marked primary, the oldest key is used.
 
-When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a provider key, it follows this priority: personal key > team key > organization-wide key > environment variable. If multiple keys exist in the same scope for a provider, the primary key is selected first; otherwise, the oldest key is selected.
+When the Archestra Chat, JWKS auth, or user OAuth Model Router auth resolves a provider key, it follows this priority: conversation key > agent configured key > personal key > team key > organization-wide key > environment variable. If multiple keys exist in the same scope for a provider, the primary key is selected first; otherwise, the oldest key is selected.
 
 ## Custom Base URLs
 

@@ -1,4 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
@@ -707,6 +708,100 @@ describe("AnthropicStreamAdapter content block forwarding", () => {
   });
 });
 
+describe("AnthropicStreamAdapter policy refusal terminal", () => {
+  type Chunk = Parameters<
+    ReturnType<
+      typeof anthropicAdapterFactory.createStreamAdapter
+    >["processChunk"]
+  >[0];
+
+  // Reproduces the reported incident: a blocked tool-call turn must not end the
+  // stream with the upstream "tool_use" stop reason, or Claude Code reads the
+  // text-only refusal as a malformed tool call and retries it.
+  function streamBlockedToolTurn() {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    // A text block streams live at index 0...
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "let me check" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_stop",
+      index: 0,
+    } as Chunk);
+    // ...then a tool_use block at index 1 is buffered (held back)...
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "list",
+        input: {},
+      },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 1,
+      delta: { type: "input_json_delta", partial_json: '{"a":1}' },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_stop",
+      index: 1,
+    } as Chunk);
+    // ...and the upstream turn ends with a tool_use stop reason.
+    adapter.processChunk({
+      type: "message_delta",
+      delta: { stop_reason: "tool_use", stop_sequence: null },
+      usage: { output_tokens: 5 },
+    } as Chunk);
+    return adapter;
+  }
+
+  test("formatEndSSE closes a refused stream as end_turn, not the upstream tool_use", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.formatCompleteTextSSE(
+      "Archestra LLM Proxy blocked unsafe tool call",
+    );
+    const endEvents = adapter.formatEndSSE();
+
+    expect(endEvents).toContain('"stop_reason":"end_turn"');
+    expect(endEvents).not.toContain('"stop_reason":"tool_use"');
+  });
+
+  test("refusal text block is placed after already-streamed blocks (no index reuse)", () => {
+    const adapter = streamBlockedToolTurn();
+
+    const refusalEvents = adapter.formatCompleteTextSSE("blocked").join("");
+
+    // index 0 was already streamed (the text block); the refusal must use index 1.
+    expect(refusalEvents).toContain('"index":1');
+    expect(refusalEvents).not.toContain('"index":0');
+  });
+
+  test("toProviderResponse persists the refusal, not the blocked tool call", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.formatCompleteTextSSE("blocked message");
+    const response = adapter.toProviderResponse();
+
+    expect(response.stop_reason).toBe("end_turn");
+    expect(response.content).toEqual([
+      { type: "text", text: "blocked message", citations: null },
+    ]);
+    expect(response.content.some((block) => block.type === "tool_use")).toBe(
+      false,
+    );
+  });
+});
+
 describe("anthropicAdapterFactory.execute", () => {
   // The SDK refuses non-streaming requests whose max_tokens implies a >10 min
   // completion ("Streaming is required for operations that may take longer
@@ -736,5 +831,60 @@ describe("anthropicAdapterFactory.execute", () => {
 
     expect(post).toHaveBeenCalled();
     expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
+  });
+});
+
+describe("anthropicAdapterFactory balance-too-low message", () => {
+  // The SDK nests the provider body as error.error.{type,message}.
+  function sdkError(
+    status: number,
+    type: string,
+    message: string,
+  ): { status: number; error: { error: { type: string; message: string } } } {
+    return { status, error: { error: { type, message } } };
+  }
+
+  test("returns one unified message for both out-of-credit and usage-limit blocks", () => {
+    const creditError = sdkError(
+      402,
+      "billing_error",
+      "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+    );
+    // A usage/spend cap: HTTP 400 with a non-standard `api_validation_error`
+    // type, so it's detected off the body message.
+    const limitError = sdkError(
+      400,
+      "api_validation_error",
+      "You have reached your specified API usage limits.",
+    );
+
+    for (const error of [creditError, limitError]) {
+      expect(anthropicAdapterFactory.extractInternalCode(error)).toBe(
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+    }
+
+    const creditMessage =
+      anthropicAdapterFactory.extractErrorMessage(creditError);
+    const limitMessage =
+      anthropicAdapterFactory.extractErrorMessage(limitError);
+
+    // Same message for both; no Anthropic raw text / Console steering.
+    expect(creditMessage).toBe(limitMessage);
+    expect(creditMessage).toMatch(/remaining usage balance is too low/i);
+    expect(creditMessage).toMatch(/please contact your administrator/i);
+    expect(creditMessage).not.toMatch(/Plans & Billing/i);
+  });
+
+  test("does not flag an ordinary error, relays its message verbatim", () => {
+    const error = sdkError(
+      400,
+      "invalid_request_error",
+      'messages: roles must alternate between "user" and "assistant"',
+    );
+    expect(anthropicAdapterFactory.extractInternalCode(error)).toBeUndefined();
+    expect(anthropicAdapterFactory.extractErrorMessage(error)).toContain(
+      "roles must alternate",
+    );
   });
 });

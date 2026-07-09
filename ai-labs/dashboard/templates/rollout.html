@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ id }} — bench dashboard{% endblock %}
+{% block content %}
+<p class="crumb"><a href="{{ run_href }}">← {{ run_id }}</a></p>
+<h1>{{ id }} <span class="badge {{ outcome_class }}">{{ outcome_label }}</span></h1>
+
+<section>
+    <h2>Metadata</h2>
+    <div class="card table-card">
+    <table class="kv">
+        <tbody>
+        {% for row in meta_rows %}
+            <tr><th>{{ row.label }}</th><td>{{ row.value }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+{% match rubric %}
+{% when Some(r) %}
+<section>
+    <h2>Triage <span class="chip {{ r.mean_class }}">mean {{ r.mean }}</span></h2>
+    {% if r.hacking_suspected %}
+    <p class="warning">⚠ reward hacking suspected{% if !r.hacking_evidence.is_empty() %}: <em>{{ r.hacking_evidence }}</em>{% endif %}</p>
+    {% endif %}
+    <p><strong>Verdict:</strong> {{ r.verdict }}</p>
+    <div class="card table-card">
+    <table>
+        <thead>
+            <tr><th>rubric</th><th>grade</th><th>comment</th></tr>
+        </thead>
+        <tbody>
+        {% for s in r.scores %}
+            <tr><th>{{ s.label }}</th><td><span class="chip {{ s.class }}">{{ s.grade }}</span></td><td>{{ s.comment }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if !r.observations.is_empty() %}
+    <h3>Observations</h3>
+    <ul>
+    {% for o in r.observations %}
+        <li>{{ o }}</li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+{% when None %}
+<p class="muted">No rubric record for this rollout.</p>
+{% endmatch %}
+
+<section>
+    {% if trajectory_note.is_empty() %}
+    <details class="report">
+        <summary><h2>Trajectory</h2></summary>
+        <article class="trajectory">{{ trajectory_html|safe }}</article>
+    </details>
+    {% else %}
+    <h2>Trajectory</h2>
+    <p class="muted">{{ trajectory_note }}</p>
+    {% endif %}
+</section>
+{% endblock %}

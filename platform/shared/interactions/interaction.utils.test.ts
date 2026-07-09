@@ -24,6 +24,12 @@ describe("DynamicInteraction with a failed-interaction error response", () => {
     );
   });
 
+  it("reports the failure via hasErrorResponse", () => {
+    expect(new DynamicInteraction(errorInteraction).hasErrorResponse()).toBe(
+      true,
+    );
+  });
+
   it("renders the error as an assistant message instead of throwing", () => {
     const interaction = new DynamicInteraction(errorInteraction);
     const messages = interaction.mapToUiMessages();

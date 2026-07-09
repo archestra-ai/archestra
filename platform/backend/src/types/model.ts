@@ -23,6 +23,20 @@ export {
 } from "@archestra/shared";
 
 /**
+ * Ollama model default generation parameters, pulled from `/api/show`.
+ * A free-form key/value map (e.g. num_ctx, temperature, stop); repeated keys
+ * such as `stop` are collected into an array. Stored for display only — nothing
+ * applies these at request time.
+ */
+const ModelDefaultParametersSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.array(z.string())]),
+);
+export type ModelDefaultParameters = z.infer<
+  typeof ModelDefaultParametersSchema
+>;
+
+/**
  * Fields to extend for drizzle-zod schema generation.
  */
 const fieldsToExtend = {
@@ -30,6 +44,7 @@ const fieldsToExtend = {
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable(),
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
+  defaultParameters: ModelDefaultParametersSchema.nullable(),
 };
 
 /**
@@ -53,6 +68,7 @@ export const CreateModelSchema = InsertModelSchema.omit({
   updatedAt: true,
 }).extend({
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable().optional(),
+  defaultParameters: ModelDefaultParametersSchema.nullable().optional(),
 });
 
 /**

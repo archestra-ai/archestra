@@ -1,10 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { CallPolicyToggle } from "@/components/call-policy-toggle";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -41,12 +42,6 @@ import {
   resolveInitialState,
 } from "./agent-settings-utils";
 
-type GlobalToolPolicy = NonNullable<
-  NonNullable<
-    archestraApiTypes.UpdateSecuritySettingsData["body"]
-  >["globalToolPolicy"]
->;
-
 type FileUploadsEnabled = "enabled" | "disabled";
 
 export default function AgentSettingsPage() {
@@ -64,7 +59,6 @@ export default function AgentSettingsPage() {
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [defaultAgentId, setDefaultAgentId] = useState<string>("");
-  const [toolPolicy, setToolPolicy] = useState<GlobalToolPolicy>("permissive");
   const [fileUploads, setFileUploads] = useState<FileUploadsEnabled>("enabled");
   const [defaultInvocationPolicy, setDefaultInvocationPolicy] =
     useState<CallPolicyAction>("allow_when_context_is_untrusted");
@@ -77,7 +71,6 @@ export default function AgentSettingsPage() {
     defaultAgentId: "",
   });
   const savedSecurityStateRef = useRef({
-    toolPolicy: "permissive" as GlobalToolPolicy,
     fileUploads: "enabled" as FileUploadsEnabled,
     defaultInvocationPolicy:
       "allow_when_context_is_untrusted" as CallPolicyAction,
@@ -88,10 +81,17 @@ export default function AgentSettingsPage() {
     data: allModels,
     isPending: modelsLoading,
     isLoadingError: isModelsLoadError,
+    isPlaceholderData,
     refetch: refetchModels,
   } = useLlmModels({
     apiKeyId: selectedApiKeyId || undefined,
   });
+
+  // `useLlmModels` uses `keepPreviousData`, so after a key switch `data` still
+  // holds the previous key's models (isPlaceholderData). Treat that as loading
+  // for the new key so the admin can't save a model from the old provider
+  // against the new provider's key.
+  const modelsPending = modelsLoading || isPlaceholderData;
 
   const isLoadError = isApiKeysLoadError || isModelsLoadError;
 
@@ -112,7 +112,6 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(state.selectedApiKeyId);
     setDefaultModel(state.defaultModel);
     setDefaultAgentId(state.defaultAgentId);
-    setToolPolicy(organization.globalToolPolicy ?? "permissive");
     setFileUploads(
       (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
     );
@@ -125,7 +124,6 @@ export default function AgentSettingsPage() {
     );
     savedStateRef.current = state;
     savedSecurityStateRef.current = {
-      toolPolicy: organization.globalToolPolicy ?? "permissive",
       fileUploads:
         (organization.allowChatFileUploads ?? true) ? "enabled" : "disabled",
       defaultInvocationPolicy:
@@ -147,7 +145,6 @@ export default function AgentSettingsPage() {
 
   const changes = detectChanges(localState, savedStateRef.current);
   const securityHasChanges =
-    toolPolicy !== savedSecurityStateRef.current.toolPolicy ||
     fileUploads !== savedSecurityStateRef.current.fileUploads ||
     defaultInvocationPolicy !==
       savedSecurityStateRef.current.defaultInvocationPolicy ||
@@ -164,13 +161,11 @@ export default function AgentSettingsPage() {
 
     if (securityHasChanges) {
       await updateSecurityMutation.mutateAsync({
-        globalToolPolicy: toolPolicy,
         allowChatFileUploads: fileUploads === "enabled",
         defaultDiscoveredToolInvocationPolicy: defaultInvocationPolicy,
         defaultDiscoveredToolResultPolicy: defaultResultPolicy,
       });
       savedSecurityStateRef.current = {
-        toolPolicy,
         fileUploads,
         defaultInvocationPolicy,
         defaultResultPolicy,
@@ -185,7 +180,6 @@ export default function AgentSettingsPage() {
     setSelectedApiKeyId(saved.selectedApiKeyId);
     setDefaultModel(saved.defaultModel);
     setDefaultAgentId(saved.defaultAgentId);
-    setToolPolicy(savedSecurityStateRef.current.toolPolicy);
     setFileUploads(savedSecurityStateRef.current.fileUploads);
     setDefaultInvocationPolicy(
       savedSecurityStateRef.current.defaultInvocationPolicy,
@@ -194,7 +188,7 @@ export default function AgentSettingsPage() {
   };
 
   const modelItems = useMemo(() => {
-    if (!allModels) return [];
+    if (!allModels || isPlaceholderData) return [];
     return allModels.map((model) => ({
       value: model.dbId,
       model: model.displayName ?? model.id,
@@ -203,7 +197,7 @@ export default function AgentSettingsPage() {
       isFree: model.isFree,
       isBest: model.isBest,
     }));
-  }, [allModels]);
+  }, [allModels, isPlaceholderData]);
 
   const selectedApiKey = useMemo(
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
@@ -220,7 +214,6 @@ export default function AgentSettingsPage() {
     setDefaultModel("");
   }, []);
 
-  const isRestrictive = toolPolicy === "restrictive";
   const isSaving =
     updateAgentMutation.isPending || updateSecurityMutation.isPending;
 
@@ -228,7 +221,24 @@ export default function AgentSettingsPage() {
     <SettingsSectionStack>
       <SettingsBlock
         title="Default Model for Agents and New Chats"
-        description="Select the LLM provider API key and model that will be used by default when creating new agents and starting new chat conversations."
+        description={
+          <>
+            Select the LLM provider API key and model that will be used by
+            default when creating new agents and starting new chat
+            conversations.
+            <span className="mt-2 block">
+              It's also the fallback for {appName}'s{" "}
+              <Link
+                href="/agents?scope=built_in"
+                className="text-primary hover:underline"
+              >
+                built-in agents
+              </Link>{" "}
+              — like chat title generation and context compaction — when they
+              don't have their own model.
+            </span>
+          </>
+        }
         control={
           <WithPermissions
             permissions={{ agentSettings: ["update"] }}
@@ -270,7 +280,7 @@ export default function AgentSettingsPage() {
                     placeholder={
                       !selectedApiKeyId
                         ? "Select API key first..."
-                        : modelsLoading
+                        : modelsPending
                           ? "Loading models..."
                           : "Select model..."
                     }
@@ -278,7 +288,7 @@ export default function AgentSettingsPage() {
                     disabled={
                       isSaving ||
                       !hasPermission ||
-                      modelsLoading ||
+                      modelsPending ||
                       !selectedApiKeyId
                     }
                   />
@@ -331,49 +341,32 @@ export default function AgentSettingsPage() {
         }
       />
       <SettingsBlock
-        title="Agentic Security Engine"
-        description="Configure the default security policy for tool execution and result treatment."
-        control={
-          <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <Select
-                value={toolPolicy}
-                onValueChange={(value: GlobalToolPolicy) =>
-                  setToolPolicy(value)
-                }
-                disabled={isSaving || !hasPermission}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="permissive">Disabled</SelectItem>
-                  <SelectItem value="restrictive">Enabled</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </WithPermissions>
+        title="Default Guardrails for MCP Tools"
+        description={
+          <>
+            Every new tool your agents use — whether discovered through the LLM
+            Proxy or added from an MCP server — starts with these guardrails.{" "}
+            <ExternalDocsLink
+              href={getDocsUrl(DocsPage.PlatformAiToolGuardrails)}
+              className="text-primary hover:underline"
+              showIcon={false}
+            >
+              Learn how guardrails work.
+            </ExternalDocsLink>
+          </>
         }
+        control={null}
         notice={
-          isRestrictive ? (
-            <span className="text-green-600 dark:text-green-400">
-              Policies apply to agents' tools.{" "}
-              <Link
-                href="/mcp/tool-guardrails"
-                className="text-primary hover:underline"
-              >
-                Configure policies
-              </Link>
-            </span>
-          ) : (
-            <span className="text-red-600 dark:text-red-400">
-              Agents can perform any action. Tool calls are allowed and results
-              are safe.
-            </span>
-          )
+          <span className="text-muted-foreground">
+            Existing tools keep their policies; adjust any tool under{" "}
+            <Link
+              href="/mcp/tool-guardrails"
+              className="text-primary hover:underline"
+            >
+              Guardrails
+            </Link>
+            .
+          </span>
         }
       >
         <WithPermissions
@@ -381,35 +374,16 @@ export default function AgentSettingsPage() {
           noPermissionHandle="tooltip"
         >
           {({ hasPermission }) => (
-            <div className="flex flex-col gap-4">
-              <div>
-                <h3 className="font-semibold leading-none">
-                  Default Guardrails for Discovered Tools
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Archestra records new tools your agents call through the LLM
-                  Proxy and gives each these starting guardrails.{" "}
-                  <span className="font-medium text-foreground">
-                    Call Policy
-                  </span>{" "}
-                  controls whether a tool may run;{" "}
-                  <span className="font-medium text-foreground">
-                    Results are
-                  </span>{" "}
-                  controls how its output is treated. Existing tools keep their
-                  policies — adjust any tool policy under{" "}
-                  <Link
-                    href="/mcp/tool-guardrails"
-                    className="text-primary hover:underline"
-                  >
-                    Tool Guardrails
-                  </Link>
-                  .
-                </p>
-              </div>
+            <div className="flex flex-col gap-6">
               <div className="flex items-center justify-between gap-4">
-                <p className="text-sm font-medium">Call Policy</p>
-                <div className="flex w-[150px] justify-start">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Call Policy</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    This policy controls whether a tool may run in the current
+                    context.
+                  </p>
+                </div>
+                <div className="flex w-[150px] shrink-0 justify-start">
                   <CallPolicyToggle
                     size="sm"
                     value={defaultInvocationPolicy}
@@ -419,8 +393,14 @@ export default function AgentSettingsPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <p className="text-sm font-medium">Results are</p>
-                <div className="flex w-[150px] justify-start">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Results are</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    This policy controls how tool output is treated after a tool
+                    runs.
+                  </p>
+                </div>
+                <div className="flex w-[150px] shrink-0 justify-start">
                   <ResultPolicyToggle
                     size="sm"
                     value={defaultResultPolicy}

@@ -6,17 +6,29 @@ import { PostHogProviderWrapper } from "./posthog-provider";
 
 const DEFAULT_INSTANCE_ID = "00000000-0000-4000-8000-000000000001";
 
-const { mockGroup, mockIdentify, mockInit, mockRegister, mockReset } =
-  vi.hoisted(() => ({
-    mockGroup: vi.fn(),
-    mockIdentify: vi.fn(),
-    mockInit: vi.fn(),
-    mockRegister: vi.fn(),
-    mockReset: vi.fn(),
-  }));
+const {
+  mockCapture,
+  mockGetDistinctId,
+  mockGroup,
+  mockIdentify,
+  mockInit,
+  mockRegister,
+  mockReset,
+} = vi.hoisted(() => ({
+  mockCapture: vi.fn(),
+  mockGetDistinctId: vi.fn(),
+  mockGroup: vi.fn(),
+  mockIdentify: vi.fn(),
+  mockInit: vi.fn(),
+  mockRegister: vi.fn(),
+  mockReset: vi.fn(),
+}));
 
 vi.mock("posthog-js", () => ({
   default: {
+    __loaded: true,
+    capture: mockCapture,
+    get_distinct_id: mockGetDistinctId,
     group: mockGroup,
     identify: mockIdentify,
     init: mockInit,
@@ -41,6 +53,8 @@ vi.mock("@/lib/config/config.query");
 describe("PostHogProviderWrapper", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // A signed-out browser carries an anonymous device id by default.
+    mockGetDistinctId.mockReturnValue("anon-device-id");
     vi.mocked(usePublicConfig).mockReturnValue(
       makePublicConfigResult({
         enabled: true,
@@ -259,6 +273,63 @@ describe("PostHogProviderWrapper", () => {
         name: "Other User",
       });
     });
+  });
+
+  it("captures user_authenticated when an anonymous browser signs in", async () => {
+    vi.mocked(useSession).mockReturnValue(
+      makeSessionResult({
+        data: {
+          user: {
+            id: "user-123",
+            email: "user@example.com",
+            name: "Example User",
+          },
+          session: { id: "session-123" },
+        },
+      }),
+    );
+
+    render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCapture).toHaveBeenCalledWith("user_authenticated", {});
+  });
+
+  it("does not capture user_authenticated on a reload of an already-identified browser", async () => {
+    // PostHog persisted the identified distinct id from a previous sign-in.
+    mockGetDistinctId.mockReturnValue("user-123");
+    vi.mocked(useSession).mockReturnValue(
+      makeSessionResult({
+        data: {
+          user: {
+            id: "user-123",
+            email: "user@example.com",
+            name: "Example User",
+          },
+          session: { id: "session-123" },
+        },
+      }),
+    );
+
+    render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCapture).not.toHaveBeenCalledWith(
+      "user_authenticated",
+      expect.anything(),
+    );
   });
 
   it("uses the email as the fallback name when the user has no display name", async () => {

@@ -7,7 +7,6 @@ import {
   getArchestraToolShortName,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
-import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
 import logger from "@/logging";
 
@@ -86,6 +85,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   deploy_mcp_server: ToolGroup.MCPServers,
   list_mcp_server_deployments: ToolGroup.MCPServers,
   get_mcp_server_logs: ToolGroup.MCPServers,
+  reload_mcp_server_tools: ToolGroup.MCPServers,
   create_mcp_server_installation_request: ToolGroup.MCPServers,
 
   create_team: ToolGroup.Teams,
@@ -118,6 +118,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   delete_trusted_data_policy: ToolGroup.Policies,
 
   bulk_assign_tools_to_agents: ToolGroup.ToolAssignment,
+  bulk_remove_tools_from_agents: ToolGroup.ToolAssignment,
   bulk_assign_tools_to_mcp_gateways: ToolGroup.ToolAssignment,
 
   query_knowledge_sources: ToolGroup.KnowledgeManagement,
@@ -140,7 +141,6 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   unassign_knowledge_connector_from_agent: ToolGroup.KnowledgeManagement,
 
   todo_write: ToolGroup.Chat,
-  artifact_write: ToolGroup.Chat,
   swap_agent: ToolGroup.Chat,
   swap_to_default_agent: ToolGroup.Chat,
   create_project_from_conversation: ToolGroup.Chat,
@@ -266,11 +266,8 @@ function generateMarkdownBody(): string {
     (name) => getArchestraToolShortName(name) ?? name,
   );
 
-  // Knowledge tools are conditionally assigned (only when knowledge sources are attached)
-  const knowledgeToolSet = new Set<string>(knowledgeManagementToolShortNames);
   const preInstalledShortNames = allPreInstalledShortNames.filter(
-    (n): n is ArchestraToolShortName =>
-      isArchestraToolShortName(n) && !knowledgeToolSet.has(n),
+    (n): n is ArchestraToolShortName => isArchestraToolShortName(n),
   );
 
   // Group tools
@@ -371,7 +368,7 @@ The Archestra MCP Server is a built-in MCP server that ships with the platform a
 
 Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
 
-Additionally, ${formatToolLink("query_knowledge_sources")} is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base](/platform-knowledge-bases) or [knowledge connector](/platform-knowledge-connectors) attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
+${formatToolLink("query_knowledge_sources")} appears for Agents and MCP Gateways only when at least one [knowledge base or connector](/docs/platform-knowledge) is attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
 
 All Archestra tools are prefixed with \`archestra__\`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
 
@@ -379,7 +376,7 @@ ${formatToolLink("query_knowledge_sources")} is an exception: its output is trea
 
 ## Auth
 
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation policies](/platform-tool-invocation-policies) and [trusted data policies](/platform-trusted-data-policies) — the tool will always execute without policy evaluation.
+Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
 
 ${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
 

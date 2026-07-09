@@ -33,19 +33,27 @@ export async function addCustomSelfHostedCatalogItem({
   await addButton.waitFor({ state: "visible", timeout: 30_000 });
   await addButton.click();
 
-  const createDialog = page.getByRole("dialog", {
-    name: /Add MCP Server to the Private Registry/i,
-  });
-  await expect(createDialog).toBeVisible({ timeout: 30_000 });
+  // "Add MCP Server" navigates to the routed /mcp/registry/new wizard: pick a
+  // source first, then fill the same catalog form the old dialog hosted.
+  await expect(
+    page.getByRole("heading", {
+      name: /Add MCP Server to the Private Registry/i,
+    }),
+  ).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Start from scratch" }).click();
 
-  await createDialog.getByRole("button", { name: "Self-hosted" }).click();
-  await createDialog
+  // The create form renders inline on the page (no dialog wrapper), so
+  // page-level locators are unambiguous here.
+  const createForm = page;
+
+  await createForm.getByRole("button", { name: "Self-hosted" }).click();
+  await createForm
     .getByRole("textbox", { name: "Name *" })
     .fill(catalogItemName);
-  await createDialog.getByLabel("stdio").click();
-  await createDialog.getByRole("textbox", { name: "Command" }).fill("sh");
+  await createForm.getByLabel("stdio").click();
+  await createForm.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
-  await createDialog
+  await createForm
     .getByRole("textbox", { name: "Arguments (one per line)" })
     .fill(`-c\n${singleLineCommand}`);
   if (envVars) {
@@ -53,7 +61,7 @@ export async function addCustomSelfHostedCatalogItem({
     // (`environment-variable-dialog.tsx`) opened by the "Add Variable"
     // button. All the env-var-specific inputs scope to that sub-dialog
     // now — not the parent "Add MCP Server" dialog.
-    await createDialog.getByRole("button", { name: "Add Variable" }).click();
+    await createForm.getByRole("button", { name: "Add Variable" }).click();
     const envVarDialog = page.getByRole("dialog", {
       name: /Add environment variable/i,
     });
@@ -127,15 +135,15 @@ export async function addCustomSelfHostedCatalogItem({
     await expect(envVarDialog).not.toBeVisible({ timeout: 15_000 });
   }
   if (scope && scope !== "personal") {
-    await createDialog
+    await createForm
       .getByRole("button", { name: /Only you can access this MCP server/i })
       .click();
     const scopeLabel = scope === "org" ? "Organization" : "Teams";
-    await createDialog
+    await createForm
       .getByRole("button", { name: new RegExp(scopeLabel, "i") })
       .click();
   }
-  await createDialog.getByRole("button", { name: "Add Server" }).click();
+  await createForm.getByRole("button", { name: "Add Server" }).click();
   await page.waitForLoadState("domcontentloaded");
 
   let newCatalogItem: { id: string; name: string } | null = null;
@@ -172,10 +180,6 @@ export async function addCustomSelfHostedCatalogItem({
   }
 
   const createdCatalogItem = newCatalogItem as { id: string; name: string };
-
-  if (await createDialog.isVisible().catch(() => false)) {
-    await page.keyboard.press("Escape").catch(() => undefined);
-  }
 
   return {
     id: createdCatalogItem.id,
@@ -253,6 +257,72 @@ export async function ensureInternalDevTestServerCatalogItem(
   const created = await response.json();
   return { id: created.id, name: created.name };
 }
+
+/**
+ * Fixture server for the app SDK `tools.call` unwrapping contract: its single
+ * tool returns a JSON object serialized into a text content block (no
+ * structuredContent), which the SDK must resolve as the parsed value.
+ */
+export async function ensureAppSdkJsonTestServerCatalogItem(
+  request: APIRequestContext,
+): Promise<{ id: string; name: string }> {
+  const existing = await findCatalogItem(
+    request,
+    APP_SDK_JSON_CATALOG_ITEM_NAME,
+  );
+  if (existing) {
+    return existing;
+  }
+
+  const response = await request.post(
+    getE2eRequestUrl("/api/internal_mcp_catalog"),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: UI_BASE_URL,
+      },
+      data: {
+        name: APP_SDK_JSON_CATALOG_ITEM_NAME,
+        description:
+          "Test MCP server for e2e tests. Has one tool that returns a JSON task list serialized into a text content block.",
+        serverType: "local",
+        localConfig: {
+          command: "sh",
+          arguments: ["-c", appSdkJsonServerCommand],
+          transportType: "stdio",
+          environment: [],
+        },
+      },
+    },
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to create ${APP_SDK_JSON_CATALOG_ITEM_NAME} catalog item: ${response.status()} ${await response.text()}`,
+    );
+  }
+
+  const created = await response.json();
+  return { id: created.id, name: created.name };
+}
+
+export const APP_SDK_JSON_SERVER_TOOL_NAME = "get_tasks";
+
+const appSdkJsonFixtureTasks = [
+  { id: 1, title: "triage inbox" },
+  { id: 2, title: "review pull request" },
+  { id: 3, title: "publish release" },
+];
+
+export const APP_SDK_JSON_SERVER_TASK_COUNT = appSdkJsonFixtureTasks.length;
+
+const APP_SDK_JSON_CATALOG_ITEM_NAME = "e2e-app-sdk-json-server";
+
+// Single-line script, same shape/escaping as `testMcpServerCommand` in
+// @archestra/shared/test-mcp-server (arguments are newline-separated in the UI).
+const appSdkJsonServerScript = `const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js'); const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js'); const server = new McpServer({ name: '${APP_SDK_JSON_CATALOG_ITEM_NAME}', version: '1.0.0' }); server.tool('${APP_SDK_JSON_SERVER_TOOL_NAME}', 'Returns the fixture task list as JSON serialized into a text content block', {}, async () => ({ content: [{ type: 'text', text: ${JSON.stringify(JSON.stringify({ tasks: appSdkJsonFixtureTasks }))} }] })); const transport = new StdioServerTransport(); server.connect(transport);`;
+
+const appSdkJsonServerCommand = `npm install --silent @modelcontextprotocol/sdk && node -e '${appSdkJsonServerScript.replace(/'/g, "'\"'\"'")}'`;
 
 function extractCatalogItems(
   data: unknown,

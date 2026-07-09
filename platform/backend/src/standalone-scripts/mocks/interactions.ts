@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
-  buildArchestraToolRefusalMetadata,
+  buildToolInvocationRefusalMessages,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
 } from "@archestra/shared";
 import type { InsertInteraction } from "@/types";
@@ -577,15 +577,17 @@ export function generateMockInteraction(
 
   // Create the final assistant response (but DON'T add it to request messages)
   const argsString = JSON.stringify(toolArguments);
+  const blockedMessages = buildToolInvocationRefusalMessages({
+    toolName: selectedTool.name,
+    toolArguments: argsString,
+    reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+    surface: "llm-proxy",
+  });
   const responseMessage = shouldBlock
     ? {
         role: "assistant",
-        content: `\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`,
-        refusal: `\n${buildArchestraToolRefusalMetadata({
-          toolName: selectedTool.name,
-          toolArguments: argsString,
-          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-        })}\n\nI tried to invoke the ${selectedTool.name} tool with the following arguments: ${argsString}.\n\nHowever, I was denied by a tool invocation policy:\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}`,
+        content: blockedMessages.contentMessage,
+        refusal: blockedMessages.refusalMessage,
       }
     : {
         role: "assistant",

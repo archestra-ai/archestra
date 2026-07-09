@@ -1,5 +1,13 @@
 name: GitHub Cache
-description: Wrapper around actions/cache pinned to a vetted version.
+# Backed by useblacksmith/cache (a drop-in for actions/cache) rather than
+# actions/cache. GitHub's Actions cache has a ~10 GB per-repo LRU budget, and
+# CodeQL default setup churns ~11 GB of per-commit overlay-database caches into
+# it, evicting these entries (e2e image tarballs, Playwright browsers) within
+# minutes of them being written. Blacksmith's cache is a separate, larger
+# backend not subject to that budget, so warmed caches actually survive to the
+# hot path. All consumers run on blacksmith-* runners, which this backend
+# requires. Interface (inputs/outputs) is identical to actions/cache.
+description: Wrapper around useblacksmith/cache pinned to a vetted version.
 inputs:
   path:
     description: Files, directories, and wildcard patterns to cache.
@@ -19,18 +27,12 @@ outputs:
   cache-hit:
     description: A boolean value to indicate an exact match was found for the key.
     value: ${{ steps.cache.outputs.cache-hit }}
-  cache-primary-key:
-    description: The primary key provided by the action.
-    value: ${{ steps.cache.outputs.cache-primary-key }}
-  cache-matched-key:
-    description: The actual cache key that was restored.
-    value: ${{ steps.cache.outputs.cache-matched-key }}
 runs:
   using: composite
   steps:
     - name: Cache
       id: cache
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: useblacksmith/cache@c5fe29eb0efdf1cf4186b9f7fcbbcbc0cf025662 # v5.0.2
       with:
         path: ${{ inputs.path }}
         key: ${{ inputs.key }}

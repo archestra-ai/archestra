@@ -1,0 +1,36 @@
+<div id="grid">
+    <p class="muted">{{ grid.shown }} of {{ grid.total }} rollouts</p>
+    {% if grid.rows.is_empty() %}
+    <p>No rollouts match the current filters.</p>
+    {% else %}
+    <div class="grid-scroll">
+        <table class="grid">
+            <thead>
+                <tr><th>task</th>{% for lane in grid.lanes %}<th>{{ lane }}</th>{% endfor %}<th class="avg-col">avg</th></tr>
+            </thead>
+            <tbody>
+            {% for row in grid.rows %}
+                <tr>
+                    <th>{{ row.label }}</th>
+                    {% for cell in row.cells %}
+                    {% match cell %}
+                    {% when Some(c) %}
+                    <td class="cell {{ c.outcome_class }}">
+                        <a href="{{ c.href }}">
+                            <span class="outcome">{{ c.outcome_label }}</span>
+                            {% if !c.grade_text.is_empty() %}<span class="chip {{ c.grade_class }}">{{ c.grade_text }}</span>{% endif %}
+                            {% if c.hacking %}<span class="chip chip-hack" title="reward hacking suspected">RH</span>{% endif %}
+                        </a>
+                    </td>
+                    {% when None %}
+                    <td class="cell cell-empty">—</td>
+                    {% endmatch %}
+                    {% endfor %}
+                    <td class="cell avg-col">{% if row.avg_text.is_empty() %}<span class="cell-empty">—</span>{% else %}<span class="chip {{ row.avg_class }}">{{ row.avg_text }}</span>{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>

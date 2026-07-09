@@ -177,6 +177,7 @@ class ConversationModel {
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
           schema.messagesTable.createdAt,
+          schema.messagesTable.id,
         )
         .limit(
           ConversationModel.SEARCH_RESULT_LIMIT *
@@ -330,7 +331,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -526,7 +527,7 @@ class ConversationModel {
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
       )
-      .orderBy(schema.messagesTable.createdAt);
+      .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) {
       return null;
@@ -629,7 +630,14 @@ class ConversationModel {
   }): Promise<boolean> {
     const [updated] = await db
       .update(schema.conversationsTable)
-      .set({ lastReadAt: new Date() })
+      // GREATEST: the newest message visible at read time is covered even
+      // when it landed in the same millisecond (or marginally ahead of the
+      // reader's clock) — unread is a strict lastMessageAt > lastReadAt
+      // comparison, so a read must never leave lastReadAt behind
+      // lastMessageAt.
+      .set({
+        lastReadAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastMessageAt})`,
+      })
       .where(
         and(
           eq(schema.conversationsTable.id, params.id),

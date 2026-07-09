@@ -598,8 +598,8 @@ function KnowledgeSettingsContent() {
             <CardDescription className="leading-relaxed">
               Choose the API key and embedding model used for knowledge base
               documents. Only keys with synced models that have configured
-              embedding dimensions appear here. Supported dimensions: 768, 1536,
-              3072.
+              embedding dimensions appear here. Supported dimensions: 384, 768,
+              1024, 1536, 3072.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -36,13 +35,22 @@ import {
   SKILL_MARKETPLACE_TTL_PRESETS,
   type SkillMarketplaceClient,
 } from "./skills-marketplace-clients";
-import { StepCard, type StepState } from "./step-card";
 import { TerminalBlock } from "./terminal-block";
 
 interface SkillsMarketplaceStepProps {
-  client: ConnectClient | null;
-  expanded: boolean;
-  onToggle: (() => void) | undefined;
+  client: ConnectClient;
+}
+
+/**
+ * Whether the skills marketplace step applies: caller is a skill admin, and
+ * the picked client supports installable marketplaces. The flow uses this for
+ * wizard-step numbering; the component returns null without it.
+ */
+export function useSkillsMarketplaceVisible(
+  client: ConnectClient | null,
+): boolean {
+  const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
+  return canAdmin === true && client !== null && isClientSupported(client);
 }
 
 /**
@@ -55,34 +63,13 @@ interface RevealedClone {
   marketplaceName: string;
 }
 
-export function SkillsMarketplaceStep({
-  client,
-  expanded,
-  onToggle,
-}: SkillsMarketplaceStepProps) {
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
+export function SkillsMarketplaceStep({ client }: SkillsMarketplaceStepProps) {
+  // hide the step entirely when skills don't apply to this user/client — the
+  // wizard rail numbering in connection-flow uses the same hook.
+  const visible = useSkillsMarketplaceVisible(client);
+  if (!visible) return null;
 
-  if (!skillsEnabled || !canAdmin) return null;
-
-  // hide the step entirely when the picked client doesn't support installable
-  // skill marketplaces — the user already knows their tool doesn't support it,
-  // we don't need to apologize in the UI.
-  if (client && !isClientSupported(client)) return null;
-
-  const state: StepState = !client ? "todo" : expanded ? "active" : "todo";
-
-  return (
-    <StepCard
-      hideStatus
-      title="Install shared skills"
-      state={state}
-      expanded={expanded && !!client}
-      onToggle={client ? onToggle : undefined}
-    >
-      {client && <SkillsMarketplaceBody client={client} />}
-    </StepCard>
-  );
+  return <SkillsMarketplaceBody client={client} />;
 }
 
 function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
@@ -152,7 +139,7 @@ function CreateLinkPanel({
     const preset =
       SKILL_MARKETPLACE_TTL_PRESETS.find((p) => p.id === ttlId) ??
       SKILL_MARKETPLACE_TTL_PRESETS[0];
-    const skillIds = await fetchAllSkillIds();
+    const skillIds = (await fetchAllSkills()).map((s) => s.id);
     if (skillIds.length === 0) return;
     const result = await createShare.mutateAsync({
       skillIds,
@@ -227,7 +214,7 @@ function ExistingLinkPanel({
   // already stored in users' git configs without the admin asking for it.
   const handleRotate = useCallback(async () => {
     if (!link) return;
-    const skillIds = await fetchAllSkillIds();
+    const skillIds = (await fetchAllSkills()).map((s) => s.id);
     if (skillIds.length === 0) return;
     const result = await rotateShare.mutateAsync({
       previousLinkId: link.id,
@@ -509,8 +496,29 @@ function firstActiveLink(links: SkillShareLink[]): SkillShareLink | null {
   return links.find((l) => l.status === "active") ?? null;
 }
 
-async function fetchAllSkillIds(): Promise<string[]> {
-  const ids: string[] = [];
+/** The slice of a skill the connection flow needs to list and share it. */
+export interface ConnectSkill {
+  id: string;
+  name: string;
+}
+
+/**
+ * Query over the org's full skill set (id + name), for the connect-command
+ * step's per-skill picker. Soft-fails to an empty list (with the API-error
+ * toast) so a skills outage degrades to "no skills ride along" instead of
+ * blocking command generation.
+ */
+export function useAllSkills(params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["skills", "connect-all"],
+    queryFn: fetchAllSkills,
+    enabled: params?.enabled,
+  });
+}
+
+/** Fetch every skill page by page; on error, toast and return what we have. */
+async function fetchAllSkills(): Promise<ConnectSkill[]> {
+  const skills: ConnectSkill[] = [];
   const limit = 100;
   let offset = 0;
   while (true) {
@@ -522,11 +530,13 @@ async function fetchAllSkillIds(): Promise<string[]> {
       return [];
     }
     if (!data) break;
-    for (const skill of data.data) ids.push(skill.id);
+    for (const skill of data.data) {
+      skills.push({ id: skill.id, name: skill.name });
+    }
     if (data.data.length < limit) break;
     offset += limit;
   }
-  return ids;
+  return skills;
 }
 
 function useTotalSkillCount() {

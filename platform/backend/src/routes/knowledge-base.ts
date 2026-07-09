@@ -41,8 +41,8 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   KnowledgeSourceVisibilitySchema,
+  SelectConnectorRunDetailSchema,
   SelectConnectorRunListSchema,
-  SelectConnectorRunSchema,
   SelectKbDocumentSchema,
   SelectKnowledgeBaseConnectorSchema,
   SelectKnowledgeBaseSchema,
@@ -1305,7 +1305,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           id: z.uuid(),
           runId: z.uuid(),
         }),
-        response: constructResponseSchema(SelectConnectorRunSchema),
+        response: constructResponseSchema(SelectConnectorRunDetailSchema),
       },
     },
     async ({ params: { id, runId }, organizationId, user }, reply) => {

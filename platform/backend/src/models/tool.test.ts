@@ -4,8 +4,6 @@ import {
   getArchestraMcpCatalogName,
   getArchestraToolFullName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-  TOOL_ARTIFACT_WRITE_FULL_NAME,
-  TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -14,7 +12,7 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { afterAll, beforeEach, vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
@@ -28,19 +26,13 @@ import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
 // these suites assert exact assigned-tool sets after agent creation; pin the
-// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
-// auto-assigned app tools into them (app-tool assignment is covered in
-// tool-archestra-assignment.test.ts)
-const originalAppsEnabled = config.apps.enabled;
+// sandbox runtime off so its tools do not leak into the default-assignment
+// counts (relying on the worker-pristine baseline for this let a rare
+// cross-file ordering surface sandbox tools). App tools are seeded and
+// auto-assigned to every agent; their assignment is covered in
+// tool-archestra-assignment.test.ts.
 beforeEach(() => {
-  (config.apps as { enabled: boolean }).enabled = false;
-  // Pin every tool-gating flag this suite's expected tool sets assume —
-  // relying on the worker-pristine baseline for these let a rare cross-file
-  // ordering surface sandbox/app tools in the default-assignment counts.
   (config.skillsSandbox as { enabled: boolean }).enabled = false;
-});
-afterAll(() => {
-  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
 });
 
 describe("ToolModel", () => {
@@ -127,6 +119,59 @@ describe("ToolModel", () => {
         const result = ToolModel.slugifyName(serverName, toolName);
         expect(result).toMatch(pattern);
       }
+    });
+
+    test("leaves a name at exactly the 64-char limit unchanged", () => {
+      // server + "__" + tool == 64
+      const server = "a".repeat(61);
+      const result = ToolModel.slugifyName(server, "t");
+      expect(result).toBe(`${server}${MCP_SERVER_TOOL_NAME_SEPARATOR}t`);
+      expect(result).toHaveLength(64);
+    });
+
+    test("trims only the server prefix when the slug exceeds 64 chars", () => {
+      const tool = "list_repositories";
+      const result = ToolModel.slugifyName("a".repeat(80), tool);
+      expect(result).toHaveLength(64);
+      // The full raw tool name (and its separator) is preserved verbatim...
+      expect(result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`)).toBe(
+        true,
+      );
+      // ...so it still round-trips to the raw upstream name.
+      expect(ToolModel.unslugifyName(result)).toBe(tool);
+    });
+
+    test("preserves a raw tool name that itself contains the separator", () => {
+      const tool = "get__user";
+      const result = ToolModel.slugifyName("s".repeat(80), tool);
+      expect(result).toHaveLength(64);
+      expect(result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`)).toBe(
+        true,
+      );
+    });
+
+    test("does not collide two distinct tools on the same long-named server", () => {
+      const server = "a".repeat(80);
+      const a = ToolModel.slugifyName(server, "get__user");
+      const b = ToolModel.slugifyName(server, "user");
+      expect(a).not.toBe(b);
+    });
+
+    test("is deterministic for the same inputs", () => {
+      const a = ToolModel.slugifyName("x".repeat(90), "do_something");
+      const b = ToolModel.slugifyName("x".repeat(90), "do_something");
+      expect(a).toBe(b);
+      expect(a.length).toBeLessThanOrEqual(64);
+    });
+
+    test("hard-caps at 64 and keeps distinct over-long raw names unique", () => {
+      // Raw names longer than the cap can't fit in the slug; a hash suffix keeps
+      // two distinct ones from colliding (the real name lives in raw_name).
+      const a = ToolModel.slugifyName("srv", `${"z".repeat(65)}_alpha`);
+      const b = ToolModel.slugifyName("srv", `${"z".repeat(65)}_beta`);
+      expect(a).toHaveLength(64);
+      expect(b).toHaveLength(64);
+      expect(a).not.toBe(b);
     });
   });
 
@@ -451,6 +496,7 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
+        rawName: "list_issues",
         mcpServerId: null,
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",
@@ -1030,6 +1076,20 @@ describe("ToolModel", () => {
     });
   });
 
+  describe("getDefaultToolPolicies", () => {
+    test("falls back to safe restrictive defaults when no organization exists", async () => {
+      // setup.ts intentionally seeds no organization, so getFirst() returns
+      // null here. New tools must then fail safe: block on an untrusted context
+      // and mark results untrusted, never silently permissive.
+      const defaults = await ToolModel.getDefaultToolPolicies();
+
+      expect(defaults).toEqual({
+        invocationAction: "block_when_context_is_untrusted",
+        resultAction: "mark_as_untrusted",
+      });
+    });
+  });
+
   describe("bulkCreateToolsIfNotExists", () => {
     test("creates multiple tools for an MCP server in bulk", async ({
       makeInternalMcpCatalog,
@@ -1074,6 +1134,42 @@ describe("ToolModel", () => {
         expect(tool.catalogId).toBe(catalog.id);
         expect(tool.agentId).toBeNull();
       });
+    });
+
+    test("applies the org's configured default guardrails to new MCP catalog tools", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      // The org's "Default Guardrails for MCP Tools" settings must flow to every
+      // newly created catalog tool — not just proxy-discovered ones.
+      const org = await makeOrganization({
+        defaultDiscoveredToolInvocationPolicy: "require_approval",
+        defaultDiscoveredToolResultPolicy: "mark_as_trusted",
+      });
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "catalog-tool-honors-org-default",
+          description: "Catalog tool",
+          parameters: { type: "object", properties: {} },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      const inv = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+      expect(inv).toHaveLength(1);
+      expect(inv[0].action).toBe("require_approval");
+
+      const trusted = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
+      expect(trusted).toHaveLength(1);
+      expect(trusted[0].action).toBe("mark_as_trusted");
     });
 
     test("returns existing tools when some tools already exist", async ({
@@ -1704,14 +1800,12 @@ describe("ToolModel", () => {
 
       // Verify the tool was assigned in the junction table
       const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
-      expect(assignedToolIds.length).toBeGreaterThanOrEqual(3);
+      expect(assignedToolIds.length).toBeGreaterThanOrEqual(2);
 
       // But getMcpToolsByAgent filters it out because the agent has no knowledge sources
       const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = mcpTools.map((t) => t.name);
 
-      // Should have artifact_write and todo_write
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
 
       // query_knowledge_sources is filtered out at query time because agent has no knowledge sources
@@ -1748,8 +1842,7 @@ describe("ToolModel", () => {
       const mcpTools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = mcpTools.map((t) => t.name);
 
-      // Should have all three default tools including query_knowledge_sources
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      // Should have both default tools including query_knowledge_sources
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
     });
@@ -1793,11 +1886,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+
+      // Create the agent before the catalog is seeded so create-time
+      // auto-assignment (app tools) does not add to the default set under test.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
-
-      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.assignDefaultArchestraToolsToAgent(agent.id);
 
       const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
@@ -1806,7 +1901,6 @@ describe("ToolModel", () => {
       expect(assignedTools.map((tool) => tool.name).sort()).toEqual(
         (
           [
-            TOOL_ARTIFACT_WRITE_SHORT_NAME,
             TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
             TOOL_TODO_WRITE_SHORT_NAME,
           ] as const
@@ -1836,7 +1930,6 @@ describe("ToolModel", () => {
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       // Other Archestra tools should still be present
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
@@ -1890,7 +1983,6 @@ describe("ToolModel", () => {
       // query_knowledge_sources should be injected for direct connector assignments
       expect(toolNames).toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       // Other default tools should still be present
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
       expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
@@ -1983,16 +2075,18 @@ describe("ToolModel", () => {
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
-      // Seed the archestra tools (so query_knowledge_sources exists in DB)
-      // but do NOT assign them to the agent
-      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
-      await seedAndAssignArchestraTools(tempAgent.id);
-
-      // Agent with a direct connector but NO tools assigned
+      // Agent with a direct connector but NO tools assigned. Created BEFORE
+      // the built-ins are seeded so the create path has nothing to
+      // auto-assign.
       const agent = await makeAgent({ organizationId: org.id });
       await db
         .insert(schema.agentConnectorAssignmentsTable)
         .values({ agentId: agent.id, connectorId: connector.id });
+
+      // Seed the archestra tools (so query_knowledge_sources exists in DB)
+      // but do NOT assign them to the agent
+      const tempAgent = await makeAgent({ name: "Temp Agent for Seeding" });
+      await seedAndAssignArchestraTools(tempAgent.id);
 
       const tools = await ToolModel.getMcpToolsByAgent(agent.id);
       const toolNames = tools.map((t) => t.name);
@@ -2057,7 +2151,7 @@ describe("ToolModel", () => {
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
       expect(toolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
 
     test("getToolsByAgent and findByCatalogId use branded knowledge-tool filtering after white-label sync", async ({
@@ -2128,7 +2222,7 @@ describe("ToolModel", () => {
       const toolNames = tools.map((t) => t.name);
 
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME);
-      expect(toolNames).toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+      expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
     });
   });
 
@@ -2947,6 +3041,76 @@ describe("ToolModel", () => {
       expect(result[0].meta).toEqual(updatedMeta);
     });
 
+    test("refreshes description and parameters on existing tools when they change", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      const [created] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "refresh-tool",
+          description: "old description",
+          parameters: { type: "object", properties: { a: { type: "string" } } },
+          catalogId: catalog.id,
+          rawToolName: "refresh-tool",
+        },
+      ]);
+
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "refresh-tool",
+          description: "new description",
+          parameters: { type: "object", properties: { b: { type: "number" } } },
+          catalogId: catalog.id,
+          rawToolName: "refresh-tool",
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(created.id);
+      expect(result[0].description).toBe("new description");
+      expect(result[0].parameters).toEqual({
+        type: "object",
+        properties: { b: { type: "number" } },
+      });
+    });
+
+    test("stores raw_name from rawToolName", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: ToolModel.slugifyName(catalog.name, "do__thing"),
+          description: null,
+          parameters: {},
+          catalogId: catalog.id,
+          rawToolName: "do__thing",
+        },
+      ]);
+
+      expect(tool.rawName).toBe("do__thing");
+    });
+
+    test("derives raw_name from the slugified name when rawToolName is absent", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const slug = ToolModel.slugifyName(catalog.name, "plain_tool");
+
+      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: slug,
+          description: null,
+          parameters: {},
+          catalogId: catalog.id,
+        },
+      ]);
+
+      expect(tool.rawName).toBe("plain_tool");
+    });
+
     test("preserves meta on existing tools when it has not changed", async ({
       makeInternalMcpCatalog,
     }) => {
@@ -3160,13 +3324,13 @@ describe("ToolModel", () => {
             "00000000-0000-4000-8000-000000000001",
           ),
         );
-      const [artifactTool] = await db
+      const [todoTool] = await db
         .select()
         .from(schema.toolsTable)
         .where(
           eq(
             schema.toolsTable.name,
-            getArchestraToolFullName(TOOL_ARTIFACT_WRITE_SHORT_NAME, {
+            getArchestraToolFullName(TOOL_TODO_WRITE_SHORT_NAME, {
               appName: "Acme Copilot",
               fullWhiteLabeling: true,
             }),
@@ -3182,7 +3346,7 @@ describe("ToolModel", () => {
       expect(catalog?.docsUrl).toBeNull();
       expect(catalog?.icon).toBe("https://cdn.example.com/logo.png");
       expect(catalog?.description).not.toContain("Archestra");
-      expect(artifactTool).toBeDefined();
+      expect(todoTool).toBeDefined();
     });
 
     test("does not crash startup when a legacy/branded prefix duplicate exists", async ({
@@ -3194,12 +3358,12 @@ describe("ToolModel", () => {
 
       archestraMcpBranding.syncFromOrganization(brandedOrg);
       const brandedName = archestraMcpBranding.getToolName(
-        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        TOOL_TODO_WRITE_SHORT_NAME,
       );
-      const legacyName = getArchestraToolFullName(
-        TOOL_ARTIFACT_WRITE_SHORT_NAME,
-        { appName: null, fullWhiteLabeling: false },
-      );
+      const legacyName = getArchestraToolFullName(TOOL_TODO_WRITE_SHORT_NAME, {
+        appName: null,
+        fullWhiteLabeling: false,
+      });
 
       await db.insert(schema.internalMcpCatalogTable).values({
         id: ARCHESTRA_MCP_CATALOG_ID,
@@ -3274,11 +3438,10 @@ describe("ToolModel", () => {
       expect(secondRun).toEqual([]);
     });
 
-    test("keeps a feature-flagged-off built-in but prunes a truly-removed one", async () => {
-      // The suite pins config.apps.enabled = false, so getArchestraMcpTools()
-      // omits app tools. A pre-existing app-tool row must survive reseed (the
-      // definition still exists, the feature is merely dark); a row whose short
-      // name is gone from the registry is the only kind that is genuinely stale.
+    test("keeps a registered built-in but prunes a truly-removed one", async () => {
+      // A pre-existing row whose short name is still in the registry must
+      // survive reseed; a row whose short name is gone from the registry is the
+      // only kind that is genuinely stale.
       archestraMcpBranding.syncFromOrganization(null);
       const catalogId = randomUUID();
       await ToolModel.seedArchestraTools(catalogId);
@@ -3390,12 +3553,12 @@ describe("ToolModel", () => {
       archestraMcpBranding.syncFromOrganization(brandedOrg);
 
       const brandedName = archestraMcpBranding.getToolName(
-        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+        TOOL_TODO_WRITE_SHORT_NAME,
       );
-      const defaultName = getArchestraToolFullName(
-        TOOL_ARTIFACT_WRITE_SHORT_NAME,
-        { appName: null, fullWhiteLabeling: false },
-      );
+      const defaultName = getArchestraToolFullName(TOOL_TODO_WRITE_SHORT_NAME, {
+        appName: null,
+        fullWhiteLabeling: false,
+      });
       expect(brandedName).not.toBe(defaultName); // branded env: prefixes differ
 
       await db.insert(schema.internalMcpCatalogTable).values({
@@ -3431,7 +3594,7 @@ describe("ToolModel", () => {
         .where(eq(schema.toolsTable.id, discovered.id));
       expect(after?.catalogId).toBeNull();
 
-      // …and the catalog holds exactly one row for the artifact_write short name.
+      // …and the catalog holds exactly one row for the todo_write short name.
       const catalogRows = await db
         .select({ name: schema.toolsTable.name })
         .from(schema.toolsTable)
@@ -3534,11 +3697,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns the knowledge tool itself.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
 
-      const agent = await makeAgent({ organizationId: org.id });
       const [kbTool] = await db
         .select()
         .from(schema.toolsTable)
@@ -3578,11 +3743,13 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns the knowledge tool itself.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
 
-      const agent = await makeAgent({ organizationId: org.id });
       const brandedKbToolName = getArchestraToolFullName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         {
@@ -3618,19 +3785,20 @@ describe("ToolModel", () => {
     }) => {
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
+      // Agent created BEFORE the built-ins are synced so the create path has
+      // nothing to auto-assign — this test assigns its built-ins manually.
+      const agent = await makeAgent({ organizationId: org.id });
       await ToolModel.syncArchestraBuiltInCatalog({
         organization: { appName: "Acme Copilot", iconLogo: null },
       });
-
-      const agent = await makeAgent({ organizationId: org.id });
 
       // Assign a few built-in tools to the agent
       const brandedKbToolName = getArchestraToolFullName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
         { appName: "Acme Copilot", fullWhiteLabeling: true },
       );
-      const brandedArtifactToolName = getArchestraToolFullName(
-        TOOL_ARTIFACT_WRITE_SHORT_NAME,
+      const brandedTodoToolName = getArchestraToolFullName(
+        TOOL_TODO_WRITE_SHORT_NAME,
         { appName: "Acme Copilot", fullWhiteLabeling: true },
       );
 
@@ -3638,15 +3806,15 @@ describe("ToolModel", () => {
         .select()
         .from(schema.toolsTable)
         .where(eq(schema.toolsTable.name, brandedKbToolName));
-      const [artifactTool] = await db
+      const [todoTool] = await db
         .select()
         .from(schema.toolsTable)
-        .where(eq(schema.toolsTable.name, brandedArtifactToolName));
+        .where(eq(schema.toolsTable.name, brandedTodoToolName));
 
       expect(kbTool).toBeDefined();
-      expect(artifactTool).toBeDefined();
+      expect(todoTool).toBeDefined();
       await makeAgentTool(agent.id, kbTool?.id);
-      await makeAgentTool(agent.id, artifactTool?.id);
+      await makeAgentTool(agent.id, todoTool?.id);
 
       const result = await ToolModel.findAllWithAssignments({
         filters: {
@@ -3662,7 +3830,7 @@ describe("ToolModel", () => {
 
       // Other built-in tools must NOT be present
       expect(
-        result.data.some((tool) => tool.name === brandedArtifactToolName),
+        result.data.some((tool) => tool.name === brandedTodoToolName),
       ).toBe(false);
     });
   });
@@ -3911,5 +4079,70 @@ describe("policy configurator and cloned tools", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("getMcpToolsAccessibleToUser requireUiResource", () => {
+  // The route-level tools/list tests cannot isolate this filter: the in-memory
+  // providesUiResource gate in filterExposedTools hides non-UI tools anyway, so
+  // a dropped requireUiResource is invisible there (it only changes how many
+  // rows are loaded and re-filtered). This pins the DB-side predicate directly.
+  test("restricts to tools carrying a ui:// resource (canonical or legacy key)", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const canonicalTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__open_canonical",
+      meta: { _meta: { ui: { resourceUri: "ui://widget/canonical.html" } } },
+    });
+    const legacyTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__open_legacy",
+      meta: { _meta: { "ui/resourceUri": "ui://widget/legacy.html" } },
+    });
+    const nonUiTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__list",
+    });
+    const nonUiSchemeTool = await makeTool({
+      catalogId: catalog.id,
+      name: "widget__https_scheme",
+      meta: { _meta: { ui: { resourceUri: "https://example.com/page" } } },
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+
+    const uiOnlyNames = (
+      await ToolModel.getMcpToolsAccessibleToUser({
+        userId: user.id,
+        organizationId: org.id,
+        isAdmin: true,
+        environmentId: null,
+        requireUiResource: true,
+      })
+    ).map((tool) => tool.name);
+    expect(uiOnlyNames).toContain(canonicalTool.name);
+    expect(uiOnlyNames).toContain(legacyTool.name);
+    expect(uiOnlyNames).not.toContain(nonUiTool.name);
+    expect(uiOnlyNames).not.toContain(nonUiSchemeTool.name);
+
+    // Without the flag the filter must not apply — the same non-UI tools stay
+    // in the unrestricted discovery set search_tools/run_tool rely on.
+    const allNames = (
+      await ToolModel.getMcpToolsAccessibleToUser({
+        userId: user.id,
+        organizationId: org.id,
+        isAdmin: true,
+        environmentId: null,
+      })
+    ).map((tool) => tool.name);
+    expect(allNames).toContain(nonUiTool.name);
+    expect(allNames).toContain(nonUiSchemeTool.name);
   });
 });

@@ -2262,6 +2262,118 @@
       "when": 1782908617938,
       "tag": "0322_perpetual_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 323,
+      "version": "7",
+      "when": 1782990763987,
+      "tag": "0323_happy_namorita",
+      "breakpoints": true
+    },
+    {
+      "idx": 324,
+      "version": "7",
+      "when": 1782994638509,
+      "tag": "0324_melodic_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 325,
+      "version": "7",
+      "when": 1783005976344,
+      "tag": "0325_oval_famine",
+      "breakpoints": true
+    },
+    {
+      "idx": 326,
+      "version": "7",
+      "when": 1783015731592,
+      "tag": "0326_sweet_meltdown",
+      "breakpoints": true
+    },
+    {
+      "idx": 327,
+      "version": "7",
+      "when": 1783032604513,
+      "tag": "0327_perfect_jean_grey",
+      "breakpoints": true
+    },
+    {
+      "idx": 328,
+      "version": "7",
+      "when": 1783086802875,
+      "tag": "0328_grant-file-manage-to-custom-roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 329,
+      "version": "7",
+      "when": 1783092151478,
+      "tag": "0329_sour_dreaming_celestial",
+      "breakpoints": true
+    },
+    {
+      "idx": 330,
+      "version": "7",
+      "when": 1783098361844,
+      "tag": "0330_auto_mode_tool_exclusions",
+      "breakpoints": true
+    },
+    {
+      "idx": 331,
+      "version": "7",
+      "when": 1783101750929,
+      "tag": "0331_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 332,
+      "version": "7",
+      "when": 1783110698567,
+      "tag": "0332_backfill-default-archestra-tool-assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 333,
+      "version": "7",
+      "when": 1783114944689,
+      "tag": "0333_nosy_black_bird",
+      "breakpoints": true
+    },
+    {
+      "idx": 334,
+      "version": "7",
+      "when": 1783294065959,
+      "tag": "0334_loud_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 335,
+      "version": "7",
+      "when": 1783362129115,
+      "tag": "0335_remove-skill-tool-auto-mode-exclusions",
+      "breakpoints": true
+    },
+    {
+      "idx": 336,
+      "version": "7",
+      "when": 1783363575412,
+      "tag": "0336_backfill-sandbox-and-auto-mode-tool-assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 337,
+      "version": "7",
+      "when": 1783388553796,
+      "tag": "0337_nervous_stick",
+      "breakpoints": true
+    },
+    {
+      "idx": 338,
+      "version": "7",
+      "when": 1783565829313,
+      "tag": "0338_fat_dark_beast",
+      "breakpoints": true
     }
   ]
 }

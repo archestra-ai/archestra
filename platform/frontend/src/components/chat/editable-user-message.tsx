@@ -122,7 +122,9 @@ export function EditableUserMessage({
       className="group/message"
       onMouseLeave={() => setIsRegenerateConfirming(false)}
     >
-      <div className="relative flex flex-col items-end pb-2 w-full">
+      {/* No bottom padding here: the message row's mb-4 IS the 16px rhythm gap
+          to the next block (see chat/CLAUDE.md); extra padding would compound. */}
+      <div className="relative flex flex-col items-end w-full">
         {/* Skill invoked via slash command — same pill shape as the tool-call
             SkillPill so the slash-command attribution and the model-driven
             load_skill call read as the same thing. Right-aligned (inheriting

@@ -6,15 +6,11 @@ description: Share Archestra skills into Claude Code, Codex CLI, Copilot CLI, an
 lastUpdated: 2026-06-10
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 Archestra skills can be installed into your local Claude Code, Codex CLI, Copilot CLI, or Cursor IDE through each tool's native plugin marketplace. A signed share link points the client at an Archestra-hosted git repository that serves the marketplaces in parallel — Claude reads `.claude-plugin/marketplace.json`, Codex and Copilot read `.agents/plugins/marketplace.json`, Cursor reads `.cursor-plugin/marketplace.json`, and the underlying `SKILL.md` files are identical.
 
 Every shared skill is bundled into a single plugin so the user installs one thing instead of one-per-skill. The plugin name is the marketplace name (e.g. `archestra-acme-corp-skills`), and each skill lives under `skills/<slug>/` inside that plugin. Anthropic's official marketplaces follow the same one-plugin-per-toolkit convention.
 
-The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup by default: the generated `curl | bash` command registers the marketplace automatically (a fresh share link is created when the script is fetched), with an opt-out under the command's options. Picking "Any client" keeps the manual "Install shared skills" step that snapshots every current skill into one link.
+The marketplace lives at `/connection` alongside the MCP Gateway and LLM Proxy connection flows. For Claude Code, Codex, Copilot CLI, and Cursor the skills install is part of the one-command setup by default: the generated `curl | bash` command registers the marketplace automatically (a fresh share link is created when the script is fetched); the review step lists the skills and lets you deselect individual ones. Picking "Any client" keeps the manual "Install shared skills" step that snapshots every current skill into one link.
 
 ## Marketplace name
 
@@ -24,7 +20,7 @@ Format: `<app-slug>-<org-slug>-skills` (e.g. `archestra-acme-corp-skills`). The 
 
 ## Who can share
 
-Creating, refreshing, and revoking the marketplace link requires the `skill: admin` permission. Members can install a link that has been shared with them; they cannot create new links.
+Creating, refreshing, and revoking the marketplace link requires the `skill:admin` permission. Members can install a link that has been shared with them; they cannot create new links.
 
 ## Scope and authentication
 

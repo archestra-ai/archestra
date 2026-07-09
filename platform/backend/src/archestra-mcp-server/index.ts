@@ -5,14 +5,18 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { ZodError, type ZodType } from "zod";
+import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
 import { ToolModel } from "@/models";
+import {
+  type AgentToolExclusionSets,
+  agentToolExclusionsService,
+  isToolRowExcluded,
+} from "@/services/agent-tool-exclusions";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import {
@@ -79,6 +83,7 @@ import {
 } from "./search-tools";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import { toolEntries as teamToolEntries, tools as teamTools } from "./teams";
+import { toolParamsSkeleton } from "./tool-args-skeleton";
 import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
@@ -90,6 +95,21 @@ export { archestraMcpBranding } from "./branding";
 export { getAgentTools } from "./delegation";
 export { filterToolNamesByPermission } from "./rbac";
 export type { ArchestraContext } from "./types";
+
+/**
+ * Machine-readable descriptor of a tool-args validation failure, attached to
+ * the error result as `_meta.archestraValidation`. Consumed by run_tool's
+ * repair-note gate (run-tool.ts `reachedArgValidation`) to distinguish a
+ * post-gate validation failure from an access denial. Like
+ * `_meta.archestraError` (shared/mcp-tool-error.ts), it is result metadata
+ * and reaches MCP gateway clients; it names only the tool and the issue
+ * code/path set — a subset of the error text beside it.
+ */
+interface ArchestraValidationMeta {
+  /** Resolved target tool (full/branded name), never the run_tool wrapper. */
+  toolName: string;
+  issues: Array<{ code: string; path: string }>;
+}
 
 const toolEntries: Partial<
   Record<ArchestraToolFullName, ArchestraRuntimeToolEntry>
@@ -115,30 +135,6 @@ const toolEntries: Partial<
   ...appLlmToolEntries,
 };
 
-// App tools are registered above so they remain unit-testable, but when the
-// feature is dark they must not be dispatchable even by exact name.
-const appToolFullNames = new Set<string>([
-  ...Object.keys(appToolEntries),
-  ...Object.keys(appDataToolEntries),
-  ...Object.keys(appLlmToolEntries),
-]);
-
-// search_files / read_file / save_file / edit_file / delete_file are the
-// persistent-files (Projects) surface of the sandbox tool group. Registered above
-// for unit tests, but hidden and non-dispatchable when the projects feature is dark.
-// Derived from the shared subgroup so this gate and the always-exposed /
-// dynamic-access logic stay in lockstep.
-const projectGatedSandboxFullNames = new Set<string>(
-  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES.map(getArchestraToolFullName),
-);
-
-// The dedicated Projects tool group (create_project_from_conversation).
-// Registered above for unit tests, but hidden and non-dispatchable when the
-// projects feature is dark.
-const projectFeatureToolFullNames = new Set<string>(
-  projectTools.map((t) => t.name),
-);
-
 export function getArchestraMcpTools() {
   const tools = [
     ...identityTools,
@@ -152,18 +148,14 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
-    ...(config.projects.enabled ? projectTools : []),
+    ...projectTools,
     ...searchToolTools,
     ...runToolTools,
     ...skillTools,
-    ...(config.skillsSandbox.enabled
-      ? config.projects.enabled
-        ? sandboxTools
-        : sandboxTools.filter((t) => !projectGatedSandboxFullNames.has(t.name))
-      : []),
-    ...(config.apps.enabled
-      ? [...appTools, ...appDataTools, ...appLlmTools]
-      : []),
+    ...(config.skillsSandbox.enabled ? sandboxTools : []),
+    ...appTools,
+    ...appDataTools,
+    ...appLlmTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -181,6 +173,30 @@ export function getArchestraMcpTools() {
       name: archestraMcpBranding.getToolName(shortName),
     };
   });
+}
+
+/**
+ * JSON input schema of a built-in Archestra tool, resolved by its published
+ * (branding-aware) full name or canonical `archestra__` name — derived from the
+ * same zod schema `tools/list` advertises. Returns undefined for names that are
+ * not built-ins (agent delegations, third-party names). Consumed by run_tool's
+ * schema-aware envelope repair.
+ */
+export function getArchestraToolInputSchema(
+  toolName: string,
+): Record<string, unknown> | undefined {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (!shortName) {
+    return undefined;
+  }
+  const entry = toolEntries[getArchestraToolFullName(shortName)];
+  if (!entry) {
+    return undefined;
+  }
+  return z.toJSONSchema(entry.schema, { io: "input" }) as Record<
+    string,
+    unknown
+  >;
 }
 
 export async function executeArchestraTool(
@@ -209,8 +225,9 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment. A narrow
-  // set of built-ins is exempt under dynamic tool access (see below).
+  // Archestra tool the user has RBAC for, regardless of assignment. Under
+  // dynamic tool access ("access all tools") unassigned built-ins are exempt
+  // (see below).
   const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 
@@ -222,29 +239,6 @@ export async function executeArchestraTool(
     ? toolEntries[resolvedToolName as ArchestraToolFullName]
     : undefined;
   if (!toolEntry) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  if (
-    !config.apps.enabled &&
-    resolvedToolName &&
-    appToolFullNames.has(resolvedToolName)
-  ) {
-    throw {
-      code: -32601,
-      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
-    };
-  }
-
-  if (
-    !config.projects.enabled &&
-    resolvedToolName &&
-    (projectGatedSandboxFullNames.has(resolvedToolName) ||
-      projectFeatureToolFullNames.has(resolvedToolName))
-  ) {
     throw {
       code: -32601,
       message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
@@ -278,9 +272,7 @@ export async function executeArchestraTool(
     return result;
   } catch (error) {
     if (error instanceof ZodError) {
-      return errorResult(
-        `Validation error in ${toolName}: ${formatZodError(error)}`,
-      );
+      return zodValidationErrorResult({ toolName, error });
     }
     throw error;
   }
@@ -296,6 +288,7 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 async function checkToolAssignedToAgent(
   toolName: string,
   context: ArchestraContext,
+  exclusionSets: AgentToolExclusionSets,
 ): Promise<CallToolResult | null> {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
@@ -303,8 +296,13 @@ async function checkToolAssignedToAgent(
   if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
 
   const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  // Per-agent exclusions (Auto-tool mode): an assigned-but-excluded built-in
+  // is treated as unavailable — the sets are empty unless the agent's
+  // accessAllTools setting is on, so Custom mode is unchanged.
   const isAssigned = assignedTools.some(
-    (tool) => archestraMcpBranding.getToolShortName(tool.name) === shortName,
+    (tool) =>
+      archestraMcpBranding.getToolShortName(tool.name) === shortName &&
+      !isToolRowExcluded(tool, exclusionSets),
   );
   if (isAssigned) return null;
   return structuredToolErrorResult({
@@ -317,24 +315,43 @@ async function checkToolAssignedToAgent(
   });
 }
 
-// Assignment gate with the dynamic-access relaxation: an unassigned sandbox
-// built-in (feature on) or query_knowledge_sources (user can access a knowledge
-// connector) executes anyway when the agent's "access all tools" setting and
-// the org kill-switch allow it — nothing is assigned. RBAC already ran before
-// this gate, so e.g. the sandbox tools still require sandbox:execute.
+// Assignment gate with the dynamic-access relaxation: an unassigned built-in
+// executes anyway when the agent's "access all tools" setting allows it and
+// isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
+// exclusions, and the query_knowledge_sources connector check) — nothing is
+// assigned. RBAC already ran before this gate, so e.g. the sandbox tools
+// still require sandbox:execute.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
 ): Promise<CallToolResult | null> {
-  const notAssigned = await checkToolAssignedToAgent(toolName, context);
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
+  if (!context.agentId || !shortName) return null;
+  // The dispatch-surface tools are exempt from the assignment gate —
+  // short-circuit BEFORE loading exclusion sets so every run_tool /
+  // search_tools invocation skips the extra queries (excluding these tools is
+  // also rejected at write time).
+  if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+
+  // Loaded once per invocation and threaded through both gates. Empty (no-op)
+  // unless the agent has accessAllTools on and exclusions configured.
+  const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
+    context.agentId,
+  );
+  const notAssigned = await checkToolAssignedToAgent(
+    toolName,
+    context,
+    exclusionSets,
+  );
   if (!notAssigned) return null;
-  if (!context.agentId) return notAssigned;
 
   const dynamicallyAvailable = await isDynamicallyAvailableArchestraTool({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
     organizationId: context.organizationId,
+    exclusionSets,
   });
   return dynamicallyAvailable ? null : notAssigned;
 }
@@ -378,6 +395,7 @@ function validateToolResult(
 /** @public — exported for testability */
 export const __test = {
   validateToolResult,
+  zodValidationErrorResult,
 };
 
 function validateToolArgs(
@@ -392,11 +410,67 @@ function validateToolArgs(
   }
 
   return {
-    error: errorResult(
-      `Validation error in ${toolName}: ${formatZodErrorWithSchema(
-        parsed.error,
-        schema,
-      )}`,
-    ),
+    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
   };
+}
+
+/**
+ * Shared error-result builder for a tool-args ZodError: the per-issue error
+ * text, a schema-derived parameter skeleton so the model can restructure the
+ * call on its first failure (the built-in counterpart of run_tool's
+ * third-party "Send instead:" pre-check), and machine-readable
+ * `_meta.archestraValidation`, which gates run_tool's repair-note disclosure
+ * (run-tool.ts). `toolName` is the resolved dispatch target, so
+ * run_tool-wrapped failures carry the target's name, not the wrapper's.
+ *
+ * `schema` is absent only on the handler-thrown ZodError path: such an error
+ * may come from an internal parse of a different shape, so a skeleton of the
+ * tool's input schema would mislead — those results carry the error text only.
+ */
+function zodValidationErrorResult(params: {
+  toolName: string;
+  error: ZodError;
+  schema?: ZodType;
+}): CallToolResult {
+  const { toolName, error, schema } = params;
+  const details = schema
+    ? formatZodErrorWithSchema(error, schema)
+    : formatZodError(error);
+  const meta: ArchestraValidationMeta = {
+    toolName,
+    issues: error.issues.map((issue) => ({
+      code: issue.code ?? "custom",
+      path: issue.path.map((segment) => String(segment)).join("."),
+    })),
+  };
+  const lines = [`Validation error in ${toolName}: ${details}`];
+  const skeleton = schema ? inputSchemaSkeleton(schema) : null;
+  if (skeleton) {
+    const requiredNote =
+      skeleton.required.length > 0
+        ? `; required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
+        : "";
+    lines.push(
+      `The tool's parameters are shaped like ${skeleton.skeleton} (replace each <…> with a real value${requiredNote}).`,
+    );
+  }
+  return {
+    ...errorResult(lines.join("\n")),
+    _meta: { archestraValidation: meta },
+  };
+}
+
+/**
+ * Top-level parameter skeleton of a tool's Zod input schema, via its published
+ * JSON form. Best-effort: null when the schema cannot be converted or declares
+ * no readable properties — the error text still stands alone.
+ */
+function inputSchemaSkeleton(
+  schema: ZodType,
+): { skeleton: string; required: string[] } | null {
+  try {
+    return toolParamsSkeleton(z.toJSONSchema(schema, { io: "input" }));
+  } catch {
+    return null;
+  }
 }

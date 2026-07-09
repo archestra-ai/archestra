@@ -17,7 +17,6 @@ import {
 import type {
   ConnectionBaseUrl,
   ConnectionDefaultProviderKeys,
-  GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
   OnboardingWizard,
@@ -43,6 +42,12 @@ const organizationsTable = pgTable("organization", {
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
+  /**
+   * When the first-login onboarding survey was submitted (the forward to the
+   * website is best-effort). Null = not yet; the survey keeps reappearing for
+   * admins of an empty, unlicensed instance until submitted once.
+   */
+  onboardingSurveyCompletedAt: timestamp("onboarding_survey_completed_at"),
   theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()
@@ -55,8 +60,15 @@ const organizationsTable = pgTable("organization", {
     .$type<OrganizationCompressionScope>()
     .notNull()
     .default("organization"),
+  /**
+   * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
+   * removed — the security engine is always enabled now. This column is inert:
+   * no code reads or writes it, and it is omitted from the API schemas. Retained
+   * (not dropped) for rollout safety — dropping a column older app versions may
+   * still read is not deploy-safe. Safe to drop in a future expand/contract
+   * migration once every supported version no longer references it.
+   */
   globalToolPolicy: varchar("global_tool_policy")
-    .$type<GlobalToolPolicy>()
     .notNull()
     .default("permissive"),
   /**
@@ -350,16 +362,6 @@ const organizationsTable = pgTable("organization", {
    * by the "Enable and create a new skill" empty-state button on /skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
-
-  /**
-   * When true, the org's skills are exposed in chat as slash commands
-   * (`/skill-name`). Invoking one injects the skill's content directly into the
-   * conversation, independent of `skillToolsEnabled` (which only governs the
-   * model-facing `load_skill` tool).
-   */
-  skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
-    .notNull()
-    .default(false),
 
   /**
    * Legacy preset column (feature removed) — retained inert. Held a validation

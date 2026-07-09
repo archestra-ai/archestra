@@ -40,6 +40,7 @@ vi.mock("./chunker", () => ({
 }));
 
 import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   ConnectorRunModel,
@@ -392,6 +393,49 @@ describe("ConnectorSyncService", () => {
     expect(updatedConnector?.checkpoint).toEqual({ page: 1 });
   });
 
+  test("executeSync strips NUL bytes from extracted text before persisting", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    // Binary text extraction (e.g. PDFs) can emit NUL bytes, which Postgres text
+    // columns reject — without sanitization the whole document insert fails and
+    // the document is lost as an item error.
+    const mockImpl = makeMockConnector([
+      {
+        id: "ext-1",
+        title: "Title\u0000With\u0000Nuls",
+        content: "Before\u0000After\u0000End",
+      },
+    ]);
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+
+    // Ingest succeeded (would be 0 ingested / 1 item error if the insert threw).
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.documentsIngested).toBe(1);
+    expect(run?.itemErrors).toBe(0);
+
+    const doc = await KbDocumentModel.findBySourceId({
+      connectorId: connector.id,
+      sourceId: "ext-1",
+    });
+    expect(doc?.content).toBe("BeforeAfterEnd");
+    expect(doc?.title).toBe("TitleWithNuls");
+    expect(doc?.content).not.toContain("\u0000");
+  });
+
   test("executeSync creates chunks for new documents", async ({
     makeOrganization,
     makeKnowledgeBase,
@@ -446,5 +490,62 @@ describe("ConnectorSyncService", () => {
     expect(doc.acl).toEqual([`team:${connectorTeam.id}`]);
     expect(chunks[0].acl).toEqual([`team:${connectorTeam.id}`]);
     expect(chunks[1].acl).toEqual([`team:${connectorTeam.id}`]);
+  });
+
+  test("stops before ingesting the next batch when the run is reclaimed mid-sync", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+    setupSecret();
+
+    // A connector that yields two batches; between them a reaper reclaims the run
+    // (status -> partial, epoch bumped), simulating a lost lease mid-sync. The
+    // batch-boundary lease check must then fence the second batch's writes.
+    const mockImpl = {
+      estimateTotalItems: vi.fn().mockResolvedValue(2),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [{ id: "doc-a", title: "A", content: "Body A" }],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          await db.execute(sql`
+            UPDATE connector_runs
+            SET status = 'partial', lease_epoch = lease_epoch + 1
+            WHERE connector_id = ${connector.id} AND status = 'running'
+          `);
+          yield {
+            documents: [{ id: "doc-b", title: "B", content: "Body B" }],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    };
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("superseded");
+    // Batch 1's document was ingested before the reclaim; batch 2's was fenced out.
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "doc-a",
+      }),
+    ).not.toBeNull();
+    expect(
+      await KbDocumentModel.findBySourceId({
+        connectorId: connector.id,
+        sourceId: "doc-b",
+      }),
+    ).toBeNull();
   });
 });

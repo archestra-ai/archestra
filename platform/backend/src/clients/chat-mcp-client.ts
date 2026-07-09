@@ -30,14 +30,13 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
-  OrganizationModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
-import type { GlobalToolPolicy } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -188,10 +187,15 @@ function getToolCacheKey(
   agentId: string,
   userId: string,
   isolationKey?: string,
+  delegationChain?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
   if (isolationKey) parts.push(isolationKey);
+  // One agent can run at several depths of a delegation tree, concurrently and
+  // under one isolation key. Each depth needs its own entry: the tools close
+  // over the chain, which the executor reads to detect delegation cycles.
+  if (delegationChain) parts.push(delegationChain);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -206,7 +210,7 @@ export const __test = {
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
-      toolCache.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+      deleteToolCacheScope(`${CacheKey.ChatMcpTools}-${cacheKey}`);
     } else {
       toolCache.clear();
     }
@@ -214,6 +218,7 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   filterToolsByEnabledIds,
+  pingClientWithTimeout,
 };
 
 /**
@@ -392,15 +397,31 @@ export function clearChatMcpClient(agentId: string): void {
     toolClearedCount++;
   }
 
+  // Clear cached MCP App UI resources for this agentId (keys are
+  // `${agentId}:${userId}:${uri}`) — e.g. a tool newly excluded from the
+  // agent's surface must not keep serving its cached app HTML until TTL.
+  let uiResourceClearedCount = 0;
+  const uiResourceKeysToDelete: string[] = [];
+  for (const key of uiResourceCache.keys()) {
+    if (key.startsWith(`${agentId}:`)) {
+      uiResourceKeysToDelete.push(key);
+    }
+  }
+  for (const key of uiResourceKeysToDelete) {
+    uiResourceCache.delete(key);
+    uiResourceClearedCount++;
+  }
+
   logger.info(
     {
       agentId,
       clientClearedCount,
       toolClearedCount,
+      uiResourceClearedCount,
       remainingCachedClients: clientCache.size,
       remainingCachedTools: toolCache.size,
     },
-    "Cleared MCP client and tool cache entries for agent",
+    "Cleared MCP client, tool, and UI resource cache entries for agent",
   );
 }
 
@@ -437,8 +458,7 @@ export function closeChatMcpClient(
   }
 
   // Also clear tool cache for this conversation/execution
-  const toolCacheKey = getToolCacheKey(agentId, userId, isolationKey);
-  toolCache.delete(toolCacheKey);
+  deleteToolCacheScope(getToolCacheKey(agentId, userId, isolationKey));
 }
 
 /**
@@ -696,15 +716,20 @@ async function pingClientWithTimeout(
   client: Pick<Client, "ping">,
   timeoutMs = CLIENT_PING_TIMEOUT_MS,
 ): Promise<void> {
-  await Promise.race([
-    client.ping(),
-    new Promise<never>((_, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error(`Ping timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      timeout.unref?.();
-    }),
-  ]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.ping(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Ping timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+        timeout.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function shouldValidateCachedClient(cacheKey: string): boolean {
@@ -777,7 +802,7 @@ export async function getChatMcpTools({
   user?: { id: string; email?: string; name?: string };
   /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
   blockOnApprovalRequired?: boolean;
-  /** Schedule trigger run ID — enables artifact_write to target the run */
+  /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
@@ -798,7 +823,12 @@ export async function getChatMcpTools({
   repeatTracker?: ToolCallRepeatTracker;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
-  const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
+  const toolCacheKey = getToolCacheKey(
+    agentId,
+    userId,
+    scopeKey,
+    delegationChain,
+  );
   const shouldUseToolCache = !abortSignal;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
@@ -903,17 +933,13 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch globalToolPolicy for approval checks (needed for both chat and
-    // autonomous contexts) and the agent's + user's teams (for trace span
-    // attributes).
-    const [org, agent, teams, userTeams] = await Promise.all([
-      OrganizationModel.getById(organizationId),
+    // Fetch the agent (for its trust config) and the agent's + user's teams
+    // (for trace span attributes).
+    const [agent, teams, userTeams] = await Promise.all([
       AgentModel.findById(agentId),
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const globalToolPolicy: GlobalToolPolicy =
-      org?.globalToolPolicy ?? "permissive";
     const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
@@ -936,7 +962,6 @@ export async function getChatMcpTools({
       hookRunCollector,
       subagentToolStream,
       mcpGwToken,
-      globalToolPolicy,
       considerContextUntrusted,
       teams,
       userTeams,
@@ -1049,7 +1074,11 @@ export async function getChatMcpToolUiResourceUris(
   agentId: string,
 ): Promise<Record<string, string>> {
   try {
-    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    // Per-agent exclusions (Auto-tool mode): an excluded tool must not emit a
+    // UI hint that would mount its app iframe. Empty (no-op) unless the
+    // agent's accessAllTools setting is on.
+    const { tools } =
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
     const result: Record<string, string> = {};
     for (const tool of tools) {
       const uriFromMeta = (
@@ -1208,4 +1237,16 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+/**
+ * Deletes a scope's tool-cache entry and every per-delegation-chain variant of
+ * it. One agent can run at several depths of a delegation tree under a single
+ * isolation key, so a scope owns one entry per chain, all sharing this prefix.
+ */
+function deleteToolCacheScope(toolCacheKey: string): void {
+  toolCache.delete(toolCacheKey);
+  // The separator keeps the match on a key boundary: isolation key `exec-1`
+  // must not reclaim `exec-10`'s entries.
+  toolCache.deleteByPrefix(`${toolCacheKey}:`);
 }

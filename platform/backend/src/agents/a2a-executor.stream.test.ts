@@ -9,7 +9,7 @@ import { ChatErrorCode } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import { simulateReadableStream, tool } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { vi } from "vitest";
 import { z } from "zod";
 import {
   REPEAT_CALL_TERMINATION_CEILING,
@@ -17,6 +17,7 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import { ProviderError } from "@/routes/chat/errors";
+import { THINKING_ONLY_NOTICE } from "@/utils/strip-thinking-blocks";
 import { executeA2AMessage } from "./a2a-executor";
 
 const {
@@ -61,15 +62,6 @@ vi.mock("@/clients/mcp-client", () => ({
   default: { closeSession: vi.fn() },
 }));
 
-vi.mock("@/models", async () => {
-  const actual = await vi.importActual<typeof import("@/models")>("@/models");
-  return {
-    ...actual,
-    AgentModel: { findById: vi.fn() },
-    McpServerModel: { getUserPersonalServerForCatalog: vi.fn() },
-  };
-});
-
 vi.mock("@/templating", async () => {
   const actual =
     await vi.importActual<typeof import("@/templating")>("@/templating");
@@ -80,7 +72,7 @@ vi.mock("@/templating", async () => {
   };
 });
 
-import { AgentModel, McpServerModel } from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 
 type StreamResult = Extract<
   NonNullable<ConstructorParameters<typeof MockLanguageModelV3>[0]>["doStream"],
@@ -134,18 +126,9 @@ function modelEmitting(...attempts: ModelStreamPart[][]): MockLanguageModelV3 {
   });
 }
 
+// Primes only the non-DB boundaries (LLM selection, model factory, MCP tools).
+// The agent itself is a real row created per test; findById hits real PGlite.
 function primeAgent(model: MockLanguageModelV3) {
-  vi.mocked(AgentModel.findById).mockResolvedValue({
-    id: "agent-child",
-    name: "Child Agent",
-    agentType: "agent",
-    systemPrompt: "Handle the task.",
-    llmApiKeyId: null,
-    modelId: null,
-  } as never);
-  vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
-    null,
-  );
   mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
     chatApiKeyId: "org-key",
     selectedModel: "gemini-2.5-pro",
@@ -164,14 +147,21 @@ describe("executeA2AMessage real stream boundary", () => {
     vi.clearAllMocks();
   });
 
-  test("collects text, finishReason, and the response message from a real stream", async () => {
+  test("collects text, finishReason, and the response message from a real stream", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
     primeAgent(modelEmitting(textChunks("Hello from A2A")));
 
     const result = await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
     });
 
@@ -182,7 +172,103 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.usage?.completionTokens).toBe(2);
   });
 
-  test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async () => {
+  test("strips inline <thinking> blocks from the text and the response message", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    primeAgent(
+      modelEmitting(
+        textChunks("Answer.<thinking>secret reasoning</thinking> Done."),
+      ),
+    );
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Answer. Done.");
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
+    );
+    expect(textPart?.text).toBe("Answer. Done.");
+  });
+
+  test("strips Qwen-style <think> blocks so reasoning does not leak into the A2A reply", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    primeAgent(
+      modelEmitting(
+        textChunks("<think>The user wants a task.</think>Created the task."),
+      ),
+    );
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Created the task.");
+    expect(result.text).not.toContain("<think>");
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
+    );
+    expect(textPart?.text).toBe("Created the task.");
+  });
+
+  test("substitutes a notice when a thinking-only turn strips to nothing", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    // The pre-strip stream is non-empty, so the empty-response recovery does not
+    // re-trigger; stripping leaves no visible answer, so the notice stands in —
+    // in both the headless text and the message's text part.
+    primeAgent(
+      modelEmitting(textChunks("<thinking>only reasoning</thinking>")),
+    );
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe(THINKING_ONLY_NOTICE);
+    const textPart = result.responseUiMessage.parts.find(
+      (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
+    );
+    expect(textPart?.text).toBe(THINKING_ONLY_NOTICE);
+  });
+
+  test("surfaces the captured provider cause, not a generic NoOutputGeneratedError", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
     // A provider failure (e.g. billing) makes streamText produce zero output and
     // throw NoOutputGeneratedError; the real cause is only available via the
     // captured onError, which a2a must map into the ProviderError.
@@ -196,10 +282,10 @@ describe("executeA2AMessage real stream boundary", () => {
     );
 
     const error = await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
     }).catch((e: unknown) => e);
 
@@ -207,17 +293,24 @@ describe("executeA2AMessage real stream boundary", () => {
     expect((error as ProviderError).message).toContain("Insufficient credits");
   });
 
-  test("maps an exhausted empty response to a ProviderError EmptyResponse", async () => {
+  test("maps an exhausted empty response to a ProviderError EmptyResponse", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
     // every attempt is content-free, so the recovery loop exhausts and throws
     // EmptyModelResponseError, which a2a maps to the EmptyResponse card.
     const model = modelEmitting(emptyChunks());
     primeAgent(model);
 
     const error = await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
     }).catch((e: unknown) => e);
 
@@ -228,7 +321,14 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(model.doStreamCalls).toHaveLength(3);
   });
 
-  test("trims and retries a context-length rejection on the A2A messages path", async () => {
+  test("trims and retries a context-length rejection on the A2A messages path", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
     const messages: ModelMessage[] = [
       { role: "user", content: "a".repeat(400) },
       { role: "assistant", content: "b".repeat(400) },
@@ -241,10 +341,10 @@ describe("executeA2AMessage real stream boundary", () => {
     primeAgent(model);
 
     const result = await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "ignored when messages provided",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
       messages,
     });
@@ -257,7 +357,14 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.text).toBe("Recovered after trim");
   });
 
-  test("stops via the repeat-call ceiling and surfaces a termination notice as text", async () => {
+  test("stops via the repeat-call ceiling and surfaces a termination notice as text", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
     // The model repeats the same tool call every step (unique call ids, identical
     // name+args), so the run's tracker streak climbs to the ceiling.
     let step = 0;
@@ -304,10 +411,10 @@ describe("executeA2AMessage real stream boundary", () => {
     );
 
     const result = await executeA2AMessage({
-      agentId: "agent-child",
+      agentId: agent.id,
       message: "Handle this",
-      organizationId: "org-1",
-      userId: "user-1",
+      organizationId: org.id,
+      userId: user.id,
       conversationId: "conv-1",
     });
 

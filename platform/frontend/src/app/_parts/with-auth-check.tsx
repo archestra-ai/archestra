@@ -1,9 +1,11 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
-import { useEffect, useState } from "react";
-import { useSession } from "@/lib/auth/auth.query";
+import { useEffect, useRef, useState } from "react";
+import { authQueryKeys, useSession } from "@/lib/auth/auth.query";
+import { usePublicConfig } from "@/lib/config/config.query";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
 type ErrorReportingUser = Parameters<
@@ -50,6 +52,7 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   // useSearchParams is intentionally not used here to avoid the need
   // to wrap whole app in Suspense which causes flickering
   const searchParams =
@@ -63,6 +66,15 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
     isPending: isAuthPending,
     isRefetching: isAuthRefetching,
   } = useSession();
+
+  // Developer-only auto-login (never enabled in production). When on, an
+  // unauthenticated visitor gets a real session minted server-side instead of
+  // the sign-in form. Gate the redirect on this being resolved so we don't flash
+  // the login page before we know it's enabled.
+  const { data: publicConfig, isLoading: isPublicConfigLoading } =
+    usePublicConfig();
+  const devAutoLoginEnabled = publicConfig?.devAutoLoginEnabled ?? false;
+  const devAutoLoginAttemptedRef = useRef(false);
 
   const isLoggedIn = session?.user;
   const isAuthPage = pathCorrespondsToAnAuthPage(pathname);
@@ -97,8 +109,8 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
 
   // Redirect to home if user is logged in and on auth page, or if user is not logged in and not on auth page
   useEffect(() => {
-    if (isAuthInitializing || isAuthRefetching) {
-      // If auth check is pending, don't do anything
+    if (isAuthInitializing || isAuthRefetching || isPublicConfigLoading) {
+      // If auth or public-config check is pending, don't do anything
       return;
     } else if (isSpecialAuth) {
       // Special auth pages (like /auth/two-factor) can be accessed regardless of login state
@@ -110,22 +122,44 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
       const redirectTo = searchParams.get("redirectTo");
       router.push(getValidatedRedirectPath(redirectTo));
     } else if (!isAuthPage && !isLoggedIn) {
-      // User is not logged in and not on any auth page, redirect to sign-in
-      // Preserve the original URL (including query params) so we can redirect back after login
       const queryString = searchParams.toString();
       const fullPath = queryString ? `${pathname}?${queryString}` : pathname;
-      const redirectTo = encodeURIComponent(fullPath);
-      router.push(`/auth/sign-in?redirectTo=${redirectTo}`);
+      // Developer-only: mint a session server-side instead of showing the login
+      // form. On any failure, fall back to the normal sign-in redirect.
+      if (devAutoLoginEnabled && !devAutoLoginAttemptedRef.current) {
+        devAutoLoginAttemptedRef.current = true;
+        void fetch("/api/auth/dev-auto-login", { method: "POST" })
+          .then((res) => {
+            if (!res.ok) {
+              throw new Error(`dev-auto-login failed: ${res.status}`);
+            }
+            return queryClient.invalidateQueries({
+              queryKey: authQueryKeys.session(),
+            });
+          })
+          .catch(() => {
+            router.push(
+              `/auth/sign-in?redirectTo=${encodeURIComponent(fullPath)}`,
+            );
+          });
+        return;
+      }
+      // User is not logged in and not on any auth page, redirect to sign-in.
+      // Preserve the original URL (including query params) so we can redirect back after login
+      router.push(`/auth/sign-in?redirectTo=${encodeURIComponent(fullPath)}`);
     }
   }, [
     isAuthInitializing,
     isAuthRefetching,
+    isPublicConfigLoading,
     isAuthPage,
     isLoggedIn,
     router,
     isSpecialAuth,
     pathname,
     searchParams,
+    devAutoLoginEnabled,
+    queryClient,
   ]);
 
   // Show loading while checking auth/permissions

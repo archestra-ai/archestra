@@ -8,10 +8,16 @@ import ModelModel from "@/models/model";
 import OrganizationModel from "@/models/organization";
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import { afterEach, describe, expect, test } from "@/test";
-import { modelSyncService, resolveModelCapabilities } from "./model-sync";
+import {
+  buildModelsToUpsert,
+  modelSyncService,
+  resolveModelCapabilities,
+} from "./model-sync";
 
-// Mock the models.dev client to avoid external API calls
-vi.mock("@/clients/models-dev-client", () => ({
+// Mock only the network boundary (the client singleton's fetch); keep the real
+// pure helpers (sanitizeOutputLimit, modelsDevCostToPerToken) that the SUT uses.
+vi.mock("@/clients/models-dev-client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/clients/models-dev-client")>()),
   modelsDevClient: {
     fetchModelsFromApi: vi.fn().mockResolvedValue({}),
   },
@@ -291,6 +297,7 @@ describe("ModelSyncService", () => {
       capabilities: {
         description: "Gemini Embedding 2 Preview",
         contextLength: null,
+        outputLength: null,
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: true,
@@ -306,6 +313,35 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(false);
   });
 
+  test("persists a sanitized outputLength from the models.dev limit.output", () => {
+    const [good, bad] = buildModelsToUpsert({
+      provider: "openai",
+      models: [{ id: "gpt-4o" }, { id: "gpt-legacy" }],
+      modelsDevData: {
+        openai: {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "gpt-4o": {
+              id: "gpt-4o",
+              name: "GPT-4o",
+              limit: { context: 128000, output: 16384 },
+            },
+            "gpt-legacy": {
+              id: "gpt-legacy",
+              name: "GPT Legacy",
+              limit: { context: 8192, output: 0 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(good.outputLength).toBe(16384);
+    // A non-positive/garbage limit.output is dropped to null by sanitizeOutputLimit.
+    expect(bad.outputLength).toBeNull();
+  });
+
   test("prefers fetcher capabilities over models.dev with per-field fallthrough", () => {
     const capabilities = resolveModelCapabilities({
       provider: "openrouter",
@@ -313,6 +349,7 @@ describe("ModelSyncService", () => {
       capabilities: {
         description: "DeepSeek V3.1",
         contextLength: 32000,
+        outputLength: 16384,
         inputModalities: ["text"],
         outputModalities: ["text"],
         supportsToolCalling: false,
@@ -337,6 +374,8 @@ describe("ModelSyncService", () => {
     // models.dev still fills fields the fetcher does not carry.
     expect(capabilities.description).toBe("DeepSeek V3.1");
     expect(capabilities.inputModalities).toEqual(["text"]);
+    // outputLength has no fetcher tier, so the models.dev value flows through.
+    expect(capabilities.outputLength).toBe(16384);
   });
 
   test("persists fetcher pricing so :free models sync as zero-priced", async ({
@@ -597,5 +636,74 @@ describe("ModelSyncService", () => {
     expect(
       selectableEmbeddingModels.map((model) => model.modelId).sort(),
     ).toEqual(["nomic-ai/nomic-embed-text", "openai/text-embedding-3-small"]);
+  });
+
+  test("uses an authoritative fetched embedding dimension over the name heuristic", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "mxbai-embed-large",
+          capabilities: { embeddingDimensions: 1024 },
+        },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBe(1024);
+  });
+
+  test("drops an authoritative embedding dimension the KB cannot store", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        { id: "exotic-embed", capabilities: { embeddingDimensions: 999 } },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBeNull();
+  });
+
+  test("does not tag an authoritatively-generative model as embedding even if its id matches an embed name", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      // capabilities present with embeddingDimensions null ⇒ authoritative chat model.
+      models: [
+        {
+          id: "mxbai-embed-large",
+          capabilities: { embeddingDimensions: null },
+        },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.embeddingDimensions).toBeNull();
+  });
+
+  test("falls back to the name heuristic for Ollama when capabilities are absent", () => {
+    const [mxbai, minilm] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [{ id: "mxbai-embed-large:335m" }, { id: "all-minilm" }],
+      modelsDevData: {},
+    });
+    expect(mxbai.embeddingDimensions).toBe(1024);
+    expect(minilm.embeddingDimensions).toBe(384);
+  });
+
+  test("persists fetched default parameters", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "ollama",
+      models: [
+        {
+          id: "llama3",
+          capabilities: {
+            defaultParameters: { num_ctx: 4096, stop: ["<|eot_id|>"] },
+          },
+        },
+      ],
+      modelsDevData: {},
+    });
+    expect(model.defaultParameters).toEqual({
+      num_ctx: 4096,
+      stop: ["<|eot_id|>"],
+    });
   });
 });

@@ -237,13 +237,58 @@ describe("OpenAIResponseAdapter", () => {
       expect(adapter.getFinishReasons()).toEqual(["stop"]);
     });
 
-    test("returns empty array when choices is missing (e.g. upstream error body)", () => {
+    test("returns empty array when choices is empty", () => {
       const response = {
-        error: { message: "upstream failure" },
-      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+        ...createMockResponse({ role: "assistant", content: "x" }),
+        choices: [],
+      };
 
       const adapter = openaiAdapterFactory.createResponseAdapter(response);
       expect(adapter.getFinishReasons()).toEqual([]);
+      expect(adapter.getText()).toBe("");
+      expect(adapter.getToolCalls()).toEqual([]);
+      expect(adapter.hasToolCalls()).toBe(false);
+    });
+  });
+
+  describe("responses without choices (upstream error bodies)", () => {
+    test("surfaces the embedded upstream error message and status", () => {
+      const response = {
+        error: { message: "Rate limit exceeded", code: 429 },
+      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      expect(() =>
+        openaiAdapterFactory.createResponseAdapter(response),
+      ).toThrow(
+        expect.objectContaining({
+          statusCode: 429,
+          message: "Rate limit exceeded",
+        }),
+      );
+    });
+
+    test("defaults to 502 with a generic message when no error details exist", () => {
+      const response = {} as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      expect(() =>
+        openaiAdapterFactory.createResponseAdapter(response),
+      ).toThrow(
+        expect.objectContaining({
+          statusCode: 502,
+          message:
+            "Upstream openai provider returned a response without choices",
+        }),
+      );
+    });
+
+    test("ignores non-HTTP error codes when picking the status", () => {
+      const response = {
+        error: { message: "boom", code: "model_not_found" },
+      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      expect(() =>
+        openaiAdapterFactory.createResponseAdapter(response),
+      ).toThrow(expect.objectContaining({ statusCode: 502 }));
     });
   });
 
@@ -817,6 +862,52 @@ describe("OpenAIStreamAdapter", () => {
       completion_tokens: 42,
       total_tokens: 132,
     });
+  });
+
+  function finishReasonOf(endSse: string | Uint8Array): unknown {
+    const text =
+      typeof endSse === "string" ? endSse : new TextDecoder().decode(endSse);
+    const firstData = text.split("\n\n")[0].replace(/^data: /, "");
+    return (
+      JSON.parse(firstData) as {
+        choices?: Array<{ finish_reason?: unknown }>;
+      }
+    ).choices?.[0]?.finish_reason;
+  }
+
+  test("closes a refused stream as stop, not the upstream tool_calls", () => {
+    const adapter = openaiAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "chatcmpl-3",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "gpt-x",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: { name: "list", arguments: '{"a":1}' },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    } as Chunk);
+
+    adapter.formatCompleteTextSSE("blocked");
+
+    expect(finishReasonOf(adapter.formatEndSSE())).toBe("stop");
+
+    const response = adapter.toProviderResponse();
+    expect(response.choices[0].finish_reason).toBe("stop");
+    expect(response.choices[0].message.tool_calls).toBeUndefined();
+    expect(response.choices[0].message.content).toBe("blocked");
   });
 
   test("omits usage when the provider sent none", () => {

@@ -25,7 +25,9 @@ async function filterMcpRegistryByName(
   await searchInput.fill(catalogItemName);
 }
 
-export async function openAddMcpServerDialog(page: Page): Promise<void> {
+/** Clicks "Add MCP Server" on the registry list, which navigates to the
+ * routed /mcp/registry/new setup wizard. */
+export async function goToAddMcpServerPage(page: Page): Promise<void> {
   await clickButton({
     page,
     options: { name: "Add MCP Server" },
@@ -51,7 +53,14 @@ export async function waitForInstallDialog(
 }
 
 export async function installMcpServer(page: Page): Promise<void> {
-  await clickButton({ page, options: { name: "Install" } });
+  // Scope to the open install dialog — pages like the setup wizard's "Test
+  // connection" step render their own "Install" button behind the dialog.
+  await page
+    .getByRole("dialog")
+    .filter({ visible: true })
+    .last()
+    .getByRole("button", { name: "Install", disabled: false })
+    .click();
   await page.waitForLoadState("domcontentloaded");
 }
 
@@ -171,9 +180,11 @@ export async function waitForMcpServerToolsDiscovered(
   const toolsCount = scope
     .getByTestId(E2eTestId.McpServerToolsCount)
     .getByText(/\d+/);
-  const errorBanner = catalogItemName
-    ? scope.getByTestId(`${E2eTestId.McpServerError}-${catalogItemName}`)
-    : page.locator("[data-testid^='mcp-server-error-']").first();
+  // Per-connection banners suffix the testid (e.g. "-default"), so prefix-
+  // match within the card scope rather than expecting an exact id.
+  const errorBanner = scope
+    .locator("[data-testid^='mcp-server-error-']")
+    .first();
 
   await expect
     .poll(
@@ -259,16 +270,21 @@ export async function addSharedLocalConnection(params: {
   expectDialog?: boolean;
   timeoutMs?: number;
 }): Promise<void> {
+  // Opens the item detail page's Credentials tab, where team/org connections
+  // are added through the "Add service account" dialog.
   await openManageCredentialsDialog(params.page, params.catalogItemName);
-  const visibleDialog = params.page
+  await params.page
+    .getByTestId(E2eTestId.ManageCredentialsAddServiceAccountButton)
+    .click({ timeout: params.timeoutMs ?? 15_000 });
+  const serviceAccountDialog = params.page
     .getByRole("dialog")
     .filter({ visible: true })
     .last();
-  await visibleDialog
-    .getByRole("button", { name: /^Install\b/ })
-    .click({ timeout: params.timeoutMs ?? 15_000 });
-  await params.page
+  await serviceAccountDialog
     .getByTestId(getManageCredentialsAddToTeamOptionTestId(params.teamName))
+    .click({ timeout: params.timeoutMs ?? 15_000 });
+  await serviceAccountDialog
+    .getByTestId(E2eTestId.AddServiceAccountConfirmButton)
     .click({ timeout: params.timeoutMs ?? 15_000 });
 
   const shouldWaitForDialog =
@@ -276,6 +292,7 @@ export async function addSharedLocalConnection(params: {
   if (!shouldWaitForDialog) {
     if (await maybeWaitForInstallDialog(params.page, params.timeoutMs)) {
       await installMcpServer(params.page);
+      await goToMcpRegistry(params.page);
       await waitForInstalledCardActions(params.page, params.catalogItemName);
       await waitForMcpServerToolsDiscovered(
         params.page,
@@ -284,11 +301,13 @@ export async function addSharedLocalConnection(params: {
       return;
     }
 
+    // Direct install (no credential prompt): the new team credential shows up
+    // as a row on the Credentials tab.
     await expect(
-      visibleDialog.getByTestId(
-        E2eTestId.ManageCredentialsSharedConnectionsEmptyState,
-      ),
-    ).not.toBeVisible({
+      params.page
+        .getByTestId(E2eTestId.CredentialOwner)
+        .filter({ hasText: params.teamName }),
+    ).toBeVisible({
       timeout: params.timeoutMs ?? 15_000,
     });
     return;
@@ -299,6 +318,7 @@ export async function addSharedLocalConnection(params: {
   await fillInstallDialogEnvValues(params.page, params.envValues);
 
   await installMcpServer(params.page);
+  await goToMcpRegistry(params.page);
   await waitForInstalledCardActions(params.page, params.catalogItemName);
   await waitForMcpServerToolsDiscovered(params.page, params.catalogItemName);
 }

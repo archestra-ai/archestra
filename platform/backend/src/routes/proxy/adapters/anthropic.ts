@@ -1,5 +1,9 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import type { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  PROVIDER_BILLING_BLOCK_BODY,
+  PROVIDER_BILLING_BLOCK_TITLE,
+} from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -29,6 +33,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -605,6 +610,21 @@ class AnthropicStreamAdapter
   readonly state: StreamAccumulatorState;
   private toolUseBlockIndices = new Set<number>();
   private currentToolCallIndex = -1;
+  // Highest content-block index actually forwarded to the client, so a refusal
+  // block appended after a guardrail hit does not collide with (reuse) an index
+  // the client has already seen.
+  private maxStreamedBlockIndex = -1;
+  // Set to the refusal text when the streamed response was replaced by a policy
+  // refusal. formatEndSSE then closes the turn as end_turn instead of replaying
+  // the upstream tool_use stop reason (which would leave a text-only turn ending
+  // in a tool-use stop reason and no tool_use blocks — an inconsistent state
+  // that makes agent harnesses treat the turn as a malformed tool call and
+  // retry), and toProviderResponse persists the refusal rather than the blocked
+  // tool calls so the interaction log matches what the client received.
+  private replacedText: string | null = null;
+  private get responseReplacedWithText(): boolean {
+    return this.replacedText !== null;
+  }
 
   constructor() {
     this.state = {
@@ -669,6 +689,10 @@ class AnthropicStreamAdapter
           // unmodified. Thinking blocks in particular must reach the client:
           // it has to replay them (with signature) on the next turn or the
           // upstream API rejects the conversation.
+          this.maxStreamedBlockIndex = Math.max(
+            this.maxStreamedBlockIndex,
+            chunk.index,
+          );
           sseData = `event: content_block_start\ndata: ${JSON.stringify(chunk)}\n\n`;
         }
         break;
@@ -765,20 +789,22 @@ class AnthropicStreamAdapter
   }
 
   formatCompleteTextSSE(text: string): string[] {
+    this.replacedText = text;
+    const index = this.maxStreamedBlockIndex + 1;
     return [
       `event: content_block_start\ndata: ${JSON.stringify({
         type: "content_block_start",
-        index: 0,
+        index,
         content_block: { type: "text", text: "" },
       })}\n\n`,
       `event: content_block_delta\ndata: ${JSON.stringify({
         type: "content_block_delta",
-        index: 0,
+        index,
         delta: { type: "text_delta", text },
       })}\n\n`,
       `event: content_block_stop\ndata: ${JSON.stringify({
         type: "content_block_stop",
-        index: 0,
+        index,
       })}\n\n`,
     ];
   }
@@ -791,7 +817,9 @@ class AnthropicStreamAdapter
       `event: message_delta\ndata: ${JSON.stringify({
         type: "message_delta",
         delta: {
-          stop_reason: this.state.stopReason ?? "end_turn",
+          stop_reason: this.responseReplacedWithText
+            ? "end_turn"
+            : (this.state.stopReason ?? "end_turn"),
           stop_sequence: null,
         },
         usage: {
@@ -811,6 +839,22 @@ class AnthropicStreamAdapter
   }
 
   toProviderResponse(): AnthropicResponse {
+    if (this.replacedText !== null) {
+      return {
+        id: this.state.responseId,
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: this.replacedText, citations: null }],
+        model: this.state.model,
+        stop_reason: "end_turn",
+        stop_sequence: null,
+        usage: {
+          input_tokens: this.state.usage?.inputTokens ?? 0,
+          output_tokens: this.state.usage?.outputTokens ?? 0,
+        },
+      };
+    }
+
     const content: AnthropicResponse["content"] = [];
 
     // Add text block if we have text
@@ -1186,7 +1230,6 @@ export const anthropicAdapterFactory: LLMProvider<
           "anthropic",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 
@@ -1262,14 +1305,24 @@ export const anthropicAdapterFactory: LLMProvider<
     } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
   },
 
-  extractInternalCode(_error: unknown): ArchestraInternalErrorCode | undefined {
-    // Anthropic and its compatible gateways signal context overflow only via the
-    // message with no structured code, so there is no structured signal to
-    // classify overflow against.
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    // A structured code so the chat mapper (and any client) can name the real
+    // cause instead of a generic "invalid request". Context overflow, by
+    // contrast, has no structured signal, so we don't emit a code for it.
+    if (isAnthropicBalanceTooLow(error)) {
+      return ArchestraInternalErrorCode.ProviderInsufficientBalance;
+    }
     return undefined;
   },
 
   extractErrorMessage(error: unknown): string {
+    // When the key's remaining usage balance is too low, show the same unified
+    // message as the connection page instead of Anthropic's raw text (which
+    // steers the reader into the Console).
+    if (isAnthropicBalanceTooLow(error)) {
+      return `${PROVIDER_BILLING_BLOCK_TITLE}. ${PROVIDER_BILLING_BLOCK_BODY}`;
+    }
+
     // Anthropic SDK wraps errors as: { error: { error: { message: "..." } } }
     const anthropicMessage = get(error, "error.error.message");
     if (typeof anthropicMessage === "string") {
@@ -1283,6 +1336,17 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/** The SDK nests the provider body as `error.error.{type,message}`. */
+function isAnthropicBalanceTooLow(error: unknown): boolean {
+  return isAnthropicBillingBlock({
+    status: (get(error, "status") ?? get(error, "statusCode")) as
+      | number
+      | undefined,
+    type: get(error, "error.error.type") as string | undefined,
+    message: get(error, "error.error.message") as string | undefined,
+  });
+}
 
 function createAnthropicAzureFoundryFetch(
   baseFetch: typeof globalThis.fetch | undefined,

@@ -3,7 +3,7 @@ import { makeInstalledServer } from "../src/mocks/data/servers";
 import { expect, test } from "./fixtures";
 
 test.describe("Add Remote MCP Server", () => {
-  test("no-auth remote: create + install shows the success toast", async ({
+  test("no-auth remote: create + install reports a working connection", async ({
     page,
     mcpRegistryPage,
     mswControl,
@@ -17,6 +17,13 @@ test.describe("Add Remote MCP Server", () => {
       serverUrl: "https://example.test/mcp",
       toolCount: 3,
     });
+    const installedServer = makeInstalledServer({
+      id: "test-server-remote",
+      name: "test-remote-noauth",
+      catalogId: newCatalogItem.id,
+      serverType: "remote",
+      localInstallationStatus: "success",
+    });
 
     await mcpRegistryPage.goto();
     await expect(mcpRegistryPage.heading).toBeVisible();
@@ -26,19 +33,21 @@ test.describe("Add Remote MCP Server", () => {
       url: "/api/internal_mcp_catalog",
       body: newCatalogItem,
     });
+    // Creating the item routes to /mcp/registry/:id/edit?step=test, which
+    // resolves the item from the catalog list.
+    await mswControl.use({
+      method: "get",
+      url: "/api/internal_mcp_catalog",
+      body: [newCatalogItem],
+    });
     await mswControl.use({
       method: "post",
       url: "/api/mcp_server",
-      body: makeInstalledServer({
-        id: "test-server-remote",
-        name: "test-remote-noauth",
-        catalogId: newCatalogItem.id,
-        serverType: "remote",
-        localInstallationStatus: "success",
-      }),
+      body: installedServer,
     });
 
     await page.getByRole("button", { name: "Add MCP Server" }).click();
+    await page.getByRole("button", { name: "Start from scratch" }).click();
     await page.getByRole("button", { name: /^Remote/ }).click();
 
     await page
@@ -50,18 +59,30 @@ test.describe("Add Remote MCP Server", () => {
 
     await page.getByRole("button", { name: "Add Server" }).click();
 
-    const installDialog = page
-      .getByRole("dialog")
-      .filter({ hasText: /Install Server/ });
-    await expect(installDialog).toBeVisible();
+    // Creating the item continues on the setup wizard's "Test connection"
+    // step. Its Install button installs a no-auth remote directly (no
+    // dialog), then refetches the servers list — which now reports the
+    // successful connection.
+    const installButton = page.getByRole("button", {
+      name: "Install",
+      exact: true,
+    });
+    await expect(installButton).toBeVisible();
+    await mswControl.use({
+      method: "get",
+      url: "/api/mcp_server",
+      body: [installedServer],
+    });
 
-    await installDialog.getByRole("button", { name: "Install" }).click();
-
-    // Sonner toast fired by useInstallMcpServer's onSuccess
-    // ("Successfully installed test-remote-noauth").
-    await expect(
-      page.getByText(/Successfully installed test-remote-noauth/),
-    ).toBeVisible();
+    // Retry the click: a click landing before React attaches the handler is
+    // silently lost (same next-dev quirk skill-share.spec works around).
+    // Installing is idempotent against the mocked POST, so re-clicking is safe.
+    await expect(async () => {
+      await installButton.click();
+      await expect(page.getByText("Connected", { exact: true })).toBeVisible({
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: 30_000 });
   });
 
   test("bearer-token remote: install failure surfaces the connection error", async ({
@@ -99,6 +120,13 @@ test.describe("Add Remote MCP Server", () => {
       url: "/api/internal_mcp_catalog",
       body: newCatalogItem,
     });
+    // Creating the item routes to /mcp/registry/:id/edit?step=test, which
+    // resolves the item from the catalog list.
+    await mswControl.use({
+      method: "get",
+      url: "/api/internal_mcp_catalog",
+      body: [newCatalogItem],
+    });
     await mswControl.use({
       method: "post",
       url: "/api/mcp_server",
@@ -112,6 +140,7 @@ test.describe("Add Remote MCP Server", () => {
     });
 
     await page.getByRole("button", { name: "Add MCP Server" }).click();
+    await page.getByRole("button", { name: "Start from scratch" }).click();
     await page.getByRole("button", { name: /^Remote/ }).click();
 
     await page
@@ -126,10 +155,23 @@ test.describe("Add Remote MCP Server", () => {
 
     await page.getByRole("button", { name: "Add Server" }).click();
 
+    // The setup wizard's "Test connection" step opens the install dialog to
+    // collect the token (the item has promptable userConfig). Retry the
+    // click: a click landing before React attaches the handler is silently
+    // lost (same next-dev quirk skill-share.spec works around). "Install" is
+    // matched exactly — the form's auth/env labels contain "installation".
     const installDialog = page
       .getByRole("dialog")
       .filter({ hasText: /Install Server/ });
-    await expect(installDialog).toBeVisible();
+    const stepInstallButton = page.getByRole("button", {
+      name: "Install",
+      exact: true,
+    });
+    await expect(stepInstallButton).toBeVisible();
+    await expect(async () => {
+      await stepInstallButton.click();
+      await expect(installDialog).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 30_000 });
 
     await installDialog
       .getByRole("textbox", { name: "Access Token *" })

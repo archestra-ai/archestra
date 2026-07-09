@@ -29,13 +29,10 @@ async function setup(
     makeAppTool: any;
   },
   options: {
-    globalToolPolicy?: "permissive" | "restrictive";
     meta?: Record<string, unknown> | null;
   } = {},
 ) {
-  const org = await fx.makeOrganization({
-    globalToolPolicy: options.globalToolPolicy ?? "restrictive",
-  });
+  const org = await fx.makeOrganization();
   const user = await fx.makeUser();
   const app = await fx.makeApp({ organizationId: org.id });
   const catalog = await fx.makeInternalMcpCatalog({ organizationId: org.id });
@@ -126,9 +123,9 @@ test("refuses an assigned tool whose catalog is outside the app's bound environm
   makeTool,
   makeAppTool,
 }) => {
-  // Permissive org so the policy engine short-circuits to allow — the env fence
-  // (which runs before policy) is the only thing that can refuse here.
-  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  // The tool has no policy, so the env fence (which runs before policy) is the
+  // only thing that can refuse here.
+  const org = await makeOrganization();
   const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
@@ -278,7 +275,13 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
       treatRequireApprovalAsBlock,
     });
     expect(decision.allowed).toBe(false);
-    if (!decision.allowed) expect(decision.reason).toContain("policy");
+    if (!decision.allowed) {
+      // Attribute the guardrail to Archestra so the app (and whoever reads the
+      // error) knows the gateway blocked the call, not the tool.
+      expect(decision.reason).toContain(
+        "a security guardrail enforced by Archestra, not by the tool itself",
+      );
+    }
   }
 });
 
@@ -381,7 +384,7 @@ test("a team-scoped policy is matched against the viewer's teams", async ({
   makeTeamMember,
   makeToolPolicy,
 }) => {
-  const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+  const org = await makeOrganization();
   const inTeam = await makeUser();
   const outOfTeam = await makeUser();
   const team = await makeTeam(org.id, inTeam.id);
@@ -423,39 +426,6 @@ test("a team-scoped policy is matched against the viewer's teams", async ({
   expect(allowed.allowed).toBe(true);
 });
 
-test("a permissive org skips policy enforcement", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-  makeToolPolicy,
-}) => {
-  const { organizationId, userId, appId, toolId, toolName } = await setup(
-    {
-      makeOrganization,
-      makeUser,
-      makeApp,
-      makeInternalMcpCatalog,
-      makeTool,
-      makeAppTool,
-    },
-    { globalToolPolicy: "permissive" },
-  );
-  await makeToolPolicy(toolId, { conditions: [], action: "block_always" });
-
-  const decision = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(true);
-});
-
 test("refuses an assigned tool whose catalog left the app's environment", async ({
   makeOrganization,
   makeUser,
@@ -464,7 +434,7 @@ test("refuses an assigned tool whose catalog left the app's environment", async 
   makeTool,
   makeAppTool,
 }) => {
-  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const org = await makeOrganization();
   const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
@@ -510,7 +480,7 @@ test("allows an assigned tool in the app's bound environment", async ({
   makeTool,
   makeAppTool,
 }) => {
-  const org = await makeOrganization({ globalToolPolicy: "permissive" });
+  const org = await makeOrganization();
   const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,

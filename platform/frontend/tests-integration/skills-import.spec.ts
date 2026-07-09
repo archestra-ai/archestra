@@ -1,4 +1,3 @@
-import { makeConfig } from "../src/mocks/data/config";
 import {
   catalogRootSkillSeed,
   catalogSkillSeed,
@@ -8,16 +7,6 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("Skills import", () => {
-  test.beforeEach(async ({ mswControl }) => {
-    // /skills/* is feature-gated and the base config seed ships with
-    // the flag off, so every test flips it on before navigating.
-    await mswControl.use({
-      method: "get",
-      url: "/api/config",
-      body: makeConfig({ features: { agentSkillsEnabled: true } }),
-    });
-  });
-
   test("catalog result opens the import dialog on the confirm step, skipping the repo scan", async ({
     page,
     skillsNewPage,

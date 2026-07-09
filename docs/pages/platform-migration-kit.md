@@ -4,13 +4,7 @@ category: Archestra Platform
 order: 7
 ---
 
-<!--
-Check ../docs_writer_prompt.md before changing this file.
--->
-
 # Migrate to Archestra
-
-> **Experimental.** The migration kit is new and still evolving.
 
 The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
 unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
@@ -58,6 +52,7 @@ locked-down or air-gapped hosts. Then open Claude Code near the source project a
 - **MCP servers** become catalog items; installing them is opt-in because local stdio servers run
   inside Archestra's Kubernetes-backed runtime.
 - **Guard hooks** become tool policies only when the target tool exists in Archestra.
+- **Lifecycle hooks** (`SessionStart`, `PreToolUse`, `PostToolUse`) become native Archestra hooks when possible.
 - **Passive hooks, openclaw config, and unknown files** are reported for manual follow-up.
 - **Telemetry/observability** is reported, not migrated: Archestra emits OpenTelemetry traces and
   Prometheus metrics natively (see [Observability](/docs/platform-observability)), so the report

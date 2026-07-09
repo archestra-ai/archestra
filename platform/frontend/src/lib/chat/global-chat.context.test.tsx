@@ -38,15 +38,21 @@ vi.mock("ai", () => ({
 
 vi.mock("sonner");
 
-vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({
+vi.mock("@tanstack/react-query", () => {
+  // The real useQueryClient returns a stable client. A fresh object per call
+  // would destabilize callbacks that list it as a dependency (e.g.
+  // regenerateUserMessage) and loop the session-sync effect.
+  const queryClient = {
     getQueryData: mocks.getQueryData,
     invalidateQueries: mocks.invalidateQueries,
-  }),
-  useMutation: () => ({
-    mutateAsync: mocks.mutateAsync,
-  }),
-}));
+  };
+  return {
+    useQueryClient: () => queryClient,
+    useMutation: () => ({
+      mutateAsync: mocks.mutateAsync,
+    }),
+  };
+});
 
 const conversationMock = vi.hoisted(() => ({
   data: { title: null as string | null } as { title: string | null } | null,
@@ -82,6 +88,13 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
+// Bespoke factory (not the canonical __mocks__ one): this file partially
+// mocks @/lib/config/config above, which the canonical mock's importActual
+// chain would break on. Beta off means message-queue draining stays inert.
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => false,
+}));
+
 describe("ChatProvider retries", () => {
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
@@ -91,6 +104,9 @@ describe("ChatProvider retries", () => {
     // the replayed stream concludes, so a plain vi.fn() (returning undefined)
     // would misrepresent the SDK contract.
     mocks.resumeStream.mockReturnValue(new Promise(() => {}));
+    // regenerate now clears persisted chat errors unconditionally (fire-and-
+    // forget with a .catch), so the mutateAsync mock must return a promise.
+    mocks.clearChatErrors.mockResolvedValue({ success: true });
     chatOptions = undefined;
     const messages: UIMessage[] = [];
     mocks.useChat.mockImplementation((options) => {
@@ -301,6 +317,91 @@ describe("ChatProvider retries", () => {
     });
 
     expect(mocks.clearChatErrors).not.toHaveBeenCalled();
+  });
+
+  it("clears persisted chat errors once a user-message regenerate is issued", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    // The conversation cache holds a persisted error card from the failed turn.
+    mocks.getQueryData.mockReturnValue({
+      chatErrors: [{ id: "chat-error-1" }],
+    });
+    mocks.clearChatErrors.mockResolvedValue({ success: true });
+    // updateChatMessage returns the saved thread keyed by DB ids.
+    mocks.mutateAsync.mockResolvedValue({
+      messages: [
+        { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+      ],
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    await act(async () => {
+      await latestSessionRef.current?.regenerateUserMessage({
+        messageId: "user-1",
+        partIndex: 0,
+        text: "hi",
+      });
+    });
+
+    expect(mocks.regenerate).toHaveBeenCalledWith({ messageId: "user-1" });
+    expect(mocks.clearChatErrors).toHaveBeenCalledWith({
+      id: "conversation-1",
+    });
+  });
+
+  it("clears chat errors on regenerate even when the client cache shows none", async () => {
+    // The failed turn persists its error row asynchronously, so the client
+    // cache frequently has not loaded it yet when the user regenerates. The
+    // clear must still fire — otherwise the stale row (still on the server)
+    // resurfaces on the next conversation refetch, above the new answer.
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    mocks.getQueryData.mockReturnValue({ chatErrors: [] });
+    mocks.mutateAsync.mockResolvedValue({
+      messages: [
+        { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+      ],
+    });
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    await act(async () => {
+      await latestSessionRef.current?.regenerateUserMessage({
+        messageId: "user-1",
+        partIndex: 0,
+        text: "hi",
+      });
+    });
+
+    expect(mocks.regenerate).toHaveBeenCalledWith({ messageId: "user-1" });
+    expect(mocks.clearChatErrors).toHaveBeenCalledWith({
+      id: "conversation-1",
+    });
   });
 
   it("updates live context token estimate from usage and compaction data", async () => {

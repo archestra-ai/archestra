@@ -927,113 +927,26 @@ describe("McpServerModel", () => {
       const failed = await McpServerModel.update(server.id, {
         oauthRefreshError: "refresh_failed",
         oauthRefreshErrorMessage: "invalid_grant",
+        oauthRefreshErrorDescription: "The refresh token is invalid",
         oauthRefreshFailedAt: failedAt,
       });
       expect(failed?.oauthRefreshError).toBe("refresh_failed");
       expect(failed?.oauthRefreshErrorMessage).toBe("invalid_grant");
+      expect(failed?.oauthRefreshErrorDescription).toBe(
+        "The refresh token is invalid",
+      );
       expect(failed?.oauthRefreshFailedAt?.getTime()).toBe(failedAt.getTime());
 
       const cleared = await McpServerModel.update(server.id, {
         oauthRefreshError: null,
         oauthRefreshErrorMessage: null,
+        oauthRefreshErrorDescription: null,
         oauthRefreshFailedAt: null,
       });
       expect(cleared?.oauthRefreshError).toBeNull();
       expect(cleared?.oauthRefreshErrorMessage).toBeNull();
+      expect(cleared?.oauthRefreshErrorDescription).toBeNull();
       expect(cleared?.oauthRefreshFailedAt).toBeNull();
-    });
-  });
-
-  describe("getAccessibleInstallCatalogIds", () => {
-    test("returns catalogs the user has an own personal install of", async ({
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      const install = await makeMcpServer({
-        catalogId: catalog.id,
-        scope: "personal",
-        ownerId: user.id,
-      });
-      await McpServerUserModel.assignUserToMcpServer(install.id, user.id);
-
-      const ids = await McpServerModel.getAccessibleInstallCatalogIds(user.id);
-      expect(ids.has(catalog.id)).toBe(true);
-    });
-
-    test("excludes a catalog whose only install is another user's personal server", async ({
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeOrganization,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const owner = await makeUser();
-      const otherUser = await makeUser();
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      const install = await makeMcpServer({
-        catalogId: catalog.id,
-        scope: "personal",
-        ownerId: owner.id,
-      });
-      await McpServerUserModel.assignUserToMcpServer(install.id, owner.id);
-
-      const ids = await McpServerModel.getAccessibleInstallCatalogIds(
-        otherUser.id,
-      );
-      expect(ids.has(catalog.id)).toBe(false);
-    });
-
-    test("returns a catalog backed by an install for a team the user belongs to", async ({
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeOrganization,
-      makeTeam,
-      makeTeamMember,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      await makeTeamMember(team.id, user.id);
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      await makeMcpServer({
-        catalogId: catalog.id,
-        scope: "team",
-        teamId: team.id,
-      });
-
-      const ids = await McpServerModel.getAccessibleInstallCatalogIds(user.id);
-      expect(ids.has(catalog.id)).toBe(true);
-    });
-
-    test("excludes a team install for a user who is not a member of that team", async ({
-      makeInternalMcpCatalog,
-      makeMcpServer,
-      makeOrganization,
-      makeTeam,
-      makeUser,
-    }) => {
-      const org = await makeOrganization();
-      const teamOwner = await makeUser();
-      const outsider = await makeUser();
-      // makeTeam does not enroll the creator; nobody is a member of this team.
-      const team = await makeTeam(org.id, teamOwner.id);
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-      await makeMcpServer({
-        catalogId: catalog.id,
-        scope: "team",
-        teamId: team.id,
-      });
-
-      const ids = await McpServerModel.getAccessibleInstallCatalogIds(
-        outsider.id,
-      );
-      expect(ids.has(catalog.id)).toBe(false);
     });
   });
 });

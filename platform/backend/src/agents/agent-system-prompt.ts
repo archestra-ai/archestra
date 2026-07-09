@@ -8,6 +8,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
@@ -198,6 +199,9 @@ function buildFileHandlingInstruction(
     paragraphs.push(
       `You have a code execution environment: \`${runCommand}\` runs shell commands and Python in a persistent Linux workspace at \`${SKILL_SANDBOX_HOME}\`. Use it to compute, transform files, run scripts, or fetch data when the other tools don't cover the task. Files there persist across commands within this conversation but the user cannot see them. Files the user attached are staged under \`${SKILL_SANDBOX_ATTACHMENTS_DIR}/\` — the on-disk name may be sanitized, so \`ls\` that directory to find them.`,
     );
+    paragraphs.push(
+      `Skill scripts and instructions may assume packages or system binaries this workspace does not have. When a command fails on a missing module or binary, install it or work around it — for example, compute the values directly in Python instead of relying on the missing tool — and make sure the deliverable reflects the workaround, not the broken intermediate state.`,
+    );
   }
 
   if (hasPersistentFiles) {
@@ -238,8 +242,21 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
   const runToolName = archestraMcpBranding.getToolName(
     TOOL_RUN_TOOL_SHORT_NAME,
   );
+  // Naming scaffold_app verbatim satisfies run_tool's names-seen-verbatim
+  // gate, so the model can start an app build without a search_tools
+  // round-trip. Emitted for every search_and_run_only agent regardless of
+  // assignment: an agent that cannot dispatch it gets a clear refusal from
+  // run_tool, which costs one turn in a rare configuration — cheaper than
+  // mirroring the dispatch gate's assignment/RBAC logic here.
+  const scaffoldAppName = archestraMcpBranding.getToolName(
+    TOOL_SCAFFOLD_APP_SHORT_NAME,
+  );
 
-  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.
+  const base = `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.
 
-\`${runToolName}\` takes exactly two arguments: \`tool_name\` (the exact name) and \`tool_args\` (an object holding the target tool's own parameters). For example, to call a tool \`maps__set_marker\` that takes a name and a \`coordinates\` object, call \`${runToolName}\` with \`tool_name: "maps__set_marker"\` and \`tool_args: { "name": "home", "coordinates": { "lat": 51.5, "lng": -0.1 } }\` — keep each parameter under its own key in \`tool_args\` and preserve nested objects as-is; do not flatten their fields into \`tool_args\`. The \`${searchToolsName}\` parameter signatures are summaries; if a \`${runToolName}\` call is rejected as invalid, the error describes the expected input (for third-party tools, the target tool's full input schema) — use it to correct the call.`;
+\`${runToolName}\` takes exactly two arguments: \`tool_name\` (the exact name) and \`tool_args\` (an object holding the target tool's own parameters). For example, to call a tool \`maps__set_marker\` that takes a name and a \`coordinates\` object, call \`${runToolName}\` with \`tool_name: "maps__set_marker"\` and \`tool_args: { "name": "home", "coordinates": { "lat": 51.5, "lng": -0.1 } }\` — keep each parameter under its own key in \`tool_args\` and preserve nested objects as-is; do not flatten their fields into \`tool_args\`. Equally, pass strings, numbers, booleans, and arrays directly as parameter values — never wrap a value in a single-key object. The \`${searchToolsName}\` parameter signatures are summaries; if a \`${runToolName}\` call is rejected as invalid, the error describes the expected input — use it to correct the call.`;
+
+  return `${base}
+
+When the user asks to make, build, or create an app or interactive UI, never write the app's code in your chat reply: start by calling \`${runToolName}\` with \`tool_name: "${scaffoldAppName}"\`, and find the follow-up app tools with \`${searchToolsName}\`.`;
 }

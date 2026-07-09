@@ -307,6 +307,13 @@ function sleep(ms: number): Promise<void> {
  * which extract Axios response data instead of wrapping in Error instances.
  */
 export function extractErrorMessage(error: unknown): string {
+  // Google/gaxios errors carry the actionable detail (e.g. reason
+  // "cannotDownloadAbusiveFile" / "insufficientFilePermissions") in the response
+  // body, not in the generic "Request failed with status code 403" message.
+  const googleApiError = extractGoogleApiError(error);
+  if (googleApiError) {
+    return googleApiError;
+  }
   if (error instanceof Error) {
     return error.message;
   }
@@ -325,4 +332,38 @@ export function extractErrorMessage(error: unknown): string {
     }
   }
   return String(error);
+}
+
+/**
+ * Pull the `code`/`reason`/`message` out of a Google API (gaxios) error body,
+ * shaped `{ response: { data: { error: { code, message, errors: [{ reason }] }}}}`.
+ * Returns e.g. "403 cannotDownloadAbusiveFile: <message>", or null if the error
+ * is not that shape.
+ */
+function extractGoogleApiError(error: unknown): string | null {
+  if (error === null || typeof error !== "object") return null;
+  const data = (error as { response?: { data?: unknown } }).response?.data;
+  if (data === null || typeof data !== "object") return null;
+  const apiError = (data as { error?: unknown }).error;
+  if (apiError === null || typeof apiError !== "object") return null;
+
+  const { code, message, errors } = apiError as {
+    code?: unknown;
+    message?: unknown;
+    errors?: unknown;
+  };
+  const firstReason =
+    Array.isArray(errors) && typeof errors[0]?.reason === "string"
+      ? (errors[0].reason as string)
+      : undefined;
+
+  const prefix = [
+    typeof code === "number" ? String(code) : undefined,
+    firstReason,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const detail = typeof message === "string" ? message : "";
+  if (!prefix && !detail) return null;
+  return prefix && detail ? `${prefix}: ${detail}` : prefix || detail;
 }

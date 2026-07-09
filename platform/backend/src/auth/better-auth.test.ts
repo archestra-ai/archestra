@@ -3,6 +3,7 @@ import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
+import { CREDENTIAL_PROVIDER_ID } from "@/constants";
 import { enterpriseTier } from "@/enterprise-tier";
 
 vi.mock("@/logging");
@@ -610,7 +611,7 @@ describe("handleAfterHook", () => {
       const user = await makeUser({ email: "person@other.com" });
       const org = await makeOrganization();
       await makeMember(user.id, org.id, { role: "member" });
-      await makeAccount(user.id, { providerId: "credential" });
+      await makeAccount(user.id, { providerId: CREDENTIAL_PROVIDER_ID });
       await makeIdentityProvider(org.id, {
         providerId: "google-workspace",
         domain: "example.com",

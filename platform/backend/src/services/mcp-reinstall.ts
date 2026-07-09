@@ -410,7 +410,7 @@ async function syncToolsForServer(
       }>
     >;
   },
-): Promise<void> {
+): Promise<Awaited<ReturnType<typeof ToolModel.syncToolsForCatalog>>> {
   const tools = options?.getTools
     ? await options.getTools({ server, catalogItem })
     : await McpServerModel.getToolsFromServer(server);
@@ -438,6 +438,40 @@ async function syncToolsForServer(
     },
     "Tools synced for MCP server",
   );
+
+  return syncResult;
+}
+
+/**
+ * Re-discover an installed MCP server's tools from the LIVE server and
+ * reconcile the `tools` table for its catalog — without recreating the pod.
+ * Updates changed schemas/descriptions/raw names, inserts newly-advertised
+ * tools, and removes tools the server no longer exposes. Like any tool sync
+ * it operates per-catalog, so it cascades to every install sharing the
+ * catalog. Throws if the catalog item is missing; propagates the connection
+ * error if the live server is unreachable.
+ */
+export async function reloadToolsForServer(server: McpServer): Promise<{
+  created: number;
+  updated: number;
+  unchanged: number;
+  deleted: number;
+}> {
+  const catalogItem = await InternalMcpCatalogModel.findById(server.catalogId, {
+    expandSecrets: false,
+  });
+  if (!catalogItem) {
+    throw new Error(
+      `Catalog item ${server.catalogId} not found for MCP server ${server.id}`,
+    );
+  }
+  const result = await syncToolsForServer(server, catalogItem);
+  return {
+    created: result.created.length,
+    updated: result.updated.length,
+    unchanged: result.unchanged.length,
+    deleted: result.deleted.length,
+  };
 }
 
 /**

@@ -51,6 +51,19 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute is styled by the UA sheet (`[hidden] { display: none }`),
+ * which any app rule that sets `display` on the same element silently overrides —
+ * a common footgun that leaves a modal (or any toggled element) stuck visible.
+ * `!important` here deliberately breaks the usual "app CSS overrides the base"
+ * rule for this one property so ordinary app `display:` no longer defeats the
+ * attribute (an app that fights back with its own `!important` still can). Apps
+ * toggle visibility by adding/removing `hidden` (or a class), not fighting display.
+ * `hidden="until-found"` is excluded: it must stay in layout (styled by the UA as
+ * `content-visibility: hidden`) so find-in-page / scroll-to-text can reveal it. */
+[hidden]:not([hidden="until-found"]) {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: 1.5rem;

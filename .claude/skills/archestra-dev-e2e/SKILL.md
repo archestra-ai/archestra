@@ -32,17 +32,9 @@ ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
 ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
 ```
 
-Use port `9091` for the alternate local WireMock setup:
-
-```bash
-ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
-ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
-```
-
 ## Local and CI setup
 
-- Local e2e uses docker-compose setup through `Tiltfile.test`.
+- Local e2e dependencies deploy through `dev/Tiltfile.test`, which installs the `helm/e2e-tests` chart (`helm upgrade --install e2e-tests`) and port-forwards WireMock to `9092`.
 - CI uses a kind cluster and Helm deployment.
 - CI kind config is `.github/kind.yaml`.
 - CI Helm values are `.github/values-ci.yaml`.
@@ -52,14 +44,14 @@ ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
 ## Fixtures
 
 - Use the Playwright fixtures pattern.
-- Import from `./fixtures` in API/UI test directories.
-- API fixtures include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, and `deleteTrustedDataPolicy`.
-- UI fixtures include `goToPage` and `makeRandomString`.
+- API fixtures live in `e2e-tests/tests/api-fixtures.ts` — import relative to the spec's location (`./api-fixtures` from `tests/`, `../api-fixtures` from a subdirectory like `tests/llm-proxy/`). They include `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, and `deleteTrustedDataPolicy`.
+- UI fixtures live in `e2e-tests/fixtures.ts` — import relative to the spec's location (`../fixtures` from `tests/`). They include `goToPage` and `makeRandomString`.
+- Pure API tests (no browser needed) belong in the backend vitest suite as route tests, not in Playwright (#6155). Keep Playwright specs for flows that exercise the UI.
 
 Example:
 
 ```typescript
-import { test } from "./fixtures";
+import { test } from "./api-fixtures";
 
 test("API example", async ({ request, createAgent, deleteAgent }) => {
   const response = await createAgent(request, "Test Agent");

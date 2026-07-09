@@ -21,6 +21,7 @@ import config, {
   parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
+  parseChatMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -64,7 +65,9 @@ describe("getAnalyticsConfig", () => {
     process.env = originalEnv;
   });
 
-  test("uses the default PostHog analytics config", () => {
+  test("uses the default PostHog analytics config, enabled in production", () => {
+    process.env.NODE_ENV = "production";
+
     expect(getAnalyticsConfig()).toEqual({
       enabled: true,
       posthog: {
@@ -72,6 +75,26 @@ describe("getAnalyticsConfig", () => {
         host: "https://eu.i.posthog.com",
       },
     });
+  });
+
+  test("defaults to disabled outside production", () => {
+    process.env.NODE_ENV = "development";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=enabled wins outside production", () => {
+    process.env.NODE_ENV = "development";
+    process.env.ARCHESTRA_ANALYTICS = "enabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(true);
+  });
+
+  test("explicit ARCHESTRA_ANALYTICS=disabled wins in production", () => {
+    process.env.NODE_ENV = "production";
+    process.env.ARCHESTRA_ANALYTICS = "disabled";
+
+    expect(getAnalyticsConfig().enabled).toBe(false);
   });
 
   test("uses custom PostHog analytics env vars", () => {
@@ -810,6 +833,48 @@ describe("parseContentMaxLength", () => {
   });
 });
 
+describe("parseChatMaxOutputTokens", () => {
+  test("should return default 32768 when no value provided", () => {
+    expect(parseChatMaxOutputTokens(undefined)).toBe(32768);
+  });
+
+  test("should return default when empty/whitespace string provided", () => {
+    expect(parseChatMaxOutputTokens("")).toBe(32768);
+    expect(parseChatMaxOutputTokens("   ")).toBe(32768);
+  });
+
+  test("should parse and trim a valid value", () => {
+    expect(parseChatMaxOutputTokens("  16000  ")).toBe(16000);
+  });
+
+  test("should accept boundary values", () => {
+    expect(parseChatMaxOutputTokens("1")).toBe(1);
+    expect(parseChatMaxOutputTokens("1000000")).toBe(1000000);
+  });
+
+  test("should return default and warn for non-numeric value", () => {
+    expect(parseChatMaxOutputTokens("abc")).toBe(32768);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "abc", using default 32768',
+    );
+  });
+
+  test("should reject fractional and trailing-garbage values instead of truncating", () => {
+    expect(parseChatMaxOutputTokens("1.5")).toBe(32768);
+    expect(parseChatMaxOutputTokens("32768abc")).toBe(32768);
+    expect(parseChatMaxOutputTokens("Infinity")).toBe(32768);
+  });
+
+  test("should accept scientific notation for an integer value", () => {
+    expect(parseChatMaxOutputTokens("1e6")).toBe(1000000);
+  });
+
+  test("should return default and warn for zero and out-of-range", () => {
+    expect(parseChatMaxOutputTokens("0")).toBe(32768);
+    expect(parseChatMaxOutputTokens("1000001")).toBe(32768);
+  });
+});
+
 describe("parseDatabasePoolMax", () => {
   test("should return default 50 when no value provided", () => {
     expect(parseDatabasePoolMax(undefined)).toBe(50);
@@ -1096,6 +1161,45 @@ describe("chat active run config", () => {
     const { default: cfg } = await import("./config");
 
     expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(500);
+  });
+});
+
+describe("mcp gateway config", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    process.env.ARCHESTRA_DATABASE_URL =
+      "postgresql://archestra:pass@localhost:5432/archestra";
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  test("defaults the tool call timeout to 60s", async () => {
+    delete process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
+  });
+
+  test("reads the tool call timeout from the env var", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS = "300000";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(300000);
+  });
+
+  test("falls back to the default for invalid values", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS = "-1";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
   });
 });
 

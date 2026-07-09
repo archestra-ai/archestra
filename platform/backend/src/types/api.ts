@@ -3,7 +3,10 @@ import { z } from "zod";
 
 export { ApiError, ApiErrorTypeSchema };
 
-export const UuidIdSchema = z.uuidv4();
+// Any RFC 9562 version: entity ids are minted as v4 by the database default
+// and as monotonic v7 by models that need a chronological tiebreaker (see
+// utils/uuid.ts), so version-pinned validation would reject real ids.
+export const UuidIdSchema = z.uuid();
 
 export const UuidOrSlugSchema = z.string().min(1);
 

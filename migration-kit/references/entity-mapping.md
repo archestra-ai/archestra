@@ -25,6 +25,7 @@ same `name`/`name_override`: the install resolves its catalog item **by name**, 
 | telemetry (OTEL env, observability hooks, metrics-shipping scripts) | `manual` | report | no target — Archestra emits telemetry natively; redirect the collector (see "Telemetry" below) |
 
 ## Scope
+
 Ask for ONE default migration scope up front (default `personal`); use per-decision overrides only as
 exceptions. Keep the primary agent and its skills in the same scope so the agent can see them. If that
 scope is `team`, agent/skill/catalog decisions must include `user_answers.teamIds`; MCP installs and
@@ -33,6 +34,7 @@ LLM keys must include `user_answers.teamId` (or exactly one `teamIds` value). Ot
 network calls.
 
 ## Skill visibility
+
 After creating skills/agents, `apply.py` calls `POST /api/skills/enable-defaults` once, which enables the
 org `archestra__{list_skills,load_skill}` tools and backfills them onto agents — that
 is how the primary agent gains access to the migrated skills (there is no agent↔skill junction).
@@ -41,6 +43,7 @@ so bundled local tools can run from activated skills. Missing/disabled sandbox s
 non-blocking warning.
 
 ## Rewrite environment-specific references before applying (judgment)
+
 Skill, command, subagent, and hook bodies migrate **verbatim** — `apply.py` ships them unchanged. So any
 path or shell invocation inside a body that assumed the source machine breaks in the Archestra sandbox.
 Before the preview, read each migrating body and surgically rewrite it (ordinary file edits in the source):
@@ -65,19 +68,21 @@ Every reference you can't safely rewrite goes in the report as a manual follow-u
 pointing at a path or binary that won't exist at runtime.
 
 ## Hooks → native lifecycle hooks (preferred)
+
 Archestra runs per-agent `.py`/`.sh` lifecycle hooks at `session_start`/`pre_tool_use`/`post_tool_use`,
 in the conversation sandbox, with a **Claude-compatible** stdin payload (`hook_event_name`, `tool_name`,
 `tool_input`, `tool_response`, `session_id`, `cwd`) and the same exit-code protocol (`2` blocks with
 stderr as the reason; `0` proceeds with stdout injected; errors/timeout fail open). So most Claude Code
 hooks for those three events port near-1:1 as a `hook` target — that is the default.
 
-Native hooks require the **agent-hooks feature**, which is off by default: it needs
-`ARCHESTRA_AGENT_HOOKS_ENABLED=true` **and** the sandbox runtime to be on (hooks run in the conversation
-sandbox). `POST /api/hooks` still persists a migrated hook when the feature is off, but the hook never
-fires and is hidden in the agent UI until an admin enables it — `apply.py` probes `/api/config` after
+Native hooks require the **sandbox runtime** to be on (hooks run in the conversation sandbox), which
+means a Dagger runner host must be configured. `POST /api/hooks` still persists a migrated hook when the
+runtime is off, but the hook never fires and is hidden in the agent UI until the runtime is available —
+`apply.py` probes `/api/config` after
 creating hooks and warns when the feature is off.
 
 `discover.py` does the mechanical part and records it on each `hook` item's `data.source`:
+
 - **bundled** — the command referenced a script in the tree (e.g. `python3 "$CLAUDE_PROJECT_DIR/hooks/x.py"`);
   the script is bundled and `file_name` is its basename. PEP-723 `dependencies` from a `.py` are pulled
   into `data.requirements`.
@@ -94,6 +99,7 @@ regex), `requirements` (override the PEP-723 list; a `.sh` hook must have none).
 validates the payload, attaches it to the primary agent, and skips an existing `(agentId, event, fileName)`.
 
 **Behavior differences to surface (no native equivalent — list them in the report):**
+
 - **No matcher.** Claude's `matcher` (`"Bash"`, `"Edit|Write"`, `"*"`) is gone; an Archestra hook fires
   for **every** tool call of its event. The script must self-filter on `tool_name`.
 - **Tool names differ.** Archestra names (`run_command`, `server__tool`) ≠ Claude built-ins (`Bash`,
@@ -103,6 +109,7 @@ validates the payload, attaches it to the primary agent, and skips an existing `
   take neither. discover flags these in the item summary.
 
 ## Hooks → tool policies (the declarative alternative)
+
 A deterministic `PreToolUse` guard (e.g. "block Bash commands matching `rm -rf /`") can instead map to a
 tool-invocation policy: `{toolId, conditions:[{key,operator:"regex",value}], action:"block_always", reason}`.
 Prefer this over a native `hook` only when the guard is a clean declarative condition **and** the guarded
@@ -111,13 +118,14 @@ tool exists in Archestra (so it has a `toolId`) **and** the org enforces policie
 
 A policy attaches to a **tool that exists in Archestra**. Claude Code built-ins (Bash, Read, Write…) are
 not Archestra tools, so a guard on `Bash` has no policy target. Therefore:
+
 - The **model** must read the guard script and extract its semantics into `user_answers`:
   `{tool_name, key, operator, value, action?, reason?}`. (Parsing arbitrary guard code is judgment — do it.)
 - `apply.py` resolves `tool_name` against `GET /api/tools`. If found → creates the policy. If not found
   (the common case for built-ins) → records `manual` with the ready-to-paste policy in the report.
-- Policies only enforce when the org `globalToolPolicy` is `restrictive`. Tell the user; don't flip it silently.
 
 ## Telemetry & observability → leverage Archestra's native telemetry (report-only)
+
 If the source ships its own telemetry, **don't migrate it** — Archestra already emits richer telemetry
 natively and automatically: an OpenTelemetry span per LLM call and per MCP tool invocation, plus
 Prometheus metrics (tokens, cost, latency, blocked-tools), with no per-agent setup. So a setup's
@@ -141,6 +149,7 @@ Telemetry is **instance-level env config** — no API, no per-agent knob. To kee
 Grafana/collector, the pilot owner sets `ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT` on the instance.
 
 ## Local tools: consolidate before migrating (judgment, not tooling)
+
 Migrating each `tools/*.py` as its own wrapper skill scatters one toolset across many skills, and
 skills/commands that say "run `python3 tools/<x>.py`" dangle after migration (the script ends up in
 a different skill's mount → file-not-found at runtime). Prefer consolidating, using ordinary file
@@ -165,6 +174,7 @@ Fall back to per-script `local_tool` migration only for a single independent scr
 else references.
 
 ## Behavioral differences to put in the report
+
 - **Subagent isolation & tool allowlists are not preserved.** Archestra skills are instructions, not
   isolated agents with enforced tool permissions. The migrated skill documents the original allowlist only.
 - **Hooks** for `SessionStart`/`PreToolUse`/`PostToolUse` migrate as native lifecycle hooks, but lose the
@@ -174,6 +184,7 @@ else references.
 - **Local stdio MCP servers** are registered but only run if installed (opt-in) and resolvable in the cluster.
 
 ## Report (`report.md`)
+
 Use `references/report-template.md`. The report should help a pilot owner decide what is ready to try
 in Archestra, what was skipped or failed, and what still needs hands-on follow-up. Include behavioral
 differences from the list above only when they apply to the actual migration.

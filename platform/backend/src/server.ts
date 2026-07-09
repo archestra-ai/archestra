@@ -55,6 +55,7 @@ import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
+import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
@@ -75,6 +76,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -383,6 +385,9 @@ function captureServerException(
       method: request.method,
       url: request.url,
       route: request.routeOptions?.url,
+      // The requested host (from the Host header) — identifies which
+      // deployment hit the error, used by the PostHog Slack alert template.
+      hostname: request.host,
       reqId: request.id,
       ...extraProperties,
     },
@@ -527,6 +532,67 @@ export const createFastifyInstance = () =>
         });
       }
 
+      // Fastify's own typed errors (unsupported media type, malformed
+      // content-type, …) carry the intended 4xx status. Without this branch
+      // they fall through to the generic handler below, which miscodes a
+      // client mistake as a 500 and captures it as a server exception.
+      const errorStatusCode = (error as { statusCode?: unknown }).statusCode;
+      if (
+        !(error instanceof ApiError) &&
+        typeof errorStatusCode === "number" &&
+        errorStatusCode >= 400 &&
+        errorStatusCode < 500
+      ) {
+        const coerced = new ApiError(
+          errorStatusCode,
+          error.message || "Bad Request",
+        );
+        this.log.info(
+          {
+            ...requestContext,
+            error: coerced.message,
+            statusCode: coerced.statusCode,
+          },
+          "HTTP 40x request error occurred",
+        );
+        return reply.status(coerced.statusCode).send({
+          error: { message: coerced.message, type: coerced.type },
+        });
+      }
+
+      // Transient database connectivity failures (DNS lookup, connection
+      // refused during a database restart, pool connect timeouts) that
+      // survived the retry budget are availability incidents, not bugs in
+      // whichever route happened to be in flight. Respond with a retryable
+      // 503 instead of a 500, and group them in error tracking by root
+      // cause rather than by the query text the ORM wraps them in.
+      const transientDbErrorCode = getTransientDbErrorCode(error);
+      if (transientDbErrorCode) {
+        this.log.error(
+          {
+            ...requestContext,
+            error: error.message,
+            statusCode: 503,
+            dbErrorCode: transientDbErrorCode,
+          },
+          "HTTP 503 database temporarily unavailable",
+        );
+
+        captureServerException(request, error, {
+          error_type: "db_unavailable",
+          db_error_code: transientDbErrorCode,
+          status_code: 503,
+          $exception_fingerprint: `db-transient/${transientDbErrorCode}`,
+        });
+
+        return reply.status(503).send({
+          error: {
+            message: "Database temporarily unavailable, please retry",
+            type: "api_service_unavailable_error",
+          },
+        });
+      }
+
       // Handle ApiError objects
       if (error instanceof ApiError) {
         const { statusCode, message, type, internalCode } = error;
@@ -539,11 +605,16 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
-          captureServerException(request, error, {
-            error_type: "api_error",
-            status_code: statusCode,
-            ...(internalCode && { internal_code: internalCode }),
-          });
+          // 502/504 report an upstream's failure (a user-configured provider
+          // or external server), not a crash of ours — log them, but keep
+          // them out of exception tracking.
+          if (statusCode !== 502 && statusCode !== 504) {
+            captureServerException(request, error, {
+              error_type: "api_error",
+              status_code: statusCode,
+              ...(internalCode && { internal_code: internalCode }),
+            });
+          }
         } else if (statusCode >= 400) {
           this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {
@@ -1059,7 +1130,7 @@ const startWebServer = async () => {
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
 
-    instanceAnalyticsService.trackStartup().catch((error) => {
+    instanceAnalyticsService.start().catch((error) => {
       logger.warn({ err: error }, "Failed to track instance analytics");
     });
 
@@ -1095,6 +1166,10 @@ const startWebServer = async () => {
     // Bring up the ngrok tunnel (if ARCHESTRA_NGROK_AUTH_TOKEN is set) so the
     // instance is reachable from the Internet for inbound chatops webhooks.
     await ngrokTunnelManager.initialize();
+
+    // Opt-in periodic re-discovery of installed MCP servers' tools
+    // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
+    mcpToolsRefreshManager.start();
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
@@ -1320,6 +1395,10 @@ function registerWebServerShutdown(
         await taskQueueService.stopWorker();
       }
 
+      mcpToolsRefreshManager.stop();
+
+      instanceAnalyticsService.stop();
+
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"
       >();
@@ -1381,7 +1460,7 @@ const startWorker = async () => {
     await enterpriseTier.start();
 
     // Sync Archestra MCP branding so the worker recognises branded tool names
-    // (e.g. "archestra_staging__artifact_write") when executing scheduled tasks.
+    // (e.g. "archestra_staging__todo_write") when executing scheduled tasks.
     // Without this, isToolName() only matches the default "archestra__" prefix
     // and builtin tools fall through to mcpClient.executeToolCallForOwner() which fails
     // because they have credentialResolutionMode "static" with no mcpServerId.

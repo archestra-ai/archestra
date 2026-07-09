@@ -7,15 +7,25 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import { AlertTriangle, Check, Copy, Loader2, Search } from "lucide-react";
+import { AlertTriangle, Check, Copy, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ConnectionCreditWarning,
+  CreditWarningNotice,
+} from "@/components/connection/credit-warning-notice";
 import { CopyableCode } from "@/components/copyable-code";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useCreateConnectionPassthroughKey } from "@/lib/connection-setup.query";
+import {
+  useCreateConnectionPassthroughKey,
+  useCreateConnectionVirtualKey,
+} from "@/lib/connection-setup.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
@@ -147,10 +157,10 @@ export function ProxyClientInstructions({
       ? urlProvider
       : null;
 
-  // Auto-select the sole supported provider when the card opens for a client
-  // that only supports one option, so the user doesn't have to click it.
+  // Auto-select the first provider when nothing is chosen yet, so the card
+  // opens with that provider's instructions expanded instead of a blank grid.
   useEffect(() => {
-    if (!selectedProvider && supportedProviders.length === 1) {
+    if (!selectedProvider && supportedProviders.length > 0) {
       updateProviderInUrl(supportedProviders[0]);
     }
   }, [selectedProvider, supportedProviders, updateProviderInUrl]);
@@ -212,36 +222,13 @@ export function ProxyClientInstructions({
         url &&
         providerLabel &&
         originalUrl ? (
-        selectedProvider === "bedrock" ? (
-          <BedrockGenericInstructions
-            baseUrl={baseUrl}
-            profileId={profileId}
-            originalUrl={originalUrl}
-          />
-        ) : (
-          <div className="rounded-lg border bg-card p-4">
-            <div className="mb-2.5 text-xs text-muted-foreground">
-              Replace the{" "}
-              <span className="font-medium text-foreground">
-                {providerLabel}
-              </span>{" "}
-              base URL:
-            </div>
-            <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-              <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
-                <code className="block truncate text-xs line-through opacity-50">
-                  {originalUrl}
-                </code>
-              </div>
-              <span className="text-center text-muted-foreground">→</span>
-              <CopyableCode
-                value={url}
-                variant="primary"
-                toastMessage="Proxy URL copied"
-              />
-            </div>
-          </div>
-        )
+        <GenericProxyInstructions
+          baseUrl={baseUrl}
+          profileId={profileId}
+          selectedProvider={selectedProvider}
+          providerLabel={providerLabel}
+          originalUrl={originalUrl}
+        />
       ) : isCompatible && instruction ? (
         instruction.kind === "snippet" ? (
           <div className="space-y-2">
@@ -278,6 +265,266 @@ export function ProxyClientInstructions({
           reason={`${client.label} doesn't support this provider.`}
         />
       )}
+    </div>
+  );
+}
+
+type GenericAuthMethod = "provider-key" | "virtual-key";
+
+/**
+ * The "Any client" step 4 body: between picking a provider and copying the
+ * proxy URL, the user decides (1) whether to route through the OpenAI-Compatible
+ * Model Router (one OpenAI-style endpoint for every provider) and (2) how to
+ * authenticate — bring their own provider key (passthrough) or have us
+ * auto-provision a personal virtual key (the same provisioning the one-command
+ * setup performs, gated by llmVirtualKey:create).
+ */
+function GenericProxyInstructions({
+  baseUrl,
+  profileId,
+  selectedProvider,
+  providerLabel,
+  originalUrl,
+}: {
+  baseUrl: string;
+  profileId: string;
+  selectedProvider: SupportedProvider;
+  providerLabel: string;
+  originalUrl: string;
+}) {
+  const [useRouter, setUseRouter] = useState(false);
+  const [authMethod, setAuthMethod] =
+    useState<GenericAuthMethod>("provider-key");
+  const { data: canCreateVirtualKey } = useHasPermissions({
+    llmVirtualKey: ["create"],
+  });
+  const { data: canCreateProviderKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const [showAddProviderKey, setShowAddProviderKey] = useState(false);
+  const provisionKey = useCreateConnectionVirtualKey();
+  const provisionAsync = provisionKey.mutateAsync;
+  const [virtualKey, setVirtualKey] = useState<{
+    value: string;
+    name: string;
+    creditWarning?: ConnectionCreditWarning | null;
+  } | null>(null);
+
+  // A virtual key can only wrap a provider key the user can resolve. Mirror the
+  // one-command flow: only offer the option when the selected provider has a
+  // configured key — otherwise provisioning would 400 ("no key configured").
+  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const providerHasKey = useMemo(
+    () => (availableKeys ?? []).some((k) => k.provider === selectedProvider),
+    [availableKeys, selectedProvider],
+  );
+  const offerVirtualKey = canCreateVirtualKey === true && providerHasKey;
+
+  // A freshly provisioned key is scoped to the current provider; drop it when
+  // the provider or auth mode changes so a stale key is never shown.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are the reset triggers, not values read
+  useEffect(() => {
+    setVirtualKey(null);
+  }, [selectedProvider, authMethod]);
+
+  useEffect(() => {
+    if (!offerVirtualKey && authMethod === "virtual-key") {
+      setAuthMethod("provider-key");
+    }
+  }, [offerVirtualKey, authMethod]);
+
+  // Auto-provision the moment the user picks the virtual-key tab — no extra
+  // "generate" click. ensureConnectionVirtualKey reuses an existing key, so a
+  // repeat call (e.g. React strict-mode double-invoke) is idempotent.
+  const provisioningRef = useRef(false);
+  useEffect(() => {
+    if (authMethod !== "virtual-key" || !offerVirtualKey || virtualKey) return;
+    if (provisioningRef.current) return;
+    provisioningRef.current = true;
+    let cancelled = false;
+    provisionAsync({ provider: selectedProvider })
+      .then((result) => {
+        if (!cancelled && result) setVirtualKey(result);
+      })
+      .finally(() => {
+        provisioningRef.current = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authMethod,
+    offerVirtualKey,
+    selectedProvider,
+    virtualKey,
+    provisionAsync,
+  ]);
+
+  // The OpenAI-compatible router lives at /v1/model-router (it resolves
+  // provider-qualified model IDs like `openai:gpt-5.4` and fans out to every
+  // provider). /v1/openai is just the OpenAI passthrough proxy, so it must NOT
+  // be used here — it would only ever reach OpenAI.
+  const routerUrl = `${baseUrl}/model-router/${profileId}`;
+  const providerUrl = `${baseUrl}/${selectedProvider}/${profileId}`;
+  const effectiveUrl = useRouter ? routerUrl : providerUrl;
+  const effectiveOriginalUrl = useRouter
+    ? "https://api.openai.com/v1/"
+    : originalUrl;
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-4 rounded-lg border bg-card p-4">
+        <label
+          className="flex cursor-pointer items-start gap-2.5"
+          htmlFor="generic-use-router"
+        >
+          <Checkbox
+            id="generic-use-router"
+            checked={useRouter}
+            onCheckedChange={(checked) => setUseRouter(checked === true)}
+            className="mt-0.5"
+          />
+          <span className="space-y-0.5">
+            <span className="block text-sm font-medium text-foreground">
+              Use the OpenAI-Compatible Model Router
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              Reach every configured provider through one OpenAI-style endpoint.
+              Send provider-qualified model IDs like{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                openai:gpt-5.4
+              </code>{" "}
+              instead of switching base URLs per provider.
+            </span>
+          </span>
+        </label>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">
+            Authentication
+          </div>
+          <Tabs
+            value={authMethod}
+            onValueChange={(v) => setAuthMethod(v as GenericAuthMethod)}
+          >
+            <TabsList>
+              <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
+              <TabsTrigger value="virtual-key" disabled={!offerVirtualKey}>
+                Virtual key
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <p className="text-xs text-muted-foreground">
+            {authMethod === "provider-key" ? (
+              canCreateVirtualKey && !providerHasKey ? (
+                <>
+                  Passthrough — you keep using your own {providerLabel} key. A
+                  virtual key needs a configured {providerLabel} provider key
+                  first
+                  {canCreateProviderKey ? (
+                    <>
+                      {" "}
+                      (
+                      <button
+                        type="button"
+                        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                        onClick={() => setShowAddProviderKey(true)}
+                      >
+                        add one
+                      </button>
+                      ).
+                    </>
+                  ) : (
+                    " (ask an admin to add one)."
+                  )}
+                </>
+              ) : (
+                "Passthrough — you keep using your own provider API key; only the base URL changes."
+              )
+            ) : (
+              "A personal virtual key mapped to your provider key is created automatically and shown below."
+            )}
+          </p>
+          {authMethod === "virtual-key" &&
+            (virtualKey ? (
+              <div className="space-y-1.5">
+                <CopyableCode
+                  value={virtualKey.value}
+                  variant="primary"
+                  toastMessage="Virtual key copied"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Use this as your API key. Revoke it any time by deleting the
+                  &quot;{virtualKey.name}&quot; key on the Virtual API Keys
+                  page.
+                </p>
+                <CreditWarningNotice warning={virtualKey.creditWarning} />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Creating your virtual key…
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {selectedProvider === "bedrock" && !useRouter ? (
+        <BedrockGenericInstructions
+          baseUrl={baseUrl}
+          profileId={profileId}
+          originalUrl={originalUrl}
+        />
+      ) : (
+        <ReplaceUrlBlock
+          label={useRouter ? "OpenAI-compatible" : providerLabel}
+          originalUrl={effectiveOriginalUrl}
+          url={effectiveUrl}
+        />
+      )}
+
+      <CreateLlmProviderApiKeyDialog
+        open={showAddProviderKey}
+        onOpenChange={setShowAddProviderKey}
+        title={`Add a ${providerLabel} provider key`}
+        description={`Add a provider API key so a virtual key can be minted from it. This unlocks the virtual-key option for ${providerLabel}.`}
+        defaultValues={{ provider: selectedProvider }}
+        allowedProviders={[selectedProvider]}
+        onSuccess={() => setShowAddProviderKey(false)}
+      />
+    </div>
+  );
+}
+
+/** The "replace this base URL with that one" card shared by the generic flows. */
+function ReplaceUrlBlock({
+  label,
+  originalUrl,
+  url,
+}: {
+  label: string;
+  originalUrl: string;
+  url: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="mb-2.5 text-xs text-muted-foreground">
+        Replace the <span className="font-medium text-foreground">{label}</span>{" "}
+        base URL:
+      </div>
+      <div className="grid min-w-0 items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+        <div className="min-w-0 overflow-hidden rounded-md border border-dashed bg-muted/40 px-3 py-2">
+          <code className="block truncate text-xs line-through opacity-50">
+            {originalUrl}
+          </code>
+        </div>
+        <span className="text-center text-muted-foreground">→</span>
+        <CopyableCode
+          value={url}
+          variant="primary"
+          toastMessage="Proxy URL copied"
+        />
+      </div>
     </div>
   );
 }
@@ -396,7 +643,7 @@ function StepList({
           key={s.title}
           className="grid grid-cols-[22px_1fr] items-start gap-3"
         >
-          <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+          <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full border bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground">
             {i + 1}
           </div>
           <div className="min-w-0 space-y-3">
@@ -721,59 +968,31 @@ function ProviderGrid({
     "groq",
   ];
   const [showAll, setShowAll] = useState(false);
-  const [query, setQuery] = useState("");
   const compact = providers.filter((p) => PRIMARY.includes(p));
   // If the admin's allow-list excludes every primary provider, there's
   // nothing to collapse to — fall through to the full list instead of
   // rendering an empty grid behind a "Show all" button.
   const canCollapse = compact.length > 0 && compact.length < providers.length;
-  const normalizedQuery = query.trim().toLowerCase();
-  const searching = normalizedQuery.length > 0;
-  // When searching, ignore the compact/expanded toggle and search all providers.
-  const base = searching || showAll || !canCollapse ? providers : compact;
-  const visible = searching
-    ? base.filter((p) =>
-        providerDisplayNames[p].toLowerCase().includes(normalizedQuery),
-      )
-    : base;
+  const visible = showAll || !canCollapse ? providers : compact;
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
-        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
+        <h4 className="text-sm font-semibold text-foreground">
           Select a provider
-        </h3>
+        </h4>
         {canCollapse && (
-          <div className="flex items-center gap-3">
-            {!searching && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-9 text-xs"
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll ? "Show fewer" : `Show all (${providers.length})`}
-              </Button>
-            )}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
-                className="h-9 w-56 rounded-full pl-8"
-              />
-            </div>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs"
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? "Show fewer" : `Show all (${providers.length})`}
+          </Button>
         )}
       </div>
-      {searching && visible.length === 0 && (
-        <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-xs text-muted-foreground">
-          No providers match "{query}".
-        </div>
-      )}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
         {visible.map((p) => {
           const isSupported = supported.includes(p);

@@ -24,7 +24,6 @@ export const cerebrasAdapterFactory = createOpenAiCompatibleAdapterFactory({
           "cerebras",
           options.agent,
           options.source,
-          options.externalAgentId,
         )
       : undefined;
 

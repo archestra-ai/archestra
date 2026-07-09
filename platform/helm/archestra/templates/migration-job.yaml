@@ -66,6 +66,18 @@ spec:
               valueFrom:
                 {{- toYaml .valueFrom | nindent 16 }}
             {{- end }}
+            {{- /*
+            Fail-fast lock acquisition for migration DDL: the hook overlaps
+            live traffic from the previous release, so DDL waiting on a table
+            lock would block that traffic until the lock is granted. Rendered
+            after the operator-supplied env blocks so hook-only env stays
+            first for $(VAR) expansion; skipped entirely when the operator
+            provides their own PGOPTIONS through migrationJob.env.
+            */}}
+            {{- if and .Values.archestra.migrationJob.lockTimeout (not (hasKey .Values.archestra.migrationJob.env "PGOPTIONS")) }}
+            - name: PGOPTIONS
+              value: {{ printf "-c lock_timeout=%s" (toString .Values.archestra.migrationJob.lockTimeout) | quote }}
+            {{- end }}
             {{- include "archestra-platform.env" $migrationContext | nindent 12 }}
           {{- if or .Values.archestra.envFrom .Values.archestra.migrationJob.envFrom }}
           envFrom:

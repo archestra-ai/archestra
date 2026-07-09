@@ -167,6 +167,14 @@
   .font-sans {
     font-family: var(--font-sans) !important;
   }
+  /* App-secret fields (SecretInput): render the value as dots via a disc-glyph
+     font instead of type="password" / -webkit-text-security, both of which
+     summon browser password managers (iCloud AutoFill, Chrome save/generate).
+     :not(:placeholder-shown) keeps placeholders in the field's real font.
+     !important so it beats font-mono/font-sans utilities on the same element. */
+  .secret-masked:not(:placeholder-shown) {
+    font-family: var(--font-secret-mask) !important;
+  }
   /* Streamdown streaming caret - the library sets --streamdown-caret inline style
      and expects Tailwind to generate *:last:after:content-[var(--streamdown-caret)].
      Since Tailwind v4 can't detect these dynamic classes from minified JS, we
@@ -351,4 +359,30 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   mask-composite: exclude;
   animation: aceternity-border-spin 3.5s linear infinite;
   pointer-events: none;
+}
+
+
+/* ── Feedback pop-up ──
+   Friendly greeting: the hand waves twice when the pop-up opens, then rests. */
+
+@keyframes feedback-wave {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0deg);
+  }
+  10%,
+  30% {
+    transform: rotate(16deg);
+  }
+  20%,
+  40% {
+    transform: rotate(-8deg);
+  }
+}
+
+.feedback-wave {
+  display: inline-block;
+  transform-origin: 70% 75%;
+  animation: feedback-wave 1.8s ease-in-out 0.4s 2;
 }

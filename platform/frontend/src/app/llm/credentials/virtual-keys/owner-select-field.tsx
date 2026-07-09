@@ -11,7 +11,7 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useMembersPaginated } from "@/lib/member.query";
 
 /**
- * Whether the admin-only "Person" owner picker applies: only admins, and only
+ * Whether the admin-only "Key owner" picker applies: only admins, and only
  * for personal-scope keys. Used both to render the field and to decide whether
  * to send an ownerId on create.
  */
@@ -40,7 +40,7 @@ export function OwnerSelectField({
 
   // Accumulate every other member we've seen so a chosen owner stays
   // selectable even when a later search filters them out. The signed-in user
-  // is excluded — picking yourself is the default (an empty selection).
+  // is listed as a pinned "Yourself" option instead of their member entry.
   const [knownUsers, setKnownUsers] = useState<
     Record<string, UserSelectOption>
   >({});
@@ -60,19 +60,35 @@ export function OwnerSelectField({
     });
   }, [membersData, session?.user?.id]);
 
-  const users = useMemo(() => Object.values(knownUsers), [knownUsers]);
+  const selfId = session?.user?.id ?? "";
+  const selfEmail = session?.user?.email ?? null;
+  const users = useMemo(() => {
+    const others = Object.values(knownUsers);
+    if (!selfId) {
+      return others;
+    }
+    // "Yourself" stays at the top so the default owner is an explicit,
+    // re-selectable choice rather than only an empty placeholder.
+    return [{ userId: selfId, name: "Yourself", email: selfEmail }, ...others];
+  }, [knownUsers, selfId, selfEmail]);
 
   return (
     <div className="space-y-2">
-      <Label>Person</Label>
+      <div className="space-y-1">
+        <Label>Key owner</Label>
+        <p className="text-xs text-muted-foreground">
+          Create this key on behalf of another member — it becomes their
+          personal key to view and manage.
+        </p>
+      </div>
       <UserSearchableSelect
-        value={value}
-        onValueChange={onChange}
+        className="w-full"
+        value={value || selfId}
+        onValueChange={(userId) => onChange(userId === selfId ? "" : userId)}
         users={users}
         placeholder="Yourself"
         onSearchQueryChange={setSearch}
         emptyMessage={isSearching ? "Searching…" : "No matching users found."}
-        hint="Pick a user to create this key on their behalf. Leave empty to own it yourself."
       />
     </div>
   );

@@ -1,123 +1,124 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
-
-const mockFindDueTriggers = vi.hoisted(() => vi.fn().mockResolvedValue([]));
-const mockMarkExecuted = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const mockHasPendingOrProcessingForTrigger = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(false),
-);
-const mockRunCreate = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ id: "run-1" }),
-);
-const mockRunMarkCompleted = vi.hoisted(() => vi.fn().mockResolvedValue(null));
-
-vi.mock("@/models", () => ({
-  ScheduleTriggerModel: {
-    findDueTriggers: mockFindDueTriggers,
-    markExecuted: mockMarkExecuted,
-  },
-  TaskModel: {
-    hasPendingOrProcessingForTrigger: mockHasPendingOrProcessingForTrigger,
-  },
-  ScheduleTriggerRunModel: {
-    create: mockRunCreate,
-    markCompleted: mockRunMarkCompleted,
-  },
-}));
+import { vi } from "vitest";
 
 const mockEnqueue = vi.hoisted(() => vi.fn().mockResolvedValue("task-id"));
 vi.mock("@/task-queue", () => ({
   taskQueueService: { enqueue: mockEnqueue },
 }));
 
+import {
+  ScheduleTriggerModel,
+  ScheduleTriggerRunModel,
+  TaskModel,
+} from "@/models";
+import { beforeEach, describe, expect, test } from "@/test";
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 
-const makeTrigger = (id: string) => ({
-  id,
-  organizationId: "org-1",
-  name: `Trigger ${id}`,
-  agentId: "agent-1",
-  messageTemplate: "Run task",
-  cronExpression: "* * * * *",
-  timezone: "UTC",
-  enabled: true,
-  actorUserId: "user-1",
-  lastExecutedAt: null,
-  createdAt: new Date(),
-});
+// A trigger whose last execution is in the past is due on the next minute tick.
+const TWO_MIN_AGO = () => new Date(Date.now() - 120_000);
 
 describe("handleCheckDueScheduleTriggers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  test("does nothing when no triggers are due", async () => {
-    mockFindDueTriggers.mockResolvedValue([]);
+  test("does nothing when no triggers are due", async ({
+    makeScheduleTrigger,
+  }) => {
+    // lastExecutedAt = now → next run is a minute out → not due yet.
+    const trigger = await makeScheduleTrigger({ lastExecutedAt: new Date() });
 
     await handleCheckDueScheduleTriggers();
 
     expect(mockEnqueue).not.toHaveBeenCalled();
-    expect(mockRunCreate).not.toHaveBeenCalled();
+    expect(
+      await ScheduleTriggerRunModel.countByTrigger({
+        organizationId: trigger.organizationId,
+        triggerId: trigger.id,
+      }),
+    ).toBe(0);
   });
 
-  test("creates run, marks executed, and enqueues task for due trigger", async () => {
-    const trigger = makeTrigger("t-1");
-    mockFindDueTriggers.mockResolvedValue([trigger]);
-    mockHasPendingOrProcessingForTrigger.mockResolvedValue(false);
-    mockRunCreate.mockResolvedValue({ id: "run-1" });
+  test("creates run, marks executed, and enqueues task for due trigger", async ({
+    makeScheduleTrigger,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      lastExecutedAt: TWO_MIN_AGO(),
+    });
 
     await handleCheckDueScheduleTriggers();
 
-    expect(mockRunCreate).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      triggerId: "t-1",
-      runKind: "due",
+    const runs = await ScheduleTriggerRunModel.listByTrigger({
+      organizationId: trigger.organizationId,
+      triggerId: trigger.id,
     });
-    expect(mockMarkExecuted).toHaveBeenCalledWith("t-1", expect.any(Date));
+    expect(runs).toHaveLength(1);
+    expect(runs[0].runKind).toBe("due");
+
     expect(mockEnqueue).toHaveBeenCalledWith({
       taskType: "schedule_trigger_run_execute",
-      payload: { runId: "run-1", triggerId: "t-1" },
+      payload: { runId: runs[0].id, triggerId: trigger.id },
     });
+
+    const reloaded = await ScheduleTriggerModel.findById(trigger.id);
+    expect(reloaded?.lastExecutedAt?.getTime()).toBeGreaterThan(
+      TWO_MIN_AGO().getTime(),
+    );
   });
 
-  test("creates failed run and skips enqueue when task already in flight", async () => {
-    const trigger = makeTrigger("t-1");
-    mockFindDueTriggers.mockResolvedValue([trigger]);
-    mockHasPendingOrProcessingForTrigger.mockResolvedValue(true);
-    mockRunCreate.mockResolvedValue({ id: "skipped-run" });
+  test("creates failed run and skips enqueue when task already in flight", async ({
+    makeScheduleTrigger,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      lastExecutedAt: TWO_MIN_AGO(),
+    });
+    await TaskModel.create({
+      taskType: "schedule_trigger_run_execute",
+      payload: { triggerId: trigger.id },
+      status: "pending",
+    });
 
     await handleCheckDueScheduleTriggers();
 
-    expect(mockRunCreate).toHaveBeenCalledWith({
-      organizationId: "org-1",
-      triggerId: "t-1",
-      runKind: "due",
+    const runs = await ScheduleTriggerRunModel.listByTrigger({
+      organizationId: trigger.organizationId,
+      triggerId: trigger.id,
     });
-    expect(mockRunMarkCompleted).toHaveBeenCalledWith({
-      runId: "skipped-run",
-      status: "failed",
-      error: "Skipped: previous run was still in progress",
-    });
-    expect(mockMarkExecuted).toHaveBeenCalledWith("t-1", expect.any(Date));
+    expect(runs).toHaveLength(1);
+    expect(runs[0].status).toBe("failed");
+    expect(runs[0].error).toBe("Skipped: previous run was still in progress");
+
     expect(mockEnqueue).not.toHaveBeenCalled();
+
+    const reloaded = await ScheduleTriggerModel.findById(trigger.id);
+    expect(reloaded?.lastExecutedAt?.getTime()).toBeGreaterThan(
+      TWO_MIN_AGO().getTime(),
+    );
   });
 
-  test("continues processing when one trigger fails", async () => {
-    const badTrigger = makeTrigger("t-bad");
-    const goodTrigger = makeTrigger("t-good");
-    mockFindDueTriggers.mockResolvedValue([badTrigger, goodTrigger]);
-    mockHasPendingOrProcessingForTrigger.mockResolvedValue(false);
+  test("continues processing when one trigger fails", async ({
+    makeOrganization,
+    makeScheduleTrigger,
+  }) => {
+    const org = await makeOrganization();
+    await makeScheduleTrigger({
+      organizationId: org.id,
+      lastExecutedAt: TWO_MIN_AGO(),
+    });
+    await makeScheduleTrigger({
+      organizationId: org.id,
+      lastExecutedAt: TWO_MIN_AGO(),
+    });
 
-    // First create call throws, second succeeds
-    mockRunCreate
-      .mockRejectedValueOnce(new Error("DB error"))
-      .mockResolvedValueOnce({ id: "run-good" });
+    // First run-creation throws; the spy falls back to the real impl afterward.
+    const createSpy = vi.spyOn(ScheduleTriggerRunModel, "create");
+    createSpy.mockRejectedValueOnce(new Error("DB error"));
 
     await handleCheckDueScheduleTriggers();
 
+    // One trigger failed, the other still produced an enqueued run.
     expect(mockEnqueue).toHaveBeenCalledTimes(1);
-    expect(mockEnqueue).toHaveBeenCalledWith({
-      taskType: "schedule_trigger_run_execute",
-      payload: { runId: "run-good", triggerId: "t-good" },
-    });
+    const enqueuedRunId = mockEnqueue.mock.calls[0][0].payload.runId;
+    const run = await ScheduleTriggerRunModel.findById(enqueuedRunId);
+    expect(run).not.toBeNull();
   });
 });

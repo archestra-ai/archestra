@@ -9,8 +9,8 @@ serviceAccount:
   automountServiceAccountToken: false
 
 networkPolicy:
-  # optional hardening only; enforcement depends on the cluster CNI.
-  create: false
+  # enforcement depends on the cluster CNI; set false to disable.
+  create: true
 
   ingress:
     # allow pods carrying these labels to reach Dagger. With no `namespace`,

@@ -10,15 +10,22 @@
  *     (values are plain JSON; get(key) resolves to an entry { value, revision,
  *     owner } or null when absent, list() to [{key, value, revision, owner}];
  *     set(key, value, { ifRevision, owned }) resolves to { revision, owner } and
- *     rejects with { code: "conflict" } on a stale ifRevision or
- *     { code: "forbidden" } on an owned-key violation; delete clears a key)
+ *     by default rejects with { code: "conflict" } when the key changed since
+ *     this app last read it — pass { ifRevision: null } to force last-writer-wins,
+ *     or a number to guard on that exact revision — and { code: "forbidden" } on
+ *     an owned-key violation; delete clears a key)
  *   archestra.llm.complete(prompt, opts) — one host LLM completion (opts: { system, jsonMode });
  *                                     resolves to the text, rejects with { code: "llm_quota" }
  *                                     on a usage limit or { code: "llm_unavailable" } otherwise
  *   archestra.llm.prompt`...`       — tagged-template prompt builder (pure string, no round-trip)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
- *                                     throws { code: "auth_required", url } when the
- *                                     upstream MCP server needs (re)authentication
+ *                                     resolves with the tool's data unwrapped from the MCP
+ *                                     envelope (structuredContent when the tool provides it,
+ *                                     else JSON parsed from its text output, else the raw
+ *                                     text, else { media: [{ type, mimeType, dataUrl }] }
+ *                                     for image/audio-only results, else null); throws
+ *                                     { code: "auth_required", url } when the upstream MCP
+ *                                     server needs (re)authentication
  *   archestra.tools.list()          — the app's assigned tools (name/description/inputSchema)
  *   archestra.ui.openLink(url) / archestra.ui.requestDisplayMode(mode)
  *   archestra.context               — { appId, version } of the running app (sync)
@@ -158,6 +165,69 @@
   // app never awaits ready
   ready.catch(() => {});
 
+  // Render lint: an element carrying the `hidden` attribute that still occupies
+  // a visible box means a CSS rule is overriding `hidden`, leaving a modal or
+  // toggled element stuck visible. The base sheet's `[hidden]` reset prevents the
+  // ordinary case; this is the backstop for what slips past it — an app that
+  // beats the reset with its own `!important`, or a render where the base sheet
+  // never loaded. Such a render throws nothing and violates no CSP, so only a DOM
+  // check catches it before validate_app reports "clean".
+  const reportHiddenOverridden = () => {
+    try {
+      const offenders = [];
+      for (const el of document.querySelectorAll("[hidden]")) {
+        // `hidden="until-found"` is intentionally in the layout (find-in-page),
+        // so it is not an override; only the boolean form should stay unpainted.
+        if (el.getAttribute("hidden") === "until-found") continue;
+        // A visible box, not merely a layout box: a collapsed element (height:0,
+        // an app's own animation/disclosure state) is not "stuck visible".
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        const id = el.id ? "#" + el.id : "";
+        const cls = el.classList.length ? "." + [...el.classList].join(".") : "";
+        offenders.push(el.tagName.toLowerCase() + id + cls);
+        if (offenders.length >= 5) break;
+      }
+      if (offenders.length > 0) {
+        // `render-check` is the general channel for proactive render-correctness
+        // checks; the specific check is named in brackets so the model — and the
+        // host's dedup, keyed on the message prefix — can tell them apart. A new
+        // check posts here rather than minting its own diagnostic type.
+        postDiagnostic(
+          "render-check",
+          "[hidden-overridden] Element(s) with the `hidden` attribute are still " +
+            "rendered — a CSS rule (e.g. `display:` on the element) is overriding " +
+            "`hidden`, leaving them stuck visible: " +
+            offenders.join(", "),
+        );
+      }
+    } catch {
+      // render lint is best-effort; never surface a failure to the app
+    }
+  };
+  // Scan the DOM twice (the host dedupes): once as soon as the initial markup is
+  // parsed and laid out, and once after the handshake so anything the app's own
+  // `ready.then` handler painted is covered too. The first scan does NOT wait for
+  // `ready` on purpose — posting is a raw postMessage the host records regardless
+  // of the handshake, so scanning at DOMContentLoaded lands the diagnostic before
+  // the host's ~1.5s render-settle snapshot; waiting for a slow handshake would
+  // let that clean snapshot win and mask a statically-broken render from
+  // validate_app. The two rAFs let layout settle before getBoundingClientRect.
+  const scheduleHiddenCheck = () =>
+    requestAnimationFrame(() => requestAnimationFrame(reportHiddenOverridden));
+  // Guarded for non-browser hosts (e.g. the SDK's own Node unit tests run it
+  // against a minimal window with no `document`).
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleHiddenCheck, {
+        once: true,
+      });
+    } else {
+      scheduleHiddenCheck();
+    }
+    ready.then(scheduleHiddenCheck).catch(() => {});
+  }
+
   // A connect that neither resolves nor rejects means the host accepted our
   // postMessage but never answered ui/initialize — its sandbox doesn't relay to
   // an MCP-Apps bridge (a wrapper/proxy frame, or a non-conformant host). That
@@ -201,10 +271,15 @@
     null;
 
   /**
-   * Call a tool and resolve with its result. Tool-level failures throw —
-   * apps handle one error channel instead of checking isError:
+   * Call a tool and resolve with the raw MCP result envelope. Internal raw
+   * path — the storage/llm wrappers read the envelope directly; tools.call
+   * unwraps it (see unwrapToolResult). Tool-level failures throw — apps
+   * handle one error channel instead of checking isError:
    * - upstream MCP needs (re)auth → { code: "auth_required", url } so the app
-   *   can render a "Connect" link (the user authenticates in the registry UI);
+   *   can show the error message with the url as a clickable link that calls
+   *   archestra.ui.openLink(url) — the sandbox blocks popups, so a plain
+   *   target="_blank" link cannot open (the user authenticates in the
+   *   registry UI);
    * - any other tool error → { code: "tool_error" } with the error text.
    */
   const callTool = async (name, args) => {
@@ -260,44 +335,112 @@
     return result;
   };
 
+  // Unwrap a successful envelope into the data an app actually wants:
+  // structuredContent when it is a non-null object, else JSON parsed from the
+  // joined text blocks, else the raw text, else { media } for image/audio-only
+  // results (dataUrl drops straight into an <img>/<audio> src), else null.
+  // Mirrored server-side by unwrapToolResultForPreview in
+  // archestra-mcp-server/apps.ts (this file is injected browser JS, so the
+  // two implementations cannot share code) — keep them in step.
+  const unwrapToolResult = (result) => {
+    const sc = result.structuredContent;
+    if (sc && typeof sc === "object") return sc;
+    const text = textOf(result);
+    if (text.trim()) {
+      try {
+        return JSON.parse(text.trim());
+      } catch {
+        return text;
+      }
+    }
+    // Tool results are untrusted: only a strict type/subtype mimeType and
+    // base64-alphabet data may enter the data URL, so a malicious block can
+    // never smuggle quotes/markup into an attribute an app interpolates.
+    const media = (result.content || [])
+      .filter(
+        (c) =>
+          c &&
+          (c.type === "image" || c.type === "audio") &&
+          typeof c.data === "string" &&
+          /^[A-Za-z0-9+/=]+$/.test(c.data) &&
+          typeof c.mimeType === "string" &&
+          /^[\w.+-]+\/[\w.+-]+$/.test(c.mimeType),
+      )
+      .map((c) => ({
+        type: c.type,
+        mimeType: c.mimeType,
+        dataUrl: "data:" + c.mimeType + ";base64," + c.data,
+      }));
+    return media.length ? { media } : null;
+  };
+
   // Each value is an entry { value, revision, owner }: revision powers optimistic
-  // concurrency (pass it back as set opts.ifRevision to fail a write that raced
-  // another viewer — the call rejects with { code: "conflict" }); owner is the
-  // viewer id that claimed the (shared) key, or null when unclaimed. delete is
-  // guarded by ownership rather than revision.
-  const storagePartition = (scope) =>
-    Object.freeze({
+  // concurrency — a later set of the same key guards on it automatically, failing
+  // a write that raced another instance with { code: "conflict" } (opts.ifRevision
+  // overrides the guard); owner is the viewer id that claimed the (shared) key, or
+  // null when unclaimed. delete is guarded by ownership rather than revision.
+  const storagePartition = (scope) => {
+    // The revision last seen for each key, from a get or a successful set. A
+    // write guards on it by default so a read-modify-write that raced another
+    // instance of this app is rejected as a conflict rather than silently
+    // overwriting the other's committed value.
+    const seenRevisions = new Map();
+    return Object.freeze({
       get: async (key) => {
         const sc = (await callTool(APP_DATA_TOOLS.get, { key, scope }))
           .structuredContent;
-        return sc && sc.revision != null
-          ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
-          : null;
+        const entry =
+          sc && sc.revision != null
+            ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
+            : null;
+        // Cache the revision so a later set of this key guards on it. An absent
+        // key caches 0 (insert-if-absent) so two instances racing to create the
+        // same key conflict rather than one silently overwriting the other.
+        seenRevisions.set(key, entry ? entry.revision : 0);
+        return entry;
       },
-      // opts.ifRevision: write only if the stored revision matches (0 = create,
-      // i.e. fail if the key already exists). opts.owned: claim a new shared key
-      // for the viewer so only they (or the app's author/admins) may overwrite it.
+      // By default a write guards on the revision last seen for the key this
+      // session (a conflict rejects with { code: "conflict" }). opts.ifRevision
+      // overrides that guard: a number writes only if the stored revision
+      // matches (0 = create, i.e. fail if the key already exists); null opts out
+      // entirely (last-writer-wins). opts.owned: claim a new shared key for the
+      // viewer so only they (or the app's author/admins) may overwrite it.
       set: async (key, value, opts) => {
+        const expectedRevision =
+          opts && "ifRevision" in opts
+            ? (opts.ifRevision === null ? undefined : opts.ifRevision)
+            : seenRevisions.get(key);
         const sc = (
           await callTool(APP_DATA_TOOLS.set, {
             key,
             value,
             scope,
-            expectedRevision: opts?.ifRevision,
+            expectedRevision,
             claimOwner: opts?.owned,
           })
         ).structuredContent;
+        if (sc && sc.revision != null) seenRevisions.set(key, sc.revision);
         return { revision: sc?.revision, owner: sc?.owner ?? null };
       },
-      list: async () =>
-        (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
-          ?.entries || [],
+      list: async () => {
+        const entries =
+          (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
+            ?.entries || [];
+        // Cache each listed revision so an edit flow that loads via list() then
+        // saves one record still guards that write on the revision it loaded.
+        for (const e of entries) {
+          if (e && e.revision != null) seenRevisions.set(e.key, e.revision);
+        }
+        return entries;
+      },
       // delete is guarded by ownership (an owned shared key can only be removed
       // by its owner or the app's author/admins), not by revision.
       delete: async (key) => {
         await callTool(APP_DATA_TOOLS.delete, { key, scope });
+        seenRevisions.delete(key);
       },
     });
+  };
 
   // A single host LLM completion. Runs as the viewer through the org's app
   // runtime model (the app can't pick one); jsonMode steers the model to emit
@@ -333,7 +476,7 @@
       prompt: llmPrompt,
     }),
     tools: Object.freeze({
-      call: callTool,
+      call: async (name, args) => unwrapToolResult(await callTool(name, args)),
       // assigned-tool descriptors embedded at serve time (already filtered to
       // what the app may call); async to allow a live listing later without an
       // API break

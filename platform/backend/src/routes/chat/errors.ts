@@ -311,7 +311,11 @@ function extractArchestraInternalCode(
   try {
     const parsed = JSON.parse(responseBody);
     const code = parsed?.error?.internal_code;
-    if (code === ArchestraInternalErrorCode.ContextLengthExceeded) {
+    if (
+      code === ArchestraInternalErrorCode.ContextLengthExceeded ||
+      code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
+      code === ArchestraInternalErrorCode.UpstreamEmptyResponse
+    ) {
       return code;
     }
   } catch {
@@ -1670,6 +1674,33 @@ export function mapProviderError(
     responseBody =
       typeof obj.responseBody === "string" ? obj.responseBody : undefined;
 
+    // A mid-stream SSE error part arrives as a bare `{ message, type,
+    // internal_code? }` object with no HTTP envelope. Re-wrap it as a response
+    // body so the provider parser, normalized internal-code extraction, and
+    // message extraction below all treat it uniformly with the pre-stream
+    // (status + body) delivery shape. Only the fields those consumers read are
+    // copied, so arbitrary (possibly circular) extra properties are ignored.
+    // Error instances are excluded: their fields are non-enumerable, so
+    // wrapping them would serialize to nothing.
+    if (
+      !responseBody &&
+      !(error instanceof Error) &&
+      typeof obj.message === "string"
+    ) {
+      responseBody = JSON.stringify({
+        error: {
+          message: obj.message,
+          ...(typeof obj.type === "string" ? { type: obj.type } : {}),
+          ...(typeof obj.code === "string" || typeof obj.code === "number"
+            ? { code: obj.code }
+            : {}),
+          ...(typeof obj.internal_code === "string"
+            ? { internal_code: obj.internal_code }
+            : {}),
+        },
+      });
+    }
+
     if (responseBody) {
       parsedError = parseError(responseBody);
     }
@@ -1690,8 +1721,32 @@ export function mapProviderError(
   const normalizedCode = extractArchestraInternalCode(responseBody);
   if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
     errorCode = ChatErrorCode.ContextTooLong;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.ProviderInsufficientBalance
+  ) {
+    // Balance too low arrives as a 400/402 the per-provider mapper would call
+    // InvalidRequest (generic "please try again"). Reclassify to the dedicated,
+    // non-retryable code so the card names the real cause.
+    errorCode = ChatErrorCode.ProviderInsufficientBalance;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.UpstreamEmptyResponse
+  ) {
+    // The proxy detected the provider finished a turn with no content or tool
+    // calls and returned a 503 the per-provider mapper would call ServerError
+    // ("the provider is experiencing issues"). Reclassify to the retryable
+    // EmptyResponse code so the card names what actually happened.
+    errorCode = ChatErrorCode.EmptyResponse;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
+  // An Archestra usage-limit block arrives over the proxy envelope as an HTTP
+  // 429, which the per-provider mappers classify as a retryable RateLimit. That
+  // mislabels it as the provider throttling traffic ("not your usage limit" in
+  // some clients) and offers a pointless retry. Reclassify it to the dedicated,
+  // non-retryable UsageLimitExceeded code so the UI attributes it to Archestra
+  // and drops the retry affordance.
+  if (usageLimitError) {
+    errorCode = ChatErrorCode.UsageLimitExceeded;
+  }
 
   // Extract the most meaningful error message
   const errorMessage = extractErrorMessage(parsedError, responseBody, error);
@@ -1713,6 +1768,20 @@ export function mapProviderError(
     errorCode = ChatErrorCode.NetworkError;
   }
 
+  // OpenRouter reports a failure of the inference provider it routed to as
+  // "Upstream error from <provider>: ...". Like the idle timeout above, it can
+  // arrive as a mid-stream SSE error with no status code, leaving the
+  // per-provider mapper at the dead-end, non-retryable Unknown card even
+  // though the condition is a transient provider-side failure. Reclassify it
+  // as a retryable ServerError, again scoped to the Unknown fallback so a more
+  // specific classification is never overwritten.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isUpstreamProviderError(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
   // Determine error type from parsed error
   const errorType =
     (parsedError as ParsedOpenAIError)?.type ||
@@ -1721,7 +1790,17 @@ export function mapProviderError(
     (error instanceof Error ? error.name : undefined);
   const rawErrorJson = stringifyRawError(error);
 
-  if (!isTerminatedStream) {
+  // Report only provider errors that suggest a gap on our side (an
+  // unrecognized shape, or an unexpected classification). Client-class 4xx
+  // rejections and transient retryable provider-side conditions (server
+  // errors, rate limits, empty turns, network blips) are expected operational
+  // noise: they're already surfaced to the user, logged below, and don't
+  // indicate a bug.
+  const isExpectedProviderError =
+    (statusCode !== undefined && statusCode >= 400 && statusCode < 500) ||
+    RetryableErrorCodes.has(errorCode);
+
+  if (!isTerminatedStream && !isExpectedProviderError) {
     captureRawProviderErrorInSentry({
       provider,
       statusCode,
@@ -1775,6 +1854,10 @@ function isStreamTerminatedError(error: unknown): boolean {
 
 function isUpstreamIdleTimeoutError(message: string): boolean {
   return /idle timeout/i.test(message);
+}
+
+function isUpstreamProviderError(message: string): boolean {
+  return /^upstream error from /i.test(message);
 }
 
 /**
@@ -1832,7 +1915,10 @@ export function sanitizeChatErrorForFrontend(
 
 function formatUsageLimitMessage(entityType: string | undefined): string {
   if (!entityType) {
-    return "A usage limit budget has been exceeded.";
+    return "Archestra blocked this request because a configured usage limit has been reached.";
   }
-  return `The ${entityType.replace(/_/g, " ")} usage limit budget has been exceeded.`;
+  return `Archestra blocked this request because the ${entityType.replace(
+    /_/g,
+    " ",
+  )} usage limit has been reached.`;
 }

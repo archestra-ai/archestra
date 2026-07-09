@@ -2,6 +2,9 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import { vi } from "vitest";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import TeamTokenModel from "./team-token";
 
@@ -251,8 +254,43 @@ describe("TeamTokenModel", () => {
 
       await TeamTokenModel.validateToken(value);
 
-      const updated = await TeamTokenModel.findById(token.id);
-      expect(updated?.lastUsedAt).not.toBeNull();
+      // The lastUsedAt refresh is fire-and-forget on the auth path
+      await vi.waitFor(async () => {
+        const updated = await TeamTokenModel.findById(token.id);
+        expect(updated?.lastUsedAt).not.toBeNull();
+      });
+    });
+
+    test("collapses repeated lastUsedAt refreshes into one write per staleness window", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+
+      const { token } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Test Token",
+        teamId: null,
+      });
+
+      await TeamTokenModel.updateLastUsed(token.id);
+      const first = (await TeamTokenModel.findById(token.id))?.lastUsedAt;
+      expect(first).not.toBeNull();
+
+      // Fresh timestamp: a second refresh inside the window is a no-op
+      await TeamTokenModel.updateLastUsed(token.id);
+      const second = (await TeamTokenModel.findById(token.id))?.lastUsedAt;
+      expect(second?.getTime()).toBe(first?.getTime());
+
+      // Stale timestamp: the refresh writes again
+      const staleDate = new Date(Date.now() - 5 * 60_000);
+      await db
+        .update(schema.teamTokensTable)
+        .set({ lastUsedAt: staleDate })
+        .where(eq(schema.teamTokensTable.id, token.id));
+
+      await TeamTokenModel.updateLastUsed(token.id);
+      const third = (await TeamTokenModel.findById(token.id))?.lastUsedAt;
+      expect(third?.getTime()).toBeGreaterThan(staleDate.getTime());
     });
   });
 

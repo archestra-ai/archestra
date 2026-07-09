@@ -301,6 +301,19 @@ export const RouteId = {
   GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
   GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
 
+  // Proxy Routes - Microsoft Copilot
+  MicrosoftCopilotChatCompletionsWithDefaultAgent:
+    "microsoftCopilotChatCompletionsWithDefaultAgent",
+  MicrosoftCopilotChatCompletionsWithAgent:
+    "microsoftCopilotChatCompletionsWithAgent",
+  MicrosoftCopilotListModelsWithDefaultAgent:
+    "microsoftCopilotListModelsWithDefaultAgent",
+  MicrosoftCopilotListModelsWithAgent: "microsoftCopilotListModelsWithAgent",
+
+  // Microsoft Copilot device-flow sign-in (creates personal provider keys)
+  MicrosoftCopilotDeviceAuthStart: "microsoftCopilotDeviceAuthStart",
+  MicrosoftCopilotDeviceAuthPoll: "microsoftCopilotDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",

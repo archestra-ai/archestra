@@ -1,0 +1,407 @@
+/**
+ * Microsoft Copilot LLM Proxy Adapter
+ *
+ * The proxy's inbound wire format is OpenAI chat completions, so the whole
+ * adapter is OpenAI's, configured via createOpenAiCompatibleAdapterFactory.
+ * Upstream, however, is NOT OpenAI-compatible: it is the Microsoft 365
+ * Copilot Chat API (Microsoft Graph beta) — stateful conversations, text-only
+ * answers, no tool calling, no model selection, no usage counts. The factory
+ * only ever calls `client.chat.completions.create(params)`, so instead of the
+ * real OpenAI SDK the client below duck-types that single method and performs
+ * the Graph translation (see ./microsoft-copilot-graph-translator):
+ *
+ * - per request: create a fresh Graph conversation, send the latest user
+ *   message as the prompt with prior turns as additional context;
+ * - non-streaming: `POST …/chat`, mapped to an OpenAI `chat.completion`;
+ * - streaming: `POST …/chatOverStream` (SSE) parsed defensively into OpenAI
+ *   chunks — the event payload shape is not publicly documented, so if the
+ *   response is not SSE or yields no recognizable text, the client falls back
+ *   to the sync endpoint and fabricates the chunk sequence;
+ * - auth: the incoming "API key" is the user's long-lived Entra ID refresh
+ *   token, swapped per request for a short-lived Graph access token inside a
+ *   fetch wrapper (see services/microsoft-copilot-token), because
+ *   `createClient` is synchronous.
+ */
+import { randomUUID } from "node:crypto";
+import type OpenAIProvider from "openai";
+import config from "@/config";
+import logger from "@/logging";
+import { metrics } from "@/observability";
+import { createMicrosoftCopilotFetch } from "@/services/microsoft-copilot-token";
+import type { CreateClientOptions, OpenAi } from "@/types";
+import {
+  assertNoTools,
+  buildGraphChatBody,
+  completionTextToChunks,
+  estimateUsage,
+  extractGraphResponseText,
+  type GraphChatBody,
+  graphChatResponseToOpenAi,
+  makeContentDeltaChunk,
+  makeFinishChunk,
+  makeRoleChunk,
+} from "./microsoft-copilot-graph-translator";
+import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
+
+export const microsoftCopilotAdapterFactory =
+  createOpenAiCompatibleAdapterFactory({
+    provider: "microsoft-copilot",
+    interactionType: "microsoft-copilot:chatCompletions",
+    getBaseUrl: () => config.llm["microsoft-copilot"].baseUrl,
+    createClient(
+      apiKey: string | undefined,
+      options: CreateClientOptions,
+    ): OpenAIProvider {
+      const observableFetch = options.agent
+        ? metrics.llm.getObservableFetch(
+            "microsoft-copilot",
+            options.agent,
+            options.source,
+          )
+        : undefined;
+
+      const client = new MicrosoftCopilotGraphClient({
+        baseUrl: options.baseUrl ?? config.llm["microsoft-copilot"].baseUrl,
+        fetch: createMicrosoftCopilotFetch({
+          refreshToken: apiKey,
+          providerApiKeyId: options.llmProviderApiKeyId,
+          innerFetch: observableFetch,
+        }),
+      });
+      // The factory only calls `chat.completions.create`, which the Graph
+      // client duck-types; it never touches other OpenAI SDK surface.
+      return client as unknown as OpenAIProvider;
+    },
+  });
+
+// ===== Internal helpers =====
+
+type ChatCompletionsRequest = OpenAi.Types.ChatCompletionsRequest;
+type ChatCompletionsResponse = OpenAi.Types.ChatCompletionsResponse;
+type ChatCompletionChunk = OpenAi.Types.ChatCompletionChunk;
+
+type FetchLike = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
+
+class MicrosoftCopilotGraphClient {
+  chat = {
+    completions: {
+      create: (
+        params: ChatCompletionsRequest & { stream?: boolean },
+      ): Promise<
+        ChatCompletionsResponse | AsyncIterable<ChatCompletionChunk>
+      > => this.createCompletion(params),
+    },
+  };
+
+  private baseUrl: string;
+  private fetch: FetchLike;
+
+  constructor(params: { baseUrl: string; fetch: FetchLike }) {
+    this.baseUrl = params.baseUrl.replace(/\/+$/, "");
+    this.fetch = params.fetch;
+  }
+
+  private async createCompletion(
+    params: ChatCompletionsRequest & { stream?: boolean },
+  ): Promise<ChatCompletionsResponse | AsyncIterable<ChatCompletionChunk>> {
+    assertNoTools(params);
+    const graphBody = buildGraphChatBody(params);
+    if (params.stream) {
+      return this.streamCompletion(params, graphBody);
+    }
+    return this.syncCompletion(params, graphBody);
+  }
+
+  private async syncCompletion(
+    params: ChatCompletionsRequest,
+    graphBody: GraphChatBody,
+  ): Promise<ChatCompletionsResponse> {
+    const responseText = await this.runSyncChat(graphBody);
+    return graphChatResponseToOpenAi({
+      responseText,
+      model: params.model,
+      completionId: newCompletionId(),
+      createdUnixSeconds: nowUnixSeconds(),
+      usage: estimateUsage({ request: params, responseText }),
+    });
+  }
+
+  /**
+   * Opens the chatOverStream request eagerly (so auth/Graph errors surface as
+   * clean HTTP errors before any chunk is emitted), then returns the chunk
+   * iterator. Falls back to the sync endpoint — on a fresh conversation —
+   * when the response is not SSE or the stream yields no recognizable text.
+   */
+  private async streamCompletion(
+    params: ChatCompletionsRequest,
+    graphBody: GraphChatBody,
+  ): Promise<AsyncIterable<ChatCompletionChunk>> {
+    const conversationId = await this.createConversation();
+    const response = await this.fetch(
+      `${this.conversationsUrl()}/${conversationId}/chatOverStream`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "text/event-stream",
+        },
+        body: JSON.stringify(graphBody),
+      },
+    );
+    if (!response.ok) {
+      await throwGraphError(response);
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("text/event-stream")) {
+      // Some deployments may answer the stream endpoint with a plain JSON
+      // conversation payload; salvage it before resorting to a second call.
+      const responseText = await this.readNonSseAnswer(response);
+      return this.fabricatedChunks(params, responseText);
+    }
+
+    const completionId = newCompletionId();
+    const createdUnixSeconds = nowUnixSeconds();
+    const self = this;
+
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield makeRoleChunk({
+          model: params.model,
+          completionId,
+          createdUnixSeconds,
+        });
+
+        let emittedText = "";
+        for await (const eventData of parseSseEvents(response)) {
+          if (eventData === "[DONE]") break;
+          let payload: unknown;
+          try {
+            payload = JSON.parse(eventData);
+          } catch {
+            continue; // tolerate keep-alives and unknown non-JSON events
+          }
+          const candidate = extractGraphResponseText(payload);
+          if (candidate === undefined || candidate.length === 0) continue;
+          // Works for both cumulative snapshots (emit the new suffix) and
+          // true deltas (emit verbatim).
+          const delta = candidate.startsWith(emittedText)
+            ? candidate.slice(emittedText.length)
+            : candidate;
+          if (delta.length === 0) continue;
+          emittedText += delta;
+          yield makeContentDeltaChunk({
+            deltaText: delta,
+            model: params.model,
+            completionId,
+            createdUnixSeconds,
+          });
+        }
+
+        if (emittedText.length === 0) {
+          // Undocumented/unrecognized stream shape: answer via the sync
+          // endpoint instead (fresh conversation) so the client still gets a
+          // valid completion. The retry shows up as a second conversation in
+          // the user's Microsoft 365 activity — unavoidable given the API's
+          // statefulness, and free under seat licensing (revisit if Microsoft
+          // ever bills per conversation).
+          logger.warn(
+            "[MicrosoftCopilot] chatOverStream yielded no recognizable text; falling back to the sync chat endpoint",
+          );
+          const responseText = await self.runSyncChat(graphBody);
+          const chunks = completionTextToChunks({
+            responseText,
+            model: params.model,
+            completionId,
+            createdUnixSeconds,
+            usage: estimateUsage({ request: params, responseText }),
+          });
+          // The role chunk was already emitted above.
+          for (const chunk of chunks.slice(1)) {
+            yield chunk;
+          }
+          return;
+        }
+
+        yield makeFinishChunk({
+          model: params.model,
+          completionId,
+          createdUnixSeconds,
+          usage: estimateUsage({ request: params, responseText: emittedText }),
+        });
+      },
+    };
+  }
+
+  /** Creates a conversation and runs one sync chat turn, returning the text. */
+  private async runSyncChat(graphBody: GraphChatBody): Promise<string> {
+    const conversationId = await this.createConversation();
+    const response = await this.fetch(
+      `${this.conversationsUrl()}/${conversationId}/chat`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(graphBody),
+      },
+    );
+    if (!response.ok) {
+      await throwGraphError(response);
+    }
+    const payload = (await response.json()) as unknown;
+    const responseText = extractGraphResponseText(payload);
+    if (responseText === undefined) {
+      throw graphShapeError(
+        "Microsoft Copilot returned a response without any message text",
+      );
+    }
+    return responseText;
+  }
+
+  private async createConversation(): Promise<string> {
+    const response = await this.fetch(this.conversationsUrl(), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    if (!response.ok) {
+      await throwGraphError(response);
+    }
+    const payload = (await response.json()) as { id?: string };
+    if (!payload.id) {
+      throw graphShapeError(
+        "Microsoft Copilot conversation creation returned no conversation id",
+      );
+    }
+    return payload.id;
+  }
+
+  private async readNonSseAnswer(response: Response): Promise<string> {
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw graphShapeError(
+        "Microsoft Copilot returned a stream response in an unexpected format",
+      );
+    }
+    const responseText = extractGraphResponseText(payload);
+    if (responseText === undefined) {
+      throw graphShapeError(
+        "Microsoft Copilot returned a response without any message text",
+      );
+    }
+    return responseText;
+  }
+
+  private fabricatedChunks(
+    params: ChatCompletionsRequest,
+    responseText: string,
+  ): AsyncIterable<ChatCompletionChunk> {
+    const chunks = completionTextToChunks({
+      responseText,
+      model: params.model,
+      completionId: newCompletionId(),
+      createdUnixSeconds: nowUnixSeconds(),
+      usage: estimateUsage({ request: params, responseText }),
+    });
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        for (const chunk of chunks) {
+          yield chunk;
+        }
+      },
+    };
+  }
+
+  private conversationsUrl(): string {
+    return `${this.baseUrl}/copilot/conversations`;
+  }
+}
+
+function newCompletionId(): string {
+  return `chatcmpl-${randomUUID()}`;
+}
+
+function nowUnixSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/**
+ * Throws a Graph error in the shape the shared adapter expects:
+ * `status` drives the HTTP status (handleError) and `error.message` feeds
+ * extractErrorMessage, so the caller sees Graph's real message (e.g. the
+ * missing-Copilot-license 403) instead of a generic 500.
+ */
+async function throwGraphError(response: Response): Promise<never> {
+  let message = `Microsoft Copilot request failed with status ${response.status}`;
+  try {
+    const body = (await response.json()) as {
+      error?: { message?: string };
+    };
+    if (typeof body?.error?.message === "string" && body.error.message) {
+      message = body.error.message;
+    }
+  } catch {
+    // Non-JSON error body; keep the generic status message.
+  }
+  throw Object.assign(new Error(message), {
+    status: response.status,
+    error: { message },
+  });
+}
+
+function graphShapeError(message: string): Error {
+  return Object.assign(new Error(message), {
+    status: 502,
+    error: { message },
+  });
+}
+
+/**
+ * Minimal incremental SSE parser: yields each event's joined `data:` payload.
+ * Tolerates comment lines, CRLF, and multi-line data fields per the SSE spec.
+ */
+async function* parseSseEvents(response: Response): AsyncGenerator<string> {
+  if (!response.body) return;
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let dataLines: string[] = [];
+
+  const flush = (): string | undefined => {
+    if (dataLines.length === 0) return undefined;
+    const data = dataLines.join("\n");
+    dataLines = [];
+    return data;
+  };
+
+  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+      buffer = buffer.slice(newlineIndex + 1);
+      if (line === "") {
+        const data = flush();
+        if (data !== undefined) yield data;
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).replace(/^ /, ""));
+      }
+      // Other fields (event:, id:, retry:, comments) carry no payload we use.
+      newlineIndex = buffer.indexOf("\n");
+    }
+  }
+  // End of stream: flush a multi-byte character split across the last chunk,
+  // then treat an unterminated final line as complete. The SSE spec says to
+  // discard an event not followed by a blank line, but Graph's stream shape
+  // is undocumented and dropping trailing text is worse than emitting it.
+  buffer += decoder.decode();
+  const lastLine = buffer.replace(/\r$/, "");
+  if (lastLine.startsWith("data:")) {
+    dataLines.push(lastLine.slice(5).replace(/^ /, ""));
+  }
+  const data = flush();
+  if (data !== undefined) yield data;
+}

@@ -939,6 +939,7 @@ export async function handleLLMProxy<
       source,
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
+      llmProviderApiKeyId: perKeyChatApiKeyId,
     });
 
     // Build final request

@@ -37,6 +37,7 @@ const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
   minimax: "minimax",
   azure: "azure",
   "github-copilot": "github-copilot",
+  "microsoft-copilot": "microsoft-copilot",
 };
 
 export type LlmModelSelectOption = {

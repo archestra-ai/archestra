@@ -72,6 +72,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     minimax: "minimax",
     azure: "azure",
     "github-copilot": "github-copilot",
+    "microsoft-copilot": "microsoft-copilot",
   } as const;
 
   return logoNames[provider];

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  MICROSOFT_COPILOT_MODELS,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
 import Fastify, {
   type FastifyInstance,
@@ -36,6 +39,7 @@ import { deepseekAdapterFactory } from "../adapters/deepseek";
 import { geminiAdapterFactory } from "../adapters/gemini";
 import { githubCopilotAdapterFactory } from "../adapters/github-copilot";
 import { groqAdapterFactory } from "../adapters/groq";
+import { microsoftCopilotAdapterFactory } from "../adapters/microsoft-copilot";
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
 import { ollamaAdapterFactory } from "../adapters/ollama";
@@ -55,6 +59,7 @@ import deepseekProxyRoutes from "./deepseek";
 import geminiProxyRoutes from "./gemini";
 import githubCopilotProxyRoutes from "./github-copilot";
 import groqProxyRoutes from "./groq";
+import microsoftCopilotProxyRoutes from "./microsoft-copilot";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
 import ollamaProxyRoutes from "./ollama";
@@ -1898,6 +1903,28 @@ const providerConfigsByProvider = {
     optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  // The matrix mocks createClient, so it exercises the OpenAI-shaped inbound
+  // wire format this provider exposes — the Graph translation and its
+  // tool-rejection behavior are covered in microsoft-copilot.test.ts.
+  "microsoft-copilot": makeConfig({
+    providerName: "Microsoft Copilot",
+    providerSlug: "microsoft-copilot",
+    provider: "microsoft-copilot",
+    family: "openai",
+    routePlugin: microsoftCopilotProxyRoutes,
+    adapterFactory: microsoftCopilotAdapterFactory,
+    endpoint: (agentId) => `/v1/microsoft-copilot/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-refresh-token",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder(MICROSOFT_COPILOT_MODELS[0].id),
+    model: MICROSOFT_COPILOT_MODELS[0].id,
+    optimizedModel: MICROSOFT_COPILOT_MODELS[0].id,
+    supportsDeclaredTools: false,
+    supportsStreamingToolCalls: false,
     supportsCompression: true,
   }),
 } satisfies Record<SupportedProvider, ProviderTestConfig>;

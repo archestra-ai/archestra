@@ -1337,6 +1337,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   "github-copilot": openAiCompatibleErrorHandler,
+  "microsoft-copilot": openAiCompatibleErrorHandler,
   minimax: providerErrorHandler(parseMinimaxError, mapMinimaxErrorToCode),
   azure: openAiCompatibleErrorHandler,
 };

@@ -707,6 +707,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     zhipuai: "ZhipuAI",
     deepseek: "DeepSeek",
     "github-copilot": "GitHub Copilot",
+    "microsoft-copilot": "Microsoft Copilot",
     bedrock: "AWS Bedrock",
     minimax: "MiniMax",
     azure: "Azure AI Foundry",

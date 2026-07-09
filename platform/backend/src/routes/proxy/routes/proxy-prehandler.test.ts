@@ -8,9 +8,14 @@ describe("createProxyPreHandler", () => {
   let app: FastifyInstance;
   let mockUpstream: FastifyInstance;
   let upstreamPort: number;
+  let upstreamHits: number;
 
   beforeEach(async () => {
     mockUpstream = Fastify();
+    upstreamHits = 0;
+    mockUpstream.addHook("onRequest", async () => {
+      upstreamHits++;
+    });
 
     mockUpstream.get("/v1/models", async () => ({
       object: "list",
@@ -341,6 +346,9 @@ describe("createProxyPreHandler", () => {
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.body);
       expect(body.error.message).toContain("/chat/completions and /models");
+      // The preHandler must short-circuit before http-proxy's handler runs:
+      // a forwarded request would relay the caller's raw token upstream.
+      expect(upstreamHits).toBe(0);
     });
 
     test("rejectUnhandledPaths: still 400s the chat/completions suffix (custom-handled)", async () => {
@@ -359,6 +367,7 @@ describe("createProxyPreHandler", () => {
       });
 
       expect(response.statusCode).toBe(400);
+      expect(upstreamHits).toBe(0);
     });
   });
 });

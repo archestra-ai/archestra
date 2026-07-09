@@ -14,6 +14,7 @@ import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
+import MicrosoftCopilotChatCompletionInteraction from "./llmProviders/microsoft-copilot";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
@@ -51,6 +52,8 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "deepseek:chatCompletions": (i) => new DeepSeekChatCompletionInteraction(i),
   "github-copilot:chatCompletions": (i) =>
     new GithubCopilotChatCompletionInteraction(i),
+  "microsoft-copilot:chatCompletions": (i) =>
+    new MicrosoftCopilotChatCompletionInteraction(i),
   "groq:chatCompletions": (i) => new GroqChatCompletionInteraction(i),
   "xai:chatCompletions": (i) => new XaiChatCompletionInteraction(i),
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),

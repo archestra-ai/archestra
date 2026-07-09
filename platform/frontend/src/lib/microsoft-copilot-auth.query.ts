@@ -2,22 +2,22 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation } from "@tanstack/react-query";
 import { handleApiError } from "@/lib/utils";
 
-const { githubCopilotDeviceAuthStart, githubCopilotDeviceAuthPoll } =
+const { microsoftCopilotDeviceAuthStart, microsoftCopilotDeviceAuthPoll } =
   archestraApiSdk;
 
-export type GithubCopilotDeviceStart =
-  archestraApiTypes.GithubCopilotDeviceAuthStartResponses["200"];
-export type GithubCopilotDevicePoll =
-  archestraApiTypes.GithubCopilotDeviceAuthPollResponses["200"];
+export type MicrosoftCopilotDeviceStart =
+  archestraApiTypes.MicrosoftCopilotDeviceAuthStartResponses["200"];
+export type MicrosoftCopilotDevicePoll =
+  archestraApiTypes.MicrosoftCopilotDeviceAuthPollResponses["200"];
 
-export function useStartGithubCopilotDeviceFlow() {
+export function useStartMicrosoftCopilotDeviceFlow() {
   return useMutation({
-    mutationFn: async (): Promise<GithubCopilotDeviceStart | null> => {
+    mutationFn: async (): Promise<MicrosoftCopilotDeviceStart | null> => {
       // Toast even when the SDK call throws (network down, backend
       // restarting) instead of returning an API error — otherwise the
       // sign-in button fails with no feedback at all.
       try {
-        const { data, error } = await githubCopilotDeviceAuthStart();
+        const { data, error } = await microsoftCopilotDeviceAuthStart();
         if (error) {
           handleApiError(error);
           return null;
@@ -31,12 +31,12 @@ export function useStartGithubCopilotDeviceFlow() {
   });
 }
 
-export function usePollGithubCopilotDeviceFlow() {
+export function usePollMicrosoftCopilotDeviceFlow() {
   return useMutation({
     mutationFn: async (
       deviceCode: string,
-    ): Promise<GithubCopilotDevicePoll | null> => {
-      const { data, error } = await githubCopilotDeviceAuthPoll({
+    ): Promise<MicrosoftCopilotDevicePoll | null> => {
+      const { data, error } = await microsoftCopilotDeviceAuthPoll({
         body: { deviceCode },
       });
       if (error) {

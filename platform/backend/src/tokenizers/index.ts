@@ -50,6 +50,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   zhipuai: getTiktokenTokenizer,
   deepseek: getTiktokenTokenizer,
   "github-copilot": getTiktokenTokenizer,
+  "microsoft-copilot": getTiktokenTokenizer,
   gemini: getTiktokenTokenizer,
   bedrock: getTiktokenTokenizer,
   minimax: getTiktokenTokenizer,

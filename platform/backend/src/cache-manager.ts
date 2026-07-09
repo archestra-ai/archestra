@@ -44,6 +44,9 @@ export const CacheKey = {
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
+  /** Microsoft Copilot device-flow sign-in rate limiting per user */
+  MicrosoftCopilotDeviceAuthRateLimit:
+    "microsoft-copilot-device-auth-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */

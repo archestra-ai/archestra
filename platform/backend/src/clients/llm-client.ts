@@ -489,6 +489,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "GitHub Copilot requires a GitHub OAuth token. Connect your GitHub account or configure ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY.",
   },
 
+  "microsoft-copilot": {
+    // The model always talks to the local LLM proxy (buildProxyBaseUrl); the
+    // proxy's microsoft-copilot adapter redeems the Entra refresh token for a
+    // short-lived Graph access token and translates the OpenAI wire format to
+    // the Graph Chat API — redeeming here too would hand the proxy an access
+    // token it cannot redeem again.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    defaultBaseUrl: config.llm["microsoft-copilot"].baseUrl,
+    apiKeyRequiredMessage:
+      "Microsoft Copilot requires a connected Microsoft account. Sign in with Microsoft when adding the provider key.",
+  },
+
   azure: {
     createModel: ({
       apiKey,

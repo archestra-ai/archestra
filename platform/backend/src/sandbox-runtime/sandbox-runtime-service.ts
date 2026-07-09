@@ -288,15 +288,28 @@ class SandboxRuntimeService {
     this.setStatus("initializing");
 
     // Per-organization mode (no explicit runner host): there is no process-
-    // default engine to warm. Each unbound run carries its own org-default
-    // target whose session warms lazily on first use, so there is nothing to
-    // health-check at init — mark ready. A broken per-org engine still surfaces
-    // at that run rather than being hidden.
+    // default engine to warm, so there is no session to health-check. Still load
+    // the native addon, so a missing or broken build fails here instead of on the
+    // first sandbox call while the runtime reports itself ready. A broken per-org
+    // engine surfaces at the run that targets it.
     if (!config.daggerRuntime.runnerHost) {
-      this.setStatus("ready");
-      logger.info(
-        "[SandboxRuntime] ready — per-organization engines warm on first use",
-      );
+      try {
+        await loadNative();
+        if ((this.status as SandboxRuntimeStatus) === "stopped") return;
+        this.setStatus("ready");
+        logger.info(
+          "[SandboxRuntime] ready — per-organization engines warm on first use",
+        );
+      } catch (error) {
+        if ((this.status as SandboxRuntimeStatus) !== "stopped") {
+          this.setStatus("error");
+        }
+        logger.error(
+          { err: error },
+          "[SandboxRuntime] failed to load the sandbox addon — sandbox execution unavailable",
+        );
+        throw error;
+      }
       return;
     }
 

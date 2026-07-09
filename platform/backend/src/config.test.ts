@@ -30,6 +30,7 @@ import config, {
   parseBodyLimit,
   parseChatMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
+  parseEngineDeniedCidrs,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
@@ -1878,6 +1879,42 @@ describe("isCodeRuntimeEnabled", () => {
 
   test("nothing configured stays off", () => {
     expect(isCodeRuntimeEnabled(base)).toBe(false);
+  });
+});
+
+describe("parseEngineDeniedCidrs", () => {
+  test("returns an empty list when unset or empty", () => {
+    expect(parseEngineDeniedCidrs(undefined)).toEqual([]);
+    expect(parseEngineDeniedCidrs("")).toEqual([]);
+  });
+
+  test("keeps valid IPv4 CIDRs", () => {
+    expect(parseEngineDeniedCidrs("100.68.0.0/16,34.118.224.0/20")).toEqual([
+      "100.68.0.0/16",
+      "34.118.224.0/20",
+    ]);
+    expect(parseEngineDeniedCidrs("0.0.0.0/0,255.255.255.255/32")).toEqual([
+      "0.0.0.0/0",
+      "255.255.255.255/32",
+    ]);
+  });
+
+  // A malformed entry would make the Kubernetes API reject the whole egress
+  // NetworkPolicy. The engine StatefulSet is created before its policy, so that
+  // leaves a privileged engine running with no egress policy at all. Dropping
+  // the bad entry keeps the built-in denials in force.
+  test.each([
+    "not-a-cidr",
+    "10.0.0.0", // no prefix
+    "10.0.0.0/33", // prefix out of range
+    "256.0.0.0/8", // octet out of range
+    "10.0.0.0/8/8",
+    "fc00::/7", // IPv6 goes on the v6 rule, not this list
+  ])("drops the invalid entry %s", (bad) => {
+    expect(parseEngineDeniedCidrs(`10.1.0.0/16,${bad},192.0.2.0/24`)).toEqual([
+      "10.1.0.0/16",
+      "192.0.2.0/24",
+    ]);
   });
 });
 

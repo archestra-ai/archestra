@@ -1224,6 +1224,33 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
 /**
+ * Extra IPv4 CIDRs an unrestricted engine may not reach. A malformed entry would
+ * be rejected by the Kubernetes API when the egress NetworkPolicy is applied —
+ * and because the engine StatefulSet is created before its policy, that would
+ * leave a privileged engine running with no egress policy at all. Drop the bad
+ * entries loudly instead: the engine still gets its built-in RFC1918,
+ * link-local and metadata denials, and the operator sees what was ignored.
+ *
+ * @public — exported for testability
+ */
+export const parseEngineDeniedCidrs = (
+  envValue: string | undefined,
+): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const valid = entries.filter((entry) => IPV4_CIDR.test(entry));
+  const invalid = entries.filter((entry) => !IPV4_CIDR.test(entry));
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS ignoring invalid IPv4 CIDRs: ${invalid.join(", ")}`,
+    );
+  }
+  return valid;
+};
+
+const IPV4_CIDR =
+  /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
+
+/**
  * Whether the code execution sandbox is enabled.
  *
  * - `ARCHESTRA_CODE_RUNTIME_ENABLED=false` is the documented kill switch and
@@ -2148,9 +2175,8 @@ const config = {
       // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set
       // to the cluster's Service/Pod CIDRs when they fall outside RFC1918 so
       // sandboxed code can't reach in-cluster ClusterIP services.
-      additionalDeniedCidrs: parseCommaSeparatedList(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS ??
-          "",
+      additionalDeniedCidrs: parseEngineDeniedCidrs(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
       ),
     },
   },

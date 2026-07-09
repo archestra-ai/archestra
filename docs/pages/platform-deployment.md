@@ -767,7 +767,7 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Defaults: `2`, `8Gi`, `16Gi`, `50Gi`
   - Values: Kubernetes quantity strings
 
-- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services.
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services. An entry that is not a valid IPv4 CIDR is ignored, and the backend logs which ones.
   - Default: unset
   - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`
 

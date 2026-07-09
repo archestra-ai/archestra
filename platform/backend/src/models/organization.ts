@@ -299,6 +299,27 @@ class OrganizationModel {
   }
 
   /**
+   * The same fields for one organization. Every sandbox run by an agent with no
+   * environment resolves its engine through this, so it reads two columns rather
+   * than a whole row.
+   */
+  static async getDefaultEngineTarget(id: string): Promise<{
+    id: string;
+    defaultEnvironmentNamespace: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.organizationsTable.id,
+        defaultEnvironmentNamespace:
+          schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {

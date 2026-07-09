@@ -496,9 +496,8 @@ export const UpdateConnectionSettingsSchema = z.object({
 export const UpdateDefaultEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
-  // Wired into runtime (the code-managed engine's namespace + kube-pod:// target,
-  // which the NAPI boundary validates as an RFC1123 label), so it must be a valid
-  // Kubernetes namespace — not the free-form ≤253 string it once was when stored-only.
+  // Becomes the code-managed engine's namespace and part of its kube-pod://
+  // target, which the NAPI boundary validates as an RFC1123 label.
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),

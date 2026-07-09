@@ -1417,7 +1417,8 @@ async function resolveEnvironmentTarget(
     // configured an explicit runner host (a BYO engine), defer to it: returning
     // undefined routes the run to that process-default engine unchanged.
     if (config.daggerRuntime.runnerHost) return undefined;
-    const organization = await OrganizationModel.getById(organizationId);
+    const organization =
+      await OrganizationModel.getDefaultEngineTarget(organizationId);
     if (!organization) return undefined;
     return daggerEnvironmentRuntimeManager.organizationDefaultTarget(
       organization,

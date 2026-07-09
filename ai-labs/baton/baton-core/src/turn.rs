@@ -3,6 +3,7 @@
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use serde::Serialize;
 use tracing::debug;
 
 use crate::ToolName;
@@ -67,7 +68,8 @@ pub struct LabeledTurn {
 
 /// Identity of one trajectory instance, unique within the process; permits
 /// are bound to it so an authorization cannot cross trajectories.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
 pub struct TrajectoryId(u64);
 
 impl TrajectoryId {

@@ -18,6 +18,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use tracing::trace;
 
 use crate::ToolName;
@@ -33,7 +34,7 @@ use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 /// here ever removes an entry — but a [`Label`] is plain data, so protecting
 /// audit integrity from the surrounding process is the embedding harness's
 /// job.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AuditEntry {
     /// An authority minted a [`Grant`] that resolved a set of grant-fixable
     /// violations for one flow (check-transient — the stored context is never
@@ -92,7 +93,7 @@ impl fmt::Display for AuditEntry {
 /// User confirmations are deliberately not here — they are a property of the
 /// interaction, not of data, and live structurally on user turns
 /// ([`crate::turn::Actor::User`]).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {
     pub audience: Audience,
     pub trust: Trust,
@@ -194,7 +195,7 @@ impl Label {
 /// authority whose declared mandate [`covers`](Grant::covers) it and (b)
 /// rechecks the lifted context fail-closed. Routing + recheck establish
 /// authority, not the type.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Grant {
     /// Attest that context trust is at least this.
     pub trust: Option<KnownTrust>,
@@ -255,11 +256,14 @@ impl fmt::Display for Label {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::authority::AuthorityName;
     use crate::contract::{Unprovable, Violation};
     use crate::dimension::{Effect, UserId};
     use crate::preset::Adequacy;
+    use crate::test_strategies::{arb_grant, arb_known_trust, arb_label, arb_label_no_audit};
 
     fn audit_entry(reason: &str) -> AuditEntry {
         AuditEntry::Declassified {
@@ -313,106 +317,88 @@ mod tests {
         assert_eq!(folded.effects, Effects::UNKNOWN);
     }
 
-    fn sample_labels() -> Vec<Label> {
-        vec![
-            Label::identity(),
-            Label::unknown(),
-            Label {
-                audience: Audience::readers([UserId::new("alice"), UserId::new("bob")]),
-                trust: Trust::SUSPICIOUS,
-                effects: Effects::declared([Effect::Mutation, Effect::Egress]),
-                audit: Vec::new(),
-            },
-            Label {
-                audience: Audience::PUBLIC,
-                trust: Trust::TRUSTED,
-                effects: Effects::none(),
-                audit: Vec::new(),
-            },
-        ]
-    }
-
-    fn sample_grants() -> Vec<Grant> {
-        vec![
-            Grant::empty(),
-            Grant {
-                trust: Some(KnownTrust::Trusted),
-                ..Grant::empty()
-            },
-            Grant {
-                trust: Some(KnownTrust::Suspicious),
-                ..Grant::empty()
-            },
-            Grant {
-                audience: Some(BTreeSet::from([UserId::new("bob")])),
-                ..Grant::empty()
-            },
-            Grant {
-                effects: Some(BTreeSet::from([Effect::Mutation])),
-                ..Grant::empty()
-            },
-            Grant {
-                trust: Some(KnownTrust::Trusted),
-                audience: Some(BTreeSet::from([UserId::new("charlie")])),
-                effects: Some(BTreeSet::from([Effect::Egress])),
-                confirms: true,
-            },
-        ]
-    }
-
-    #[test]
-    fn lift_empty_is_identity() {
-        for x in sample_labels() {
-            assert_eq!(x.lift(&Grant::empty()), x);
+    proptest! {
+        /// `combine` is a monoid append over the *whole* label — associative
+        /// including the audit Writer log's vector append.
+        #[test]
+        fn combine_is_associative(a in arb_label(), b in arb_label(), c in arb_label()) {
+            prop_assert_eq!(
+                a.clone().combine(b.clone()).combine(c.clone()),
+                a.combine(b.combine(c))
+            );
         }
-    }
 
-    #[test]
-    fn lift_is_idempotent() {
-        for x in sample_labels() {
-            for g in sample_grants() {
-                let once = x.lift(&g);
-                assert_eq!(once.lift(&g), once, "grant={g:?} x={x}");
-            }
+        /// Commutativity holds only on the data dimensions (audience/trust/
+        /// effects semilattices); the audit log appends, so these labels carry
+        /// no audit and the whole-label equality is exactly the data-dim claim.
+        #[test]
+        fn combine_is_commutative_on_data(a in arb_label_no_audit(), b in arb_label_no_audit()) {
+            prop_assert_eq!(a.clone().combine(b.clone()), b.combine(a));
         }
-    }
 
-    #[test]
-    fn lift_is_inflationary_in_the_adequacy_order() {
-        // `lift` may only move a context toward passing a check (`Unknown` is
-        // bottom in every dimension), never demote one.
-        for x in sample_labels() {
-            for g in sample_grants() {
-                let up = x.lift(&g);
-                assert!(x.trust.adequacy_le(&up.trust), "trust demoted: g={g:?} x={x}");
-                assert!(x.audience.adequacy_le(&up.audience), "audience demoted: g={g:?} x={x}");
-                assert!(x.effects.adequacy_le(&up.effects), "effects demoted: g={g:?} x={x}");
-            }
+        /// Idempotence, likewise a data-dimension law (appending the same audit
+        /// twice would duplicate it).
+        #[test]
+        fn combine_is_idempotent_on_data(a in arb_label_no_audit()) {
+            prop_assert_eq!(a.clone().combine(a.clone()), a);
         }
-    }
 
-    #[test]
-    fn trust_grant_clears_the_trust_bar() {
-        for floor in [KnownTrust::Suspicious, KnownTrust::Trusted] {
+        #[test]
+        fn lift_empty_is_identity(x in arb_label()) {
+            prop_assert_eq!(x.lift(&Grant::empty()), x);
+        }
+
+        #[test]
+        fn lift_is_idempotent(x in arb_label(), g in arb_grant()) {
+            let once = x.lift(&g);
+            let twice = once.lift(&g);
+            prop_assert_eq!(twice, once);
+        }
+
+        /// `lift` may only move a context toward passing a check (`Unknown` is
+        /// bottom in every dimension), never demote one.
+        #[test]
+        fn lift_is_inflationary_in_the_adequacy_order(x in arb_label(), g in arb_grant()) {
+            let up = x.lift(&g);
+            prop_assert!(x.trust.adequacy_le(&up.trust), "trust demoted");
+            prop_assert!(x.audience.adequacy_le(&up.audience), "audience demoted");
+            prop_assert!(x.effects.adequacy_le(&up.effects), "effects demoted");
+        }
+
+        #[test]
+        fn trust_grant_clears_the_trust_bar(x in arb_label(), floor in arb_known_trust()) {
             let g = Grant {
                 trust: Some(floor),
                 ..Grant::empty()
             };
-            for x in sample_labels() {
-                assert_eq!(x.lift(&g).trust.at_least(floor), Adequacy::Holds, "floor={floor} x={x}");
+            prop_assert_eq!(x.lift(&g).trust.at_least(floor), Adequacy::Holds);
+        }
+
+        #[test]
+        fn audience_grant_covers_the_vouched_recipients(x in arb_label()) {
+            let recipients = BTreeSet::from([UserId::new("bob"), UserId::new("charlie")]);
+            let g = Grant {
+                audience: Some(recipients.clone()),
+                ..Grant::empty()
+            };
+            prop_assert_eq!(x.lift(&g).audience.covers(&recipients), Adequacy::Holds);
+        }
+
+        #[test]
+        fn covers_is_reflexive(g in arb_grant()) {
+            prop_assert!(g.covers(&g));
+        }
+
+        #[test]
+        fn covers_is_transitive(a in arb_grant(), b in arb_grant(), c in arb_grant()) {
+            if a.covers(&b) && b.covers(&c) {
+                prop_assert!(a.covers(&c));
             }
         }
-    }
 
-    #[test]
-    fn audience_grant_covers_the_vouched_recipients() {
-        let recipients = BTreeSet::from([UserId::new("bob"), UserId::new("charlie")]);
-        let g = Grant {
-            audience: Some(recipients.clone()),
-            ..Grant::empty()
-        };
-        for x in sample_labels() {
-            assert_eq!(x.lift(&g).audience.covers(&recipients), Adequacy::Holds, "x={x}");
+        #[test]
+        fn empty_grant_is_covered_by_all(g in arb_grant()) {
+            prop_assert!(g.covers(&Grant::empty()));
         }
     }
 
@@ -446,23 +432,6 @@ mod tests {
     }
 
     #[test]
-    fn covers_is_reflexive_and_transitive() {
-        let grants = sample_grants();
-        for g in &grants {
-            assert!(g.covers(g), "not reflexive: {g:?}");
-        }
-        for a in &grants {
-            for b in &grants {
-                for c in &grants {
-                    if a.covers(b) && b.covers(c) {
-                        assert!(a.covers(c), "not transitive: {a:?} {b:?} {c:?}");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
     fn covers_trust_follows_the_known_trust_order() {
         let trusted_mandate = Grant {
             trust: Some(KnownTrust::Trusted),
@@ -487,12 +456,5 @@ mod tests {
         // The empty (None) mandate covers only a None need.
         assert!(Grant::empty().covers(&Grant::empty()));
         assert!(!Grant::empty().covers(&suspicious_need));
-    }
-
-    #[test]
-    fn empty_grant_is_covered_by_all() {
-        for g in sample_grants() {
-            assert!(g.covers(&Grant::empty()), "{g:?} should cover empty");
-        }
     }
 }

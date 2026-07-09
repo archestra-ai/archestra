@@ -54,7 +54,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -101,7 +100,6 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import {
-  mergeTeamSelection,
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
@@ -1048,83 +1046,117 @@ export function McpCatalogForm({
                         }}
                       >
                         {currentScope === "team" && (
-                          <div className="space-y-3">
+                          <div className="space-y-6">
                             <div className="space-y-2">
-                              <Label>Teams</Label>
-                              <MultiSelectCombobox
-                                options={
-                                  teams?.map((t) => ({
-                                    label: t.name,
-                                    value: t.id,
-                                  })) ?? []
-                                }
-                                value={selectedTeams.map((t) => t.id)}
-                                onChange={(ids) =>
+                              <Label>Add Team</Label>
+                              <SearchableSelect
+                                value=""
+                                onValueChange={(teamId) =>
                                   form.setValue(
                                     "teams",
-                                    mergeTeamSelection(selectedTeams, ids),
-                                    {
-                                      shouldDirty: true,
-                                    },
+                                    [
+                                      ...selectedTeams,
+                                      { id: teamId, level: "use" },
+                                    ],
+                                    { shouldDirty: true },
                                   )
                                 }
-                                placeholder="Select teams..."
-                                emptyMessage="No teams found"
+                                items={(teams ?? []).map((t) => ({
+                                  value: t.id,
+                                  label: t.name,
+                                  disabled: selectedTeams.some(
+                                    (s) => s.id === t.id,
+                                  ),
+                                }))}
+                                placeholder="Select a team"
+                                searchPlaceholder="Search teams by name"
+                                emptyMessage="No matching teams found."
+                                className="w-full"
                               />
                             </div>
-                            {selectedTeams.length > 0 && (
-                              <div className="space-y-2">
-                                <Label>Access</Label>
-                                {selectedTeams.map((selected) => (
-                                  <div
-                                    key={selected.id}
-                                    className="flex items-center justify-between gap-3"
-                                  >
-                                    <span className="truncate text-sm">
-                                      {teamNameById.get(selected.id) ??
-                                        selected.id}
-                                    </span>
-                                    <Select
-                                      value={selected.level}
-                                      onValueChange={(level) =>
-                                        form.setValue(
-                                          "teams",
-                                          selectedTeams.map((t) =>
-                                            t.id === selected.id
-                                              ? {
-                                                  ...t,
-                                                  level: level as
-                                                    | "use"
-                                                    | "write",
-                                                }
-                                              : t,
-                                          ),
-                                          { shouldDirty: true },
-                                        )
-                                      }
+
+                            <div className="space-y-2">
+                              <Label>Teams ({selectedTeams.length})</Label>
+                              {selectedTeams.length === 0 ? (
+                                <div className="rounded-lg border border-dashed p-4 text-center">
+                                  <p className="text-sm text-muted-foreground">
+                                    No teams added yet
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {selectedTeams.map((selected) => (
+                                    <div
+                                      key={selected.id}
+                                      className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
                                     >
-                                      <SelectTrigger className="w-44">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="use">Use</SelectItem>
-                                        <SelectItem value="write">
-                                          Manage
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                ))}
-                                <FormDescription>
-                                  <strong>Use</strong> — members can find this
-                                  MCP server, install it for themselves, and use
-                                  shared connections. <strong>Manage</strong>{" "}
-                                  additionally lets the team&apos;s admins edit
-                                  it, change its environment, and manage
-                                  sharing.
-                                </FormDescription>
-                              </div>
-                            )}
+                                      <p className="truncate text-sm font-medium">
+                                        {teamNameById.get(selected.id) ??
+                                          selected.id}
+                                      </p>
+                                      <Select
+                                        value={selected.level}
+                                        onValueChange={(level) =>
+                                          form.setValue(
+                                            "teams",
+                                            selectedTeams.map((t) =>
+                                              t.id === selected.id
+                                                ? {
+                                                    ...t,
+                                                    level: level as
+                                                      | "use"
+                                                      | "write",
+                                                  }
+                                                : t,
+                                            ),
+                                            { shouldDirty: true },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger className="w-full">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="use">
+                                            Use
+                                          </SelectItem>
+                                          <SelectItem value="write">
+                                            Manage
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          form.setValue(
+                                            "teams",
+                                            selectedTeams.filter(
+                                              (t) => t.id !== selected.id,
+                                            ),
+                                            { shouldDirty: true },
+                                          )
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                        <span className="sr-only">
+                                          Remove team
+                                        </span>
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  <FormDescription>
+                                    <strong>Use</strong> — members can find this
+                                    MCP server, install it for themselves, and
+                                    use shared connections.{" "}
+                                    <strong>Manage</strong> additionally lets
+                                    the team&apos;s admins edit it, change its
+                                    environment, and manage sharing.
+                                  </FormDescription>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </VisibilitySelector>

@@ -1,7 +1,6 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
-  mergeTeamSelection,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
@@ -1097,21 +1096,6 @@ describe("team access levels", () => {
     expect(data.teams).toEqual([
       { id: "t1", level: "write" },
       { id: "t2", level: "use" },
-    ]);
-  });
-
-  it("keeps chosen levels when the selection changes, defaulting new teams to use", () => {
-    const merged = mergeTeamSelection(
-      [
-        { id: "t1", level: "write" },
-        { id: "t2", level: "use" },
-      ],
-      ["t1", "t3"],
-    );
-
-    expect(merged).toEqual([
-      { id: "t1", level: "write" },
-      { id: "t3", level: "use" },
     ]);
   });
 });

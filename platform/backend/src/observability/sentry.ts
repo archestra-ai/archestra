@@ -9,7 +9,7 @@ import * as Sentry from "@sentry/node";
 import config from "@/config";
 import { getTransientDbErrorCode } from "@/database/retry";
 import logger from "@/logging";
-import { ApiError } from "@/types";
+import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import {
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
@@ -166,6 +166,21 @@ const initSentry = async (): Promise<void> => {
           ...event.tags,
           error_type: "db_transient",
           db_error_code: transientDbErrorCode,
+        };
+      }
+
+      // A secrets-backend (e.g. Vault) outage fails every route that touches
+      // secrets, fragmenting one incident into an issue per endpoint and per
+      // upstream error message. Group by the root condition instead, same as
+      // the transient-DB handling above.
+      if (
+        error instanceof ApiError &&
+        error.internalCode === SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE
+      ) {
+        event.fingerprint = [SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE];
+        event.tags = {
+          ...event.tags,
+          error_type: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
         };
       }
 

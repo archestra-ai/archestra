@@ -7,6 +7,7 @@ import {
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -1733,6 +1734,20 @@ describe("mapProviderError - Sentry raw error capture", () => {
     const result = mapProviderError(error, "openai");
 
     expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("does not capture approval-gated tool blocks in autonomous sessions", () => {
+    // Thrown by the chat tool builder when a "Require approval" policy fires
+    // in a session with no human to approve (A2A, Slack, MS Teams,
+    // sub-agents). Policy enforcement working as designed, not a provider
+    // failure — it must stay out of error tracking.
+    const error = new Error(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    );
+
+    mapProviderError(error, "bedrock");
+
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 

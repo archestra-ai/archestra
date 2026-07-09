@@ -11,6 +11,7 @@ import {
   OpenAIErrorTypes,
   RetryableErrorCodes,
   type SupportedProvider,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
@@ -1798,7 +1799,12 @@ export function mapProviderError(
   // indicate a bug.
   const isExpectedProviderError =
     (statusCode !== undefined && statusCode >= 400 && statusCode < 500) ||
-    RetryableErrorCodes.has(errorCode);
+    RetryableErrorCodes.has(errorCode) ||
+    // An approval-gated tool call rejected in an autonomous session (A2A,
+    // Slack, MS Teams, sub-agents) is our own policy enforcement doing its
+    // job, not a provider failure. It reaches this mapper as a bare Error
+    // with no HTTP envelope, so match the policy reason it was thrown with.
+    isToolApprovalPolicyBlockError(errorMessage);
 
   if (!isTerminatedStream && !isExpectedProviderError) {
     captureRawProviderErrorInSentry({
@@ -1854,6 +1860,13 @@ function isStreamTerminatedError(error: unknown): boolean {
 
 function isUpstreamIdleTimeoutError(message: string): boolean {
   return /idle timeout/i.test(message);
+}
+
+// `includes` rather than equality: the error may pick up wrapper prefixes on
+// its way through the tool-execution stack, but the thrown message is always
+// the shared policy-reason constant verbatim.
+function isToolApprovalPolicyBlockError(message: string): boolean {
+  return message.includes(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
 }
 
 function isUpstreamProviderError(message: string): boolean {

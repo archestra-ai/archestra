@@ -4,6 +4,7 @@ import SecretModel from "@/models/secret";
 import {
   ApiError,
   type ISecretManager,
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
   type SecretsConnectivityResult,
   type SecretValue,
   type SelectSecret,
@@ -63,8 +64,9 @@ export default class VaultSecretManager
     }
 
     throw new ApiError(
-      500,
+      503,
       "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+      SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
     );
   }
 
@@ -218,7 +220,11 @@ export default class VaultSecretManager
         { error, listBasePath, kvVersion: this.config.kvVersion },
         "VaultSecretManager.checkConnectivity: failed to list secrets",
       );
-      throw new ApiError(500, extractVaultErrorMessage(error));
+      throw new ApiError(
+        503,
+        extractVaultErrorMessage(error),
+        SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+      );
     }
   }
 

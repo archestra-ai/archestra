@@ -72,4 +72,4 @@ pub use engine::{
     BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
 };
 pub use label::{AuditEntry, Grant, Label};
-pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn};
+pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};

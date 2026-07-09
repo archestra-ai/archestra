@@ -7,3 +7,10 @@ description = "ADT-based information-flow label engine for agent trajectories (p
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "resolution"
+harness = false

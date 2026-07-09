@@ -8,16 +8,20 @@ use crate::dimension::UserId;
 use crate::engine::{Permit, RejectedPermit};
 use crate::label::Label;
 
+/// A user's contribution to a turn: who spoke, and whether they explicitly
+/// confirmed one named tool. The `confirms` field is structural, not a label:
+/// only user turns carry it, so "only the user confirms" holds by construction
+/// rather than by a runtime check — an assistant or tool actor has no such
+/// field to forge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserTurn {
+    pub id: UserId,
+    pub confirms: Option<ToolName>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Actor {
-    User {
-        id: UserId,
-        /// An explicit confirmation of one named tool. Structural, not a
-        /// label: only user turns can carry it, so "only the user confirms"
-        /// holds by construction rather than by a runtime check — an
-        /// assistant or tool actor has no such field to forge.
-        confirms: Option<ToolName>,
-    },
+    User(UserTurn),
     Assistant,
     Tool(ToolName),
 }
@@ -26,23 +30,23 @@ pub enum Actor {
 /// they enter a trajectory only through [`Trajectory::record_result`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Speaker {
-    User { id: UserId, confirms: Option<ToolName> },
+    User(UserTurn),
     Assistant,
 }
 
 impl Speaker {
     pub fn user(id: UserId) -> Self {
-        Self::User { id, confirms: None }
+        Self::User(UserTurn { id, confirms: None })
     }
 
     /// A user message that explicitly confirms one named tool. The
     /// confirmation is valid only while this is the newest turn — see
     /// [`Trajectory::pending_confirmation`].
     pub fn confirming(id: UserId, tool: ToolName) -> Self {
-        Self::User {
+        Self::User(UserTurn {
             id,
             confirms: Some(tool),
-        }
+        })
     }
 }
 
@@ -110,7 +114,7 @@ impl Trajectory {
     /// trusted input from the embedding harness.
     pub fn push_message(&mut self, label: Label, speaker: Speaker, content: impl Into<String>) {
         let actor = match speaker {
-            Speaker::User { id, confirms } => Actor::User { id, confirms },
+            Speaker::User(user) => Actor::User(user),
             Speaker::Assistant => Actor::Assistant,
         };
         self.turns.push(LabeledTurn {
@@ -164,9 +168,9 @@ impl Trajectory {
                 turn:
                     Turn {
                         actor:
-                            Actor::User {
+                            Actor::User(UserTurn {
                                 confirms: Some(tool), ..
-                            },
+                            }),
                         ..
                     },
                 ..

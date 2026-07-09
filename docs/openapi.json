@@ -61992,6 +61992,18 @@
         }
       }
     },
+    "/api/auth/oauth2/revoke": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/api/auth/oauth2/consent": {
       "post": {
         "operationId": "submitOAuthConsent",

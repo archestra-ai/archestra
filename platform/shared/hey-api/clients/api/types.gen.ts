@@ -17881,6 +17881,20 @@ export type PostApiAuthOauth2TokenResponses = {
     200: unknown;
 };
 
+export type PostApiAuthOauth2RevokeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/oauth2/revoke';
+};
+
+export type PostApiAuthOauth2RevokeResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type SubmitOAuthConsentData = {
     body: {
         accept: boolean;

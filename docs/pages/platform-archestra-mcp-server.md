@@ -1874,6 +1874,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `load_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
 | `create_skill` | Create a new Agent Skill from a SKILL.md manifest. | `skill:create` |
 | `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `skill:update` |
+| `edit_skill` | Make a targeted edit to an existing Agent Skill without resending the whole SKILL.md. | `skill:update` |
 
 #### list_skills
 
@@ -1923,6 +1924,23 @@ Required RBAC permission: `skill:update`
 | `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
 | `files[].content` | `string` | Yes | Text content of the file |
 | `files[].encoding` | `"utf8" \| "base64"` | No |  |
+
+
+#### edit_skill
+
+Required RBAC permission: `skill:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | The current name of the skill to edit, as named by list_skills. |
+| `baseVersion` | `integer` | Yes | The version the edit is based on — the `version` shown on the <skill_content>/<skill_file> frame you loaded with load_skill. The edit is rejected if the skill's head has moved past it. |
+| `path` | `string` | No | Omit (or pass an empty string) to edit the SKILL.md body; pass a bundled file path (from the <skill_resources> list) to edit that file instead. Only text (utf8) files are editable — binary assets are not. |
+| `edits` | `object[]` | No | str_replace edits applied in order to the target; the whole edit is atomic (any failure leaves the skill unchanged). This is the way to change a large SKILL.md without resending it all. Pass either edits or replacementContent, never both. |
+| `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the target (add surrounding context to disambiguate). |
+| `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |
+| `replacementContent` | `string` | No | The complete new content of the target, replacing it outright with no old_str matching — use it for a small file or a full rewrite. Prefer edits for the SKILL.md body so you don't resend the whole thing. Pass either edits or replacementContent, never both. |
 
 
 ### Apps

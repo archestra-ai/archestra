@@ -597,7 +597,7 @@ mod tests {
         );
         trajectory.push_message(
             Label {
-                audience: Audience::Public,
+                audience: Audience::PUBLIC,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
@@ -1017,9 +1017,9 @@ mod tests {
             panic!("expected permit, got {decision:?}");
         };
         assert_eq!(engine.authority.consulted.get(), 0);
-        assert_eq!(permit.result_label().audience, Audience::Unknown);
-        assert_eq!(permit.result_label().trust, Trust::Unknown);
-        assert_eq!(permit.result_label().effects, Effects::Unknown);
+        assert_eq!(permit.result_label().audience, Audience::UNKNOWN);
+        assert_eq!(permit.result_label().trust, Trust::UNKNOWN);
+        assert_eq!(permit.result_label().effects, Effects::UNKNOWN);
         assert_eq!(
             permit.result_label().audit,
             vec![AuditEntry::Acknowledged {
@@ -1057,7 +1057,7 @@ mod tests {
         push_user_turn(
             &mut trajectory,
             Label {
-                audience: Audience::Unknown,
+                audience: Audience::UNKNOWN,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
@@ -1101,7 +1101,7 @@ mod tests {
         push_user_turn(
             &mut trajectory,
             Label {
-                audience: Audience::Unknown,
+                audience: Audience::UNKNOWN,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
@@ -1129,7 +1129,7 @@ mod tests {
         push_user_turn(
             &mut trajectory,
             Label {
-                audience: Audience::Unknown,
+                audience: Audience::UNKNOWN,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
@@ -1257,7 +1257,7 @@ mod tests {
         // TrustUnknown: unknown-trust context, audience fine.
         let unknown_trust = context(Label {
             audience: Audience::readers([user("alice"), user("bob")]),
-            trust: Trust::Unknown,
+            trust: Trust::UNKNOWN,
             ..Label::identity()
         });
         assert!(matches!(
@@ -1278,7 +1278,7 @@ mod tests {
 
         // AudienceUnknown: unknown-audience but trusted context.
         let unknown_audience = context(Label {
-            audience: Audience::Unknown,
+            audience: Audience::UNKNOWN,
             trust: Trust::TRUSTED,
             ..Label::identity()
         });
@@ -1397,7 +1397,7 @@ mod tests {
             name: ToolName::new("web.fetch"),
             requires: Requirements::default(),
             output_label: Label {
-                audience: Audience::Public,
+                audience: Audience::PUBLIC,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },

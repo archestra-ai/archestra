@@ -309,6 +309,13 @@ export enum ChatErrorCode {
    */
   IncompleteToolCall = "incomplete_tool_call",
   /**
+   * A tool call was truncated because the model hit its output-token limit while
+   * writing it (finishReason "length") — the tool input was too large to finish
+   * in one turn. Deterministic in the payload size, so NOT retryable: retrying
+   * re-truncates. Distinct from IncompleteToolCall (a transient mid-stream drop).
+   */
+  ToolCallOutputTruncated = "tool_call_output_truncated",
+  /**
    * The provider needs a per-user credential the acting user hasn't linked yet
    * (e.g. GitHub Copilot). Carries an `authAction` so the UI can prompt the user
    * to link their account rather than showing a generic key error.
@@ -353,6 +360,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The model ended its turn without a reply. Rephrasing your message may help.",
   [ChatErrorCode.IncompleteToolCall]:
     "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
+  [ChatErrorCode.ToolCallOutputTruncated]:
+    "The model ran out of output space while writing a tool call, so it couldn't finish — the tool input was too large for one turn. Break the change into smaller steps and try again.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",

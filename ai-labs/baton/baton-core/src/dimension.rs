@@ -1,18 +1,21 @@
-//! Label dimensions and their combine algebra.
+//! Label dimensions: the crate's three built-in instances of the generic
+//! [`crate::preset`] algebras, plus their value types.
 //!
-//! Each dimension defines its own `combine`: how two values merge when data
-//! from two sources meets in one context. [`crate::label::Label::combine`]
-//! applies these per dimension; nothing else in the crate invents merge
-//! semantics.
+//! Each dimension is a newtype over its preset and delegates its `combine` (the
+//! taint fold) and adequacy relation to it; [`crate::label::Label::combine`]
+//! applies the per-dimension combine, and nothing else in the crate invents
+//! merge semantics.
 //!
 //! Per data dimension the combine is a commutative, idempotent semilattice,
 //! and `Unknown` has a definite position in each (absorbing for audience and
 //! effects; between `Trusted` and `Suspicious` for trust). This is the taint
 //! fold — distinct from the sink-side adequacy relation, where `Unknown` is
-//! instead incomparable.
+//! instead incomparable → [`Adequacy::Unprovable`](crate::preset).
 
 use std::collections::BTreeSet;
 use std::fmt;
+
+use crate::preset::{Adequacy, HasBottom, JoinSet, MeetSet, MinLevel};
 
 /// A user known to the surrounding system (ACLs, directories, ...).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,79 +37,72 @@ impl fmt::Display for UserId {
     }
 }
 
-/// The sink-side proof for one dimension: three-valued, not a lattice
-/// comparison. `Holds` when the context satisfies the requirement,
-/// `Fails(witness)` when it provably does not (the witness is exactly what is
-/// wrong — the offending readers, the too-low trust, the present forbidden
-/// effects), and `Unprovable` when `Unknown` blocked the proof either way.
-///
-/// This is where `Unknown` is *incomparable* — the opposite of its definite
-/// position in the taint fold. Resolving an `Unprovable` is an explicit
-/// [`crate::engine::UnknownPolicy`] or [`crate::authority::Authority`]
-/// decision, never a cast.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Adequacy<W> {
-    Holds,
-    Fails(W),
-    Unprovable,
-}
-
-/// Who is allowed to read a piece of data.
+/// Who is allowed to read a piece of data — an instance of
+/// [`MeetSet<UserId>`](crate::preset::MeetSet).
 ///
 /// The fold is the most-restrictive combine (the confidentiality meet):
 /// readers of a combination are those allowed to read *every* part. The
 /// original design notes said "union", but under union `private ⊔ public =
 /// public`, after which a recipients-within-audience sink check is vacuously
 /// satisfied and private turns egress anywhere. "Who has already touched
-/// this" is provenance — a different dimension, not this one. `Public` is
-/// the identity, `Unknown` is absorbing.
+/// this" is provenance — a different dimension, not this one. [`PUBLIC`] is
+/// the identity, [`UNKNOWN`] is absorbing.
+///
+/// [`PUBLIC`]: Audience::PUBLIC
+/// [`UNKNOWN`]: Audience::UNKNOWN
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Audience {
-    Public,
-    Readers(BTreeSet<UserId>),
-    Unknown,
-}
+pub struct Audience(MeetSet<UserId>);
 
 impl Audience {
+    /// Readable by anyone — the fold identity (`MeetSet::All`).
+    pub const PUBLIC: Self = Self(MeetSet::All);
+    /// Audience unestablished — absorbing in the fold, `Unprovable` at a sink.
+    pub const UNKNOWN: Self = Self(MeetSet::Unknown);
+
     pub fn readers(ids: impl IntoIterator<Item = UserId>) -> Self {
-        Self::Readers(ids.into_iter().collect())
+        Self(MeetSet::Only(ids.into_iter().collect()))
     }
 
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
-            (Self::Public, x) | (x, Self::Public) => x,
-            (Self::Readers(a), Self::Readers(b)) => Self::Readers(a.intersection(&b).cloned().collect()),
+        Self(self.0.combine(other.0))
+    }
+
+    /// Adequacy of this audience for a set of recipients: are they all already
+    /// allowed readers? See `MeetSet::covers`.
+    pub(crate) fn covers(&self, recipients: &BTreeSet<UserId>) -> Adequacy<BTreeSet<UserId>> {
+        self.0.covers(recipients)
+    }
+
+    /// Grant application ([`Label::lift`](crate::label::Label::lift)): admit
+    /// `vouched` into the readers. `Public` stays public; `Unknown` becomes
+    /// exactly the vouched readers. Monotone in the adequacy order.
+    pub(crate) fn admitting(&self, vouched: &BTreeSet<UserId>) -> Self {
+        match &self.0 {
+            MeetSet::All => Self(MeetSet::All),
+            MeetSet::Only(s) => Self(MeetSet::Only(s.union(vouched).cloned().collect())),
+            MeetSet::Unknown => Self(MeetSet::Only(vouched.clone())),
         }
     }
 
-    /// Adequacy of this audience for a set of recipients: are they all
-    /// already allowed readers? `Public` holds for anyone; `Unknown` cannot
-    /// bound anyone (so `Unprovable`, never silently treated as `Public`);
-    /// `Readers` holds iff no recipient falls outside, and the `Fails`
-    /// witness is exactly the recipients outside the set.
-    pub(crate) fn covers(&self, recipients: &BTreeSet<UserId>) -> Adequacy<BTreeSet<UserId>> {
-        match self {
-            Self::Unknown => Adequacy::Unprovable,
-            Self::Public => Adequacy::Holds,
-            Self::Readers(allowed) => {
-                let outside: BTreeSet<UserId> = recipients.difference(allowed).cloned().collect();
-                if outside.is_empty() {
-                    Adequacy::Holds
-                } else {
-                    Adequacy::Fails(outside)
-                }
-            }
+    /// `self ⊑ other` in the adequacy (permissiveness) order: `Unknown` bottom,
+    /// `Public` top, `Readers` by inclusion.
+    #[cfg(test)]
+    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (MeetSet::Unknown, _) => true,
+            (_, MeetSet::All) => true,
+            (MeetSet::Only(a), MeetSet::Only(b)) => a.is_subset(b),
+            _ => false,
         }
     }
 }
 
 impl fmt::Display for Audience {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Public => write!(f, "public"),
-            Self::Readers(ids) => {
+        match &self.0 {
+            MeetSet::All => write!(f, "public"),
+            MeetSet::Only(ids) => {
                 write!(f, "{{")?;
                 for (i, id) in ids.iter().enumerate() {
                     if i > 0 {
@@ -116,7 +112,7 @@ impl fmt::Display for Audience {
                 }
                 write!(f, "}}")
             }
-            Self::Unknown => write!(f, "unknown"),
+            MeetSet::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -128,6 +124,14 @@ pub enum KnownTrust {
     Trusted,
 }
 
+/// `Suspicious` is the least trusted, so it is the bottom `MinLevel` folds
+/// toward (and the element `Unknown` sits just above).
+impl HasBottom for KnownTrust {
+    fn bottom() -> Self {
+        Self::Suspicious
+    }
+}
+
 impl fmt::Display for KnownTrust {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -137,7 +141,8 @@ impl fmt::Display for KnownTrust {
     }
 }
 
-/// How much the provenance of data is trusted — if that is known at all.
+/// How much the provenance of data is trusted — if that is known at all. An
+/// instance of [`MinLevel<KnownTrust>`](crate::preset::MinLevel).
 ///
 /// `Unknown` is structurally separate from the known judgements so nothing
 /// can treat it as "probably fine" by accident: requirements are expressed
@@ -149,45 +154,56 @@ impl fmt::Display for KnownTrust {
 /// missing knowledge, which dominates trust
 /// (`Suspicious ∧ Unknown = Suspicious`, `Trusted ∧ Unknown = Unknown`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Trust {
-    Known(KnownTrust),
-    Unknown,
-}
+pub struct Trust(MinLevel<KnownTrust>);
 
 impl Trust {
-    pub const TRUSTED: Self = Self::Known(KnownTrust::Trusted);
-    pub const SUSPICIOUS: Self = Self::Known(KnownTrust::Suspicious);
+    pub const TRUSTED: Self = Self(MinLevel::Known(KnownTrust::Trusted));
+    pub const SUSPICIOUS: Self = Self(MinLevel::Known(KnownTrust::Suspicious));
+    /// Provenance unestablished — just above bottom in the fold, `Unprovable`
+    /// at a sink.
+    pub const UNKNOWN: Self = Self(MinLevel::Unknown);
 
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            (Self::Known(KnownTrust::Suspicious), _) | (_, Self::Known(KnownTrust::Suspicious)) => {
-                Self::Known(KnownTrust::Suspicious)
-            }
-            (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
-            (Self::Known(KnownTrust::Trusted), Self::Known(KnownTrust::Trusted)) => Self::Known(KnownTrust::Trusted),
+        Self(self.0.combine(other.0))
+    }
+
+    /// Adequacy of this trust for a floor. See `MinLevel::at_least`.
+    pub(crate) fn at_least(&self, floor: KnownTrust) -> Adequacy<KnownTrust> {
+        self.0.at_least(floor)
+    }
+
+    /// Grant application ([`Label::lift`](crate::label::Label::lift)): raise
+    /// trust to at least `attested`. A join (`max`), never a demotion — a
+    /// `Trusted` context is never lowered by a weaker attestation, and an
+    /// `Unknown` one becomes the attested judgement.
+    pub(crate) fn raised_to(&self, attested: KnownTrust) -> Self {
+        match self.0 {
+            MinLevel::Known(actual) => Self(MinLevel::Known(actual.max(attested))),
+            MinLevel::Unknown => Self(MinLevel::Known(attested)),
         }
     }
 
-    /// Adequacy of this trust for a floor. A known judgement at or above the
-    /// floor holds; a lower one `Fails`, carrying the actual (too-low)
-    /// judgement as witness. `Unknown` never satisfies any bar — unpacking it
-    /// is an explicit policy/authority decision, never a comparison — so it
-    /// is `Unprovable`.
-    pub(crate) fn at_least(self, floor: KnownTrust) -> Adequacy<KnownTrust> {
-        match self {
-            Self::Known(actual) if actual >= floor => Adequacy::Holds,
-            Self::Known(actual) => Adequacy::Fails(actual),
-            Self::Unknown => Adequacy::Unprovable,
+    /// `self ⊑ other` in the adequacy order: `Unknown` bottom, then
+    /// `Suspicious`, then `Trusted`.
+    #[cfg(test)]
+    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
+        fn rank(t: &MinLevel<KnownTrust>) -> u8 {
+            match t {
+                MinLevel::Unknown => 0,
+                MinLevel::Known(KnownTrust::Suspicious) => 1,
+                MinLevel::Known(KnownTrust::Trusted) => 2,
+            }
         }
+        rank(&self.0) <= rank(&other.0)
     }
 }
 
 impl fmt::Display for Trust {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Known(known) => write!(f, "{known}"),
-            Self::Unknown => write!(f, "unknown"),
+        match self.0 {
+            MinLevel::Known(known) => write!(f, "{known}"),
+            MinLevel::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -208,57 +224,65 @@ impl fmt::Display for Effect {
     }
 }
 
-/// Effects that have already happened in a context.
+/// Effects that have already happened in a context — an instance of
+/// [`JoinSet<Effect>`](crate::preset::JoinSet).
 ///
-/// Union fold; `Unknown` (an unannotated tool ran, so anything may have
+/// Union fold; [`none`](Effects::none) (`Has(∅)`) is the identity, and
+/// [`UNKNOWN`](Effects::UNKNOWN) (an unannotated tool ran, so anything may have
 /// happened) is absorbing.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Effects {
-    Declared(BTreeSet<Effect>),
-    Unknown,
-}
+pub struct Effects(JoinSet<Effect>);
 
 impl Effects {
+    /// Effects unestablished — absorbing in the fold, `Unprovable` at a sink.
+    pub const UNKNOWN: Self = Self(JoinSet::Unknown);
+
     pub fn none() -> Self {
-        Self::Declared(BTreeSet::new())
+        Self(JoinSet::empty())
     }
 
     pub fn declared(effects: impl IntoIterator<Item = Effect>) -> Self {
-        Self::Declared(effects.into_iter().collect())
+        Self(JoinSet::Has(effects.into_iter().collect()))
     }
 
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
-        match (self, other) {
-            (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
-            (Self::Declared(a), Self::Declared(b)) => Self::Declared(a.union(&b).copied().collect()),
-        }
+        Self(self.0.combine(other.0))
     }
 
     /// Adequacy against a forbidden set: none of `forbidden` may already be
-    /// present. `Unknown` effects cannot attest the absence of anything (an
-    /// unannotated tool ran), so they are `Unprovable`. `Declared` holds iff
-    /// the intersection is empty, and the `Fails` witness is exactly the
-    /// forbidden effects that are present.
+    /// present. See `JoinSet::avoids`.
     pub(crate) fn avoids(&self, forbidden: &BTreeSet<Effect>) -> Adequacy<BTreeSet<Effect>> {
-        match self {
-            Self::Unknown => Adequacy::Unprovable,
-            Self::Declared(present) => {
-                let hit: BTreeSet<Effect> = forbidden.intersection(present).copied().collect();
-                if hit.is_empty() {
-                    Adequacy::Holds
-                } else {
-                    Adequacy::Fails(hit)
-                }
-            }
+        self.0.avoids(forbidden)
+    }
+
+    /// Grant application ([`Label::lift`](crate::label::Label::lift)): waive
+    /// `waived` from the present effects. `Unknown` stays `Unknown` — one
+    /// cannot attest a negative over it, which is why unprovable effects are
+    /// acknowledge-only, never grant-fixable.
+    pub(crate) fn waiving(&self, waived: &BTreeSet<Effect>) -> Self {
+        match &self.0 {
+            JoinSet::Has(present) => Self(JoinSet::Has(present.difference(waived).copied().collect())),
+            JoinSet::Unknown => Self(JoinSet::Unknown),
+        }
+    }
+
+    /// `self ⊑ other` in the adequacy order: `Unknown` bottom, `none()` top,
+    /// fewer present effects is more adequate.
+    #[cfg(test)]
+    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (JoinSet::Unknown, _) => true,
+            (JoinSet::Has(a), JoinSet::Has(b)) => b.is_subset(a),
+            (JoinSet::Has(_), JoinSet::Unknown) => false,
         }
     }
 }
 
 impl fmt::Display for Effects {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Declared(effects) => {
+        match &self.0 {
+            JoinSet::Has(effects) => {
                 write!(f, "{{")?;
                 for (i, e) in effects.iter().enumerate() {
                     if i > 0 {
@@ -268,7 +292,7 @@ impl fmt::Display for Effects {
                 }
                 write!(f, "}}")
             }
-            Self::Unknown => write!(f, "unknown"),
+            JoinSet::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -292,33 +316,33 @@ mod tests {
     fn audience_disjoint_readers_combine_to_nobody() {
         let a = Audience::readers([user("alice")]);
         let b = Audience::readers([user("bob")]);
-        assert_eq!(a.combine(b), Audience::Readers(BTreeSet::new()));
+        assert_eq!(a.combine(b), Audience::readers(Vec::<UserId>::new()));
     }
 
     #[test]
     fn audience_public_is_identity() {
         let readers = Audience::readers([user("alice")]);
-        assert_eq!(Audience::Public.combine(readers.clone()), readers.clone());
-        assert_eq!(readers.clone().combine(Audience::Public), readers);
-        assert_eq!(Audience::Public.combine(Audience::Public), Audience::Public);
+        assert_eq!(Audience::PUBLIC.combine(readers.clone()), readers.clone());
+        assert_eq!(readers.clone().combine(Audience::PUBLIC), readers);
+        assert_eq!(Audience::PUBLIC.combine(Audience::PUBLIC), Audience::PUBLIC);
     }
 
     #[test]
     fn audience_unknown_is_absorbing() {
-        assert_eq!(Audience::Unknown.combine(Audience::Public), Audience::Unknown);
+        assert_eq!(Audience::UNKNOWN.combine(Audience::PUBLIC), Audience::UNKNOWN);
         assert_eq!(
-            Audience::readers([user("alice")]).combine(Audience::Unknown),
-            Audience::Unknown
+            Audience::readers([user("alice")]).combine(Audience::UNKNOWN),
+            Audience::UNKNOWN
         );
     }
 
     #[test]
     fn audience_combine_is_associative() {
         let samples = [
-            Audience::Public,
+            Audience::PUBLIC,
             Audience::readers([user("alice"), user("bob")]),
             Audience::readers([user("bob")]),
-            Audience::Unknown,
+            Audience::UNKNOWN,
         ];
         for a in &samples {
             for b in &samples {
@@ -340,11 +364,21 @@ mod tests {
 
     #[test]
     fn trust_unknown_sits_between() {
-        assert_eq!(Trust::TRUSTED.combine(Trust::Unknown), Trust::Unknown);
-        assert_eq!(Trust::Unknown.combine(Trust::TRUSTED), Trust::Unknown);
-        assert_eq!(Trust::Unknown.combine(Trust::SUSPICIOUS), Trust::SUSPICIOUS);
-        assert_eq!(Trust::SUSPICIOUS.combine(Trust::Unknown), Trust::SUSPICIOUS);
-        assert_eq!(Trust::Unknown.combine(Trust::Unknown), Trust::Unknown);
+        assert_eq!(Trust::TRUSTED.combine(Trust::UNKNOWN), Trust::UNKNOWN);
+        assert_eq!(Trust::UNKNOWN.combine(Trust::TRUSTED), Trust::UNKNOWN);
+        assert_eq!(Trust::UNKNOWN.combine(Trust::SUSPICIOUS), Trust::SUSPICIOUS);
+        assert_eq!(Trust::SUSPICIOUS.combine(Trust::UNKNOWN), Trust::SUSPICIOUS);
+        assert_eq!(Trust::UNKNOWN.combine(Trust::UNKNOWN), Trust::UNKNOWN);
+    }
+
+    #[test]
+    fn known_trust_bottom_obeys_the_has_bottom_law() {
+        // MinLevel's fold relies on `bottom()` being the Ord-minimum; the
+        // built-in Trust instance must uphold it (Suspicious is least trusted).
+        for t in [KnownTrust::Suspicious, KnownTrust::Trusted] {
+            assert!(KnownTrust::bottom() <= t, "bottom() not <= {t}");
+        }
+        assert_eq!(KnownTrust::bottom(), KnownTrust::Suspicious);
     }
 
     #[test]
@@ -355,7 +389,7 @@ mod tests {
             mutation.clone().combine(egress),
             Effects::declared([Effect::Mutation, Effect::Egress])
         );
-        assert_eq!(mutation.combine(Effects::Unknown), Effects::Unknown);
+        assert_eq!(mutation.combine(Effects::UNKNOWN), Effects::UNKNOWN);
         assert_eq!(Effects::none().combine(Effects::none()), Effects::none());
     }
 
@@ -365,8 +399,8 @@ mod tests {
 
     #[test]
     fn audience_covers_over_the_three_values() {
-        assert_eq!(Audience::Public.covers(&users(&["stranger"])), Adequacy::Holds);
-        assert_eq!(Audience::Unknown.covers(&users(&["bob"])), Adequacy::Unprovable);
+        assert_eq!(Audience::PUBLIC.covers(&users(&["stranger"])), Adequacy::Holds);
+        assert_eq!(Audience::UNKNOWN.covers(&users(&["bob"])), Adequacy::Unprovable);
 
         let ab = Audience::readers([user("alice"), user("bob")]);
         assert_eq!(ab.covers(&users(&["bob"])), Adequacy::Holds);
@@ -386,8 +420,8 @@ mod tests {
             Trust::SUSPICIOUS.at_least(KnownTrust::Trusted),
             Adequacy::Fails(KnownTrust::Suspicious)
         );
-        assert_eq!(Trust::Unknown.at_least(KnownTrust::Suspicious), Adequacy::Unprovable);
-        assert_eq!(Trust::Unknown.at_least(KnownTrust::Trusted), Adequacy::Unprovable);
+        assert_eq!(Trust::UNKNOWN.at_least(KnownTrust::Suspicious), Adequacy::Unprovable);
+        assert_eq!(Trust::UNKNOWN.at_least(KnownTrust::Trusted), Adequacy::Unprovable);
     }
 
     #[test]
@@ -399,6 +433,6 @@ mod tests {
             Effects::declared([Effect::Mutation, Effect::Egress]).avoids(&forbidden),
             Adequacy::Fails(BTreeSet::from([Effect::Mutation]))
         );
-        assert_eq!(Effects::Unknown.avoids(&forbidden), Adequacy::Unprovable);
+        assert_eq!(Effects::UNKNOWN.avoids(&forbidden), Adequacy::Unprovable);
     }
 }

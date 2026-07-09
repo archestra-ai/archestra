@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
+import { ApiError } from "@/types";
 import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
@@ -254,12 +255,19 @@ class SkillModel {
    * team writes in one transaction means a failed team sync (e.g. a team
    * deleted mid-request) rolls the whole update back, so a scope change can
    * never be committed with a team set that leaves the skill orphaned.
+   *
+   * When `expectedLatestVersion` is set, the update is a compare-and-set: it
+   * throws `ApiError(409)` (rolling back) if the skill's head has already moved
+   * past that version, so an edit computed from a stale snapshot cannot clobber
+   * a concurrent update. Omit it to keep last-write-wins (the full-manifest
+   * `update_skill` path, whose payload is self-contained).
    */
   static async updateWithFiles(params: {
     id: string;
     skill: UpdateSkill;
     files?: Omit<InsertSkillFile, "skillId">[];
     teamIds?: string[];
+    expectedLatestVersion?: number;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
       const [skill] = await tx
@@ -269,6 +277,19 @@ class SkillModel {
         .returning();
 
       if (!skill) return null;
+
+      // The UPDATE above locked the row for this tx, so latestVersion is the
+      // committed head; a mismatch means a concurrent edit forked past the base
+      // this edit was computed from — reject and roll back before forking.
+      if (
+        params.expectedLatestVersion !== undefined &&
+        skill.latestVersion !== params.expectedLatestVersion
+      ) {
+        throw new ApiError(
+          409,
+          `Skill "${skill.name}" has moved to version ${skill.latestVersion}; the edit was based on version ${params.expectedLatestVersion}. Reload the skill with load_skill and retry.`,
+        );
+      }
 
       if (params.files !== undefined) {
         await tx

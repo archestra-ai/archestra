@@ -7,8 +7,9 @@ use std::fmt;
 use tracing::trace;
 
 use crate::ToolName;
-use crate::dimension::{Adequacy, Effect, KnownTrust, UserId};
+use crate::dimension::{Effect, KnownTrust, UserId};
 use crate::label::Label;
+use crate::preset::Adequacy;
 
 /// A concrete tool invocation the policy is asked to authorize.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,7 +57,7 @@ pub enum AttentionRule {
 /// What a tool demands of the context label before it may run.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Requirements {
-    /// Minimum *known* trust. `Trust::Unknown` never satisfies any bar —
+    /// Minimum *known* trust. `Trust::UNKNOWN` never satisfies any bar —
     /// deliberately over [`KnownTrust`], so "unknown suffices" cannot even be
     /// expressed; unpacking `Unknown` is always an explicit
     /// [`crate::engine::UnknownPolicy`] or authority decision.
@@ -371,7 +372,7 @@ mod tests {
         );
 
         let unknown = Label {
-            trust: Trust::Unknown,
+            trust: Trust::UNKNOWN,
             ..private_trusted_context()
         };
         assert_eq!(
@@ -392,7 +393,7 @@ mod tests {
         let request = ToolRequest::new(ToolName::new("notes.append"));
 
         let unknown = Label {
-            trust: Trust::Unknown,
+            trust: Trust::UNKNOWN,
             ..Label::identity()
         };
         assert_eq!(
@@ -430,7 +431,7 @@ mod tests {
     #[test]
     fn unknown_audience_cannot_bound_recipients() {
         let context = Label {
-            audience: Audience::Unknown,
+            audience: Audience::UNKNOWN,
             ..private_trusted_context()
         };
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("bob")]);
@@ -443,7 +444,7 @@ mod tests {
     #[test]
     fn public_context_allows_any_recipient() {
         let context = Label {
-            audience: Audience::Public,
+            audience: Audience::PUBLIC,
             ..private_trusted_context()
         };
         let request = ToolRequest::exposing(ToolName::new("email.send"), [user("stranger")]);
@@ -500,7 +501,7 @@ mod tests {
         );
 
         let unknown = Label {
-            effects: Effects::Unknown,
+            effects: Effects::UNKNOWN,
             ..Label::identity()
         };
         assert_eq!(

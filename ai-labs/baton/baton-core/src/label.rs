@@ -104,7 +104,7 @@ impl Label {
     /// Identity of [`Label::combine`]: neutral in every dimension.
     pub fn identity() -> Self {
         Self {
-            audience: Audience::Public,
+            audience: Audience::PUBLIC,
             trust: Trust::TRUSTED,
             effects: Effects::none(),
             audit: Vec::new(),
@@ -115,9 +115,9 @@ impl Label {
     /// output of a tool nobody annotated.
     pub fn unknown() -> Self {
         Self {
-            audience: Audience::Unknown,
-            trust: Trust::Unknown,
-            effects: Effects::Unknown,
+            audience: Audience::UNKNOWN,
+            trust: Trust::UNKNOWN,
+            effects: Effects::UNKNOWN,
             audit: Vec::new(),
         }
     }
@@ -164,25 +164,15 @@ impl Label {
     #[must_use]
     pub fn lift(&self, grant: &Grant) -> Self {
         let trust = match grant.trust {
-            Some(attested) => match self.trust {
-                Trust::Known(actual) => Trust::Known(actual.max(attested)),
-                Trust::Unknown => Trust::Known(attested),
-            },
+            Some(attested) => self.trust.raised_to(attested),
             None => self.trust,
         };
         let audience = match &grant.audience {
-            Some(vouched) => match &self.audience {
-                Audience::Public => Audience::Public,
-                Audience::Readers(s) => Audience::Readers(s.union(vouched).cloned().collect()),
-                Audience::Unknown => Audience::Readers(vouched.clone()),
-            },
+            Some(vouched) => self.audience.admitting(vouched),
             None => self.audience.clone(),
         };
         let effects = match &grant.effects {
-            Some(waived) => match &self.effects {
-                Effects::Declared(present) => Effects::Declared(present.difference(waived).copied().collect()),
-                Effects::Unknown => Effects::Unknown,
-            },
+            Some(waived) => self.effects.waiving(waived),
             None => self.effects.clone(),
         };
         let lifted = Self {
@@ -268,7 +258,8 @@ mod tests {
     use super::*;
     use crate::authority::AuthorityName;
     use crate::contract::{Unprovable, Violation};
-    use crate::dimension::{Adequacy, Effect, UserId};
+    use crate::dimension::{Effect, UserId};
+    use crate::preset::Adequacy;
 
     fn audit_entry(reason: &str) -> AuditEntry {
         AuditEntry::Declassified {
@@ -299,7 +290,7 @@ mod tests {
             audit: vec![audit_entry("first")],
         };
         let public_suspicious = Label {
-            audience: Audience::Public,
+            audience: Audience::PUBLIC,
             trust: Trust::SUSPICIOUS,
             effects: Effects::declared([Effect::Mutation]),
             audit: vec![audit_entry("second")],
@@ -317,9 +308,9 @@ mod tests {
     #[test]
     fn unknown_label_poisons_the_fold() {
         let folded = Label::fold([Label::identity(), Label::unknown()]);
-        assert_eq!(folded.audience, Audience::Unknown);
-        assert_eq!(folded.trust, Trust::Unknown);
-        assert_eq!(folded.effects, Effects::Unknown);
+        assert_eq!(folded.audience, Audience::UNKNOWN);
+        assert_eq!(folded.trust, Trust::UNKNOWN);
+        assert_eq!(folded.effects, Effects::UNKNOWN);
     }
 
     fn sample_labels() -> Vec<Label> {
@@ -333,7 +324,7 @@ mod tests {
                 audit: Vec::new(),
             },
             Label {
-                audience: Audience::Public,
+                audience: Audience::PUBLIC,
                 trust: Trust::TRUSTED,
                 effects: Effects::none(),
                 audit: Vec::new(),
@@ -386,49 +377,16 @@ mod tests {
         }
     }
 
-    fn trust_rank(t: Trust) -> u8 {
-        match t {
-            Trust::Unknown => 0,
-            Trust::Known(KnownTrust::Suspicious) => 1,
-            Trust::Known(KnownTrust::Trusted) => 2,
-        }
-    }
-
-    /// `x ⊑ y` in the audience adequacy order: `Unknown` bottom, `Public`
-    /// top, `Readers` by inclusion.
-    fn audience_le(x: &Audience, y: &Audience) -> bool {
-        match (x, y) {
-            (Audience::Unknown, _) => true,
-            (_, Audience::Public) => true,
-            (Audience::Readers(a), Audience::Readers(b)) => a.is_subset(b),
-            _ => false,
-        }
-    }
-
-    /// `x ⊑ y` in the effects adequacy order: `Unknown` bottom, `none()` top,
-    /// fewer present effects is more adequate.
-    fn effects_le(x: &Effects, y: &Effects) -> bool {
-        match (x, y) {
-            (Effects::Unknown, _) => true,
-            (Effects::Declared(a), Effects::Declared(b)) => b.is_subset(a),
-            (Effects::Declared(_), Effects::Unknown) => false,
-        }
-    }
-
     #[test]
     fn lift_is_inflationary_in_the_adequacy_order() {
+        // `lift` may only move a context toward passing a check (`Unknown` is
+        // bottom in every dimension), never demote one.
         for x in sample_labels() {
             for g in sample_grants() {
                 let up = x.lift(&g);
-                assert!(
-                    trust_rank(up.trust) >= trust_rank(x.trust),
-                    "trust demoted: g={g:?} x={x}"
-                );
-                assert!(
-                    audience_le(&x.audience, &up.audience),
-                    "audience demoted: g={g:?} x={x}"
-                );
-                assert!(effects_le(&x.effects, &up.effects), "effects demoted: g={g:?} x={x}");
+                assert!(x.trust.adequacy_le(&up.trust), "trust demoted: g={g:?} x={x}");
+                assert!(x.audience.adequacy_le(&up.audience), "audience demoted: g={g:?} x={x}");
+                assert!(x.effects.adequacy_le(&up.effects), "effects demoted: g={g:?} x={x}");
             }
         }
     }
@@ -481,7 +439,7 @@ mod tests {
         // Unknown is not cleared — this is precisely why it is
         // acknowledge-only rather than grant-fixable.
         let unknown = Label {
-            effects: Effects::Unknown,
+            effects: Effects::UNKNOWN,
             ..Label::identity()
         };
         assert_eq!(unknown.lift(&g).effects.avoids(&forbidden), Adequacy::Unprovable);

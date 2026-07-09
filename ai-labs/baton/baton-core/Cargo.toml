@@ -9,7 +9,12 @@ description = "ADT-based information-flow label engine for agent trajectories (p
 tracing = "0.1"
 
 [dev-dependencies]
+criterion = "0.5"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "resolution"
+harness = false

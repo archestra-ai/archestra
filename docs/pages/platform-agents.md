@@ -16,7 +16,7 @@ An agent can include:
 - suggested prompts for common tasks in chat
 - a **Tools & Knowledge Sources** setting: **Auto** (every tool and knowledge source the chatting user can access, minus an exclusion list) or **Custom** (only assigned tools and sources)
 - optional **Load tools when needed** mode for keeping MCP `tools/list` small
-- optional delegation targets to other agents
+- a **Subagents** setting: **Auto** (delegate to any agent the chatting user can access, minus a disabled list) or **Custom** (only assigned delegation targets)
 - one or more assigned knowledge sources
 
 ## Load Tools When Needed
@@ -81,6 +81,12 @@ An agent can be assigned to an [environment](/docs/platform-environments). This 
 See [Environments](/docs/platform-environments) for the isolation model and [network egress policies](/docs/platform-environments#network-egress-policies) for how policies are configured.
 
 ## Delegation
+
+An agent can delegate work to other agents — its **subagents**. Like **Tools & Knowledge Sources**, delegation has an **Auto** or **Custom** setting, under the **Subagents** tabs in the agent dialog.
+
+In **Custom** mode the agent delegates only to the subagents you assign. In **Auto** mode it can delegate to any agent the calling user can access — new agents included automatically — minus a disabled list. Disable specific agents under **Disabled subagents** on the **Auto** tab (or via `GET`/`PUT /api/agents/:id/subagent-exclusions`). Each user's own access still applies, so **Auto** never means any agent can call any agent — a caller only reaches agents it could already see.
+
+Auto delegation resolves per calling user. It applies in chat and other flows that carry a signed-in user; automated runs without one — a scheduled trigger, for example — fall back to the explicitly assigned targets.
 
 When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
 

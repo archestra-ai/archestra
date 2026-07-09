@@ -9,9 +9,9 @@
 use std::collections::BTreeSet;
 
 use baton_core::{
-    Audience, AudienceRule, Authority, AuthorityName, BlockReason, Decision, Effect, Effects,
-    Grant, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, TaintPolicy,
-    ToolContract, ToolName, ToolRequest, Trajectory, Trust, UnknownPolicy, UserId, Violation,
+    Audience, Authority, AuthorityName, BlockReason, Decision, Effect, Effects, Grant, KnownTrust,
+    Label, PolicyEngine, Requirements, Ruling, Speaker, TaintPolicy, ToolContract, ToolName,
+    ToolRequest, Trajectory, Trust, UnknownPolicy, UserId, Violation,
 };
 use serde::{Deserialize, Serialize};
 
@@ -69,13 +69,17 @@ pub enum TrustIn {
     Unknown,
 }
 
+/// Sink requirements. Deliberately no audience rule: every output label this
+/// oracle mints is `Audience::Public` (there is no per-datum audience source
+/// in the wire format yet), and against a public context a
+/// recipients-within-context rule could only ever reject the empty recipient
+/// set — a knob that cannot do what its name promises. Audience arrives
+/// together with per-datum audience data, or not at all.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequiresIn {
     #[serde(default)]
     pub trust: Option<KnownTrustIn>,
-    #[serde(default)]
-    pub recipients_within_context: bool,
     #[serde(default)]
     pub forbid_prior_effects: Vec<EffectIn>,
 }
@@ -149,6 +153,11 @@ impl From<&BlockReason> for BlockKind {
 /// is consulted once its mandate covers the needed grant, and this mandate
 /// covers all of them (the empty grant is covered by all; this extends that
 /// to everything).
+///
+/// Because `rule` never returns `None`, `BlockKind::NoCompetentAuthority` is
+/// unreachable under this authority: every escalated flow reports
+/// `DeniedByAuthority`. That is deliberate fail-closed harness behavior, not
+/// a claim about how a mandated panel would attribute the same block.
 struct DenyAll;
 
 impl Authority for DenyAll {
@@ -221,11 +230,7 @@ impl From<&ContractIn> for ToolContract {
             name: ToolName::new(&contract.tool),
             requires: Requirements {
                 trust: contract.requires.trust.map(KnownTrust::from),
-                audience: if contract.requires.recipients_within_context {
-                    AudienceRule::RecipientsWithinContext
-                } else {
-                    AudienceRule::Unrestricted
-                },
+                audience: Default::default(),
                 attention: Default::default(),
                 forbid_prior_effects: effect_set(&contract.requires.forbid_prior_effects),
             },
@@ -253,19 +258,58 @@ fn effect_set(effects: &[EffectIn]) -> BTreeSet<Effect> {
     effects.iter().copied().map(Effect::from).collect()
 }
 
+/// A protocol violation: caller and oracle disagree about the episode. Never
+/// a decision — exit 2 upstream.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProtocolError {
+    DuplicateContract {
+        tool: String,
+    },
+    /// A replayed `executed` call came back `Blocked`; the caller only
+    /// appends permitted calls, so this must be loud.
+    ReplayBlocked {
+        index: usize,
+        tool: String,
+    },
+    /// `record_result` rejected a permit during replay — an oracle bug, since
+    /// nothing else touches the trajectory between evaluate and record.
+    ReplayRejected {
+        index: usize,
+        tool: String,
+    },
+}
+
+impl std::fmt::Display for ProtocolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateContract { tool } => {
+                write!(f, "a contract for `{tool}` is declared twice")
+            }
+            Self::ReplayBlocked { index, tool } => write!(
+                f,
+                "executed[{index}] `{tool}` was blocked on replay; \
+                 the caller must only replay permitted calls"
+            ),
+            Self::ReplayRejected { index, tool } => {
+                write!(
+                    f,
+                    "executed[{index}] `{tool}`: permit rejected during replay"
+                )
+            }
+        }
+    }
+}
+
 /// Rebuild the episode and check the proposed call.
-///
-/// Errors are protocol violations, not decisions: a duplicate contract, or a
-/// replayed `executed` call coming back `Blocked` (the caller only appends
-/// permitted calls, so a blocked replay means caller and oracle disagree and
-/// must be loud — exit 2 upstream).
-pub fn run(input: &Input) -> Result<Output, String> {
+pub fn run(input: &Input) -> Result<Output, ProtocolError> {
     let mut engine = PolicyEngine::new(DenyAll, input.unknown_policy.into())
         .with_taint_policy(input.taint_policy.into());
     for contract in &input.contracts {
         engine
             .register(contract.into())
-            .map_err(|e| e.to_string())?;
+            .map_err(|duplicate| ProtocolError::DuplicateContract {
+                tool: duplicate.tool.to_string(),
+            })?;
     }
 
     let mut trajectory = Trajectory::new();
@@ -278,16 +322,18 @@ pub fn run(input: &Input) -> Result<Output, String> {
     for (index, call) in input.executed.iter().enumerate() {
         match engine.evaluate(&trajectory, &call.tool_request()) {
             Decision::Permitted(permit) => {
-                trajectory
-                    .record_result(permit, "")
-                    .map_err(|e| format!("replay of executed[{index}] `{}`: {e}", call.tool))?;
+                trajectory.record_result(permit, "").map_err(|_| {
+                    ProtocolError::ReplayRejected {
+                        index,
+                        tool: call.tool.clone(),
+                    }
+                })?;
             }
-            Decision::Blocked { reason, .. } => {
-                return Err(format!(
-                    "executed[{index}] `{}` was blocked on replay ({reason}); \
-                     the caller must only replay permitted calls",
-                    call.tool
-                ));
+            Decision::Blocked { .. } => {
+                return Err(ProtocolError::ReplayBlocked {
+                    index,
+                    tool: call.tool.clone(),
+                });
             }
         }
     }
@@ -418,8 +464,13 @@ mod tests {
             {"tool": "get_unread_emails"},
             {"tool": "send_email", "recipients": ["mark@example.com"]},
         ]);
-        let error = run(&input(spec)).unwrap_err();
-        assert!(error.contains("executed[1]"), "got: {error}");
+        assert_eq!(
+            run(&input(spec)).unwrap_err(),
+            ProtocolError::ReplayBlocked {
+                index: 1,
+                tool: "send_email".to_owned(),
+            }
+        );
     }
 
     #[test]
@@ -429,7 +480,12 @@ mod tests {
             .as_array_mut()
             .unwrap()
             .push(serde_json::json!({"tool": "send_email", "output": {"trust": "trusted"}}));
-        run(&input(spec)).unwrap_err();
+        assert_eq!(
+            run(&input(spec)).unwrap_err(),
+            ProtocolError::DuplicateContract {
+                tool: "send_email".to_owned(),
+            }
+        );
     }
 
     #[test]
@@ -453,12 +509,9 @@ mod tests {
     }
 
     #[test]
-    fn recipients_within_context_rejects_outsiders() {
-        // The user turn's identity label has a public audience, so folding it
-        // keeps the audience public and any recipient is inside it; a
-        // suspicious-source read does not narrow audience either (sources are
-        // labeled public in this harness). The rule only bites when the
-        // request declares no recipients at all: structural, unfixable.
+    fn audience_rules_are_not_expressible() {
+        // See RequiresIn: with every output label public, an audience rule
+        // could not do what its name promises, so the wire format rejects it.
         let spec = serde_json::json!({
             "unknown_policy": "deny",
             "contracts": [
@@ -466,13 +519,9 @@ mod tests {
                  "requires": {"trust": "trusted", "recipients_within_context": true}},
             ],
             "user_prompt": "mail it",
-            "executed": [],
             "proposed": {"tool": "send_email"},
         });
-        let Output::Blocked { block_kind, .. } = run(&input(spec)).unwrap() else {
-            panic!("an audience-guarded sink with no recipients is structural");
-        };
-        assert_eq!(block_kind, BlockKind::RequiresStructuralFix);
+        assert!(serde_json::from_value::<Input>(spec).is_err());
     }
 
     #[test]

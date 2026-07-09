@@ -27,7 +27,7 @@ fn main() -> ExitCode {
             );
             ExitCode::SUCCESS
         }
-        Err(error) => fail(&error),
+        Err(error) => fail(&error.to_string()),
     }
 }
 

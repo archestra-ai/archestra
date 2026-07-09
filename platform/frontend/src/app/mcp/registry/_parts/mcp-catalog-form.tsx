@@ -876,18 +876,30 @@ export function McpCatalogForm({
   // returns (which we do early to show the bar), so it can't drive the
   // bar's spinner — track the bar→save phase ourselves.
   const [isConfirming, setIsConfirming] = useState(false);
+  // A synchronous in-flight latch. The Save button's `disabled` reflects the
+  // mutation's `isPending`, but that is React state and only takes effect on
+  // the next render — a fast double-click fires two submits before it flips.
+  // Two concurrent saves race the team-assignment delete-then-reinsert and the
+  // loser hits a unique-constraint violation. This latch drops the second call.
+  const submitInFlightRef = useRef(false);
 
   const performSubmit = async (values: McpCatalogFormValues) => {
-    // Save any unsaved label before submitting
-    const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
-    const submittedValues = { ...values, labels: updatedLabels };
-    await onSubmit(submittedValues, form);
-    // Reset baselines to what was just submitted so isDirty becomes false.
-    // initialValues from the parent may not change reference after save
-    // (TanStack Query structural sharing), and secret values are stored
-    // separately so the catalog item itself may round-trip unchanged.
-    form.reset(submittedValues, { keepValues: true });
-    setLabelsBaseline(updatedLabels);
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    try {
+      // Save any unsaved label before submitting
+      const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
+      const submittedValues = { ...values, labels: updatedLabels };
+      await onSubmit(submittedValues, form);
+      // Reset baselines to what was just submitted so isDirty becomes false.
+      // initialValues from the parent may not change reference after save
+      // (TanStack Query structural sharing), and secret values are stored
+      // separately so the catalog item itself may round-trip unchanged.
+      form.reset(submittedValues, { keepValues: true });
+      setLabelsBaseline(updatedLabels);
+    } finally {
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
@@ -1031,6 +1043,7 @@ export function McpCatalogForm({
                   <FormItem>
                     <FormControl>
                       <VisibilitySelector
+                        label="Access"
                         value={
                           (field.value ?? "personal") as
                             | "personal"

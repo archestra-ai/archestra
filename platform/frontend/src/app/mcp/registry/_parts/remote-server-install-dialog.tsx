@@ -396,6 +396,7 @@ export function RemoteServerInstallDialog({
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
         catalogId={catalogItem?.id}
+        catalogItem={catalogItem}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}

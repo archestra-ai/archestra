@@ -429,11 +429,11 @@ jobs:
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        run: cargo install cargo-deny --version 0.20.2 --locked
 
       - name: Rust dependency policy
         working-directory: ./platform/archestra-rs
-        run: cargo deny check --config deny.toml advisories bans licenses sources
+        run: cargo deny --config deny.toml check advisories bans licenses sources
 
   ai-labs-rust-checks:
     name: AI Labs Rust Checks

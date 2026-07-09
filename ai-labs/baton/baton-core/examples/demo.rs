@@ -132,7 +132,7 @@ fn main() {
             name: ToolName::new("web.fetch"),
             requires: Requirements::default(),
             output_label: Label {
-                audience: Audience::Public,
+                audience: Audience::PUBLIC,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },

@@ -39,6 +39,7 @@ pub mod contract;
 pub mod dimension;
 pub mod engine;
 pub mod label;
+pub mod preset;
 pub mod turn;
 
 use std::fmt;

@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
   // alongside the main one without colliding on `.next/dev/lock`.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
+  // CI runs the authoritative type check separately (`pnpm type-check`), so
+  // the in-build check is pure duplication — ~15s of every image build.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   // Version skew protection during rolling deployments.
   // https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId
   // VERSION is set as a build arg by CI and baked into the

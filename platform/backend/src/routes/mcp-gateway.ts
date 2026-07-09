@@ -291,7 +291,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
-      const agent = await AgentModel.findById(profileId);
+      const agent = await AgentModel.findGatewayAgentById(profileId);
       if (agent) {
         const passthroughHeaders = extractPassthroughHeaders(
           agent.passthroughHeaders,

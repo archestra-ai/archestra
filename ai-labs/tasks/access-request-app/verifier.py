@@ -23,7 +23,7 @@ the in-place path the only sane route.
 
 import json
 
-from bench_verifier import result, state
+from bench_verifier import result, state, tool_calls
 
 _PREFIX = "access-request-app-"
 _AUTH_MARKERS = ("auth_required", "reauth", "connect", "authorize", "authoriz")
@@ -52,21 +52,10 @@ def _submitted_app() -> dict:
     return matching[0]
 
 
-def _tool_calls():
-    """(name, input) for each call, unwrapping run_tool to the inner tool it dispatched."""
-    for call in state().get("tool_calls", []):
-        name = call.get("name")
-        inp = call.get("input") or {}
-        if name == "archestra__run_tool":
-            name, inp = inp.get("tool_name"), (inp.get("tool_args") or {})
-        if name:
-            yield name, inp
-
-
 def _authoring_blob() -> str:
     """All html-bearing authoring tool inputs (scaffold/edit/refine) as one searchable string."""
     parts: list[str] = []
-    for name, inp in _tool_calls():
+    for name, inp in tool_calls():
         if name.endswith("__edit_app") or name.endswith("__scaffold_app") or name.endswith("__refine_app"):
             parts.append(json.dumps(inp))
     return "\n".join(parts).lower()
@@ -98,7 +87,7 @@ def _submitted_app_edits(app_id: str) -> str:
     appId keeps an unrelated app's edits, or a scaffold `tools` arg, from satisfying the usage check."""
     parts = [
         json.dumps(inp)
-        for name, inp in _tool_calls()
+        for name, inp in tool_calls()
         if name.endswith("__edit_app") and inp.get("appId") == app_id
     ]
     return "\n".join(parts).lower()
@@ -118,7 +107,7 @@ def test_status_lookup_tool_wired() -> None:
         name.endswith("__set_app_tools")
         and inp.get("appId") == app_id
         and _STATUS_TOOL in json.dumps(inp.get("tools") or [])
-        for name, inp in _tool_calls()
+        for name, inp in tool_calls()
     )
     assert wired, (
         f"no set_app_tools call wired a {_STATUS_TOOL!r} tool onto the submitted app {app_id}"
@@ -129,7 +118,7 @@ def test_observed_status_data() -> None:
     observed = any(
         name.endswith(f"__{_STATUS_TOOL}")
         or (name.endswith("__preview_app_tool") and str(inp.get("toolName", "")).endswith(f"__{_STATUS_TOOL}"))
-        for name, inp in _tool_calls()
+        for name, inp in tool_calls()
     )
     assert observed, (
         f"no {_STATUS_TOOL!r} call (direct or via preview_app_tool) anywhere in the trajectory; "

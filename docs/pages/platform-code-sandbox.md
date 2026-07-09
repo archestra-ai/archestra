@@ -52,7 +52,7 @@ Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 
 
 ## Enabling the Sandbox
 
-The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or `archestra.codeRuntime.enabled=false` in Helm values. A manual deployment needs two settings: `ARCHESTRA_CODE_RUNTIME_ENABLED=true` and a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. See [Deployment](./platform-deployment#code-sandbox) for the full list.
+The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or `archestra.codeRuntime.enabled=false` in Helm values. A manual deployment needs a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. `ARCHESTRA_CODE_RUNTIME_ENABLED` only controls whether local dev, quickstart, and Helm deploy the embedded Dagger engine. See [Deployment](./platform-deployment#code-sandbox) for the full list.
 
 Running a command needs the `sandbox:execute` permission. See [Access Control](./platform-access-control).
 

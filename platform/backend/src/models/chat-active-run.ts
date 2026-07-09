@@ -154,6 +154,57 @@ class ActiveChatRunModel {
       .orderBy(asc(schema.chatActiveRunEventsTable.seq));
   }
 
+  /**
+   * Read the run's status together with its events after `seq` in ONE
+   * statement, for the replay poll loop that wakes twice a second per
+   * reconnected client. Beyond halving the loop's query count, the single
+   * snapshot carries an ordering guarantee separate reads don't: the writer
+   * commits its final events before marking the run terminal, so a snapshot
+   * that observes a terminal status already contains every event — no
+   * follow-up catch-up read is needed.
+   *
+   * Returns null when the run row is gone (its conversation was hard-deleted
+   * and cascaded, which also removes all events).
+   */
+  static async readStatusAndEventsAfter(params: {
+    runId: string;
+    seq: number;
+  }): Promise<{
+    status: ChatActiveRunStatus;
+    events: ChatActiveRunEvent[];
+  } | null> {
+    const rows = await db
+      .select({
+        status: schema.chatActiveRunsTable.status,
+        event: schema.chatActiveRunEventsTable,
+      })
+      .from(schema.chatActiveRunsTable)
+      .leftJoin(
+        schema.chatActiveRunEventsTable,
+        and(
+          eq(
+            schema.chatActiveRunEventsTable.runId,
+            schema.chatActiveRunsTable.id,
+          ),
+          gt(schema.chatActiveRunEventsTable.seq, params.seq),
+        ),
+      )
+      .where(eq(schema.chatActiveRunsTable.id, params.runId))
+      .orderBy(asc(schema.chatActiveRunEventsTable.seq));
+
+    const [first] = rows;
+    if (!first) {
+      return null;
+    }
+
+    return {
+      status: first.status,
+      events: rows
+        .map((row) => row.event)
+        .filter((event): event is ChatActiveRunEvent => event !== null),
+    };
+  }
+
   static async requestStop(params: {
     conversationId: string;
     organizationId: string;

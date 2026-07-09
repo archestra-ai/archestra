@@ -501,7 +501,7 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 | Variable                          | Required | Description                                                                    |
 | --------------------------------- | -------- | ------------------------------------------------------------------------------ |
 | `ARCHESTRA_CHAT_MINIMAX_API_KEY`  | No       | Default API key for MiniMax (can be overridden per conversation/team/org)     |
-| `ARCHESTRA_CHAT_MINIMAX_BASE_URL` | No       | MiniMax API base URL (default: `https://api.minimax.io/v1`)                   |
+| `ARCHESTRA_MINIMAX_BASE_URL`      | No       | MiniMax API base URL (default: `https://api.minimax.io/v1`)                   |
 
 ### Available Models
 

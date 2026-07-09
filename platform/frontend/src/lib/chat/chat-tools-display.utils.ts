@@ -107,13 +107,19 @@ export function getCompactToolState({
 }: {
   part: ToolUIPart | DynamicToolUIPart;
   toolResultPart: ToolUIPart | DynamicToolUIPart | null;
-}): "running" | "completed" | "error" {
+}): "running" | "completed" | "error" | "denied" {
   if (getToolErrorText({ part, toolResultPart })) {
     return "error";
   }
 
   if (toolResultPart || part.state === "output-available") {
     return "completed";
+  }
+
+  // A declined approval is terminal — without this it would fall through to
+  // "running" and render a blue pulsing dot forever. Surface it as "denied".
+  if (part.state === "output-denied") {
+    return "denied";
   }
 
   return "running";

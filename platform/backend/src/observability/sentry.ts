@@ -7,6 +7,7 @@ import type {
 } from "@sentry/core";
 import * as Sentry from "@sentry/node";
 import config from "@/config";
+import { getTransientDbErrorCode } from "@/database/retry";
 import logger from "@/logging";
 import { ApiError } from "@/types";
 import {
@@ -152,6 +153,21 @@ const initSentry = async (): Promise<void> => {
      */
     beforeSend(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
       const error = hint.originalException;
+
+      // Transient database connectivity failures (DNS lookup, connection
+      // refused during a database restart, pool connect timeouts) get
+      // wrapped per-query by the ORM, which fragments one availability
+      // incident into an issue per SQL statement. Fingerprint them by root
+      // cause instead so each outage groups into a single issue.
+      const transientDbErrorCode = getTransientDbErrorCode(error);
+      if (transientDbErrorCode) {
+        event.fingerprint = ["db-transient", transientDbErrorCode];
+        event.tags = {
+          ...event.tags,
+          error_type: "db_transient",
+          db_error_code: transientDbErrorCode,
+        };
+      }
 
       // Filter out ApiError instances with 4xx status codes
       if (error instanceof ApiError) {

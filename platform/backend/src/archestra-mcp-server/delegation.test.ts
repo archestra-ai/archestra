@@ -2,6 +2,7 @@
 import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { vi } from "vitest";
 import { ToolModel } from "@/models";
+import { ProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -259,5 +260,62 @@ describe("delegation tool execution", () => {
         parentContextIsTrusted: undefined,
       }),
     );
+  });
+});
+
+describe("delegation error propagation", () => {
+  let callerAgent: Agent;
+  let baseContext: ArchestraContext;
+  let toolName: string;
+
+  beforeEach(async ({ makeAgent, makeAgentTool }) => {
+    vi.clearAllMocks();
+    callerAgent = await makeAgent({ name: "Caller Agent" });
+    const targetAgent = await makeAgent({ name: "Target Agent" });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(callerAgent.id, delegationTool.id);
+    toolName = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
+    baseContext = {
+      agent: { id: callerAgent.id, name: callerAgent.name },
+      agentId: callerAgent.id,
+      organizationId: "org-123",
+    };
+  });
+
+  test("surfaces a subagent failure to the model as a tool error", async () => {
+    mockExecuteA2AMessage.mockRejectedValue(new Error("subagent exploded"));
+
+    const result = await executeArchestraTool(
+      toolName,
+      { message: "hello" },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("subagent exploded");
+  });
+
+  test("rethrows a ProviderError so the parent stream reports the provider", async () => {
+    const providerError = new ProviderError({
+      message: "upstream is down",
+      authenticated: false,
+    } as any);
+    mockExecuteA2AMessage.mockRejectedValue(providerError);
+
+    await expect(
+      executeArchestraTool(toolName, { message: "hello" }, baseContext),
+    ).rejects.toBe(providerError);
+  });
+
+  test("rethrows an abort so cancellation propagates instead of becoming a tool error", async () => {
+    const abortError = new Error("The operation was aborted");
+    abortError.name = "AbortError";
+    mockExecuteA2AMessage.mockRejectedValue(abortError);
+
+    await expect(
+      executeArchestraTool(toolName, { message: "hello" }, baseContext),
+    ).rejects.toBe(abortError);
   });
 });

@@ -30,6 +30,7 @@ import {
   structuredToolErrorResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { placeholderForSchema, safeJsonStringify } from "./tool-args-skeleton";
 import {
   ambiguousShortNameMessage,
   recoveredShortNameNotice,
@@ -63,7 +64,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, invocation policies, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). When the agent allows dynamic tool access, a tool the user can access but the agent does not have runs directly without being assigned to the agent; the MCP server's connection policy decides which credential the call uses. Target-tool RBAC, invocation policies, argument validation, and output validation all still apply. The app-authoring tools, when available to this agent, are reached this way too: when asked to make, build, or create an interactive app, start with 'scaffold_app' through this tool instead of writing app code in a reply (an unavailable tool is refused with a clear error).`,
     schema: RunToolArgsSchema,
     handler: ({ args, context }) => runToolHandler({ args, context }),
   }),
@@ -71,6 +72,11 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+/** @public — exported for testability */
+export const __test = {
+  repairEnvelopedToolArgs,
+};
 
 // ===== Internal helpers =====
 
@@ -282,7 +288,9 @@ async function dispatchTool({
 
   const runToolFullName = getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME);
   if (resolvedName === runToolFullName) {
-    return errorResult(`${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself`);
+    return errorResult(
+      `${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself. Call ${TOOL_RUN_TOOL_SHORT_NAME} once, with tool_name set to the target tool's exact name (from search_tools) and the target's arguments in tool_args — never set tool_name to ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+    );
   }
 
   // Per-conversation enabled-tool gate: in a chat with a custom tool
@@ -322,8 +330,27 @@ async function dispatchTool({
 
     // Dynamic import avoids the circular import between this file and
     // ./index (index.ts imports every tool group, including this one).
-    const { executeArchestraTool } = await import("./index");
-    return executeArchestraTool(resolvedName, args.tool_args, context);
+    const { executeArchestraTool, getArchestraToolInputSchema } = await import(
+      "./index"
+    );
+    // Envelope repair against the built-in's published input schema, so the
+    // handler's strict zod validation sees the repaired args. Delegations
+    // (agent-<id>) have no published JSON schema — the lookup returns
+    // undefined and nothing is repaired.
+    const { repairedParams, toolArgs } = repairEnvelopedToolArgs({
+      toolArgs: args.tool_args ?? {},
+      schema: getArchestraToolInputSchema(resolvedName),
+    });
+    const result = await executeArchestraTool(resolvedName, toolArgs, context);
+    // Only disclose the repair once the call has cleared the RBAC/assignment
+    // gates inside executeArchestraTool — those run before arg validation and
+    // reject with a plain error carrying no archestraValidation descriptor. A
+    // success or a post-gate validation error (which does carry it) is safe to
+    // annotate; a gate denial is not, or the note would leak a denied caller
+    // the declared type of a param they cannot reach.
+    return reachedArgValidation(result)
+      ? appendEnvelopeRepairNote(result, repairedParams)
+      : result;
   }
 
   // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
@@ -382,7 +409,32 @@ async function dispatchTool({
     if (gateError) return gateError;
   }
 
-  const toolInput = args.tool_args ?? {};
+  // The target's stored input schema, resolved BEFORE the policy gate so the
+  // envelope repair below runs first and invocation policy evaluation, the
+  // shallow pre-check, and dispatch all see the same repaired tool_args.
+  // Dynamic dispatch passes availableTool straight through, so its schema is
+  // exactly what runs. For the assigned path the gateway re-resolves by name
+  // at dispatch with no defined ordering, so when duplicate rows share the
+  // name we cannot know which schema will run — treat it as unknown rather
+  // than risk reading the wrong row.
+  const assignedMatches = assignedTools.filter(
+    (tool) => tool.name === resolvedName,
+  );
+  const targetSchema = availableTool
+    ? availableTool.parameters
+    : assignedMatches.length === 1
+      ? assignedMatches[0].parameters
+      : undefined;
+
+  // Schema-aware envelope repair: unwrap single-key wrapper objects (any key)
+  // and the two-key {type:"text",text} content block around params the schema
+  // declares scalar/array (see repairEnvelopedToolArgs). Disclosed via a note
+  // appended to the result.
+  const { repairedParams, toolArgs: toolInput } = repairEnvelopedToolArgs({
+    toolArgs: args.tool_args ?? {},
+    schema: targetSchema,
+  });
+
   // Reuse the set computed above so the policy gate does not re-query it.
   // A dynamically resolved tool is appended so the evaluator does not
   // refuse it as "disabled" — invocation policies still evaluate it.
@@ -405,10 +457,13 @@ async function dispatchTool({
   if (policyBlock) {
     // Attach the structured policy_denied error (in _meta + structuredContent)
     // so clients parse the block without scraping the prose.
-    return structuredToolErrorResult({
-      error: policyBlockToToolError(policyBlock),
-      text: `Error: ${policyBlock.refusalMessage}`,
-    });
+    return appendEnvelopeRepairNote(
+      structuredToolErrorResult({
+        error: policyBlockToToolError(policyBlock),
+        text: `Error: ${policyBlock.refusalMessage}`,
+      }),
+      repairedParams,
+    );
   }
 
   // Cheap structural pre-check against the target's stored schema. Runs only
@@ -418,27 +473,16 @@ async function dispatchTool({
   // the compact search_tools signature defers to. Deliberately shallow: only
   // a literal top-level `required` and a closed `additionalProperties:false`
   // are enforced, so refs/composed schemas fall through to the upstream
-  // server unchanged.
-  // Dynamic dispatch passes availableTool straight through, so its schema is
-  // exactly what runs. For the assigned path the gateway re-resolves by name
-  // at dispatch with no defined ordering, so when duplicate rows share the
-  // name we cannot know which schema will run — skip the pre-check rather
-  // than risk validating against the wrong row.
-  const assignedMatches = assignedTools.filter(
-    (tool) => tool.name === resolvedName,
-  );
-  const targetSchema = availableTool
-    ? availableTool.parameters
-    : assignedMatches.length === 1
-      ? assignedMatches[0].parameters
-      : undefined;
+  // server unchanged. Runs on the repaired tool_args against the same schema
+  // resolved above (undefined when duplicate rows share the name — skip the
+  // pre-check rather than risk validating against the wrong row).
   const schemaError = checkThirdPartyToolArgs({
     toolName: resolvedName,
     toolArgs: toolInput,
     schema: targetSchema,
   });
   if (schemaError) {
-    return schemaError;
+    return appendEnvelopeRepairNote(schemaError, repairedParams);
   }
 
   const { default: mcpClient } = await import("@/clients/mcp-client");
@@ -468,16 +512,35 @@ async function dispatchTool({
     },
   );
 
-  return {
-    content: Array.isArray(result.content)
-      ? (result.content as CallToolResult["content"])
-      : [{ type: "text", text: JSON.stringify(result.content) }],
-    isError: result.isError,
-    _meta: result._meta,
-    structuredContent: result.structuredContent as
-      | Record<string, unknown>
-      | undefined,
-  };
+  return appendEnvelopeRepairNote(
+    {
+      content: Array.isArray(result.content)
+        ? (result.content as CallToolResult["content"])
+        : [{ type: "text", text: JSON.stringify(result.content) }],
+      isError: result.isError,
+      _meta: stripArchestraValidationMeta(result._meta),
+      structuredContent: result.structuredContent as
+        | Record<string, unknown>
+        | undefined,
+    },
+    repairedParams,
+  );
+}
+
+/**
+ * `_meta.archestraValidation` is this platform's own validation descriptor
+ * (index.ts); an upstream third-party server must not be able to forge it and
+ * pass `reachedArgValidation`, unlocking the repair-note disclosure. Other
+ * `_meta` keys pass through untouched.
+ */
+function stripArchestraValidationMeta(
+  meta: CallToolResult["_meta"],
+): CallToolResult["_meta"] {
+  if (!isRecord(meta) || !("archestraValidation" in meta)) {
+    return meta;
+  }
+  const { archestraValidation: _dropped, ...rest } = meta;
+  return rest;
 }
 
 /**
@@ -559,100 +622,213 @@ function checkThirdPartyToolArgs(params: {
   return errorResult(messageLines.join("\n"));
 }
 
+/** Param types the repair may unwrap to — a literal declared `type` only. */
+type RepairableDeclaredType =
+  | "string"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "array";
+
 /**
- * JSON.stringify that never throws — the diagnostic path serializes
- * model-supplied tool_args and a catalog schema, either of which could carry a
- * BigInt or a circular reference. A failure must not turn a validation error
- * into an exception, so fall back to an opaque marker.
+ * Deterministic repair for the wrapper anti-patterns weak models produce when
+ * calling run_tool: a scalar/array param wrapped in a single-key object — the key
+ * can be anything, from a known envelope word (`{"value": …}`, `{"$text": …}`) to
+ * the param's own name (`{"appId": {"appId": …}}`) to an arbitrary string the
+ * model fixates on (`{"my-app": "my-app"}`) — or as the Anthropic text content
+ * block `{"type":"text","text": …}` (exactly two keys) leaked from message content.
+ * A top-level tool_args entry is unwrapped only when ALL hold:
+ *  - the tool's schema literally declares the param's `type` as
+ *    string/number/integer/boolean/array (no type arrays, no
+ *    $ref/anyOf/oneOf/allOf composition);
+ *  - the supplied value is a plain object of a recognized wrapper shape (see
+ *    envelopeInnerValue);
+ *  - the inner value already matches the declared type (see
+ *    innerMatchesDeclaredType) — the repair never retypes a value.
+ * The guard is on the declared *type* only — it deliberately does not check
+ * `enum`/`const`/`items`/tuple/`additionalProperties`; the target tool applies its
+ * complete schema at dispatch, so an inner value that satisfies the type but
+ * violates a non-type constraint is rejected downstream exactly as the wrapper
+ * object would be. The unwrapped value is the model's own inner value, never a
+ * fabricated one, so repair delivers the model's intended `param = X` call. Under
+ * those conditions the as-sent value (an object) is provably invalid against the
+ * declared scalar/array type, so the repair can never rewrite a call the schema
+ * could accept. Anything else — object-typed params, loose/absent types,
+ * unrecognized multi-key objects — is left untouched, and a call with nothing to
+ * repair passes through as the same object.
  */
-function safeJsonStringify(value: unknown, indent?: number): string {
-  try {
-    return (
-      JSON.stringify(
-        value,
-        (_key, v) => (typeof v === "bigint" ? v.toString() : v),
-        indent,
-      ) ?? "<unserializable>"
-    );
-  } catch {
-    return "<unserializable>";
+function repairEnvelopedToolArgs(params: {
+  toolArgs: Record<string, unknown>;
+  schema: unknown;
+}): { toolArgs: Record<string, unknown>; repairedParams: string[] } {
+  const { schema, toolArgs } = params;
+  const properties =
+    isRecord(schema) && isRecord(schema.properties) ? schema.properties : null;
+  if (!properties) {
+    return { toolArgs, repairedParams: [] };
+  }
+
+  const repairedParams: string[] = [];
+  const repaired: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(toolArgs)) {
+    const unwrapped = unwrapEnvelope({
+      value,
+      propertySchema: properties[key],
+    });
+    if (unwrapped) {
+      repairedParams.push(key);
+      repaired[key] = unwrapped.inner;
+    } else {
+      repaired[key] = value;
+    }
+  }
+  return repairedParams.length === 0
+    ? { toolArgs, repairedParams }
+    : { toolArgs: repaired, repairedParams };
+}
+
+/** The unwrapped inner value, or null when the entry does not qualify. */
+function unwrapEnvelope(params: {
+  value: unknown;
+  propertySchema: unknown;
+}): { inner: unknown } | null {
+  const { propertySchema, value } = params;
+  if (!isRecord(value)) {
+    return null;
+  }
+  const candidate = envelopeInnerValue(value);
+  if (!candidate) {
+    return null;
+  }
+
+  if (!isRecord(propertySchema)) {
+    return null;
+  }
+  // A composed/referenced schema may accept the object as sent — never touch it.
+  if (
+    "$ref" in propertySchema ||
+    "anyOf" in propertySchema ||
+    "oneOf" in propertySchema ||
+    "allOf" in propertySchema
+  ) {
+    return null;
+  }
+  const declaredType = asRepairableDeclaredType(propertySchema.type);
+  if (!declaredType) {
+    return null;
+  }
+
+  return innerMatchesDeclaredType(candidate.inner, declaredType);
+}
+
+/**
+ * The inner value from a recognized wrapper shape, or null when `value` is not
+ * a wrapper. Two shapes qualify:
+ *  - single-key wrapper: any object with exactly one key — its sole value is the
+ *    candidate, whatever the key is named (`{"value": X}`, `{"appId": X}`,
+ *    `{"my-app": X}`). The key name carries no meaning; weak models wrap under an
+ *    arbitrary string, so an allow-list would miss the common cases.
+ *  - Anthropic text content block: exactly the two keys `{type, text}` with
+ *    `type === "text"` — e.g. `{"type":"text","text":X}`, the shape weak models
+ *    leak from message content into tool_args.
+ * The caller enforces the declared-type guards; either shape is an object and so
+ * is provably invalid against a scalar/array declared type, keeping the repair
+ * unable to rewrite a call the schema would have accepted.
+ */
+function envelopeInnerValue(
+  value: Record<string, unknown>,
+): { inner: unknown } | null {
+  const keys = Object.keys(value);
+  if (keys.length === 1) {
+    return { inner: value[keys[0]] };
+  }
+  if (keys.length === 2 && value.type === "text" && "text" in value) {
+    return { inner: value.text };
+  }
+  return null;
+}
+
+function asRepairableDeclaredType(
+  value: unknown,
+): RepairableDeclaredType | null {
+  switch (value) {
+    case "string":
+    case "number":
+    case "integer":
+    case "boolean":
+    case "array":
+      return value;
+    default:
+      return null;
   }
 }
 
-/** How many levels of object/array nesting a skeleton unpacks before falling
- * back to an opaque tag. Generous: this runs only on an already-failed call, so
- * a fuller skeleton beats a terser one — the cap is just a guard against a
- * pathologically deep schema (`$ref` cycles already bail above). */
-const MAX_SKELETON_DEPTH = 8;
+/**
+ * Whether the inner value already matches the declared scalar/array type. The
+ * repair delivers the model's own value untouched and never retypes it: a
+ * number carried as a string stays wrapped, fails the target's validation, and
+ * the validation error's parameter skeleton teaches the shape.
+ */
+function innerMatchesDeclaredType(
+  value: unknown,
+  declaredType: RepairableDeclaredType,
+): { inner: unknown } | null {
+  switch (declaredType) {
+    case "string":
+      return typeof value === "string" ? { inner: value } : null;
+    case "number":
+      return typeof value === "number" ? { inner: value } : null;
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value)
+        ? { inner: value }
+        : null;
+    case "boolean":
+      return typeof value === "boolean" ? { inner: value } : null;
+    case "array":
+      return Array.isArray(value) ? { inner: value } : null;
+  }
+}
 
 /**
- * Illustrative placeholder for a value, derived from its declared JSON Schema.
- * Prefers a concrete literal (`const`, first `enum` member); otherwise reads
- * only literal `properties`/`required`/`items` (mirroring the shallow validation)
- * and recurses into object/array shapes up to MAX_SKELETON_DEPTH. A `type` array
- * (e.g. `["string","null"]`) resolves to its first non-null member. Falls back to
- * an opaque type tag for free-form objects, `$ref`/`allOf`/`oneOf`/`anyOf`, or
- * past the depth cap — the full schema appended to the error carries the rest.
+ * Whether a built-in dispatch result reached argument validation — i.e. cleared
+ * the RBAC/assignment gates in executeArchestraTool. A success has no error; a
+ * post-gate validation error carries the `archestraValidation` descriptor
+ * (index.ts). A gate denial is a plain error with neither, so it reads false.
+ * Deliberately conservative: a handler/output error that runs *after* the gates
+ * also lacks that descriptor and so suppresses the note too. That is the safe
+ * direction — the note is only a self-correction hint, and erring toward
+ * suppression keeps any not-yet-enumerated error path from leaking a param's
+ * declared type to a caller the gates would have refused.
  */
-function placeholderForSchema(schema: unknown, depth: number): string {
-  if (!isRecord(schema)) {
-    return "<value>";
+function reachedArgValidation(result: CallToolResult): boolean {
+  if (!result.isError) {
+    return true;
   }
-  if ("const" in schema) {
-    return safeJsonStringify(schema.const);
+  return isRecord(result._meta) && "archestraValidation" in result._meta;
+}
+
+/**
+ * Disclose a fired envelope repair on the tool result (success or failure),
+ * so the model sees what was attempted and self-corrects in-context.
+ */
+function appendEnvelopeRepairNote(
+  result: CallToolResult,
+  repairedParams: string[],
+): CallToolResult {
+  if (repairedParams.length === 0) {
+    return result;
   }
-  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
-    return safeJsonStringify(schema.enum[0]);
-  }
-  if (
-    "$ref" in schema ||
-    "allOf" in schema ||
-    "oneOf" in schema ||
-    "anyOf" in schema
-  ) {
-    return "<value>";
-  }
-  const types = Array.isArray(schema.type)
-    ? schema.type.filter((t): t is string => typeof t === "string")
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : [];
-  const primaryType = types.find((t) => t !== "null") ?? types[0];
-  switch (primaryType) {
-    case "string":
-      return "<string>";
-    case "number":
-    case "integer":
-      return "<number>";
-    case "boolean":
-      return "<boolean>";
-    case "null":
-      return "null";
-    case "array": {
-      if (depth < MAX_SKELETON_DEPTH && isRecord(schema.items)) {
-        return `[${placeholderForSchema(schema.items, depth + 1)}]`;
-      }
-      return "<array>";
-    }
-    case "object": {
-      const properties = isRecord(schema.properties) ? schema.properties : null;
-      const required = Array.isArray(schema.required)
-        ? schema.required.filter(
-            (key): key is string => typeof key === "string",
-          )
-        : [];
-      if (depth < MAX_SKELETON_DEPTH && properties && required.length > 0) {
-        const entries = required.map(
-          (key) =>
-            `${JSON.stringify(key)}: ${placeholderForSchema(properties[key], depth + 1)}`,
-        );
-        return `{${entries.join(", ")}}`;
-      }
-      return "<object>";
-    }
-    default:
-      return "<value>";
-  }
+  const names = repairedParams.map((name) => `"${name}"`).join(", ");
+  return {
+    ...result,
+    content: [
+      ...result.content,
+      {
+        type: "text",
+        text: `Note: run_tool unwrapped a wrapper object around ${names} in tool_args — pass the value directly next time.`,
+      },
+    ],
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

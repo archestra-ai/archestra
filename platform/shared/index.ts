@@ -36,6 +36,7 @@ export * from "./policy-conditions";
 export * from "./provider-billing-copy";
 export * from "./roles";
 export * from "./routes";
+export * from "./seeded-app-render";
 export * from "./slack";
 export * from "./sso-template-helpers";
 export * from "./statistics";

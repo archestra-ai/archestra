@@ -256,12 +256,14 @@ function ensureGeminiLeadingUserTurn(messages: ModelMessage[]): ModelMessage[] {
 // answered by a `tool_result` in the message that immediately follows — and
 // once such a turn is persisted, every subsequent request in the conversation
 // fails the same way. Histories can legitimately contain unanswered calls:
-// a tool part parked in `approval-requested` / `approval-responded` (the user
-// sent a new message instead of resolving the approval, or the run was blocked
-// in an autonomous session) converts to a tool-call with no result, and
-// provider mappers silently drop the SDK's approval bookkeeping parts.
-// Synthesize an "interrupted" result for every unanswered call so the replay
-// stays valid for any provider.
+// a tool part parked in `approval-requested` (the user sent a new message
+// instead of resolving the approval, or the run was blocked in an autonomous
+// session) converts to a tool-call with no result, and provider mappers
+// silently drop the SDK's approval bookkeeping parts. Synthesize an
+// "interrupted" result for those so the replay stays valid for any provider.
+// A call the user just approved/declined (`approval-responded`) is deliberately
+// left result-less: the SDK's own approval-resume executes or denies it on this
+// request, and a synthetic result would pre-empt that (see the filter below).
 const INTERRUPTED_TOOL_RESULT_TEXT =
   "Tool execution was interrupted before it produced a result (for example an unresolved approval request or an aborted run). The tool did not run; do not assume it did.";
 
@@ -287,11 +289,32 @@ function ensureToolCallsHaveResults(messages: ModelMessage[]): ModelMessage[] {
         .map((part) => part.toolCallId),
     );
 
+    // A tool call whose approval the user just answered is resolved by the AI
+    // SDK's own approval-resume on this request: `collectToolApprovals` executes
+    // an approved call (and denies a declined one) as long as no tool-result
+    // exists for the call yet. Synthesizing an "interrupted" result here would
+    // add exactly that result, so the SDK skips the call and the approved tool
+    // silently never runs. Treat a call with a matching tool-approval-response
+    // as already handled and leave it result-less for the SDK to resolve.
+    const approvalRequestToolCallIds = new Map<string, string>();
+    for (const part of message.content) {
+      if (part.type === "tool-approval-request") {
+        approvalRequestToolCallIds.set(part.approvalId, part.toolCallId);
+      }
+    }
+    const approvalRespondedToolCallIds = new Set(
+      (followingToolMessage?.content ?? [])
+        .filter((part) => part.type === "tool-approval-response")
+        .map((part) => approvalRequestToolCallIds.get(part.approvalId))
+        .filter((toolCallId): toolCallId is string => toolCallId != null),
+    );
+
     const unansweredToolCalls = message.content.filter(
       (part): part is ToolCallPart =>
         part.type === "tool-call" &&
         part.providerExecuted !== true &&
-        !answeredToolCallIds.has(part.toolCallId),
+        !answeredToolCallIds.has(part.toolCallId) &&
+        !approvalRespondedToolCallIds.has(part.toolCallId),
     );
     if (unansweredToolCalls.length === 0) {
       continue;

@@ -37,6 +37,14 @@ import {
 // and running in parallel causes identity provider conflicts.
 test.describe.configure({ mode: "serial" });
 
+// The whole file runs in the merge queue: SSO is an enterprise feature, so
+// its permutations (role mapping, team sync) gate merges rather than waiting
+// for the nightly run — a red nightly has no owner, a red merge check does.
+// Serial mode here only serializes access to the shared Keycloak realm /
+// Generic OIDC slot; every test authenticates fresh, uses a unique provider
+// name, and starts with defensive cleanup, so no test depends on a previous
+// test's state.
+
 // =============================================================================
 // Shared Test Helpers
 // =============================================================================
@@ -149,7 +157,9 @@ async function fillOidcProviderForm(
 async function createOidcProviderViaApi(
   page: Page,
   providerName: string,
-): Promise<void> {
+  options?: { teamSync?: boolean },
+): Promise<string> {
+  const teamSync = options?.teamSync ?? true;
   const response = await page.request.post(
     `${UI_BASE_URL}/api/identity-providers`,
     {
@@ -175,10 +185,14 @@ async function createOidcProviderViaApi(
           },
           overrideUserInfo: true,
         },
-        teamSyncConfig: {
-          enabled: true,
-          groupsExpression: "{{#each groups}}{{this}},{{/each}}",
-        },
+        ...(teamSync
+          ? {
+              teamSyncConfig: {
+                enabled: true,
+                groupsExpression: "{{#each groups}}{{this}},{{/each}}",
+              },
+            }
+          : {}),
       },
     },
   );
@@ -186,6 +200,7 @@ async function createOidcProviderViaApi(
   await expectApiResponseOk(response, "create identity provider");
 
   const createdProvider = (await response.json()) as {
+    id: string;
     providerId: string;
     teamSyncConfig?: {
       enabled?: boolean;
@@ -194,10 +209,69 @@ async function createOidcProviderViaApi(
   };
 
   expect(createdProvider.providerId).toBe(providerName);
-  expect(createdProvider.teamSyncConfig?.enabled).toBe(true);
-  expect(createdProvider.teamSyncConfig?.groupsExpression).toBe(
-    "{{#each groups}}{{this}},{{/each}}",
+  if (teamSync) {
+    expect(createdProvider.teamSyncConfig?.enabled).toBe(true);
+    expect(createdProvider.teamSyncConfig?.groupsExpression).toBe(
+      "{{#each groups}}{{this}},{{/each}}",
+    );
+  }
+
+  return createdProvider.id;
+}
+
+/**
+ * Delete leftover providers created by THIS spec's earlier attempts (matched
+ * by the given providerId prefixes), via the API.
+ *
+ * This deliberately replaces the old "delete every Generic OIDC card until the
+ * create dialog appears" loop for the tests that run alongside the api
+ * project: that loop deleted providers it did not own. In CI run 28859474197
+ * it repeatedly killed the OIDC providers other parallel workers had just
+ * created (mcp-enterprise-managed, mcp-gateway-jwks, jwt-propagation), which
+ * surfaced as FK violations on agents.identity_provider_id and broken SSO
+ * link flows in those specs. Prefix-scoped cleanup keeps retries idempotent
+ * (no better-auth providersLimit leaks) without touching foreign providers.
+ */
+async function deleteLeftoverProvidersByPrefixViaApi(
+  page: Page,
+  prefixes: string[],
+): Promise<void> {
+  const providersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/identity-providers`,
   );
+  await expectApiResponseOk(providersResponse, "list identity providers");
+
+  const providers = (await providersResponse.json()) as Array<{
+    id: string;
+    providerId: string;
+  }>;
+
+  for (const provider of providers) {
+    if (!prefixes.some((prefix) => provider.providerId.startsWith(prefix))) {
+      continue;
+    }
+    const deleteResponse = await page.request.delete(
+      `${UI_BASE_URL}/api/identity-providers/${provider.id}`,
+    );
+    await expectApiResponseOk(deleteResponse, "delete leftover provider");
+  }
+}
+
+/**
+ * Open the edit dialog for a SPECIFIC provider via the page's ?edit=<id> deep
+ * link. Unlike clicking the "Generic OIDC" type card — which binds to
+ * whichever non-trusted OIDC provider happens to be listed first — this is
+ * deterministic when other parallel workers have their own OIDC providers.
+ */
+async function openIdentityProviderDialogById(
+  page: Page,
+  providerId: string,
+): Promise<void> {
+  await page.goto(
+    `${UI_BASE_URL}/settings/identity-providers?edit=${encodeURIComponent(providerId)}`,
+  );
+  await page.waitForLoadState("domcontentloaded");
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 }
 
 async function deleteProviderByProviderIdViaApi(
@@ -590,10 +664,15 @@ test.describe("Identity Provider Team Sync E2E", () => {
       timeout: 10000,
     });
 
-    // Also verify the group appears in the current mappings list (not just the input)
-    await expect(page.getByRole("dialog").getByText(externalGroup)).toBeVisible(
-      { timeout: 5000 },
-    );
+    // Also verify the group appears in the current mappings list (not just the
+    // input). Scope to the mapping row: the dialog also shows the "Latest ID
+    // Token Claims" debug panel, whose decoded claims JSON can contain the same
+    // group name and would make a dialog-wide text match strict-mode ambiguous.
+    await expect(
+      page
+        .getByTestId(E2eTestId.TeamExternalGroupMappingRow)
+        .filter({ hasText: externalGroup }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Close the dialog - use first() to target the text button, not the X icon
     await clickButton({
@@ -660,20 +739,23 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
   test("should configure OIDC provider, login via SSO, update, and delete", async ({
     page,
     browser,
-    goToPage,
   }) => {
     test.slow();
     const providerName = `KeycloakOIDC${Date.now()}`;
 
-    // STEP 1: Authenticate and clean up any existing provider
+    // STEP 1: Authenticate and clean up THIS spec's leftovers from earlier
+    // attempts. Scoped to our own name prefix via the API: the api project
+    // runs OIDC-provider-based specs in parallel against the same deployment,
+    // and the old delete-every-"Generic OIDC"-card loop was deleting their
+    // freshly created providers mid-test.
     await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await deleteLeftoverProvidersByPrefixViaApi(page, ["KeycloakOIDC"]);
 
     // STEP 2: Create the provider via API, then continue exercising the UI for
     // SSO login, update, and delete. The create dialog has become flaky in CI
     // after recent UI changes, but the persisted provider behavior is the real
     // contract this flow depends on.
-    await createOidcProviderViaApi(page, providerName);
+    const providerDbId = await createOidcProviderViaApi(page, providerName);
     await settleIdentityProviderDialog(page);
 
     // Verify the provider is now shown as "Enabled"
@@ -694,12 +776,11 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
     }
 
     // STEP 5: Use the original admin page context to update the provider
-    // (the original page context is still logged in as admin)
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-
-    // Click on Generic OIDC card to edit (our provider)
-    await openIdentityProviderDialog(page, "Generic OIDC");
+    // (the original page context is still logged in as admin).
+    // Open OUR provider's edit dialog via the ?edit=<id> deep link — the
+    // "Generic OIDC" type card binds to whichever OIDC provider is listed
+    // first, which may be another parallel worker's provider.
+    await openIdentityProviderDialogById(page, providerDbId);
     await expect(
       page.getByTestId(E2eTestId.IdentityProviderUpdateButton),
     ).toBeVisible({ timeout: 10_000 });
@@ -718,8 +799,9 @@ test.describe("Identity Provider OIDC E2E Flow with Keycloak", () => {
     await expectIdentityProviderToExistViaApi(page, providerName);
     await settleIdentityProviderDialog(page);
 
-    // STEP 6: Delete the provider
-    await openIdentityProviderDialog(page, "Generic OIDC");
+    // STEP 6: Delete the provider — again via the deep link so the dialog is
+    // guaranteed to be bound to OUR provider, not a concurrent worker's.
+    await openIdentityProviderDialogById(page, providerDbId);
     await deleteProviderViaDialog(page);
 
     // STEP 7: Verify SSO button no longer appears on login page
@@ -749,17 +831,23 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
   test("should terminate IdP session on Archestra sign-out", async ({
     page,
     browser,
-    goToPage,
   }) => {
     test.slow();
     const providerName = `IdPLogoutOIDC${Date.now()}`;
 
-    // STEP 1: Authenticate as admin and create OIDC provider
+    // STEP 1: Authenticate as admin and create the OIDC provider via the API.
+    // Leftover cleanup is scoped to our own name prefix, and creation no
+    // longer goes through the "Generic OIDC" type card: the card only offers
+    // a create dialog when NO non-trusted OIDC provider exists, and the api
+    // project's parallel specs keep creating theirs — the old
+    // delete-until-create-dialog loop got there by deleting THEIR providers
+    // mid-test. The contract under test here is the RP-initiated logout
+    // redirect chain, which is unaffected by how the provider is created.
     await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
-    await fillOidcProviderForm(page, providerName);
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    await deleteLeftoverProvidersByPrefixViaApi(page, ["IdPLogoutOIDC"]);
+    // teamSync off: the dialog-created provider this replaces did not enable
+    // team sync, and this test's contract is only the logout redirect chain.
+    await createOidcProviderViaApi(page, providerName, { teamSync: false });
 
     // STEP 2: Login via SSO in a fresh context
     const { context: ssoContext, page: ssoPage } =
@@ -805,11 +893,9 @@ test.describe("Identity Provider IdP Logout (RP-Initiated Logout)", () => {
       await ssoContext.close();
     }
 
-    // STEP 5: Cleanup - delete the identity provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    // STEP 5: Cleanup - delete OUR provider via the API (the "Generic OIDC"
+    // card dialog may be bound to a concurrent worker's provider).
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 });
 

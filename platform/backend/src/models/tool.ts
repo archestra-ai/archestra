@@ -431,24 +431,16 @@ class ToolModel {
 
     // Catalog-backed tools (including All-mode tools with no agent_tools row) are
     // scoped by catalog access, which is org-scoped even for admins. Mirror the
-    // discovery path (getMcpToolsAccessibleToUser): a catalog is only reachable
-    // if the caller also has an accessible install of it (org-visible catalogs
-    // can hold only other users' personal servers). The built-in Archestra
-    // catalog runs in-process with no install row, so it stays in.
+    // discovery path (getMcpToolsAccessibleToUser): catalog visibility is the
+    // gate — a visible catalog stays readable even when the caller has no
+    // connection of their own yet (execution is install-scoped at call time).
     if (tool.catalogId) {
-      const [catalogIds, installedCatalogIds] = await Promise.all([
-        McpCatalogTeamModel.getUserAccessibleCatalogIds(
-          params.userId,
-          params.isAdmin,
-          params.organizationId,
-        ),
-        McpServerModel.getAccessibleInstallCatalogIds(params.userId),
-      ]);
-      const accessible =
-        catalogIds.includes(tool.catalogId) &&
-        (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID ||
-          installedCatalogIds.has(tool.catalogId));
-      if (!accessible) {
+      const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+        params.userId,
+        params.isAdmin,
+        params.organizationId,
+      );
+      if (!catalogIds.includes(tool.catalogId)) {
         return null;
       }
     } else if (tool.agentId) {
@@ -828,20 +820,16 @@ class ToolModel {
       return [];
     }
 
-    // Catalog visibility is broader than install access: an org-scoped catalog
-    // is visible to every member, but its only installs may be other users'
-    // personal servers. Narrow the discovery space to catalogs the caller has
-    // an accessible install of (own personal + team + org) so search_tools /
-    // run_tool cannot reach another user's personal server. The built-in
-    // Archestra catalog runs in-process with no install row, so it stays in.
-    const installedCatalogIds =
-      await McpServerModel.getAccessibleInstallCatalogIds(params.userId);
-    const scopedCatalogIds = catalogIds.filter(
-      (id) => id === ARCHESTRA_MCP_CATALOG_ID || installedCatalogIds.has(id),
-    );
-    if (scopedCatalogIds.length === 0) {
-      return [];
-    }
+    // Discovery deliberately follows catalog *visibility*, not install access.
+    // A visible catalog with no connection the caller can use (e.g. a per-user
+    // OAuth server the caller has not signed in to, even when other users
+    // have) must stay discoverable: dropping it here would silently hide the
+    // tool, so the model could never surface the actionable auth-required
+    // setup prompt. Execution stays install-scoped — the call-time resolver
+    // only routes through installs the caller can access (own personal, their
+    // teams', or org-scoped; see pickInstallForCaller in clients/mcp-client.ts)
+    // and otherwise returns the auth-required error with a self-service
+    // connect link — so another user's personal server is never reached.
 
     // Secondary sort on id keeps the ordering deterministic when createdAt
     // ties (bulk-inserted MCP tools share a timestamp), so search_tools and
@@ -851,7 +839,7 @@ class ToolModel {
       .from(schema.toolsTable)
       .where(
         and(
-          inArray(schema.toolsTable.catalogId, scopedCatalogIds),
+          inArray(schema.toolsTable.catalogId, catalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined

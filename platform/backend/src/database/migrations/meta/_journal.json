@@ -2367,6 +2367,13 @@
       "when": 1783388553796,
       "tag": "0337_nervous_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 338,
+      "version": "7",
+      "when": 1783565829313,
+      "tag": "0338_fat_dark_beast",
+      "breakpoints": true
     }
   ]
 }

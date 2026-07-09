@@ -12,9 +12,9 @@ Do not edit manually.
 
 The Archestra MCP Server is a built-in MCP server that ships with the platform and requires no installation. It exposes tools for managing platform resources such as agents, MCP servers, policies, and limits.
 
-Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`todo_write`](#todo_write).
+Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`todo_write`](#todo_write), [`query_knowledge_sources`](#query_knowledge_sources).
 
-Additionally, [`query_knowledge_sources`](#query_knowledge_sources) is automatically assigned to Agents and MCP Gateways that have at least one [knowledge base or connector](/docs/platform-knowledge) attached. To use it, the user must have `knowledgeSource:query`.
+[`query_knowledge_sources`](#query_knowledge_sources) appears for Agents and MCP Gateways only when at least one [knowledge base or connector](/docs/platform-knowledge) is attached. To use it, the user must have `knowledgeSource:query`.
 
 All Archestra tools are prefixed with `archestra__`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
 
@@ -74,7 +74,7 @@ Required RBAC permission: `agent:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
@@ -223,7 +223,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — and app tools (scaffold_app, edit_app, read_app, render_app, list_apps) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when the Projects feature is enabled and assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 
 
@@ -1991,11 +1991,11 @@ Required RBAC permission: `app:update`
 | `questions[].prompt` | `string` | Yes | The question shown to the user. |
 | `questions[].options` | `string[]` | No | When present, the question is single-select over these plain-string option labels, e.g. ["Light", "Dark"] — never {label, value} objects; otherwise it is free-text. |
 | `spec` | `object` | No | The consolidated product requirements to persist on the app (features/data/ui/tools — no implementation stack). |
-| `spec.summary` | `string` | Yes |  |
-| `spec.features` | `string[]` | Yes |  |
-| `spec.data` | `string \| null` | No |  |
-| `spec.ui` | `string \| null` | No |  |
-| `spec.tools` | `string[]` | Yes |  |
+| `spec.summary` | `string` | Yes | One-line summary of what the app is for. |
+| `spec.features` | `string[]` | Yes | Concrete capabilities the app should provide. |
+| `spec.data` | `string \| null` | No | What the app reads/persists via the App Data Store — a free-form prose string, not a structured object. |
+| `spec.ui` | `string \| null` | No | UI / style direction as a free-form prose string, not a structured object. |
+| `spec.tools` | `string[]` | Yes | Full names of the MCP tools the app calls through window.archestra. |
 
 ##### Output
 
@@ -2003,11 +2003,11 @@ Required RBAC permission: `app:update`
 |-------|------|----------|-------------|
 | `id` | `string` | Yes |  |
 | `spec` | `object` | Yes | The persisted spec when one was given, else the base spec seeded for the model. |
-| `spec.summary` | `string` | Yes |  |
-| `spec.features` | `string[]` | Yes |  |
-| `spec.data` | `string \| null` | No |  |
-| `spec.ui` | `string \| null` | No |  |
-| `spec.tools` | `string[]` | Yes |  |
+| `spec.summary` | `string` | Yes | One-line summary of what the app is for. |
+| `spec.features` | `string[]` | Yes | Concrete capabilities the app should provide. |
+| `spec.data` | `string \| null` | No | What the app reads/persists via the App Data Store — a free-form prose string, not a structured object. |
+| `spec.ui` | `string \| null` | No | UI / style direction as a free-form prose string, not a structured object. |
+| `spec.tools` | `string[]` | Yes | Full names of the MCP tools the app calls through window.archestra. |
 | `capability` | `object` | Yes |  |
 | `capability.tools` | `object[]` | Yes |  |
 | `capability.tools[].name` | `string` | Yes |  |
@@ -2070,6 +2070,8 @@ Required RBAC permission: `app:read`
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id. |
 | `version` | `integer` | No | Specific version to read; defaults to the current head. |
+| `offset` | `integer` | No | Start of the read window as a 0-based character offset (a JavaScript string index / UTF-16 code unit) into the stored HTML — character-based, not line-based, since minified HTML can be one enormous line. Defaults to 0. An offset past the end returns an empty window, not an error. A window never splits a character in half: its edges shift by one unit when they would. |
+| `limit` | `integer` | No | Maximum number of characters to return, starting at offset. Omitted reads to the end of the document; 0 returns no content, just the size metadata. |
 
 ##### Output
 
@@ -2079,8 +2081,11 @@ Required RBAC permission: `app:read`
 | `name` | `string` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `version` | `number` | Yes |  |
-| `byteSize` | `number` | Yes |  |
-| `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS). |
+| `byteSize` | `number` | Yes | UTF-8 byte size of the full stored HTML (never the window's). |
+| `totalChars` | `number` | Yes | Total character length of the full stored HTML. |
+| `offset` | `number` | Yes | Effective 0-based character offset of the returned window (0 for a full read; clamped to the end when past it). |
+| `hasMore` | `boolean` | Yes | True when the document continues past the returned window. |
+| `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS) — the requested character window when offset/limit was passed. |
 
 #### edit_app
 

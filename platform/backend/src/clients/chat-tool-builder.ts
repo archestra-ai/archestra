@@ -217,6 +217,9 @@ export function buildMcpGatewayTool(params: {
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
                 contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                // `run_tool` can dispatch a delegation tool, so this context
+                // needs the caller's ancestors for the executor's cycle check.
+                delegationChain: ctx.delegationChain,
                 approvalRequiredPoliciesHandled: true,
                 tokenAuth: buildTokenAuthContext({
                   mcpGwToken: ctx.mcpGwToken,

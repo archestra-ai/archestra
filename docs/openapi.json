@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.3"
+    "version": "1.3.5"
   },
   "components": {
     "schemas": {
@@ -54872,19 +54872,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -54892,7 +54896,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -57638,19 +57643,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -57658,7 +57667,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -58108,19 +58118,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -58128,7 +58142,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -58792,19 +58807,23 @@
                         "type": "object",
                         "properties": {
                           "summary": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "One-line summary of what the app is for."
                           },
                           "features": {
                             "type": "array",
                             "items": {
                               "type": "string"
-                            }
+                            },
+                            "description": "Concrete capabilities the app should provide."
                           },
                           "data": {
+                            "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                             "nullable": true,
                             "type": "string"
                           },
                           "ui": {
+                            "description": "UI / style direction as a free-form prose string, not a structured object.",
                             "nullable": true,
                             "type": "string"
                           },
@@ -58812,7 +58831,8 @@
                             "type": "array",
                             "items": {
                               "type": "string"
-                            }
+                            },
+                            "description": "Full names of the MCP tools the app calls through window.archestra."
                           }
                         },
                         "required": [
@@ -59171,19 +59191,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -59191,7 +59215,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -61964,6 +61989,18 @@
       }
     },
     "/api/auth/oauth2/token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/revoke": {
       "post": {
         "tags": [
           "Auth"

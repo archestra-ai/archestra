@@ -391,6 +391,25 @@ tests:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: "max_attempts=60"
 
+  - it: pins the setup-postgres-extensions image by digest when postgresql.image.digest is set
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: setup-postgres-extensions
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: ^bitnamisecure/postgresql:latest@sha256:[0-9a-f]{64}$
+
+  - it: falls back to the floating tag for setup-postgres-extensions when no digest is pinned
+    documentIndex: 1
+    set:
+      postgresql.image.digest: null
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: bitnamisecure/postgresql:latest
+
   - it: should set ARCHESTRA_DATABASE_URL with postgres:// scheme
     documentIndex: 1
     set:

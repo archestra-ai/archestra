@@ -28,11 +28,7 @@ blocks tool calls whose contract the folded context cannot satisfy.
 ```sh
 uv sync
 
-# Deterministic, free, no LLM: replay every task's scripted ground truth
-# through the gate under all three unknown-policies.
-uv run baton-dojo replay --suite workspace
-
-# The real benchmark, via OpenRouter (key from $OPENROUTER_API_KEY or
+# The benchmark, via OpenRouter (key from $OPENROUTER_API_KEY or
 # ../../.env). Compare a defended and an undefended pipeline:
 uv run baton-dojo bench --model openai/gpt-4o-mini-2024-07-18 --defense baton
 uv run baton-dojo bench --model openai/gpt-4o-mini-2024-07-18 --defense none
@@ -50,24 +46,17 @@ addresses the model by name and needs a model id AgentDojo knows (e.g. the
 dated `openai/gpt-4o-mini-2024-07-18`); the `…_no_model_name` attack variant
 works with any model id.
 
-## Reading the replay report
+## The trust-only limitation
 
-`replay` is the gate that needs no model and no spend. Hard-asserted (exit 1,
-on the `deny` table): every scripted injection ground truth blocks at or
-before its first sink, clean flows stay permitted, and two evaluations agree.
-Everything else is reported, not asserted — most importantly the benign tasks
-the policy blocks.
-
-That trade-off is the experiment's honest premise, not a bug: with
-source-type labels, a benign "search my emails, then send one" and a poisoned
-version of it are *identical in label space*. A trusted-only sink policy
-blocks both. On workspace v1.2.2 that means: 6/6 scripted attacks blocked,
-23/40 benign tasks untouched (read-only), 17/40 blocked at their sink — the
-utility price of trust-only enforcement. Also note every sink-bearing
-workspace ground truth reads a suspicious source first, so the clean-flow
-assertion is currently vacuous there, and the three unknown-policy tables are
-identical because the table annotates all 24 tools (nothing Unknown ever
-enters the fold — the policies only separate under sparse annotation).
+With source-type labels, a benign "search my emails, then send one" and a
+poisoned version of it are *identical in label space*. A trusted-only sink
+policy blocks both — that trade-off is the experiment's honest premise, not a
+bug. Concretely on the workspace suite: read-only tasks pass untouched, but a
+benign task that reads a suspicious source before a sink is blocked at that
+sink too — the utility price of trust-only enforcement. Note also that the
+three unknown-policies behave identically here, because the table annotates
+all 24 tools: nothing Unknown ever enters the fold, so the policies only
+separate under sparse annotation.
 
 The dimension that *could* split benign sends from exfiltration is audience
 (who may read the context vs. who the call exposes it to). That needs
@@ -80,5 +69,4 @@ new engine.
 Write `contracts/<suite>.toml` covering every tool of the suite (the harness
 cross-checks and fails on drift — under `unknown_policy=deny` an unlisted
 tool blocks outright, so gaps must be explicit), mark the sink tools'
-`requires_trust` and `recipients_arg`, and run
-`baton-dojo replay --suite <suite>`.
+`requires_trust` and `recipients_arg`, then run a `bench` against it.

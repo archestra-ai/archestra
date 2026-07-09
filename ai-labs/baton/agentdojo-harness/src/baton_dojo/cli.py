@@ -11,13 +11,6 @@ def main() -> None:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    replay = subparsers.add_parser(
-        "replay",
-        help="no-LLM ground-truth replay: deterministic policy report + hard assertions",
-    )
-    replay.add_argument("--suite", default="workspace")
-    replay.add_argument("--benchmark-version", default="v1.2.2")
-
     bench = subparsers.add_parser(
         "bench",
         help="real LLM benchmark via OpenRouter, with or without the baton defense",
@@ -44,10 +37,6 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    if args.command == "replay":
-        from baton_dojo.replay import run_replay
-
-        sys.exit(run_replay(args.suite, args.benchmark_version))
     if args.command == "bench":
         from baton_dojo.bench import run_bench
 

@@ -19,7 +19,7 @@ describe("resolveEditorDraftPolicy", () => {
         resolveEditorDraftPolicy({
           mode,
           policy: restricted,
-          orgDefaultPolicy: null,
+          policyLoaded: true,
         }),
       ).toBe(restricted);
     }
@@ -30,38 +30,40 @@ describe("resolveEditorDraftPolicy", () => {
       resolveEditorDraftPolicy({
         mode: "create",
         policy: null,
-        orgDefaultPolicy: null,
+        policyLoaded: true,
       }),
     ).toMatchObject({ egressMode: "restricted" });
   });
 
-  test("the org-default editor with no policy seeds unrestricted (built-in floor), not restricted", () => {
+  test("editing a named environment with no policy seeds restricted, never widening it open", () => {
+    expect(
+      resolveEditorDraftPolicy({
+        mode: "edit",
+        policy: null,
+        policyLoaded: true,
+      }),
+    ).toMatchObject({ egressMode: "restricted" });
+  });
+
+  test("the org-default editor with a loaded, absent policy seeds unrestricted (built-in floor)", () => {
     expect(
       resolveEditorDraftPolicy({
         mode: "default",
         policy: null,
-        orgDefaultPolicy: null,
+        policyLoaded: true,
       }),
     ).toMatchObject({ egressMode: "unrestricted" });
   });
 
-  test("an existing environment with no policy inherits the org default", () => {
+  test("the org-default editor whose policy is not yet loaded seeds restricted, not unrestricted", () => {
+    // A null policy from an unresolved/failed org query must not seed open egress
+    // that a save could persist over a restrictive real default.
     expect(
       resolveEditorDraftPolicy({
-        mode: "edit",
+        mode: "default",
         policy: null,
-        orgDefaultPolicy: restricted,
+        policyLoaded: false,
       }),
-    ).toBe(restricted);
-  });
-
-  test("an existing environment with no policy and no org default seeds unrestricted (built-in), not restricted", () => {
-    expect(
-      resolveEditorDraftPolicy({
-        mode: "edit",
-        policy: null,
-        orgDefaultPolicy: null,
-      }),
-    ).toMatchObject({ egressMode: "unrestricted" });
+    ).toMatchObject({ egressMode: "restricted" });
   });
 });

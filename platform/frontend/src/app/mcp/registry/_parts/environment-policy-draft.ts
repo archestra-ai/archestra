@@ -22,21 +22,25 @@ const BUILT_IN_NETWORK_POLICY: NetworkPolicy = {
 };
 
 /**
- * The policy the environment editor should seed when it opens, matching what the
- * backend actually resolves and enforces for that target:
+ * The policy the environment editor should seed when it opens, chosen to match
+ * what the backend enforces while never seeding — and letting a save persist —
+ * open egress it can't confirm:
  * - an explicit policy → itself;
- * - creating a new environment → the locked-down default;
- * - an existing environment with no policy → the org default it inherits, else
- *   the built-in unrestricted floor;
- * - the org-default editor with no policy → the built-in unrestricted floor.
+ * - the org-default editor whose policy is *known* absent (`policyLoaded`, i.e.
+ *   the org query has resolved) → the built-in unrestricted floor the backend
+ *   enforces for a null policy;
+ * - everything else — creating a new environment, editing a named one, or the
+ *   org default not yet loaded/failed — → the locked-down "restricted" default,
+ *   so an unresolved query can never widen a restrictive policy to open egress.
  */
 export function resolveEditorDraftPolicy(params: {
   mode: "create" | "edit" | "default";
   policy: NetworkPolicy | null;
-  orgDefaultPolicy: NetworkPolicy | null;
+  policyLoaded: boolean;
 }): NetworkPolicy {
   if (params.policy) return params.policy;
-  if (params.mode === "create") return NEW_ENVIRONMENT_DEFAULT_POLICY;
-  if (params.mode === "default") return BUILT_IN_NETWORK_POLICY;
-  return params.orgDefaultPolicy ?? BUILT_IN_NETWORK_POLICY;
+  if (params.mode === "default" && params.policyLoaded) {
+    return BUILT_IN_NETWORK_POLICY;
+  }
+  return NEW_ENVIRONMENT_DEFAULT_POLICY;
 }

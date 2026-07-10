@@ -42,6 +42,7 @@ import {
 } from "@/lib/environment.query";
 import {
   useDefaultEnvironment,
+  useOrganization,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
 import {
@@ -269,7 +270,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         open={editTargetOpen}
         onOpenChange={(open) => !open && closeEditor()}
         environment={editEnvironment}
-        defaultEnvironment={defaultEnvironment}
         capabilities={capabilities}
       />
 
@@ -401,6 +401,10 @@ function EnvironmentEditorDialog({
     setAllowedCidrsText(policy.allowedCidrs.join("\n"));
   }, []);
 
+  // Whether the org query has resolved — so a null org default policy can be
+  // trusted as genuinely absent (→ unrestricted floor) rather than still-loading.
+  const { isSuccess: orgLoaded } = useOrganization();
+
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
     if (open) {
@@ -415,7 +419,7 @@ function EnvironmentEditorDialog({
           resolveEditorDraftPolicy({
             mode: "default",
             policy: defaultEnvironment?.networkPolicy ?? null,
-            orgDefaultPolicy: null,
+            policyLoaded: orgLoaded,
           }),
         );
         setRestricted(defaultEnvironment?.restricted ?? false);
@@ -431,7 +435,7 @@ function EnvironmentEditorDialog({
           resolveEditorDraftPolicy({
             mode,
             policy: environment?.networkPolicy ?? null,
-            orgDefaultPolicy: defaultEnvironment?.networkPolicy ?? null,
+            policyLoaded: true,
           }),
         );
         setRestricted(environment?.restricted ?? false);
@@ -439,7 +443,14 @@ function EnvironmentEditorDialog({
         setTrustedImageRegistries(environment?.trustedImageRegistries ?? []);
       }
     }
-  }, [open, mode, environment, defaultEnvironment, syncNetworkPolicyDraft]);
+  }, [
+    open,
+    mode,
+    environment,
+    defaultEnvironment,
+    orgLoaded,
+    syncNetworkPolicyDraft,
+  ]);
 
   const isPending =
     createMutation.isPending ||

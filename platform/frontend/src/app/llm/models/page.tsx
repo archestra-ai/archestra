@@ -80,7 +80,10 @@ import {
   useSyncLlmModels,
   useUpdateModel,
 } from "@/lib/llm-models.query";
-import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import {
+  type ResourceVisibilityScope,
+  useLlmProviderApiKeys,
+} from "@/lib/llm-provider-api-keys.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
@@ -115,13 +118,18 @@ export default function ModelsPage() {
   const availableApiKeys = useMemo(() => {
     const keyMap = new Map<
       string,
-      { name: string; provider: keyof typeof PROVIDER_CONFIG }
+      {
+        name: string;
+        provider: keyof typeof PROVIDER_CONFIG;
+        scope: ResourceVisibilityScope;
+      }
     >();
     for (const model of models) {
       for (const key of model.apiKeys) {
         keyMap.set(key.id, {
           name: key.name,
           provider: key.provider as keyof typeof PROVIDER_CONFIG,
+          scope: key.scope as ResourceVisibilityScope,
         });
       }
     }
@@ -405,7 +413,7 @@ export default function ModelsPage() {
             />
             <LlmProviderApiKeyDropdown
               availableKeys={availableApiKeys.flatMap(
-                ([id, { name, provider }]) => {
+                ([id, { name, provider, scope }]) => {
                   const config = PROVIDER_CONFIG[provider];
                   if (!config) return [];
                   return [
@@ -413,6 +421,7 @@ export default function ModelsPage() {
                       id,
                       name,
                       provider,
+                      scope,
                     },
                   ];
                 },

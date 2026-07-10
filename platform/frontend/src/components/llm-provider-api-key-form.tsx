@@ -474,8 +474,11 @@ export function LlmProviderApiKeyForm({
   }, [form, hasAnyKeyForProvider, isEditMode]);
 
   // Default the Name field to the provider's display name so it's one less
-  // field to fill. Only fill while the name is empty or still the previously
-  // auto-filled provider name — never clobber a name the user typed.
+  // field to fill, suffixed with a counter when that name is already taken by
+  // a visible key of the same provider — sign-in providers (GitHub/Microsoft
+  // Copilot) otherwise mint identically-named keys on every reconnect. Only
+  // fill while the name is empty or still the previously auto-filled name —
+  // never clobber a name the user typed.
   const autoFilledNameRef = useRef<string | null>(null);
   useEffect(() => {
     if (isEditMode) {
@@ -484,10 +487,19 @@ export function LlmProviderApiKeyForm({
 
     const currentName = form.getValues("name");
     if (currentName === "" || currentName === autoFilledNameRef.current) {
-      form.setValue("name", providerConfig.name);
-      autoFilledNameRef.current = providerConfig.name;
+      const takenNames = new Set(
+        (existingKeys ?? [])
+          .filter((key) => key.provider === provider)
+          .map((key) => key.name),
+      );
+      let defaultName = providerConfig.name;
+      for (let suffix = 2; takenNames.has(defaultName); suffix++) {
+        defaultName = `${providerConfig.name} (${suffix})`;
+      }
+      form.setValue("name", defaultName);
+      autoFilledNameRef.current = defaultName;
     }
-  }, [form, isEditMode, providerConfig.name]);
+  }, [form, isEditMode, providerConfig.name, existingKeys, provider]);
 
   // Force personal scope when the provider requires a per-user credential.
   useEffect(() => {

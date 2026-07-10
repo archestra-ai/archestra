@@ -1,5 +1,4 @@
 import { InfoIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 /**
  * Shown above the composer when the selected model can't take tools while the
@@ -9,12 +8,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
  */
 export function NoToolsModelNotice() {
   return (
-    <Alert variant="info">
-      <InfoIcon />
-      <AlertDescription className="text-sm">
+    <p className="flex items-center justify-center gap-1.5 px-2 text-xs text-muted-foreground">
+      <InfoIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span>
         The selected model doesn&apos;t support tools, so this agent&apos;s
         tools won&apos;t be used in this chat. Switch models to use tools.
-      </AlertDescription>
-    </Alert>
+      </span>
+    </p>
   );
 }

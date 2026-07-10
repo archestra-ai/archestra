@@ -915,6 +915,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // stays hardcoded — its models don't declare capabilities and
                 // it has built-in web search instead of tool calling
                 // (https://docs.perplexity.ai/api-reference/chat-completions-post).
+                // Perplexity's tool calling (2026) exists only on its separate
+                // Agent API (/responses/create, a Responses-style wire format),
+                // not the chat-completions surface we proxy.
                 const supportsToolCalling =
                   provider !== "perplexity" &&
                   modelRow?.supportsToolCalling !== false;

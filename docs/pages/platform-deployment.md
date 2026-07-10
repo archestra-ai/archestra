@@ -659,7 +659,7 @@ Full resource reference: [Terraform provider docs](https://registry.terraform.io
 
 ### Crossplane
 
-Crossplane v1 or v2 must already be installed in the target cluster.
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked. Crossplane v1 or v2 must already be installed in the target cluster.
 
 **1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
 
@@ -726,46 +726,7 @@ spec:
     name: default
 ```
 
-Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
-
-### Crossplane
-
-The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked.
-
-**Install the provider**:
-
-```yaml
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-archestra
-spec:
-  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
-```
-
-**Configure credentials** (the API key is the same one used by the Terraform provider — see [API Reference](/docs/platform-api-reference#authentication)):
-
-```bash
-kubectl create secret generic archestra-creds \
-  -n crossplane-system \
-  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
-```
-
-```yaml
-apiVersion: archestra.crossplane.io/v1beta1
-kind: ProviderConfig
-metadata:
-  name: default
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: crossplane-system
-      name: archestra-creds
-      key: credentials
-```
-
-For supported resources, examples, and the contributor flow, see the [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 

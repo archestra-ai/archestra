@@ -130,10 +130,15 @@ export async function syncAppBacking(app: App): Promise<void> {
     if (server.scope !== app.scope) {
       await McpServerModel.setScope(server.id, app.scope);
     }
+    // A rename is the only edit that can leave the persisted backing name stale;
+    // the launch tool's derived description depends solely on the app name, so
+    // both the server-name update and that refresh gate on this one signal — no
+    // extra query on ordinary (e.g. HTML-only) edits.
+    const nameChanged = server.name !== app.name;
     // Keep the backing server name in lockstep with the app. The launch tool's
     // name is id-suffixed (stable + globally unique), so it is NOT re-slugified
     // on rename — renaming can't reintroduce a dedupe collision.
-    if (server.name !== app.name) {
+    if (nameChanged) {
       await McpServerModel.update(server.id, { name: app.name });
     }
     await McpServerModel.setTeam(server.id, teamIds[0] ?? null);
@@ -147,21 +152,22 @@ export async function syncAppBacking(app: App): Promise<void> {
         environmentId: app.environmentId,
       });
       await McpCatalogTeamModel.syncCatalogTeams(server.catalogId, teamIds);
-      // Keep the launch tool's derived, sanitized description in lockstep with
-      // the app name — a rename must not leave a stale (or raw pre-sanitization)
-      // name in the persisted metadata. The gateway also re-derives this at
-      // serve time; refreshing storage here keeps non-model readers (the
-      // guardrails UI) current too.
-      const desiredDescription = appLaunchToolDescription(app.name);
-      const launchTool = (
-        await ToolModel.findByCatalogIdWithMeta(server.catalogId)
-      ).find(
-        (tool) => ToolModel.unslugifyName(tool.name) === APP_LAUNCH_TOOL_NAME,
-      );
-      if (launchTool && launchTool.description !== desiredDescription) {
-        await ToolModel.update(launchTool.id, {
-          description: desiredDescription,
-        });
+      // Refresh the launch tool's derived, sanitized description on rename so the
+      // persisted metadata never keeps a stale (or raw pre-sanitization) name.
+      // The gateway also re-derives this at serve time; refreshing storage keeps
+      // non-model readers (the guardrails UI) current too.
+      if (nameChanged) {
+        const desiredDescription = appLaunchToolDescription(app.name);
+        const launchTool = (
+          await ToolModel.findByCatalogIdWithMeta(server.catalogId)
+        ).find(
+          (tool) => ToolModel.unslugifyName(tool.name) === APP_LAUNCH_TOOL_NAME,
+        );
+        if (launchTool && launchTool.description !== desiredDescription) {
+          await ToolModel.update(launchTool.id, {
+            description: desiredDescription,
+          });
+        }
       }
     }
   } catch (error) {

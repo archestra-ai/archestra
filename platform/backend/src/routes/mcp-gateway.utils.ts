@@ -321,27 +321,35 @@ export async function createAgentServer(
     ]);
 
     // An app's launch tool keeps its unique slug `name` for invocation, but a
-    // gateway client should show a human label and description. Derive both
-    // from the backing catalog name (kept in lockstep with the app) so they
-    // never go stale and are sanitized regardless of the stored value; non-app
-    // tools keep their existing title/description.
+    // gateway client should show a human label and description. Both derive from
+    // the backing catalog name (kept in lockstep with the app) so they never go
+    // stale and are sanitized regardless of the stored value. `appLaunchCatalog`
+    // is the single gate: the catalog only when this row IS the app's `__open`
+    // launch tool, so a non-launch tool that ever shares an app catalog is never
+    // mislabeled. Non-app tools keep their existing title/description.
+    const appLaunchCatalog = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ) => {
+      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
+      return catalog?.serverType === "app" &&
+        ToolModel.unslugifyName(toolName) === APP_LAUNCH_TOOL_NAME
+        ? catalog
+        : undefined;
+    };
     const appLaunchTitle = (
       catalogId: string | null | undefined,
+      toolName: string,
     ): string | undefined => {
-      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
-      return catalog?.serverType === "app"
-        ? appLaunchToolTitle(catalog.name)
-        : undefined;
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolTitle(catalog.name) : undefined;
     };
     const appLaunchDescription = (
       catalogId: string | null | undefined,
       toolName: string,
     ): string | undefined => {
-      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
-      return catalog?.serverType === "app" &&
-        ToolModel.unslugifyName(toolName) === APP_LAUNCH_TOOL_NAME
-        ? appLaunchToolDescription(catalog.name)
-        : undefined;
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolDescription(catalog.name) : undefined;
     };
 
     // Dynamically enrich the knowledge sources tool description with the
@@ -372,7 +380,9 @@ export async function createAgentServer(
       ({ name, description, parameters, meta, catalogId }) => ({
         name,
         title:
-          archestraToolTitles.get(name) || appLaunchTitle(catalogId) || name,
+          archestraToolTitles.get(name) ||
+          appLaunchTitle(catalogId, name) ||
+          name,
         description:
           name ===
             archestraMcpBranding.getToolName(

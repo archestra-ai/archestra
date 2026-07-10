@@ -73,17 +73,20 @@ const microsoft365CopilotAuthRoutes: FastifyPluginAsyncZod = async (
         );
       }
 
-      const response = await fetch(`${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/devicecode`, {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/x-www-form-urlencoded",
+      const response = await fetch(
+        `${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/devicecode`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            client_id: config.llm["microsoft-365-copilot"].clientId,
+            scope: MICROSOFT_365_COPILOT_OAUTH_SCOPES,
+          }),
         },
-        body: new URLSearchParams({
-          client_id: config.llm["microsoft-365-copilot"].clientId,
-          scope: MICROSOFT_365_COPILOT_OAUTH_SCOPES,
-        }),
-      });
+      );
       if (!response.ok) {
         const body = await response.text();
         logger.error(
@@ -149,18 +152,21 @@ const microsoft365CopilotAuthRoutes: FastifyPluginAsyncZod = async (
         );
       }
 
-      const response = await fetch(`${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/token`, {
-        method: "POST",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/x-www-form-urlencoded",
+      const response = await fetch(
+        `${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/token`,
+        {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            client_id: config.llm["microsoft-365-copilot"].clientId,
+            device_code: body.deviceCode,
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          }),
         },
-        body: new URLSearchParams({
-          client_id: config.llm["microsoft-365-copilot"].clientId,
-          device_code: body.deviceCode,
-          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        }),
-      });
+      );
 
       // Entra reports flow states (authorization_pending, …) as HTTP 400 with
       // the error name in the body, so parse the body before judging status.

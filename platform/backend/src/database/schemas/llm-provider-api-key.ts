@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@archestra/shared";
+import type { BillingMode, SupportedProvider } from "@archestra/shared";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -46,6 +46,18 @@ const llmProviderApiKeysTable = pgTable(
     isSystem: boolean("is_system").notNull().default(false),
     /** When multiple LLM provider API keys exist for the same provider+scope, the primary key is preferred */
     isPrimary: boolean("is_primary").notNull().default(false),
+    /**
+     * Whether traffic fulfilled by this key is billed per token (`metered`,
+     * default) or covered by a flat-rate subscription (`subscription`). Set
+     * `subscription` when the stored secret is a subscription/OAuth token (e.g.
+     * a Claude Code Max/Pro token shared org-wide) so its usage is reported as
+     * $0 billed spend while retaining the list-price estimate. Interactions
+     * fulfilled by this key inherit this mode (see resolveInteractionBillingMode).
+     */
+    billingMode: text("billing_mode")
+      .$type<BillingMode>()
+      .notNull()
+      .default("metered"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

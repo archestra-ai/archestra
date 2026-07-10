@@ -1230,6 +1230,18 @@ const config = {
       process.env.ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS,
     ),
   },
+  // Cost/billing behavior for LLM interactions. Kept separate from `llm` (which
+  // is a per-provider config map iterated as provider descriptors).
+  llmCost: {
+    // When on (default), traffic robustly attributed to a Claude client AND
+    // forwarding an OAuth Bearer token (Claude Code/Desktop on a Max/Pro
+    // subscription) is classified `subscription` and reported as $0 billed spend
+    // while retaining its list-price estimate. Set to "false" to treat all
+    // raw-passthrough traffic as metered and rely solely on the per-provider-key
+    // billing-mode override. See resolveInteractionBillingMode.
+    subscriptionAutodetect:
+      process.env.ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT !== "false",
+  },
   llm: {
     openai: {
       baseUrl:

@@ -1,4 +1,5 @@
 import type {
+  BillingMode,
   InteractionSource,
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
@@ -112,6 +113,18 @@ const interactionsTable = pgTable(
      */
     authMethod: varchar("auth_method").$type<InteractionAuthMethod>(),
     /**
+     * Whether this interaction's upstream fulfillment actually incurs a
+     * per-token charge. `metered` (default) = real per-token cost; `subscription`
+     * = flat-rate coverage (e.g. Claude Code on a Max/Pro plan) that incurs no
+     * per-token charge. `cost` is always kept as the list-price estimate; billed
+     * spend is `cost` for metered rows and 0 for subscription rows. Resolved at
+     * request time from the fulfilling credential (see resolveInteractionBillingMode).
+     */
+    billingMode: varchar("billing_mode")
+      .$type<BillingMode>()
+      .notNull()
+      .default("metered"),
+    /**
      * Authenticated application identity resolved from an OAuth client
      * credentials token. This is distinct from externalAgentId, which is a
      * caller-supplied label.
@@ -202,7 +215,10 @@ const interactionsTable = pgTable(
     // Covering index for the cost-statistics aggregations (StatisticsModel):
     // they filter on created_at and only read these numeric/model columns, so
     // an index-only scan avoids fetching scattered heap pages of a table whose
-    // rows are dominated by large TOASTed JSONB payloads.
+    // rows are dominated by large TOASTed JSONB payloads. `billingMode` is
+    // included because the aggregations now split billed vs subscription cost
+    // with a conditional (FILTER) SUM on it — keeping it in the index preserves
+    // the index-only scan.
     statisticsCoveringIdx: index("interactions_statistics_covering_idx").on(
       table.createdAt,
       table.profileId,
@@ -214,6 +230,7 @@ const interactionsTable = pgTable(
       table.baselineCost,
       table.toonCostSavings,
       table.cacheSavings,
+      table.billingMode,
     ),
     profileCreatedAtIdx: index("interactions_profile_created_at_idx").on(
       table.profileId,

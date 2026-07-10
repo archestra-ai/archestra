@@ -1,4 +1,5 @@
 import {
+  BillingModeSchema,
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
@@ -124,10 +125,12 @@ const extendedFields = {
  * Base database schema without discriminated union
  * This is what Drizzle actually returns from the database
  */
-const BaseSelectInteractionSchema = createSelectSchema(
-  schema.interactionsTable,
-  extendedFields,
-);
+const BaseSelectInteractionSchema = createSelectSchema(schema.interactionsTable, {
+  ...extendedFields,
+  // Required on read: the column is NOT NULL, so every row carries a concrete
+  // BillingMode. (The default override belongs on the insert schema only.)
+  billingMode: BillingModeSchema,
+});
 
 /**
  * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on
@@ -477,6 +480,9 @@ export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {
     ...extendedFields,
+    // Optional on write: the column has a DB default ("metered"), so callers may
+    // omit it. The proxy write path sets it explicitly (buildInteractionRecord).
+    billingMode: BillingModeSchema.optional(),
     type: SupportedProvidersDiscriminatorSchema,
     request: InteractionRequestSchema,
     processedRequest: InteractionRequestSchema.nullable().optional(),

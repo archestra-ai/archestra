@@ -56,16 +56,20 @@ import { buildHistorySkippedAttachmentsNote } from "./utils";
  */
 function historyTurns(call: {
   originalUiMessages?: Array<{
-    parts?: Array<{ type: string; text?: string }>;
-    metadata?: { chatops?: { authorName?: string } };
+    parts?: Array<{ type: string }>;
+    metadata?: unknown;
   }>;
 }): Array<{ text: string; author: string | undefined }> {
   return (call.originalUiMessages ?? []).map((m) => ({
     text: (m.parts ?? [])
-      .filter((p) => p.type === "text")
+      .filter(
+        (p): p is { type: "text"; text: string } =>
+          p.type === "text" && "text" in p,
+      )
       .map((p) => p.text)
       .join("\n"),
-    author: m.metadata?.chatops?.authorName,
+    author: (m.metadata as { chatops?: { authorName?: string } } | undefined)
+      ?.chatops?.authorName,
   }));
 }
 

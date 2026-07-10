@@ -533,7 +533,9 @@ export default class K8sDeployment {
     // an explicit allow to it — the AWS ANP agent does not honor the ports-only
     // DNS rule with no `to` peer, which would otherwise leave floor pods unable
     // to resolve names.
-    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(this.k8sApi);
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      this.k8sApi,
+    );
     if (clusterDnsIps.length === 0) {
       logger.warn(
         {

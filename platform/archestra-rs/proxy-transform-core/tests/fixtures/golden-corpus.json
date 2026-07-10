@@ -1,0 +1,1082 @@
+[
+  {
+    "name": "order-integer-like-keys",
+    "rawContent": "{\"2\":\"two\",\"10\":\"ten\",\"a\":1,\"1\":\"one\",\"b\":{\"20\":true,\"3\":false,\"x\":null}}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"2\":\"two\",\"10\":\"ten\",\"a\":1,\"1\":\"one\",\"b\":{\"20\":true,\"3\":false,\"x\":null}}",
+      "encoded": "\"2\": two\n\"10\": ten\na: 1\n\"1\": one\nb:\n  \"20\": true\n  \"3\": false\n  x: null"
+    }
+  },
+  {
+    "name": "order-array-of-objs-mixed-keys",
+    "rawContent": "[{\"10\":1,\"2\":2,\"z\":3},{\"10\":4,\"2\":5,\"z\":6}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"10\":1,\"2\":2,\"z\":3},{\"10\":4,\"2\":5,\"z\":6}]",
+      "encoded": "[2]{\"10\",\"2\",z}:\n  1,2,3\n  4,5,6"
+    }
+  },
+  {
+    "name": "num-2p53-minus1",
+    "rawContent": "{\"n\":9007199254740991}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":9007199254740991}",
+      "encoded": "n: 9007199254740991"
+    }
+  },
+  {
+    "name": "num-2p53",
+    "rawContent": "{\"n\":9007199254740992}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":9007199254740992}",
+      "encoded": "n: 9007199254740992"
+    }
+  },
+  {
+    "name": "num-2p53-plus1",
+    "rawContent": "{\"n\":9007199254740993}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":9007199254740993}",
+      "encoded": "n: 9007199254740993"
+    }
+  },
+  {
+    "name": "num-neg-2p53-plus1",
+    "rawContent": "{\"n\":-9007199254740993}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":-9007199254740993}",
+      "encoded": "n: -9007199254740993"
+    }
+  },
+  {
+    "name": "num-i64-max",
+    "rawContent": "{\"n\":9223372036854775807}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":9223372036854775807}",
+      "encoded": "n: 9223372036854775807"
+    }
+  },
+  {
+    "name": "num-i64-max-plus1",
+    "rawContent": "{\"n\":9223372036854775808}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":9223372036854775808}",
+      "encoded": "n: 9223372036854775808"
+    }
+  },
+  {
+    "name": "num-i64-min",
+    "rawContent": "{\"n\":-9223372036854775808}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":-9223372036854775808}",
+      "encoded": "n: -9223372036854775808"
+    }
+  },
+  {
+    "name": "num-u64-max",
+    "rawContent": "{\"n\":18446744073709551615}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":18446744073709551615}",
+      "encoded": "n: 18446744073709551615"
+    }
+  },
+  {
+    "name": "num-u64-max-plus1",
+    "rawContent": "{\"n\":18446744073709551616}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"n\":18446744073709551616}",
+      "encoded": "n: 18446744073709551615"
+    }
+  },
+  {
+    "name": "num-1e21-exp",
+    "rawContent": "{\"x\":1e21}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":1e21}",
+      "encoded": "x: 1000000000000000000000"
+    }
+  },
+  {
+    "name": "num-1e21-expanded",
+    "rawContent": "{\"x\":1000000000000000000000}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":1000000000000000000000}",
+      "encoded": "x: 1000000000000000000000"
+    }
+  },
+  {
+    "name": "num-1e300",
+    "rawContent": "{\"x\":1e300}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":1e300}",
+      "encoded": "x: 1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  {
+    "name": "num-neg-1e21",
+    "rawContent": "{\"x\":-1e21}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":-1e21}",
+      "encoded": "x: -1000000000000000000000"
+    }
+  },
+  {
+    "name": "num-1e-7",
+    "rawContent": "{\"x\":1e-7}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":1e-7}",
+      "encoded": "x: 0.0000001"
+    }
+  },
+  {
+    "name": "num-1e-300",
+    "rawContent": "{\"x\":1e-300}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":1e-300}",
+      "encoded": "x: 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+    }
+  },
+  {
+    "name": "num-neg-zero",
+    "rawContent": "{\"x\":-0}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":-0}",
+      "encoded": "x: 0"
+    }
+  },
+  {
+    "name": "num-neg-zero-float",
+    "rawContent": "{\"x\":-0.0}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":-0.0}",
+      "encoded": "x: 0"
+    }
+  },
+  {
+    "name": "num-float-precision",
+    "rawContent": "{\"x\":0.1,\"y\":1.005,\"z\":123.456e2}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":0.1,\"y\":1.005,\"z\":123.456e2}",
+      "encoded": "x: 0.1\ny: 1.005\nz: 12345.6"
+    }
+  },
+  {
+    "name": "num-large-neg",
+    "rawContent": "{\"x\":-1.7976931348623157e308}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\":-1.7976931348623157e308}",
+      "encoded": "x: -179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  {
+    "name": "esc-quotes-commas-colons",
+    "rawContent": "{\"a\":\"he said \\\"hi, there\\\": ok\",\"b\":\"comma,separated\",\"c\":\"colon: value\",\"d\":\"[bracket] {brace}\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"a\":\"he said \\\"hi, there\\\": ok\",\"b\":\"comma,separated\",\"c\":\"colon: value\",\"d\":\"[bracket] {brace}\"}",
+      "encoded": "a: \"he said \\\"hi, there\\\": ok\"\nb: \"comma,separated\"\nc: \"colon: value\"\nd: \"[bracket] {brace}\""
+    }
+  },
+  {
+    "name": "esc-control-chars",
+    "rawContent": "{\"a\":\"line1\\nline2\\ttabbed\",\"b\":\"back\\\\slash\",\"c\":\"nul\\u0000end\",\"d\":\"\\u001b[31mred\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"a\":\"line1\\nline2\\ttabbed\",\"b\":\"back\\\\slash\",\"c\":\"nul\\u0000end\",\"d\":\"\\u001b[31mred\"}",
+      "encoded": "a: \"line1\\nline2\\ttabbed\"\nb: \"back\\\\slash\"\nc: nul\u0000end\nd: \"\u001b[31mred\""
+    }
+  },
+  {
+    "name": "esc-toon-specials",
+    "rawContent": "{\"a\":\"  leading spaces\",\"b\":\"trailing  \",\"c\":\"#comment-ish\",\"d\":\"- dash start\",\"e\":\"|pipe|\",\"f\":\"true\",\"g\":\"123\",\"h\":\"null\",\"i\":\"\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"a\":\"  leading spaces\",\"b\":\"trailing  \",\"c\":\"#comment-ish\",\"d\":\"- dash start\",\"e\":\"|pipe|\",\"f\":\"true\",\"g\":\"123\",\"h\":\"null\",\"i\":\"\"}",
+      "encoded": "a: \"  leading spaces\"\nb: \"trailing  \"\nc: \"#comment-ish\"\nd: \"- dash start\"\ne: |pipe|\nf: \"true\"\ng: \"123\"\nh: \"null\"\ni: \"\""
+    }
+  },
+  {
+    "name": "unicode-mixed",
+    "rawContent": "{\"emoji\":\"🎉🚀 done\",\"cjk\":\"日本語テスト\",\"combining\":\"éé\",\"rtl\":\"مرحبا\",\"surrogate\":\"𝄞 music\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"emoji\":\"🎉🚀 done\",\"cjk\":\"日本語テスト\",\"combining\":\"éé\",\"rtl\":\"مرحبا\",\"surrogate\":\"𝄞 music\"}",
+      "encoded": "emoji: 🎉🚀 done\ncjk: 日本語テスト\ncombining: éé\nrtl: مرحبا\nsurrogate: 𝄞 music"
+    }
+  },
+  {
+    "name": "nested-deep",
+    "rawContent": "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":[1,{\"f\":[true,null,{\"g\":\"deep\"}]}]}}}}}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":[1,{\"f\":[true,null,{\"g\":\"deep\"}]}]}}}}}",
+      "encoded": "a:\n  b:\n    c:\n      d:\n        e[2]:\n          - 1\n          - f[3]:\n              - true\n              - null\n              - g: deep"
+    }
+  },
+  {
+    "name": "nested-mixed-arrays",
+    "rawContent": "[[1,2],[3,[4,5]],{\"k\":[{\"a\":1},{\"a\":2}]}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[[1,2],[3,[4,5]],{\"k\":[{\"a\":1},{\"a\":2}]}]",
+      "encoded": "[3]:\n  - [2]: 1,2\n  - [2]:\n    - 3\n    - [2]: 4,5\n  - k[2]{a}:\n      1\n      2"
+    }
+  },
+  {
+    "name": "root-string",
+    "rawContent": "\"just a string\"",
+    "unwrap": true,
+    "expected": {
+      "normalized": "\"just a string\"",
+      "encoded": "just a string"
+    }
+  },
+  {
+    "name": "root-number",
+    "rawContent": "42",
+    "unwrap": true,
+    "expected": {
+      "normalized": "42",
+      "encoded": "42"
+    }
+  },
+  {
+    "name": "root-float",
+    "rawContent": "3.14",
+    "unwrap": true,
+    "expected": {
+      "normalized": "3.14",
+      "encoded": "3.14"
+    }
+  },
+  {
+    "name": "root-true",
+    "rawContent": "true",
+    "unwrap": true,
+    "expected": {
+      "normalized": "true",
+      "encoded": "true"
+    }
+  },
+  {
+    "name": "root-null",
+    "rawContent": "null",
+    "unwrap": true,
+    "expected": {
+      "normalized": "null",
+      "encoded": "null"
+    }
+  },
+  {
+    "name": "root-array-scalars",
+    "rawContent": "[1,2,3,4,5]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[1,2,3,4,5]",
+      "encoded": "[5]: 1,2,3,4,5"
+    }
+  },
+  {
+    "name": "root-array-strings",
+    "rawContent": "[\"a\",\"b\",\"c with, comma\"]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[\"a\",\"b\",\"c with, comma\"]",
+      "encoded": "[3]: a,b,\"c with, comma\""
+    }
+  },
+  {
+    "name": "empty-object",
+    "rawContent": "{}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{}",
+      "encoded": ""
+    }
+  },
+  {
+    "name": "empty-array",
+    "rawContent": "[]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[]",
+      "encoded": "[0]:"
+    }
+  },
+  {
+    "name": "array-of-empty-objects",
+    "rawContent": "[{},{},{}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{},{},{}]",
+      "encoded": "[3]{}:\n  \n  \n  "
+    }
+  },
+  {
+    "name": "array-with-one-empty-object",
+    "rawContent": "[{\"a\":1},{}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"a\":1},{}]",
+      "encoded": "[2]:\n  - a: 1\n  -"
+    }
+  },
+  {
+    "name": "malformed-truncated",
+    "rawContent": "{\"a\": [1, 2",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"a\": [1, 2",
+      "encoded": null
+    }
+  },
+  {
+    "name": "malformed-prose",
+    "rawContent": "Tool run 42 output: alpha bravo charlie",
+    "unwrap": true,
+    "expected": {
+      "normalized": "Tool run 42 output: alpha bravo charlie",
+      "encoded": null
+    }
+  },
+  {
+    "name": "malformed-single-quotes",
+    "rawContent": "{'a': 1}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{'a': 1}",
+      "encoded": null
+    }
+  },
+  {
+    "name": "malformed-nan",
+    "rawContent": "{\"x\": NaN}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\": NaN}",
+      "encoded": null
+    }
+  },
+  {
+    "name": "malformed-infinity",
+    "rawContent": "{\"x\": Infinity}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"x\": Infinity}",
+      "encoded": null
+    }
+  },
+  {
+    "name": "malformed-empty",
+    "rawContent": "",
+    "unwrap": true,
+    "expected": {
+      "normalized": "",
+      "encoded": null
+    }
+  },
+  {
+    "name": "wrapped-single-text",
+    "rawContent": "[{\"type\":\"text\",\"text\":\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"data\":[{\"id\":1,\"v\":\"a\"},{\"id\":2,\"v\":\"b\"}],\"ok\":true}",
+      "encoded": "data[2]{id,v}:\n  1,a\n  2,b\nok: true"
+    }
+  },
+  {
+    "name": "wrapped-multi-text",
+    "rawContent": "[{\"type\":\"text\",\"text\":\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\"},{\"type\":\"text\",\"text\":\"{\\\"second\\\":\\\"element ignored by unwrap\\\"}\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"data\":[{\"id\":1,\"v\":\"a\"},{\"id\":2,\"v\":\"b\"}],\"ok\":true}",
+      "encoded": "data[2]{id,v}:\n  1,a\n  2,b\nok: true"
+    }
+  },
+  {
+    "name": "wrapped-first-not-text",
+    "rawContent": "[{\"type\":\"image\",\"url\":\"http://x\"},{\"type\":\"text\",\"text\":\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"type\":\"image\",\"url\":\"http://x\"},{\"type\":\"text\",\"text\":\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\"}]",
+      "encoded": "[2]:\n  - type: image\n    url: \"http://x\"\n  - type: text\n    text: \"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\""
+    }
+  },
+  {
+    "name": "wrapped-text-not-json",
+    "rawContent": "[{\"type\":\"text\",\"text\":\"plain prose result\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "plain prose result",
+      "encoded": null
+    }
+  },
+  {
+    "name": "wrapped-but-unwrap-false",
+    "rawContent": "[{\"type\":\"text\",\"text\":\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\"}]",
+    "unwrap": false,
+    "expected": {
+      "normalized": "[{\"type\":\"text\",\"text\":\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\"}]",
+      "encoded": "[1]{type,text}:\n  text,\"{\\\"data\\\":[{\\\"id\\\":1,\\\"v\\\":\\\"a\\\"},{\\\"id\\\":2,\\\"v\\\":\\\"b\\\"}],\\\"ok\\\":true}\""
+    }
+  },
+  {
+    "name": "provider-matrix-tool-result",
+    "rawContent": "{\"files\":[{\"name\":\"README.md\",\"size\":1024,\"type\":\"file\"},{\"name\":\"src\",\"size\":4096,\"type\":\"directory\"},{\"name\":\"package.json\",\"size\":512,\"type\":\"file\"},{\"name\":\"tsconfig.json\",\"size\":256,\"type\":\"file\"},{\"name\":\"node_modules\",\"size\":102400,\"type\":\"directory\"}],\"totalCount\":5,\"directory\":\".\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"files\":[{\"name\":\"README.md\",\"size\":1024,\"type\":\"file\"},{\"name\":\"src\",\"size\":4096,\"type\":\"directory\"},{\"name\":\"package.json\",\"size\":512,\"type\":\"file\"},{\"name\":\"tsconfig.json\",\"size\":256,\"type\":\"file\"},{\"name\":\"node_modules\",\"size\":102400,\"type\":\"directory\"}],\"totalCount\":5,\"directory\":\".\"}",
+      "encoded": "files[5]{name,size,type}:\n  README.md,1024,file\n  src,4096,directory\n  package.json,512,file\n  tsconfig.json,256,file\n  node_modules,102400,directory\ntotalCount: 5\ndirectory: ."
+    }
+  },
+  {
+    "name": "bedrock-json-branch",
+    "rawContent": "{\"files\":[{\"name\":\"README.md\",\"size\":1024,\"type\":\"file\"},{\"name\":\"src\",\"size\":4096,\"type\":\"directory\"},{\"name\":\"package.json\",\"size\":512,\"type\":\"file\"},{\"name\":\"tsconfig.json\",\"size\":256,\"type\":\"file\"},{\"name\":\"node_modules\",\"size\":102400,\"type\":\"directory\"}],\"totalCount\":5,\"directory\":\".\"}",
+    "unwrap": false,
+    "expected": {
+      "normalized": "{\"files\":[{\"name\":\"README.md\",\"size\":1024,\"type\":\"file\"},{\"name\":\"src\",\"size\":4096,\"type\":\"directory\"},{\"name\":\"package.json\",\"size\":512,\"type\":\"file\"},{\"name\":\"tsconfig.json\",\"size\":256,\"type\":\"file\"},{\"name\":\"node_modules\",\"size\":102400,\"type\":\"directory\"}],\"totalCount\":5,\"directory\":\".\"}",
+      "encoded": "files[5]{name,size,type}:\n  README.md,1024,file\n  src,4096,directory\n  package.json,512,file\n  tsconfig.json,256,file\n  node_modules,102400,directory\ntotalCount: 5\ndirectory: ."
+    }
+  },
+  {
+    "name": "realistic-github-issues",
+    "rawContent": "{\"items\":[{\"number\":100,\"title\":\"Issue title number 0: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user0\",\"id\":1000},\"labels\":[\"bug\",\"p0\"],\"comments\":0,\"created_at\":\"2026-06-01T10:00:00Z\"},{\"number\":101,\"title\":\"Issue title number 1: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user1\",\"id\":1001},\"labels\":[\"bug\",\"p1\"],\"comments\":2,\"created_at\":\"2026-06-02T10:00:00Z\"},{\"number\":102,\"title\":\"Issue title number 2: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user2\",\"id\":1002},\"labels\":[\"bug\",\"p2\"],\"comments\":4,\"created_at\":\"2026-06-03T10:00:00Z\"},{\"number\":103,\"title\":\"Issue title number 3: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user3\",\"id\":1003},\"labels\":[\"bug\",\"p0\"],\"comments\":6,\"created_at\":\"2026-06-04T10:00:00Z\"},{\"number\":104,\"title\":\"Issue title number 4: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user4\",\"id\":1004},\"labels\":[\"bug\",\"p1\"],\"comments\":8,\"created_at\":\"2026-06-05T10:00:00Z\"},{\"number\":105,\"title\":\"Issue title number 5: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user5\",\"id\":1005},\"labels\":[\"bug\",\"p2\"],\"comments\":10,\"created_at\":\"2026-06-06T10:00:00Z\"},{\"number\":106,\"title\":\"Issue title number 6: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user6\",\"id\":1006},\"labels\":[\"bug\",\"p0\"],\"comments\":12,\"created_at\":\"2026-06-07T10:00:00Z\"},{\"number\":107,\"title\":\"Issue title number 7: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user7\",\"id\":1007},\"labels\":[\"bug\",\"p1\"],\"comments\":14,\"created_at\":\"2026-06-08T10:00:00Z\"},{\"number\":108,\"title\":\"Issue title number 8: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user8\",\"id\":1008},\"labels\":[\"bug\",\"p2\"],\"comments\":16,\"created_at\":\"2026-06-09T10:00:00Z\"},{\"number\":109,\"title\":\"Issue title number 9: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user9\",\"id\":1009},\"labels\":[\"bug\",\"p0\"],\"comments\":18,\"created_at\":\"2026-06-10T10:00:00Z\"},{\"number\":110,\"title\":\"Issue title number 10: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user10\",\"id\":1010},\"labels\":[\"bug\",\"p1\"],\"comments\":20,\"created_at\":\"2026-06-11T10:00:00Z\"},{\"number\":111,\"title\":\"Issue title number 11: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user11\",\"id\":1011},\"labels\":[\"bug\",\"p2\"],\"comments\":22,\"created_at\":\"2026-06-12T10:00:00Z\"}],\"total_count\":12}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"items\":[{\"number\":100,\"title\":\"Issue title number 0: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user0\",\"id\":1000},\"labels\":[\"bug\",\"p0\"],\"comments\":0,\"created_at\":\"2026-06-01T10:00:00Z\"},{\"number\":101,\"title\":\"Issue title number 1: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user1\",\"id\":1001},\"labels\":[\"bug\",\"p1\"],\"comments\":2,\"created_at\":\"2026-06-02T10:00:00Z\"},{\"number\":102,\"title\":\"Issue title number 2: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user2\",\"id\":1002},\"labels\":[\"bug\",\"p2\"],\"comments\":4,\"created_at\":\"2026-06-03T10:00:00Z\"},{\"number\":103,\"title\":\"Issue title number 3: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user3\",\"id\":1003},\"labels\":[\"bug\",\"p0\"],\"comments\":6,\"created_at\":\"2026-06-04T10:00:00Z\"},{\"number\":104,\"title\":\"Issue title number 4: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user4\",\"id\":1004},\"labels\":[\"bug\",\"p1\"],\"comments\":8,\"created_at\":\"2026-06-05T10:00:00Z\"},{\"number\":105,\"title\":\"Issue title number 5: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user5\",\"id\":1005},\"labels\":[\"bug\",\"p2\"],\"comments\":10,\"created_at\":\"2026-06-06T10:00:00Z\"},{\"number\":106,\"title\":\"Issue title number 6: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user6\",\"id\":1006},\"labels\":[\"bug\",\"p0\"],\"comments\":12,\"created_at\":\"2026-06-07T10:00:00Z\"},{\"number\":107,\"title\":\"Issue title number 7: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user7\",\"id\":1007},\"labels\":[\"bug\",\"p1\"],\"comments\":14,\"created_at\":\"2026-06-08T10:00:00Z\"},{\"number\":108,\"title\":\"Issue title number 8: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user8\",\"id\":1008},\"labels\":[\"bug\",\"p2\"],\"comments\":16,\"created_at\":\"2026-06-09T10:00:00Z\"},{\"number\":109,\"title\":\"Issue title number 9: something broke, badly\",\"state\":\"closed\",\"user\":{\"login\":\"user9\",\"id\":1009},\"labels\":[\"bug\",\"p0\"],\"comments\":18,\"created_at\":\"2026-06-10T10:00:00Z\"},{\"number\":110,\"title\":\"Issue title number 10: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user10\",\"id\":1010},\"labels\":[\"bug\",\"p1\"],\"comments\":20,\"created_at\":\"2026-06-11T10:00:00Z\"},{\"number\":111,\"title\":\"Issue title number 11: something broke, badly\",\"state\":\"open\",\"user\":{\"login\":\"user11\",\"id\":1011},\"labels\":[\"bug\",\"p2\"],\"comments\":22,\"created_at\":\"2026-06-12T10:00:00Z\"}],\"total_count\":12}",
+      "encoded": "items[12]:\n  - number: 100\n    title: \"Issue title number 0: something broke, badly\"\n    state: closed\n    user:\n      login: user0\n      id: 1000\n    labels[2]: bug,p0\n    comments: 0\n    created_at: \"2026-06-01T10:00:00Z\"\n  - number: 101\n    title: \"Issue title number 1: something broke, badly\"\n    state: open\n    user:\n      login: user1\n      id: 1001\n    labels[2]: bug,p1\n    comments: 2\n    created_at: \"2026-06-02T10:00:00Z\"\n  - number: 102\n    title: \"Issue title number 2: something broke, badly\"\n    state: open\n    user:\n      login: user2\n      id: 1002\n    labels[2]: bug,p2\n    comments: 4\n    created_at: \"2026-06-03T10:00:00Z\"\n  - number: 103\n    title: \"Issue title number 3: something broke, badly\"\n    state: closed\n    user:\n      login: user3\n      id: 1003\n    labels[2]: bug,p0\n    comments: 6\n    created_at: \"2026-06-04T10:00:00Z\"\n  - number: 104\n    title: \"Issue title number 4: something broke, badly\"\n    state: open\n    user:\n      login: user4\n      id: 1004\n    labels[2]: bug,p1\n    comments: 8\n    created_at: \"2026-06-05T10:00:00Z\"\n  - number: 105\n    title: \"Issue title number 5: something broke, badly\"\n    state: open\n    user:\n      login: user5\n      id: 1005\n    labels[2]: bug,p2\n    comments: 10\n    created_at: \"2026-06-06T10:00:00Z\"\n  - number: 106\n    title: \"Issue title number 6: something broke, badly\"\n    state: closed\n    user:\n      login: user6\n      id: 1006\n    labels[2]: bug,p0\n    comments: 12\n    created_at: \"2026-06-07T10:00:00Z\"\n  - number: 107\n    title: \"Issue title number 7: something broke, badly\"\n    state: open\n    user:\n      login: user7\n      id: 1007\n    labels[2]: bug,p1\n    comments: 14\n    created_at: \"2026-06-08T10:00:00Z\"\n  - number: 108\n    title: \"Issue title number 8: something broke, badly\"\n    state: open\n    user:\n      login: user8\n      id: 1008\n    labels[2]: bug,p2\n    comments: 16\n    created_at: \"2026-06-09T10:00:00Z\"\n  - number: 109\n    title: \"Issue title number 9: something broke, badly\"\n    state: closed\n    user:\n      login: user9\n      id: 1009\n    labels[2]: bug,p0\n    comments: 18\n    created_at: \"2026-06-10T10:00:00Z\"\n  - number: 110\n    title: \"Issue title number 10: something broke, badly\"\n    state: open\n    user:\n      login: user10\n      id: 1010\n    labels[2]: bug,p1\n    comments: 20\n    created_at: \"2026-06-11T10:00:00Z\"\n  - number: 111\n    title: \"Issue title number 11: something broke, badly\"\n    state: open\n    user:\n      login: user11\n      id: 1011\n    labels[2]: bug,p2\n    comments: 22\n    created_at: \"2026-06-12T10:00:00Z\"\ntotal_count: 12"
+    }
+  },
+  {
+    "name": "realistic-db-rows",
+    "rawContent": "[{\"id\":0,\"email\":\"person0@example.com\",\"balance\":0,\"active\":true,\"region\":\"us-east\"},{\"id\":1,\"email\":\"person1@example.com\",\"balance\":137.13,\"active\":false,\"region\":\"eu-west\"},{\"id\":2,\"email\":\"person2@example.com\",\"balance\":274.26,\"active\":true,\"region\":\"ap-south\"},{\"id\":3,\"email\":\"person3@example.com\",\"balance\":411.39,\"active\":false,\"region\":\"us-east\"},{\"id\":4,\"email\":\"person4@example.com\",\"balance\":548.52,\"active\":true,\"region\":\"eu-west\"},{\"id\":5,\"email\":\"person5@example.com\",\"balance\":685.65,\"active\":false,\"region\":\"ap-south\"},{\"id\":6,\"email\":\"person6@example.com\",\"balance\":822.78,\"active\":true,\"region\":\"us-east\"},{\"id\":7,\"email\":\"person7@example.com\",\"balance\":959.91,\"active\":false,\"region\":\"eu-west\"},{\"id\":8,\"email\":\"person8@example.com\",\"balance\":97.04,\"active\":true,\"region\":\"ap-south\"},{\"id\":9,\"email\":\"person9@example.com\",\"balance\":234.17,\"active\":false,\"region\":\"us-east\"},{\"id\":10,\"email\":\"person10@example.com\",\"balance\":371.3,\"active\":true,\"region\":\"eu-west\"},{\"id\":11,\"email\":\"person11@example.com\",\"balance\":508.43,\"active\":false,\"region\":\"ap-south\"},{\"id\":12,\"email\":\"person12@example.com\",\"balance\":645.56,\"active\":true,\"region\":\"us-east\"},{\"id\":13,\"email\":\"person13@example.com\",\"balance\":782.69,\"active\":false,\"region\":\"eu-west\"},{\"id\":14,\"email\":\"person14@example.com\",\"balance\":919.82,\"active\":true,\"region\":\"ap-south\"},{\"id\":15,\"email\":\"person15@example.com\",\"balance\":56.95,\"active\":false,\"region\":\"us-east\"},{\"id\":16,\"email\":\"person16@example.com\",\"balance\":194.08,\"active\":true,\"region\":\"eu-west\"},{\"id\":17,\"email\":\"person17@example.com\",\"balance\":331.21,\"active\":false,\"region\":\"ap-south\"},{\"id\":18,\"email\":\"person18@example.com\",\"balance\":468.34,\"active\":true,\"region\":\"us-east\"},{\"id\":19,\"email\":\"person19@example.com\",\"balance\":605.47,\"active\":false,\"region\":\"eu-west\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"email\":\"person0@example.com\",\"balance\":0,\"active\":true,\"region\":\"us-east\"},{\"id\":1,\"email\":\"person1@example.com\",\"balance\":137.13,\"active\":false,\"region\":\"eu-west\"},{\"id\":2,\"email\":\"person2@example.com\",\"balance\":274.26,\"active\":true,\"region\":\"ap-south\"},{\"id\":3,\"email\":\"person3@example.com\",\"balance\":411.39,\"active\":false,\"region\":\"us-east\"},{\"id\":4,\"email\":\"person4@example.com\",\"balance\":548.52,\"active\":true,\"region\":\"eu-west\"},{\"id\":5,\"email\":\"person5@example.com\",\"balance\":685.65,\"active\":false,\"region\":\"ap-south\"},{\"id\":6,\"email\":\"person6@example.com\",\"balance\":822.78,\"active\":true,\"region\":\"us-east\"},{\"id\":7,\"email\":\"person7@example.com\",\"balance\":959.91,\"active\":false,\"region\":\"eu-west\"},{\"id\":8,\"email\":\"person8@example.com\",\"balance\":97.04,\"active\":true,\"region\":\"ap-south\"},{\"id\":9,\"email\":\"person9@example.com\",\"balance\":234.17,\"active\":false,\"region\":\"us-east\"},{\"id\":10,\"email\":\"person10@example.com\",\"balance\":371.3,\"active\":true,\"region\":\"eu-west\"},{\"id\":11,\"email\":\"person11@example.com\",\"balance\":508.43,\"active\":false,\"region\":\"ap-south\"},{\"id\":12,\"email\":\"person12@example.com\",\"balance\":645.56,\"active\":true,\"region\":\"us-east\"},{\"id\":13,\"email\":\"person13@example.com\",\"balance\":782.69,\"active\":false,\"region\":\"eu-west\"},{\"id\":14,\"email\":\"person14@example.com\",\"balance\":919.82,\"active\":true,\"region\":\"ap-south\"},{\"id\":15,\"email\":\"person15@example.com\",\"balance\":56.95,\"active\":false,\"region\":\"us-east\"},{\"id\":16,\"email\":\"person16@example.com\",\"balance\":194.08,\"active\":true,\"region\":\"eu-west\"},{\"id\":17,\"email\":\"person17@example.com\",\"balance\":331.21,\"active\":false,\"region\":\"ap-south\"},{\"id\":18,\"email\":\"person18@example.com\",\"balance\":468.34,\"active\":true,\"region\":\"us-east\"},{\"id\":19,\"email\":\"person19@example.com\",\"balance\":605.47,\"active\":false,\"region\":\"eu-west\"}]",
+      "encoded": "[20]{id,email,balance,active,region}:\n  0,person0@example.com,0,true,\"us-east\"\n  1,person1@example.com,137.13,false,\"eu-west\"\n  2,person2@example.com,274.26,true,\"ap-south\"\n  3,person3@example.com,411.39,false,\"us-east\"\n  4,person4@example.com,548.52,true,\"eu-west\"\n  5,person5@example.com,685.65,false,\"ap-south\"\n  6,person6@example.com,822.78,true,\"us-east\"\n  7,person7@example.com,959.91,false,\"eu-west\"\n  8,person8@example.com,97.04,true,\"ap-south\"\n  9,person9@example.com,234.17,false,\"us-east\"\n  10,person10@example.com,371.3,true,\"eu-west\"\n  11,person11@example.com,508.43,false,\"ap-south\"\n  12,person12@example.com,645.56,true,\"us-east\"\n  13,person13@example.com,782.69,false,\"eu-west\"\n  14,person14@example.com,919.82,true,\"ap-south\"\n  15,person15@example.com,56.95,false,\"us-east\"\n  16,person16@example.com,194.08,true,\"eu-west\"\n  17,person17@example.com,331.21,false,\"ap-south\"\n  18,person18@example.com,468.34,true,\"us-east\"\n  19,person19@example.com,605.47,false,\"eu-west\""
+    }
+  },
+  {
+    "name": "bench-1kb-0",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-601103\",\"name\":\"kilo uniform\",\"status\":\"archived\",\"score\":17.48,\"quantity\":263,\"active\":false,\"updatedAt\":\"2026-04-25T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-472317\",\"name\":\"foxtrot victor\",\"status\":\"archived\",\"score\":30.7,\"quantity\":98,\"active\":true,\"updatedAt\":\"2026-05-18T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-3842\",\"name\":\"lima uniform\",\"status\":\"active\",\"score\":59.23,\"quantity\":15,\"active\":false,\"updatedAt\":\"2026-01-06T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-783547\",\"name\":\"mike alpha\",\"status\":\"active\",\"score\":84.27,\"quantity\":243,\"active\":true,\"updatedAt\":\"2026-02-13T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-37439\",\"name\":\"bravo november\",\"status\":\"archived\",\"score\":24.52,\"quantity\":322,\"active\":false,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-858710\",\"name\":\"mike echo\",\"status\":\"pending\",\"score\":29.3,\"quantity\":37,\"active\":true,\"updatedAt\":\"2026-05-20T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-927839\",\"name\":\"charlie whiskey\",\"status\":\"pending\",\"score\":94.23,\"quantity\":68,\"active\":false,\"updatedAt\":\"2026-01-11T12:00:00Z\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-601103\",\"name\":\"kilo uniform\",\"status\":\"archived\",\"score\":17.48,\"quantity\":263,\"active\":false,\"updatedAt\":\"2026-04-25T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-472317\",\"name\":\"foxtrot victor\",\"status\":\"archived\",\"score\":30.7,\"quantity\":98,\"active\":true,\"updatedAt\":\"2026-05-18T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-3842\",\"name\":\"lima uniform\",\"status\":\"active\",\"score\":59.23,\"quantity\":15,\"active\":false,\"updatedAt\":\"2026-01-06T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-783547\",\"name\":\"mike alpha\",\"status\":\"active\",\"score\":84.27,\"quantity\":243,\"active\":true,\"updatedAt\":\"2026-02-13T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-37439\",\"name\":\"bravo november\",\"status\":\"archived\",\"score\":24.52,\"quantity\":322,\"active\":false,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-858710\",\"name\":\"mike echo\",\"status\":\"pending\",\"score\":29.3,\"quantity\":37,\"active\":true,\"updatedAt\":\"2026-05-20T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-927839\",\"name\":\"charlie whiskey\",\"status\":\"pending\",\"score\":94.23,\"quantity\":68,\"active\":false,\"updatedAt\":\"2026-01-11T12:00:00Z\"}]",
+      "encoded": "[7]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-601103\",kilo uniform,archived,17.48,263,false,\"2026-04-25T12:00:00Z\"\n  1,\"SKU-472317\",foxtrot victor,archived,30.7,98,true,\"2026-05-18T12:00:00Z\"\n  2,\"SKU-3842\",lima uniform,active,59.23,15,false,\"2026-01-06T12:00:00Z\"\n  3,\"SKU-783547\",mike alpha,active,84.27,243,true,\"2026-02-13T12:00:00Z\"\n  4,\"SKU-37439\",bravo november,archived,24.52,322,false,\"2026-02-21T12:00:00Z\"\n  5,\"SKU-858710\",mike echo,pending,29.3,37,true,\"2026-05-20T12:00:00Z\"\n  6,\"SKU-927839\",charlie whiskey,pending,94.23,68,false,\"2026-01-11T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-1kb-1",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-481722\",\"name\":\"oscar victor\",\"status\":\"active\",\"score\":71.96,\"quantity\":467,\"active\":false,\"updatedAt\":\"2026-05-06T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-520316\",\"name\":\"tango charlie\",\"status\":\"failed\",\"score\":56.28,\"quantity\":458,\"active\":false,\"updatedAt\":\"2026-04-10T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-596239\",\"name\":\"hotel romeo\",\"status\":\"pending\",\"score\":44.98,\"quantity\":421,\"active\":true,\"updatedAt\":\"2026-06-25T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-431891\",\"name\":\"november hotel\",\"status\":\"active\",\"score\":69.67,\"quantity\":156,\"active\":true,\"updatedAt\":\"2026-06-03T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-475391\",\"name\":\"tango delta\",\"status\":\"failed\",\"score\":17.84,\"quantity\":354,\"active\":true,\"updatedAt\":\"2026-02-12T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-163437\",\"name\":\"papa india\",\"status\":\"active\",\"score\":62.89,\"quantity\":443,\"active\":false,\"updatedAt\":\"2026-05-12T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-131392\",\"name\":\"uniform india\",\"status\":\"active\",\"score\":73.74,\"quantity\":317,\"active\":true,\"updatedAt\":\"2026-06-06T12:00:00Z\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-481722\",\"name\":\"oscar victor\",\"status\":\"active\",\"score\":71.96,\"quantity\":467,\"active\":false,\"updatedAt\":\"2026-05-06T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-520316\",\"name\":\"tango charlie\",\"status\":\"failed\",\"score\":56.28,\"quantity\":458,\"active\":false,\"updatedAt\":\"2026-04-10T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-596239\",\"name\":\"hotel romeo\",\"status\":\"pending\",\"score\":44.98,\"quantity\":421,\"active\":true,\"updatedAt\":\"2026-06-25T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-431891\",\"name\":\"november hotel\",\"status\":\"active\",\"score\":69.67,\"quantity\":156,\"active\":true,\"updatedAt\":\"2026-06-03T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-475391\",\"name\":\"tango delta\",\"status\":\"failed\",\"score\":17.84,\"quantity\":354,\"active\":true,\"updatedAt\":\"2026-02-12T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-163437\",\"name\":\"papa india\",\"status\":\"active\",\"score\":62.89,\"quantity\":443,\"active\":false,\"updatedAt\":\"2026-05-12T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-131392\",\"name\":\"uniform india\",\"status\":\"active\",\"score\":73.74,\"quantity\":317,\"active\":true,\"updatedAt\":\"2026-06-06T12:00:00Z\"}]",
+      "encoded": "[7]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-481722\",oscar victor,active,71.96,467,false,\"2026-05-06T12:00:00Z\"\n  1,\"SKU-520316\",tango charlie,failed,56.28,458,false,\"2026-04-10T12:00:00Z\"\n  2,\"SKU-596239\",hotel romeo,pending,44.98,421,true,\"2026-06-25T12:00:00Z\"\n  3,\"SKU-431891\",november hotel,active,69.67,156,true,\"2026-06-03T12:00:00Z\"\n  4,\"SKU-475391\",tango delta,failed,17.84,354,true,\"2026-02-12T12:00:00Z\"\n  5,\"SKU-163437\",papa india,active,62.89,443,false,\"2026-05-12T12:00:00Z\"\n  6,\"SKU-131392\",uniform india,active,73.74,317,true,\"2026-06-06T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-1kb-2",
+    "rawContent": "{\"meta\":{\"source\":\"bench\",\"version\":3,\"total\":5},\"entries\":{\"entry_0\":{\"id\":0,\"sku\":\"SKU-603932\",\"name\":\"lima echo\",\"status\":\"active\",\"score\":70.56,\"quantity\":354,\"active\":false,\"updatedAt\":\"2026-02-10T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"foxtrot\"],\"depth\":2}},\"entry_1\":{\"id\":1,\"sku\":\"SKU-993520\",\"name\":\"november zulu\",\"status\":\"active\",\"score\":17.08,\"quantity\":280,\"active\":false,\"updatedAt\":\"2026-03-13T12:00:00Z\",\"nested\":{\"tags\":[\"kilo\",\"quebec\"],\"depth\":2}},\"entry_2\":{\"id\":2,\"sku\":\"SKU-398513\",\"name\":\"india victor\",\"status\":\"pending\",\"score\":49.53,\"quantity\":305,\"active\":true,\"updatedAt\":\"2026-04-07T12:00:00Z\",\"nested\":{\"tags\":[\"hotel\",\"hotel\"],\"depth\":2}},\"entry_3\":{\"id\":3,\"sku\":\"SKU-320565\",\"name\":\"quebec foxtrot\",\"status\":\"active\",\"score\":69.5,\"quantity\":157,\"active\":false,\"updatedAt\":\"2026-02-02T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"echo\"],\"depth\":2}},\"entry_4\":{\"id\":4,\"sku\":\"SKU-481534\",\"name\":\"juliet romeo\",\"status\":\"failed\",\"score\":81.17,\"quantity\":219,\"active\":false,\"updatedAt\":\"2026-06-15T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"victor\"],\"depth\":2}}}}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"meta\":{\"source\":\"bench\",\"version\":3,\"total\":5},\"entries\":{\"entry_0\":{\"id\":0,\"sku\":\"SKU-603932\",\"name\":\"lima echo\",\"status\":\"active\",\"score\":70.56,\"quantity\":354,\"active\":false,\"updatedAt\":\"2026-02-10T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"foxtrot\"],\"depth\":2}},\"entry_1\":{\"id\":1,\"sku\":\"SKU-993520\",\"name\":\"november zulu\",\"status\":\"active\",\"score\":17.08,\"quantity\":280,\"active\":false,\"updatedAt\":\"2026-03-13T12:00:00Z\",\"nested\":{\"tags\":[\"kilo\",\"quebec\"],\"depth\":2}},\"entry_2\":{\"id\":2,\"sku\":\"SKU-398513\",\"name\":\"india victor\",\"status\":\"pending\",\"score\":49.53,\"quantity\":305,\"active\":true,\"updatedAt\":\"2026-04-07T12:00:00Z\",\"nested\":{\"tags\":[\"hotel\",\"hotel\"],\"depth\":2}},\"entry_3\":{\"id\":3,\"sku\":\"SKU-320565\",\"name\":\"quebec foxtrot\",\"status\":\"active\",\"score\":69.5,\"quantity\":157,\"active\":false,\"updatedAt\":\"2026-02-02T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"echo\"],\"depth\":2}},\"entry_4\":{\"id\":4,\"sku\":\"SKU-481534\",\"name\":\"juliet romeo\",\"status\":\"failed\",\"score\":81.17,\"quantity\":219,\"active\":false,\"updatedAt\":\"2026-06-15T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"victor\"],\"depth\":2}}}}",
+      "encoded": "meta:\n  source: bench\n  version: 3\n  total: 5\nentries:\n  entry_0:\n    id: 0\n    sku: \"SKU-603932\"\n    name: lima echo\n    status: active\n    score: 70.56\n    quantity: 354\n    active: false\n    updatedAt: \"2026-02-10T12:00:00Z\"\n    nested:\n      tags[2]: alpha,foxtrot\n      depth: 2\n  entry_1:\n    id: 1\n    sku: \"SKU-993520\"\n    name: november zulu\n    status: active\n    score: 17.08\n    quantity: 280\n    active: false\n    updatedAt: \"2026-03-13T12:00:00Z\"\n    nested:\n      tags[2]: kilo,quebec\n      depth: 2\n  entry_2:\n    id: 2\n    sku: \"SKU-398513\"\n    name: india victor\n    status: pending\n    score: 49.53\n    quantity: 305\n    active: true\n    updatedAt: \"2026-04-07T12:00:00Z\"\n    nested:\n      tags[2]: hotel,hotel\n      depth: 2\n  entry_3:\n    id: 3\n    sku: \"SKU-320565\"\n    name: quebec foxtrot\n    status: active\n    score: 69.5\n    quantity: 157\n    active: false\n    updatedAt: \"2026-02-02T12:00:00Z\"\n    nested:\n      tags[2]: november,echo\n      depth: 2\n  entry_4:\n    id: 4\n    sku: \"SKU-481534\"\n    name: juliet romeo\n    status: failed\n    score: 81.17\n    quantity: 219\n    active: false\n    updatedAt: \"2026-06-15T12:00:00Z\"\n    nested:\n      tags[2]: uniform,victor\n      depth: 2"
+    }
+  },
+  {
+    "name": "bench-1kb-3",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-450102\",\"name\":\"delta oscar\",\"status\":\"failed\",\"score\":20.84,\"quantity\":194,\"active\":true,\"updatedAt\":\"2026-06-14T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-859482\",\"name\":\"uniform romeo\",\"status\":\"active\",\"score\":6.93,\"quantity\":84,\"active\":true,\"updatedAt\":\"2026-05-22T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-991456\",\"name\":\"tango papa\",\"status\":\"failed\",\"score\":85.3,\"quantity\":299,\"active\":false,\"updatedAt\":\"2026-03-25T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-680988\",\"name\":\"india whiskey\",\"status\":\"archived\",\"score\":32.93,\"quantity\":422,\"active\":false,\"updatedAt\":\"2026-03-01T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-85502\",\"name\":\"papa romeo\",\"status\":\"failed\",\"score\":87.95,\"quantity\":233,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-139138\",\"name\":\"bravo golf\",\"status\":\"pending\",\"score\":56.88,\"quantity\":358,\"active\":true,\"updatedAt\":\"2026-05-06T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-666356\",\"name\":\"mike kilo\",\"status\":\"pending\",\"score\":45.91,\"quantity\":212,\"active\":false,\"updatedAt\":\"2026-02-05T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-504597\",\"name\":\"golf mike\",\"status\":\"archived\",\"score\":64.74,\"quantity\":218,\"active\":false,\"updatedAt\":\"2026-01-05T12:00:00Z\"}]",
+    "unwrap": false,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-450102\",\"name\":\"delta oscar\",\"status\":\"failed\",\"score\":20.84,\"quantity\":194,\"active\":true,\"updatedAt\":\"2026-06-14T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-859482\",\"name\":\"uniform romeo\",\"status\":\"active\",\"score\":6.93,\"quantity\":84,\"active\":true,\"updatedAt\":\"2026-05-22T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-991456\",\"name\":\"tango papa\",\"status\":\"failed\",\"score\":85.3,\"quantity\":299,\"active\":false,\"updatedAt\":\"2026-03-25T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-680988\",\"name\":\"india whiskey\",\"status\":\"archived\",\"score\":32.93,\"quantity\":422,\"active\":false,\"updatedAt\":\"2026-03-01T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-85502\",\"name\":\"papa romeo\",\"status\":\"failed\",\"score\":87.95,\"quantity\":233,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-139138\",\"name\":\"bravo golf\",\"status\":\"pending\",\"score\":56.88,\"quantity\":358,\"active\":true,\"updatedAt\":\"2026-05-06T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-666356\",\"name\":\"mike kilo\",\"status\":\"pending\",\"score\":45.91,\"quantity\":212,\"active\":false,\"updatedAt\":\"2026-02-05T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-504597\",\"name\":\"golf mike\",\"status\":\"archived\",\"score\":64.74,\"quantity\":218,\"active\":false,\"updatedAt\":\"2026-01-05T12:00:00Z\"}]",
+      "encoded": "[8]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-450102\",delta oscar,failed,20.84,194,true,\"2026-06-14T12:00:00Z\"\n  1,\"SKU-859482\",uniform romeo,active,6.93,84,true,\"2026-05-22T12:00:00Z\"\n  2,\"SKU-991456\",tango papa,failed,85.3,299,false,\"2026-03-25T12:00:00Z\"\n  3,\"SKU-680988\",india whiskey,archived,32.93,422,false,\"2026-03-01T12:00:00Z\"\n  4,\"SKU-85502\",papa romeo,failed,87.95,233,true,\"2026-01-08T12:00:00Z\"\n  5,\"SKU-139138\",bravo golf,pending,56.88,358,true,\"2026-05-06T12:00:00Z\"\n  6,\"SKU-666356\",mike kilo,pending,45.91,212,false,\"2026-02-05T12:00:00Z\"\n  7,\"SKU-504597\",golf mike,archived,64.74,218,false,\"2026-01-05T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-1kb-4",
+    "rawContent": "Tool run 943 output: bravo uniform kilo mike charlie tango bravo india foxtrot quebec november charlie zulu sierra papa tango november tango mike echo bravo charlie bravo golf quebec quebec november zulu alpha juliet india golf tango mike echo whiskey whiskey golf mike uniform whiskey quebec november tango hotel lima sierra november quebec november november zulu zulu sierra hotel papa quebec uniform juliet victor hotel victor juliet india mike uniform oscar uniform quebec delta golf zulu lima golf papa sierra romeo romeo echo uniform victor november lima bravo lima victor quebec kilo kilo oscar romeo mike bravo echo charlie charlie juliet tango uniform quebec charlie alpha golf quebec golf uniform papa victor victor india charlie papa foxtrot lima golf golf romeo mike lima oscar charlie sierra quebec whiskey charlie bravo alpha india foxtrot foxtrot zulu november uniform india papa alpha romeo tango juliet echo sierra mike delta bravo sierra kilo uniform tango lima whiskey echo delta november quebec echo sierra",
+    "unwrap": true,
+    "expected": {
+      "normalized": "Tool run 943 output: bravo uniform kilo mike charlie tango bravo india foxtrot quebec november charlie zulu sierra papa tango november tango mike echo bravo charlie bravo golf quebec quebec november zulu alpha juliet india golf tango mike echo whiskey whiskey golf mike uniform whiskey quebec november tango hotel lima sierra november quebec november november zulu zulu sierra hotel papa quebec uniform juliet victor hotel victor juliet india mike uniform oscar uniform quebec delta golf zulu lima golf papa sierra romeo romeo echo uniform victor november lima bravo lima victor quebec kilo kilo oscar romeo mike bravo echo charlie charlie juliet tango uniform quebec charlie alpha golf quebec golf uniform papa victor victor india charlie papa foxtrot lima golf golf romeo mike lima oscar charlie sierra quebec whiskey charlie bravo alpha india foxtrot foxtrot zulu november uniform india papa alpha romeo tango juliet echo sierra mike delta bravo sierra kilo uniform tango lima whiskey echo delta november quebec echo sierra",
+      "encoded": null
+    }
+  },
+  {
+    "name": "bench-1kb-5",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-241297\",\"name\":\"delta papa\",\"status\":\"archived\",\"score\":55.54,\"quantity\":102,\"active\":true,\"updatedAt\":\"2026-04-21T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-49849\",\"name\":\"whiskey november\",\"status\":\"pending\",\"score\":4.71,\"quantity\":163,\"active\":true,\"updatedAt\":\"2026-05-08T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-862775\",\"name\":\"kilo echo\",\"status\":\"archived\",\"score\":50.75,\"quantity\":94,\"active\":true,\"updatedAt\":\"2026-01-04T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-994988\",\"name\":\"foxtrot lima\",\"status\":\"archived\",\"score\":61.96,\"quantity\":242,\"active\":true,\"updatedAt\":\"2026-01-28T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-829234\",\"name\":\"india echo\",\"status\":\"archived\",\"score\":76.22,\"quantity\":222,\"active\":false,\"updatedAt\":\"2026-02-14T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-34817\",\"name\":\"uniform india\",\"status\":\"pending\",\"score\":25.15,\"quantity\":251,\"active\":false,\"updatedAt\":\"2026-04-02T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-901145\",\"name\":\"sierra papa\",\"status\":\"failed\",\"score\":5.38,\"quantity\":293,\"active\":true,\"updatedAt\":\"2026-03-15T12:00:00Z\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-241297\",\"name\":\"delta papa\",\"status\":\"archived\",\"score\":55.54,\"quantity\":102,\"active\":true,\"updatedAt\":\"2026-04-21T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-49849\",\"name\":\"whiskey november\",\"status\":\"pending\",\"score\":4.71,\"quantity\":163,\"active\":true,\"updatedAt\":\"2026-05-08T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-862775\",\"name\":\"kilo echo\",\"status\":\"archived\",\"score\":50.75,\"quantity\":94,\"active\":true,\"updatedAt\":\"2026-01-04T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-994988\",\"name\":\"foxtrot lima\",\"status\":\"archived\",\"score\":61.96,\"quantity\":242,\"active\":true,\"updatedAt\":\"2026-01-28T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-829234\",\"name\":\"india echo\",\"status\":\"archived\",\"score\":76.22,\"quantity\":222,\"active\":false,\"updatedAt\":\"2026-02-14T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-34817\",\"name\":\"uniform india\",\"status\":\"pending\",\"score\":25.15,\"quantity\":251,\"active\":false,\"updatedAt\":\"2026-04-02T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-901145\",\"name\":\"sierra papa\",\"status\":\"failed\",\"score\":5.38,\"quantity\":293,\"active\":true,\"updatedAt\":\"2026-03-15T12:00:00Z\"}]",
+      "encoded": "[7]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-241297\",delta papa,archived,55.54,102,true,\"2026-04-21T12:00:00Z\"\n  1,\"SKU-49849\",whiskey november,pending,4.71,163,true,\"2026-05-08T12:00:00Z\"\n  2,\"SKU-862775\",kilo echo,archived,50.75,94,true,\"2026-01-04T12:00:00Z\"\n  3,\"SKU-994988\",foxtrot lima,archived,61.96,242,true,\"2026-01-28T12:00:00Z\"\n  4,\"SKU-829234\",india echo,archived,76.22,222,false,\"2026-02-14T12:00:00Z\"\n  5,\"SKU-34817\",uniform india,pending,25.15,251,false,\"2026-04-02T12:00:00Z\"\n  6,\"SKU-901145\",sierra papa,failed,5.38,293,true,\"2026-03-15T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-1kb-6",
+    "rawContent": "[{\"type\":\"text\",\"text\":\"[{\\\"id\\\":0,\\\"sku\\\":\\\"SKU-475386\\\",\\\"name\\\":\\\"kilo november\\\",\\\"status\\\":\\\"active\\\",\\\"score\\\":70.83,\\\"quantity\\\":1,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-02-11T12:00:00Z\\\"},{\\\"id\\\":1,\\\"sku\\\":\\\"SKU-725772\\\",\\\"name\\\":\\\"whiskey golf\\\",\\\"status\\\":\\\"archived\\\",\\\"score\\\":90.26,\\\"quantity\\\":231,\\\"active\\\":false,\\\"updatedAt\\\":\\\"2026-04-14T12:00:00Z\\\"},{\\\"id\\\":2,\\\"sku\\\":\\\"SKU-442017\\\",\\\"name\\\":\\\"lima sierra\\\",\\\"status\\\":\\\"active\\\",\\\"score\\\":71.48,\\\"quantity\\\":297,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-05-14T12:00:00Z\\\"},{\\\"id\\\":3,\\\"sku\\\":\\\"SKU-8258\\\",\\\"name\\\":\\\"victor bravo\\\",\\\"status\\\":\\\"archived\\\",\\\"score\\\":48.68,\\\"quantity\\\":340,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-04-24T12:00:00Z\\\"},{\\\"id\\\":4,\\\"sku\\\":\\\"SKU-664289\\\",\\\"name\\\":\\\"zulu zulu\\\",\\\"status\\\":\\\"failed\\\",\\\"score\\\":81.17,\\\"quantity\\\":478,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-01-03T12:00:00Z\\\"},{\\\"id\\\":5,\\\"sku\\\":\\\"SKU-992953\\\",\\\"name\\\":\\\"alpha lima\\\",\\\"status\\\":\\\"failed\\\",\\\"score\\\":67.92,\\\"quantity\\\":388,\\\"active\\\":false,\\\"updatedAt\\\":\\\"2026-06-13T12:00:00Z\\\"},{\\\"id\\\":6,\\\"sku\\\":\\\"SKU-923099\\\",\\\"name\\\":\\\"papa golf\\\",\\\"status\\\":\\\"active\\\",\\\"score\\\":37.45,\\\"quantity\\\":362,\\\"active\\\":false,\\\"updatedAt\\\":\\\"2026-01-07T12:00:00Z\\\"},{\\\"id\\\":7,\\\"sku\\\":\\\"SKU-620884\\\",\\\"name\\\":\\\"india papa\\\",\\\"status\\\":\\\"failed\\\",\\\"score\\\":40.95,\\\"quantity\\\":396,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-01-20T12:00:00Z\\\"}]\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-475386\",\"name\":\"kilo november\",\"status\":\"active\",\"score\":70.83,\"quantity\":1,\"active\":true,\"updatedAt\":\"2026-02-11T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-725772\",\"name\":\"whiskey golf\",\"status\":\"archived\",\"score\":90.26,\"quantity\":231,\"active\":false,\"updatedAt\":\"2026-04-14T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-442017\",\"name\":\"lima sierra\",\"status\":\"active\",\"score\":71.48,\"quantity\":297,\"active\":true,\"updatedAt\":\"2026-05-14T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-8258\",\"name\":\"victor bravo\",\"status\":\"archived\",\"score\":48.68,\"quantity\":340,\"active\":true,\"updatedAt\":\"2026-04-24T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-664289\",\"name\":\"zulu zulu\",\"status\":\"failed\",\"score\":81.17,\"quantity\":478,\"active\":true,\"updatedAt\":\"2026-01-03T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-992953\",\"name\":\"alpha lima\",\"status\":\"failed\",\"score\":67.92,\"quantity\":388,\"active\":false,\"updatedAt\":\"2026-06-13T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-923099\",\"name\":\"papa golf\",\"status\":\"active\",\"score\":37.45,\"quantity\":362,\"active\":false,\"updatedAt\":\"2026-01-07T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-620884\",\"name\":\"india papa\",\"status\":\"failed\",\"score\":40.95,\"quantity\":396,\"active\":true,\"updatedAt\":\"2026-01-20T12:00:00Z\"}]",
+      "encoded": "[8]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-475386\",kilo november,active,70.83,1,true,\"2026-02-11T12:00:00Z\"\n  1,\"SKU-725772\",whiskey golf,archived,90.26,231,false,\"2026-04-14T12:00:00Z\"\n  2,\"SKU-442017\",lima sierra,active,71.48,297,true,\"2026-05-14T12:00:00Z\"\n  3,\"SKU-8258\",victor bravo,archived,48.68,340,true,\"2026-04-24T12:00:00Z\"\n  4,\"SKU-664289\",zulu zulu,failed,81.17,478,true,\"2026-01-03T12:00:00Z\"\n  5,\"SKU-992953\",alpha lima,failed,67.92,388,false,\"2026-06-13T12:00:00Z\"\n  6,\"SKU-923099\",papa golf,active,37.45,362,false,\"2026-01-07T12:00:00Z\"\n  7,\"SKU-620884\",india papa,failed,40.95,396,true,\"2026-01-20T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-1kb-7",
+    "rawContent": "[{\"type\":\"text\",\"text\":\"{\\\"meta\\\":{\\\"source\\\":\\\"bench\\\",\\\"version\\\":3,\\\"total\\\":5},\\\"entries\\\":{\\\"entry_0\\\":{\\\"id\\\":0,\\\"sku\\\":\\\"SKU-875281\\\",\\\"name\\\":\\\"golf oscar\\\",\\\"status\\\":\\\"failed\\\",\\\"score\\\":46.69,\\\"quantity\\\":190,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-04-09T12:00:00Z\\\",\\\"nested\\\":{\\\"tags\\\":[\\\"lima\\\",\\\"mike\\\"],\\\"depth\\\":2}},\\\"entry_1\\\":{\\\"id\\\":1,\\\"sku\\\":\\\"SKU-995847\\\",\\\"name\\\":\\\"echo oscar\\\",\\\"status\\\":\\\"active\\\",\\\"score\\\":64.41,\\\"quantity\\\":397,\\\"active\\\":false,\\\"updatedAt\\\":\\\"2026-04-24T12:00:00Z\\\",\\\"nested\\\":{\\\"tags\\\":[\\\"juliet\\\",\\\"oscar\\\"],\\\"depth\\\":2}},\\\"entry_2\\\":{\\\"id\\\":2,\\\"sku\\\":\\\"SKU-169022\\\",\\\"name\\\":\\\"zulu echo\\\",\\\"status\\\":\\\"archived\\\",\\\"score\\\":70.82,\\\"quantity\\\":283,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-04-26T12:00:00Z\\\",\\\"nested\\\":{\\\"tags\\\":[\\\"sierra\\\",\\\"alpha\\\"],\\\"depth\\\":2}},\\\"entry_3\\\":{\\\"id\\\":3,\\\"sku\\\":\\\"SKU-60400\\\",\\\"name\\\":\\\"charlie victor\\\",\\\"status\\\":\\\"active\\\",\\\"score\\\":3.47,\\\"quantity\\\":261,\\\"active\\\":false,\\\"updatedAt\\\":\\\"2026-05-18T12:00:00Z\\\",\\\"nested\\\":{\\\"tags\\\":[\\\"alpha\\\",\\\"juliet\\\"],\\\"depth\\\":2}},\\\"entry_4\\\":{\\\"id\\\":4,\\\"sku\\\":\\\"SKU-825996\\\",\\\"name\\\":\\\"india echo\\\",\\\"status\\\":\\\"archived\\\",\\\"score\\\":65.27,\\\"quantity\\\":24,\\\"active\\\":true,\\\"updatedAt\\\":\\\"2026-04-24T12:00:00Z\\\",\\\"nested\\\":{\\\"tags\\\":[\\\"november\\\",\\\"juliet\\\"],\\\"depth\\\":2}}}}\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"meta\":{\"source\":\"bench\",\"version\":3,\"total\":5},\"entries\":{\"entry_0\":{\"id\":0,\"sku\":\"SKU-875281\",\"name\":\"golf oscar\",\"status\":\"failed\",\"score\":46.69,\"quantity\":190,\"active\":true,\"updatedAt\":\"2026-04-09T12:00:00Z\",\"nested\":{\"tags\":[\"lima\",\"mike\"],\"depth\":2}},\"entry_1\":{\"id\":1,\"sku\":\"SKU-995847\",\"name\":\"echo oscar\",\"status\":\"active\",\"score\":64.41,\"quantity\":397,\"active\":false,\"updatedAt\":\"2026-04-24T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"oscar\"],\"depth\":2}},\"entry_2\":{\"id\":2,\"sku\":\"SKU-169022\",\"name\":\"zulu echo\",\"status\":\"archived\",\"score\":70.82,\"quantity\":283,\"active\":true,\"updatedAt\":\"2026-04-26T12:00:00Z\",\"nested\":{\"tags\":[\"sierra\",\"alpha\"],\"depth\":2}},\"entry_3\":{\"id\":3,\"sku\":\"SKU-60400\",\"name\":\"charlie victor\",\"status\":\"active\",\"score\":3.47,\"quantity\":261,\"active\":false,\"updatedAt\":\"2026-05-18T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"juliet\"],\"depth\":2}},\"entry_4\":{\"id\":4,\"sku\":\"SKU-825996\",\"name\":\"india echo\",\"status\":\"archived\",\"score\":65.27,\"quantity\":24,\"active\":true,\"updatedAt\":\"2026-04-24T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"juliet\"],\"depth\":2}}}}",
+      "encoded": "meta:\n  source: bench\n  version: 3\n  total: 5\nentries:\n  entry_0:\n    id: 0\n    sku: \"SKU-875281\"\n    name: golf oscar\n    status: failed\n    score: 46.69\n    quantity: 190\n    active: true\n    updatedAt: \"2026-04-09T12:00:00Z\"\n    nested:\n      tags[2]: lima,mike\n      depth: 2\n  entry_1:\n    id: 1\n    sku: \"SKU-995847\"\n    name: echo oscar\n    status: active\n    score: 64.41\n    quantity: 397\n    active: false\n    updatedAt: \"2026-04-24T12:00:00Z\"\n    nested:\n      tags[2]: juliet,oscar\n      depth: 2\n  entry_2:\n    id: 2\n    sku: \"SKU-169022\"\n    name: zulu echo\n    status: archived\n    score: 70.82\n    quantity: 283\n    active: true\n    updatedAt: \"2026-04-26T12:00:00Z\"\n    nested:\n      tags[2]: sierra,alpha\n      depth: 2\n  entry_3:\n    id: 3\n    sku: \"SKU-60400\"\n    name: charlie victor\n    status: active\n    score: 3.47\n    quantity: 261\n    active: false\n    updatedAt: \"2026-05-18T12:00:00Z\"\n    nested:\n      tags[2]: alpha,juliet\n      depth: 2\n  entry_4:\n    id: 4\n    sku: \"SKU-825996\"\n    name: india echo\n    status: archived\n    score: 65.27\n    quantity: 24\n    active: true\n    updatedAt: \"2026-04-24T12:00:00Z\"\n    nested:\n      tags[2]: november,juliet\n      depth: 2"
+    }
+  },
+  {
+    "name": "bench-1kb-8",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-588157\",\"name\":\"juliet oscar\",\"status\":\"active\",\"score\":13.52,\"quantity\":353,\"active\":true,\"updatedAt\":\"2026-02-26T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-943313\",\"name\":\"kilo oscar\",\"status\":\"pending\",\"score\":66.62,\"quantity\":489,\"active\":true,\"updatedAt\":\"2026-05-10T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-909215\",\"name\":\"mike whiskey\",\"status\":\"active\",\"score\":15.08,\"quantity\":159,\"active\":true,\"updatedAt\":\"2026-04-28T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-21248\",\"name\":\"papa oscar\",\"status\":\"failed\",\"score\":25.06,\"quantity\":481,\"active\":false,\"updatedAt\":\"2026-06-09T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-512470\",\"name\":\"juliet foxtrot\",\"status\":\"pending\",\"score\":94.43,\"quantity\":313,\"active\":false,\"updatedAt\":\"2026-04-11T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-445960\",\"name\":\"echo november\",\"status\":\"failed\",\"score\":65.91,\"quantity\":270,\"active\":true,\"updatedAt\":\"2026-04-24T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-443750\",\"name\":\"papa kilo\",\"status\":\"archived\",\"score\":66.03,\"quantity\":312,\"active\":false,\"updatedAt\":\"2026-02-01T12:00:00Z\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-588157\",\"name\":\"juliet oscar\",\"status\":\"active\",\"score\":13.52,\"quantity\":353,\"active\":true,\"updatedAt\":\"2026-02-26T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-943313\",\"name\":\"kilo oscar\",\"status\":\"pending\",\"score\":66.62,\"quantity\":489,\"active\":true,\"updatedAt\":\"2026-05-10T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-909215\",\"name\":\"mike whiskey\",\"status\":\"active\",\"score\":15.08,\"quantity\":159,\"active\":true,\"updatedAt\":\"2026-04-28T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-21248\",\"name\":\"papa oscar\",\"status\":\"failed\",\"score\":25.06,\"quantity\":481,\"active\":false,\"updatedAt\":\"2026-06-09T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-512470\",\"name\":\"juliet foxtrot\",\"status\":\"pending\",\"score\":94.43,\"quantity\":313,\"active\":false,\"updatedAt\":\"2026-04-11T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-445960\",\"name\":\"echo november\",\"status\":\"failed\",\"score\":65.91,\"quantity\":270,\"active\":true,\"updatedAt\":\"2026-04-24T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-443750\",\"name\":\"papa kilo\",\"status\":\"archived\",\"score\":66.03,\"quantity\":312,\"active\":false,\"updatedAt\":\"2026-02-01T12:00:00Z\"}]",
+      "encoded": "[7]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-588157\",juliet oscar,active,13.52,353,true,\"2026-02-26T12:00:00Z\"\n  1,\"SKU-943313\",kilo oscar,pending,66.62,489,true,\"2026-05-10T12:00:00Z\"\n  2,\"SKU-909215\",mike whiskey,active,15.08,159,true,\"2026-04-28T12:00:00Z\"\n  3,\"SKU-21248\",papa oscar,failed,25.06,481,false,\"2026-06-09T12:00:00Z\"\n  4,\"SKU-512470\",juliet foxtrot,pending,94.43,313,false,\"2026-04-11T12:00:00Z\"\n  5,\"SKU-445960\",echo november,failed,65.91,270,true,\"2026-04-24T12:00:00Z\"\n  6,\"SKU-443750\",papa kilo,archived,66.03,312,false,\"2026-02-01T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-1kb-9",
+    "rawContent": "Tool run 710 output: juliet hotel alpha delta papa golf bravo lima quebec delta romeo foxtrot golf oscar india india oscar lima tango charlie echo india victor uniform whiskey lima echo papa oscar sierra whiskey juliet juliet delta victor november echo alpha uniform charlie mike mike oscar zulu mike quebec mike victor victor charlie foxtrot whiskey juliet quebec mike kilo hotel india india papa uniform victor foxtrot oscar lima mike romeo november juliet zulu foxtrot kilo bravo delta bravo charlie india sierra mike kilo juliet zulu romeo kilo india romeo golf oscar golf charlie uniform juliet charlie whiskey bravo sierra november bravo oscar victor echo uniform foxtrot zulu kilo kilo alpha juliet bravo juliet lima juliet alpha zulu sierra foxtrot charlie echo quebec tango zulu uniform victor foxtrot quebec mike tango foxtrot alpha uniform victor whiskey foxtrot delta alpha whiskey quebec papa charlie papa quebec tango alpha uniform foxtrot mike india bravo golf victor zulu november echo alpha tango alpha whiskey",
+    "unwrap": true,
+    "expected": {
+      "normalized": "Tool run 710 output: juliet hotel alpha delta papa golf bravo lima quebec delta romeo foxtrot golf oscar india india oscar lima tango charlie echo india victor uniform whiskey lima echo papa oscar sierra whiskey juliet juliet delta victor november echo alpha uniform charlie mike mike oscar zulu mike quebec mike victor victor charlie foxtrot whiskey juliet quebec mike kilo hotel india india papa uniform victor foxtrot oscar lima mike romeo november juliet zulu foxtrot kilo bravo delta bravo charlie india sierra mike kilo juliet zulu romeo kilo india romeo golf oscar golf charlie uniform juliet charlie whiskey bravo sierra november bravo oscar victor echo uniform foxtrot zulu kilo kilo alpha juliet bravo juliet lima juliet alpha zulu sierra foxtrot charlie echo quebec tango zulu uniform victor foxtrot quebec mike tango foxtrot alpha uniform victor whiskey foxtrot delta alpha whiskey quebec papa charlie papa quebec tango alpha uniform foxtrot mike india bravo golf victor zulu november echo alpha tango alpha whiskey",
+      "encoded": null
+    }
+  },
+  {
+    "name": "bench-10kb-0",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-11704\",\"name\":\"bravo zulu\",\"status\":\"archived\",\"score\":52.14,\"quantity\":202,\"active\":false,\"updatedAt\":\"2026-02-16T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-729822\",\"name\":\"golf delta\",\"status\":\"failed\",\"score\":51.84,\"quantity\":98,\"active\":false,\"updatedAt\":\"2026-02-15T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-296330\",\"name\":\"zulu foxtrot\",\"status\":\"failed\",\"score\":19.08,\"quantity\":71,\"active\":false,\"updatedAt\":\"2026-02-16T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-761873\",\"name\":\"bravo victor\",\"status\":\"archived\",\"score\":62.16,\"quantity\":340,\"active\":true,\"updatedAt\":\"2026-04-26T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-827628\",\"name\":\"alpha echo\",\"status\":\"pending\",\"score\":42.53,\"quantity\":10,\"active\":false,\"updatedAt\":\"2026-05-11T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-426715\",\"name\":\"lima whiskey\",\"status\":\"archived\",\"score\":68.83,\"quantity\":165,\"active\":false,\"updatedAt\":\"2026-01-04T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-913034\",\"name\":\"hotel echo\",\"status\":\"archived\",\"score\":33.68,\"quantity\":21,\"active\":true,\"updatedAt\":\"2026-06-16T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-826577\",\"name\":\"papa whiskey\",\"status\":\"active\",\"score\":52.99,\"quantity\":324,\"active\":true,\"updatedAt\":\"2026-06-24T12:00:00Z\"},{\"id\":8,\"sku\":\"SKU-594234\",\"name\":\"zulu zulu\",\"status\":\"archived\",\"score\":81.85,\"quantity\":2,\"active\":true,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":9,\"sku\":\"SKU-549495\",\"name\":\"sierra zulu\",\"status\":\"archived\",\"score\":82.32,\"quantity\":214,\"active\":true,\"updatedAt\":\"2026-05-16T12:00:00Z\"},{\"id\":10,\"sku\":\"SKU-312383\",\"name\":\"foxtrot alpha\",\"status\":\"active\",\"score\":94.34,\"quantity\":416,\"active\":true,\"updatedAt\":\"2026-01-18T12:00:00Z\"},{\"id\":11,\"sku\":\"SKU-594896\",\"name\":\"romeo zulu\",\"status\":\"pending\",\"score\":98.63,\"quantity\":324,\"active\":true,\"updatedAt\":\"2026-04-24T12:00:00Z\"},{\"id\":12,\"sku\":\"SKU-139064\",\"name\":\"zulu mike\",\"status\":\"archived\",\"score\":16.09,\"quantity\":198,\"active\":false,\"updatedAt\":\"2026-05-25T12:00:00Z\"},{\"id\":13,\"sku\":\"SKU-735919\",\"name\":\"papa zulu\",\"status\":\"archived\",\"score\":73.65,\"quantity\":477,\"active\":false,\"updatedAt\":\"2026-02-17T12:00:00Z\"},{\"id\":14,\"sku\":\"SKU-795681\",\"name\":\"uniform echo\",\"status\":\"archived\",\"score\":47.77,\"quantity\":262,\"active\":false,\"updatedAt\":\"2026-02-13T12:00:00Z\"},{\"id\":15,\"sku\":\"SKU-477512\",\"name\":\"echo alpha\",\"status\":\"active\",\"score\":2.41,\"quantity\":53,\"active\":true,\"updatedAt\":\"2026-06-02T12:00:00Z\"},{\"id\":16,\"sku\":\"SKU-174454\",\"name\":\"juliet lima\",\"status\":\"archived\",\"score\":36.82,\"quantity\":180,\"active\":true,\"updatedAt\":\"2026-05-23T12:00:00Z\"},{\"id\":17,\"sku\":\"SKU-529989\",\"name\":\"tango juliet\",\"status\":\"archived\",\"score\":29.26,\"quantity\":263,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":18,\"sku\":\"SKU-826842\",\"name\":\"tango sierra\",\"status\":\"pending\",\"score\":35.69,\"quantity\":460,\"active\":false,\"updatedAt\":\"2026-03-14T12:00:00Z\"},{\"id\":19,\"sku\":\"SKU-830306\",\"name\":\"juliet zulu\",\"status\":\"archived\",\"score\":43.63,\"quantity\":169,\"active\":true,\"updatedAt\":\"2026-02-25T12:00:00Z\"},{\"id\":20,\"sku\":\"SKU-572258\",\"name\":\"zulu uniform\",\"status\":\"pending\",\"score\":43.68,\"quantity\":348,\"active\":true,\"updatedAt\":\"2026-04-19T12:00:00Z\"},{\"id\":21,\"sku\":\"SKU-162384\",\"name\":\"quebec juliet\",\"status\":\"archived\",\"score\":85.6,\"quantity\":191,\"active\":false,\"updatedAt\":\"2026-01-20T12:00:00Z\"},{\"id\":22,\"sku\":\"SKU-732128\",\"name\":\"zulu hotel\",\"status\":\"pending\",\"score\":6.74,\"quantity\":360,\"active\":true,\"updatedAt\":\"2026-05-24T12:00:00Z\"},{\"id\":23,\"sku\":\"SKU-962738\",\"name\":\"foxtrot zulu\",\"status\":\"pending\",\"score\":53.84,\"quantity\":195,\"active\":true,\"updatedAt\":\"2026-05-18T12:00:00Z\"},{\"id\":24,\"sku\":\"SKU-725523\",\"name\":\"oscar oscar\",\"status\":\"pending\",\"score\":83.19,\"quantity\":241,\"active\":false,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":25,\"sku\":\"SKU-559534\",\"name\":\"november victor\",\"status\":\"failed\",\"score\":15.33,\"quantity\":50,\"active\":false,\"updatedAt\":\"2026-04-11T12:00:00Z\"},{\"id\":26,\"sku\":\"SKU-910057\",\"name\":\"uniform mike\",\"status\":\"failed\",\"score\":27.87,\"quantity\":246,\"active\":true,\"updatedAt\":\"2026-05-23T12:00:00Z\"},{\"id\":27,\"sku\":\"SKU-333534\",\"name\":\"victor zulu\",\"status\":\"failed\",\"score\":0.27,\"quantity\":83,\"active\":true,\"updatedAt\":\"2026-01-03T12:00:00Z\"},{\"id\":28,\"sku\":\"SKU-911823\",\"name\":\"golf oscar\",\"status\":\"pending\",\"score\":79.39,\"quantity\":359,\"active\":false,\"updatedAt\":\"2026-03-28T12:00:00Z\"},{\"id\":29,\"sku\":\"SKU-82374\",\"name\":\"charlie juliet\",\"status\":\"failed\",\"score\":69.13,\"quantity\":135,\"active\":false,\"updatedAt\":\"2026-01-14T12:00:00Z\"},{\"id\":30,\"sku\":\"SKU-437150\",\"name\":\"november echo\",\"status\":\"failed\",\"score\":30.32,\"quantity\":345,\"active\":true,\"updatedAt\":\"2026-01-06T12:00:00Z\"},{\"id\":31,\"sku\":\"SKU-717183\",\"name\":\"victor golf\",\"status\":\"failed\",\"score\":64.44,\"quantity\":161,\"active\":false,\"updatedAt\":\"2026-01-28T12:00:00Z\"},{\"id\":32,\"sku\":\"SKU-693431\",\"name\":\"golf mike\",\"status\":\"active\",\"score\":51.6,\"quantity\":213,\"active\":true,\"updatedAt\":\"2026-01-21T12:00:00Z\"},{\"id\":33,\"sku\":\"SKU-170458\",\"name\":\"foxtrot echo\",\"status\":\"failed\",\"score\":3.08,\"quantity\":16,\"active\":true,\"updatedAt\":\"2026-06-14T12:00:00Z\"},{\"id\":34,\"sku\":\"SKU-575652\",\"name\":\"quebec echo\",\"status\":\"archived\",\"score\":7.45,\"quantity\":297,\"active\":true,\"updatedAt\":\"2026-06-02T12:00:00Z\"},{\"id\":35,\"sku\":\"SKU-570174\",\"name\":\"india bravo\",\"status\":\"failed\",\"score\":27.28,\"quantity\":77,\"active\":false,\"updatedAt\":\"2026-03-23T12:00:00Z\"},{\"id\":36,\"sku\":\"SKU-823612\",\"name\":\"uniform sierra\",\"status\":\"archived\",\"score\":86.48,\"quantity\":318,\"active\":true,\"updatedAt\":\"2026-05-09T12:00:00Z\"},{\"id\":37,\"sku\":\"SKU-403326\",\"name\":\"papa hotel\",\"status\":\"active\",\"score\":49.65,\"quantity\":299,\"active\":true,\"updatedAt\":\"2026-03-20T12:00:00Z\"},{\"id\":38,\"sku\":\"SKU-241598\",\"name\":\"romeo mike\",\"status\":\"pending\",\"score\":39.17,\"quantity\":407,\"active\":false,\"updatedAt\":\"2026-04-16T12:00:00Z\"},{\"id\":39,\"sku\":\"SKU-659493\",\"name\":\"papa bravo\",\"status\":\"pending\",\"score\":94.52,\"quantity\":356,\"active\":true,\"updatedAt\":\"2026-05-09T12:00:00Z\"},{\"id\":40,\"sku\":\"SKU-975648\",\"name\":\"bravo sierra\",\"status\":\"pending\",\"score\":22.45,\"quantity\":246,\"active\":false,\"updatedAt\":\"2026-06-28T12:00:00Z\"},{\"id\":41,\"sku\":\"SKU-534571\",\"name\":\"whiskey delta\",\"status\":\"pending\",\"score\":17.4,\"quantity\":21,\"active\":true,\"updatedAt\":\"2026-05-07T12:00:00Z\"},{\"id\":42,\"sku\":\"SKU-6562\",\"name\":\"lima papa\",\"status\":\"pending\",\"score\":53.6,\"quantity\":470,\"active\":false,\"updatedAt\":\"2026-04-20T12:00:00Z\"},{\"id\":43,\"sku\":\"SKU-300056\",\"name\":\"charlie papa\",\"status\":\"active\",\"score\":54.68,\"quantity\":226,\"active\":true,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":44,\"sku\":\"SKU-575007\",\"name\":\"sierra mike\",\"status\":\"failed\",\"score\":61.37,\"quantity\":307,\"active\":true,\"updatedAt\":\"2026-05-22T12:00:00Z\"},{\"id\":45,\"sku\":\"SKU-722145\",\"name\":\"victor uniform\",\"status\":\"archived\",\"score\":62.68,\"quantity\":75,\"active\":false,\"updatedAt\":\"2026-06-06T12:00:00Z\"},{\"id\":46,\"sku\":\"SKU-905940\",\"name\":\"alpha romeo\",\"status\":\"archived\",\"score\":82.48,\"quantity\":135,\"active\":false,\"updatedAt\":\"2026-02-20T12:00:00Z\"},{\"id\":47,\"sku\":\"SKU-645839\",\"name\":\"hotel charlie\",\"status\":\"pending\",\"score\":93.84,\"quantity\":47,\"active\":false,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":48,\"sku\":\"SKU-524\",\"name\":\"romeo alpha\",\"status\":\"failed\",\"score\":50.78,\"quantity\":485,\"active\":true,\"updatedAt\":\"2026-03-22T12:00:00Z\"},{\"id\":49,\"sku\":\"SKU-274904\",\"name\":\"india papa\",\"status\":\"failed\",\"score\":53.95,\"quantity\":369,\"active\":false,\"updatedAt\":\"2026-04-07T12:00:00Z\"},{\"id\":50,\"sku\":\"SKU-63590\",\"name\":\"juliet foxtrot\",\"status\":\"failed\",\"score\":16.3,\"quantity\":162,\"active\":false,\"updatedAt\":\"2026-03-27T12:00:00Z\"},{\"id\":51,\"sku\":\"SKU-888095\",\"name\":\"oscar romeo\",\"status\":\"failed\",\"score\":1.55,\"quantity\":98,\"active\":false,\"updatedAt\":\"2026-03-13T12:00:00Z\"},{\"id\":52,\"sku\":\"SKU-152688\",\"name\":\"kilo india\",\"status\":\"active\",\"score\":0.62,\"quantity\":317,\"active\":false,\"updatedAt\":\"2026-02-02T12:00:00Z\"},{\"id\":53,\"sku\":\"SKU-438587\",\"name\":\"sierra uniform\",\"status\":\"archived\",\"score\":71.89,\"quantity\":492,\"active\":true,\"updatedAt\":\"2026-03-25T12:00:00Z\"},{\"id\":54,\"sku\":\"SKU-816723\",\"name\":\"tango whiskey\",\"status\":\"archived\",\"score\":70.58,\"quantity\":160,\"active\":false,\"updatedAt\":\"2026-05-10T12:00:00Z\"},{\"id\":55,\"sku\":\"SKU-762042\",\"name\":\"bravo november\",\"status\":\"archived\",\"score\":23.99,\"quantity\":229,\"active\":true,\"updatedAt\":\"2026-06-09T12:00:00Z\"},{\"id\":56,\"sku\":\"SKU-14029\",\"name\":\"november lima\",\"status\":\"active\",\"score\":5.02,\"quantity\":201,\"active\":false,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":57,\"sku\":\"SKU-798172\",\"name\":\"sierra sierra\",\"status\":\"archived\",\"score\":92.92,\"quantity\":455,\"active\":true,\"updatedAt\":\"2026-06-26T12:00:00Z\"},{\"id\":58,\"sku\":\"SKU-338632\",\"name\":\"victor tango\",\"status\":\"pending\",\"score\":39.96,\"quantity\":140,\"active\":false,\"updatedAt\":\"2026-06-21T12:00:00Z\"},{\"id\":59,\"sku\":\"SKU-344716\",\"name\":\"sierra romeo\",\"status\":\"archived\",\"score\":72.13,\"quantity\":310,\"active\":true,\"updatedAt\":\"2026-01-23T12:00:00Z\"},{\"id\":60,\"sku\":\"SKU-917943\",\"name\":\"echo juliet\",\"status\":\"archived\",\"score\":77.74,\"quantity\":255,\"active\":false,\"updatedAt\":\"2026-06-28T12:00:00Z\"},{\"id\":61,\"sku\":\"SKU-150627\",\"name\":\"papa foxtrot\",\"status\":\"archived\",\"score\":47.01,\"quantity\":272,\"active\":false,\"updatedAt\":\"2026-05-17T12:00:00Z\"},{\"id\":62,\"sku\":\"SKU-838601\",\"name\":\"charlie echo\",\"status\":\"failed\",\"score\":7.23,\"quantity\":408,\"active\":false,\"updatedAt\":\"2026-04-10T12:00:00Z\"},{\"id\":63,\"sku\":\"SKU-809961\",\"name\":\"foxtrot delta\",\"status\":\"pending\",\"score\":60.76,\"quantity\":51,\"active\":true,\"updatedAt\":\"2026-01-18T12:00:00Z\"},{\"id\":64,\"sku\":\"SKU-513516\",\"name\":\"echo tango\",\"status\":\"failed\",\"score\":67.25,\"quantity\":16,\"active\":false,\"updatedAt\":\"2026-04-07T12:00:00Z\"},{\"id\":65,\"sku\":\"SKU-304984\",\"name\":\"kilo echo\",\"status\":\"active\",\"score\":47.84,\"quantity\":344,\"active\":true,\"updatedAt\":\"2026-04-19T12:00:00Z\"},{\"id\":66,\"sku\":\"SKU-469514\",\"name\":\"india charlie\",\"status\":\"pending\",\"score\":57.19,\"quantity\":309,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":67,\"sku\":\"SKU-71481\",\"name\":\"lima romeo\",\"status\":\"failed\",\"score\":8.23,\"quantity\":384,\"active\":true,\"updatedAt\":\"2026-03-25T12:00:00Z\"},{\"id\":68,\"sku\":\"SKU-836554\",\"name\":\"lima bravo\",\"status\":\"active\",\"score\":80.91,\"quantity\":72,\"active\":false,\"updatedAt\":\"2026-05-19T12:00:00Z\"},{\"id\":69,\"sku\":\"SKU-410694\",\"name\":\"mike sierra\",\"status\":\"archived\",\"score\":66.44,\"quantity\":144,\"active\":false,\"updatedAt\":\"2026-06-24T12:00:00Z\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-11704\",\"name\":\"bravo zulu\",\"status\":\"archived\",\"score\":52.14,\"quantity\":202,\"active\":false,\"updatedAt\":\"2026-02-16T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-729822\",\"name\":\"golf delta\",\"status\":\"failed\",\"score\":51.84,\"quantity\":98,\"active\":false,\"updatedAt\":\"2026-02-15T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-296330\",\"name\":\"zulu foxtrot\",\"status\":\"failed\",\"score\":19.08,\"quantity\":71,\"active\":false,\"updatedAt\":\"2026-02-16T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-761873\",\"name\":\"bravo victor\",\"status\":\"archived\",\"score\":62.16,\"quantity\":340,\"active\":true,\"updatedAt\":\"2026-04-26T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-827628\",\"name\":\"alpha echo\",\"status\":\"pending\",\"score\":42.53,\"quantity\":10,\"active\":false,\"updatedAt\":\"2026-05-11T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-426715\",\"name\":\"lima whiskey\",\"status\":\"archived\",\"score\":68.83,\"quantity\":165,\"active\":false,\"updatedAt\":\"2026-01-04T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-913034\",\"name\":\"hotel echo\",\"status\":\"archived\",\"score\":33.68,\"quantity\":21,\"active\":true,\"updatedAt\":\"2026-06-16T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-826577\",\"name\":\"papa whiskey\",\"status\":\"active\",\"score\":52.99,\"quantity\":324,\"active\":true,\"updatedAt\":\"2026-06-24T12:00:00Z\"},{\"id\":8,\"sku\":\"SKU-594234\",\"name\":\"zulu zulu\",\"status\":\"archived\",\"score\":81.85,\"quantity\":2,\"active\":true,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":9,\"sku\":\"SKU-549495\",\"name\":\"sierra zulu\",\"status\":\"archived\",\"score\":82.32,\"quantity\":214,\"active\":true,\"updatedAt\":\"2026-05-16T12:00:00Z\"},{\"id\":10,\"sku\":\"SKU-312383\",\"name\":\"foxtrot alpha\",\"status\":\"active\",\"score\":94.34,\"quantity\":416,\"active\":true,\"updatedAt\":\"2026-01-18T12:00:00Z\"},{\"id\":11,\"sku\":\"SKU-594896\",\"name\":\"romeo zulu\",\"status\":\"pending\",\"score\":98.63,\"quantity\":324,\"active\":true,\"updatedAt\":\"2026-04-24T12:00:00Z\"},{\"id\":12,\"sku\":\"SKU-139064\",\"name\":\"zulu mike\",\"status\":\"archived\",\"score\":16.09,\"quantity\":198,\"active\":false,\"updatedAt\":\"2026-05-25T12:00:00Z\"},{\"id\":13,\"sku\":\"SKU-735919\",\"name\":\"papa zulu\",\"status\":\"archived\",\"score\":73.65,\"quantity\":477,\"active\":false,\"updatedAt\":\"2026-02-17T12:00:00Z\"},{\"id\":14,\"sku\":\"SKU-795681\",\"name\":\"uniform echo\",\"status\":\"archived\",\"score\":47.77,\"quantity\":262,\"active\":false,\"updatedAt\":\"2026-02-13T12:00:00Z\"},{\"id\":15,\"sku\":\"SKU-477512\",\"name\":\"echo alpha\",\"status\":\"active\",\"score\":2.41,\"quantity\":53,\"active\":true,\"updatedAt\":\"2026-06-02T12:00:00Z\"},{\"id\":16,\"sku\":\"SKU-174454\",\"name\":\"juliet lima\",\"status\":\"archived\",\"score\":36.82,\"quantity\":180,\"active\":true,\"updatedAt\":\"2026-05-23T12:00:00Z\"},{\"id\":17,\"sku\":\"SKU-529989\",\"name\":\"tango juliet\",\"status\":\"archived\",\"score\":29.26,\"quantity\":263,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":18,\"sku\":\"SKU-826842\",\"name\":\"tango sierra\",\"status\":\"pending\",\"score\":35.69,\"quantity\":460,\"active\":false,\"updatedAt\":\"2026-03-14T12:00:00Z\"},{\"id\":19,\"sku\":\"SKU-830306\",\"name\":\"juliet zulu\",\"status\":\"archived\",\"score\":43.63,\"quantity\":169,\"active\":true,\"updatedAt\":\"2026-02-25T12:00:00Z\"},{\"id\":20,\"sku\":\"SKU-572258\",\"name\":\"zulu uniform\",\"status\":\"pending\",\"score\":43.68,\"quantity\":348,\"active\":true,\"updatedAt\":\"2026-04-19T12:00:00Z\"},{\"id\":21,\"sku\":\"SKU-162384\",\"name\":\"quebec juliet\",\"status\":\"archived\",\"score\":85.6,\"quantity\":191,\"active\":false,\"updatedAt\":\"2026-01-20T12:00:00Z\"},{\"id\":22,\"sku\":\"SKU-732128\",\"name\":\"zulu hotel\",\"status\":\"pending\",\"score\":6.74,\"quantity\":360,\"active\":true,\"updatedAt\":\"2026-05-24T12:00:00Z\"},{\"id\":23,\"sku\":\"SKU-962738\",\"name\":\"foxtrot zulu\",\"status\":\"pending\",\"score\":53.84,\"quantity\":195,\"active\":true,\"updatedAt\":\"2026-05-18T12:00:00Z\"},{\"id\":24,\"sku\":\"SKU-725523\",\"name\":\"oscar oscar\",\"status\":\"pending\",\"score\":83.19,\"quantity\":241,\"active\":false,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":25,\"sku\":\"SKU-559534\",\"name\":\"november victor\",\"status\":\"failed\",\"score\":15.33,\"quantity\":50,\"active\":false,\"updatedAt\":\"2026-04-11T12:00:00Z\"},{\"id\":26,\"sku\":\"SKU-910057\",\"name\":\"uniform mike\",\"status\":\"failed\",\"score\":27.87,\"quantity\":246,\"active\":true,\"updatedAt\":\"2026-05-23T12:00:00Z\"},{\"id\":27,\"sku\":\"SKU-333534\",\"name\":\"victor zulu\",\"status\":\"failed\",\"score\":0.27,\"quantity\":83,\"active\":true,\"updatedAt\":\"2026-01-03T12:00:00Z\"},{\"id\":28,\"sku\":\"SKU-911823\",\"name\":\"golf oscar\",\"status\":\"pending\",\"score\":79.39,\"quantity\":359,\"active\":false,\"updatedAt\":\"2026-03-28T12:00:00Z\"},{\"id\":29,\"sku\":\"SKU-82374\",\"name\":\"charlie juliet\",\"status\":\"failed\",\"score\":69.13,\"quantity\":135,\"active\":false,\"updatedAt\":\"2026-01-14T12:00:00Z\"},{\"id\":30,\"sku\":\"SKU-437150\",\"name\":\"november echo\",\"status\":\"failed\",\"score\":30.32,\"quantity\":345,\"active\":true,\"updatedAt\":\"2026-01-06T12:00:00Z\"},{\"id\":31,\"sku\":\"SKU-717183\",\"name\":\"victor golf\",\"status\":\"failed\",\"score\":64.44,\"quantity\":161,\"active\":false,\"updatedAt\":\"2026-01-28T12:00:00Z\"},{\"id\":32,\"sku\":\"SKU-693431\",\"name\":\"golf mike\",\"status\":\"active\",\"score\":51.6,\"quantity\":213,\"active\":true,\"updatedAt\":\"2026-01-21T12:00:00Z\"},{\"id\":33,\"sku\":\"SKU-170458\",\"name\":\"foxtrot echo\",\"status\":\"failed\",\"score\":3.08,\"quantity\":16,\"active\":true,\"updatedAt\":\"2026-06-14T12:00:00Z\"},{\"id\":34,\"sku\":\"SKU-575652\",\"name\":\"quebec echo\",\"status\":\"archived\",\"score\":7.45,\"quantity\":297,\"active\":true,\"updatedAt\":\"2026-06-02T12:00:00Z\"},{\"id\":35,\"sku\":\"SKU-570174\",\"name\":\"india bravo\",\"status\":\"failed\",\"score\":27.28,\"quantity\":77,\"active\":false,\"updatedAt\":\"2026-03-23T12:00:00Z\"},{\"id\":36,\"sku\":\"SKU-823612\",\"name\":\"uniform sierra\",\"status\":\"archived\",\"score\":86.48,\"quantity\":318,\"active\":true,\"updatedAt\":\"2026-05-09T12:00:00Z\"},{\"id\":37,\"sku\":\"SKU-403326\",\"name\":\"papa hotel\",\"status\":\"active\",\"score\":49.65,\"quantity\":299,\"active\":true,\"updatedAt\":\"2026-03-20T12:00:00Z\"},{\"id\":38,\"sku\":\"SKU-241598\",\"name\":\"romeo mike\",\"status\":\"pending\",\"score\":39.17,\"quantity\":407,\"active\":false,\"updatedAt\":\"2026-04-16T12:00:00Z\"},{\"id\":39,\"sku\":\"SKU-659493\",\"name\":\"papa bravo\",\"status\":\"pending\",\"score\":94.52,\"quantity\":356,\"active\":true,\"updatedAt\":\"2026-05-09T12:00:00Z\"},{\"id\":40,\"sku\":\"SKU-975648\",\"name\":\"bravo sierra\",\"status\":\"pending\",\"score\":22.45,\"quantity\":246,\"active\":false,\"updatedAt\":\"2026-06-28T12:00:00Z\"},{\"id\":41,\"sku\":\"SKU-534571\",\"name\":\"whiskey delta\",\"status\":\"pending\",\"score\":17.4,\"quantity\":21,\"active\":true,\"updatedAt\":\"2026-05-07T12:00:00Z\"},{\"id\":42,\"sku\":\"SKU-6562\",\"name\":\"lima papa\",\"status\":\"pending\",\"score\":53.6,\"quantity\":470,\"active\":false,\"updatedAt\":\"2026-04-20T12:00:00Z\"},{\"id\":43,\"sku\":\"SKU-300056\",\"name\":\"charlie papa\",\"status\":\"active\",\"score\":54.68,\"quantity\":226,\"active\":true,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":44,\"sku\":\"SKU-575007\",\"name\":\"sierra mike\",\"status\":\"failed\",\"score\":61.37,\"quantity\":307,\"active\":true,\"updatedAt\":\"2026-05-22T12:00:00Z\"},{\"id\":45,\"sku\":\"SKU-722145\",\"name\":\"victor uniform\",\"status\":\"archived\",\"score\":62.68,\"quantity\":75,\"active\":false,\"updatedAt\":\"2026-06-06T12:00:00Z\"},{\"id\":46,\"sku\":\"SKU-905940\",\"name\":\"alpha romeo\",\"status\":\"archived\",\"score\":82.48,\"quantity\":135,\"active\":false,\"updatedAt\":\"2026-02-20T12:00:00Z\"},{\"id\":47,\"sku\":\"SKU-645839\",\"name\":\"hotel charlie\",\"status\":\"pending\",\"score\":93.84,\"quantity\":47,\"active\":false,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":48,\"sku\":\"SKU-524\",\"name\":\"romeo alpha\",\"status\":\"failed\",\"score\":50.78,\"quantity\":485,\"active\":true,\"updatedAt\":\"2026-03-22T12:00:00Z\"},{\"id\":49,\"sku\":\"SKU-274904\",\"name\":\"india papa\",\"status\":\"failed\",\"score\":53.95,\"quantity\":369,\"active\":false,\"updatedAt\":\"2026-04-07T12:00:00Z\"},{\"id\":50,\"sku\":\"SKU-63590\",\"name\":\"juliet foxtrot\",\"status\":\"failed\",\"score\":16.3,\"quantity\":162,\"active\":false,\"updatedAt\":\"2026-03-27T12:00:00Z\"},{\"id\":51,\"sku\":\"SKU-888095\",\"name\":\"oscar romeo\",\"status\":\"failed\",\"score\":1.55,\"quantity\":98,\"active\":false,\"updatedAt\":\"2026-03-13T12:00:00Z\"},{\"id\":52,\"sku\":\"SKU-152688\",\"name\":\"kilo india\",\"status\":\"active\",\"score\":0.62,\"quantity\":317,\"active\":false,\"updatedAt\":\"2026-02-02T12:00:00Z\"},{\"id\":53,\"sku\":\"SKU-438587\",\"name\":\"sierra uniform\",\"status\":\"archived\",\"score\":71.89,\"quantity\":492,\"active\":true,\"updatedAt\":\"2026-03-25T12:00:00Z\"},{\"id\":54,\"sku\":\"SKU-816723\",\"name\":\"tango whiskey\",\"status\":\"archived\",\"score\":70.58,\"quantity\":160,\"active\":false,\"updatedAt\":\"2026-05-10T12:00:00Z\"},{\"id\":55,\"sku\":\"SKU-762042\",\"name\":\"bravo november\",\"status\":\"archived\",\"score\":23.99,\"quantity\":229,\"active\":true,\"updatedAt\":\"2026-06-09T12:00:00Z\"},{\"id\":56,\"sku\":\"SKU-14029\",\"name\":\"november lima\",\"status\":\"active\",\"score\":5.02,\"quantity\":201,\"active\":false,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":57,\"sku\":\"SKU-798172\",\"name\":\"sierra sierra\",\"status\":\"archived\",\"score\":92.92,\"quantity\":455,\"active\":true,\"updatedAt\":\"2026-06-26T12:00:00Z\"},{\"id\":58,\"sku\":\"SKU-338632\",\"name\":\"victor tango\",\"status\":\"pending\",\"score\":39.96,\"quantity\":140,\"active\":false,\"updatedAt\":\"2026-06-21T12:00:00Z\"},{\"id\":59,\"sku\":\"SKU-344716\",\"name\":\"sierra romeo\",\"status\":\"archived\",\"score\":72.13,\"quantity\":310,\"active\":true,\"updatedAt\":\"2026-01-23T12:00:00Z\"},{\"id\":60,\"sku\":\"SKU-917943\",\"name\":\"echo juliet\",\"status\":\"archived\",\"score\":77.74,\"quantity\":255,\"active\":false,\"updatedAt\":\"2026-06-28T12:00:00Z\"},{\"id\":61,\"sku\":\"SKU-150627\",\"name\":\"papa foxtrot\",\"status\":\"archived\",\"score\":47.01,\"quantity\":272,\"active\":false,\"updatedAt\":\"2026-05-17T12:00:00Z\"},{\"id\":62,\"sku\":\"SKU-838601\",\"name\":\"charlie echo\",\"status\":\"failed\",\"score\":7.23,\"quantity\":408,\"active\":false,\"updatedAt\":\"2026-04-10T12:00:00Z\"},{\"id\":63,\"sku\":\"SKU-809961\",\"name\":\"foxtrot delta\",\"status\":\"pending\",\"score\":60.76,\"quantity\":51,\"active\":true,\"updatedAt\":\"2026-01-18T12:00:00Z\"},{\"id\":64,\"sku\":\"SKU-513516\",\"name\":\"echo tango\",\"status\":\"failed\",\"score\":67.25,\"quantity\":16,\"active\":false,\"updatedAt\":\"2026-04-07T12:00:00Z\"},{\"id\":65,\"sku\":\"SKU-304984\",\"name\":\"kilo echo\",\"status\":\"active\",\"score\":47.84,\"quantity\":344,\"active\":true,\"updatedAt\":\"2026-04-19T12:00:00Z\"},{\"id\":66,\"sku\":\"SKU-469514\",\"name\":\"india charlie\",\"status\":\"pending\",\"score\":57.19,\"quantity\":309,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":67,\"sku\":\"SKU-71481\",\"name\":\"lima romeo\",\"status\":\"failed\",\"score\":8.23,\"quantity\":384,\"active\":true,\"updatedAt\":\"2026-03-25T12:00:00Z\"},{\"id\":68,\"sku\":\"SKU-836554\",\"name\":\"lima bravo\",\"status\":\"active\",\"score\":80.91,\"quantity\":72,\"active\":false,\"updatedAt\":\"2026-05-19T12:00:00Z\"},{\"id\":69,\"sku\":\"SKU-410694\",\"name\":\"mike sierra\",\"status\":\"archived\",\"score\":66.44,\"quantity\":144,\"active\":false,\"updatedAt\":\"2026-06-24T12:00:00Z\"}]",
+      "encoded": "[70]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-11704\",bravo zulu,archived,52.14,202,false,\"2026-02-16T12:00:00Z\"\n  1,\"SKU-729822\",golf delta,failed,51.84,98,false,\"2026-02-15T12:00:00Z\"\n  2,\"SKU-296330\",zulu foxtrot,failed,19.08,71,false,\"2026-02-16T12:00:00Z\"\n  3,\"SKU-761873\",bravo victor,archived,62.16,340,true,\"2026-04-26T12:00:00Z\"\n  4,\"SKU-827628\",alpha echo,pending,42.53,10,false,\"2026-05-11T12:00:00Z\"\n  5,\"SKU-426715\",lima whiskey,archived,68.83,165,false,\"2026-01-04T12:00:00Z\"\n  6,\"SKU-913034\",hotel echo,archived,33.68,21,true,\"2026-06-16T12:00:00Z\"\n  7,\"SKU-826577\",papa whiskey,active,52.99,324,true,\"2026-06-24T12:00:00Z\"\n  8,\"SKU-594234\",zulu zulu,archived,81.85,2,true,\"2026-02-21T12:00:00Z\"\n  9,\"SKU-549495\",sierra zulu,archived,82.32,214,true,\"2026-05-16T12:00:00Z\"\n  10,\"SKU-312383\",foxtrot alpha,active,94.34,416,true,\"2026-01-18T12:00:00Z\"\n  11,\"SKU-594896\",romeo zulu,pending,98.63,324,true,\"2026-04-24T12:00:00Z\"\n  12,\"SKU-139064\",zulu mike,archived,16.09,198,false,\"2026-05-25T12:00:00Z\"\n  13,\"SKU-735919\",papa zulu,archived,73.65,477,false,\"2026-02-17T12:00:00Z\"\n  14,\"SKU-795681\",uniform echo,archived,47.77,262,false,\"2026-02-13T12:00:00Z\"\n  15,\"SKU-477512\",echo alpha,active,2.41,53,true,\"2026-06-02T12:00:00Z\"\n  16,\"SKU-174454\",juliet lima,archived,36.82,180,true,\"2026-05-23T12:00:00Z\"\n  17,\"SKU-529989\",tango juliet,archived,29.26,263,true,\"2026-01-08T12:00:00Z\"\n  18,\"SKU-826842\",tango sierra,pending,35.69,460,false,\"2026-03-14T12:00:00Z\"\n  19,\"SKU-830306\",juliet zulu,archived,43.63,169,true,\"2026-02-25T12:00:00Z\"\n  20,\"SKU-572258\",zulu uniform,pending,43.68,348,true,\"2026-04-19T12:00:00Z\"\n  21,\"SKU-162384\",quebec juliet,archived,85.6,191,false,\"2026-01-20T12:00:00Z\"\n  22,\"SKU-732128\",zulu hotel,pending,6.74,360,true,\"2026-05-24T12:00:00Z\"\n  23,\"SKU-962738\",foxtrot zulu,pending,53.84,195,true,\"2026-05-18T12:00:00Z\"\n  24,\"SKU-725523\",oscar oscar,pending,83.19,241,false,\"2026-05-13T12:00:00Z\"\n  25,\"SKU-559534\",november victor,failed,15.33,50,false,\"2026-04-11T12:00:00Z\"\n  26,\"SKU-910057\",uniform mike,failed,27.87,246,true,\"2026-05-23T12:00:00Z\"\n  27,\"SKU-333534\",victor zulu,failed,0.27,83,true,\"2026-01-03T12:00:00Z\"\n  28,\"SKU-911823\",golf oscar,pending,79.39,359,false,\"2026-03-28T12:00:00Z\"\n  29,\"SKU-82374\",charlie juliet,failed,69.13,135,false,\"2026-01-14T12:00:00Z\"\n  30,\"SKU-437150\",november echo,failed,30.32,345,true,\"2026-01-06T12:00:00Z\"\n  31,\"SKU-717183\",victor golf,failed,64.44,161,false,\"2026-01-28T12:00:00Z\"\n  32,\"SKU-693431\",golf mike,active,51.6,213,true,\"2026-01-21T12:00:00Z\"\n  33,\"SKU-170458\",foxtrot echo,failed,3.08,16,true,\"2026-06-14T12:00:00Z\"\n  34,\"SKU-575652\",quebec echo,archived,7.45,297,true,\"2026-06-02T12:00:00Z\"\n  35,\"SKU-570174\",india bravo,failed,27.28,77,false,\"2026-03-23T12:00:00Z\"\n  36,\"SKU-823612\",uniform sierra,archived,86.48,318,true,\"2026-05-09T12:00:00Z\"\n  37,\"SKU-403326\",papa hotel,active,49.65,299,true,\"2026-03-20T12:00:00Z\"\n  38,\"SKU-241598\",romeo mike,pending,39.17,407,false,\"2026-04-16T12:00:00Z\"\n  39,\"SKU-659493\",papa bravo,pending,94.52,356,true,\"2026-05-09T12:00:00Z\"\n  40,\"SKU-975648\",bravo sierra,pending,22.45,246,false,\"2026-06-28T12:00:00Z\"\n  41,\"SKU-534571\",whiskey delta,pending,17.4,21,true,\"2026-05-07T12:00:00Z\"\n  42,\"SKU-6562\",lima papa,pending,53.6,470,false,\"2026-04-20T12:00:00Z\"\n  43,\"SKU-300056\",charlie papa,active,54.68,226,true,\"2026-05-21T12:00:00Z\"\n  44,\"SKU-575007\",sierra mike,failed,61.37,307,true,\"2026-05-22T12:00:00Z\"\n  45,\"SKU-722145\",victor uniform,archived,62.68,75,false,\"2026-06-06T12:00:00Z\"\n  46,\"SKU-905940\",alpha romeo,archived,82.48,135,false,\"2026-02-20T12:00:00Z\"\n  47,\"SKU-645839\",hotel charlie,pending,93.84,47,false,\"2026-02-21T12:00:00Z\"\n  48,\"SKU-524\",romeo alpha,failed,50.78,485,true,\"2026-03-22T12:00:00Z\"\n  49,\"SKU-274904\",india papa,failed,53.95,369,false,\"2026-04-07T12:00:00Z\"\n  50,\"SKU-63590\",juliet foxtrot,failed,16.3,162,false,\"2026-03-27T12:00:00Z\"\n  51,\"SKU-888095\",oscar romeo,failed,1.55,98,false,\"2026-03-13T12:00:00Z\"\n  52,\"SKU-152688\",kilo india,active,0.62,317,false,\"2026-02-02T12:00:00Z\"\n  53,\"SKU-438587\",sierra uniform,archived,71.89,492,true,\"2026-03-25T12:00:00Z\"\n  54,\"SKU-816723\",tango whiskey,archived,70.58,160,false,\"2026-05-10T12:00:00Z\"\n  55,\"SKU-762042\",bravo november,archived,23.99,229,true,\"2026-06-09T12:00:00Z\"\n  56,\"SKU-14029\",november lima,active,5.02,201,false,\"2026-05-21T12:00:00Z\"\n  57,\"SKU-798172\",sierra sierra,archived,92.92,455,true,\"2026-06-26T12:00:00Z\"\n  58,\"SKU-338632\",victor tango,pending,39.96,140,false,\"2026-06-21T12:00:00Z\"\n  59,\"SKU-344716\",sierra romeo,archived,72.13,310,true,\"2026-01-23T12:00:00Z\"\n  60,\"SKU-917943\",echo juliet,archived,77.74,255,false,\"2026-06-28T12:00:00Z\"\n  61,\"SKU-150627\",papa foxtrot,archived,47.01,272,false,\"2026-05-17T12:00:00Z\"\n  62,\"SKU-838601\",charlie echo,failed,7.23,408,false,\"2026-04-10T12:00:00Z\"\n  63,\"SKU-809961\",foxtrot delta,pending,60.76,51,true,\"2026-01-18T12:00:00Z\"\n  64,\"SKU-513516\",echo tango,failed,67.25,16,false,\"2026-04-07T12:00:00Z\"\n  65,\"SKU-304984\",kilo echo,active,47.84,344,true,\"2026-04-19T12:00:00Z\"\n  66,\"SKU-469514\",india charlie,pending,57.19,309,true,\"2026-01-08T12:00:00Z\"\n  67,\"SKU-71481\",lima romeo,failed,8.23,384,true,\"2026-03-25T12:00:00Z\"\n  68,\"SKU-836554\",lima bravo,active,80.91,72,false,\"2026-05-19T12:00:00Z\"\n  69,\"SKU-410694\",mike sierra,archived,66.44,144,false,\"2026-06-24T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-10kb-1",
+    "rawContent": "[{\"id\":0,\"sku\":\"SKU-369981\",\"name\":\"lima oscar\",\"status\":\"failed\",\"score\":9.74,\"quantity\":27,\"active\":false,\"updatedAt\":\"2026-06-24T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-967340\",\"name\":\"sierra kilo\",\"status\":\"pending\",\"score\":37.31,\"quantity\":46,\"active\":false,\"updatedAt\":\"2026-02-04T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-334172\",\"name\":\"mike golf\",\"status\":\"archived\",\"score\":94.56,\"quantity\":499,\"active\":false,\"updatedAt\":\"2026-06-24T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-708572\",\"name\":\"uniform kilo\",\"status\":\"failed\",\"score\":91.72,\"quantity\":414,\"active\":false,\"updatedAt\":\"2026-01-12T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-59452\",\"name\":\"alpha sierra\",\"status\":\"active\",\"score\":21.56,\"quantity\":215,\"active\":false,\"updatedAt\":\"2026-06-20T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-354103\",\"name\":\"zulu hotel\",\"status\":\"pending\",\"score\":59.22,\"quantity\":250,\"active\":true,\"updatedAt\":\"2026-05-02T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-868744\",\"name\":\"whiskey tango\",\"status\":\"active\",\"score\":46.31,\"quantity\":111,\"active\":true,\"updatedAt\":\"2026-01-05T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-834024\",\"name\":\"delta delta\",\"status\":\"archived\",\"score\":88.68,\"quantity\":221,\"active\":true,\"updatedAt\":\"2026-06-10T12:00:00Z\"},{\"id\":8,\"sku\":\"SKU-4318\",\"name\":\"alpha lima\",\"status\":\"failed\",\"score\":86.59,\"quantity\":237,\"active\":true,\"updatedAt\":\"2026-05-22T12:00:00Z\"},{\"id\":9,\"sku\":\"SKU-397052\",\"name\":\"bravo quebec\",\"status\":\"active\",\"score\":14.17,\"quantity\":244,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":10,\"sku\":\"SKU-987401\",\"name\":\"november sierra\",\"status\":\"failed\",\"score\":67.5,\"quantity\":212,\"active\":true,\"updatedAt\":\"2026-03-22T12:00:00Z\"},{\"id\":11,\"sku\":\"SKU-399261\",\"name\":\"charlie tango\",\"status\":\"active\",\"score\":12.8,\"quantity\":104,\"active\":false,\"updatedAt\":\"2026-05-01T12:00:00Z\"},{\"id\":12,\"sku\":\"SKU-541132\",\"name\":\"india november\",\"status\":\"active\",\"score\":8.18,\"quantity\":21,\"active\":true,\"updatedAt\":\"2026-02-08T12:00:00Z\"},{\"id\":13,\"sku\":\"SKU-664917\",\"name\":\"november golf\",\"status\":\"pending\",\"score\":39.06,\"quantity\":87,\"active\":true,\"updatedAt\":\"2026-02-22T12:00:00Z\"},{\"id\":14,\"sku\":\"SKU-470178\",\"name\":\"papa uniform\",\"status\":\"failed\",\"score\":31.51,\"quantity\":379,\"active\":true,\"updatedAt\":\"2026-04-28T12:00:00Z\"},{\"id\":15,\"sku\":\"SKU-795808\",\"name\":\"papa india\",\"status\":\"active\",\"score\":81.8,\"quantity\":443,\"active\":true,\"updatedAt\":\"2026-02-17T12:00:00Z\"},{\"id\":16,\"sku\":\"SKU-501650\",\"name\":\"golf india\",\"status\":\"pending\",\"score\":94.3,\"quantity\":462,\"active\":true,\"updatedAt\":\"2026-05-11T12:00:00Z\"},{\"id\":17,\"sku\":\"SKU-562629\",\"name\":\"charlie echo\",\"status\":\"archived\",\"score\":34.87,\"quantity\":280,\"active\":true,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":18,\"sku\":\"SKU-32189\",\"name\":\"zulu mike\",\"status\":\"pending\",\"score\":58.38,\"quantity\":372,\"active\":false,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":19,\"sku\":\"SKU-197718\",\"name\":\"india kilo\",\"status\":\"active\",\"score\":19.81,\"quantity\":296,\"active\":true,\"updatedAt\":\"2026-03-03T12:00:00Z\"},{\"id\":20,\"sku\":\"SKU-770813\",\"name\":\"whiskey delta\",\"status\":\"archived\",\"score\":14.07,\"quantity\":375,\"active\":false,\"updatedAt\":\"2026-06-11T12:00:00Z\"},{\"id\":21,\"sku\":\"SKU-993297\",\"name\":\"lima oscar\",\"status\":\"pending\",\"score\":49.46,\"quantity\":320,\"active\":true,\"updatedAt\":\"2026-06-04T12:00:00Z\"},{\"id\":22,\"sku\":\"SKU-129005\",\"name\":\"india delta\",\"status\":\"active\",\"score\":38.89,\"quantity\":1,\"active\":true,\"updatedAt\":\"2026-06-18T12:00:00Z\"},{\"id\":23,\"sku\":\"SKU-983730\",\"name\":\"bravo papa\",\"status\":\"pending\",\"score\":88.65,\"quantity\":367,\"active\":false,\"updatedAt\":\"2026-01-28T12:00:00Z\"},{\"id\":24,\"sku\":\"SKU-758767\",\"name\":\"romeo tango\",\"status\":\"pending\",\"score\":92.43,\"quantity\":327,\"active\":false,\"updatedAt\":\"2026-04-21T12:00:00Z\"},{\"id\":25,\"sku\":\"SKU-642530\",\"name\":\"charlie whiskey\",\"status\":\"failed\",\"score\":91.16,\"quantity\":139,\"active\":true,\"updatedAt\":\"2026-06-13T12:00:00Z\"},{\"id\":26,\"sku\":\"SKU-465260\",\"name\":\"kilo lima\",\"status\":\"archived\",\"score\":35.1,\"quantity\":257,\"active\":true,\"updatedAt\":\"2026-01-16T12:00:00Z\"},{\"id\":27,\"sku\":\"SKU-73648\",\"name\":\"india mike\",\"status\":\"archived\",\"score\":97.62,\"quantity\":386,\"active\":true,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":28,\"sku\":\"SKU-776786\",\"name\":\"victor lima\",\"status\":\"active\",\"score\":27.69,\"quantity\":438,\"active\":true,\"updatedAt\":\"2026-05-27T12:00:00Z\"},{\"id\":29,\"sku\":\"SKU-468983\",\"name\":\"hotel kilo\",\"status\":\"archived\",\"score\":0.48,\"quantity\":239,\"active\":true,\"updatedAt\":\"2026-02-09T12:00:00Z\"},{\"id\":30,\"sku\":\"SKU-563299\",\"name\":\"charlie november\",\"status\":\"archived\",\"score\":13.56,\"quantity\":88,\"active\":true,\"updatedAt\":\"2026-05-08T12:00:00Z\"},{\"id\":31,\"sku\":\"SKU-419442\",\"name\":\"romeo charlie\",\"status\":\"pending\",\"score\":26.86,\"quantity\":346,\"active\":true,\"updatedAt\":\"2026-04-15T12:00:00Z\"},{\"id\":32,\"sku\":\"SKU-182808\",\"name\":\"november tango\",\"status\":\"pending\",\"score\":95.74,\"quantity\":288,\"active\":false,\"updatedAt\":\"2026-04-25T12:00:00Z\"},{\"id\":33,\"sku\":\"SKU-921862\",\"name\":\"zulu sierra\",\"status\":\"active\",\"score\":38.59,\"quantity\":370,\"active\":true,\"updatedAt\":\"2026-02-02T12:00:00Z\"},{\"id\":34,\"sku\":\"SKU-809989\",\"name\":\"golf echo\",\"status\":\"archived\",\"score\":13.09,\"quantity\":427,\"active\":false,\"updatedAt\":\"2026-04-23T12:00:00Z\"},{\"id\":35,\"sku\":\"SKU-684809\",\"name\":\"romeo foxtrot\",\"status\":\"pending\",\"score\":82.4,\"quantity\":444,\"active\":false,\"updatedAt\":\"2026-03-19T12:00:00Z\"},{\"id\":36,\"sku\":\"SKU-56758\",\"name\":\"november victor\",\"status\":\"pending\",\"score\":57.61,\"quantity\":122,\"active\":true,\"updatedAt\":\"2026-02-06T12:00:00Z\"},{\"id\":37,\"sku\":\"SKU-158771\",\"name\":\"hotel quebec\",\"status\":\"archived\",\"score\":52.21,\"quantity\":108,\"active\":true,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":38,\"sku\":\"SKU-201657\",\"name\":\"india mike\",\"status\":\"archived\",\"score\":11.98,\"quantity\":279,\"active\":true,\"updatedAt\":\"2026-04-17T12:00:00Z\"},{\"id\":39,\"sku\":\"SKU-934265\",\"name\":\"oscar victor\",\"status\":\"failed\",\"score\":10.39,\"quantity\":10,\"active\":true,\"updatedAt\":\"2026-04-09T12:00:00Z\"},{\"id\":40,\"sku\":\"SKU-980470\",\"name\":\"delta zulu\",\"status\":\"failed\",\"score\":95.34,\"quantity\":73,\"active\":false,\"updatedAt\":\"2026-03-22T12:00:00Z\"},{\"id\":41,\"sku\":\"SKU-522215\",\"name\":\"november lima\",\"status\":\"archived\",\"score\":64.84,\"quantity\":369,\"active\":true,\"updatedAt\":\"2026-05-16T12:00:00Z\"},{\"id\":42,\"sku\":\"SKU-409943\",\"name\":\"hotel zulu\",\"status\":\"archived\",\"score\":11.64,\"quantity\":426,\"active\":true,\"updatedAt\":\"2026-02-11T12:00:00Z\"},{\"id\":43,\"sku\":\"SKU-77806\",\"name\":\"mike lima\",\"status\":\"active\",\"score\":63.83,\"quantity\":203,\"active\":true,\"updatedAt\":\"2026-03-19T12:00:00Z\"},{\"id\":44,\"sku\":\"SKU-928201\",\"name\":\"charlie mike\",\"status\":\"pending\",\"score\":5.06,\"quantity\":450,\"active\":false,\"updatedAt\":\"2026-05-06T12:00:00Z\"},{\"id\":45,\"sku\":\"SKU-619926\",\"name\":\"bravo whiskey\",\"status\":\"pending\",\"score\":20.01,\"quantity\":155,\"active\":true,\"updatedAt\":\"2026-02-06T12:00:00Z\"},{\"id\":46,\"sku\":\"SKU-22057\",\"name\":\"charlie sierra\",\"status\":\"failed\",\"score\":33.47,\"quantity\":435,\"active\":true,\"updatedAt\":\"2026-05-07T12:00:00Z\"},{\"id\":47,\"sku\":\"SKU-638993\",\"name\":\"alpha charlie\",\"status\":\"archived\",\"score\":26.92,\"quantity\":104,\"active\":false,\"updatedAt\":\"2026-05-07T12:00:00Z\"},{\"id\":48,\"sku\":\"SKU-765547\",\"name\":\"echo oscar\",\"status\":\"pending\",\"score\":72.91,\"quantity\":279,\"active\":true,\"updatedAt\":\"2026-02-13T12:00:00Z\"},{\"id\":49,\"sku\":\"SKU-440455\",\"name\":\"echo uniform\",\"status\":\"archived\",\"score\":74.63,\"quantity\":272,\"active\":false,\"updatedAt\":\"2026-06-22T12:00:00Z\"},{\"id\":50,\"sku\":\"SKU-303645\",\"name\":\"papa sierra\",\"status\":\"pending\",\"score\":28.63,\"quantity\":90,\"active\":false,\"updatedAt\":\"2026-06-25T12:00:00Z\"},{\"id\":51,\"sku\":\"SKU-213454\",\"name\":\"november oscar\",\"status\":\"pending\",\"score\":35.5,\"quantity\":159,\"active\":true,\"updatedAt\":\"2026-04-26T12:00:00Z\"},{\"id\":52,\"sku\":\"SKU-715886\",\"name\":\"mike oscar\",\"status\":\"active\",\"score\":73.01,\"quantity\":399,\"active\":true,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":53,\"sku\":\"SKU-586691\",\"name\":\"delta zulu\",\"status\":\"archived\",\"score\":48.69,\"quantity\":373,\"active\":false,\"updatedAt\":\"2026-02-10T12:00:00Z\"},{\"id\":54,\"sku\":\"SKU-236865\",\"name\":\"oscar romeo\",\"status\":\"archived\",\"score\":66.72,\"quantity\":241,\"active\":false,\"updatedAt\":\"2026-01-07T12:00:00Z\"},{\"id\":55,\"sku\":\"SKU-157251\",\"name\":\"alpha delta\",\"status\":\"archived\",\"score\":20.83,\"quantity\":58,\"active\":true,\"updatedAt\":\"2026-04-16T12:00:00Z\"},{\"id\":56,\"sku\":\"SKU-262253\",\"name\":\"golf echo\",\"status\":\"failed\",\"score\":33.33,\"quantity\":168,\"active\":false,\"updatedAt\":\"2026-03-12T12:00:00Z\"},{\"id\":57,\"sku\":\"SKU-863890\",\"name\":\"victor whiskey\",\"status\":\"archived\",\"score\":59.55,\"quantity\":199,\"active\":true,\"updatedAt\":\"2026-02-12T12:00:00Z\"},{\"id\":58,\"sku\":\"SKU-602861\",\"name\":\"bravo romeo\",\"status\":\"archived\",\"score\":62.56,\"quantity\":107,\"active\":false,\"updatedAt\":\"2026-02-14T12:00:00Z\"},{\"id\":59,\"sku\":\"SKU-140459\",\"name\":\"tango oscar\",\"status\":\"pending\",\"score\":6.22,\"quantity\":52,\"active\":false,\"updatedAt\":\"2026-01-21T12:00:00Z\"},{\"id\":60,\"sku\":\"SKU-736207\",\"name\":\"victor delta\",\"status\":\"active\",\"score\":44.62,\"quantity\":24,\"active\":true,\"updatedAt\":\"2026-03-13T12:00:00Z\"},{\"id\":61,\"sku\":\"SKU-759724\",\"name\":\"delta juliet\",\"status\":\"pending\",\"score\":26.46,\"quantity\":384,\"active\":false,\"updatedAt\":\"2026-05-19T12:00:00Z\"},{\"id\":62,\"sku\":\"SKU-442602\",\"name\":\"alpha golf\",\"status\":\"archived\",\"score\":49.58,\"quantity\":228,\"active\":true,\"updatedAt\":\"2026-05-05T12:00:00Z\"},{\"id\":63,\"sku\":\"SKU-575268\",\"name\":\"romeo foxtrot\",\"status\":\"archived\",\"score\":14.2,\"quantity\":267,\"active\":true,\"updatedAt\":\"2026-05-05T12:00:00Z\"},{\"id\":64,\"sku\":\"SKU-648994\",\"name\":\"hotel romeo\",\"status\":\"archived\",\"score\":44.89,\"quantity\":321,\"active\":false,\"updatedAt\":\"2026-03-11T12:00:00Z\"},{\"id\":65,\"sku\":\"SKU-188457\",\"name\":\"mike echo\",\"status\":\"active\",\"score\":94.79,\"quantity\":432,\"active\":false,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":66,\"sku\":\"SKU-149621\",\"name\":\"golf november\",\"status\":\"pending\",\"score\":90.25,\"quantity\":465,\"active\":false,\"updatedAt\":\"2026-03-11T12:00:00Z\"},{\"id\":67,\"sku\":\"SKU-285740\",\"name\":\"romeo charlie\",\"status\":\"pending\",\"score\":93.89,\"quantity\":5,\"active\":false,\"updatedAt\":\"2026-04-11T12:00:00Z\"},{\"id\":68,\"sku\":\"SKU-291992\",\"name\":\"sierra lima\",\"status\":\"active\",\"score\":86.27,\"quantity\":85,\"active\":false,\"updatedAt\":\"2026-02-07T12:00:00Z\"},{\"id\":69,\"sku\":\"SKU-747919\",\"name\":\"golf whiskey\",\"status\":\"failed\",\"score\":90.75,\"quantity\":226,\"active\":false,\"updatedAt\":\"2026-04-09T12:00:00Z\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"id\":0,\"sku\":\"SKU-369981\",\"name\":\"lima oscar\",\"status\":\"failed\",\"score\":9.74,\"quantity\":27,\"active\":false,\"updatedAt\":\"2026-06-24T12:00:00Z\"},{\"id\":1,\"sku\":\"SKU-967340\",\"name\":\"sierra kilo\",\"status\":\"pending\",\"score\":37.31,\"quantity\":46,\"active\":false,\"updatedAt\":\"2026-02-04T12:00:00Z\"},{\"id\":2,\"sku\":\"SKU-334172\",\"name\":\"mike golf\",\"status\":\"archived\",\"score\":94.56,\"quantity\":499,\"active\":false,\"updatedAt\":\"2026-06-24T12:00:00Z\"},{\"id\":3,\"sku\":\"SKU-708572\",\"name\":\"uniform kilo\",\"status\":\"failed\",\"score\":91.72,\"quantity\":414,\"active\":false,\"updatedAt\":\"2026-01-12T12:00:00Z\"},{\"id\":4,\"sku\":\"SKU-59452\",\"name\":\"alpha sierra\",\"status\":\"active\",\"score\":21.56,\"quantity\":215,\"active\":false,\"updatedAt\":\"2026-06-20T12:00:00Z\"},{\"id\":5,\"sku\":\"SKU-354103\",\"name\":\"zulu hotel\",\"status\":\"pending\",\"score\":59.22,\"quantity\":250,\"active\":true,\"updatedAt\":\"2026-05-02T12:00:00Z\"},{\"id\":6,\"sku\":\"SKU-868744\",\"name\":\"whiskey tango\",\"status\":\"active\",\"score\":46.31,\"quantity\":111,\"active\":true,\"updatedAt\":\"2026-01-05T12:00:00Z\"},{\"id\":7,\"sku\":\"SKU-834024\",\"name\":\"delta delta\",\"status\":\"archived\",\"score\":88.68,\"quantity\":221,\"active\":true,\"updatedAt\":\"2026-06-10T12:00:00Z\"},{\"id\":8,\"sku\":\"SKU-4318\",\"name\":\"alpha lima\",\"status\":\"failed\",\"score\":86.59,\"quantity\":237,\"active\":true,\"updatedAt\":\"2026-05-22T12:00:00Z\"},{\"id\":9,\"sku\":\"SKU-397052\",\"name\":\"bravo quebec\",\"status\":\"active\",\"score\":14.17,\"quantity\":244,\"active\":true,\"updatedAt\":\"2026-01-08T12:00:00Z\"},{\"id\":10,\"sku\":\"SKU-987401\",\"name\":\"november sierra\",\"status\":\"failed\",\"score\":67.5,\"quantity\":212,\"active\":true,\"updatedAt\":\"2026-03-22T12:00:00Z\"},{\"id\":11,\"sku\":\"SKU-399261\",\"name\":\"charlie tango\",\"status\":\"active\",\"score\":12.8,\"quantity\":104,\"active\":false,\"updatedAt\":\"2026-05-01T12:00:00Z\"},{\"id\":12,\"sku\":\"SKU-541132\",\"name\":\"india november\",\"status\":\"active\",\"score\":8.18,\"quantity\":21,\"active\":true,\"updatedAt\":\"2026-02-08T12:00:00Z\"},{\"id\":13,\"sku\":\"SKU-664917\",\"name\":\"november golf\",\"status\":\"pending\",\"score\":39.06,\"quantity\":87,\"active\":true,\"updatedAt\":\"2026-02-22T12:00:00Z\"},{\"id\":14,\"sku\":\"SKU-470178\",\"name\":\"papa uniform\",\"status\":\"failed\",\"score\":31.51,\"quantity\":379,\"active\":true,\"updatedAt\":\"2026-04-28T12:00:00Z\"},{\"id\":15,\"sku\":\"SKU-795808\",\"name\":\"papa india\",\"status\":\"active\",\"score\":81.8,\"quantity\":443,\"active\":true,\"updatedAt\":\"2026-02-17T12:00:00Z\"},{\"id\":16,\"sku\":\"SKU-501650\",\"name\":\"golf india\",\"status\":\"pending\",\"score\":94.3,\"quantity\":462,\"active\":true,\"updatedAt\":\"2026-05-11T12:00:00Z\"},{\"id\":17,\"sku\":\"SKU-562629\",\"name\":\"charlie echo\",\"status\":\"archived\",\"score\":34.87,\"quantity\":280,\"active\":true,\"updatedAt\":\"2026-02-21T12:00:00Z\"},{\"id\":18,\"sku\":\"SKU-32189\",\"name\":\"zulu mike\",\"status\":\"pending\",\"score\":58.38,\"quantity\":372,\"active\":false,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":19,\"sku\":\"SKU-197718\",\"name\":\"india kilo\",\"status\":\"active\",\"score\":19.81,\"quantity\":296,\"active\":true,\"updatedAt\":\"2026-03-03T12:00:00Z\"},{\"id\":20,\"sku\":\"SKU-770813\",\"name\":\"whiskey delta\",\"status\":\"archived\",\"score\":14.07,\"quantity\":375,\"active\":false,\"updatedAt\":\"2026-06-11T12:00:00Z\"},{\"id\":21,\"sku\":\"SKU-993297\",\"name\":\"lima oscar\",\"status\":\"pending\",\"score\":49.46,\"quantity\":320,\"active\":true,\"updatedAt\":\"2026-06-04T12:00:00Z\"},{\"id\":22,\"sku\":\"SKU-129005\",\"name\":\"india delta\",\"status\":\"active\",\"score\":38.89,\"quantity\":1,\"active\":true,\"updatedAt\":\"2026-06-18T12:00:00Z\"},{\"id\":23,\"sku\":\"SKU-983730\",\"name\":\"bravo papa\",\"status\":\"pending\",\"score\":88.65,\"quantity\":367,\"active\":false,\"updatedAt\":\"2026-01-28T12:00:00Z\"},{\"id\":24,\"sku\":\"SKU-758767\",\"name\":\"romeo tango\",\"status\":\"pending\",\"score\":92.43,\"quantity\":327,\"active\":false,\"updatedAt\":\"2026-04-21T12:00:00Z\"},{\"id\":25,\"sku\":\"SKU-642530\",\"name\":\"charlie whiskey\",\"status\":\"failed\",\"score\":91.16,\"quantity\":139,\"active\":true,\"updatedAt\":\"2026-06-13T12:00:00Z\"},{\"id\":26,\"sku\":\"SKU-465260\",\"name\":\"kilo lima\",\"status\":\"archived\",\"score\":35.1,\"quantity\":257,\"active\":true,\"updatedAt\":\"2026-01-16T12:00:00Z\"},{\"id\":27,\"sku\":\"SKU-73648\",\"name\":\"india mike\",\"status\":\"archived\",\"score\":97.62,\"quantity\":386,\"active\":true,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":28,\"sku\":\"SKU-776786\",\"name\":\"victor lima\",\"status\":\"active\",\"score\":27.69,\"quantity\":438,\"active\":true,\"updatedAt\":\"2026-05-27T12:00:00Z\"},{\"id\":29,\"sku\":\"SKU-468983\",\"name\":\"hotel kilo\",\"status\":\"archived\",\"score\":0.48,\"quantity\":239,\"active\":true,\"updatedAt\":\"2026-02-09T12:00:00Z\"},{\"id\":30,\"sku\":\"SKU-563299\",\"name\":\"charlie november\",\"status\":\"archived\",\"score\":13.56,\"quantity\":88,\"active\":true,\"updatedAt\":\"2026-05-08T12:00:00Z\"},{\"id\":31,\"sku\":\"SKU-419442\",\"name\":\"romeo charlie\",\"status\":\"pending\",\"score\":26.86,\"quantity\":346,\"active\":true,\"updatedAt\":\"2026-04-15T12:00:00Z\"},{\"id\":32,\"sku\":\"SKU-182808\",\"name\":\"november tango\",\"status\":\"pending\",\"score\":95.74,\"quantity\":288,\"active\":false,\"updatedAt\":\"2026-04-25T12:00:00Z\"},{\"id\":33,\"sku\":\"SKU-921862\",\"name\":\"zulu sierra\",\"status\":\"active\",\"score\":38.59,\"quantity\":370,\"active\":true,\"updatedAt\":\"2026-02-02T12:00:00Z\"},{\"id\":34,\"sku\":\"SKU-809989\",\"name\":\"golf echo\",\"status\":\"archived\",\"score\":13.09,\"quantity\":427,\"active\":false,\"updatedAt\":\"2026-04-23T12:00:00Z\"},{\"id\":35,\"sku\":\"SKU-684809\",\"name\":\"romeo foxtrot\",\"status\":\"pending\",\"score\":82.4,\"quantity\":444,\"active\":false,\"updatedAt\":\"2026-03-19T12:00:00Z\"},{\"id\":36,\"sku\":\"SKU-56758\",\"name\":\"november victor\",\"status\":\"pending\",\"score\":57.61,\"quantity\":122,\"active\":true,\"updatedAt\":\"2026-02-06T12:00:00Z\"},{\"id\":37,\"sku\":\"SKU-158771\",\"name\":\"hotel quebec\",\"status\":\"archived\",\"score\":52.21,\"quantity\":108,\"active\":true,\"updatedAt\":\"2026-05-13T12:00:00Z\"},{\"id\":38,\"sku\":\"SKU-201657\",\"name\":\"india mike\",\"status\":\"archived\",\"score\":11.98,\"quantity\":279,\"active\":true,\"updatedAt\":\"2026-04-17T12:00:00Z\"},{\"id\":39,\"sku\":\"SKU-934265\",\"name\":\"oscar victor\",\"status\":\"failed\",\"score\":10.39,\"quantity\":10,\"active\":true,\"updatedAt\":\"2026-04-09T12:00:00Z\"},{\"id\":40,\"sku\":\"SKU-980470\",\"name\":\"delta zulu\",\"status\":\"failed\",\"score\":95.34,\"quantity\":73,\"active\":false,\"updatedAt\":\"2026-03-22T12:00:00Z\"},{\"id\":41,\"sku\":\"SKU-522215\",\"name\":\"november lima\",\"status\":\"archived\",\"score\":64.84,\"quantity\":369,\"active\":true,\"updatedAt\":\"2026-05-16T12:00:00Z\"},{\"id\":42,\"sku\":\"SKU-409943\",\"name\":\"hotel zulu\",\"status\":\"archived\",\"score\":11.64,\"quantity\":426,\"active\":true,\"updatedAt\":\"2026-02-11T12:00:00Z\"},{\"id\":43,\"sku\":\"SKU-77806\",\"name\":\"mike lima\",\"status\":\"active\",\"score\":63.83,\"quantity\":203,\"active\":true,\"updatedAt\":\"2026-03-19T12:00:00Z\"},{\"id\":44,\"sku\":\"SKU-928201\",\"name\":\"charlie mike\",\"status\":\"pending\",\"score\":5.06,\"quantity\":450,\"active\":false,\"updatedAt\":\"2026-05-06T12:00:00Z\"},{\"id\":45,\"sku\":\"SKU-619926\",\"name\":\"bravo whiskey\",\"status\":\"pending\",\"score\":20.01,\"quantity\":155,\"active\":true,\"updatedAt\":\"2026-02-06T12:00:00Z\"},{\"id\":46,\"sku\":\"SKU-22057\",\"name\":\"charlie sierra\",\"status\":\"failed\",\"score\":33.47,\"quantity\":435,\"active\":true,\"updatedAt\":\"2026-05-07T12:00:00Z\"},{\"id\":47,\"sku\":\"SKU-638993\",\"name\":\"alpha charlie\",\"status\":\"archived\",\"score\":26.92,\"quantity\":104,\"active\":false,\"updatedAt\":\"2026-05-07T12:00:00Z\"},{\"id\":48,\"sku\":\"SKU-765547\",\"name\":\"echo oscar\",\"status\":\"pending\",\"score\":72.91,\"quantity\":279,\"active\":true,\"updatedAt\":\"2026-02-13T12:00:00Z\"},{\"id\":49,\"sku\":\"SKU-440455\",\"name\":\"echo uniform\",\"status\":\"archived\",\"score\":74.63,\"quantity\":272,\"active\":false,\"updatedAt\":\"2026-06-22T12:00:00Z\"},{\"id\":50,\"sku\":\"SKU-303645\",\"name\":\"papa sierra\",\"status\":\"pending\",\"score\":28.63,\"quantity\":90,\"active\":false,\"updatedAt\":\"2026-06-25T12:00:00Z\"},{\"id\":51,\"sku\":\"SKU-213454\",\"name\":\"november oscar\",\"status\":\"pending\",\"score\":35.5,\"quantity\":159,\"active\":true,\"updatedAt\":\"2026-04-26T12:00:00Z\"},{\"id\":52,\"sku\":\"SKU-715886\",\"name\":\"mike oscar\",\"status\":\"active\",\"score\":73.01,\"quantity\":399,\"active\":true,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":53,\"sku\":\"SKU-586691\",\"name\":\"delta zulu\",\"status\":\"archived\",\"score\":48.69,\"quantity\":373,\"active\":false,\"updatedAt\":\"2026-02-10T12:00:00Z\"},{\"id\":54,\"sku\":\"SKU-236865\",\"name\":\"oscar romeo\",\"status\":\"archived\",\"score\":66.72,\"quantity\":241,\"active\":false,\"updatedAt\":\"2026-01-07T12:00:00Z\"},{\"id\":55,\"sku\":\"SKU-157251\",\"name\":\"alpha delta\",\"status\":\"archived\",\"score\":20.83,\"quantity\":58,\"active\":true,\"updatedAt\":\"2026-04-16T12:00:00Z\"},{\"id\":56,\"sku\":\"SKU-262253\",\"name\":\"golf echo\",\"status\":\"failed\",\"score\":33.33,\"quantity\":168,\"active\":false,\"updatedAt\":\"2026-03-12T12:00:00Z\"},{\"id\":57,\"sku\":\"SKU-863890\",\"name\":\"victor whiskey\",\"status\":\"archived\",\"score\":59.55,\"quantity\":199,\"active\":true,\"updatedAt\":\"2026-02-12T12:00:00Z\"},{\"id\":58,\"sku\":\"SKU-602861\",\"name\":\"bravo romeo\",\"status\":\"archived\",\"score\":62.56,\"quantity\":107,\"active\":false,\"updatedAt\":\"2026-02-14T12:00:00Z\"},{\"id\":59,\"sku\":\"SKU-140459\",\"name\":\"tango oscar\",\"status\":\"pending\",\"score\":6.22,\"quantity\":52,\"active\":false,\"updatedAt\":\"2026-01-21T12:00:00Z\"},{\"id\":60,\"sku\":\"SKU-736207\",\"name\":\"victor delta\",\"status\":\"active\",\"score\":44.62,\"quantity\":24,\"active\":true,\"updatedAt\":\"2026-03-13T12:00:00Z\"},{\"id\":61,\"sku\":\"SKU-759724\",\"name\":\"delta juliet\",\"status\":\"pending\",\"score\":26.46,\"quantity\":384,\"active\":false,\"updatedAt\":\"2026-05-19T12:00:00Z\"},{\"id\":62,\"sku\":\"SKU-442602\",\"name\":\"alpha golf\",\"status\":\"archived\",\"score\":49.58,\"quantity\":228,\"active\":true,\"updatedAt\":\"2026-05-05T12:00:00Z\"},{\"id\":63,\"sku\":\"SKU-575268\",\"name\":\"romeo foxtrot\",\"status\":\"archived\",\"score\":14.2,\"quantity\":267,\"active\":true,\"updatedAt\":\"2026-05-05T12:00:00Z\"},{\"id\":64,\"sku\":\"SKU-648994\",\"name\":\"hotel romeo\",\"status\":\"archived\",\"score\":44.89,\"quantity\":321,\"active\":false,\"updatedAt\":\"2026-03-11T12:00:00Z\"},{\"id\":65,\"sku\":\"SKU-188457\",\"name\":\"mike echo\",\"status\":\"active\",\"score\":94.79,\"quantity\":432,\"active\":false,\"updatedAt\":\"2026-05-21T12:00:00Z\"},{\"id\":66,\"sku\":\"SKU-149621\",\"name\":\"golf november\",\"status\":\"pending\",\"score\":90.25,\"quantity\":465,\"active\":false,\"updatedAt\":\"2026-03-11T12:00:00Z\"},{\"id\":67,\"sku\":\"SKU-285740\",\"name\":\"romeo charlie\",\"status\":\"pending\",\"score\":93.89,\"quantity\":5,\"active\":false,\"updatedAt\":\"2026-04-11T12:00:00Z\"},{\"id\":68,\"sku\":\"SKU-291992\",\"name\":\"sierra lima\",\"status\":\"active\",\"score\":86.27,\"quantity\":85,\"active\":false,\"updatedAt\":\"2026-02-07T12:00:00Z\"},{\"id\":69,\"sku\":\"SKU-747919\",\"name\":\"golf whiskey\",\"status\":\"failed\",\"score\":90.75,\"quantity\":226,\"active\":false,\"updatedAt\":\"2026-04-09T12:00:00Z\"}]",
+      "encoded": "[70]{id,sku,name,status,score,quantity,active,updatedAt}:\n  0,\"SKU-369981\",lima oscar,failed,9.74,27,false,\"2026-06-24T12:00:00Z\"\n  1,\"SKU-967340\",sierra kilo,pending,37.31,46,false,\"2026-02-04T12:00:00Z\"\n  2,\"SKU-334172\",mike golf,archived,94.56,499,false,\"2026-06-24T12:00:00Z\"\n  3,\"SKU-708572\",uniform kilo,failed,91.72,414,false,\"2026-01-12T12:00:00Z\"\n  4,\"SKU-59452\",alpha sierra,active,21.56,215,false,\"2026-06-20T12:00:00Z\"\n  5,\"SKU-354103\",zulu hotel,pending,59.22,250,true,\"2026-05-02T12:00:00Z\"\n  6,\"SKU-868744\",whiskey tango,active,46.31,111,true,\"2026-01-05T12:00:00Z\"\n  7,\"SKU-834024\",delta delta,archived,88.68,221,true,\"2026-06-10T12:00:00Z\"\n  8,\"SKU-4318\",alpha lima,failed,86.59,237,true,\"2026-05-22T12:00:00Z\"\n  9,\"SKU-397052\",bravo quebec,active,14.17,244,true,\"2026-01-08T12:00:00Z\"\n  10,\"SKU-987401\",november sierra,failed,67.5,212,true,\"2026-03-22T12:00:00Z\"\n  11,\"SKU-399261\",charlie tango,active,12.8,104,false,\"2026-05-01T12:00:00Z\"\n  12,\"SKU-541132\",india november,active,8.18,21,true,\"2026-02-08T12:00:00Z\"\n  13,\"SKU-664917\",november golf,pending,39.06,87,true,\"2026-02-22T12:00:00Z\"\n  14,\"SKU-470178\",papa uniform,failed,31.51,379,true,\"2026-04-28T12:00:00Z\"\n  15,\"SKU-795808\",papa india,active,81.8,443,true,\"2026-02-17T12:00:00Z\"\n  16,\"SKU-501650\",golf india,pending,94.3,462,true,\"2026-05-11T12:00:00Z\"\n  17,\"SKU-562629\",charlie echo,archived,34.87,280,true,\"2026-02-21T12:00:00Z\"\n  18,\"SKU-32189\",zulu mike,pending,58.38,372,false,\"2026-05-13T12:00:00Z\"\n  19,\"SKU-197718\",india kilo,active,19.81,296,true,\"2026-03-03T12:00:00Z\"\n  20,\"SKU-770813\",whiskey delta,archived,14.07,375,false,\"2026-06-11T12:00:00Z\"\n  21,\"SKU-993297\",lima oscar,pending,49.46,320,true,\"2026-06-04T12:00:00Z\"\n  22,\"SKU-129005\",india delta,active,38.89,1,true,\"2026-06-18T12:00:00Z\"\n  23,\"SKU-983730\",bravo papa,pending,88.65,367,false,\"2026-01-28T12:00:00Z\"\n  24,\"SKU-758767\",romeo tango,pending,92.43,327,false,\"2026-04-21T12:00:00Z\"\n  25,\"SKU-642530\",charlie whiskey,failed,91.16,139,true,\"2026-06-13T12:00:00Z\"\n  26,\"SKU-465260\",kilo lima,archived,35.1,257,true,\"2026-01-16T12:00:00Z\"\n  27,\"SKU-73648\",india mike,archived,97.62,386,true,\"2026-05-13T12:00:00Z\"\n  28,\"SKU-776786\",victor lima,active,27.69,438,true,\"2026-05-27T12:00:00Z\"\n  29,\"SKU-468983\",hotel kilo,archived,0.48,239,true,\"2026-02-09T12:00:00Z\"\n  30,\"SKU-563299\",charlie november,archived,13.56,88,true,\"2026-05-08T12:00:00Z\"\n  31,\"SKU-419442\",romeo charlie,pending,26.86,346,true,\"2026-04-15T12:00:00Z\"\n  32,\"SKU-182808\",november tango,pending,95.74,288,false,\"2026-04-25T12:00:00Z\"\n  33,\"SKU-921862\",zulu sierra,active,38.59,370,true,\"2026-02-02T12:00:00Z\"\n  34,\"SKU-809989\",golf echo,archived,13.09,427,false,\"2026-04-23T12:00:00Z\"\n  35,\"SKU-684809\",romeo foxtrot,pending,82.4,444,false,\"2026-03-19T12:00:00Z\"\n  36,\"SKU-56758\",november victor,pending,57.61,122,true,\"2026-02-06T12:00:00Z\"\n  37,\"SKU-158771\",hotel quebec,archived,52.21,108,true,\"2026-05-13T12:00:00Z\"\n  38,\"SKU-201657\",india mike,archived,11.98,279,true,\"2026-04-17T12:00:00Z\"\n  39,\"SKU-934265\",oscar victor,failed,10.39,10,true,\"2026-04-09T12:00:00Z\"\n  40,\"SKU-980470\",delta zulu,failed,95.34,73,false,\"2026-03-22T12:00:00Z\"\n  41,\"SKU-522215\",november lima,archived,64.84,369,true,\"2026-05-16T12:00:00Z\"\n  42,\"SKU-409943\",hotel zulu,archived,11.64,426,true,\"2026-02-11T12:00:00Z\"\n  43,\"SKU-77806\",mike lima,active,63.83,203,true,\"2026-03-19T12:00:00Z\"\n  44,\"SKU-928201\",charlie mike,pending,5.06,450,false,\"2026-05-06T12:00:00Z\"\n  45,\"SKU-619926\",bravo whiskey,pending,20.01,155,true,\"2026-02-06T12:00:00Z\"\n  46,\"SKU-22057\",charlie sierra,failed,33.47,435,true,\"2026-05-07T12:00:00Z\"\n  47,\"SKU-638993\",alpha charlie,archived,26.92,104,false,\"2026-05-07T12:00:00Z\"\n  48,\"SKU-765547\",echo oscar,pending,72.91,279,true,\"2026-02-13T12:00:00Z\"\n  49,\"SKU-440455\",echo uniform,archived,74.63,272,false,\"2026-06-22T12:00:00Z\"\n  50,\"SKU-303645\",papa sierra,pending,28.63,90,false,\"2026-06-25T12:00:00Z\"\n  51,\"SKU-213454\",november oscar,pending,35.5,159,true,\"2026-04-26T12:00:00Z\"\n  52,\"SKU-715886\",mike oscar,active,73.01,399,true,\"2026-05-21T12:00:00Z\"\n  53,\"SKU-586691\",delta zulu,archived,48.69,373,false,\"2026-02-10T12:00:00Z\"\n  54,\"SKU-236865\",oscar romeo,archived,66.72,241,false,\"2026-01-07T12:00:00Z\"\n  55,\"SKU-157251\",alpha delta,archived,20.83,58,true,\"2026-04-16T12:00:00Z\"\n  56,\"SKU-262253\",golf echo,failed,33.33,168,false,\"2026-03-12T12:00:00Z\"\n  57,\"SKU-863890\",victor whiskey,archived,59.55,199,true,\"2026-02-12T12:00:00Z\"\n  58,\"SKU-602861\",bravo romeo,archived,62.56,107,false,\"2026-02-14T12:00:00Z\"\n  59,\"SKU-140459\",tango oscar,pending,6.22,52,false,\"2026-01-21T12:00:00Z\"\n  60,\"SKU-736207\",victor delta,active,44.62,24,true,\"2026-03-13T12:00:00Z\"\n  61,\"SKU-759724\",delta juliet,pending,26.46,384,false,\"2026-05-19T12:00:00Z\"\n  62,\"SKU-442602\",alpha golf,archived,49.58,228,true,\"2026-05-05T12:00:00Z\"\n  63,\"SKU-575268\",romeo foxtrot,archived,14.2,267,true,\"2026-05-05T12:00:00Z\"\n  64,\"SKU-648994\",hotel romeo,archived,44.89,321,false,\"2026-03-11T12:00:00Z\"\n  65,\"SKU-188457\",mike echo,active,94.79,432,false,\"2026-05-21T12:00:00Z\"\n  66,\"SKU-149621\",golf november,pending,90.25,465,false,\"2026-03-11T12:00:00Z\"\n  67,\"SKU-285740\",romeo charlie,pending,93.89,5,false,\"2026-04-11T12:00:00Z\"\n  68,\"SKU-291992\",sierra lima,active,86.27,85,false,\"2026-02-07T12:00:00Z\"\n  69,\"SKU-747919\",golf whiskey,failed,90.75,226,false,\"2026-04-09T12:00:00Z\""
+    }
+  },
+  {
+    "name": "bench-10kb-2",
+    "rawContent": "{\"meta\":{\"source\":\"bench\",\"version\":3,\"total\":50},\"entries\":{\"entry_0\":{\"id\":0,\"sku\":\"SKU-509743\",\"name\":\"zulu charlie\",\"status\":\"archived\",\"score\":87.86,\"quantity\":46,\"active\":true,\"updatedAt\":\"2026-02-04T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"tango\"],\"depth\":2}},\"entry_1\":{\"id\":1,\"sku\":\"SKU-409669\",\"name\":\"quebec zulu\",\"status\":\"pending\",\"score\":9.37,\"quantity\":361,\"active\":false,\"updatedAt\":\"2026-06-27T12:00:00Z\",\"nested\":{\"tags\":[\"golf\",\"victor\"],\"depth\":2}},\"entry_2\":{\"id\":2,\"sku\":\"SKU-564643\",\"name\":\"romeo zulu\",\"status\":\"pending\",\"score\":5.29,\"quantity\":342,\"active\":true,\"updatedAt\":\"2026-03-28T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"alpha\"],\"depth\":2}},\"entry_3\":{\"id\":3,\"sku\":\"SKU-49672\",\"name\":\"delta romeo\",\"status\":\"pending\",\"score\":58.97,\"quantity\":72,\"active\":true,\"updatedAt\":\"2026-05-03T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"romeo\"],\"depth\":2}},\"entry_4\":{\"id\":4,\"sku\":\"SKU-461045\",\"name\":\"oscar echo\",\"status\":\"failed\",\"score\":84.05,\"quantity\":44,\"active\":true,\"updatedAt\":\"2026-05-01T12:00:00Z\",\"nested\":{\"tags\":[\"whiskey\",\"romeo\"],\"depth\":2}},\"entry_5\":{\"id\":5,\"sku\":\"SKU-434641\",\"name\":\"alpha foxtrot\",\"status\":\"pending\",\"score\":21.77,\"quantity\":262,\"active\":false,\"updatedAt\":\"2026-04-17T12:00:00Z\",\"nested\":{\"tags\":[\"hotel\",\"mike\"],\"depth\":2}},\"entry_6\":{\"id\":6,\"sku\":\"SKU-575426\",\"name\":\"victor golf\",\"status\":\"archived\",\"score\":88.95,\"quantity\":81,\"active\":true,\"updatedAt\":\"2026-01-25T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"alpha\"],\"depth\":2}},\"entry_7\":{\"id\":7,\"sku\":\"SKU-334021\",\"name\":\"romeo oscar\",\"status\":\"failed\",\"score\":16.58,\"quantity\":67,\"active\":false,\"updatedAt\":\"2026-05-25T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"whiskey\"],\"depth\":2}},\"entry_8\":{\"id\":8,\"sku\":\"SKU-540445\",\"name\":\"delta hotel\",\"status\":\"pending\",\"score\":53.51,\"quantity\":266,\"active\":true,\"updatedAt\":\"2026-03-16T12:00:00Z\",\"nested\":{\"tags\":[\"victor\",\"sierra\"],\"depth\":2}},\"entry_9\":{\"id\":9,\"sku\":\"SKU-256829\",\"name\":\"alpha zulu\",\"status\":\"pending\",\"score\":9.35,\"quantity\":292,\"active\":true,\"updatedAt\":\"2026-02-10T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"alpha\"],\"depth\":2}},\"entry_10\":{\"id\":10,\"sku\":\"SKU-950846\",\"name\":\"bravo foxtrot\",\"status\":\"active\",\"score\":49.13,\"quantity\":26,\"active\":true,\"updatedAt\":\"2026-01-04T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"india\"],\"depth\":2}},\"entry_11\":{\"id\":11,\"sku\":\"SKU-617755\",\"name\":\"mike zulu\",\"status\":\"pending\",\"score\":4.97,\"quantity\":415,\"active\":false,\"updatedAt\":\"2026-01-17T12:00:00Z\",\"nested\":{\"tags\":[\"mike\",\"echo\"],\"depth\":2}},\"entry_12\":{\"id\":12,\"sku\":\"SKU-581445\",\"name\":\"lima victor\",\"status\":\"archived\",\"score\":59.99,\"quantity\":485,\"active\":false,\"updatedAt\":\"2026-05-05T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"lima\"],\"depth\":2}},\"entry_13\":{\"id\":13,\"sku\":\"SKU-719044\",\"name\":\"oscar kilo\",\"status\":\"active\",\"score\":63.28,\"quantity\":24,\"active\":false,\"updatedAt\":\"2026-05-28T12:00:00Z\",\"nested\":{\"tags\":[\"hotel\",\"mike\"],\"depth\":2}},\"entry_14\":{\"id\":14,\"sku\":\"SKU-789713\",\"name\":\"papa oscar\",\"status\":\"archived\",\"score\":27.49,\"quantity\":198,\"active\":false,\"updatedAt\":\"2026-04-15T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"alpha\"],\"depth\":2}},\"entry_15\":{\"id\":15,\"sku\":\"SKU-534443\",\"name\":\"delta india\",\"status\":\"archived\",\"score\":62.51,\"quantity\":361,\"active\":false,\"updatedAt\":\"2026-05-12T12:00:00Z\",\"nested\":{\"tags\":[\"golf\",\"lima\"],\"depth\":2}},\"entry_16\":{\"id\":16,\"sku\":\"SKU-894299\",\"name\":\"delta golf\",\"status\":\"active\",\"score\":4.53,\"quantity\":321,\"active\":false,\"updatedAt\":\"2026-06-06T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"zulu\"],\"depth\":2}},\"entry_17\":{\"id\":17,\"sku\":\"SKU-178180\",\"name\":\"hotel oscar\",\"status\":\"active\",\"score\":94.67,\"quantity\":438,\"active\":false,\"updatedAt\":\"2026-04-12T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"quebec\"],\"depth\":2}},\"entry_18\":{\"id\":18,\"sku\":\"SKU-474295\",\"name\":\"november juliet\",\"status\":\"archived\",\"score\":52.97,\"quantity\":162,\"active\":true,\"updatedAt\":\"2026-06-12T12:00:00Z\",\"nested\":{\"tags\":[\"foxtrot\",\"romeo\"],\"depth\":2}},\"entry_19\":{\"id\":19,\"sku\":\"SKU-526106\",\"name\":\"golf romeo\",\"status\":\"archived\",\"score\":51.51,\"quantity\":176,\"active\":true,\"updatedAt\":\"2026-01-14T12:00:00Z\",\"nested\":{\"tags\":[\"tango\",\"quebec\"],\"depth\":2}},\"entry_20\":{\"id\":20,\"sku\":\"SKU-643873\",\"name\":\"foxtrot tango\",\"status\":\"pending\",\"score\":84.13,\"quantity\":321,\"active\":false,\"updatedAt\":\"2026-05-05T12:00:00Z\",\"nested\":{\"tags\":[\"tango\",\"uniform\"],\"depth\":2}},\"entry_21\":{\"id\":21,\"sku\":\"SKU-881747\",\"name\":\"india charlie\",\"status\":\"active\",\"score\":99.94,\"quantity\":215,\"active\":false,\"updatedAt\":\"2026-03-09T12:00:00Z\",\"nested\":{\"tags\":[\"india\",\"delta\"],\"depth\":2}},\"entry_22\":{\"id\":22,\"sku\":\"SKU-536249\",\"name\":\"oscar echo\",\"status\":\"pending\",\"score\":49.7,\"quantity\":198,\"active\":true,\"updatedAt\":\"2026-02-23T12:00:00Z\",\"nested\":{\"tags\":[\"quebec\",\"juliet\"],\"depth\":2}},\"entry_23\":{\"id\":23,\"sku\":\"SKU-242438\",\"name\":\"zulu alpha\",\"status\":\"failed\",\"score\":15.35,\"quantity\":282,\"active\":false,\"updatedAt\":\"2026-01-11T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"kilo\"],\"depth\":2}},\"entry_24\":{\"id\":24,\"sku\":\"SKU-787964\",\"name\":\"oscar hotel\",\"status\":\"archived\",\"score\":35.78,\"quantity\":383,\"active\":true,\"updatedAt\":\"2026-04-21T12:00:00Z\",\"nested\":{\"tags\":[\"zulu\",\"uniform\"],\"depth\":2}},\"entry_25\":{\"id\":25,\"sku\":\"SKU-270620\",\"name\":\"india india\",\"status\":\"pending\",\"score\":30.89,\"quantity\":367,\"active\":false,\"updatedAt\":\"2026-04-10T12:00:00Z\",\"nested\":{\"tags\":[\"tango\",\"echo\"],\"depth\":2}},\"entry_26\":{\"id\":26,\"sku\":\"SKU-479773\",\"name\":\"whiskey papa\",\"status\":\"archived\",\"score\":90.09,\"quantity\":10,\"active\":false,\"updatedAt\":\"2026-06-16T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"foxtrot\"],\"depth\":2}},\"entry_27\":{\"id\":27,\"sku\":\"SKU-85068\",\"name\":\"kilo zulu\",\"status\":\"archived\",\"score\":11.57,\"quantity\":100,\"active\":true,\"updatedAt\":\"2026-04-01T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"juliet\"],\"depth\":2}},\"entry_28\":{\"id\":28,\"sku\":\"SKU-88619\",\"name\":\"alpha echo\",\"status\":\"pending\",\"score\":86.22,\"quantity\":23,\"active\":true,\"updatedAt\":\"2026-03-02T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"victor\"],\"depth\":2}},\"entry_29\":{\"id\":29,\"sku\":\"SKU-342557\",\"name\":\"bravo papa\",\"status\":\"failed\",\"score\":57.84,\"quantity\":493,\"active\":false,\"updatedAt\":\"2026-05-15T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"foxtrot\"],\"depth\":2}},\"entry_30\":{\"id\":30,\"sku\":\"SKU-64537\",\"name\":\"quebec charlie\",\"status\":\"failed\",\"score\":65.9,\"quantity\":334,\"active\":false,\"updatedAt\":\"2026-04-15T12:00:00Z\",\"nested\":{\"tags\":[\"quebec\",\"juliet\"],\"depth\":2}},\"entry_31\":{\"id\":31,\"sku\":\"SKU-45365\",\"name\":\"papa golf\",\"status\":\"pending\",\"score\":56.24,\"quantity\":315,\"active\":false,\"updatedAt\":\"2026-05-07T12:00:00Z\",\"nested\":{\"tags\":[\"bravo\",\"charlie\"],\"depth\":2}},\"entry_32\":{\"id\":32,\"sku\":\"SKU-306983\",\"name\":\"quebec foxtrot\",\"status\":\"active\",\"score\":6.96,\"quantity\":276,\"active\":true,\"updatedAt\":\"2026-02-17T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"victor\"],\"depth\":2}},\"entry_33\":{\"id\":33,\"sku\":\"SKU-100839\",\"name\":\"alpha lima\",\"status\":\"active\",\"score\":7.02,\"quantity\":308,\"active\":true,\"updatedAt\":\"2026-03-01T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"victor\"],\"depth\":2}},\"entry_34\":{\"id\":34,\"sku\":\"SKU-285603\",\"name\":\"quebec echo\",\"status\":\"pending\",\"score\":54.61,\"quantity\":276,\"active\":false,\"updatedAt\":\"2026-04-12T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"kilo\"],\"depth\":2}},\"entry_35\":{\"id\":35,\"sku\":\"SKU-129333\",\"name\":\"foxtrot delta\",\"status\":\"pending\",\"score\":0.69,\"quantity\":36,\"active\":true,\"updatedAt\":\"2026-02-11T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"sierra\"],\"depth\":2}},\"entry_36\":{\"id\":36,\"sku\":\"SKU-704370\",\"name\":\"sierra oscar\",\"status\":\"active\",\"score\":45.65,\"quantity\":239,\"active\":false,\"updatedAt\":\"2026-01-22T12:00:00Z\",\"nested\":{\"tags\":[\"kilo\",\"oscar\"],\"depth\":2}},\"entry_37\":{\"id\":37,\"sku\":\"SKU-810963\",\"name\":\"foxtrot alpha\",\"status\":\"failed\",\"score\":59.48,\"quantity\":48,\"active\":true,\"updatedAt\":\"2026-06-24T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"zulu\"],\"depth\":2}},\"entry_38\":{\"id\":38,\"sku\":\"SKU-171741\",\"name\":\"zulu uniform\",\"status\":\"failed\",\"score\":42.96,\"quantity\":48,\"active\":true,\"updatedAt\":\"2026-03-22T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"charlie\"],\"depth\":2}},\"entry_39\":{\"id\":39,\"sku\":\"SKU-893779\",\"name\":\"alpha tango\",\"status\":\"archived\",\"score\":0.81,\"quantity\":390,\"active\":false,\"updatedAt\":\"2026-06-25T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"victor\"],\"depth\":2}},\"entry_40\":{\"id\":40,\"sku\":\"SKU-455048\",\"name\":\"quebec uniform\",\"status\":\"archived\",\"score\":52.81,\"quantity\":296,\"active\":true,\"updatedAt\":\"2026-03-11T12:00:00Z\",\"nested\":{\"tags\":[\"quebec\",\"kilo\"],\"depth\":2}},\"entry_41\":{\"id\":41,\"sku\":\"SKU-579597\",\"name\":\"alpha bravo\",\"status\":\"active\",\"score\":74.63,\"quantity\":209,\"active\":false,\"updatedAt\":\"2026-02-05T12:00:00Z\",\"nested\":{\"tags\":[\"papa\",\"charlie\"],\"depth\":2}},\"entry_42\":{\"id\":42,\"sku\":\"SKU-927995\",\"name\":\"bravo oscar\",\"status\":\"failed\",\"score\":46.03,\"quantity\":13,\"active\":true,\"updatedAt\":\"2026-01-18T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"uniform\"],\"depth\":2}},\"entry_43\":{\"id\":43,\"sku\":\"SKU-640313\",\"name\":\"oscar foxtrot\",\"status\":\"failed\",\"score\":75.06,\"quantity\":102,\"active\":true,\"updatedAt\":\"2026-06-10T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"quebec\"],\"depth\":2}},\"entry_44\":{\"id\":44,\"sku\":\"SKU-587339\",\"name\":\"delta lima\",\"status\":\"pending\",\"score\":1.02,\"quantity\":160,\"active\":false,\"updatedAt\":\"2026-03-12T12:00:00Z\",\"nested\":{\"tags\":[\"kilo\",\"november\"],\"depth\":2}},\"entry_45\":{\"id\":45,\"sku\":\"SKU-22977\",\"name\":\"alpha charlie\",\"status\":\"active\",\"score\":91.65,\"quantity\":457,\"active\":false,\"updatedAt\":\"2026-02-26T12:00:00Z\",\"nested\":{\"tags\":[\"india\",\"kilo\"],\"depth\":2}},\"entry_46\":{\"id\":46,\"sku\":\"SKU-274156\",\"name\":\"foxtrot oscar\",\"status\":\"archived\",\"score\":31.37,\"quantity\":424,\"active\":true,\"updatedAt\":\"2026-01-24T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"foxtrot\"],\"depth\":2}},\"entry_47\":{\"id\":47,\"sku\":\"SKU-533189\",\"name\":\"golf lima\",\"status\":\"active\",\"score\":9.71,\"quantity\":251,\"active\":false,\"updatedAt\":\"2026-04-01T12:00:00Z\",\"nested\":{\"tags\":[\"india\",\"kilo\"],\"depth\":2}},\"entry_48\":{\"id\":48,\"sku\":\"SKU-290356\",\"name\":\"zulu zulu\",\"status\":\"archived\",\"score\":25.89,\"quantity\":432,\"active\":false,\"updatedAt\":\"2026-04-14T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"kilo\"],\"depth\":2}},\"entry_49\":{\"id\":49,\"sku\":\"SKU-746759\",\"name\":\"juliet tango\",\"status\":\"active\",\"score\":40.83,\"quantity\":374,\"active\":false,\"updatedAt\":\"2026-06-22T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"golf\"],\"depth\":2}}}}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"meta\":{\"source\":\"bench\",\"version\":3,\"total\":50},\"entries\":{\"entry_0\":{\"id\":0,\"sku\":\"SKU-509743\",\"name\":\"zulu charlie\",\"status\":\"archived\",\"score\":87.86,\"quantity\":46,\"active\":true,\"updatedAt\":\"2026-02-04T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"tango\"],\"depth\":2}},\"entry_1\":{\"id\":1,\"sku\":\"SKU-409669\",\"name\":\"quebec zulu\",\"status\":\"pending\",\"score\":9.37,\"quantity\":361,\"active\":false,\"updatedAt\":\"2026-06-27T12:00:00Z\",\"nested\":{\"tags\":[\"golf\",\"victor\"],\"depth\":2}},\"entry_2\":{\"id\":2,\"sku\":\"SKU-564643\",\"name\":\"romeo zulu\",\"status\":\"pending\",\"score\":5.29,\"quantity\":342,\"active\":true,\"updatedAt\":\"2026-03-28T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"alpha\"],\"depth\":2}},\"entry_3\":{\"id\":3,\"sku\":\"SKU-49672\",\"name\":\"delta romeo\",\"status\":\"pending\",\"score\":58.97,\"quantity\":72,\"active\":true,\"updatedAt\":\"2026-05-03T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"romeo\"],\"depth\":2}},\"entry_4\":{\"id\":4,\"sku\":\"SKU-461045\",\"name\":\"oscar echo\",\"status\":\"failed\",\"score\":84.05,\"quantity\":44,\"active\":true,\"updatedAt\":\"2026-05-01T12:00:00Z\",\"nested\":{\"tags\":[\"whiskey\",\"romeo\"],\"depth\":2}},\"entry_5\":{\"id\":5,\"sku\":\"SKU-434641\",\"name\":\"alpha foxtrot\",\"status\":\"pending\",\"score\":21.77,\"quantity\":262,\"active\":false,\"updatedAt\":\"2026-04-17T12:00:00Z\",\"nested\":{\"tags\":[\"hotel\",\"mike\"],\"depth\":2}},\"entry_6\":{\"id\":6,\"sku\":\"SKU-575426\",\"name\":\"victor golf\",\"status\":\"archived\",\"score\":88.95,\"quantity\":81,\"active\":true,\"updatedAt\":\"2026-01-25T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"alpha\"],\"depth\":2}},\"entry_7\":{\"id\":7,\"sku\":\"SKU-334021\",\"name\":\"romeo oscar\",\"status\":\"failed\",\"score\":16.58,\"quantity\":67,\"active\":false,\"updatedAt\":\"2026-05-25T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"whiskey\"],\"depth\":2}},\"entry_8\":{\"id\":8,\"sku\":\"SKU-540445\",\"name\":\"delta hotel\",\"status\":\"pending\",\"score\":53.51,\"quantity\":266,\"active\":true,\"updatedAt\":\"2026-03-16T12:00:00Z\",\"nested\":{\"tags\":[\"victor\",\"sierra\"],\"depth\":2}},\"entry_9\":{\"id\":9,\"sku\":\"SKU-256829\",\"name\":\"alpha zulu\",\"status\":\"pending\",\"score\":9.35,\"quantity\":292,\"active\":true,\"updatedAt\":\"2026-02-10T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"alpha\"],\"depth\":2}},\"entry_10\":{\"id\":10,\"sku\":\"SKU-950846\",\"name\":\"bravo foxtrot\",\"status\":\"active\",\"score\":49.13,\"quantity\":26,\"active\":true,\"updatedAt\":\"2026-01-04T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"india\"],\"depth\":2}},\"entry_11\":{\"id\":11,\"sku\":\"SKU-617755\",\"name\":\"mike zulu\",\"status\":\"pending\",\"score\":4.97,\"quantity\":415,\"active\":false,\"updatedAt\":\"2026-01-17T12:00:00Z\",\"nested\":{\"tags\":[\"mike\",\"echo\"],\"depth\":2}},\"entry_12\":{\"id\":12,\"sku\":\"SKU-581445\",\"name\":\"lima victor\",\"status\":\"archived\",\"score\":59.99,\"quantity\":485,\"active\":false,\"updatedAt\":\"2026-05-05T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"lima\"],\"depth\":2}},\"entry_13\":{\"id\":13,\"sku\":\"SKU-719044\",\"name\":\"oscar kilo\",\"status\":\"active\",\"score\":63.28,\"quantity\":24,\"active\":false,\"updatedAt\":\"2026-05-28T12:00:00Z\",\"nested\":{\"tags\":[\"hotel\",\"mike\"],\"depth\":2}},\"entry_14\":{\"id\":14,\"sku\":\"SKU-789713\",\"name\":\"papa oscar\",\"status\":\"archived\",\"score\":27.49,\"quantity\":198,\"active\":false,\"updatedAt\":\"2026-04-15T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"alpha\"],\"depth\":2}},\"entry_15\":{\"id\":15,\"sku\":\"SKU-534443\",\"name\":\"delta india\",\"status\":\"archived\",\"score\":62.51,\"quantity\":361,\"active\":false,\"updatedAt\":\"2026-05-12T12:00:00Z\",\"nested\":{\"tags\":[\"golf\",\"lima\"],\"depth\":2}},\"entry_16\":{\"id\":16,\"sku\":\"SKU-894299\",\"name\":\"delta golf\",\"status\":\"active\",\"score\":4.53,\"quantity\":321,\"active\":false,\"updatedAt\":\"2026-06-06T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"zulu\"],\"depth\":2}},\"entry_17\":{\"id\":17,\"sku\":\"SKU-178180\",\"name\":\"hotel oscar\",\"status\":\"active\",\"score\":94.67,\"quantity\":438,\"active\":false,\"updatedAt\":\"2026-04-12T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"quebec\"],\"depth\":2}},\"entry_18\":{\"id\":18,\"sku\":\"SKU-474295\",\"name\":\"november juliet\",\"status\":\"archived\",\"score\":52.97,\"quantity\":162,\"active\":true,\"updatedAt\":\"2026-06-12T12:00:00Z\",\"nested\":{\"tags\":[\"foxtrot\",\"romeo\"],\"depth\":2}},\"entry_19\":{\"id\":19,\"sku\":\"SKU-526106\",\"name\":\"golf romeo\",\"status\":\"archived\",\"score\":51.51,\"quantity\":176,\"active\":true,\"updatedAt\":\"2026-01-14T12:00:00Z\",\"nested\":{\"tags\":[\"tango\",\"quebec\"],\"depth\":2}},\"entry_20\":{\"id\":20,\"sku\":\"SKU-643873\",\"name\":\"foxtrot tango\",\"status\":\"pending\",\"score\":84.13,\"quantity\":321,\"active\":false,\"updatedAt\":\"2026-05-05T12:00:00Z\",\"nested\":{\"tags\":[\"tango\",\"uniform\"],\"depth\":2}},\"entry_21\":{\"id\":21,\"sku\":\"SKU-881747\",\"name\":\"india charlie\",\"status\":\"active\",\"score\":99.94,\"quantity\":215,\"active\":false,\"updatedAt\":\"2026-03-09T12:00:00Z\",\"nested\":{\"tags\":[\"india\",\"delta\"],\"depth\":2}},\"entry_22\":{\"id\":22,\"sku\":\"SKU-536249\",\"name\":\"oscar echo\",\"status\":\"pending\",\"score\":49.7,\"quantity\":198,\"active\":true,\"updatedAt\":\"2026-02-23T12:00:00Z\",\"nested\":{\"tags\":[\"quebec\",\"juliet\"],\"depth\":2}},\"entry_23\":{\"id\":23,\"sku\":\"SKU-242438\",\"name\":\"zulu alpha\",\"status\":\"failed\",\"score\":15.35,\"quantity\":282,\"active\":false,\"updatedAt\":\"2026-01-11T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"kilo\"],\"depth\":2}},\"entry_24\":{\"id\":24,\"sku\":\"SKU-787964\",\"name\":\"oscar hotel\",\"status\":\"archived\",\"score\":35.78,\"quantity\":383,\"active\":true,\"updatedAt\":\"2026-04-21T12:00:00Z\",\"nested\":{\"tags\":[\"zulu\",\"uniform\"],\"depth\":2}},\"entry_25\":{\"id\":25,\"sku\":\"SKU-270620\",\"name\":\"india india\",\"status\":\"pending\",\"score\":30.89,\"quantity\":367,\"active\":false,\"updatedAt\":\"2026-04-10T12:00:00Z\",\"nested\":{\"tags\":[\"tango\",\"echo\"],\"depth\":2}},\"entry_26\":{\"id\":26,\"sku\":\"SKU-479773\",\"name\":\"whiskey papa\",\"status\":\"archived\",\"score\":90.09,\"quantity\":10,\"active\":false,\"updatedAt\":\"2026-06-16T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"foxtrot\"],\"depth\":2}},\"entry_27\":{\"id\":27,\"sku\":\"SKU-85068\",\"name\":\"kilo zulu\",\"status\":\"archived\",\"score\":11.57,\"quantity\":100,\"active\":true,\"updatedAt\":\"2026-04-01T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"juliet\"],\"depth\":2}},\"entry_28\":{\"id\":28,\"sku\":\"SKU-88619\",\"name\":\"alpha echo\",\"status\":\"pending\",\"score\":86.22,\"quantity\":23,\"active\":true,\"updatedAt\":\"2026-03-02T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"victor\"],\"depth\":2}},\"entry_29\":{\"id\":29,\"sku\":\"SKU-342557\",\"name\":\"bravo papa\",\"status\":\"failed\",\"score\":57.84,\"quantity\":493,\"active\":false,\"updatedAt\":\"2026-05-15T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"foxtrot\"],\"depth\":2}},\"entry_30\":{\"id\":30,\"sku\":\"SKU-64537\",\"name\":\"quebec charlie\",\"status\":\"failed\",\"score\":65.9,\"quantity\":334,\"active\":false,\"updatedAt\":\"2026-04-15T12:00:00Z\",\"nested\":{\"tags\":[\"quebec\",\"juliet\"],\"depth\":2}},\"entry_31\":{\"id\":31,\"sku\":\"SKU-45365\",\"name\":\"papa golf\",\"status\":\"pending\",\"score\":56.24,\"quantity\":315,\"active\":false,\"updatedAt\":\"2026-05-07T12:00:00Z\",\"nested\":{\"tags\":[\"bravo\",\"charlie\"],\"depth\":2}},\"entry_32\":{\"id\":32,\"sku\":\"SKU-306983\",\"name\":\"quebec foxtrot\",\"status\":\"active\",\"score\":6.96,\"quantity\":276,\"active\":true,\"updatedAt\":\"2026-02-17T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"victor\"],\"depth\":2}},\"entry_33\":{\"id\":33,\"sku\":\"SKU-100839\",\"name\":\"alpha lima\",\"status\":\"active\",\"score\":7.02,\"quantity\":308,\"active\":true,\"updatedAt\":\"2026-03-01T12:00:00Z\",\"nested\":{\"tags\":[\"uniform\",\"victor\"],\"depth\":2}},\"entry_34\":{\"id\":34,\"sku\":\"SKU-285603\",\"name\":\"quebec echo\",\"status\":\"pending\",\"score\":54.61,\"quantity\":276,\"active\":false,\"updatedAt\":\"2026-04-12T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"kilo\"],\"depth\":2}},\"entry_35\":{\"id\":35,\"sku\":\"SKU-129333\",\"name\":\"foxtrot delta\",\"status\":\"pending\",\"score\":0.69,\"quantity\":36,\"active\":true,\"updatedAt\":\"2026-02-11T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"sierra\"],\"depth\":2}},\"entry_36\":{\"id\":36,\"sku\":\"SKU-704370\",\"name\":\"sierra oscar\",\"status\":\"active\",\"score\":45.65,\"quantity\":239,\"active\":false,\"updatedAt\":\"2026-01-22T12:00:00Z\",\"nested\":{\"tags\":[\"kilo\",\"oscar\"],\"depth\":2}},\"entry_37\":{\"id\":37,\"sku\":\"SKU-810963\",\"name\":\"foxtrot alpha\",\"status\":\"failed\",\"score\":59.48,\"quantity\":48,\"active\":true,\"updatedAt\":\"2026-06-24T12:00:00Z\",\"nested\":{\"tags\":[\"juliet\",\"zulu\"],\"depth\":2}},\"entry_38\":{\"id\":38,\"sku\":\"SKU-171741\",\"name\":\"zulu uniform\",\"status\":\"failed\",\"score\":42.96,\"quantity\":48,\"active\":true,\"updatedAt\":\"2026-03-22T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"charlie\"],\"depth\":2}},\"entry_39\":{\"id\":39,\"sku\":\"SKU-893779\",\"name\":\"alpha tango\",\"status\":\"archived\",\"score\":0.81,\"quantity\":390,\"active\":false,\"updatedAt\":\"2026-06-25T12:00:00Z\",\"nested\":{\"tags\":[\"echo\",\"victor\"],\"depth\":2}},\"entry_40\":{\"id\":40,\"sku\":\"SKU-455048\",\"name\":\"quebec uniform\",\"status\":\"archived\",\"score\":52.81,\"quantity\":296,\"active\":true,\"updatedAt\":\"2026-03-11T12:00:00Z\",\"nested\":{\"tags\":[\"quebec\",\"kilo\"],\"depth\":2}},\"entry_41\":{\"id\":41,\"sku\":\"SKU-579597\",\"name\":\"alpha bravo\",\"status\":\"active\",\"score\":74.63,\"quantity\":209,\"active\":false,\"updatedAt\":\"2026-02-05T12:00:00Z\",\"nested\":{\"tags\":[\"papa\",\"charlie\"],\"depth\":2}},\"entry_42\":{\"id\":42,\"sku\":\"SKU-927995\",\"name\":\"bravo oscar\",\"status\":\"failed\",\"score\":46.03,\"quantity\":13,\"active\":true,\"updatedAt\":\"2026-01-18T12:00:00Z\",\"nested\":{\"tags\":[\"romeo\",\"uniform\"],\"depth\":2}},\"entry_43\":{\"id\":43,\"sku\":\"SKU-640313\",\"name\":\"oscar foxtrot\",\"status\":\"failed\",\"score\":75.06,\"quantity\":102,\"active\":true,\"updatedAt\":\"2026-06-10T12:00:00Z\",\"nested\":{\"tags\":[\"november\",\"quebec\"],\"depth\":2}},\"entry_44\":{\"id\":44,\"sku\":\"SKU-587339\",\"name\":\"delta lima\",\"status\":\"pending\",\"score\":1.02,\"quantity\":160,\"active\":false,\"updatedAt\":\"2026-03-12T12:00:00Z\",\"nested\":{\"tags\":[\"kilo\",\"november\"],\"depth\":2}},\"entry_45\":{\"id\":45,\"sku\":\"SKU-22977\",\"name\":\"alpha charlie\",\"status\":\"active\",\"score\":91.65,\"quantity\":457,\"active\":false,\"updatedAt\":\"2026-02-26T12:00:00Z\",\"nested\":{\"tags\":[\"india\",\"kilo\"],\"depth\":2}},\"entry_46\":{\"id\":46,\"sku\":\"SKU-274156\",\"name\":\"foxtrot oscar\",\"status\":\"archived\",\"score\":31.37,\"quantity\":424,\"active\":true,\"updatedAt\":\"2026-01-24T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"foxtrot\"],\"depth\":2}},\"entry_47\":{\"id\":47,\"sku\":\"SKU-533189\",\"name\":\"golf lima\",\"status\":\"active\",\"score\":9.71,\"quantity\":251,\"active\":false,\"updatedAt\":\"2026-04-01T12:00:00Z\",\"nested\":{\"tags\":[\"india\",\"kilo\"],\"depth\":2}},\"entry_48\":{\"id\":48,\"sku\":\"SKU-290356\",\"name\":\"zulu zulu\",\"status\":\"archived\",\"score\":25.89,\"quantity\":432,\"active\":false,\"updatedAt\":\"2026-04-14T12:00:00Z\",\"nested\":{\"tags\":[\"alpha\",\"kilo\"],\"depth\":2}},\"entry_49\":{\"id\":49,\"sku\":\"SKU-746759\",\"name\":\"juliet tango\",\"status\":\"active\",\"score\":40.83,\"quantity\":374,\"active\":false,\"updatedAt\":\"2026-06-22T12:00:00Z\",\"nested\":{\"tags\":[\"delta\",\"golf\"],\"depth\":2}}}}",
+      "encoded": "meta:\n  source: bench\n  version: 3\n  total: 50\nentries:\n  entry_0:\n    id: 0\n    sku: \"SKU-509743\"\n    name: zulu charlie\n    status: archived\n    score: 87.86\n    quantity: 46\n    active: true\n    updatedAt: \"2026-02-04T12:00:00Z\"\n    nested:\n      tags[2]: november,tango\n      depth: 2\n  entry_1:\n    id: 1\n    sku: \"SKU-409669\"\n    name: quebec zulu\n    status: pending\n    score: 9.37\n    quantity: 361\n    active: false\n    updatedAt: \"2026-06-27T12:00:00Z\"\n    nested:\n      tags[2]: golf,victor\n      depth: 2\n  entry_2:\n    id: 2\n    sku: \"SKU-564643\"\n    name: romeo zulu\n    status: pending\n    score: 5.29\n    quantity: 342\n    active: true\n    updatedAt: \"2026-03-28T12:00:00Z\"\n    nested:\n      tags[2]: echo,alpha\n      depth: 2\n  entry_3:\n    id: 3\n    sku: \"SKU-49672\"\n    name: delta romeo\n    status: pending\n    score: 58.97\n    quantity: 72\n    active: true\n    updatedAt: \"2026-05-03T12:00:00Z\"\n    nested:\n      tags[2]: delta,romeo\n      depth: 2\n  entry_4:\n    id: 4\n    sku: \"SKU-461045\"\n    name: oscar echo\n    status: failed\n    score: 84.05\n    quantity: 44\n    active: true\n    updatedAt: \"2026-05-01T12:00:00Z\"\n    nested:\n      tags[2]: whiskey,romeo\n      depth: 2\n  entry_5:\n    id: 5\n    sku: \"SKU-434641\"\n    name: alpha foxtrot\n    status: pending\n    score: 21.77\n    quantity: 262\n    active: false\n    updatedAt: \"2026-04-17T12:00:00Z\"\n    nested:\n      tags[2]: hotel,mike\n      depth: 2\n  entry_6:\n    id: 6\n    sku: \"SKU-575426\"\n    name: victor golf\n    status: archived\n    score: 88.95\n    quantity: 81\n    active: true\n    updatedAt: \"2026-01-25T12:00:00Z\"\n    nested:\n      tags[2]: juliet,alpha\n      depth: 2\n  entry_7:\n    id: 7\n    sku: \"SKU-334021\"\n    name: romeo oscar\n    status: failed\n    score: 16.58\n    quantity: 67\n    active: false\n    updatedAt: \"2026-05-25T12:00:00Z\"\n    nested:\n      tags[2]: juliet,whiskey\n      depth: 2\n  entry_8:\n    id: 8\n    sku: \"SKU-540445\"\n    name: delta hotel\n    status: pending\n    score: 53.51\n    quantity: 266\n    active: true\n    updatedAt: \"2026-03-16T12:00:00Z\"\n    nested:\n      tags[2]: victor,sierra\n      depth: 2\n  entry_9:\n    id: 9\n    sku: \"SKU-256829\"\n    name: alpha zulu\n    status: pending\n    score: 9.35\n    quantity: 292\n    active: true\n    updatedAt: \"2026-02-10T12:00:00Z\"\n    nested:\n      tags[2]: romeo,alpha\n      depth: 2\n  entry_10:\n    id: 10\n    sku: \"SKU-950846\"\n    name: bravo foxtrot\n    status: active\n    score: 49.13\n    quantity: 26\n    active: true\n    updatedAt: \"2026-01-04T12:00:00Z\"\n    nested:\n      tags[2]: delta,india\n      depth: 2\n  entry_11:\n    id: 11\n    sku: \"SKU-617755\"\n    name: mike zulu\n    status: pending\n    score: 4.97\n    quantity: 415\n    active: false\n    updatedAt: \"2026-01-17T12:00:00Z\"\n    nested:\n      tags[2]: mike,echo\n      depth: 2\n  entry_12:\n    id: 12\n    sku: \"SKU-581445\"\n    name: lima victor\n    status: archived\n    score: 59.99\n    quantity: 485\n    active: false\n    updatedAt: \"2026-05-05T12:00:00Z\"\n    nested:\n      tags[2]: alpha,lima\n      depth: 2\n  entry_13:\n    id: 13\n    sku: \"SKU-719044\"\n    name: oscar kilo\n    status: active\n    score: 63.28\n    quantity: 24\n    active: false\n    updatedAt: \"2026-05-28T12:00:00Z\"\n    nested:\n      tags[2]: hotel,mike\n      depth: 2\n  entry_14:\n    id: 14\n    sku: \"SKU-789713\"\n    name: papa oscar\n    status: archived\n    score: 27.49\n    quantity: 198\n    active: false\n    updatedAt: \"2026-04-15T12:00:00Z\"\n    nested:\n      tags[2]: juliet,alpha\n      depth: 2\n  entry_15:\n    id: 15\n    sku: \"SKU-534443\"\n    name: delta india\n    status: archived\n    score: 62.51\n    quantity: 361\n    active: false\n    updatedAt: \"2026-05-12T12:00:00Z\"\n    nested:\n      tags[2]: golf,lima\n      depth: 2\n  entry_16:\n    id: 16\n    sku: \"SKU-894299\"\n    name: delta golf\n    status: active\n    score: 4.53\n    quantity: 321\n    active: false\n    updatedAt: \"2026-06-06T12:00:00Z\"\n    nested:\n      tags[2]: uniform,zulu\n      depth: 2\n  entry_17:\n    id: 17\n    sku: \"SKU-178180\"\n    name: hotel oscar\n    status: active\n    score: 94.67\n    quantity: 438\n    active: false\n    updatedAt: \"2026-04-12T12:00:00Z\"\n    nested:\n      tags[2]: romeo,quebec\n      depth: 2\n  entry_18:\n    id: 18\n    sku: \"SKU-474295\"\n    name: november juliet\n    status: archived\n    score: 52.97\n    quantity: 162\n    active: true\n    updatedAt: \"2026-06-12T12:00:00Z\"\n    nested:\n      tags[2]: foxtrot,romeo\n      depth: 2\n  entry_19:\n    id: 19\n    sku: \"SKU-526106\"\n    name: golf romeo\n    status: archived\n    score: 51.51\n    quantity: 176\n    active: true\n    updatedAt: \"2026-01-14T12:00:00Z\"\n    nested:\n      tags[2]: tango,quebec\n      depth: 2\n  entry_20:\n    id: 20\n    sku: \"SKU-643873\"\n    name: foxtrot tango\n    status: pending\n    score: 84.13\n    quantity: 321\n    active: false\n    updatedAt: \"2026-05-05T12:00:00Z\"\n    nested:\n      tags[2]: tango,uniform\n      depth: 2\n  entry_21:\n    id: 21\n    sku: \"SKU-881747\"\n    name: india charlie\n    status: active\n    score: 99.94\n    quantity: 215\n    active: false\n    updatedAt: \"2026-03-09T12:00:00Z\"\n    nested:\n      tags[2]: india,delta\n      depth: 2\n  entry_22:\n    id: 22\n    sku: \"SKU-536249\"\n    name: oscar echo\n    status: pending\n    score: 49.7\n    quantity: 198\n    active: true\n    updatedAt: \"2026-02-23T12:00:00Z\"\n    nested:\n      tags[2]: quebec,juliet\n      depth: 2\n  entry_23:\n    id: 23\n    sku: \"SKU-242438\"\n    name: zulu alpha\n    status: failed\n    score: 15.35\n    quantity: 282\n    active: false\n    updatedAt: \"2026-01-11T12:00:00Z\"\n    nested:\n      tags[2]: november,kilo\n      depth: 2\n  entry_24:\n    id: 24\n    sku: \"SKU-787964\"\n    name: oscar hotel\n    status: archived\n    score: 35.78\n    quantity: 383\n    active: true\n    updatedAt: \"2026-04-21T12:00:00Z\"\n    nested:\n      tags[2]: zulu,uniform\n      depth: 2\n  entry_25:\n    id: 25\n    sku: \"SKU-270620\"\n    name: india india\n    status: pending\n    score: 30.89\n    quantity: 367\n    active: false\n    updatedAt: \"2026-04-10T12:00:00Z\"\n    nested:\n      tags[2]: tango,echo\n      depth: 2\n  entry_26:\n    id: 26\n    sku: \"SKU-479773\"\n    name: whiskey papa\n    status: archived\n    score: 90.09\n    quantity: 10\n    active: false\n    updatedAt: \"2026-06-16T12:00:00Z\"\n    nested:\n      tags[2]: uniform,foxtrot\n      depth: 2\n  entry_27:\n    id: 27\n    sku: \"SKU-85068\"\n    name: kilo zulu\n    status: archived\n    score: 11.57\n    quantity: 100\n    active: true\n    updatedAt: \"2026-04-01T12:00:00Z\"\n    nested:\n      tags[2]: uniform,juliet\n      depth: 2\n  entry_28:\n    id: 28\n    sku: \"SKU-88619\"\n    name: alpha echo\n    status: pending\n    score: 86.22\n    quantity: 23\n    active: true\n    updatedAt: \"2026-03-02T12:00:00Z\"\n    nested:\n      tags[2]: romeo,victor\n      depth: 2\n  entry_29:\n    id: 29\n    sku: \"SKU-342557\"\n    name: bravo papa\n    status: failed\n    score: 57.84\n    quantity: 493\n    active: false\n    updatedAt: \"2026-05-15T12:00:00Z\"\n    nested:\n      tags[2]: echo,foxtrot\n      depth: 2\n  entry_30:\n    id: 30\n    sku: \"SKU-64537\"\n    name: quebec charlie\n    status: failed\n    score: 65.9\n    quantity: 334\n    active: false\n    updatedAt: \"2026-04-15T12:00:00Z\"\n    nested:\n      tags[2]: quebec,juliet\n      depth: 2\n  entry_31:\n    id: 31\n    sku: \"SKU-45365\"\n    name: papa golf\n    status: pending\n    score: 56.24\n    quantity: 315\n    active: false\n    updatedAt: \"2026-05-07T12:00:00Z\"\n    nested:\n      tags[2]: bravo,charlie\n      depth: 2\n  entry_32:\n    id: 32\n    sku: \"SKU-306983\"\n    name: quebec foxtrot\n    status: active\n    score: 6.96\n    quantity: 276\n    active: true\n    updatedAt: \"2026-02-17T12:00:00Z\"\n    nested:\n      tags[2]: romeo,victor\n      depth: 2\n  entry_33:\n    id: 33\n    sku: \"SKU-100839\"\n    name: alpha lima\n    status: active\n    score: 7.02\n    quantity: 308\n    active: true\n    updatedAt: \"2026-03-01T12:00:00Z\"\n    nested:\n      tags[2]: uniform,victor\n      depth: 2\n  entry_34:\n    id: 34\n    sku: \"SKU-285603\"\n    name: quebec echo\n    status: pending\n    score: 54.61\n    quantity: 276\n    active: false\n    updatedAt: \"2026-04-12T12:00:00Z\"\n    nested:\n      tags[2]: echo,kilo\n      depth: 2\n  entry_35:\n    id: 35\n    sku: \"SKU-129333\"\n    name: foxtrot delta\n    status: pending\n    score: 0.69\n    quantity: 36\n    active: true\n    updatedAt: \"2026-02-11T12:00:00Z\"\n    nested:\n      tags[2]: november,sierra\n      depth: 2\n  entry_36:\n    id: 36\n    sku: \"SKU-704370\"\n    name: sierra oscar\n    status: active\n    score: 45.65\n    quantity: 239\n    active: false\n    updatedAt: \"2026-01-22T12:00:00Z\"\n    nested:\n      tags[2]: kilo,oscar\n      depth: 2\n  entry_37:\n    id: 37\n    sku: \"SKU-810963\"\n    name: foxtrot alpha\n    status: failed\n    score: 59.48\n    quantity: 48\n    active: true\n    updatedAt: \"2026-06-24T12:00:00Z\"\n    nested:\n      tags[2]: juliet,zulu\n      depth: 2\n  entry_38:\n    id: 38\n    sku: \"SKU-171741\"\n    name: zulu uniform\n    status: failed\n    score: 42.96\n    quantity: 48\n    active: true\n    updatedAt: \"2026-03-22T12:00:00Z\"\n    nested:\n      tags[2]: delta,charlie\n      depth: 2\n  entry_39:\n    id: 39\n    sku: \"SKU-893779\"\n    name: alpha tango\n    status: archived\n    score: 0.81\n    quantity: 390\n    active: false\n    updatedAt: \"2026-06-25T12:00:00Z\"\n    nested:\n      tags[2]: echo,victor\n      depth: 2\n  entry_40:\n    id: 40\n    sku: \"SKU-455048\"\n    name: quebec uniform\n    status: archived\n    score: 52.81\n    quantity: 296\n    active: true\n    updatedAt: \"2026-03-11T12:00:00Z\"\n    nested:\n      tags[2]: quebec,kilo\n      depth: 2\n  entry_41:\n    id: 41\n    sku: \"SKU-579597\"\n    name: alpha bravo\n    status: active\n    score: 74.63\n    quantity: 209\n    active: false\n    updatedAt: \"2026-02-05T12:00:00Z\"\n    nested:\n      tags[2]: papa,charlie\n      depth: 2\n  entry_42:\n    id: 42\n    sku: \"SKU-927995\"\n    name: bravo oscar\n    status: failed\n    score: 46.03\n    quantity: 13\n    active: true\n    updatedAt: \"2026-01-18T12:00:00Z\"\n    nested:\n      tags[2]: romeo,uniform\n      depth: 2\n  entry_43:\n    id: 43\n    sku: \"SKU-640313\"\n    name: oscar foxtrot\n    status: failed\n    score: 75.06\n    quantity: 102\n    active: true\n    updatedAt: \"2026-06-10T12:00:00Z\"\n    nested:\n      tags[2]: november,quebec\n      depth: 2\n  entry_44:\n    id: 44\n    sku: \"SKU-587339\"\n    name: delta lima\n    status: pending\n    score: 1.02\n    quantity: 160\n    active: false\n    updatedAt: \"2026-03-12T12:00:00Z\"\n    nested:\n      tags[2]: kilo,november\n      depth: 2\n  entry_45:\n    id: 45\n    sku: \"SKU-22977\"\n    name: alpha charlie\n    status: active\n    score: 91.65\n    quantity: 457\n    active: false\n    updatedAt: \"2026-02-26T12:00:00Z\"\n    nested:\n      tags[2]: india,kilo\n      depth: 2\n  entry_46:\n    id: 46\n    sku: \"SKU-274156\"\n    name: foxtrot oscar\n    status: archived\n    score: 31.37\n    quantity: 424\n    active: true\n    updatedAt: \"2026-01-24T12:00:00Z\"\n    nested:\n      tags[2]: alpha,foxtrot\n      depth: 2\n  entry_47:\n    id: 47\n    sku: \"SKU-533189\"\n    name: golf lima\n    status: active\n    score: 9.71\n    quantity: 251\n    active: false\n    updatedAt: \"2026-04-01T12:00:00Z\"\n    nested:\n      tags[2]: india,kilo\n      depth: 2\n  entry_48:\n    id: 48\n    sku: \"SKU-290356\"\n    name: zulu zulu\n    status: archived\n    score: 25.89\n    quantity: 432\n    active: false\n    updatedAt: \"2026-04-14T12:00:00Z\"\n    nested:\n      tags[2]: alpha,kilo\n      depth: 2\n  entry_49:\n    id: 49\n    sku: \"SKU-746759\"\n    name: juliet tango\n    status: active\n    score: 40.83\n    quantity: 374\n    active: false\n    updatedAt: \"2026-06-22T12:00:00Z\"\n    nested:\n      tags[2]: delta,golf\n      depth: 2"
+    }
+  },
+  {
+    "name": "boundary-obj-1",
+    "rawContent": "{\"key_0\":\"val, with comma 0\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\"}",
+      "encoded": "key_0: \"val, with comma 0\""
+    }
+  },
+  {
+    "name": "boundary-obj-2",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5"
+    }
+  },
+  {
+    "name": "boundary-obj-3",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\"}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\""
+    }
+  },
+  {
+    "name": "boundary-obj-4",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5"
+    }
+  },
+  {
+    "name": "boundary-obj-5",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\"}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5\nkey_4: \"val, with comma 4\""
+    }
+  },
+  {
+    "name": "boundary-obj-6",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5\nkey_4: \"val, with comma 4\"\nkey_5: 7.5"
+    }
+  },
+  {
+    "name": "boundary-obj-7",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\"}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5\nkey_4: \"val, with comma 4\"\nkey_5: 7.5\nkey_6: \"val, with comma 6\""
+    }
+  },
+  {
+    "name": "boundary-obj-8",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\",\"key_7\":10.5}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\",\"key_7\":10.5}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5\nkey_4: \"val, with comma 4\"\nkey_5: 7.5\nkey_6: \"val, with comma 6\"\nkey_7: 10.5"
+    }
+  },
+  {
+    "name": "boundary-obj-9",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\",\"key_7\":10.5,\"key_8\":\"val, with comma 8\"}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\",\"key_7\":10.5,\"key_8\":\"val, with comma 8\"}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5\nkey_4: \"val, with comma 4\"\nkey_5: 7.5\nkey_6: \"val, with comma 6\"\nkey_7: 10.5\nkey_8: \"val, with comma 8\""
+    }
+  },
+  {
+    "name": "boundary-obj-10",
+    "rawContent": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\",\"key_7\":10.5,\"key_8\":\"val, with comma 8\",\"key_9\":13.5}",
+    "unwrap": true,
+    "expected": {
+      "normalized": "{\"key_0\":\"val, with comma 0\",\"key_1\":1.5,\"key_2\":\"val, with comma 2\",\"key_3\":4.5,\"key_4\":\"val, with comma 4\",\"key_5\":7.5,\"key_6\":\"val, with comma 6\",\"key_7\":10.5,\"key_8\":\"val, with comma 8\",\"key_9\":13.5}",
+      "encoded": "key_0: \"val, with comma 0\"\nkey_1: 1.5\nkey_2: \"val, with comma 2\"\nkey_3: 4.5\nkey_4: \"val, with comma 4\"\nkey_5: 7.5\nkey_6: \"val, with comma 6\"\nkey_7: 10.5\nkey_8: \"val, with comma 8\"\nkey_9: 13.5"
+    }
+  },
+  {
+    "name": "boundary-hetero-arr-1",
+    "rawContent": "[{\"f0\":\"x,y 0\",\"n\":0}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"f0\":\"x,y 0\",\"n\":0}]",
+      "encoded": "[1]{f0,n}:\n  \"x,y 0\",0"
+    }
+  },
+  {
+    "name": "boundary-hetero-arr-2",
+    "rawContent": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1}]",
+      "encoded": "[2]:\n  - f0: \"x,y 0\"\n    n: 0\n  - f1: \"x,y 1\"\n    n: 1"
+    }
+  },
+  {
+    "name": "boundary-hetero-arr-3",
+    "rawContent": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2}]",
+      "encoded": "[3]:\n  - f0: \"x,y 0\"\n    n: 0\n  - f1: \"x,y 1\"\n    n: 1\n  - f2: \"x,y 2\"\n    n: 2"
+    }
+  },
+  {
+    "name": "boundary-hetero-arr-4",
+    "rawContent": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2},{\"f3\":\"x,y 3\",\"n\":3}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2},{\"f3\":\"x,y 3\",\"n\":3}]",
+      "encoded": "[4]:\n  - f0: \"x,y 0\"\n    n: 0\n  - f1: \"x,y 1\"\n    n: 1\n  - f2: \"x,y 2\"\n    n: 2\n  - f3: \"x,y 3\"\n    n: 3"
+    }
+  },
+  {
+    "name": "boundary-hetero-arr-5",
+    "rawContent": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2},{\"f3\":\"x,y 3\",\"n\":3},{\"f4\":\"x,y 4\",\"n\":4}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2},{\"f3\":\"x,y 3\",\"n\":3},{\"f4\":\"x,y 4\",\"n\":4}]",
+      "encoded": "[5]:\n  - f0: \"x,y 0\"\n    n: 0\n  - f1: \"x,y 1\"\n    n: 1\n  - f2: \"x,y 2\"\n    n: 2\n  - f3: \"x,y 3\"\n    n: 3\n  - f4: \"x,y 4\"\n    n: 4"
+    }
+  },
+  {
+    "name": "boundary-hetero-arr-6",
+    "rawContent": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2},{\"f3\":\"x,y 3\",\"n\":3},{\"f4\":\"x,y 4\",\"n\":4},{\"f5\":\"x,y 5\",\"n\":5}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"f0\":\"x,y 0\",\"n\":0},{\"f1\":\"x,y 1\",\"n\":1},{\"f2\":\"x,y 2\",\"n\":2},{\"f3\":\"x,y 3\",\"n\":3},{\"f4\":\"x,y 4\",\"n\":4},{\"f5\":\"x,y 5\",\"n\":5}]",
+      "encoded": "[6]:\n  - f0: \"x,y 0\"\n    n: 0\n  - f1: \"x,y 1\"\n    n: 1\n  - f2: \"x,y 2\"\n    n: 2\n  - f3: \"x,y 3\"\n    n: 3\n  - f4: \"x,y 4\"\n    n: 4\n  - f5: \"x,y 5\"\n    n: 5"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-1",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0}]",
+      "encoded": "[1]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-2",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1}]",
+      "encoded": "[2]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-3",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2}]",
+      "encoded": "[3]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1\n  \"AB-102\",\"us-east-2\",2"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-4",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3}]",
+      "encoded": "[4]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1\n  \"AB-102\",\"us-east-2\",2\n  \"AB-103\",\"us-east-3\",3"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-5",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4}]",
+      "encoded": "[5]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1\n  \"AB-102\",\"us-east-2\",2\n  \"AB-103\",\"us-east-3\",3\n  \"AB-104\",\"us-east-4\",4"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-6",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4},{\"sku\":\"AB-105\",\"zone\":\"us-east-5\",\"n\":5}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4},{\"sku\":\"AB-105\",\"zone\":\"us-east-5\",\"n\":5}]",
+      "encoded": "[6]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1\n  \"AB-102\",\"us-east-2\",2\n  \"AB-103\",\"us-east-3\",3\n  \"AB-104\",\"us-east-4\",4\n  \"AB-105\",\"us-east-5\",5"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-7",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4},{\"sku\":\"AB-105\",\"zone\":\"us-east-5\",\"n\":5},{\"sku\":\"AB-106\",\"zone\":\"us-east-6\",\"n\":6}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4},{\"sku\":\"AB-105\",\"zone\":\"us-east-5\",\"n\":5},{\"sku\":\"AB-106\",\"zone\":\"us-east-6\",\"n\":6}]",
+      "encoded": "[7]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1\n  \"AB-102\",\"us-east-2\",2\n  \"AB-103\",\"us-east-3\",3\n  \"AB-104\",\"us-east-4\",4\n  \"AB-105\",\"us-east-5\",5\n  \"AB-106\",\"us-east-6\",6"
+    }
+  },
+  {
+    "name": "boundary-hyphen-arr-8",
+    "rawContent": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4},{\"sku\":\"AB-105\",\"zone\":\"us-east-5\",\"n\":5},{\"sku\":\"AB-106\",\"zone\":\"us-east-6\",\"n\":6},{\"sku\":\"AB-107\",\"zone\":\"us-east-7\",\"n\":7}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"sku\":\"AB-100\",\"zone\":\"us-east-0\",\"n\":0},{\"sku\":\"AB-101\",\"zone\":\"us-east-1\",\"n\":1},{\"sku\":\"AB-102\",\"zone\":\"us-east-2\",\"n\":2},{\"sku\":\"AB-103\",\"zone\":\"us-east-3\",\"n\":3},{\"sku\":\"AB-104\",\"zone\":\"us-east-4\",\"n\":4},{\"sku\":\"AB-105\",\"zone\":\"us-east-5\",\"n\":5},{\"sku\":\"AB-106\",\"zone\":\"us-east-6\",\"n\":6},{\"sku\":\"AB-107\",\"zone\":\"us-east-7\",\"n\":7}]",
+      "encoded": "[8]{sku,zone,n}:\n  \"AB-100\",\"us-east-0\",0\n  \"AB-101\",\"us-east-1\",1\n  \"AB-102\",\"us-east-2\",2\n  \"AB-103\",\"us-east-3\",3\n  \"AB-104\",\"us-east-4\",4\n  \"AB-105\",\"us-east-5\",5\n  \"AB-106\",\"us-east-6\",6\n  \"AB-107\",\"us-east-7\",7"
+    }
+  },
+  {
+    "name": "fine-r1-b0-h1",
+    "rawContent": "[{\"h0\":\"us-east-00\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"h0\":\"us-east-00\"}]",
+      "encoded": "[1]{h0}:\n  \"us-east-00\""
+    }
+  },
+  {
+    "name": "fine-r2-b0-h1",
+    "rawContent": "[{\"h0\":\"us-east-00\"},{\"h0\":\"us-east-10\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"h0\":\"us-east-00\"},{\"h0\":\"us-east-10\"}]",
+      "encoded": "[2]{h0}:\n  \"us-east-00\"\n  \"us-east-10\""
+    }
+  },
+  {
+    "name": "fine-r1-b0-h2",
+    "rawContent": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+      "encoded": "[1]{h0,h1}:\n  \"us-east-00\",\"us-east-01\""
+    }
+  },
+  {
+    "name": "fine-r2-b0-h2",
+    "rawContent": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+      "encoded": "[2]{h0,h1}:\n  \"us-east-00\",\"us-east-01\"\n  \"us-east-10\",\"us-east-11\""
+    }
+  },
+  {
+    "name": "fine-r1-b0-h3",
+    "rawContent": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+      "encoded": "[1]{h0,h1,h2}:\n  \"us-east-00\",\"us-east-01\",\"us-east-02\""
+    }
+  },
+  {
+    "name": "fine-r2-b0-h3",
+    "rawContent": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+      "encoded": "[2]{h0,h1,h2}:\n  \"us-east-00\",\"us-east-01\",\"us-east-02\"\n  \"us-east-10\",\"us-east-11\",\"us-east-12\""
+    }
+  },
+  {
+    "name": "fine-r1-b1-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\"}]",
+      "encoded": "[1]{b0,h0}:\n  plain00,\"us-east-00\""
+    }
+  },
+  {
+    "name": "fine-r2-b1-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"h0\":\"us-east-10\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"h0\":\"us-east-10\"}]",
+      "encoded": "[2]{b0,h0}:\n  plain00,\"us-east-00\"\n  plain10,\"us-east-10\""
+    }
+  },
+  {
+    "name": "fine-r1-b1-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+      "encoded": "[1]{b0,h0,h1}:\n  plain00,\"us-east-00\",\"us-east-01\""
+    }
+  },
+  {
+    "name": "fine-r2-b1-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+      "encoded": "[2]{b0,h0,h1}:\n  plain00,\"us-east-00\",\"us-east-01\"\n  plain10,\"us-east-10\",\"us-east-11\""
+    }
+  },
+  {
+    "name": "fine-r1-b1-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+      "encoded": "[1]{b0,h0,h1,h2}:\n  plain00,\"us-east-00\",\"us-east-01\",\"us-east-02\""
+    }
+  },
+  {
+    "name": "fine-r2-b1-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+      "encoded": "[2]{b0,h0,h1,h2}:\n  plain00,\"us-east-00\",\"us-east-01\",\"us-east-02\"\n  plain10,\"us-east-10\",\"us-east-11\",\"us-east-12\""
+    }
+  },
+  {
+    "name": "fine-r1-b2-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\"}]",
+      "encoded": "[1]{b0,b1,h0}:\n  plain00,plain01,\"us-east-00\""
+    }
+  },
+  {
+    "name": "fine-r2-b2-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"h0\":\"us-east-10\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"h0\":\"us-east-10\"}]",
+      "encoded": "[2]{b0,b1,h0}:\n  plain00,plain01,\"us-east-00\"\n  plain10,plain11,\"us-east-10\""
+    }
+  },
+  {
+    "name": "fine-r1-b2-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+      "encoded": "[1]{b0,b1,h0,h1}:\n  plain00,plain01,\"us-east-00\",\"us-east-01\""
+    }
+  },
+  {
+    "name": "fine-r2-b2-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+      "encoded": "[2]{b0,b1,h0,h1}:\n  plain00,plain01,\"us-east-00\",\"us-east-01\"\n  plain10,plain11,\"us-east-10\",\"us-east-11\""
+    }
+  },
+  {
+    "name": "fine-r1-b2-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+      "encoded": "[1]{b0,b1,h0,h1,h2}:\n  plain00,plain01,\"us-east-00\",\"us-east-01\",\"us-east-02\""
+    }
+  },
+  {
+    "name": "fine-r2-b2-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+      "encoded": "[2]{b0,b1,h0,h1,h2}:\n  plain00,plain01,\"us-east-00\",\"us-east-01\",\"us-east-02\"\n  plain10,plain11,\"us-east-10\",\"us-east-11\",\"us-east-12\""
+    }
+  },
+  {
+    "name": "fine-r1-b3-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\"}]",
+      "encoded": "[1]{b0,b1,b2,h0}:\n  plain00,plain01,plain02,\"us-east-00\""
+    }
+  },
+  {
+    "name": "fine-r2-b3-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"h0\":\"us-east-10\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"h0\":\"us-east-10\"}]",
+      "encoded": "[2]{b0,b1,b2,h0}:\n  plain00,plain01,plain02,\"us-east-00\"\n  plain10,plain11,plain12,\"us-east-10\""
+    }
+  },
+  {
+    "name": "fine-r1-b3-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+      "encoded": "[1]{b0,b1,b2,h0,h1}:\n  plain00,plain01,plain02,\"us-east-00\",\"us-east-01\""
+    }
+  },
+  {
+    "name": "fine-r2-b3-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+      "encoded": "[2]{b0,b1,b2,h0,h1}:\n  plain00,plain01,plain02,\"us-east-00\",\"us-east-01\"\n  plain10,plain11,plain12,\"us-east-10\",\"us-east-11\""
+    }
+  },
+  {
+    "name": "fine-r1-b3-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+      "encoded": "[1]{b0,b1,b2,h0,h1,h2}:\n  plain00,plain01,plain02,\"us-east-00\",\"us-east-01\",\"us-east-02\""
+    }
+  },
+  {
+    "name": "fine-r2-b3-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+      "encoded": "[2]{b0,b1,b2,h0,h1,h2}:\n  plain00,plain01,plain02,\"us-east-00\",\"us-east-01\",\"us-east-02\"\n  plain10,plain11,plain12,\"us-east-10\",\"us-east-11\",\"us-east-12\""
+    }
+  },
+  {
+    "name": "fine-r1-b4-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\"}]",
+      "encoded": "[1]{b0,b1,b2,b3,h0}:\n  plain00,plain01,plain02,plain03,\"us-east-00\""
+    }
+  },
+  {
+    "name": "fine-r2-b4-h1",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"b3\":\"plain13\",\"h0\":\"us-east-10\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"b3\":\"plain13\",\"h0\":\"us-east-10\"}]",
+      "encoded": "[2]{b0,b1,b2,b3,h0}:\n  plain00,plain01,plain02,plain03,\"us-east-00\"\n  plain10,plain11,plain12,plain13,\"us-east-10\""
+    }
+  },
+  {
+    "name": "fine-r1-b4-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"}]",
+      "encoded": "[1]{b0,b1,b2,b3,h0,h1}:\n  plain00,plain01,plain02,plain03,\"us-east-00\",\"us-east-01\""
+    }
+  },
+  {
+    "name": "fine-r2-b4-h2",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"b3\":\"plain13\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"b3\":\"plain13\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\"}]",
+      "encoded": "[2]{b0,b1,b2,b3,h0,h1}:\n  plain00,plain01,plain02,plain03,\"us-east-00\",\"us-east-01\"\n  plain10,plain11,plain12,plain13,\"us-east-10\",\"us-east-11\""
+    }
+  },
+  {
+    "name": "fine-r1-b4-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"}]",
+      "encoded": "[1]{b0,b1,b2,b3,h0,h1,h2}:\n  plain00,plain01,plain02,plain03,\"us-east-00\",\"us-east-01\",\"us-east-02\""
+    }
+  },
+  {
+    "name": "fine-r2-b4-h3",
+    "rawContent": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"b3\":\"plain13\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+    "unwrap": true,
+    "expected": {
+      "normalized": "[{\"b0\":\"plain00\",\"b1\":\"plain01\",\"b2\":\"plain02\",\"b3\":\"plain03\",\"h0\":\"us-east-00\",\"h1\":\"us-east-01\",\"h2\":\"us-east-02\"},{\"b0\":\"plain10\",\"b1\":\"plain11\",\"b2\":\"plain12\",\"b3\":\"plain13\",\"h0\":\"us-east-10\",\"h1\":\"us-east-11\",\"h2\":\"us-east-12\"}]",
+      "encoded": "[2]{b0,b1,b2,b3,h0,h1,h2}:\n  plain00,plain01,plain02,plain03,\"us-east-00\",\"us-east-01\",\"us-east-02\"\n  plain10,plain11,plain12,plain13,\"us-east-10\",\"us-east-11\",\"us-east-12\""
+    }
+  }
+]

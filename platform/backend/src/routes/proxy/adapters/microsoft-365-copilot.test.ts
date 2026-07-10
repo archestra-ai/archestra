@@ -1,3 +1,4 @@
+import { ArchestraInternalErrorCode, TimeInMs } from "@archestra/shared";
 import { vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
@@ -115,8 +116,9 @@ function stubGraphFetch(handlers: {
   return { fetchMock, calls };
 }
 
-function createClient() {
+function createClient(abortSignal?: AbortSignal) {
   return microsoft365CopilotAdapterFactory.createClient(uniqueRefreshToken(), {
+    abortSignal,
     source: "api",
   });
 }
@@ -365,6 +367,58 @@ describe("microsoft365CopilotAdapterFactory executeStream", () => {
     );
   });
 
+  test("cancels and sync-falls back when metadata-only SSE exceeds the text-progress deadline", async () => {
+    vi.useFakeTimers();
+    const encoder = new TextEncoder();
+    const lifecycle: string[] = [];
+    let heartbeat: NodeJS.Timeout | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // Raw bytes continue to arrive, but none contain recognizable answer
+        // text. They must not reset the semantic progress deadline.
+        heartbeat = setInterval(() => {
+          controller.enqueue(encoder.encode('data: {"kind":"heartbeat"}\n\n'));
+        }, 30 * TimeInMs.Second);
+      },
+      cancel() {
+        clearInterval(heartbeat);
+        lifecycle.push("stream-canceled");
+      },
+    });
+    let conversationCount = 0;
+    stubGraphFetch({
+      chatOverStream: () =>
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+      chat: () => {
+        lifecycle.push("sync-chat");
+        return graphChatAnswer("safe fallback answer");
+      },
+      createConversation: () => {
+        conversationCount += 1;
+        return graphConversation(`conv-${conversationCount}`);
+      },
+    });
+
+    const iterable = await microsoft365CopilotAdapterFactory.executeStream(
+      createClient(),
+      makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
+    );
+    const outcome = collectChunks(iterable);
+
+    await vi.advanceTimersByTimeAsync(2 * TimeInMs.Minute);
+
+    const chunks = await outcome;
+    const contentDeltas = chunks
+      .map((chunk) => chunk.choices[0]?.delta?.content)
+      .filter((content): content is string => Boolean(content));
+    expect(contentDeltas).toEqual(["safe fallback answer"]);
+    expect(lifecycle).toEqual(["stream-canceled", "sync-chat"]);
+    expect(conversationCount).toBe(2);
+  });
+
   test("cancels an open SSE body after the done event", async () => {
     const cancel = vi.fn();
     const encoder = new TextEncoder();
@@ -424,10 +478,11 @@ describe("microsoft365CopilotAdapterFactory executeStream", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  test("fails a stream that goes silent mid-answer with a 504 and cancels the body", async () => {
+  test("fails a text-stalled stream with a retryable 504, cancels it, and never splices in a sync answer", async () => {
     vi.useFakeTimers();
-    const cancel = vi.fn();
     const encoder = new TextEncoder();
+    let heartbeat: NodeJS.Timeout | undefined;
+    const cancel = vi.fn(() => clearInterval(heartbeat));
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(
@@ -435,16 +490,22 @@ describe("microsoft365CopilotAdapterFactory executeStream", () => {
             `data: ${JSON.stringify({ text: "Once upon a" })}\n\n`,
           ),
         );
-        // The stream then stalls: no further events, never closes.
+        // Metadata keeps the raw reader active, but does not advance the
+        // answer. The semantic timeout must still fire.
+        heartbeat = setInterval(() => {
+          controller.enqueue(encoder.encode('data: {"kind":"heartbeat"}\n\n'));
+        }, 30 * TimeInMs.Second);
       },
       cancel,
     });
-    stubGraphFetch({
+    const syncChat = vi.fn(() => graphChatAnswer("different sync answer"));
+    const { calls } = stubGraphFetch({
       chatOverStream: () =>
         new Response(body, {
           status: 200,
           headers: { "content-type": "text/event-stream" },
         }),
+      chat: syncChat,
     });
 
     const iterable = await microsoft365CopilotAdapterFactory.executeStream(
@@ -458,14 +519,41 @@ describe("microsoft365CopilotAdapterFactory executeStream", () => {
       (error: unknown) => error,
     );
 
-    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    await vi.advanceTimersByTimeAsync(2 * TimeInMs.Minute);
 
     const error = await outcome;
     expect(error).toMatchObject({
       status: 504,
-      message: expect.stringContaining("stopped streaming"),
+      statusCode: 504,
+      internalCode: ArchestraInternalErrorCode.UpstreamTimeout,
+      message: expect.stringContaining("upstream idle timeout"),
     });
     expect(cancel).toHaveBeenCalledOnce();
+    expect(syncChat).not.toHaveBeenCalled();
+    expect(calls.some(({ url }) => url.endsWith("/chat"))).toBe(false);
+  });
+
+  test("forwards a downstream abort signal to Graph conversation and stream requests", async () => {
+    const abortController = new AbortController();
+    const { calls } = stubGraphFetch({
+      chatOverStream: () =>
+        sseResponse([JSON.stringify({ text: "complete" }), "[DONE]"]),
+    });
+
+    await collectChunks(
+      await microsoft365CopilotAdapterFactory.executeStream(
+        createClient(abortController.signal),
+        makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
+      ),
+    );
+
+    const graphCalls = calls.filter(({ url }) =>
+      url.includes(CONVERSATIONS_URL_MARKER),
+    );
+    expect(graphCalls).toHaveLength(2);
+    expect(
+      graphCalls.every(({ init }) => init?.signal === abortController.signal),
+    ).toBe(true);
   });
 
   test("surfaces a Graph error on the stream request as a clean error before any chunk", async () => {

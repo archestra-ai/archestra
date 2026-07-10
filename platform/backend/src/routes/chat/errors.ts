@@ -316,7 +316,8 @@ function extractArchestraInternalCode(
     if (
       code === ArchestraInternalErrorCode.ContextLengthExceeded ||
       code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
-      code === ArchestraInternalErrorCode.UpstreamEmptyResponse
+      code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
+      code === ArchestraInternalErrorCode.UpstreamTimeout
     ) {
       return code;
     }
@@ -1772,6 +1773,10 @@ export function mapProviderError(
     // ("the provider is experiencing issues"). Reclassify to the retryable
     // EmptyResponse code so the card names what actually happened.
     errorCode = ChatErrorCode.EmptyResponse;
+  } else if (normalizedCode === ArchestraInternalErrorCode.UpstreamTimeout) {
+    // Mid-stream HTTP status is already committed as 200, so the normalized
+    // code preserves the upstream 504 semantics and retryability.
+    errorCode = ChatErrorCode.NetworkError;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
   // An Archestra usage-limit block arrives over the proxy envelope as an HTTP

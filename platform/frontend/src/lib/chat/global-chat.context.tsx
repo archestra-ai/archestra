@@ -111,6 +111,10 @@ function shouldResumeActiveRun(messages: UIMessage[]): boolean {
 interface ChatSession {
   conversationId: string;
   messages: UIMessage[];
+  /** Monotonic signal advanced by every event received from the stream. */
+  transportActivitySequence: number;
+  /** Monotonic signal advanced only when the assistant response progresses. */
+  responseProgressSequence: number;
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
@@ -437,6 +441,22 @@ function ChatSessionHook({
   );
   const [contextWindow, setContextWindow] =
     useState<ContextWindowBreakdown | null>(null);
+  const [streamActivity, setStreamActivity] = useState({
+    transportSequence: 0,
+    responseProgressSequence: 0,
+  });
+  const recordTransportActivity = useCallback(() => {
+    setStreamActivity((activity) => ({
+      ...activity,
+      transportSequence: activity.transportSequence + 1,
+    }));
+  }, []);
+  const recordResponseProgress = useCallback(() => {
+    setStreamActivity((activity) => ({
+      transportSequence: activity.transportSequence + 1,
+      responseProgressSequence: activity.responseProgressSequence + 1,
+    }));
+  }, []);
   const [contextCompaction, setContextCompaction] =
     useState<ContextCompactionState>({
       isCompacting: false,
@@ -889,6 +909,14 @@ function ChatSessionHook({
       }
     },
     onData: (dataPart) => {
+      // A transient heartbeat proves the browser-to-backend stream is alive,
+      // but not that the upstream provider is making response progress.
+      if (dataPart.type === "data-heartbeat") {
+        recordTransportActivity();
+      } else {
+        recordResponseProgress();
+      }
+
       // Handle token usage data from the backend stream
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
@@ -983,6 +1011,26 @@ function ChatSessionHook({
       });
     },
   } as Parameters<typeof useChat>[0]);
+
+  // Text and tool-call deltas update the SDK's raw message list. Track that
+  // progress independently from displayedMessages, which can intentionally be
+  // frozen while a failed connection is recovering. Entering streaming also
+  // starts fresh transport and response-progress windows.
+  const previousActivityMessagesRef = useRef(messages);
+  const previousActivityStatusRef = useRef(status);
+  useEffect(() => {
+    const enteredStreaming =
+      previousActivityStatusRef.current !== "streaming" &&
+      status === "streaming";
+    const messagesProgressed = previousActivityMessagesRef.current !== messages;
+
+    previousActivityStatusRef.current = status;
+    previousActivityMessagesRef.current = messages;
+
+    if (status === "streaming" && (enteredStreaming || messagesProgressed)) {
+      recordResponseProgress();
+    }
+  }, [messages, status, recordResponseProgress]);
 
   const resumeAttemptedRef = useRef(false);
   useEffect(() => {
@@ -1234,6 +1282,8 @@ function ChatSessionHook({
   sessionRef.current = {
     conversationId,
     messages: displayedMessages,
+    transportActivitySequence: streamActivity.transportSequence,
+    responseProgressSequence: streamActivity.responseProgressSequence,
     sendMessage,
     regenerateUserMessage,
     stop,
@@ -1284,6 +1334,7 @@ function ChatSessionHook({
   }, [
     conversationId,
     stableMessages,
+    streamActivity,
     sendMessage,
     regenerateUserMessage,
     stop,

@@ -835,6 +835,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     writer.write({
                       type: "data-heartbeat",
                       data: { timestamp: Date.now() },
+                      transient: true,
                     });
                   } catch {
                     clearInterval(heartbeatInterval);

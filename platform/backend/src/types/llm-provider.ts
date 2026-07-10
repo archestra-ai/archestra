@@ -71,6 +71,11 @@ export interface CreateClientOptions {
    * secret back to the key; other adapters ignore it.
    */
   llmProviderApiKeyId?: string;
+  /**
+   * Aborted when the downstream HTTP client disconnects before its response
+   * finishes. Provider clients may forward it to their upstream requests.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**

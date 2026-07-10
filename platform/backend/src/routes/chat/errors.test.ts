@@ -2141,6 +2141,22 @@ describe("buildAbortiveTurnError", () => {
 // =============================================================================
 
 describe("mapProviderError - Microsoft 365 Copilot tools rejection", () => {
+  it("maps a mid-stream upstream timeout to a retryable network error", () => {
+    // Once streaming headers are committed the HTTP 504 cannot be changed;
+    // this is the bare SSE error shape delivered by the AI SDK instead.
+    const error = {
+      message:
+        "Microsoft 365 Copilot upstream idle timeout after 120 seconds without new response text.",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.UpstreamTimeout,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.NetworkError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.message).toContain("upstream idle timeout");
+  });
+
   it("maps the proxy adapter's tools rejection to ToolsUnsupported", () => {
     const error = {
       name: "AI_APICallError",

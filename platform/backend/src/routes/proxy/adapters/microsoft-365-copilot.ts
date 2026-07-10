@@ -24,12 +24,13 @@
  *   `createClient` is synchronous.
  */
 import { randomUUID } from "node:crypto";
+import { ArchestraInternalErrorCode, TimeInMs } from "@archestra/shared";
 import type OpenAIProvider from "openai";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
 import { createMicrosoft365CopilotFetch } from "@/services/microsoft-365-copilot-token";
-import type { CreateClientOptions, OpenAi } from "@/types";
+import { ApiError, type CreateClientOptions, type OpenAi } from "@/types";
 import {
   assertNoTools,
   buildGraphChatBody,
@@ -63,6 +64,7 @@ export const microsoft365CopilotAdapterFactory =
 
       const client = new Microsoft365CopilotGraphClient({
         baseUrl: options.baseUrl ?? config.llm["microsoft-365-copilot"].baseUrl,
+        abortSignal: options.abortSignal,
         fetch: createMicrosoft365CopilotFetch({
           refreshToken: apiKey,
           providerApiKeyId: options.llmProviderApiKeyId,
@@ -98,10 +100,16 @@ class Microsoft365CopilotGraphClient {
   };
 
   private baseUrl: string;
+  private abortSignal: AbortSignal | undefined;
   private fetch: FetchLike;
 
-  constructor(params: { baseUrl: string; fetch: FetchLike }) {
+  constructor(params: {
+    baseUrl: string;
+    abortSignal?: AbortSignal;
+    fetch: FetchLike;
+  }) {
     this.baseUrl = params.baseUrl.replace(/\/+$/, "");
+    this.abortSignal = params.abortSignal;
     this.fetch = params.fetch;
   }
 
@@ -151,6 +159,7 @@ class Microsoft365CopilotGraphClient {
           accept: "text/event-stream",
         },
         body: JSON.stringify(graphBody),
+        signal: this.abortSignal,
       },
     );
     if (!response.ok) {
@@ -188,29 +197,66 @@ class Microsoft365CopilotGraphClient {
         }
 
         let emittedText = "";
-        for await (const eventData of parseSseEvents(response)) {
-          if (eventData === "[DONE]") break;
-          let payload: unknown;
+        let timedOutBeforeText = false;
+        const progressTimeoutController = new AbortController();
+        let progressTimeout: NodeJS.Timeout | undefined;
+        const resetProgressTimeout = () => {
+          clearTimeout(progressTimeout);
+          progressTimeout = setTimeout(() => {
+            progressTimeoutController.abort(
+              new Microsoft365CopilotStreamIdleError(),
+            );
+          }, STREAM_IDLE_TIMEOUT_MS);
+        };
+
+        try {
+          resetProgressTimeout();
           try {
-            payload = JSON.parse(eventData);
-          } catch {
-            continue; // tolerate keep-alives and unknown non-JSON events
+            for await (const eventData of parseSseEvents(
+              response,
+              progressTimeoutController.signal,
+            )) {
+              if (eventData === "[DONE]") break;
+              let payload: unknown;
+              try {
+                payload = JSON.parse(eventData);
+              } catch {
+                continue; // tolerate keep-alives and unknown non-JSON events
+              }
+              const candidate = extractGraphResponseText(payload);
+              if (candidate === undefined || candidate.length === 0) continue;
+              // Works for both cumulative snapshots (emit the new suffix) and
+              // true deltas (emit verbatim).
+              const delta = candidate.startsWith(emittedText)
+                ? candidate.slice(emittedText.length)
+                : candidate;
+              if (delta.length === 0) continue;
+              emittedText += delta;
+              // Only recognizable new answer text counts as progress. SSE
+              // comments, metadata, and repeated cumulative snapshots must
+              // not keep a text-dead stream alive forever.
+              resetProgressTimeout();
+              yield makeContentDeltaChunk({
+                deltaText: delta,
+                model: params.model,
+                completionId,
+                createdUnixSeconds,
+              });
+            }
+          } catch (error) {
+            if (
+              !(error instanceof Microsoft365CopilotStreamIdleError) ||
+              emittedText.length > 0
+            ) {
+              throw error;
+            }
+            // No answer text reached the client, so retrying synchronously on
+            // a fresh conversation cannot splice two different answers
+            // together. parseSseEvents has already canceled the stalled body.
+            timedOutBeforeText = true;
           }
-          const candidate = extractGraphResponseText(payload);
-          if (candidate === undefined || candidate.length === 0) continue;
-          // Works for both cumulative snapshots (emit the new suffix) and
-          // true deltas (emit verbatim).
-          const delta = candidate.startsWith(emittedText)
-            ? candidate.slice(emittedText.length)
-            : candidate;
-          if (delta.length === 0) continue;
-          emittedText += delta;
-          yield makeContentDeltaChunk({
-            deltaText: delta,
-            model: params.model,
-            completionId,
-            createdUnixSeconds,
-          });
+        } finally {
+          clearTimeout(progressTimeout);
         }
 
         if (emittedText.length === 0) {
@@ -221,7 +267,7 @@ class Microsoft365CopilotGraphClient {
           // statefulness, and free under seat licensing (revisit if Microsoft
           // ever bills per conversation).
           logger.warn(
-            "[Microsoft365Copilot] chatOverStream yielded no recognizable text; falling back to the sync chat endpoint",
+            `[Microsoft365Copilot] chatOverStream ${timedOutBeforeText ? "timed out before yielding recognizable text" : "yielded no recognizable text"}; falling back to the sync chat endpoint`,
           );
           const responseText = await self.runSyncChat(graphBody);
           const chunks = completionTextToChunks({
@@ -257,6 +303,7 @@ class Microsoft365CopilotGraphClient {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(graphBody),
+        signal: this.abortSignal,
       },
     );
     if (!response.ok) {
@@ -280,6 +327,7 @@ class Microsoft365CopilotGraphClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
+      signal: this.abortSignal,
     });
     if (!response.ok) {
       await throwGraphError(response);
@@ -384,14 +432,37 @@ function graphShapeError(message: string): Error {
  * message. Failing loudly instead routes through the standard mid-stream
  * error path, which marks the run terminal so the user can retry immediately.
  */
-const STREAM_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+const STREAM_IDLE_TIMEOUT_MS = 2 * TimeInMs.Minute;
+
+/**
+ * Branded so only our inactivity deadline can take the zero-text sync fallback;
+ * network failures and downstream aborts must propagate without creating a
+ * second Microsoft 365 conversation.
+ */
+class Microsoft365CopilotStreamIdleError extends ApiError {
+  readonly status = 504;
+
+  constructor() {
+    super(
+      504,
+      `Microsoft 365 Copilot upstream idle timeout after ${STREAM_IDLE_TIMEOUT_MS / TimeInMs.Second} seconds without new response text. The streaming response did not finish; please try again.`,
+      ArchestraInternalErrorCode.UpstreamTimeout,
+    );
+    this.name = "Microsoft365CopilotStreamIdleError";
+  }
+}
 
 /**
  * Minimal incremental SSE parser: yields each event's joined `data:` payload.
  * Tolerates comment lines, CRLF, and multi-line data fields per the SSE spec.
- * Throws a 504 when the stream stays silent for STREAM_IDLE_TIMEOUT_MS.
+ * The optional abort signal is the answer-progress deadline owned by the
+ * caller. Aborting it cancels a pending read immediately, including when raw
+ * SSE comments or unrecognized metadata continue to arrive.
  */
-async function* parseSseEvents(response: Response): AsyncGenerator<string> {
+async function* parseSseEvents(
+  response: Response,
+  abortSignal?: AbortSignal,
+): AsyncGenerator<string> {
   if (!response.body) return;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -406,9 +477,24 @@ async function* parseSseEvents(response: Response): AsyncGenerator<string> {
   };
 
   let reachedEnd = false;
+  const cancelForAbort = () => {
+    reader.cancel(abortSignal?.reason).catch((cancelError) => {
+      logger.debug(
+        { cancelError },
+        "[Microsoft365Copilot] failed to cancel Graph stream after progress timeout",
+      );
+    });
+  };
+  abortSignal?.addEventListener("abort", cancelForAbort, { once: true });
   try {
     while (true) {
-      const { done, value } = await readWithIdleTimeout(reader);
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason;
+      }
+      const { done, value } = await reader.read();
+      if (abortSignal?.aborted) {
+        throw abortSignal.reason;
+      }
       if (done) {
         reachedEnd = true;
         break;
@@ -429,10 +515,18 @@ async function* parseSseEvents(response: Response): AsyncGenerator<string> {
       }
     }
   } finally {
+    abortSignal?.removeEventListener("abort", cancelForAbort);
     try {
       if (!reachedEnd) {
         await reader.cancel();
       }
+    } catch (cancelError) {
+      // Preserve the original timeout/abort/read error. Cancellation is
+      // best-effort cleanup and must never replace the actionable failure.
+      logger.debug(
+        { cancelError },
+        "[Microsoft365Copilot] failed to cancel unfinished Graph stream",
+      );
     } finally {
       reader.releaseLock();
     }
@@ -448,45 +542,4 @@ async function* parseSseEvents(response: Response): AsyncGenerator<string> {
   }
   const data = flush();
   if (data !== undefined) yield data;
-}
-
-/**
- * One reader.read() bounded by STREAM_IDLE_TIMEOUT_MS of silence. On expiry
- * this throws in the adapter error shape (`status` + `error.message`, like
- * throwGraphError); parseSseEvents' cleanup then cancels the reader, which
- * releases the underlying Graph connection.
- */
-async function readWithIdleTimeout(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  const read = reader.read();
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    return await Promise.race([
-      read,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          const message = `Microsoft 365 Copilot stopped streaming a response (no data received for ${STREAM_IDLE_TIMEOUT_MS / 1000} seconds). Please try again.`;
-          reject(
-            Object.assign(new Error(message), {
-              status: 504,
-              error: { message },
-            }),
-          );
-        }, STREAM_IDLE_TIMEOUT_MS);
-      }),
-    ]);
-  } catch (error) {
-    // The losing read settles later (when the caller's cleanup cancels the
-    // reader); observe it so it can't surface as an unhandled rejection.
-    read.catch((readError) => {
-      logger.debug(
-        { readError },
-        "[Microsoft365Copilot] late stream read failure after the idle timeout fired",
-      );
-    });
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
 }

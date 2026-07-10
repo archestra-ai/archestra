@@ -137,26 +137,31 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     //    matches this can add (e.g. inside HTML comments) are fail-closed.
     for tag_capture in RESOURCE_TAG_FALLBACK.captures_iter(html) {
         let tag_name = &tag_capture[1];
-        for attr_capture in RESOURCE_ATTR_FALLBACK.captures_iter(&tag_capture[2]) {
-            let attr_name = &attr_capture[1];
-            let value = attr_capture
-                .get(2)
-                .or_else(|| attr_capture.get(3))
-                .map_or("", |m| m.as_str());
-            if tag_name.eq_ignore_ascii_case("script") && attr_name.eq_ignore_ascii_case("src") {
-                let normalized = normalize_resource_ref(value);
-                if PLATFORM_SCRIPT_SRC_MARKERS
-                    .iter()
-                    .any(|marker| normalized.contains(marker))
-                {
-                    return reject(RejectionKind::PlatformScriptSrc, value.to_string());
-                }
-            } else if tag_name.eq_ignore_ascii_case("link")
-                && attr_name.eq_ignore_ascii_case("href")
-                && normalize_resource_ref(value).contains(PLATFORM_BASE_CSS_MARKER)
+        let attr_name = if tag_name.eq_ignore_ascii_case("script") {
+            "src"
+        } else {
+            "href"
+        };
+        let Some(attr_capture) = RESOURCE_ATTR_FALLBACK
+            .captures_iter(&tag_capture[2])
+            .find(|capture| capture[1].eq_ignore_ascii_case(attr_name))
+        else {
+            continue;
+        };
+        let value = attr_capture
+            .get(2)
+            .or_else(|| attr_capture.get(3))
+            .map_or("", |matched| matched.as_str());
+        let normalized = normalize_resource_ref(value);
+        if tag_name.eq_ignore_ascii_case("script") {
+            if PLATFORM_SCRIPT_SRC_MARKERS
+                .iter()
+                .any(|marker| normalized.contains(marker))
             {
-                return reject(RejectionKind::PlatformBaseCss, value.to_string());
+                return reject(RejectionKind::PlatformScriptSrc, value.to_string());
             }
+        } else if normalized.contains(PLATFORM_BASE_CSS_MARKER) {
+            return reject(RejectionKind::PlatformBaseCss, value.to_string());
         }
     }
 
@@ -420,6 +425,17 @@ mod tests {
             r#"<html><head><link-widget href="/_sandbox/archestra-app-base.css"></head></html>"#,
             r#"<html><head><script:widget src="/_sandbox/archestra-app-sdk.js"></script:widget></head></html>"#,
             "<html><head><link\u{00a0}href=\"/_sandbox/archestra-app-base.css\"></head></html>",
+        ];
+        for html in cases {
+            assert_eq!(scan_app_html(html).rejection, None, "{html}");
+        }
+    }
+
+    #[test]
+    fn fallback_uses_the_first_effective_resource_attribute() {
+        let cases = [
+            r#"<html><head><script src="safe.js" src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#,
+            r#"<html><head><link href="safe.css" href="/_sandbox/archestra-app-base.css"></head></html>"#,
         ];
         for html in cases {
             assert_eq!(scan_app_html(html).rejection, None, "{html}");

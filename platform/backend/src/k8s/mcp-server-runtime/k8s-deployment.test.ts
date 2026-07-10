@@ -6740,6 +6740,7 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
     readNamespacedPod?: ReturnType<typeof vi.fn>;
     readNamespacedDeployment: ReturnType<typeof vi.fn>;
     deleteNamespacedDeployment?: ReturnType<typeof vi.fn>;
+    createNamespacedDeployment?: ReturnType<typeof vi.fn>;
   }): K8sDeployment {
     const mockMcpServer = {
       id: "current-install-id",
@@ -6759,6 +6760,8 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
         readNamespacedDeployment: params.readNamespacedDeployment,
         deleteNamespacedDeployment:
           params.deleteNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
+        createNamespacedDeployment:
+          params.createNamespacedDeployment ?? vi.fn().mockResolvedValue({}),
       } as unknown as k8s.AppsV1Api,
       k8sNetworkingApi: {} as k8s.NetworkingV1Api,
       k8sAttach: {} as Attach,
@@ -6802,6 +6805,137 @@ describe("K8sDeployment selector self-heal (multitenant drift)", () => {
     expect(deleteNamespacedDeployment).toHaveBeenCalledTimes(1);
     expect(deleteNamespacedDeployment).toHaveBeenCalledWith(
       expect.objectContaining({ name: deployment.k8sDeploymentName }),
+    );
+  });
+
+  // Regression: the pod's egress policy MUST be applied before the deployment is
+  // created. A pod that starts before its per-pod policy lands is selected only
+  // by the namespace deny-all baseline (no DNS, no egress) and crashloops on
+  // startup connectivity.
+  test("applies the per-pod egress policy before creating the deployment", async () => {
+    const createNamespacedDeployment = vi.fn().mockResolvedValue({});
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound), // no legacy bare pod
+      readNamespacedDeployment: vi.fn().mockRejectedValue(notFound), // 404 → create path
+      createNamespacedDeployment,
+    });
+
+    // Stub everything the create path touches except the two calls we're ordering.
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(false);
+    vi.spyOn(
+      deployment as unknown as { generateDeploymentSpec: () => unknown },
+      "generateDeploymentSpec",
+    ).mockReturnValue({});
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+    const applySpy = vi
+      .spyOn(deployment, "applyK8sNetworkPolicy")
+      .mockResolvedValue(undefined);
+
+    await deployment.startOrCreateDeployment();
+
+    expect(applySpy).toHaveBeenCalled();
+    expect(createNamespacedDeployment).toHaveBeenCalled();
+    expect(applySpy.mock.invocationCallOrder[0]).toBeLessThan(
+      createNamespacedDeployment.mock.invocationCallOrder[0],
+    );
+  });
+
+  // A concurrent reconcile (another orchestrator replica) can create the Deployment
+  // between our 404 read and our create call. The resulting 409 must re-enter the
+  // reconcile (re-read + validate the now-existing deployment), not blindly assume
+  // success — a stale-selector deployment left by an older replica must still be
+  // self-healed, and a healthy one must not be marked failed.
+  test("on a 409 (concurrent create), re-reconciles the now-existing deployment", async () => {
+    const conflict = { statusCode: 409, message: "already exists" };
+    // Initial read: absent (→ create path). Create conflicts (409). The re-entry
+    // then reads the now-present deployment and reconciles it (here: not-ready).
+    const readNamespacedDeployment = vi
+      .fn()
+      .mockRejectedValueOnce(notFound)
+      .mockResolvedValue({ status: {} });
+    const createNamespacedDeployment = vi.fn().mockRejectedValue(conflict);
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound), // no legacy bare pod
+      readNamespacedDeployment,
+      createNamespacedDeployment,
+    });
+    vi.spyOn(
+      deployment as unknown as { getCatalogItem: () => unknown },
+      "getCatalogItem",
+    ).mockResolvedValue({ localConfig: { dockerImage: "img" } });
+    vi.spyOn(
+      deployment as unknown as { needsHttpPort: () => unknown },
+      "needsHttpPort",
+    ).mockResolvedValue(false);
+    vi.spyOn(
+      deployment as unknown as { generateDeploymentSpec: () => unknown },
+      "generateDeploymentSpec",
+    ).mockReturnValue({});
+    vi.spyOn(
+      deployment as unknown as {
+        checkPodContainerStatusesForFailure: () => unknown;
+      },
+      "checkPodContainerStatusesForFailure",
+    ).mockResolvedValue({ hasFailed: false, isTransientImagePull: false });
+    vi.spyOn(
+      deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+      "ensureHttpServerConfigured",
+    ).mockResolvedValue(undefined);
+    const applySpy = vi
+      .spyOn(deployment, "applyK8sNetworkPolicy")
+      .mockResolvedValue(undefined);
+
+    await expect(deployment.startOrCreateDeployment()).resolves.toBeUndefined();
+    // Re-read on conflict (not a blind "continue"), and no create-retry loop.
+    expect(readNamespacedDeployment.mock.calls.length).toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(createNamespacedDeployment).toHaveBeenCalledTimes(1);
+    expect(applySpy).toHaveBeenCalled();
+  });
+
+  // Regression: the reconcile path for an existing-but-not-ready deployment must
+  // also (re)apply the egress policy before HTTP config, so a slow or failing
+  // Service setup can't leave an already-created pod on the deny-all baseline.
+  test("reapplies the egress policy before HTTP config on a not-ready deployment, even when HTTP config fails", async () => {
+    const deployment = makeDeployment({
+      readNamespacedPod: vi.fn().mockRejectedValue(notFound), // no legacy bare pod
+      readNamespacedDeployment: vi.fn().mockResolvedValue({ status: {} }), // exists, not ready
+    });
+    vi.spyOn(
+      deployment as unknown as {
+        checkPodContainerStatusesForFailure: () => unknown;
+      },
+      "checkPodContainerStatusesForFailure",
+    ).mockResolvedValue({ hasFailed: false, isTransientImagePull: false });
+    const applySpy = vi
+      .spyOn(deployment, "applyK8sNetworkPolicy")
+      .mockResolvedValue(undefined);
+    const httpSpy = vi
+      .spyOn(
+        deployment as unknown as { ensureHttpServerConfigured: () => unknown },
+        "ensureHttpServerConfigured",
+      )
+      .mockRejectedValue(new Error("Service setup failed"));
+
+    await expect(deployment.startOrCreateDeployment()).rejects.toThrow(
+      "Service setup failed",
+    );
+
+    // The policy was (re)applied before — and independently of — the HTTP failure.
+    expect(applySpy).toHaveBeenCalled();
+    expect(applySpy.mock.invocationCallOrder[0]).toBeLessThan(
+      httpSpy.mock.invocationCallOrder[0],
     );
   });
 

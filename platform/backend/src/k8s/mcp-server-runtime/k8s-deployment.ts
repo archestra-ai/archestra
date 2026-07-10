@@ -2356,6 +2356,13 @@ export default class K8sDeployment {
     resolvedImagePullSecretNames?: Array<{ name: string }>,
   ): Promise<void> {
     try {
+      // Load the catalog item up front so every path below derives the pod
+      // selector from the correct id — the drift check and the reconcile branches'
+      // policy apply both key on catalogItem.multitenant (getPodSelectorServerId),
+      // and would otherwise select a multitenant pod's per-install id and leave it
+      // under the deny-all baseline. getCatalogItem caches, so later calls reuse it.
+      await this.getCatalogItem();
+
       /**
        * MIGRATION STEP:
        * Check if there's a bare pod with the same name.
@@ -2440,9 +2447,10 @@ export default class K8sDeployment {
             await this.assignHttpPortIfNeeded(pod);
           }
 
-          // Ensure HTTP configuration is set up
-          await this.ensureHttpServerConfigured();
+          // Reconcile the egress policy before HTTP config, so a slow or failing
+          // Service setup can't skip (re)applying the pod's policy.
           await this.applyK8sNetworkPolicy();
+          await this.ensureHttpServerConfigured();
 
           logger.info(`Deployment ${this.deploymentName} is already running`);
           return;
@@ -2475,9 +2483,12 @@ export default class K8sDeployment {
           }
         }
 
+        // Reconcile the egress policy before HTTP config, so a slow or failing
+        // Service setup can't leave an already-created (still not-ready) pod under
+        // the deny-all baseline alone.
+        await this.applyK8sNetworkPolicy();
         // Even if pending/failed, ensure HTTP configuration (Service + URL) is set up
         await this.ensureHttpServerConfigured();
-        await this.applyK8sNetworkPolicy();
         return;
       } catch (error: unknown) {
         // Deployment doesn't exist, we'll create it below
@@ -2527,24 +2538,47 @@ export default class K8sDeployment {
       const platformNodeSelector = getCachedPlatformNodeSelector();
       const platformTolerations = getCachedPlatformTolerations();
 
-      await this.k8sAppsApi.createNamespacedDeployment({
-        namespace: this.namespace,
-        body: this.generateDeploymentSpec(
-          dockerImage,
-          normalizedLocalConfig,
-          needsHttp,
-          httpPort,
-          platformNodeSelector,
-          platformTolerations,
-          resolvedImagePullSecretNames,
-        ),
-      });
+      // Create the pod's egress policy before the pod itself, so the pod is
+      // confined the instant it starts. A pod that starts before its policy lands
+      // is selected only by the namespace deny-all baseline — no DNS, no egress —
+      // long enough to fail startup name resolution/connectivity and crashloop.
+      // The policy selects the pod by label, so creating it first is inert until
+      // the pod appears, then takes effect immediately.
+      await this.applyK8sNetworkPolicy();
 
-      logger.info(`Deployment ${this.deploymentName} created`);
+      try {
+        await this.k8sAppsApi.createNamespacedDeployment({
+          namespace: this.namespace,
+          body: this.generateDeploymentSpec(
+            dockerImage,
+            normalizedLocalConfig,
+            needsHttp,
+            httpPort,
+            platformNodeSelector,
+            platformTolerations,
+            resolvedImagePullSecretNames,
+          ),
+        });
+        logger.info(`Deployment ${this.deploymentName} created`);
+      } catch (createError) {
+        // A concurrent reconcile (e.g. another orchestrator replica that also saw
+        // the deployment absent) may have created it between our 404 read and this
+        // call. Re-enter the reconcile so the now-existing deployment is re-read and
+        // validated — a matching one reconciles normally, a stale per-install
+        // selector is self-healed via delete+recreate — rather than assuming the
+        // concurrently-created workload is correct and leaving its Service without
+        // endpoints.
+        if (!isK8sConflictError(createError)) {
+          throw createError;
+        }
+        logger.info(
+          `Deployment ${this.deploymentName} was created concurrently; re-reconciling`,
+        );
+        return this.startOrCreateDeployment(resolvedImagePullSecretNames);
+      }
 
       // Ensure HTTP configuration is set up
       await this.ensureHttpServerConfigured();
-      await this.applyK8sNetworkPolicy();
 
       // Note: assignedHttpPort is set asynchronously in findPodForDeployment during status checks
       // State is "pending" until waitForDeploymentReady confirms the deployment has available replicas

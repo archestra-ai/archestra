@@ -517,6 +517,11 @@ export const AUDIT_DECISIONS = {
     reason: "ChatOps thread override; runtime state",
   },
 
+  chatopsThreadConversationsTable: {
+    audited: false,
+    reason: "ChatOps thread-to-conversation mapping; runtime state",
+  },
+
   // =========================================================================
   // Email / messaging ingest
   // =========================================================================

@@ -395,7 +395,7 @@ function ChatsList({
     id: string;
     title: string | null;
     authorName: string | null;
-    origin: "user" | "schedule_trigger";
+    origin: string;
     lastMessageAt: string;
     readOnly: boolean;
     scheduleTriggerId: string | null;

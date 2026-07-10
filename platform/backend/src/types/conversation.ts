@@ -18,8 +18,18 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
-/** How a conversation was started: a person, or a scheduled trigger run. */
-export const ConversationOriginSchema = z.enum(["user", "schedule_trigger"]);
+/**
+ * How a conversation was started: a person in the web UI, a scheduled trigger
+ * run, or a ChatOps thread (Slack / MS Teams / Telegram) persisted for
+ * cross-interface continuation.
+ */
+export const ConversationOriginSchema = z.enum([
+  "user",
+  "schedule_trigger",
+  "chatops:slack",
+  "chatops:ms-teams",
+  "chatops:telegram",
+]);
 export type ConversationOrigin = z.infer<typeof ConversationOriginSchema>;
 
 // Override selectedProvider to use the proper enum type

@@ -2388,6 +2388,13 @@
       "when": 1783669071314,
       "tag": "0340_complex_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 341,
+      "version": "7",
+      "when": 1783702166760,
+      "tag": "0341_skinny_liz_osborn",
+      "breakpoints": true
     }
   ]
 }

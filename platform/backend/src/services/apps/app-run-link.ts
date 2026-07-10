@@ -49,11 +49,17 @@ export function sanitizeAppNameForToolMetadata(name: string): string {
 // creation, the gateway serve path, and rename sync — renders one identical,
 // safe string instead of re-inlining the template.
 export function appLaunchToolTitle(name: string): string {
-  return `Open ${sanitizeAppNameForToolMetadata(name)}`;
+  const safe = sanitizeAppNameForToolMetadata(name);
+  return safe === "" ? "Open app" : `Open ${safe}`;
 }
 
 export function appLaunchToolDescription(name: string): string {
-  return `Open the "${sanitizeAppNameForToolMetadata(name)}" app and render its UI.`;
+  const safe = sanitizeAppNameForToolMetadata(name);
+  // Fall back to an unquoted, still-useful string when a name of only control/
+  // format characters sanitizes away — mirrors appRunLink's blank-name label.
+  return safe === ""
+    ? "Open the app and render its UI."
+    : `Open the "${safe}" app and render its UI.`;
 }
 
 const MARKDOWN_PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/g;

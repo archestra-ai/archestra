@@ -3,7 +3,7 @@ title: Slack
 category: Agents
 order: 6
 description: Connect Archestra agents to Slack channels
-lastUpdated: 2026-02-23
+lastUpdated: 2026-07-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,6 +55,14 @@ The bot responds with a list of options to choose which agent will handle messag
 In channels the bot stays silent until it is @mentioned. Once mentioned in a thread, it keeps replying to every message in that thread without further mentions. Starting a new thread needs a fresh mention. Direct messages always get a reply, no mention required.
 
 To stop the bot replying in a thread, send `mute` (you can address it by name with no @mention, e.g. `Archestra mute`), or react to one of its replies with the mute (🔇) or shushing-face (🤫) emoji. It goes quiet until the thread is @mentioned again. As a reminder, the bot adds a short hint about this to its first reply in each thread.
+
+### Continuing on the Web
+
+Every Slack thread the agent participates in is persisted as a regular chat conversation. The agent's replies include a link to it, and the conversation appears in the chat sidebar of whoever sent the first message in the thread — that person owns the conversation and can keep chatting with the agent on the web.
+
+The link works both ways: when the thread's owner returns to Slack, the agent remembers everything from the web session too. Messages other people posted in the Slack thread are recorded in the conversation with their name, so a multi-person thread reads coherently on the web.
+
+Web-side context stays private to the owner. When someone else in a shared channel invokes the agent on the same thread, the agent answers using only what happened in that channel — it never repeats the owner's web-side work into the channel.
 
 ### Commands
 

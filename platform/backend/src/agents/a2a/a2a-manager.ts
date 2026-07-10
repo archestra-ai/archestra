@@ -75,6 +75,17 @@ interface A2AManagerConfig {
   disableApprovalFlow?: boolean;
 }
 
+/**
+ * Result of A2AManager.sendMessage: the protocol response plus, when an
+ * execution ran, the executor's full assistant UIMessage (tool parts included)
+ * for callers that persist chat-quality history (ChatOps conversation-backed
+ * mode). The protocol response itself stays text-only.
+ */
+export interface A2ASendMessageResult {
+  response: A2AProtocolSendMessageResponse;
+  responseUiMessage?: UIMessage;
+}
+
 export class A2AManager {
   private readonly config: A2AManagerConfig;
 
@@ -93,8 +104,20 @@ export class A2AManager {
       routeCategory?: RouteCategory;
       chatOpsBindingId?: string;
       chatOpsThreadId?: string;
+      /**
+       * Conversation-backed mode: id of a persisted `conversations` row this
+       * execution belongs to. Forwarded to the executor so tools/sandbox get
+       * conversation-scoped isolation instead of a generated headless key.
+       */
+      conversationId?: string;
+      /**
+       * Prior-context history for conversation-backed mode, supplied by the
+       * caller (already access-filtered). Used only when neither an A2A
+       * context nor task history provides messages (i.e. stateless mode).
+       */
+      conversationHistory?: UIMessage[];
     };
-  }): Promise<A2AProtocolSendMessageResponse> {
+  }): Promise<A2ASendMessageResult> {
     try {
       const { actor, agentId, request, systemParams } = params;
 
@@ -180,7 +203,7 @@ export class A2AManager {
               "[A2AManager] No task when approval decisions were applied",
             );
           }
-          return { task: A2ATaskManager.toProtocolTask(task) };
+          return { response: { task: A2ATaskManager.toProtocolTask(task) } };
         }
         throw new A2AError(A2AErrorKind.NothingToExecute);
       }
@@ -195,11 +218,16 @@ export class A2AManager {
           : task && taskWasSwitchedToWorkingState
             ? task.history
             : [];
+      // Conversation-backed mode: the caller supplies prior context from a
+      // persisted chat conversation. A2A-native history (context/task) takes
+      // precedence — approval continuations must replay task history.
+      const historyUiMessages =
+        contextDbMessages.length > 0
+          ? contextDbMessages.map((m) => m.content as UIMessage)
+          : (systemParams?.conversationHistory ?? []);
       // Repair malformed tool inputs at the source so both the provider request
       // and the UI-continuation copy (`originalUiMessages` below) stay valid.
-      const contextUiMessages = coerceMalformedToolInputs(
-        contextDbMessages.map((m) => m.content as UIMessage),
-      );
+      const contextUiMessages = coerceMalformedToolInputs(historyUiMessages);
       const requestMessages: ModelMessage[] =
         await convertToModelMessages(contextUiMessages);
 
@@ -276,6 +304,7 @@ export class A2AManager {
             parentDelegationChain: undefined, // This is the root call, chain starts with agentId
             blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
             originalUiMessages: contextUiMessages,
+            conversationId: systemParams?.conversationId,
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
           });
@@ -379,7 +408,10 @@ export class A2AManager {
         });
         task = updatedTask ?? task;
 
-        return { task: A2ATaskManager.toProtocolTask(task) };
+        return {
+          response: { task: A2ATaskManager.toProtocolTask(task) },
+          responseUiMessage: result.responseUiMessage,
+        };
       }
 
       if (!this.config.stateless) {
@@ -407,7 +439,10 @@ export class A2AManager {
         );
       }
 
-      return { message: resultMessage };
+      return {
+        response: { message: resultMessage },
+        responseUiMessage: result.responseUiMessage,
+      };
     } catch (error) {
       if (error instanceof A2AError) {
         throw error;

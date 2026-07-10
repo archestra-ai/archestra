@@ -1347,7 +1347,7 @@ describe("ChatOpsManager security validation", () => {
   }) => {
     const sendMessageSpy = vi
       .spyOn(A2AManager.prototype, "sendMessage")
-      .mockResolvedValue({});
+      .mockResolvedValue({ response: {} });
 
     const user = await makeUser({ email: "approver@example.com" });
     const org = await makeOrganization();
@@ -1426,7 +1426,7 @@ describe("ChatOpsManager security validation", () => {
     }) => {
       const sendMessageSpy = vi
         .spyOn(A2AManager.prototype, "sendMessage")
-        .mockResolvedValue({});
+        .mockResolvedValue({ response: {} });
 
       const user = await makeUser({ email: "inline@example.com" });
       const org = await makeOrganization();
@@ -1485,7 +1485,7 @@ describe("ChatOpsManager security validation", () => {
     }) => {
       const sendMessageSpy = vi
         .spyOn(A2AManager.prototype, "sendMessage")
-        .mockResolvedValue({});
+        .mockResolvedValue({ response: {} });
 
       const user = await makeUser({ email: "switch@example.com" });
       const org = await makeOrganization();

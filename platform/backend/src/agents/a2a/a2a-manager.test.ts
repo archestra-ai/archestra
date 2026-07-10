@@ -46,7 +46,7 @@ async function sendMessageWithParts(
   agentId: string,
   parts: A2AProtocolPart[],
 ): Promise<A2AProtocolSendMessageResponse> {
-  return await manager.sendMessage({
+  const result = await manager.sendMessage({
     actor,
     agentId,
     request: {
@@ -59,6 +59,7 @@ async function sendMessageWithParts(
       metadata: {},
     },
   });
+  return result.response;
 }
 
 async function sendTextMessage(
@@ -75,7 +76,7 @@ async function sendApprovalDecisions(
   taskId: string,
   approvalDecisions: A2AArchestraTaskApprovalDecision[],
 ): Promise<A2AProtocolSendMessageResponse> {
-  return await manager.sendMessage({
+  const result = await manager.sendMessage({
     actor,
     agentId,
     request: buildApprovalDecisionSendMessageRequest({
@@ -83,6 +84,7 @@ async function sendApprovalDecisions(
       approvalDecisions,
     }),
   });
+  return result.response;
 }
 
 function mockA2AExecuteMessageWithApprovalRequests(
@@ -227,7 +229,7 @@ describe("A2AManager.sendMessage", () => {
       text: "response(text)",
     });
     const clientMessageId = crypto.randomUUID();
-    const response = await manager.sendMessage({
+    const { response } = await manager.sendMessage({
       actor,
       agentId: agent.id,
       request: {
@@ -262,7 +264,7 @@ describe("A2AManager.sendMessage", () => {
     });
 
     const clientMessageId = crypto.randomUUID();
-    const response = await manager.sendMessage({
+    const { response } = await manager.sendMessage({
       actor,
       agentId: agent.id,
       request: {
@@ -290,7 +292,7 @@ describe("A2AManager.sendMessage", () => {
       text: "response(text)",
     });
     const clientMessageId2 = crypto.randomUUID();
-    const response2 = await manager.sendMessage({
+    const { response: response2 } = await manager.sendMessage({
       actor,
       agentId: agent.id,
       request: {
@@ -347,6 +349,72 @@ describe("A2AManager.sendMessage", () => {
     expect(await A2AContextModel.getTotalCount()).toBe(prevContextCount);
     expect(await A2ATaskModel.getTotalCount()).toBe(prevTaskCount);
     expect(await A2AMessageModel.getTotalCount()).toBe(prevMessageCount);
+  });
+
+  test("Conversation-backed mode: caller history and conversationId reach the executor, full assistant turn is surfaced", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager({ stateless: true });
+    const conversationId = crypto.randomUUID();
+    const responseUiMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant" as const,
+      parts: [
+        { type: "text" as const, text: "done" },
+        {
+          type: "tool-search",
+          toolCallId: "call_1",
+          state: "output-available",
+          output: { type: "text", value: "result" },
+        },
+      ],
+    };
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage,
+      text: "done",
+    });
+
+    const priorTurn = {
+      id: crypto.randomUUID(),
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "earlier web turn" }],
+    };
+    const currentMessageId = crypto.randomUUID();
+    const result = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: currentMessageId,
+          role: A2AProtocolRole.User,
+          parts: [{ text: "follow up from slack" }],
+        },
+        configuration: {},
+        metadata: {},
+      },
+      systemParams: {
+        conversationId,
+        conversationHistory: [priorTurn],
+      },
+    });
+
+    // the full assistant turn (tool parts included) is surfaced for persistence
+    expect(result.responseUiMessage).toEqual(responseUiMessage);
+    // the protocol response stays text-only
+    expect(result.response.message?.parts).toEqual([{ text: "done" }]);
+
+    const call = executeA2AMessage.mock.calls.at(-1)?.[0];
+    // conversation-scoped isolation instead of a generated headless key
+    expect(call.conversationId).toBe(conversationId);
+    // caller-supplied history becomes the prior model context...
+    expect(call.messages).toHaveLength(1);
+    expect(JSON.stringify(call.messages[0])).toContain("earlier web turn");
+    // ...and the UI-continuation copy carries history + the current turn once
+    expect(call.originalUiMessages.map((m: { id: string }) => m.id)).toEqual([
+      priorTurn.id,
+      currentMessageId,
+    ]);
   });
 
   describe("Approval flow", () => {
@@ -633,7 +701,7 @@ describe("A2AManager.sendMessage", () => {
         text: "response(text)",
       });
 
-      const response2 = await manager.sendMessage({
+      const { response: response2 } = await manager.sendMessage({
         actor,
         agentId: agent.id,
         request: buildApprovalDecisionSendMessageRequest({

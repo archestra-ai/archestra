@@ -4,7 +4,10 @@ import {
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
-import { A2AManager } from "@/agents/a2a/a2a-manager";
+import {
+  A2AManager,
+  type A2ASendMessageResult,
+} from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { userHasPermission } from "@/auth/utils";
@@ -1632,7 +1635,7 @@ export class ChatOpsManager {
         message,
         provider,
         sendReply,
-        result,
+        result: result.response,
       });
     } catch (error) {
       logger.error(
@@ -1990,7 +1993,7 @@ export class ChatOpsManager {
     fullMessage: string;
     userId: string;
   }): Promise<{
-    result: A2AProtocolSendMessageResponse;
+    result: A2ASendMessageResult;
     responseAgent: { id: string; name: string };
   }> {
     const { agent, binding, message, provider, fullMessage, userId } = params;
@@ -2016,7 +2019,7 @@ export class ChatOpsManager {
     const systemParams = {
       sessionId,
       source,
-      route: RouteCategory.CHATOPS,
+      routeCategory: RouteCategory.CHATOPS,
       chatOpsBindingId: binding.id,
       chatOpsThreadId: effectiveThreadId,
     };
@@ -2045,12 +2048,16 @@ export class ChatOpsManager {
       if (swappedAgent && swappedAgent.agentType === "agent") {
         const initialResponseTextIsEmpty =
           stripThinkingBlocks(
-            (extractMessageFromSendMessageResult(initialResult)?.parts || [])
+            (
+              extractMessageFromSendMessageResult(initialResult.response)
+                ?.parts || []
+            )
               .map((p) => p.text)
               .join("\n"),
           ) === "";
         const initialResponseNoApprovalRequests =
-          !extractApprovalRequestsFromSendMessageResult(initialResult)?.length;
+          !extractApprovalRequestsFromSendMessageResult(initialResult.response)
+            ?.length;
         const initialResponseIsEmpty =
           initialResponseTextIsEmpty && initialResponseNoApprovalRequests;
 
@@ -2214,7 +2221,7 @@ export class ChatOpsManager {
         provider,
         sendReply: true,
         currentApprovalId: decision.approvalId,
-        result,
+        result: result.response,
       });
     } catch (error) {
       logger.error(

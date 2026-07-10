@@ -316,10 +316,14 @@ class A2AV2Router {
       {
         SendMessage: {
           func: async (params) =>
-            this.manager.sendMessage({
-              ...params,
-              request: params.request as A2AProtocolSendMessageRequest,
-            }),
+            this.manager
+              .sendMessage({
+                ...params,
+                request: params.request as A2AProtocolSendMessageRequest,
+              })
+              // the wire response is the protocol shape; the wrapper's
+              // responseUiMessage is for internal persistence callers only
+              .then((result) => result.response),
           schema: A2AProtocolSendMessageRequestSchema,
         },
         GetTask: {

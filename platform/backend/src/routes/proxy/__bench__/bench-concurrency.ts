@@ -3,19 +3,19 @@
  *
  * Runs 8 concurrent async batches of the TOON kernel (mixed 1KB-5MB items,
  * ~8.8MB per batch, ~70MB total) with an event-loop yield between items,
- * and reports p50/p99/max event-loop delay plus peak RSS.
+ * and reports p50/p99/max event-loop delay plus peak RSS. Backend selectable
+ * via BENCH_BACKEND=ts|native (see toon-backend.ts).
  *
  * Run from platform/backend:
  *   pnpm exec tsx src/routes/proxy/__bench__/bench-concurrency.ts
+ *   BENCH_BACKEND=native pnpm exec tsx src/routes/proxy/__bench__/bench-concurrency.ts
  */
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { setImmediate as yieldEventLoop } from "node:timers/promises";
 import { fmt } from "./bench-util";
 import { batchBytes, buildBatch, type CorpusSpec } from "./corpus";
-import {
-  encodeToolResultsReference,
-  type ToonKernelItem,
-} from "./toon-kernel-reference";
+import { resolveToonBackend, type ToonBenchBackend } from "./toon-backend";
+import type { ToonKernelItem } from "./toon-kernel-reference";
 
 const CONCURRENCY = 8;
 
@@ -42,9 +42,12 @@ function sampleRss(): void {
   }
 }
 
-async function worker(items: ToonKernelItem[]): Promise<void> {
+async function worker(
+  backend: ToonBenchBackend,
+  items: ToonKernelItem[],
+): Promise<void> {
   for (const item of items) {
-    const [result] = encodeToolResultsReference([item]);
+    const [result] = await backend.encode([item]);
     sink += result.encoded === null ? 0 : result.encoded.length;
     sampleRss();
     await yieldEventLoop();
@@ -52,6 +55,7 @@ async function worker(items: ToonKernelItem[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const backend = await resolveToonBackend();
   const batches: ToonKernelItem[][] = [];
   for (let i = 0; i < CONCURRENCY; i++) {
     batches.push(buildWorkerBatch(1000 + i));
@@ -64,7 +68,7 @@ async function main(): Promise<void> {
   const rssTimer = setInterval(sampleRss, 25);
   histogram.enable();
   const start = performance.now();
-  await Promise.all(batches.map((b) => worker(b)));
+  await Promise.all(batches.map((b) => worker(backend, b)));
   const wallMs = performance.now() - start;
   histogram.disable();
   clearInterval(rssTimer);
@@ -72,7 +76,7 @@ async function main(): Promise<void> {
 
   const toMs = (ns: number) => ns / 1e6;
   console.info(
-    "bench-concurrency: 8 concurrent TOON kernel batches (baseline)",
+    `bench-concurrency: 8 concurrent TOON kernel batches (${backend.name} backend)`,
   );
   console.info(
     [

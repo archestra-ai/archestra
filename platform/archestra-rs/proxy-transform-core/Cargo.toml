@@ -15,6 +15,11 @@ serde_json = { version = "1", features = ["preserve_order"] }
 toon-format = { version = "0.5.0", default-features = false }
 
 [dev-dependencies]
+criterion = "0.5"
 proptest = "1"
 # fixture (de)serialization in the golden-corpus test
 serde = { version = "1", features = ["derive"] }
+
+[[bench]]
+name = "toon_kernel"
+harness = false

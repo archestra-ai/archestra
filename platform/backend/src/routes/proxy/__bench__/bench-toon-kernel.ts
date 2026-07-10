@@ -1,9 +1,11 @@
 /**
- * Benchmark (a): TOON kernel (unwrap -> JSON.parse -> toonEncode) via the TS
- * reference backend, over deterministic synthetic corpora.
+ * Benchmark (a): TOON kernel (unwrap -> JSON.parse -> toonEncode) over
+ * deterministic synthetic corpora, against a selectable backend
+ * (BENCH_BACKEND=ts|native — see toon-backend.ts).
  *
  * Run from platform/backend:
  *   pnpm exec tsx src/routes/proxy/__bench__/bench-toon-kernel.ts
+ *   BENCH_BACKEND=native pnpm exec tsx src/routes/proxy/__bench__/bench-toon-kernel.ts
  */
 import { performance } from "node:perf_hooks";
 import { fmt, summarize } from "./bench-util";
@@ -13,10 +15,8 @@ import {
   buildJumboBatch,
   CORPUS_SPECS,
 } from "./corpus";
-import {
-  encodeToolResultsReference,
-  type ToonKernelItem,
-} from "./toon-kernel-reference";
+import { resolveToonBackend, type ToonBenchBackend } from "./toon-backend";
+import type { ToonKernelItem } from "./toon-kernel-reference";
 
 const TIME_BUDGET_MS = 4_000;
 const MIN_ITERATIONS = 5;
@@ -25,9 +25,12 @@ const MAX_ITERATIONS = 200;
 // Prevents dead-code elimination of the encode results.
 let sink = 0;
 
-function runBatch(items: ToonKernelItem[]): number {
+async function runBatch(
+  backend: ToonBenchBackend,
+  items: ToonKernelItem[],
+): Promise<number> {
   const start = performance.now();
-  const results = encodeToolResultsReference(items);
+  const results = await backend.encode(items);
   const elapsed = performance.now() - start;
   for (const r of results) {
     sink += r.encoded === null ? r.normalized.length : r.encoded.length;
@@ -35,9 +38,13 @@ function runBatch(items: ToonKernelItem[]): number {
   return elapsed;
 }
 
-function benchCorpus(name: string, items: ToonKernelItem[]): void {
+async function benchCorpus(
+  backend: ToonBenchBackend,
+  name: string,
+  items: ToonKernelItem[],
+): Promise<void> {
   const totalMB = batchBytes(items) / (1 << 20);
-  runBatch(items); // warmup
+  await runBatch(backend, items); // warmup
   const samples: number[] = [];
   const budgetStart = performance.now();
   while (
@@ -45,7 +52,7 @@ function benchCorpus(name: string, items: ToonKernelItem[]): void {
     (samples.length < MIN_ITERATIONS ||
       performance.now() - budgetStart < TIME_BUDGET_MS)
   ) {
-    samples.push(runBatch(items));
+    samples.push(await runBatch(backend, items));
   }
   const s = summarize(samples);
   const mbPerSec = totalMB / (s.meanMs / 1000);
@@ -64,9 +71,14 @@ function benchCorpus(name: string, items: ToonKernelItem[]): void {
   );
 }
 
-console.info("bench-toon-kernel: TS reference backend (baseline)");
-for (const spec of CORPUS_SPECS) {
-  benchCorpus(spec.name, buildBatch(spec, 42));
+async function main(): Promise<void> {
+  const backend = await resolveToonBackend();
+  console.info(`bench-toon-kernel: ${backend.name} backend`);
+  for (const spec of CORPUS_SPECS) {
+    await benchCorpus(backend, spec.name, buildBatch(spec, 42));
+  }
+  await benchCorpus(backend, "70MB", buildJumboBatch(4242));
+  console.info(`(sink=${sink})`);
 }
-benchCorpus("70MB", buildJumboBatch(4242));
-console.info(`(sink=${sink})`);
+
+main();

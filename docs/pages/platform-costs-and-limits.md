@@ -27,6 +27,23 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
+## Subscription vs Metered Cost
+
+Some LLM traffic is not billed per token. A flat-rate subscription — Claude Code on a Max or Pro plan, for example — covers usage for a fixed monthly fee. Pricing that traffic at per-token API rates would report a cost that was never charged.
+
+Each interaction records a billing mode. Metered traffic is billed per token, so its cost is real spend. Subscription traffic is covered by the plan, so its billed spend is $0. Archestra still keeps the list-price estimate for subscription traffic, so you can see what the same usage would have cost at API rates.
+
+The "Actual Cost" line and the per-team, per-agent, and per-model cost figures show billed spend. Subscription usage appears as a separate "Subscription (Not Billed)" line on the Costs chart and as a badge on the affected sessions.
+
+Archestra resolves the billing mode two ways:
+
+- A provider key you mark as Subscription in the LLM Gateways settings applies that mode to every request it fulfills. Use this when the key's secret is itself a subscription token, such as a shared Claude Code token.
+- Claude Code and Claude Desktop that forward an OAuth Bearer token (a subscription login) are detected automatically. Turn this off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false`.
+
+Detection applies to new interactions. Traffic recorded before the billing mode was set stays metered.
+
+Cost-based usage limits are the one exception: they still count the list-price estimate, including subscription usage. A subscription-heavy setup can therefore reach a dollar limit on usage that was never billed. Use token-based limits for those setups.
+
 ## Usage Limits
 
 Usage limits are guardrails for LLM spend. Archestra supports token-cost limits scoped to the organization, team, user, agent, LLM proxy, virtual API key, or environment. Each limit can target one or more specific models, or apply to all models. A limit with no model specified acts as a global budget across every model the entity uses. Each limit has its own cleanup interval.

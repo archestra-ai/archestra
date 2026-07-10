@@ -1112,6 +1112,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Opt-in: set a larger value (e.g. `600000` for 10 minutes) when an upstream's time-to-first-token can exceed 5 minutes — typically a slow CPU-only Ollama or vLLM model — which otherwise fails with `Headers Timeout Error`
   - Keep it finite so genuinely-dead upstreams still surface as errors
 
+- **`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT`** - Automatically classify Claude-client subscription passthrough as subscription usage.
+  - Default: `true`
+  - When on, traffic attributed to a Claude client (Claude Code or Claude Desktop) that forwards an OAuth Bearer token — a Max/Pro subscription — is recorded as `subscription` billing mode and reported as $0 billed spend, keeping its list-price estimate for comparison
+  - Set to `false` to treat all raw-passthrough traffic as metered and rely only on the per-provider-key billing mode
+  - See: [Costs and Limits](/docs/platform-costs-and-limits#subscription-vs-metered-cost)
+
 - **`ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED`** - Enable AWS IAM authentication for Bedrock.
   - Default: `false`
   - Set to `true` to use the AWS credential chain (IRSA, instance profiles, env vars) instead of API keys

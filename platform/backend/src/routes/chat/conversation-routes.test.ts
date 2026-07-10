@@ -925,19 +925,34 @@ describe("chat conversation and message routes", () => {
       const { conversation, message } =
         await makeConversationWithAssistantMessage(agent.id);
 
-      const upBefore = await counterValue("up");
-      const clearedBefore = await counterValue("cleared");
+      const snapshot = async () => ({
+        up: await counterValue("up"),
+        down: await counterValue("down"),
+        cleared: await counterValue("cleared"),
+      });
+      const before = await snapshot();
 
-      await setFeedback(message.id, conversation.id, "up");
-      expect(await counterValue("up")).toBe(upBefore + 1);
+      const upResponse = await setFeedback(message.id, conversation.id, "up");
+      expect(upResponse.statusCode).toBe(200);
+      expect(await snapshot()).toEqual({ ...before, up: before.up + 1 });
 
-      await setFeedback(message.id, conversation.id, null);
-      expect(await counterValue("cleared")).toBe(clearedBefore + 1);
+      const clearResponse = await setFeedback(
+        message.id,
+        conversation.id,
+        null,
+      );
+      expect(clearResponse.statusCode).toBe(200);
+      const afterClear = {
+        ...before,
+        up: before.up + 1,
+        cleared: before.cleared + 1,
+      };
+      expect(await snapshot()).toEqual(afterClear);
 
-      // A rejected update (message not found) must not count
+      // A rejected update (message not found) must not count anywhere
       const missing = await setFeedback(uuidv7(), conversation.id, "up");
       expect(missing.statusCode).toBe(404);
-      expect(await counterValue("up")).toBe(upBefore + 1);
+      expect(await snapshot()).toEqual(afterClear);
     });
 
     test("the feedback column overrides stale metadata baked into content JSON", async ({

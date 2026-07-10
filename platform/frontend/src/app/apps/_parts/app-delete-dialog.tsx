@@ -58,9 +58,9 @@ export function AppDeleteDialog({
         >
           <div className="flex flex-col gap-3 px-4 pb-4">
             <DialogDescription>
-              Are you sure you want to delete &quot;{app.name}&quot;? This
-              permanently removes the app and its version history and cannot be
-              undone.
+              Are you sure you want to delete &quot;{app.name}&quot;? The app
+              will no longer be available, and this cannot be undone in the UI.
+              Its app record and version history may be retained.
             </DialogDescription>
           </div>
           <DialogStickyFooter className="mt-0 border-t-0 shadow-none">

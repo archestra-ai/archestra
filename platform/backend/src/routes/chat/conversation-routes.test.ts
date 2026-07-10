@@ -1,10 +1,12 @@
 import { ChatErrorCode } from "@archestra/shared";
+import client from "prom-client";
 import db, { schema } from "@/database";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
+import { initializeChatMetrics } from "@/observability/metrics/chat";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { projectService } from "@/services/project";
@@ -901,6 +903,41 @@ describe("chat conversation and message routes", () => {
       expect(
         clearedReadBack.json().messages[0].metadata.feedback,
       ).toBeUndefined();
+    });
+
+    test("counts feedback actions in chat_message_feedback_total, skipping failed updates", async ({
+      makeAgent,
+    }) => {
+      initializeChatMetrics();
+      const counterValue = async (feedback: string) => {
+        const metric = client.register.getSingleMetric(
+          "chat_message_feedback_total",
+        );
+        const { values } = await (metric as client.Counter<string>).get();
+        return values.find((v) => v.labels.feedback === feedback)?.value ?? 0;
+      };
+
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      const { conversation, message } =
+        await makeConversationWithAssistantMessage(agent.id);
+
+      const upBefore = await counterValue("up");
+      const clearedBefore = await counterValue("cleared");
+
+      await setFeedback(message.id, conversation.id, "up");
+      expect(await counterValue("up")).toBe(upBefore + 1);
+
+      await setFeedback(message.id, conversation.id, null);
+      expect(await counterValue("cleared")).toBe(clearedBefore + 1);
+
+      // A rejected update (message not found) must not count
+      const missing = await setFeedback(uuidv7(), conversation.id, "up");
+      expect(missing.statusCode).toBe(404);
+      expect(await counterValue("up")).toBe(upBefore + 1);
     });
 
     test("the feedback column overrides stale metadata baked into content JSON", async ({

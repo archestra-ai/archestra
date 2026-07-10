@@ -4,12 +4,14 @@
  * Thumbs feedback rate over the last day, by value:
  * sum by (feedback) (increase(chat_message_feedback_total[1d]))
  *
- * `cleared` counts retractions — counters cannot decrement, so dashboards
- * that want net sentiment subtract it explicitly.
+ * This counts feedback *actions* by resulting value (`cleared` = a rating
+ * retracted); it cannot reconstruct current or net sentiment — the source
+ * of truth for that is the messages.feedback column.
  */
 
 import client from "prom-client";
 import logger from "@/logging";
+import type { MessageFeedback } from "@/types";
 
 let chatMessageFeedbackTotal: client.Counter<string>;
 
@@ -29,7 +31,7 @@ export function initializeChatMetrics(): void {
 }
 
 export function reportChatMessageFeedback(
-  feedback: "up" | "down" | null,
+  feedback: MessageFeedback | null,
 ): void {
   if (!chatMessageFeedbackTotal) return;
   chatMessageFeedbackTotal.inc({ feedback: feedback ?? "cleared" });

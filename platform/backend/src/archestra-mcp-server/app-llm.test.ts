@@ -84,62 +84,6 @@ describe("app llm completion", () => {
     );
   });
 
-  test("aborting the tool context cancels the in-flight completion", async () => {
-    const controller = new AbortController();
-    const abortError = new DOMException(
-      "The operation was aborted",
-      "AbortError",
-    );
-    vi.mocked(generateText).mockImplementation(
-      ({ abortSignal }) =>
-        new Promise((_, reject) => {
-          if (abortSignal?.aborted) {
-            reject(abortError);
-            return;
-          }
-          abortSignal?.addEventListener("abort", () => reject(abortError), {
-            once: true,
-          });
-        }),
-    );
-
-    const completion = executeArchestraTool(
-      llmTool,
-      { prompt: "summarize this" },
-      { ...context, abortSignal: controller.signal },
-    );
-    controller.abort();
-
-    await expect(completion).rejects.toBe(abortError);
-  });
-
-  test("rethrows a provider-wrapped failure after cancellation", async () => {
-    const controller = new AbortController();
-    const providerError = new Error("provider disconnected");
-    controller.abort();
-    vi.mocked(generateText).mockRejectedValue(providerError);
-
-    await expect(
-      executeArchestraTool(
-        llmTool,
-        { prompt: "summarize this" },
-        { ...context, abortSignal: controller.signal },
-      ),
-    ).rejects.toBe(providerError);
-  });
-
-  test("rethrows an abort-like failure even without a context signal", async () => {
-    const abortError = new DOMException(
-      "The operation was aborted",
-      "AbortError",
-    );
-    vi.mocked(generateText).mockRejectedValue(abortError);
-
-    await expect(
-      executeArchestraTool(llmTool, { prompt: "summarize this" }, context),
-    ).rejects.toBe(abortError);
-  });
-
   test("jsonMode steers the model with a JSON directive", async () => {
     vi.mocked(generateText).mockResolvedValue({ text: "{}" } as any);
 

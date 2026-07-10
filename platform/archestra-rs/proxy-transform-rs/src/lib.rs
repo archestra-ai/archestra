@@ -20,6 +20,7 @@ use proxy_transform_core as core;
 /// runs, so nothing here touches a JS handle.
 pub struct ToonEncodeTask {
     items: Vec<core::ToonEncodeItem>,
+    count: Option<core::BeforeSource>,
 }
 
 impl Task for ToonEncodeTask {
@@ -28,8 +29,9 @@ impl Task for ToonEncodeTask {
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
         let items = std::mem::take(&mut self.items);
+        let count = self.count;
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            core::toon_encode_tool_results(items)
+            core::toon_encode_tool_results(items, count)
         }))
         .map_err(panic_to_napi_error)
     }
@@ -44,12 +46,23 @@ impl Task for ToonEncodeTask {
 /// as TOON (spec v3). Results are positional — same length and order as
 /// `items`; content that is not parseable JSON yields `encoded: null` (the
 /// caller keeps the original payload).
+///
+/// `beforeSource` selects the fused cl100k token counting: pass it to have the
+/// off-thread pass populate `beforeTokens`/`encodedTokens` (`Normalized` for
+/// most adapters, `Raw` for Gemini), or omit it to skip counting (Anthropic and
+/// Bedrock tokenize with their own tokenizer).
 #[napi(
     js_name = "toonEncodeToolResults",
     ts_return_type = "Promise<Array<ToonEncodeResult>>"
 )]
-pub fn toon_encode_tool_results(items: Vec<core::ToonEncodeItem>) -> AsyncTask<ToonEncodeTask> {
-    AsyncTask::new(ToonEncodeTask { items })
+pub fn toon_encode_tool_results(
+    items: Vec<core::ToonEncodeItem>,
+    before_source: Option<core::BeforeSource>,
+) -> AsyncTask<ToonEncodeTask> {
+    AsyncTask::new(ToonEncodeTask {
+        items,
+        count: before_source,
+    })
 }
 
 fn panic_to_napi_error(payload: Box<dyn Any + Send>) -> napi::Error {

@@ -59,7 +59,7 @@ fn golden_corpus_conformance() {
             unwrap: case.unwrap,
         })
         .collect();
-    let results: Vec<ToonEncodeResult> = toon_encode_tool_results(items);
+    let results: Vec<ToonEncodeResult> = toon_encode_tool_results(items, None);
     assert_eq!(results.len(), cases.len(), "positional contract");
 
     if std::env::var("UPDATE_TOON_GOLDENS").as_deref() == Ok("1") {

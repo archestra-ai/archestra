@@ -14,6 +14,7 @@
 
 mod encode;
 mod json;
+mod tokenize;
 
 use json::JsonValue;
 
@@ -29,6 +30,21 @@ pub struct ToonEncodeItem {
     pub unwrap: bool,
 }
 
+/// Which string an adapter tokenizes as the pre-compression baseline, selecting
+/// the fused token counting (see [`toon_encode_tool_results`]). Passing `None`
+/// there skips counting entirely (Anthropic and Bedrock keep their own JS
+/// tokenizer); the two variants below cover the tiktoken-family adapters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "napi", napi_derive::napi(string_enum))]
+pub enum BeforeSource {
+    /// Count the original `raw_content` (pre-unwrap) as the baseline — Gemini,
+    /// which tokenizes its serialized response, not the unwrapped inner text.
+    Raw,
+    /// Count the `normalized` (post-unwrap) content — every other tiktoken
+    /// adapter (OpenAI family, Cohere, ZhipuAI, MiniMax).
+    Normalized,
+}
+
 /// The transformation output for one item. `normalized` is the unwrapped string
 /// when unwrapping was requested and matched, else the original `raw_content`
 /// (adapters tokenize it for accounting). `encoded` is the TOON encoding, or
@@ -36,13 +52,22 @@ pub struct ToonEncodeItem {
 /// exceed the anti-amplification output budget (see `encode` module docs);
 /// adapters keep the original payload either way.
 ///
-/// `use_nullable` makes `encoded: None` cross the boundary as an explicit JS
-/// `null` (typed `string | null`) instead of an omitted key.
+/// `before_tokens`/`encoded_tokens` are the cl100k counts of the baseline and
+/// the compressed candidate, populated only when a [`BeforeSource`] is passed
+/// AND `encoded` is `Some` (an unencodable item is never tokenized, matching
+/// the adapters). Both `None` otherwise.
+///
+/// `use_nullable` makes `None` fields cross the boundary as an explicit JS
+/// `null` (typed `string | null` / `number | null`) instead of an omitted key.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "napi", napi_derive::napi(object, use_nullable = true))]
 pub struct ToonEncodeResult {
     pub normalized: String,
     pub encoded: Option<String>,
+    #[cfg_attr(feature = "napi", napi(js_name = "beforeTokens"))]
+    pub before_tokens: Option<u32>,
+    #[cfg_attr(feature = "napi", napi(js_name = "encodedTokens"))]
+    pub encoded_tokens: Option<u32>,
 }
 
 /// Items whose raw content exceeds this many bytes are not parsed or encoded
@@ -63,7 +88,16 @@ pub const MAX_ITEM_INPUT_BYTES: usize = 10 * 1024 * 1024;
 /// total produced output is capped at `2 x total input bytes + one floor`;
 /// once the running total exceeds it, remaining items are not encoded
 /// (`encoded: None`, fail-open like the per-item budget, unwrap still applied).
-pub fn toon_encode_tool_results(items: Vec<ToonEncodeItem>) -> Vec<ToonEncodeResult> {
+///
+/// When `count` is `Some`, the cl100k token counts that gate each adapter's
+/// keep/reject decision are computed here, in the same off-thread pass, instead
+/// of by a synchronous WASM tokenizer on the Node event loop. `None` leaves
+/// `before_tokens`/`encoded_tokens` unset (Anthropic/Bedrock count with their
+/// own tokenizer).
+pub fn toon_encode_tool_results(
+    items: Vec<ToonEncodeItem>,
+    count: Option<BeforeSource>,
+) -> Vec<ToonEncodeResult> {
     let total_input: usize = items
         .iter()
         .map(|item| item.raw_content.len())
@@ -75,7 +109,7 @@ pub fn toon_encode_tool_results(items: Vec<ToonEncodeItem>) -> Vec<ToonEncodeRes
     items
         .into_iter()
         .map(|item| {
-            let result = encode_item(item, produced <= batch_budget);
+            let result = encode_item(item, produced <= batch_budget, count);
             if let Some(encoded) = &result.encoded {
                 produced = produced.saturating_add(encoded.len());
             }
@@ -92,12 +126,18 @@ enum ItemOutcome {
     Unwrapped(String),
 }
 
-fn encode_item(item: ToonEncodeItem, encode_enabled: bool) -> ToonEncodeResult {
+fn encode_item(
+    item: ToonEncodeItem,
+    encode_enabled: bool,
+    count: Option<BeforeSource>,
+) -> ToonEncodeResult {
     // Input size cap: see MAX_ITEM_INPUT_BYTES. Checked before any parse.
     if item.raw_content.len() > MAX_ITEM_INPUT_BYTES {
         return ToonEncodeResult {
             normalized: item.raw_content,
             encoded: None,
+            before_tokens: None,
+            encoded_tokens: None,
         };
     }
     // Single DOM parse per item: the unwrap check reuses the parsed value
@@ -125,10 +165,22 @@ fn encode_item(item: ToonEncodeItem, encode_enabled: bool) -> ToonEncodeResult {
         }
     };
     match outcome {
-        ItemOutcome::Encoded(encoded) => ToonEncodeResult {
-            normalized: item.raw_content,
-            encoded,
-        },
+        ItemOutcome::Encoded(encoded) => {
+            // normalized == raw_content on this path, so Raw and Normalized
+            // select the same string.
+            let (before_tokens, encoded_tokens) = counts(
+                count,
+                &item.raw_content,
+                &item.raw_content,
+                encoded.as_deref(),
+            );
+            ToonEncodeResult {
+                normalized: item.raw_content,
+                encoded,
+                before_tokens,
+                encoded_tokens,
+            }
+        }
         ItemOutcome::Unwrapped(text) => {
             let encoded = if encode_enabled {
                 json::parse_json(&text)
@@ -136,11 +188,42 @@ fn encode_item(item: ToonEncodeItem, encode_enabled: bool) -> ToonEncodeResult {
             } else {
                 None
             };
+            let (before_tokens, encoded_tokens) =
+                counts(count, &item.raw_content, &text, encoded.as_deref());
             ToonEncodeResult {
                 normalized: text,
                 encoded,
+                before_tokens,
+                encoded_tokens,
             }
         }
+    }
+}
+
+/// cl100k token counts for the keep/reject decision. Computed only for
+/// encodable items (`encoded` is `Some`) — every adapter skips tokenizing a
+/// result it cannot compress, so counting one here would be wasted work and a
+/// meaningless "before". `before` follows the adapter's semantics via
+/// [`BeforeSource`]. A `None` from the tokenizer (encoder init failed) is
+/// propagated so the binding can fail open rather than report a bogus zero.
+fn counts(
+    count: Option<BeforeSource>,
+    raw: &str,
+    normalized: &str,
+    encoded: Option<&str>,
+) -> (Option<u32>, Option<u32>) {
+    match (count, encoded) {
+        (Some(source), Some(encoded)) => {
+            let before = match source {
+                BeforeSource::Raw => raw,
+                BeforeSource::Normalized => normalized,
+            };
+            (
+                tokenize::count_user_tokens(before),
+                tokenize::count_user_tokens(encoded),
+            )
+        }
+        _ => (None, None),
     }
 }
 
@@ -191,11 +274,14 @@ mod tests {
     use super::*;
 
     fn encode_one(raw_content: &str, unwrap: bool) -> ToonEncodeResult {
-        let results = toon_encode_tool_results(vec![ToonEncodeItem {
-            id: "t1".to_string(),
-            raw_content: raw_content.to_string(),
-            unwrap,
-        }]);
+        let results = toon_encode_tool_results(
+            vec![ToonEncodeItem {
+                id: "t1".to_string(),
+                raw_content: raw_content.to_string(),
+                unwrap,
+            }],
+            None,
+        );
         assert_eq!(results.len(), 1);
         results.into_iter().next().expect("one result")
     }
@@ -374,7 +460,7 @@ mod tests {
         let total_input = raw.len() * 40;
         let batch_budget = 2 * total_input + 16 * 1024;
 
-        let results = toon_encode_tool_results(items);
+        let results = toon_encode_tool_results(items, None);
         assert_eq!(results.len(), 40);
         let encoded_count = results.iter().filter(|r| r.encoded.is_some()).count();
         assert_eq!(encoded_count, 3, "first items encode, tail is skipped");
@@ -442,7 +528,7 @@ mod tests {
                 unwrap: false,
             },
         ];
-        let results = toon_encode_tool_results(items);
+        let results = toon_encode_tool_results(items, None);
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].encoded.as_deref(), Some("a: 1"));
         assert_eq!(results[1].encoded, None);
@@ -451,6 +537,60 @@ mod tests {
 
     #[test]
     fn empty_batch_returns_empty() {
-        assert!(toon_encode_tool_results(Vec::new()).is_empty());
+        assert!(toon_encode_tool_results(Vec::new(), None).is_empty());
+    }
+
+    fn count_one(raw_content: &str, unwrap: bool, count: BeforeSource) -> ToonEncodeResult {
+        let results = toon_encode_tool_results(
+            vec![ToonEncodeItem {
+                id: "t1".to_string(),
+                raw_content: raw_content.to_string(),
+                unwrap,
+            }],
+            Some(count),
+        );
+        results.into_iter().next().expect("one result")
+    }
+
+    #[test]
+    fn no_count_leaves_token_fields_unset() {
+        let result = encode_one(INNER, true);
+        assert!(result.encoded.is_some());
+        assert_eq!(result.before_tokens, None);
+        assert_eq!(result.encoded_tokens, None);
+    }
+
+    #[test]
+    fn count_populates_both_token_fields_for_encoded_items() {
+        let result = count_one(INNER, false, BeforeSource::Normalized);
+        let before = result.before_tokens.expect("before counted");
+        let after = result.encoded_tokens.expect("encoded counted");
+        assert!(before > 0 && after > 0);
+        // The whole point: the TOON encoding of a uniform object is smaller.
+        assert!(after < before, "before={before} after={after}");
+    }
+
+    #[test]
+    fn count_skips_unencodable_items() {
+        // Not JSON -> encoded None -> no "before" to compare, nothing counted.
+        let result = count_one("plain prose, not json", true, BeforeSource::Normalized);
+        assert_eq!(result.encoded, None);
+        assert_eq!(result.before_tokens, None);
+        assert_eq!(result.encoded_tokens, None);
+    }
+
+    #[test]
+    fn before_source_selects_raw_vs_normalized_when_they_differ() {
+        // A wrapped payload: normalized (inner INNER) differs from raw (the
+        // whole wrapper array). Raw counts more tokens than Normalized.
+        let wrapped = serde_json::to_string(&serde_json::json!([{"type": "text", "text": INNER}]))
+            .expect("serialize fixture");
+        let normalized = count_one(&wrapped, true, BeforeSource::Normalized)
+            .before_tokens
+            .expect("normalized before");
+        let raw = count_one(&wrapped, true, BeforeSource::Raw)
+            .before_tokens
+            .expect("raw before");
+        assert!(raw > normalized, "raw={raw} normalized={normalized}");
     }
 }

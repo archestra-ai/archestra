@@ -8,7 +8,7 @@
 use criterion::{
     BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
 };
-use proxy_transform_core::{ToonEncodeItem, toon_encode_tool_results};
+use proxy_transform_core::{BeforeSource, ToonEncodeItem, toon_encode_tool_results};
 use serde_json::{Value, json};
 
 /// (label, payload bytes) per corpus; every corpus is a 10-item batch covering
@@ -128,17 +128,26 @@ fn build_payload(kind: PayloadKind, target_bytes: usize, rng: &mut TinyRng) -> S
 fn bench_toon_kernel(c: &mut Criterion) {
     let mut group = c.benchmark_group("toon_kernel");
     group.sample_size(20);
-    for (label, payload_bytes) in PAYLOAD_SIZES {
-        let batch = build_batch(payload_bytes, 0x5eed ^ payload_bytes as u64);
-        let total_bytes: usize = batch.iter().map(|item| item.raw_content.len()).sum();
-        group.throughput(Throughput::Bytes(total_bytes as u64));
-        group.bench_with_input(BenchmarkId::from_parameter(label), &batch, |b, batch| {
-            b.iter_batched(
-                || batch.clone(),
-                |items| black_box(toon_encode_tool_results(black_box(items))),
-                BatchSize::LargeInput,
-            );
-        });
+    // Two variants per size: `encode` isolates the transform; `encode+count`
+    // adds the fused cl100k token counting. The delta is the native marginal
+    // cost of the counting that used to run as synchronous WASM calls on the
+    // Node event loop.
+    for (variant, count) in [
+        ("encode", None),
+        ("encode+count", Some(BeforeSource::Normalized)),
+    ] {
+        for (label, payload_bytes) in PAYLOAD_SIZES {
+            let batch = build_batch(payload_bytes, 0x5eed ^ payload_bytes as u64);
+            let total_bytes: usize = batch.iter().map(|item| item.raw_content.len()).sum();
+            group.throughput(Throughput::Bytes(total_bytes as u64));
+            group.bench_with_input(BenchmarkId::new(variant, label), &batch, |b, batch| {
+                b.iter_batched(
+                    || batch.clone(),
+                    |items| black_box(toon_encode_tool_results(black_box(items), count)),
+                    BatchSize::LargeInput,
+                );
+            });
+        }
     }
     group.finish();
 }

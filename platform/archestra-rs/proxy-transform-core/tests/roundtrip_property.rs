@@ -198,11 +198,14 @@ proptest! {
         let parsed: Value = serde_json::from_str(&raw).expect("reparse generated document");
         let raw_len = raw.len();
         let budget = (2 * raw_len).max(16 * 1024);
-        let results = toon_encode_tool_results(vec![ToonEncodeItem {
-            id: "diff".to_string(),
-            raw_content: raw,
-            unwrap: false,
-        }]);
+        let results = toon_encode_tool_results(
+            vec![ToonEncodeItem {
+                id: "diff".to_string(),
+                raw_content: raw,
+                unwrap: false,
+            }],
+            None,
+        );
         let expected = toon_format::encode_default(&parsed).ok();
         match (&results[0].encoded, &expected) {
             (None, Some(crate_output)) => prop_assert!(
@@ -228,11 +231,14 @@ proptest! {
     fn encode_decode_roundtrips(value in arb_json()) {
         let raw = serde_json::to_string(&value).expect("serialize generated value");
         let parsed: Value = serde_json::from_str(&raw).expect("reparse generated document");
-        let results = toon_encode_tool_results(vec![ToonEncodeItem {
-            id: "prop".to_string(),
-            raw_content: raw,
-            unwrap: false,
-        }]);
+        let results = toon_encode_tool_results(
+            vec![ToonEncodeItem {
+                id: "prop".to_string(),
+                raw_content: raw,
+                unwrap: false,
+            }],
+            None,
+        );
         let encoded = results[0].encoded.as_ref().expect("valid JSON always encodes");
         let decoded: Value = toon_format::decode_default(encoded)
             .unwrap_or_else(|error| panic!("decode failed: {error}\nencoded:\n{encoded}"));
@@ -251,10 +257,13 @@ proptest! {
             {"type": "text", "text": inner}
         ]))
         .expect("serialize wrapper");
-        let results = toon_encode_tool_results(vec![
-            ToonEncodeItem { id: "direct".to_string(), raw_content: inner.clone(), unwrap: false },
-            ToonEncodeItem { id: "wrapped".to_string(), raw_content: wrapped, unwrap: true },
-        ]);
+        let results = toon_encode_tool_results(
+            vec![
+                ToonEncodeItem { id: "direct".to_string(), raw_content: inner.clone(), unwrap: false },
+                ToonEncodeItem { id: "wrapped".to_string(), raw_content: wrapped, unwrap: true },
+            ],
+            None,
+        );
         prop_assert_eq!(&results[1].normalized, &inner);
         prop_assert_eq!(&results[1].encoded, &results[0].encoded);
     }

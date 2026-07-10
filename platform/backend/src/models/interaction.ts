@@ -1077,7 +1077,19 @@ class InteractionModel {
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
           totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
           totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
+          // `totalCost` is the full list-price estimate across the session.
+          // `totalBilledCost` / `totalSubscriptionCost` split it by billing mode
+          // (metered = billed spend; subscription = flat-rate, not billed), so a
+          // session's Cost cell can show what was actually charged plus what the
+          // subscription-covered portion would have cost. A session may mix modes
+          // (e.g. a mid-session switch), so both filtered sums are needed.
           totalCost: sum(schema.interactionsTable.cost),
+          totalBilledCost: sql<
+            string | null
+          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered')`,
+          totalSubscriptionCost: sql<
+            string | null
+          >`SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription')`,
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
           totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
           totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
@@ -1180,6 +1192,8 @@ class InteractionModel {
         totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
         totalCacheWriteTokens: Number(s.totalCacheWriteTokens) || 0,
         totalCost: s.totalCost,
+        totalBilledCost: s.totalBilledCost,
+        totalSubscriptionCost: s.totalSubscriptionCost,
         totalBaselineCost: s.totalBaselineCost,
         totalToonCostSavings: s.totalToonCostSavings,
         totalCacheSavings: s.totalCacheSavings,

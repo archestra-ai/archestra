@@ -1283,6 +1283,63 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions billing-mode split", () => {
+    test("splits session cost into billed and subscription", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Agent",
+        teams: [],
+        scope: "org",
+      });
+      const base = {
+        profileId: agent.id,
+        sessionId: "billing-split-session",
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      // Same session, mixed billing modes: $1 + $1 metered, $5 subscription.
+      await InteractionModel.create({
+        ...base,
+        cost: "1.0000000000",
+        billingMode: "metered",
+      });
+      await InteractionModel.create({
+        ...base,
+        cost: "1.0000000000",
+        billingMode: "metered",
+      });
+      await InteractionModel.create({
+        ...base,
+        cost: "5.0000000000",
+        billingMode: "subscription",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+      );
+      const session = sessions.data.find(
+        (s) => s.sessionId === "billing-split-session",
+      );
+      expect(session).toBeDefined();
+      // Full list price is unchanged; billed spend is metered-only; the
+      // subscription portion is tracked separately.
+      expect(Number(session?.totalCost)).toBeCloseTo(7, 5);
+      expect(Number(session?.totalBilledCost)).toBeCloseTo(2, 5);
+      expect(Number(session?.totalSubscriptionCost)).toBeCloseTo(5, 5);
+    });
+  });
+
   describe("getSessions auth attribution", () => {
     test("aggregates auth methods and authenticated app names", async ({
       makeAdmin,

@@ -1,5 +1,14 @@
 import type { StatisticsTimeFrame } from "@archestra/shared";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import {
+  and,
+  type AnyColumn,
+  eq,
+  gte,
+  inArray,
+  lte,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
@@ -304,7 +313,9 @@ class StatisticsModel {
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
-        cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
+        // Billed spend: subscription-fulfilled traffic incurs no per-token
+        // charge, so its list-price `cost` is excluded from the reported total.
+        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)
       .innerJoin(
@@ -472,7 +483,9 @@ class StatisticsModel {
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
         cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
-        cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
+        // Billed spend: subscription-fulfilled traffic incurs no per-token
+        // charge, so its list-price `cost` is excluded from the reported total.
+        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)
       .innerJoin(
@@ -610,7 +623,9 @@ class StatisticsModel {
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
         cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
-        cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
+        // Billed spend: subscription-fulfilled traffic incurs no per-token
+        // charge, so its list-price `cost` is excluded from the reported total.
+        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)
       .innerJoin(
@@ -791,6 +806,7 @@ class StatisticsModel {
           totalBaselineCost: 0,
           totalActualCost: 0,
           totalSavings: 0,
+          totalSubscriptionCost: 0,
           totalOptimizationSavings: 0,
           totalToonSavings: 0,
           totalCacheSavings: 0,
@@ -802,10 +818,15 @@ class StatisticsModel {
     const query = db
       .select({
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
-        baselineCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.baselineCost}), 0) AS DECIMAL)`,
-        actualCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DECIMAL)`,
-        toonSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.toonCostSavings}), 0) AS DECIMAL)`,
-        cacheSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheSavings}), 0) AS DECIMAL)`,
+        // All cost/savings figures are billed (metered) only: optimization,
+        // TOON, and cache savings reflect money actually spent. Subscription
+        // traffic is reported separately as its would-be list-price cost, never
+        // as an optimization saving.
+        baselineCost: billedSum(schema.interactionsTable.baselineCost, "DECIMAL"),
+        actualCost: billedSum(schema.interactionsTable.cost, "DECIMAL"),
+        toonSavings: billedSum(schema.interactionsTable.toonCostSavings, "DECIMAL"),
+        cacheSavings: billedSum(schema.interactionsTable.cacheSavings, "DECIMAL"),
+        subscriptionCost: subscriptionCostSum("DECIMAL"),
       })
       .from(schema.interactionsTable)
       .innerJoin(
@@ -861,6 +882,7 @@ class StatisticsModel {
       actualCost: number;
       toonSavings: number;
       cacheSavings: number;
+      subscriptionCost: number;
     }
 
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
@@ -881,6 +903,7 @@ class StatisticsModel {
           actualCost: 0,
           toonSavings: 0,
           cacheSavings: 0,
+          subscriptionCost: 0,
         });
       }
 
@@ -891,6 +914,7 @@ class StatisticsModel {
       existing.actualCost += Number(row.actualCost);
       existing.toonSavings += Number(row.toonSavings);
       existing.cacheSavings += Number(row.cacheSavings);
+      existing.subscriptionCost += Number(row.subscriptionCost);
     }
 
     const timeSeriesData = Array.from(grouped.values()).sort(
@@ -904,15 +928,17 @@ class StatisticsModel {
     let totalOptimizationSavings = 0;
     let totalToonSavings = 0;
     let totalCacheSavings = 0;
+    let totalSubscriptionCost = 0;
 
     const timeSeries = timeSeriesData.map((row) => {
-      // `row.actualCost` is SUM(interactions.cost): the real spend. It already
-      // reflects every applied optimization — the cheaper model, TOON's reduced
-      // billed token count, and the prompt-cache discount — so it is the true
-      // "Actual Cost". (The previous code subtracted toonSavings from it, which
-      // double-counted savings already baked into `cost` and reported an actual
-      // cost below what was really spent.)
+      // `row.actualCost` is SUM(interactions.cost) over METERED rows only: the
+      // real billed spend. It already reflects every applied optimization — the
+      // cheaper model, TOON's reduced billed token count, and the prompt-cache
+      // discount — so it is the true "Actual Cost". Subscription-fulfilled
+      // traffic is excluded here and surfaced separately as `subscriptionCost`.
       const actualCost = Number(row.actualCost);
+      // Would-be list-price cost of subscription-covered traffic (not billed).
+      const subscriptionCost = Number(row.subscriptionCost);
       // `row.baselineCost` is SUM(interactions.baseline_cost): the same usage
       // priced at the original (pre-optimization) model.
       const baselineModelCost = Number(row.baselineCost);
@@ -937,6 +963,7 @@ class StatisticsModel {
       totalOptimizationSavings += optimizationSavings;
       totalToonSavings += toonSavings;
       totalCacheSavings += cacheSavings;
+      totalSubscriptionCost += subscriptionCost;
 
       return {
         timestamp: row.timeBucket,
@@ -945,6 +972,7 @@ class StatisticsModel {
         optimizationSavings,
         toonSavings,
         cacheSavings,
+        subscriptionCost,
       };
     });
 
@@ -954,12 +982,35 @@ class StatisticsModel {
       totalBaselineCost,
       totalActualCost,
       totalSavings,
+      totalSubscriptionCost,
       totalOptimizationSavings,
       totalToonSavings,
       totalCacheSavings,
       timeSeries,
     };
   }
+}
+
+// ─── Billing-mode-aware cost aggregates ─────────────────────────────────────
+// An interaction's `cost` is the list-price estimate. "Billed spend" is that
+// cost only for `metered` rows; `subscription` rows incur no per-token charge
+// and contribute 0. Expressing the split as SQL aggregate FILTERs keeps these
+// analytics as a single index-only scan (billing_mode is in the statistics
+// covering index).
+
+/** SUM of an interaction cost column restricted to metered rows (billed spend). */
+function billedSum(
+  column: AnyColumn,
+  cast: "DOUBLE PRECISION" | "DECIMAL",
+): SQL<number> {
+  return sql<number>`CAST(COALESCE(SUM(${column}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'metered'), 0) AS ${sql.raw(cast)})`;
+}
+
+/** SUM of interaction `cost` restricted to subscription rows (would-be list-price cost). */
+function subscriptionCostSum(
+  cast: "DOUBLE PRECISION" | "DECIMAL",
+): SQL<number> {
+  return sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}) FILTER (WHERE ${schema.interactionsTable.billingMode} = 'subscription'), 0) AS ${sql.raw(cast)})`;
 }
 
 export default StatisticsModel;

@@ -4688,6 +4688,16 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsHttpMethods: false,
     message: null,
   };
+  const CILIUM_CAPS = {
+    kubernetesNetworkPolicy: true,
+    ciliumNetworkPolicy: true,
+    gkeFqdnNetworkPolicy: false,
+    awsApplicationNetworkPolicy: false,
+    provider: "cilium" as const,
+    supportsFqdn: true,
+    supportsHttpMethods: false,
+    message: null,
+  };
   const POLICY_NAME = "mcp-egress-mcp-mcp-test-server";
   const FLOOR_EGRESS = [
     {
@@ -4809,6 +4819,78 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         rule.to?.some((peer) => peer.ipBlock?.cidr === "203.0.113.0/24"),
       ),
     ).toBe(true);
+  });
+
+  test("emits off as a deny-all ApplicationNetworkPolicy on AWS, not an unenforced plain NetworkPolicy", async () => {
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "off" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    expect(anp?.spec?.egress).toEqual([]);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: POLICY_NAME,
+      namespace: "default",
+    });
+  });
+
+  test("emits the unrestricted floor as a plain NetworkPolicy on Cilium, not a CiliumNetworkPolicy", async () => {
+    const { api: networkingApi, policies } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: ciliumPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "cilium.io",
+          version: "v2",
+          plural: "ciliumnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: CILIUM_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(ciliumPolicies.has(POLICY_NAME)).toBe(false);
+  });
+
+  test("emits the floor as an ApplicationNetworkPolicy for a built-in (null) policy on AWS", async () => {
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: anpPolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.k8s.aws",
+          version: "v1alpha1",
+          plural: "applicationnetworkpolicies",
+        },
+      });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const anp = anpPolicies.get(POLICY_NAME);
+    expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
+    expect(anp?.spec?.egress).toEqual(FLOOR_EGRESS);
   });
 
   test("reconciles in place when relaxing from a restricted policy to the unrestricted floor", async () => {

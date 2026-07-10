@@ -228,14 +228,17 @@ export function shouldUseAwsApplicationNetworkPolicy(params: {
   effectivePolicy?: EffectiveNetworkPolicy | null;
   capabilities?: K8sNetworkPolicyCapabilities | null;
 }): boolean {
-  // On the AWS VPC CNI a plain NetworkPolicy is accepted but not enforced, so a
-  // restricted policy must use ApplicationNetworkPolicy even when its allow-list
-  // is CIDR-only (no domains) — otherwise the deny baseline blocks all its egress.
+  // On the AWS VPC CNI a plain NetworkPolicy is accepted but not enforced, so any
+  // enforcing per-pod policy must be an ApplicationNetworkPolicy — `restricted`
+  // (even a CIDR-only allow-list, which would otherwise be blocked entirely by the
+  // deny baseline) and `off` alike, so `off` does not depend solely on the
+  // best-effort baseline for its kill-switch.
+  const egressMode = params.effectivePolicy?.policy?.egressMode;
   return (
     params.capabilities?.ciliumNetworkPolicy !== true &&
     params.capabilities?.gkeFqdnNetworkPolicy !== true &&
     params.capabilities?.awsApplicationNetworkPolicy === true &&
-    params.effectivePolicy?.policy?.egressMode === "restricted"
+    (egressMode === "restricted" || egressMode === "off")
   );
 }
 

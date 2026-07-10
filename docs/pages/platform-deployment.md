@@ -497,6 +497,7 @@ A namespace-wide default-deny baseline also selects every MCP pod, so a pod that
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
 - `127.0.0.0/8` - Loopback
+- `0.0.0.0/32` - Unspecified address (treated as localhost by some HTTP libraries)
 - `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.

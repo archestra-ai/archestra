@@ -447,6 +447,32 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
     ).toBe(false);
   });
 
+  test("uses AWS ApplicationNetworkPolicy for off too, since a plain NetworkPolicy is unenforced on AWS", () => {
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: true,
+      provider: "aws-application-network-policy" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+    expect(
+      shouldUseAwsApplicationNetworkPolicy({
+        effectivePolicy: makeEffectivePolicy({ egressMode: "off" }),
+        capabilities,
+      }),
+    ).toBe(true);
+    // unrestricted is handled by the floor branch, not this predicate.
+    expect(
+      shouldUseAwsApplicationNetworkPolicy({
+        effectivePolicy: makeEffectivePolicy({ egressMode: "unrestricted" }),
+        capabilities,
+      }),
+    ).toBe(false);
+  });
+
   test("does not manage a Kubernetes NetworkPolicy for unrestricted or built-in policy", () => {
     expect(
       shouldManageK8sNetworkPolicy(makeEffectivePolicy({ egressMode: "off" })),

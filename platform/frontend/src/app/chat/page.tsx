@@ -1015,14 +1015,20 @@ export function ChatPageContent({
       setChatMessageFeedback
         .mutateAsync({ messageId, conversationId, feedback })
         .catch(() => {
-          // Error toast already handled inside the mutation; only roll back.
-          applyMessages((current) =>
-            applyFeedbackToMessages({
+          // Error toast already handled inside the mutation; only roll back —
+          // and only while the message still shows THIS request's value, so a
+          // slow failure can't overwrite a newer rating made in the meantime.
+          applyMessages((current) => {
+            const target = current.find((message) => message.id === messageId);
+            if (getMessageFeedback(target) !== feedback) {
+              return current;
+            }
+            return applyFeedbackToMessages({
               messages: current,
               messageId,
               feedback: previousFeedback,
-            }),
-          );
+            });
+          });
         });
     },
     [setMessages, conversationId, messages, setChatMessageFeedback],

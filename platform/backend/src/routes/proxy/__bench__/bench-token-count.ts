@@ -149,6 +149,12 @@ async function section2EventLoop(): Promise<void> {
   }
   const totalMB = batches.reduce((s, b) => s + batchBytes(b), 0) / (1 << 20);
 
+  // Each worker processes items one at a time with an event-loop yield between
+  // them, mirroring bench-concurrency.ts. This isolates event-loop delay (the
+  // metric that matters): a production request batches its results into one
+  // native call, so the absolute wall/RSS figures here are directional, but the
+  // p50/p99/max event-loop delay per mode is faithful — synchronous JS counting
+  // stalls the loop, the off-thread native call does not.
   for (const mode of ["none", "js", "native"] as const) {
     let peakRss = 0;
     const sampleRss = () => {

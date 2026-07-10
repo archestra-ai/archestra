@@ -13,17 +13,20 @@ import { toonEncodeToolResults } from "./toon-native";
 const countJs = (content: string) =>
   getTokenizer("openai").countTokens([{ role: "user", content }]);
 
+// Each adversarial payload is wrapped in encodable JSON so the strings actually
+// reach the count comparison (a bare non-JSON string yields encoded=null and is
+// never tokenized). The reserved-marker case doubles as the regression for the
+// encode_ordinary baseline: counting it on both sides would throw under the old
+// `encode()`.
 const ADVERSARIAL = [
-  "",
-  "   \n\t\r  ",
-  "café résumé naïve Ångström",
-  "日本語 中文 한국어 emoji 🚀🔥✨🎉",
-  "<|endoftext|> reserved <|fim_prefix|> markers <|fim_suffix|>",
-  "a".repeat(5000),
-  JSON.stringify({
-    rows: Array.from({ length: 60 }, (_, i) => ({ id: i, name: `row ${i}` })),
-  }),
-];
+  { v: "" },
+  { v: "   \n\t\r  " },
+  { v: "café résumé naïve Ångström" },
+  { v: "日本語 中文 한국어 emoji 🚀🔥✨🎉" },
+  { v: "<|endoftext|> reserved <|fim_prefix|> markers <|fim_suffix|>" },
+  { v: "a".repeat(5000) },
+  { rows: Array.from({ length: 60 }, (_, i) => ({ id: i, name: `row ${i}` })) },
+].map((payload) => JSON.stringify(payload));
 
 describeNative("native cl100k counting matches the JS tokenizer", () => {
   test("golden corpus + adversarial inputs count identically to JS", async () => {
@@ -43,6 +46,7 @@ describeNative("native cl100k counting matches the JS tokenizer", () => {
     if (results === null) return;
     expect(results).toHaveLength(inputs.length);
 
+    let compared = 0;
     for (const result of results) {
       if (result.encoded === null) {
         // Unencodable items are never tokenized.
@@ -54,7 +58,11 @@ describeNative("native cl100k counting matches the JS tokenizer", () => {
       // so any boundary normalization applies equally to both sides.
       expect(result.beforeTokens).toBe(countJs(result.normalized));
       expect(result.encodedTokens).toBe(countJs(result.encoded));
+      compared++;
     }
+    // The adversarial payloads are all encodable, so the count comparison must
+    // actually run on them (not just assert null on non-JSON input).
+    expect(compared).toBeGreaterThanOrEqual(ADVERSARIAL.length);
   });
 
   test("the Raw baseline counts the original pre-unwrap serialization", async () => {

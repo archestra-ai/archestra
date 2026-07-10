@@ -2,7 +2,6 @@ import {
   ArchestraInternalErrorCode,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
@@ -26,7 +25,7 @@ import type {
   Zhipuai,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { toonEncodeToolResults } from "../utils/toon-native";
 
 // =============================================================================
 // TYPE ALIASES
@@ -831,7 +830,16 @@ async function convertToolResultsToToon(
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
-  const result = messages.map((message) => {
+  // Collect candidate tool messages first so the native unwrap→parse→encode
+  // transform runs once per request (batched, off the JS thread); results are
+  // positional and reapplied by message index.
+  type ZhipuaiToolMessage = Extract<ZhipuaiMessages[number], { role: "tool" }>;
+  const candidates: {
+    index: number;
+    message: ZhipuaiToolMessage;
+    content: string;
+  }[] = [];
+  messages.forEach((message, index) => {
     if (message.role === "tool") {
       logger.info(
         {
@@ -843,85 +851,111 @@ async function convertToolResultsToToon(
       );
 
       if (typeof message.content === "string") {
-        try {
-          const unwrapped = unwrapToolContent(message.content);
-          const parsed = JSON.parse(unwrapped);
-          const noncompressed = unwrapped;
-          const compressed = toonEncode(parsed);
-
-          const tokensBefore = tokenizer.countTokens([
-            { role: "user", content: noncompressed },
-          ]);
-          const tokensAfter = tokenizer.countTokens([
-            { role: "user", content: compressed },
-          ]);
-
-          toolResultCount++;
-
-          // Always count tokens before
-          totalTokensBefore += tokensBefore;
-
-          // Only apply compression if it actually saves tokens
-          if (tokensAfter < tokensBefore) {
-            totalTokensAfter += tokensAfter;
-
-            logger.info(
-              {
-                toolCallId: message.tool_call_id,
-                beforeLength: noncompressed.length,
-                afterLength: compressed.length,
-                tokensBefore,
-                tokensAfter,
-                toonPreview: compressed.substring(0, 150),
-                provider: "zhipuai",
-              },
-              "convertToolResultsToToon: compressed",
-            );
-            logger.trace(
-              {
-                toolCallId: message.tool_call_id,
-                before: noncompressed,
-                after: compressed,
-                provider: "zhipuai",
-                supposedToBeJson: parsed,
-              },
-              "convertToolResultsToToon: before/after",
-            );
-
-            return {
-              ...message,
-              content: compressed,
-            };
-          }
-
-          // Compression not applied - count non-compressed tokens to track total tokens anyway
-          totalTokensAfter += tokensBefore;
-          logger.info(
-            {
-              toolCallId: message.tool_call_id,
-              tokensBefore,
-              tokensAfter,
-              provider: "zhipuai",
-            },
-            "Skipping TOON compression - compressed output has more tokens",
-          );
-        } catch {
-          logger.info(
-            {
-              toolCallId: message.tool_call_id,
-              contentPreview:
-                typeof message.content === "string"
-                  ? message.content.substring(0, 100)
-                  : "non-string",
-            },
-            "Skipping TOON conversion - content is not JSON",
-          );
-          return message;
-        }
+        candidates.push({ index, message, content: message.content });
       }
     }
+  });
 
-    return message;
+  const encodedResults =
+    candidates.length > 0
+      ? await toonEncodeToolResults(
+          candidates.map((candidate) => ({
+            id: candidate.message.tool_call_id,
+            rawContent: candidate.content,
+            unwrap: true,
+          })),
+        )
+      : [];
+
+  if (encodedResults === null) {
+    // Native addon unavailable: fail open — keep every message uncompressed
+    // and surface the explicit skip reason instead of fabricating stats.
+    return {
+      messages,
+      stats: {
+        tokensBefore: 0,
+        tokensAfter: 0,
+        costSavings: 0,
+        wasEffective: false,
+        hadToolResults: candidates.length > 0,
+        skipReason: "addon_unavailable",
+      },
+    };
+  }
+
+  const result = [...messages];
+  candidates.forEach((candidate, candidateIndex) => {
+    const { normalized, encoded: compressed } = encodedResults[candidateIndex];
+    const { message } = candidate;
+
+    if (compressed === null) {
+      logger.info(
+        {
+          toolCallId: message.tool_call_id,
+          contentPreview: candidate.content.substring(0, 100),
+        },
+        "Skipping TOON conversion - content is not JSON",
+      );
+      return;
+    }
+
+    // Token accounting on the normalized (unwrapped) string, exactly as before.
+    const tokensBefore = tokenizer.countTokens([
+      { role: "user", content: normalized },
+    ]);
+    const tokensAfter = tokenizer.countTokens([
+      { role: "user", content: compressed },
+    ]);
+
+    toolResultCount++;
+
+    // Always count tokens before
+    totalTokensBefore += tokensBefore;
+
+    // Only apply compression if it actually saves tokens
+    if (tokensAfter < tokensBefore) {
+      totalTokensAfter += tokensAfter;
+
+      logger.info(
+        {
+          toolCallId: message.tool_call_id,
+          beforeLength: normalized.length,
+          afterLength: compressed.length,
+          tokensBefore,
+          tokensAfter,
+          toonPreview: compressed.substring(0, 150),
+          provider: "zhipuai",
+        },
+        "convertToolResultsToToon: compressed",
+      );
+      logger.trace(
+        {
+          toolCallId: message.tool_call_id,
+          before: normalized,
+          after: compressed,
+          provider: "zhipuai",
+        },
+        "convertToolResultsToToon: before/after",
+      );
+
+      result[candidate.index] = {
+        ...message,
+        content: compressed,
+      };
+      return;
+    }
+
+    // Compression not applied - count non-compressed tokens to track total tokens anyway
+    totalTokensAfter += tokensBefore;
+    logger.info(
+      {
+        toolCallId: message.tool_call_id,
+        tokensBefore,
+        tokensAfter,
+        provider: "zhipuai",
+      },
+      "Skipping TOON compression - compressed output has more tokens",
+    );
   });
 
   logger.info(

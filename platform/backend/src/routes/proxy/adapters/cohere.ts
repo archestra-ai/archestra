@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { ArchestraInternalErrorCode } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
@@ -25,7 +24,7 @@ import type {
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
 import type { ToolCompressionStats as CompressionStats } from "../utils/toon-conversion";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { toonEncodeToolResults } from "../utils/toon-native";
 
 // =============================================================================
 // TYPE ALIASES
@@ -742,84 +741,107 @@ export async function convertToolResultsToToon(
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
-  const result = messages.map((message) => {
+  // Collect candidate tool messages first so the native unwrap→parse→encode
+  // transform runs once per request (batched, off the JS thread); results are
+  // positional and reapplied by message index.
+  const candidates: {
+    index: number;
+    message: Cohere.Types.ToolMessage;
+  }[] = [];
+  messages.forEach((message, index) => {
     if (message.role === "tool") {
-      const toolMsg = message as Cohere.Types.ToolMessage;
-
-      try {
-        const unwrapped = unwrapToolContent(toolMsg.content);
-        const parsedRes = safeJsonParse(unwrapped);
-        if (!parsedRes.ok) {
-          logger.info(
-            {
-              toolCallId: toolMsg.tool_call_id,
-              contentPreview: toolMsg.content.substring(0, 100),
-            },
-            "convertToolResultsToToon: skipping - content is not JSON",
-          );
-          return message;
-        }
-
-        const parsed = parsedRes.value as unknown;
-        const noncompressed = unwrapped;
-        const compressed = toonEncode(parsed);
-
-        const tokensBefore = tokenizer.countTokens([
-          { role: "user", content: noncompressed },
-        ]);
-        const tokensAfter = tokenizer.countTokens([
-          { role: "user", content: compressed },
-        ]);
-
-        // Only use TOON compression if it actually saves tokens
-        if (tokensAfter < tokensBefore) {
-          totalTokensBefore += tokensBefore;
-          totalTokensAfter += tokensAfter;
-
-          logger.info(
-            {
-              toolCallId: toolMsg.tool_call_id,
-              beforeLength: noncompressed.length,
-              afterLength: compressed.length,
-              tokensBefore,
-              tokensAfter,
-              tokensSaved: tokensBefore - tokensAfter,
-              provider: "cohere",
-            },
-            "convertToolResultsToToon: compressed",
-          );
-
-          return {
-            ...toolMsg,
-            content: compressed,
-          };
-        } else {
-          logger.info(
-            {
-              toolCallId: toolMsg.tool_call_id,
-              beforeLength: noncompressed.length,
-              afterLength: compressed.length,
-              tokensBefore,
-              tokensAfter,
-              tokensDiff: tokensAfter - tokensBefore,
-              provider: "cohere",
-            },
-            "convertToolResultsToToon: skipping - compression increases tokens",
-          );
-          return message;
-        }
-      } catch {
-        logger.info(
-          {
-            toolCallId: toolMsg.tool_call_id,
-            contentPreview: toolMsg.content.substring(0, 100),
-          },
-          "convertToolResultsToToon: skipping - content is not JSON",
-        );
-        return message;
-      }
+      candidates.push({ index, message: message as Cohere.Types.ToolMessage });
     }
-    return message;
+  });
+
+  const encodedResults =
+    candidates.length > 0
+      ? await toonEncodeToolResults(
+          candidates.map((candidate) => ({
+            id: candidate.message.tool_call_id,
+            rawContent: candidate.message.content,
+            unwrap: true,
+          })),
+        )
+      : [];
+
+  if (encodedResults === null) {
+    // Native addon unavailable: fail open — keep every message uncompressed
+    // and surface the explicit skip reason instead of fabricating stats.
+    return {
+      messages,
+      stats: {
+        tokensBefore: 0,
+        tokensAfter: 0,
+        costSavings: 0,
+        wasEffective: false,
+        hadToolResults: candidates.length > 0,
+        skipReason: "addon_unavailable",
+      },
+    };
+  }
+
+  const result = [...messages];
+  candidates.forEach((candidate, candidateIndex) => {
+    const { normalized, encoded: compressed } = encodedResults[candidateIndex];
+    const { message: toolMsg } = candidate;
+
+    if (compressed === null) {
+      logger.info(
+        {
+          toolCallId: toolMsg.tool_call_id,
+          contentPreview: toolMsg.content.substring(0, 100),
+        },
+        "convertToolResultsToToon: skipping - content is not JSON",
+      );
+      return;
+    }
+
+    // Token accounting on the normalized (unwrapped) string, exactly as before.
+    const tokensBefore = tokenizer.countTokens([
+      { role: "user", content: normalized },
+    ]);
+    const tokensAfter = tokenizer.countTokens([
+      { role: "user", content: compressed },
+    ]);
+
+    // Only use TOON compression if it actually saves tokens — Cohere counts
+    // totals only for wins.
+    if (tokensAfter < tokensBefore) {
+      totalTokensBefore += tokensBefore;
+      totalTokensAfter += tokensAfter;
+
+      logger.info(
+        {
+          toolCallId: toolMsg.tool_call_id,
+          beforeLength: normalized.length,
+          afterLength: compressed.length,
+          tokensBefore,
+          tokensAfter,
+          tokensSaved: tokensBefore - tokensAfter,
+          provider: "cohere",
+        },
+        "convertToolResultsToToon: compressed",
+      );
+
+      result[candidate.index] = {
+        ...toolMsg,
+        content: compressed,
+      };
+    } else {
+      logger.info(
+        {
+          toolCallId: toolMsg.tool_call_id,
+          beforeLength: normalized.length,
+          afterLength: compressed.length,
+          tokensBefore,
+          tokensAfter,
+          tokensDiff: tokensAfter - tokensBefore,
+          provider: "cohere",
+        },
+        "convertToolResultsToToon: skipping - compression increases tokens",
+      );
+    }
   });
 
   // Calculate cost savings

@@ -1,5 +1,4 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import config from "@/config";
 import logger from "@/logging";
@@ -23,7 +22,7 @@ import type {
 import { extractCommonMessageText } from "@/types";
 import type { Minimax } from "@/types/llm-providers";
 import type { ToolCompressionStats } from "../utils/toon-conversion";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { toonEncodeToolResults } from "../utils/toon-native";
 
 // =============================================================================
 // TYPE ALIASES
@@ -905,7 +904,16 @@ async function convertToolResultsToToon(
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
-  const result = messages.map((message) => {
+  // Collect candidate tool messages first so the native unwrap→parse→encode
+  // transform runs once per request (batched, off the JS thread); results are
+  // positional and reapplied by message index.
+  type MinimaxToolMessage = Extract<MinimaxMessages[number], { role: "tool" }>;
+  const candidates: {
+    index: number;
+    message: MinimaxToolMessage;
+    content: string;
+  }[] = [];
+  messages.forEach((message, index) => {
     if (message.role === "tool") {
       logger.info(
         {
@@ -917,48 +925,79 @@ async function convertToolResultsToToon(
       );
 
       if (typeof message.content === "string") {
-        try {
-          const unwrapped = unwrapToolContent(message.content);
-          const parsed = JSON.parse(unwrapped);
-          const noncompressed = unwrapped;
-          const compressed = toonEncode(parsed);
-
-          const tokensBefore = tokenizer.countTokens([
-            { role: "user", content: noncompressed },
-          ]);
-          const tokensAfter = tokenizer.countTokens([
-            { role: "user", content: compressed },
-          ]);
-
-          totalTokensBefore += tokensBefore;
-          totalTokensAfter += tokensAfter;
-          toolResultCount++;
-
-          logger.info(
-            {
-              toolCallId: message.tool_call_id,
-              tokensBefore,
-              tokensAfter,
-              tokensSaved: tokensBefore - tokensAfter,
-              provider: "minimax",
-            },
-            "convertToolResultsToToon: tool result compressed",
-          );
-
-          return {
-            ...message,
-            content: compressed,
-          };
-        } catch (err) {
-          logger.warn(
-            { err, toolCallId: message.tool_call_id },
-            "Failed to compress tool result",
-          );
-          return message;
-        }
+        candidates.push({ index, message, content: message.content });
       }
     }
-    return message;
+  });
+
+  const encodedResults =
+    candidates.length > 0
+      ? await toonEncodeToolResults(
+          candidates.map((candidate) => ({
+            id: candidate.message.tool_call_id,
+            rawContent: candidate.content,
+            unwrap: true,
+          })),
+        )
+      : [];
+
+  if (encodedResults === null) {
+    // Native addon unavailable: fail open — keep every message uncompressed
+    // and surface the explicit skip reason instead of fabricating stats.
+    return {
+      messages,
+      stats: {
+        tokensBefore: 0,
+        tokensAfter: 0,
+        costSavings: 0,
+        wasEffective: false,
+        hadToolResults: candidates.length > 0,
+        skipReason: "addon_unavailable",
+      },
+    };
+  }
+
+  const result = [...messages];
+  candidates.forEach((candidate, candidateIndex) => {
+    const { normalized, encoded: compressed } = encodedResults[candidateIndex];
+    const { message } = candidate;
+
+    if (compressed === null) {
+      logger.warn(
+        { toolCallId: message.tool_call_id },
+        "Failed to compress tool result",
+      );
+      return;
+    }
+
+    // Token accounting on the normalized (unwrapped) string, exactly as before.
+    const tokensBefore = tokenizer.countTokens([
+      { role: "user", content: normalized },
+    ]);
+    const tokensAfter = tokenizer.countTokens([
+      { role: "user", content: compressed },
+    ]);
+
+    totalTokensBefore += tokensBefore;
+    totalTokensAfter += tokensAfter;
+    toolResultCount++;
+
+    logger.info(
+      {
+        toolCallId: message.tool_call_id,
+        tokensBefore,
+        tokensAfter,
+        tokensSaved: tokensBefore - tokensAfter,
+        provider: "minimax",
+      },
+      "convertToolResultsToToon: tool result compressed",
+    );
+
+    // Unconditional apply: MiniMax always records the encoded output.
+    result[candidate.index] = {
+      ...message,
+      content: compressed,
+    };
   });
 
   logger.info(

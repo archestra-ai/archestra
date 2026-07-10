@@ -19,7 +19,7 @@
     "dev": "tsdown --watch",
     "dev:debug": "DEBUG=1 tsdown --watch",
     "test": "vitest",
-    "test:native": "pnpm --filter @archestra/proxy-transform-rs build && vitest run src/routes/proxy/utils/toon-native.golden.test.ts src/routes/proxy/adapters/openai-toon-compression.test.ts src/routes/proxy/routes/provider-matrix.test.ts",
+    "test:native": "pnpm --filter @archestra/proxy-transform-rs build && vitest run src/routes/proxy/utils/toon-native.golden.test.ts src/routes/proxy/adapters/*-toon-compression.test.ts src/routes/proxy/routes/provider-matrix.test.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
     "lint:fix:unsafe": "biome check --write --unsafe",

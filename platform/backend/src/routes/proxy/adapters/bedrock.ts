@@ -6,7 +6,6 @@ import {
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import { encode as toonEncode } from "@toon-format/toon";
 import { BedrockClient } from "@/clients/bedrock-client";
 import {
   decodeBedrockSigV4Marker,
@@ -35,6 +34,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { toonEncodeToolResults } from "../utils/toon-native";
 
 // ToolCompressionStats imported from @/types
 
@@ -1426,10 +1426,27 @@ export async function convertToolResultsToToon(
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
-  const result = messages.map((message) => {
+  // Collect candidate tool results first so the native parse→encode transform
+  // runs once per request (batched, off the JS thread); results are positional
+  // and reapplied via message/content-block locators. Preserved semantics:
+  // only content[0] is read, a compressed result replaces the WHOLE content
+  // array, neither branch unwraps client wrappers (unwrap: false), and
+  // compression is applied unconditionally (no keep/reject rule).
+  type BedrockToolResult = Extract<
+    Bedrock.Types.Message["content"][number],
+    { toolResult: unknown }
+  >["toolResult"];
+  const candidates: {
+    messageIndex: number;
+    blockIndex: number;
+    branch: "text" | "json";
+    toolResult: BedrockToolResult;
+    rawContent: string;
+  }[] = [];
+  messages.forEach((message, messageIndex) => {
     // Only process user messages with content arrays that contain tool_result blocks
     if (message.role === "user" && Array.isArray(message.content)) {
-      const updatedContent = message.content.map((contentBlock) => {
+      message.content.forEach((contentBlock, blockIndex) => {
         if (
           isToolResultBlock(contentBlock) &&
           contentBlock.toolResult.status !== "error"
@@ -1445,85 +1462,131 @@ export async function convertToolResultsToToon(
               "text" in firstContent &&
               typeof firstContent.text === "string"
             ) {
-              try {
-                const parsed = JSON.parse(firstContent.text);
-                const noncompressed = firstContent.text;
-                const compressed = toonEncode(parsed);
-
-                // Count tokens for before and after
-                const tokensBefore = tokenizer.countTokens([
-                  { role: "user", content: noncompressed },
-                ]);
-                const tokensAfter = tokenizer.countTokens([
-                  { role: "user", content: compressed },
-                ]);
-                totalTokensBefore += tokensBefore;
-                totalTokensAfter += tokensAfter;
-
-                logger.info(
-                  {
-                    toolUseId: toolResult.toolUseId,
-                    beforeLength: noncompressed.length,
-                    afterLength: compressed.length,
-                    tokensBefore,
-                    tokensAfter,
-                    provider: "bedrock",
-                  },
-                  "convertToolResultsToToon: compressed",
-                );
-
-                return {
-                  toolResult: {
-                    ...toolResult,
-                    content: [{ text: compressed }],
-                  },
-                };
-              } catch {
-                logger.info(
-                  {
-                    toolUseId: toolResult.toolUseId,
-                  },
-                  "convertToolResultsToToon: skipping - content is not JSON",
-                );
-                return contentBlock;
-              }
+              candidates.push({
+                messageIndex,
+                blockIndex,
+                branch: "text",
+                toolResult,
+                rawContent: firstContent.text,
+              });
             } else if ("json" in firstContent && firstContent.json) {
               try {
-                const noncompressed = JSON.stringify(firstContent.json);
-                const compressed = toonEncode(firstContent.json);
-
-                const tokensBefore = tokenizer.countTokens([
-                  { role: "user", content: noncompressed },
-                ]);
-                const tokensAfter = tokenizer.countTokens([
-                  { role: "user", content: compressed },
-                ]);
-                totalTokensBefore += tokensBefore;
-                totalTokensAfter += tokensAfter;
-
-                return {
-                  toolResult: {
-                    ...toolResult,
-                    content: [{ text: compressed }],
-                  },
-                };
+                // JSON.stringify is typed as returning string but can yield
+                // undefined at runtime (e.g. a toJSON returning undefined);
+                // the old TS path then TOON-encoded the value as "null" and
+                // continued. Keep that, and never let a non-string poison the
+                // whole native batch.
+                const serialized: string | undefined = JSON.stringify(
+                  firstContent.json,
+                );
+                candidates.push({
+                  messageIndex,
+                  blockIndex,
+                  branch: "json",
+                  toolResult,
+                  rawContent:
+                    typeof serialized === "string" ? serialized : "null",
+                });
               } catch {
-                return contentBlock;
+                // Unstringifiable json content is kept as-is (silently, as before).
               }
             }
           }
         }
-        return contentBlock;
       });
+    }
+  });
 
-      return {
-        ...message,
-        content: updatedContent,
-      };
+  const encodedResults =
+    candidates.length > 0
+      ? await toonEncodeToolResults(
+          candidates.map((candidate) => ({
+            id: candidate.toolResult.toolUseId,
+            rawContent: candidate.rawContent,
+            unwrap: false,
+          })),
+        )
+      : [];
+
+  if (encodedResults === null) {
+    // Native addon unavailable: fail open — keep every message uncompressed
+    // and surface the explicit skip reason instead of fabricating stats.
+    return {
+      messages,
+      stats: {
+        tokensBefore: 0,
+        tokensAfter: 0,
+        costSavings: 0,
+        wasEffective: false,
+        hadToolResults: toolResultCount > 0,
+        skipReason: "addon_unavailable",
+      },
+    };
+  }
+
+  const result = [...messages];
+  // Clone a message's content array on first write so untouched messages keep
+  // their original objects.
+  const clonedContent = new Map<number, Bedrock.Types.Message["content"]>();
+  const contentFor = (messageIndex: number) => {
+    let cloned = clonedContent.get(messageIndex);
+    if (!cloned) {
+      const message = messages[messageIndex];
+      cloned = [...message.content];
+      clonedContent.set(messageIndex, cloned);
+      result[messageIndex] = { ...message, content: cloned };
+    }
+    return cloned;
+  };
+
+  candidates.forEach((candidate, candidateIndex) => {
+    const { encoded: compressed } = encodedResults[candidateIndex];
+    const { toolResult, rawContent } = candidate;
+
+    if (compressed === null) {
+      if (candidate.branch === "text") {
+        logger.info(
+          {
+            toolUseId: toolResult.toolUseId,
+          },
+          "convertToolResultsToToon: skipping - content is not JSON",
+        );
+      }
+      // json branch: kept as-is silently, as before.
+      return;
     }
 
-    return message;
-  }) as BedrockMessages;
+    // Token accounting on the original serialization (no unwrap on either branch).
+    const tokensBefore = tokenizer.countTokens([
+      { role: "user", content: rawContent },
+    ]);
+    const tokensAfter = tokenizer.countTokens([
+      { role: "user", content: compressed },
+    ]);
+    totalTokensBefore += tokensBefore;
+    totalTokensAfter += tokensAfter;
+
+    if (candidate.branch === "text") {
+      logger.info(
+        {
+          toolUseId: toolResult.toolUseId,
+          beforeLength: rawContent.length,
+          afterLength: compressed.length,
+          tokensBefore,
+          tokensAfter,
+          provider: "bedrock",
+        },
+        "convertToolResultsToToon: compressed",
+      );
+    }
+
+    contentFor(candidate.messageIndex)[candidate.blockIndex] = {
+      toolResult: {
+        ...toolResult,
+        content: [{ text: compressed }],
+      },
+    };
+  });
 
   logger.info(
     { messageCount: messages.length, toolResultCount },

@@ -20,11 +20,15 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
+  ActiveChatRunModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsThreadAgentOverrideModel,
+  ChatOpsThreadConversationModel,
+  ConversationChatErrorModel,
   LlmProviderApiKeyModelLinkModel,
+  MessageModel,
   ModelModel,
 } from "@/models";
 import { ProviderError } from "@/routes/chat/errors";
@@ -3793,6 +3797,334 @@ describe("ChatOpsManager attachment passthrough", () => {
       binding.id,
     );
     expect(unchangedBinding?.agentId).toBe(routerAgent.id);
+  });
+
+  // ===========================================================================
+  // Cross-interface conversations: ChatOps turns persist into the canonical
+  // conversations/messages tables and continue on the web.
+  // ===========================================================================
+
+  function spyExecutor() {
+    // fresh assistant ids per turn, like the real executor — a reused id
+    // would trigger the approval update-in-place path and collapse turns
+    return vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async () => {
+        const id = crypto.randomUUID();
+        return {
+          text: "Agent response",
+          messageId: id,
+          finishReason: "stop",
+          responseUiMessage: {
+            id,
+            role: "assistant",
+            parts: [{ type: "text", text: "Agent response" }],
+          },
+        };
+      });
+  }
+
+  function managerWith(provider: ChatOpsProvider): ChatOpsManager {
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = provider;
+    return manager;
+  }
+
+  async function setupThreadFixture(params: {
+    makeUser: (o?: { email?: string }) => Promise<{ id: string }>;
+    makeOrganization: () => Promise<{ id: string }>;
+    makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+    makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+    makeInternalAgent: (o: {
+      organizationId: string;
+      teams: string[];
+    }) => Promise<{ id: string }>;
+    email?: string;
+  }) {
+    const email = params.email ?? `owner-${crypto.randomUUID()}@example.com`;
+    const user = await params.makeUser({ email });
+    const org = await params.makeOrganization();
+    const team = await params.makeTeam(org.id, user.id);
+    await params.makeTeamMember(team.id, user.id);
+    const agent = await params.makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+    return { user, org, team, agent, binding, email };
+  }
+
+  async function threadConversation(bindingId: string, threadId: string) {
+    const mapping = await ChatOpsThreadConversationModel.findByBindingAndThread(
+      bindingId,
+      threadId,
+    );
+    if (!mapping) {
+      throw new Error("expected a thread conversation mapping");
+    }
+    return mapping;
+  }
+
+  test("two turns in one thread persist one conversation with ordered pairs", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = spyExecutor();
+    const fx = await setupThreadFixture({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => fx.email,
+    });
+    const manager = managerWith(mockProvider);
+
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-1",
+        threadId: "thread-x",
+        text: "first ask",
+      }),
+      provider: mockProvider,
+    });
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-2",
+        threadId: "thread-x",
+        isThreadReply: true,
+        text: "second ask",
+      }),
+      provider: mockProvider,
+    });
+
+    const mapping = await threadConversation(fx.binding.id, "thread-x");
+    const rows = await MessageModel.findByConversation(mapping.conversationId);
+    expect(rows.map((r) => r.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    // the second turn's model context contains the first pair
+    const secondTurnHistory = historyTurns(
+      executorSpy.mock.calls.at(-1)?.[0] ?? {},
+    );
+    expect(secondTurnHistory.some((t) => t.text.includes("first ask"))).toBe(
+      true,
+    );
+  });
+
+  test("web turns are visible to the owner's next chatops turn but not to a non-owner in the channel", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = spyExecutor();
+    const fx = await setupThreadFixture({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    const teammateEmail = `teammate-${crypto.randomUUID()}@example.com`;
+    const teammate = await makeUser({ email: teammateEmail });
+    await makeTeamMember(fx.team.id, teammate.id);
+
+    const senderEmails: Record<string, string> = {
+      "owner-id": fx.email,
+      "teammate-id": teammateEmail,
+    };
+    const mockProvider = createMockProvider({
+      getUserEmail: async (userId: string) => senderEmails[userId] ?? null,
+    });
+    const manager = managerWith(mockProvider);
+
+    // owner starts the thread
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-1",
+        senderId: "owner-id",
+        threadId: "thread-web",
+        text: "kick off",
+      }),
+      provider: mockProvider,
+    });
+    const mapping = await threadConversation(fx.binding.id, "thread-web");
+
+    // ...continues on the web (a plain turn with no chatops metadata)
+    await MessageModel.bulkCreate([
+      {
+        conversationId: mapping.conversationId,
+        role: "user",
+        content: {
+          id: crypto.randomUUID(),
+          role: "user",
+          parts: [{ type: "text", text: "private web-side follow-up" }],
+        },
+      },
+    ]);
+
+    // ...and returns to the thread: the owner's turn sees the web turn
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-2",
+        senderId: "owner-id",
+        threadId: "thread-web",
+        isThreadReply: true,
+        text: "back on chat",
+      }),
+      provider: mockProvider,
+    });
+    const ownerHistory = historyTurns(executorSpy.mock.calls.at(-1)?.[0] ?? {});
+    expect(
+      ownerHistory.some((t) => t.text.includes("private web-side follow-up")),
+    ).toBe(true);
+
+    // a teammate invoking in the same channel thread must NOT see it
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-3",
+        senderId: "teammate-id",
+        senderName: "Teammate",
+        threadId: "thread-web",
+        isThreadReply: true,
+        text: "what's going on here",
+      }),
+      provider: mockProvider,
+    });
+    const teammateHistory = historyTurns(
+      executorSpy.mock.calls.at(-1)?.[0] ?? {},
+    );
+    expect(
+      teammateHistory.some((t) =>
+        t.text.includes("private web-side follow-up"),
+      ),
+    ).toBe(false);
+    // provider-born turns remain visible
+    expect(teammateHistory.some((t) => t.text.includes("kick off"))).toBe(true);
+  });
+
+  test("an active run on the conversation skips the turn with a notice", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = spyExecutor();
+    const fx = await setupThreadFixture({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    const replies: string[] = [];
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => fx.email,
+      sendReply: async (options) => {
+        replies.push(options.text);
+        return "reply-id";
+      },
+    });
+    const manager = managerWith(mockProvider);
+
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-1",
+        threadId: "thread-busy",
+        text: "first",
+      }),
+      provider: mockProvider,
+    });
+    const mapping = await threadConversation(fx.binding.id, "thread-busy");
+    const callsAfterFirstTurn = executorSpy.mock.calls.length;
+
+    // a web run is mid-flight on the conversation
+    const webRun = await ActiveChatRunModel.create({
+      conversationId: mapping.conversationId,
+      userId: fx.user.id,
+      organizationId: fx.org.id,
+    });
+    expect(webRun).not.toBeNull();
+
+    const result = await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-2",
+        threadId: "thread-busy",
+        isThreadReply: true,
+        text: "second",
+      }),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(false);
+    expect(executorSpy.mock.calls.length).toBe(callsAfterFirstTurn);
+    expect(replies.some((text) => text.includes("already responding"))).toBe(
+      true,
+    );
+  });
+
+  test("a failed turn records a chat error and releases the run lock", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockRejectedValue(
+      new Error("provider exploded"),
+    );
+    const fx = await setupThreadFixture({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => fx.email,
+    });
+    const manager = managerWith(mockProvider);
+
+    const result = await manager.processMessage({
+      message: createMockMessage({
+        messageId: "turn-1",
+        threadId: "thread-err",
+        text: "boom please",
+      }),
+      provider: mockProvider,
+    });
+    expect(result.success).toBe(false);
+
+    const mapping = await threadConversation(fx.binding.id, "thread-err");
+    const errors = await ConversationChatErrorModel.findByConversation(
+      mapping.conversationId,
+    );
+    expect(errors.length).toBe(1);
+    // the lock was terminally released, so the next turn can run
+    const running = await ActiveChatRunModel.findRunningByConversation(
+      mapping.conversationId,
+    );
+    expect(running).toBeNull();
   });
 });
 

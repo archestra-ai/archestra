@@ -24,21 +24,113 @@ describe("toonEncodeToolResults helper", () => {
 
   test("returns the positional native results on success", async () => {
     const nativeResults = [
-      { normalized: '{"a":[1,2]}', encoded: "a[2]: 1,2" },
-      { normalized: "not json", encoded: null },
+      {
+        normalized: '{"a":[1,2]}',
+        encoded: "a[2]: 1,2",
+        beforeTokens: null,
+        encodedTokens: null,
+      },
+      {
+        normalized: "not json",
+        encoded: null,
+        beforeTokens: null,
+        encodedTokens: null,
+      },
     ];
     vi.mocked(nativeToonEncodeToolResults).mockResolvedValue(nativeResults);
 
     const results = await toonEncodeToolResults(items);
 
     expect(results).toStrictEqual(nativeResults);
-    expect(nativeToonEncodeToolResults).toHaveBeenCalledWith(items);
+    expect(nativeToonEncodeToolResults).toHaveBeenCalledWith(items, undefined);
     expect(metrics.llm.reportToonAddonUnavailable).not.toHaveBeenCalled();
+  });
+
+  test("requests native counting and returns the counts", async () => {
+    const nativeResults = [
+      {
+        normalized: '{"a":[1,2]}',
+        encoded: "a[2]: 1,2",
+        beforeTokens: 8,
+        encodedTokens: 5,
+      },
+      {
+        normalized: "not json",
+        encoded: null,
+        beforeTokens: null,
+        encodedTokens: null,
+      },
+    ];
+    vi.mocked(nativeToonEncodeToolResults).mockResolvedValue(nativeResults);
+
+    const results = await toonEncodeToolResults(items, "normalized");
+
+    expect(results).toStrictEqual(nativeResults);
+    // The friendly union maps to the native string_enum value.
+    expect(nativeToonEncodeToolResults).toHaveBeenCalledWith(
+      items,
+      "Normalized",
+    );
+  });
+
+  test("maps the gemini raw baseline to the native Raw source", async () => {
+    vi.mocked(nativeToonEncodeToolResults).mockResolvedValue([
+      {
+        normalized: "not json",
+        encoded: null,
+        beforeTokens: null,
+        encodedTokens: null,
+      },
+    ]);
+
+    await toonEncodeToolResults([items[1]], "raw");
+
+    expect(nativeToonEncodeToolResults).toHaveBeenCalledWith([items[1]], "Raw");
+  });
+
+  test("returns null when a requested count is missing for an encoded item", async () => {
+    // Native tokenizer unavailable: encoding succeeded but counts came back
+    // null. The keep/reject decision cannot proceed, so fail open.
+    vi.mocked(nativeToonEncodeToolResults).mockResolvedValue([
+      {
+        normalized: '{"a":[1,2]}',
+        encoded: "a[2]: 1,2",
+        beforeTokens: null,
+        encodedTokens: null,
+      },
+    ]);
+
+    const results = await toonEncodeToolResults([items[0]], "normalized");
+
+    expect(results).toBeNull();
+    expect(metrics.llm.reportToonAddonUnavailable).toHaveBeenCalledWith(
+      "request",
+    );
+  });
+
+  test("returns null when counts appear though none were requested", async () => {
+    vi.mocked(nativeToonEncodeToolResults).mockResolvedValue([
+      {
+        normalized: '{"a":[1,2]}',
+        encoded: "a[2]: 1,2",
+        beforeTokens: 8,
+        encodedTokens: 5,
+      },
+    ]);
+
+    const results = await toonEncodeToolResults([items[0]]);
+
+    expect(results).toBeNull();
   });
 
   test("returns null when the native batch length does not match the input", async () => {
     vi.mocked(nativeToonEncodeToolResults).mockResolvedValue([
-      { normalized: '{"a":[1,2]}', encoded: "a[2]: 1,2" },
+      {
+        normalized: '{"a":[1,2]}',
+        encoded: "a[2]: 1,2",
+        beforeTokens: null,
+        encodedTokens: null,
+      },
     ]);
 
     const results = await toonEncodeToolResults(items);

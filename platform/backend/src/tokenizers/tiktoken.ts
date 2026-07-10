@@ -16,6 +16,11 @@ export class TiktokenTokenizer extends BaseTokenizer {
   }
 
   protected computeMessageTokens(encodableText: string): number {
-    return this.encoding.encode(encodableText).length;
+    // Ordinary encoding: treat reserved-marker literals (e.g. `<|endoftext|>`)
+    // that appear in tool results as plain text. `encode()` raises on them by
+    // default, which would crash counting on otherwise-valid content; the
+    // native cl100k path (proxy-transform-core) counts ordinally too, so this
+    // keeps the two byte-identical.
+    return this.encoding.encode_ordinary(encodableText).length;
   }
 }

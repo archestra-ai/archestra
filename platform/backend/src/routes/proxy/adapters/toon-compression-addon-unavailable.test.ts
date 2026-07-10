@@ -41,9 +41,21 @@ const EXPECTED_STATS: ToolCompressionStats = {
 
 function expectSingleBatchCall(
   expectedItems: { id: string; rawContent: string; unwrap: boolean }[],
+  beforeSource?: "raw" | "normalized",
 ) {
   expect(vi.mocked(toonEncodeToolResults)).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(toonEncodeToolResults)).toHaveBeenCalledWith(expectedItems);
+  // Anthropic and Bedrock keep their own tokenizer and call with one argument;
+  // the tiktoken-family adapters request native counting with a before-source.
+  if (beforeSource === undefined) {
+    expect(vi.mocked(toonEncodeToolResults)).toHaveBeenCalledWith(
+      expectedItems,
+    );
+  } else {
+    expect(vi.mocked(toonEncodeToolResults)).toHaveBeenCalledWith(
+      expectedItems,
+      beforeSource,
+    );
+  }
 }
 
 describe("adapters with the TOON addon unavailable", () => {
@@ -99,10 +111,13 @@ describe("adapters with the TOON addon unavailable", () => {
     const adapter = geminiAdapterFactory.createRequestAdapter({ contents });
     const stats = await adapter.applyToonCompression("gemini-2.0-flash");
 
-    expectSingleBatchCall([
-      { id: "list_files", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
-      { id: "read_config", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
-    ]);
+    expectSingleBatchCall(
+      [
+        { id: "list_files", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
+        { id: "read_config", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
+      ],
+      "raw",
+    );
     expect(stats).toStrictEqual(EXPECTED_STATS);
     expect(adapter.getProviderMessages()).toBe(contents);
   });
@@ -162,10 +177,13 @@ describe("adapters with the TOON addon unavailable", () => {
     });
     const stats = await adapter.applyToonCompression("glm-4.6");
 
-    expectSingleBatchCall([
-      { id: "call_1", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
-      { id: "call_2", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
-    ]);
+    expectSingleBatchCall(
+      [
+        { id: "call_1", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
+        { id: "call_2", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
+      ],
+      "normalized",
+    );
     expect(stats).toStrictEqual(EXPECTED_STATS);
     expect(adapter.getProviderMessages()).toBe(messages);
   });
@@ -189,10 +207,13 @@ describe("adapters with the TOON addon unavailable", () => {
     });
     const stats = await adapter.applyToonCompression("MiniMax-M2");
 
-    expectSingleBatchCall([
-      { id: "call_1", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
-      { id: "call_2", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
-    ]);
+    expectSingleBatchCall(
+      [
+        { id: "call_1", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
+        { id: "call_2", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
+      ],
+      "normalized",
+    );
     expect(stats).toStrictEqual(EXPECTED_STATS);
     expect(adapter.getProviderMessages()).toBe(messages);
   });
@@ -216,10 +237,13 @@ describe("adapters with the TOON addon unavailable", () => {
     });
     const stats = await adapter.applyToonCompression("command-r-plus");
 
-    expectSingleBatchCall([
-      { id: "call_1", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
-      { id: "call_2", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
-    ]);
+    expectSingleBatchCall(
+      [
+        { id: "call_1", rawContent: TOOL_RESULT_JSON_A, unwrap: true },
+        { id: "call_2", rawContent: TOOL_RESULT_JSON_B, unwrap: true },
+      ],
+      "normalized",
+    );
     expect(stats).toStrictEqual(EXPECTED_STATS);
     expect(adapter.getProviderMessages()).toBe(messages);
   });

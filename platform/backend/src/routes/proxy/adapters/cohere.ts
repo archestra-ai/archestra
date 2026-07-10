@@ -5,7 +5,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   Cohere,
@@ -736,8 +735,6 @@ export async function convertToolResultsToToon(
   messages: CohereMessages;
   stats: CompressionStats;
 }> {
-  const tokenizer = getTokenizer("cohere");
-
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
@@ -762,6 +759,7 @@ export async function convertToolResultsToToon(
             rawContent: candidate.message.content,
             unwrap: true,
           })),
+          "normalized",
         )
       : [];
 
@@ -783,10 +781,21 @@ export async function convertToolResultsToToon(
 
   const result = [...messages];
   candidates.forEach((candidate, candidateIndex) => {
-    const { normalized, encoded: compressed } = encodedResults[candidateIndex];
+    const {
+      normalized,
+      encoded: compressed,
+      beforeTokens,
+      encodedTokens,
+    } = encodedResults[candidateIndex];
     const { message: toolMsg } = candidate;
 
-    if (compressed === null) {
+    // Counts come from the native pass (on the "normalized" baseline). Present
+    // iff the item was encoded; a null compressed output means non-JSON content.
+    if (
+      compressed === null ||
+      beforeTokens === null ||
+      encodedTokens === null
+    ) {
       logger.info(
         {
           toolCallId: toolMsg.tool_call_id,
@@ -797,13 +806,8 @@ export async function convertToolResultsToToon(
       return;
     }
 
-    // Token accounting on the normalized (unwrapped) string, exactly as before.
-    const tokensBefore = tokenizer.countTokens([
-      { role: "user", content: normalized },
-    ]);
-    const tokensAfter = tokenizer.countTokens([
-      { role: "user", content: compressed },
-    ]);
+    const tokensBefore = beforeTokens;
+    const tokensAfter = encodedTokens;
 
     // Only use TOON compression if it actually saves tokens — Cohere counts
     // totals only for wins.

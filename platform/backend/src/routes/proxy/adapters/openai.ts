@@ -13,7 +13,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -1270,7 +1269,6 @@ export async function convertToolResultsToToon(
   messages: OpenAiMessages;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer(provider);
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -1309,6 +1307,7 @@ export async function convertToolResultsToToon(
             rawContent: candidate.content,
             unwrap: true,
           })),
+          "normalized",
         )
       : [];
 
@@ -1330,10 +1329,22 @@ export async function convertToolResultsToToon(
 
   const result = [...messages];
   candidates.forEach((candidate, candidateIndex) => {
-    const { normalized, encoded: compressed } = encodedResults[candidateIndex];
+    const {
+      normalized,
+      encoded: compressed,
+      beforeTokens,
+      encodedTokens,
+    } = encodedResults[candidateIndex];
     const { message } = candidate;
 
-    if (compressed === null) {
+    // Counts come from the native pass (on the "normalized" baseline). They are
+    // present iff the item was encoded; a null compressed output means the
+    // content was not JSON — keep the original either way.
+    if (
+      compressed === null ||
+      beforeTokens === null ||
+      encodedTokens === null
+    ) {
       logger.info(
         {
           toolCallId: message.tool_call_id,
@@ -1344,13 +1355,8 @@ export async function convertToolResultsToToon(
       return;
     }
 
-    // Token accounting on the normalized (unwrapped) string, exactly as before.
-    const tokensBefore = tokenizer.countTokens([
-      { role: "user", content: normalized },
-    ]);
-    const tokensAfter = tokenizer.countTokens([
-      { role: "user", content: compressed },
-    ]);
+    const tokensBefore = beforeTokens;
+    const tokensAfter = encodedTokens;
 
     toolResultCount++;
 

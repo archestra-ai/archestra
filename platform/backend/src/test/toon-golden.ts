@@ -23,6 +23,11 @@ export function corpusEntry(name: string): GoldenEntry {
   return entry;
 }
 
+/** Every golden entry — for suites that sweep the whole corpus. */
+export function allGoldenEntries(): GoldenEntry[] {
+  return corpus;
+}
+
 export function makeCountTokens(provider: SupportedProvider) {
   const tokenizer = getTokenizer(provider);
   return (content: string) =>

@@ -22,12 +22,31 @@ const items = [
   const results = await proxyTransform.toonEncodeToolResults(items);
   assert.equal(results.length, items.length);
 
-  assert.deepEqual(results[0], { normalized: '{"a":1}', encoded: "a: 1" });
+  // No before-source: token counts are unset.
+  assert.deepEqual(results[0], {
+    normalized: '{"a":1}',
+    encoded: "a: 1",
+    beforeTokens: null,
+    encodedTokens: null,
+  });
 
   assert.equal(results[1].normalized, inner);
   assert.equal(results[1].encoded, "data[2]{id,v}:\n  1,a\n  2,b\nok: true");
 
-  assert.deepEqual(results[2], { normalized: "not json at all", encoded: null });
+  assert.deepEqual(results[2], {
+    normalized: "not json at all",
+    encoded: null,
+    beforeTokens: null,
+    encodedTokens: null,
+  });
+
+  // With a before-source, encodable items carry cl100k counts; unencodable
+  // ones stay null.
+  const counted = await proxyTransform.toonEncodeToolResults(items, "Normalized");
+  assert.ok(Number.isInteger(counted[0].beforeTokens) && counted[0].beforeTokens > 0);
+  assert.ok(Number.isInteger(counted[0].encodedTokens) && counted[0].encodedTokens > 0);
+  assert.equal(counted[2].beforeTokens, null);
+  assert.equal(counted[2].encodedTokens, null);
 
   // Empty batch resolves to an empty array.
   assert.deepEqual(await proxyTransform.toonEncodeToolResults([]), []);

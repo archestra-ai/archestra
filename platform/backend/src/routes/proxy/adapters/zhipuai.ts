@@ -7,7 +7,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -825,7 +824,6 @@ async function convertToolResultsToToon(
   messages: ZhipuaiMessages;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("zhipuai");
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -864,6 +862,7 @@ async function convertToolResultsToToon(
             rawContent: candidate.content,
             unwrap: true,
           })),
+          "normalized",
         )
       : [];
 
@@ -885,10 +884,21 @@ async function convertToolResultsToToon(
 
   const result = [...messages];
   candidates.forEach((candidate, candidateIndex) => {
-    const { normalized, encoded: compressed } = encodedResults[candidateIndex];
+    const {
+      normalized,
+      encoded: compressed,
+      beforeTokens,
+      encodedTokens,
+    } = encodedResults[candidateIndex];
     const { message } = candidate;
 
-    if (compressed === null) {
+    // Counts come from the native pass (on the "normalized" baseline). Present
+    // iff the item was encoded; a null compressed output means non-JSON content.
+    if (
+      compressed === null ||
+      beforeTokens === null ||
+      encodedTokens === null
+    ) {
       logger.info(
         {
           toolCallId: message.tool_call_id,
@@ -899,13 +909,8 @@ async function convertToolResultsToToon(
       return;
     }
 
-    // Token accounting on the normalized (unwrapped) string, exactly as before.
-    const tokensBefore = tokenizer.countTokens([
-      { role: "user", content: normalized },
-    ]);
-    const tokensAfter = tokenizer.countTokens([
-      { role: "user", content: compressed },
-    ]);
+    const tokensBefore = beforeTokens;
+    const tokensAfter = encodedTokens;
 
     toolResultCount++;
 

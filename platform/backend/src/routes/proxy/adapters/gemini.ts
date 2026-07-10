@@ -16,7 +16,6 @@ import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -866,7 +865,6 @@ async function convertToolResultsToToon(
   contents: GeminiContents;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("gemini");
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
@@ -958,6 +956,7 @@ async function convertToolResultsToToon(
             rawContent: candidate.rawContent,
             unwrap: true,
           })),
+          "raw",
         )
       : [];
 
@@ -994,12 +993,23 @@ async function convertToolResultsToToon(
   };
 
   candidates.forEach((candidate, candidateIndex) => {
-    const { encoded: compressed } = encodedResults[candidateIndex];
+    const {
+      encoded: compressed,
+      beforeTokens,
+      encodedTokens,
+    } = encodedResults[candidateIndex];
     const { functionResponse, rawContent: noncompressed } = candidate;
     const functionName =
       "name" in functionResponse ? functionResponse.name : "unknown";
 
-    if (compressed === null) {
+    // Counts come from the native pass on the "raw" baseline — the original
+    // serialization, matching Gemini's accounting. Present iff the item was
+    // encoded; a null compressed output means it could not be compressed.
+    if (
+      compressed === null ||
+      beforeTokens === null ||
+      encodedTokens === null
+    ) {
       logger.info(
         { functionName },
         "convertToolResultsToToon: skipping - response cannot be compressed",
@@ -1007,14 +1017,8 @@ async function convertToolResultsToToon(
       return;
     }
 
-    // Token accounting on the ORIGINAL serialization (not the unwrapped
-    // string), exactly as before.
-    const tokensBefore = tokenizer.countTokens([
-      { role: "user", content: noncompressed },
-    ]);
-    const tokensAfter = tokenizer.countTokens([
-      { role: "user", content: compressed },
-    ]);
+    const tokensBefore = beforeTokens;
+    const tokensAfter = encodedTokens;
 
     // Always count tokens
     totalTokensBefore += tokensBefore;

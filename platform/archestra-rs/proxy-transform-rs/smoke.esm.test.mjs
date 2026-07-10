@@ -9,10 +9,13 @@ const { toonEncodeToolResults } = await import("./index.cjs");
 assert.equal(typeof toonEncodeToolResults, "function");
 
 // The async binding is reachable via ESM interop and resolves positionally
-// (null encoding for non-JSON content).
-const results = await toonEncodeToolResults([
-  { id: "esm", rawContent: "not json", unwrap: true },
+// (null encoding and counts for non-JSON content).
+const results = await toonEncodeToolResults(
+  [{ id: "esm", rawContent: "not json", unwrap: true }],
+  "Normalized",
+);
+assert.deepEqual(results, [
+  { normalized: "not json", encoded: null, beforeTokens: null, encodedTokens: null },
 ]);
-assert.deepEqual(results, [{ normalized: "not json", encoded: null }]);
 
 console.log("proxy-transform-rs esm smoke ok");

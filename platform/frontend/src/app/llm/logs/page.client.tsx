@@ -15,6 +15,7 @@ import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { BilledCost } from "@/components/billed-cost";
 import {
   ClientFilterOption,
   ProfileFilterOption,
@@ -22,7 +23,6 @@ import {
   UserFilterOption,
 } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
-import { BilledCost } from "@/components/billed-cost";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
 import { TableFilters } from "@/components/table-filters";

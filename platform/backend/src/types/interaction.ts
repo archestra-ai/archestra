@@ -125,12 +125,15 @@ const extendedFields = {
  * Base database schema without discriminated union
  * This is what Drizzle actually returns from the database
  */
-const BaseSelectInteractionSchema = createSelectSchema(schema.interactionsTable, {
-  ...extendedFields,
-  // Required on read: the column is NOT NULL, so every row carries a concrete
-  // BillingMode. (The default override belongs on the insert schema only.)
-  billingMode: BillingModeSchema,
-});
+const BaseSelectInteractionSchema = createSelectSchema(
+  schema.interactionsTable,
+  {
+    ...extendedFields,
+    // Required on read: the column is NOT NULL, so every row carries a concrete
+    // BillingMode. (The default override belongs on the insert schema only.)
+    billingMode: BillingModeSchema,
+  },
+);
 
 /**
  * Delta-encoding bookkeeping columns. They live on the Drizzle table (and so on

@@ -1,7 +1,7 @@
 import type { StatisticsTimeFrame } from "@archestra/shared";
 import {
-  and,
   type AnyColumn,
+  and,
   eq,
   gte,
   inArray,
@@ -822,10 +822,19 @@ class StatisticsModel {
         // TOON, and cache savings reflect money actually spent. Subscription
         // traffic is reported separately as its would-be list-price cost, never
         // as an optimization saving.
-        baselineCost: billedSum(schema.interactionsTable.baselineCost, "DECIMAL"),
+        baselineCost: billedSum(
+          schema.interactionsTable.baselineCost,
+          "DECIMAL",
+        ),
         actualCost: billedSum(schema.interactionsTable.cost, "DECIMAL"),
-        toonSavings: billedSum(schema.interactionsTable.toonCostSavings, "DECIMAL"),
-        cacheSavings: billedSum(schema.interactionsTable.cacheSavings, "DECIMAL"),
+        toonSavings: billedSum(
+          schema.interactionsTable.toonCostSavings,
+          "DECIMAL",
+        ),
+        cacheSavings: billedSum(
+          schema.interactionsTable.cacheSavings,
+          "DECIMAL",
+        ),
         subscriptionCost: subscriptionCostSum("DECIMAL"),
       })
       .from(schema.interactionsTable)

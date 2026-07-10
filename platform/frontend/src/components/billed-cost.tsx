@@ -115,8 +115,8 @@ export function BilledCost({
         <div className="space-y-0.5 text-sm">
           <div>Billed: {formatCost(billed)}</div>
           <div className="text-muted-foreground">
-            Subscription-covered (not billed): {formatCost(subscription)} est. at
-            list price
+            Subscription-covered (not billed): {formatCost(subscription)} est.
+            at list price
           </div>
         </div>
       </TooltipContent>

@@ -727,7 +727,14 @@ describe("reportLLMCost", () => {
   });
 
   test("records cost without model, labeling subscription billing mode", () => {
-    reportLLMCost("anthropic", testAgent, "unknown", 0.02, "api", "subscription");
+    reportLLMCost(
+      "anthropic",
+      testAgent,
+      "unknown",
+      0.02,
+      "api",
+      "subscription",
+    );
 
     expect(counterInc).toHaveBeenCalledWith({
       labels: {

@@ -13,6 +13,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  isAbortLikeError,
   structuredSuccessResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -130,9 +131,13 @@ async function runAppLlmCompletion(
       model,
       system: system || undefined,
       prompt: args.prompt,
+      abortSignal: context.abortSignal,
     });
     return structuredSuccessResult({ text: result.text }, result.text);
   } catch (error) {
+    if (context.abortSignal?.aborted || isAbortLikeError(error)) {
+      throw error;
+    }
     // 429 is an upstream provider rate limit; 402 is the Archestra token-cost
     // limit block. Both surface to apps as llm_quota — the app-visible action
     // (stop and back off) is the same, so the message does not assert a

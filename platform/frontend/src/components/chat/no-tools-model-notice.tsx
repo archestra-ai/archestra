@@ -20,7 +20,11 @@ export function NoToolsModelBadge() {
       <TooltipTrigger asChild>
         <Badge
           variant="secondary"
-          className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium cursor-default"
+          // leading-none collapses the text's 16px line box to the glyph size
+          // so it truly centers against the 12px icon; the icon glyph carries
+          // ~1px of built-in inset, so the left padding is 1px tighter to
+          // keep the content optically centered.
+          className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 pl-[9px] pr-2.5 py-1 text-xs font-medium leading-none cursor-default"
         >
           <InfoIcon className="size-3" />
           no tools

@@ -2733,6 +2733,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
+      // Microsoft 365 Copilot can't run utility generations: the Graph Chat
+      // API has a fixed product persona and takes our system prompt only as
+      // riding-along additional context, which it routinely ignores — instead
+      // of a title it answers the message (a greeting, emoji included, became
+      // the stored title). Skip so the client keeps its first-user-message
+      // fallback.
+      if (titleLlm.provider === "microsoft-365-copilot") {
+        logger.info(
+          { conversationId: id },
+          "Skipping title generation - Microsoft 365 Copilot does not follow title instructions",
+        );
+        return reply.send(conversation);
+      }
+
       // Generate title using the extracted function
       const generatedTitle = await generateConversationTitle({
         ...titleLlm,

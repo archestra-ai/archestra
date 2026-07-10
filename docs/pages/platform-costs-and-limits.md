@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-06-22
+lastUpdated: 2026-07-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -99,6 +99,7 @@ Compression is skipped when:
 - TOON is disabled
 - a response has no tool results
 - the TOON version would not save tokens
+- the compression engine is unavailable (`addon_unavailable`) — an infrastructure failure; the request proceeds with uncompressed tool results
 
 Archestra records before/after token counts and savings when compression is applied, so those savings appear in logs and aggregate cost reporting.
 

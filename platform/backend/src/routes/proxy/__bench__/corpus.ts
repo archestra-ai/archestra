@@ -1,4 +1,4 @@
-import type { ToonKernelItem } from "./toon-kernel-reference";
+import type { ToonKernelItem } from "./toon-backend";
 
 /**
  * Deterministic synthetic corpora for the TOON kernel benchmarks (T0).
@@ -6,7 +6,7 @@ import type { ToonKernelItem } from "./toon-kernel-reference";
  * Every batch is fully reproducible from its seed. Item mix per 10 items:
  * 6 uniform JSON arrays of objects, 2 non-array JSON objects, 2 non-JSON
  * prose strings; 2 of the JSON items are wrapped in the n8n/Vercel-style
- * `[{"type":"text","text":...}]` wrapper (exercising unwrapToolContent),
+ * `[{"type":"text","text":...}]` wrapper (exercising the unwrap path),
  * and roughly 1 in 7 unwrapped items uses `unwrap: false` (Bedrock-style).
  */
 

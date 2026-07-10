@@ -1,61 +1,39 @@
 /**
- * Benchmark backend selection for the TOON kernel harness (T0/T8):
- *   BENCH_BACKEND=ts      (default) TS reference implementation
- *   BENCH_BACKEND=native  the real production helper (utils/toon-native.ts)
- *                         over the Rust addon, so JS→Rust string copies, async
- *                         scheduling, and result conversion are all inside the
- *                         measurement.
+ * TOON kernel backend for the benchmark harness (T0/T8): the real production
+ * helper (utils/toon-native.ts) over the Rust addon, so JS→Rust string
+ * copies, async scheduling, and result conversion are all inside the
+ * measurement. Boundary: batch of { rawContent, unwrap } → results.
  *
- * Both backends share the "batch of { rawContent, unwrap } → results"
- * boundary, corpora, and stats output — the pre-registered threshold compares
- * exactly these two numbers.
+ * The TS reference backend this was originally compared against (npm
+ * @toon-format/toon) was removed once all adapters cut over to the native
+ * kernel — baseline numbers are recorded in the PR; git history keeps the
+ * code.
  */
 import "./bench-env";
-import {
-  encodeToolResultsReference,
-  type ToonKernelItem,
-  type ToonKernelResult,
-} from "./toon-kernel-reference";
+import { toonEncodeToolResults } from "../utils/toon-native";
 
-export interface ToonBenchBackend {
-  name: "ts" | "native";
-  encode: (items: ToonKernelItem[]) => Promise<ToonKernelResult[]>;
+export interface ToonKernelItem {
+  rawContent: string;
+  unwrap: boolean;
 }
 
-export async function resolveToonBackend(): Promise<ToonBenchBackend> {
-  const requested = process.env.BENCH_BACKEND ?? "ts";
-  switch (requested) {
-    case "ts":
-      return {
-        name: "ts",
-        encode: async (items) => encodeToolResultsReference(items),
-      };
-    case "native": {
-      // Dynamic import keeps the backend module graph (logging, metrics,
-      // config) out of TS-backend runs.
-      const { toonEncodeToolResults } = await import("../utils/toon-native");
-      return {
-        name: "native",
-        encode: async (items) => {
-          const results = await toonEncodeToolResults(
-            items.map(({ rawContent, unwrap }, i) => ({
-              id: `bench_${i}`,
-              rawContent,
-              unwrap,
-            })),
-          );
-          if (results === null) {
-            throw new Error(
-              "native TOON backend unavailable (addon failed to load)",
-            );
-          }
-          return results;
-        },
-      };
-    }
-    default:
-      throw new Error(
-        `unknown BENCH_BACKEND "${requested}" (expected "ts" or "native")`,
-      );
+export interface ToonKernelResult {
+  normalized: string;
+  encoded: string | null;
+}
+
+export async function encodeBatchNative(
+  items: ToonKernelItem[],
+): Promise<ToonKernelResult[]> {
+  const results = await toonEncodeToolResults(
+    items.map(({ rawContent, unwrap }, i) => ({
+      id: `bench_${i}`,
+      rawContent,
+      unwrap,
+    })),
+  );
+  if (results === null) {
+    throw new Error("native TOON backend unavailable (addon failed to load)");
   }
+  return results;
 }

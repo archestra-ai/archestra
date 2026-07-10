@@ -529,6 +529,22 @@ export default class K8sDeployment {
         this.effectiveNetworkPolicy?.source ?? "built_in",
     };
 
+    // The resolver ClusterIP is inside the ranges the floor blocks, so DNS needs
+    // an explicit allow to it — the AWS ANP agent does not honor the ports-only
+    // DNS rule with no `to` peer, which would otherwise leave floor pods unable
+    // to resolve names.
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(this.k8sApi);
+    if (clusterDnsIps.length === 0) {
+      logger.warn(
+        {
+          mcpServerId: this.mcpServer.id,
+          networkPolicyName: policyName,
+          namespace: this.namespace,
+        },
+        "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to any IP",
+      );
+    }
+
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
       await this.upsertManagedCustomPolicy({
         resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
@@ -537,6 +553,7 @@ export default class K8sDeployment {
           name: policyName,
           podSelectorLabels: this.getSystemLabels(),
           labels,
+          clusterDnsIps,
         }),
       });
       await Promise.all([
@@ -557,6 +574,7 @@ export default class K8sDeployment {
         name: policyName,
         podSelectorLabels: this.getSystemLabels(),
         labels,
+        clusterDnsIps,
       }),
     );
     await Promise.all([

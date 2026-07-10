@@ -571,9 +571,47 @@ describe("MCP egress floor and default-deny baseline builders", () => {
         ],
       },
     });
-    // DNS rule allows :53 to any resolver (no `to` peer); public rules uncapped.
+    // Without a resolved cluster DNS IP the DNS rule falls back to :53 to any
+    // resolver (no `to` peer); public rules uncapped.
     expect(manifest.spec?.egress?.[0]).not.toHaveProperty("to");
     expect(manifest.spec?.egress?.[1]).not.toHaveProperty("ports");
+  });
+
+  test("pins floor DNS to the cluster resolver IPs when provided (AWS ANP needs an explicit `to`)", () => {
+    const clusterDnsIps = ["10.100.0.10", "fd00:ec2::10"];
+    const plain = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      clusterDnsIps,
+    });
+
+    // The first egress rule now targets the resolver IPs explicitly on :53
+    // (family-aware CIDR), instead of the ports-only rule the AWS ANP agent drops.
+    expect(plain.spec?.egress?.[0]).toEqual({
+      to: [
+        { ipBlock: { cidr: "10.100.0.10/32" } },
+        { ipBlock: { cidr: "fd00:ec2::10/128" } },
+      ],
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    });
+    // The public-egress rules are untouched.
+    expect(plain.spec?.egress?.[1]?.to?.[0]?.ipBlock?.cidr).toBe("0.0.0.0/0");
+    expect(plain.spec?.egress?.[2]?.to?.[0]?.ipBlock?.cidr).toBe("::/0");
+
+    // The AWS ApplicationNetworkPolicy floor threads the identical DNS rule.
+    const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      clusterDnsIps,
+    });
+    expect((anp.spec as { egress: unknown[] }).egress).toEqual(
+      plain.spec?.egress,
+    );
   });
 
   test("builds the AWS ApplicationNetworkPolicy floor with the same egress shape", () => {

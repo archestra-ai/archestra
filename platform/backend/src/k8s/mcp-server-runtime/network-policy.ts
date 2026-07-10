@@ -246,6 +246,7 @@ export function buildUnrestrictedFloorPolicy(params: {
   name: string;
   podSelectorLabels: Record<string, string>;
   labels: Record<string, string>;
+  clusterDnsIps?: string[];
 }): k8s.V1NetworkPolicy {
   return {
     apiVersion: "networking.k8s.io/v1",
@@ -257,7 +258,7 @@ export function buildUnrestrictedFloorPolicy(params: {
     spec: {
       podSelector: { matchLabels: params.podSelectorLabels },
       policyTypes: ["Egress"],
-      egress: buildFloorEgressRules(),
+      egress: buildFloorEgressRules(params.clusterDnsIps ?? []),
     },
   };
 }
@@ -266,6 +267,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
   name: string;
   podSelectorLabels: Record<string, string>;
   labels: Record<string, string>;
+  clusterDnsIps?: string[];
 }): Record<string, unknown> {
   return {
     apiVersion: "networking.k8s.aws/v1alpha1",
@@ -277,7 +279,7 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
     spec: {
       podSelector: { matchLabels: params.podSelectorLabels },
       policyTypes: ["Egress"],
-      egress: buildFloorEgressRules(),
+      egress: buildFloorEgressRules(params.clusterDnsIps ?? []),
     },
   };
 }
@@ -361,17 +363,33 @@ const FLOOR_DENIED_IPV6_CIDRS = [
   "64:ff9b::/96",
 ];
 
-// DNS to any resolver + all public egress with the reserved ranges above blocked.
-// Shared by the plain NetworkPolicy and AWS ApplicationNetworkPolicy floor
-// variants — ApplicationNetworkPolicy supports all standard NetworkPolicy fields.
-function buildFloorEgressRules(): k8s.V1NetworkPolicyEgressRule[] {
+// DNS + all public egress with the reserved ranges above blocked. Shared by the
+// plain NetworkPolicy and AWS ApplicationNetworkPolicy floor variants —
+// ApplicationNetworkPolicy supports all standard NetworkPolicy fields.
+function buildFloorEgressRules(
+  clusterDnsIps: string[],
+): k8s.V1NetworkPolicyEgressRule[] {
+  const dnsPorts = [
+    { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
+    { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
+  ];
+  // Allow port 53 to the cluster resolver explicitly. The resolver ClusterIP
+  // sits inside the reserved ranges the public rule below blocks, and the AWS
+  // ApplicationNetworkPolicy agent does not honor a ports-only rule with no `to`
+  // peer, so an explicit destination is required for DNS to resolve on EKS Auto
+  // Mode — the same rule the restricted path emits. Falls back to port 53 to any
+  // IP when the resolver could not be resolved (degraded, but never breaks DNS).
+  const dnsRule: k8s.V1NetworkPolicyEgressRule =
+    clusterDnsIps.length > 0
+      ? {
+          to: clusterDnsIps.map((ip) => ({
+            ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+          })),
+          ports: dnsPorts,
+        }
+      : { ports: dnsPorts };
   return [
-    {
-      ports: [
-        { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
-        { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
-      ],
-    },
+    dnsRule,
     {
       to: [{ ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } }],
     },

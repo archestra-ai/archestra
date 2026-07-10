@@ -912,11 +912,11 @@ const registry = defineArchestraTools([
       // The context block lets the model verify str_replace edits landed
       // without a follow-up read_app. A replacement carries no news (the model
       // just wrote the document), and an unforked result saved nothing new.
-      // Fenced: the excerpts echo edited source (which may carry the app name in
-      // the title/heading) that would otherwise render as markdown here.
+      // buildAppliedEditExcerpts fences the echoed source (an "html" hint here)
+      // so edited markup can't render as markdown where this text is echoed.
       const excerptsNote =
         mode.kind === "edits" && forked
-          ? `\n${fencedBlock(buildAppliedEditExcerpts(editedHtml, editSpans), "html")}`
+          ? `\n${buildAppliedEditExcerpts(editedHtml, editSpans, "html")}`
           : "";
       const replacementNote =
         mode.kind === "replacement" && forked

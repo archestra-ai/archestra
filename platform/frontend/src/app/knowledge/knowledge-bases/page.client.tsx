@@ -120,6 +120,7 @@ function KnowledgeBasesList() {
             e.stopPropagation();
             row.toggleExpanded();
           }}
+          aria-label="Toggle row"
         >
           {row.getIsExpanded() ? (
             <ChevronDown className="h-4 w-4" />
@@ -517,6 +518,7 @@ function AddConnectorDialog({
                   setStep("choose");
                   setSelectedIds(new Set());
                 }}
+                aria-label="Go back"
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>

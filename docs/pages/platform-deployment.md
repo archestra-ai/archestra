@@ -659,7 +659,7 @@ Full resource reference: [Terraform provider docs](https://registry.terraform.io
 
 ### Crossplane
 
-Crossplane v1 or v2 must already be installed in the target cluster.
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked. Crossplane v1 or v2 must already be installed in the target cluster.
 
 **1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
 
@@ -726,46 +726,7 @@ spec:
     name: default
 ```
 
-Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
-
-### Crossplane
-
-The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked.
-
-**Install the provider**:
-
-```yaml
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-archestra
-spec:
-  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
-```
-
-**Configure credentials** (the API key is the same one used by the Terraform provider — see [API Reference](/docs/platform-api-reference#authentication)):
-
-```bash
-kubectl create secret generic archestra-creds \
-  -n crossplane-system \
-  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
-```
-
-```yaml
-apiVersion: archestra.crossplane.io/v1beta1
-kind: ProviderConfig
-metadata:
-  name: default
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: crossplane-system
-      name: archestra-creds
-      key: credentials
-```
-
-For supported resources, examples, and the contributor flow, see the [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 
@@ -1102,6 +1063,21 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`** - GitHub App client id used for the Copilot device flow.
   - Default: `Iv1.b507a08c87ecfe98` (the community-standard VS Code client id accepted by the Copilot token exchange)
   - Override this if your organization registers its own GitHub App with Copilot API access
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`** - Application (client) ID of your Entra app registration for the Microsoft 365 Copilot device flow.
+  - No default. The "Sign in with Microsoft" flow is unavailable until this is set.
+  - The registration needs public client flows enabled and admin-consented delegated Graph scopes (see [Supported LLM Providers](/docs/platform-supported-llm-providers))
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`** - Entra tenant segment of the OAuth endpoints used for Microsoft 365 Copilot sign-in and token redemption.
+  - Default: `organizations` (any work or school account)
+  - Pin your tenant id to restrict sign-in to one directory
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL`** - Override the Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API.
+  - Default: `https://graph.microsoft.com/beta`
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL`** - Entra ID host serving the OAuth device-flow and token endpoints.
+  - Default: `https://login.microsoftonline.com`
+  - Microsoft 365 Copilot has no static API keys: provider keys store the user's long-lived Entra refresh token, and the proxy redeems it (with caching) on every request
 
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
@@ -1460,6 +1436,19 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Required for the default socket mode
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
+
+#### Telegram
+
+See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses long polling — no public URL, webhook, or ngrok needed.
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_ENABLED`** - Feature gate for the Telegram integration.
+  - `true` shows the channel, `false` forces it off
+  - Blank/unset falls back to the `ARCHESTRA_BETA` master switch
+  - When off, the Telegram channel is hidden and the provider never starts
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN`** - Bot token issued by [@BotFather](https://t.me/BotFather).
+  - Required when: `ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true`
+  - Format: `123456789:ABC...`
 
 #### Attachment processing
 

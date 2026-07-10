@@ -1300,6 +1300,7 @@ export function ToolChecklist({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-7 pl-7 text-xs"
+              aria-label="Search tools"
             />
           </div>
         </div>

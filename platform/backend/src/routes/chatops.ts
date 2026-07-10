@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   createPaginatedResponseSchema,
@@ -28,10 +29,12 @@ import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
+  TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -1511,6 +1514,201 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Update Telegram chatops config.
+   * Persists to DB and reinitializes the chatops manager (which reloads from DB).
+   */
+  fastify.put(
+    "/api/chatops/config/telegram",
+    {
+      schema: {
+        operationId: RouteId.UpdateTelegramChatOpsConfig,
+        description: "Update Telegram chatops configuration",
+        tags: ["ChatOps"],
+        body: z.object({
+          enabled: z.boolean().optional(),
+          botToken: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true (or ARCHESTRA_BETA=true) and restart.",
+        );
+      }
+      const { enabled, botToken } = request.body;
+
+      // Merge new values with existing DB config (or defaults for first setup)
+      const existing = await ChatOpsConfigModel.getTelegramConfig();
+      const merged = {
+        enabled: enabled ?? existing?.enabled ?? false,
+        botToken: botToken ?? existing?.botToken ?? "",
+      };
+
+      // Validate the bot token by calling getMe
+      if (merged.enabled && merged.botToken) {
+        try {
+          const response = await fetch(
+            `https://api.telegram.org/bot${merged.botToken}/getMe`,
+          );
+          const body = (await response.json()) as { ok?: boolean };
+          if (!body.ok) throw new Error("getMe returned ok=false");
+        } catch {
+          throw new ApiError(
+            400,
+            "Invalid Telegram credentials — could not authenticate with Telegram. Please check your Bot Token.",
+          );
+        }
+      }
+
+      await ChatOpsConfigModel.saveTelegramConfig(merged);
+      await chatOpsManager.reinitialize();
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Mint a one-shot Telegram linking code for the signed-in user.
+   * The code rides a t.me/<bot>?start=<code> deep link; when the user taps
+   * Start, the bot redeems it and ties that Telegram chat to this user's
+   * email. Open to any authenticated user (self-service).
+   */
+  fastify.post(
+    "/api/chatops/telegram/link-code",
+    {
+      schema: {
+        operationId: RouteId.GenerateTelegramLinkCode,
+        description:
+          "Generate a one-shot code that links the current user's Telegram account via a t.me deep link",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ code: z.string(), botUsername: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment.",
+        );
+      }
+      const botUsername = chatOpsManager
+        .getTelegramProvider()
+        ?.getBotUsername();
+      if (!botUsername) {
+        throw new ApiError(400, "Telegram is not configured yet.");
+      }
+
+      const code = randomUUID();
+      await cacheManager.set(
+        `${CacheKey.TelegramLinkCode}-${code}`,
+        { email: request.user.email },
+        TELEGRAM_LINK_CODE_TTL_MS,
+      );
+
+      return reply.send({ code, botUsername });
+    },
+  );
+
+  /**
+   * Link the signed-in user's Telegram account.
+   * The code comes from the bot's /start reply and proves control of the
+   * Telegram chat; the email comes from the web session — so neither side
+   * can be spoofed. Open to any authenticated user (self-service).
+   */
+  fastify.post(
+    "/api/chatops/telegram/link",
+    {
+      schema: {
+        operationId: RouteId.LinkTelegramChatOpsAccount,
+        description:
+          "Link the current user's Telegram account using a code from the bot",
+        tags: ["ChatOps"],
+        body: z.object({ code: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment.",
+        );
+      }
+
+      const payload = await cacheManager.getAndDelete<{ chatId?: string }>(
+        `${CacheKey.TelegramLinkCode}-${request.body.code}`,
+      );
+      // Codes minted by the web UI carry an email instead of a chatId and are
+      // only redeemable from the bot side — reject them here.
+      if (!payload?.chatId) {
+        throw new ApiError(
+          400,
+          "This linking code is invalid or expired. Send /start to the bot again to get a fresh link.",
+        );
+      }
+
+      const email = request.user.email;
+      const chatBinding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "telegram",
+        channelId: payload.chatId,
+        workspaceId: null,
+      });
+      if (
+        chatBinding?.dmOwnerEmail &&
+        chatBinding.dmOwnerEmail.toLowerCase() !== email.toLowerCase()
+      ) {
+        throw new ApiError(
+          400,
+          "This Telegram account is already linked to another user.",
+        );
+      }
+
+      if (!chatBinding) {
+        // Reuse the user's pending/stale DM binding when one exists so an
+        // agent assignment made in the UI survives the link.
+        const existingDm =
+          await ChatOpsChannelBindingModel.findDmBindingByEmail(
+            "telegram",
+            email,
+          );
+        if (existingDm) {
+          await ChatOpsChannelBindingModel.fulfillDmBinding(
+            existingDm.id,
+            payload.chatId,
+            null,
+          );
+        } else {
+          await ChatOpsChannelBindingModel.create({
+            organizationId: request.organizationId,
+            provider: "telegram",
+            channelId: payload.chatId,
+            isDm: true,
+            dmOwnerEmail: email,
+            channelName: `Direct Message - ${email}`,
+            agentId: null,
+          });
+        }
+      }
+
+      // Confirm in the Telegram chat (non-blocking)
+      chatOpsManager
+        .getTelegramProvider()
+        ?.sendDirectMessage({
+          userId: payload.chatId,
+          text: `✅ Linked to ${email}. Send me a message to start!`,
+        })
+        .catch(() => {});
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the
@@ -1592,7 +1790,12 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
     appLevelToken?: string;
     connectionMode?: ChatOpsConnectionMode;
   };
-  dmInfo?: { botUserId?: string; teamId?: string; appId?: string };
+  dmInfo?: {
+    botUserId?: string;
+    teamId?: string;
+    appId?: string;
+    botUsername?: string;
+  };
 }> {
   switch (providerType) {
     case "ms-teams": {
@@ -1635,6 +1838,22 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
                 teamId: provider.getWorkspaceId() ?? undefined,
               }
             : undefined,
+      };
+    }
+    case "telegram": {
+      const provider = chatOpsManager.getTelegramProvider();
+      const dbConfig = await ChatOpsConfigModel.getTelegramConfig();
+      return {
+        id: "telegram",
+        displayName: "Telegram",
+        configured: provider?.isConfigured() ?? false,
+        credentials: {
+          botToken: maskValue(dbConfig?.botToken ?? ""),
+        },
+        // The bot username builds t.me deep links (chat and account linking)
+        dmInfo: provider?.getBotUsername()
+          ? { botUsername: provider.getBotUsername() ?? undefined }
+          : undefined,
       };
     }
   }

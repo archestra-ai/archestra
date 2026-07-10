@@ -1353,6 +1353,35 @@ const config = {
         process.env.ARCHESTRA_GITHUB_COPILOT_CLIENT_ID ||
         "Iv1.b507a08c87ecfe98",
     },
+    "microsoft-365-copilot": {
+      /** Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API (beta). */
+      baseUrl:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL ||
+        "https://graph.microsoft.com/beta",
+      /**
+       * Host serving the Entra ID OAuth endpoints
+       * (/{tenant}/oauth2/v2.0/devicecode and /{tenant}/oauth2/v2.0/token).
+       * Overridable for sovereign clouds and e2e tests.
+       */
+      authBaseUrl:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL ||
+        "https://login.microsoftonline.com",
+      /**
+       * Entra tenant segment of the OAuth endpoints. "organizations" allows any
+       * work/school account; operators can pin their own tenant id to restrict
+       * sign-in to one directory.
+       */
+      tenantId:
+        process.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID ||
+        "organizations",
+      /**
+       * Application (client) ID of the operator's Entra app registration (a
+       * public client with "Allow public client flows" enabled and the Graph
+       * delegated scopes the Chat API requires). No community default exists,
+       * so device-flow sign-in is unavailable until this is set.
+       */
+      clientId: process.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID || "",
+    },
     bedrock: {
       enabled: Boolean(process.env.ARCHESTRA_BEDROCK_BASE_URL),
       baseUrl: process.env.ARCHESTRA_BEDROCK_BASE_URL || "",
@@ -1429,6 +1458,11 @@ const config = {
     },
     "github-copilot": {
       apiKey: process.env.ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY || "",
+    },
+    "microsoft-365-copilot": {
+      // Per-user provider: every env-key consumer skips it (resolution
+      // fallback, env seeding, system defaults), so no env var is read.
+      apiKey: "",
     },
     bedrock: {
       apiKey: process.env.ARCHESTRA_CHAT_BEDROCK_API_KEY || "",
@@ -1768,6 +1802,13 @@ const config = {
     domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
   },
   chatops: {
+    // Gate for the Telegram integration: per-feature flag with ARCHESTRA_BETA
+    // as the fallback (betaFeatureEnabled). Off = the provider never starts
+    // (even with a token saved in the DB), the config endpoint rejects
+    // updates, and the frontend hides the Telegram messaging channel.
+    telegramEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_CHATOPS_TELEGRAM_ENABLED,
+    ),
     // Per-process cap on concurrent chatops file downloads + image shrinking.
     // Chatops events are acked to the provider before processing, so an OOM
     // during a burst of attachment-heavy messages means silent message loss —

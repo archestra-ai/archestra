@@ -59,6 +59,10 @@ const nextConfig: NextConfig = {
     // the backend's runtime value.) Anything the proxy lets through still gets
     // sized-checked by the backend's bodyLimit, which is the authoritative cap.
     proxyClientMaxBodySize: "200mb",
+    // React <ViewTransition> integration (animates the new-chat → conversation
+    // handoff; see src/lib/view-transition.tsx). Browsers without the View
+    // Transitions API just skip the animation.
+    viewTransition: true,
   },
   httpAgentOptions: {
     keepAlive: true,

@@ -44,6 +44,9 @@ export const CacheKey = {
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
+  /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
+  Microsoft365CopilotDeviceAuthRateLimit:
+    "microsoft-365-copilot-device-auth-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
@@ -56,6 +59,10 @@ export const CacheKey = {
   TeamsThreadMuteHint: "teams-thread-mute-hint",
   /** Slack channel threads that already got the one-time "you can mute me" hint */
   SlackThreadMuteHint: "slack-thread-mute-hint",
+  /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
+  TelegramApprovalCallback: "chatops-telegram-approval",
+  /** One-shot codes linking a Telegram chat to a signed-in user */
+  TelegramLinkCode: "chatops-telegram-link",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

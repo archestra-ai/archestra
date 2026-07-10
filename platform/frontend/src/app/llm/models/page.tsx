@@ -1113,6 +1113,7 @@ function ModalitySelectField<T extends string>(params: {
               {option.label}
               <Button
                 type="button"
+                aria-label="Remove option"
                 variant="ghost"
                 size="icon"
                 className="h-4 w-4"

@@ -476,7 +476,12 @@ function CreatedTokenDialog({
             token requires creating a new one.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Input readOnly value={token ?? ""} className="font-mono text-xs" />
+            <Input
+              readOnly
+              aria-label="Service account token"
+              value={token ?? ""}
+              className="font-mono text-xs"
+            />
             <Button type="button" onClick={onCopy}>
               <Copy className="h-4 w-4" />
               Copy to clipboard

@@ -20,6 +20,7 @@ vi.mock("@sentry/node", () => ({
 }));
 
 import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
+import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   buildAbortiveTurnError,
@@ -2132,5 +2133,51 @@ describe("buildAbortiveTurnError", () => {
       expect(result.code).toBe(ChatErrorCode.IncompleteToolCall);
       expect(result.isRetryable).toBe(true);
     }
+  });
+});
+
+// =============================================================================
+// Microsoft 365 Copilot — tools rejection (ToolsUnsupported)
+// =============================================================================
+
+describe("mapProviderError - Microsoft 365 Copilot tools rejection", () => {
+  it("maps the proxy adapter's tools rejection to ToolsUnsupported", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE,
+          type: "invalid_request_error",
+        },
+      }),
+      isRetryable: false,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.ToolsUnsupported);
+    expect(result.isRetryable).toBe(false);
+    // The headline must be the actionable copy, not the generic
+    // invalid-request one whose details only admins can expand.
+    expect(result.message).toBe(
+      ChatErrorMessages[ChatErrorCode.ToolsUnsupported],
+    );
+  });
+
+  it("keeps other microsoft-365-copilot 400s on the generic invalid-request code", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: "additionalContext exceeds the allowed size",
+          type: "invalid_request_error",
+        },
+      }),
+      isRetryable: false,
+    };
+    const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
   });
 });

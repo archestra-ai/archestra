@@ -607,6 +607,7 @@ export function SkillEditorDialog({
                 <Textarea
                   value={editorValue}
                   onChange={(e) => setEditorValue(e.target.value)}
+                  aria-label="File contents"
                   placeholder={
                     openFile ? "File contents..." : MANIFEST_PLACEHOLDER
                   }
@@ -801,6 +802,7 @@ function NewFileRow({
         }}
         placeholder={placeholder}
         className="h-7 flex-1 font-mono text-xs"
+        aria-label="File name"
       />
       <Button
         type="button"
@@ -818,6 +820,7 @@ function NewFileRow({
         size="icon"
         className="h-7 w-7"
         onClick={onCancel}
+        aria-label="Cancel"
       >
         <X className="h-3.5 w-3.5" />
       </Button>
@@ -892,6 +895,7 @@ function NewFolderRow({
         }}
         placeholder="folder name"
         className="h-7 flex-1 font-mono text-xs"
+        aria-label="Folder name"
       />
       <Button
         type="button"
@@ -909,6 +913,7 @@ function NewFolderRow({
         size="icon"
         className="h-7 w-7"
         onClick={onCancel}
+        aria-label="Cancel"
       >
         <X className="h-3.5 w-3.5" />
       </Button>

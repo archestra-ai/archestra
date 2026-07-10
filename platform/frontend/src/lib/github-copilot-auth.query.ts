@@ -13,12 +13,20 @@ export type GithubCopilotDevicePoll =
 export function useStartGithubCopilotDeviceFlow() {
   return useMutation({
     mutationFn: async (): Promise<GithubCopilotDeviceStart | null> => {
-      const { data, error } = await githubCopilotDeviceAuthStart();
-      if (error) {
-        handleApiError(error);
+      // Toast even when the SDK call throws (network down, backend
+      // restarting) instead of returning an API error — otherwise the
+      // sign-in button fails with no feedback at all.
+      try {
+        const { data, error } = await githubCopilotDeviceAuthStart();
+        if (error) {
+          handleApiError(error);
+          return null;
+        }
+        return data;
+      } catch (thrown) {
+        handleApiError(thrown as Parameters<typeof handleApiError>[0]);
         return null;
       }
-      return data;
     },
   });
 }

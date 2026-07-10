@@ -1,12 +1,14 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
+  applyFeedbackToMessages,
   applyTextEditToMessages,
   chatDraftStorageKey,
   conversationStorageKeys,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
+  getMessageFeedback,
   mergePersistedMessageMetadata,
   migrateLegacyNewChatDraft,
   NEW_CHAT_DRAFT_STORAGE_KEY,
@@ -636,6 +638,67 @@ describe("applyTextEditToMessages", () => {
     });
 
     expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
+  });
+});
+
+describe("message feedback helpers", () => {
+  const makeAssistantMessage = (metadata?: Record<string, unknown>) =>
+    ({
+      id: "assistant-1",
+      role: "assistant",
+      metadata,
+      parts: [{ type: "text", text: "answer" }],
+    }) as UIMessage;
+
+  it("getMessageFeedback reads only valid verdicts", () => {
+    expect(getMessageFeedback(makeAssistantMessage({ feedback: "up" }))).toBe(
+      "up",
+    );
+    expect(getMessageFeedback(makeAssistantMessage({ feedback: "down" }))).toBe(
+      "down",
+    );
+    expect(getMessageFeedback(makeAssistantMessage())).toBeNull();
+    expect(
+      getMessageFeedback(makeAssistantMessage({ feedback: "sideways" })),
+    ).toBeNull();
+    expect(getMessageFeedback(undefined)).toBeNull();
+  });
+
+  it("applyFeedbackToMessages sets the target and leaves other messages untouched", () => {
+    const other = makeAssistantMessage();
+    const messages = [
+      { ...makeAssistantMessage({ skill: { name: "s" } }), id: "target" },
+      other,
+    ] as UIMessage[];
+
+    const updated = applyFeedbackToMessages({
+      messages,
+      messageId: "target",
+      feedback: "up",
+    });
+
+    expect(getMessageFeedback(updated[0])).toBe("up");
+    // Unrelated metadata survives the patch
+    expect(updated[0]?.metadata).toMatchObject({ skill: { name: "s" } });
+    expect(updated[1]).toBe(other);
+  });
+
+  it("applyFeedbackToMessages clears with null (round-trips through apply/rollback)", () => {
+    const messages = [makeAssistantMessage({ feedback: "up" })];
+
+    const cleared = applyFeedbackToMessages({
+      messages,
+      messageId: "assistant-1",
+      feedback: null,
+    });
+    expect(getMessageFeedback(cleared[0])).toBeNull();
+
+    const restored = applyFeedbackToMessages({
+      messages: cleared,
+      messageId: "assistant-1",
+      feedback: "up",
+    });
+    expect(getMessageFeedback(restored[0])).toBe("up");
   });
 });
 

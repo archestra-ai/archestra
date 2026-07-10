@@ -3,6 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
+  ChatMessageFeedbackSchema,
   ChatMessageMetadataSchema,
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
@@ -92,6 +93,7 @@ import {
   ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
+import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -714,10 +716,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const normalizedMessagesForLLM =
               normalizeChatMessages(messagesForLLM);
 
-            // Perplexity does NOT support tool calling - it has built-in web search instead
-            // @see https://docs.perplexity.ai/api-reference/chat-completions-post
-            const supportsToolCalling = provider !== "perplexity";
-
             // For Gemini image generation models, enable image output via responseModalities
             // Known image-capable model patterns:
             // - gemini-2.0-flash-exp-image-generation
@@ -909,6 +907,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                   return null;
                 });
+
+                // Omit tools for models that can't take them (e.g. Microsoft
+                // 365 Copilot) instead of letting the provider reject the
+                // turn; an unknown capability is assumed supported. Perplexity
+                // stays hardcoded — its models don't declare capabilities and
+                // it has built-in web search instead of tool calling
+                // (https://docs.perplexity.ai/api-reference/chat-completions-post).
+                const supportsToolCalling =
+                  provider !== "perplexity" &&
+                  modelRow?.supportsToolCalling !== false;
 
                 const { modelMessages, preparedMessages } =
                   await buildModelMessages({
@@ -2837,6 +2845,90 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Message Feedback Route
+  fastify.patch(
+    "/api/chat/messages/:id/feedback",
+    {
+      schema: {
+        operationId: RouteId.SetChatMessageFeedback,
+        description:
+          "Set or clear the owner's thumbs feedback on an assistant message",
+        tags: ["Chat"],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          conversationId: z.string().uuid(),
+          // union (not .nullable()): the OpenAPI 3.0 `nullable: true` + `enum`
+          // combination loses `null` in the generated hey-api client type
+          feedback: z.union([ChatMessageFeedbackSchema, z.null()]),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string().uuid(),
+            feedback: z.union([ChatMessageFeedbackSchema, z.null()]),
+          }),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        body: { conversationId, feedback },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Verify the user owns the conversation before resolving the message.
+      // isOwnedBy, not findById: this endpoint only needs the ownership check,
+      // and findById drags every message body along with it.
+      const isOwner = await ConversationModel.isOwnedBy({
+        id: conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!isOwner) {
+        throw new ApiError(404, "Message not found or access denied");
+      }
+
+      // Resolve by DB UUID or AI SDK nanoid content ID, scoped to the
+      // conversation — content IDs are client-supplied and not globally unique
+      const message = await MessageModel.findByAnyIdInConversation(
+        id,
+        conversationId,
+      );
+
+      if (!message) {
+        throw new ApiError(404, "Message not found");
+      }
+
+      if (message.role !== "assistant") {
+        throw new ApiError(
+          400,
+          "Feedback is only supported on assistant messages",
+        );
+      }
+
+      const updatedMessage = await MessageModel.updateFeedback(
+        message.id,
+        feedback,
+      );
+
+      // The row can vanish between lookup and update (e.g. a concurrent
+      // regeneration deleted this assistant turn)
+      if (!updatedMessage) {
+        throw new ApiError(404, "Message not found");
+      }
+
+      reportChatMessageFeedback(updatedMessage.feedback ?? null);
+
+      return reply.send({
+        id: updatedMessage.id,
+        feedback: updatedMessage.feedback ?? null,
+      });
+    },
+  );
+
   // Enabled Tools Routes
   fastify.get(
     "/api/chat/conversations/:id/enabled-tools",
@@ -3809,7 +3901,7 @@ async function forkConversation(params: {
       forkedMessages.map((message) => ({
         conversationId: newConversation.id,
         role: message.role,
-        content: message,
+        content: stripFeedbackMetadata(message),
       })),
     );
   }
@@ -3825,6 +3917,20 @@ async function forkConversation(params: {
   }
 
   return result;
+}
+
+/**
+ * A fork starts unrated: the source read projection embeds the owner's
+ * feedback in message metadata, and persisting that copy verbatim would bake
+ * a stale verdict into the fork's content JSON (its feedback column is NULL).
+ */
+function stripFeedbackMetadata(message: ChatMessage): ChatMessage {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== "object" || !("feedback" in metadata)) {
+    return message;
+  }
+  const { feedback: _feedback, ...rest } = metadata as Record<string, unknown>;
+  return { ...message, metadata: rest } as ChatMessage;
 }
 
 /**

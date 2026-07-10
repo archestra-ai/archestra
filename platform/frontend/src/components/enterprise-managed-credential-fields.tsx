@@ -106,6 +106,7 @@ export function EnterpriseManagedCredentialFields({
       <div className="space-y-1.5">
         <Label className="text-xs">Managed Resource Identifier</Label>
         <Input
+          aria-label="Managed resource identifier"
           value={config.resourceIdentifier ?? ""}
           onChange={(event) =>
             onChange({
@@ -120,6 +121,7 @@ export function EnterpriseManagedCredentialFields({
       <div className="space-y-1.5">
         <Label className="text-xs">External Provider Alias</Label>
         <Input
+          aria-label="External provider alias"
           value={config.requestedIssuer ?? ""}
           onChange={(event) =>
             onChange({
@@ -139,6 +141,7 @@ export function EnterpriseManagedCredentialFields({
       <div className="space-y-1.5">
         <Label className="text-xs">Response Field Path</Label>
         <Input
+          aria-label="Response field path"
           value={config.responseFieldPath ?? ""}
           onChange={(event) =>
             onChange({
@@ -158,6 +161,7 @@ export function EnterpriseManagedCredentialFields({
         <div className="space-y-1.5">
           <Label className="text-xs">Header Name</Label>
           <Input
+            aria-label="Header name"
             value={config.headerName ?? ""}
             onChange={(event) =>
               onChange({

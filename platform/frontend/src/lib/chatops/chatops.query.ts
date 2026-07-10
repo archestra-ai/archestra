@@ -94,7 +94,7 @@ export function useCreateChatOpsDmBinding() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (params: {
-      provider: "ms-teams" | "slack";
+      provider: "ms-teams" | "slack" | "telegram";
       agentId: string | null;
     }) => {
       const { data, error } = await archestraApiSdk.createChatOpsDmBinding({

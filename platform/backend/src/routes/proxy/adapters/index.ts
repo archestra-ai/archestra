@@ -9,6 +9,7 @@ export { geminiAdapterFactory } from "./gemini";
 export { geminiEmbeddingsAdapterFactory } from "./gemini-embeddings";
 export { githubCopilotAdapterFactory } from "./github-copilot";
 export { groqAdapterFactory } from "./groq";
+export { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";

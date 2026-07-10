@@ -127,6 +127,7 @@ describe("config routes", () => {
       "gemini",
       "github-copilot",
       "groq",
+      "microsoft-365-copilot",
       "minimax",
       "mistral",
       "ollama",

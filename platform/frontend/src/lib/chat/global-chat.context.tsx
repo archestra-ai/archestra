@@ -123,7 +123,7 @@ interface ChatSession {
   stop: () => void;
   status: "ready" | "submitted" | "streaming" | "error";
   error: Error | undefined;
-  setMessages: (messages: UIMessage[]) => void;
+  setMessages: ReturnType<typeof useChat>["setMessages"];
   addToolResult: ReturnType<typeof useChat>["addToolResult"];
   addToolApprovalResponse: ReturnType<
     typeof useChat

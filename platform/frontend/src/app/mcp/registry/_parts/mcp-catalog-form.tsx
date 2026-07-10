@@ -1669,6 +1669,7 @@ export function McpCatalogForm({
                             variant="ghost"
                             size="icon"
                             onClick={() => removeImagePullSecret(index)}
+                            aria-label="Remove image pull secret"
                           >
                             <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                           </Button>
@@ -1693,6 +1694,7 @@ export function McpCatalogForm({
                               <Label className="text-xs">Server</Label>
                               <Input
                                 placeholder="e.g. quay.io"
+                                aria-label="Server"
                                 className="font-mono"
                                 autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                                 value={watchField("server")}
@@ -1705,6 +1707,7 @@ export function McpCatalogForm({
                               <Label className="text-xs">Username</Label>
                               <Input
                                 placeholder="username"
+                                aria-label="Username"
                                 autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                                 value={watchField("username")}
                                 onChange={(e) =>
@@ -1732,6 +1735,7 @@ export function McpCatalogForm({
                               </Label>
                               <Input
                                 placeholder="email@example.com"
+                                aria-label="Email"
                                 autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                                 value={watchField("email")}
                                 onChange={(e) =>

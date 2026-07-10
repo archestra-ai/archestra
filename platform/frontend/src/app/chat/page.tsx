@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import type { ChatSkillMetadata } from "@archestra/shared";
+import type { ChatMessageFeedback, ChatSkillMetadata } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -37,9 +38,11 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
+import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { NoToolsModelNotice } from "@/components/chat/no-tools-model-notice";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
@@ -109,6 +112,7 @@ import {
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
   useConversationShare,
@@ -116,9 +120,11 @@ import {
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
 import {
+  applyFeedbackToMessages,
   conversationStorageKeys,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
+  getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
@@ -135,6 +141,7 @@ import {
 } from "@/lib/chat/pending-tool-state";
 import {
   agentRequiresPerUserConnect,
+  agentToolsUnavailableForModel,
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
@@ -157,6 +164,7 @@ import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
+import { ViewTransition } from "@/lib/view-transition";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -555,15 +563,36 @@ export function ChatPageContent({
   // Update URL when conversation changes
   const selectConversation = useCallback(
     (id: string | undefined) => {
-      setConversationId(id);
+      // A React Transition so the <ViewTransition> boundaries below animate
+      // the splash → conversation swap (plain setState swaps instantly).
+      startTransition(() => setConversationId(id));
       if (id) {
-        router.push(`/chat/${id}`);
+        // Shallow-route to the canonical URL: history.pushState syncs
+        // usePathname/useSearchParams without an RSC navigation, so this
+        // instance keeps rendering the conversation it just started. A real
+        // router.push to /chat/[conversationId] would mount that segment's
+        // keyed page and remount everything mid-stream (visible flicker).
+        // Refresh, deep links, and back/forward still resolve through the
+        // /chat/[conversationId] route.
+        window.history.pushState(null, "", `/chat/${id}`);
       } else {
         router.push("/chat");
       }
     },
     [router],
   );
+
+  // After the shallow pushState above, this /chat instance stays mounted while
+  // the URL reads /chat/<id> — so navigating back to /chat (sidebar "New
+  // Chat", browser back) can land on this same instance instead of a fresh
+  // mount. Derive the reset from the URL: when the pathname returns to /chat,
+  // clear the selection so the New Chat splash renders again.
+  const isNewChatUrl = !routeConversationId && pathname === "/chat";
+  useEffect(() => {
+    if (isNewChatUrl) {
+      startTransition(() => setConversationId(undefined));
+    }
+  }, [isNewChatUrl]);
 
   // App render diagnostics are conversation-scoped: drop any leftovers when
   // switching conversations so they never attach to an unrelated send.
@@ -752,6 +781,29 @@ export function ChatPageContent({
     conversation?.modelId,
     chatModels,
   ]);
+
+  // A no-tools model (e.g. Microsoft 365 Copilot) paired with a tooled agent
+  // runs tool-less — the backend omits the tools — so an up-front notice
+  // above the composer replaces tools silently never firing.
+  const initialToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === initialAgentId),
+        selectedModelId: initialModel,
+        models: chatModels,
+      }),
+    [internalAgents, initialAgentId, initialModel, chatModels],
+  );
+
+  const conversationToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === conversation?.agentId),
+        selectedModelId: conversation?.modelId,
+        models: chatModels,
+      }),
+    [internalAgents, conversation?.agentId, conversation?.modelId, chatModels],
+  );
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
@@ -987,6 +1039,49 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+
+  // Thumbs feedback on assistant messages: optimistic apply + rollback against
+  // the originating session's setter, captured here so a conversation switch
+  // mid-request cannot retarget the rollback (or the invalidation, which the
+  // mutation keys off its per-call variables). The rollback rides this
+  // closure's own promise chain, NOT a mutation callback: switching
+  // conversations remounts the page and unmounts the mutation observer, which
+  // makes TanStack skip per-call callbacks — while the originating session
+  // (and this closure's setter into it) lives on in the global chat context.
+  const setChatMessageFeedback = useSetChatMessageFeedback();
+  const handleMessageFeedback = useCallback(
+    (messageId: string, feedback: ChatMessageFeedback | null) => {
+      const applyMessages = setMessages;
+      if (!applyMessages || !conversationId) {
+        return;
+      }
+      const previousFeedback = getMessageFeedback(
+        messages.find((message) => message.id === messageId),
+      );
+      applyMessages((current) =>
+        applyFeedbackToMessages({ messages: current, messageId, feedback }),
+      );
+      setChatMessageFeedback
+        .mutateAsync({ messageId, conversationId, feedback })
+        .catch(() => {
+          // Error toast already handled inside the mutation; only roll back —
+          // and only while the message still shows THIS request's value, so a
+          // slow failure can't overwrite a newer rating made in the meantime.
+          applyMessages((current) => {
+            const target = current.find((message) => message.id === messageId);
+            if (getMessageFeedback(target) !== feedback) {
+              return current;
+            }
+            return applyFeedbackToMessages({
+              messages: current,
+              messageId,
+              feedback: previousFeedback,
+            });
+          });
+        });
+    },
+    [setMessages, conversationId, messages, setChatMessageFeedback],
+  );
   // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
   const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
 
@@ -1395,17 +1490,24 @@ export function ChatPageContent({
     }
 
     const initialAppDiagnostics = drainAppDiagnostics();
-    sendMessage({
-      role: "user",
-      parts: ensureNonEmptyParts(parts),
-      metadata: {
-        createdAt: new Date().toISOString(),
-        ...(skillToSend ? { skill: skillToSend } : {}),
-        ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
-        ...(initialAppDiagnostics.length > 0
-          ? { appDiagnostics: initialAppDiagnostics }
-          : {}),
-      },
+    // This effect fires right after the splash → conversation swap commits,
+    // while its view transition (the composer morph) is still animating. An
+    // urgent update here would make React skip that animation mid-flight, so
+    // schedule the optimistic user-message append as a transition too — it
+    // joins the running animation instead of snapping it to the end.
+    startTransition(() => {
+      sendMessage({
+        role: "user",
+        parts: ensureNonEmptyParts(parts),
+        metadata: {
+          createdAt: new Date().toISOString(),
+          ...(skillToSend ? { skill: skillToSend } : {}),
+          ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
+          ...(initialAppDiagnostics.length > 0
+            ? { appDiagnostics: initialAppDiagnostics }
+            : {}),
+        },
+      });
     });
 
     trackEvent("message_sent", {
@@ -2306,7 +2408,6 @@ export function ChatPageContent({
     hasAttachmentsMarker: searchParams.get("attachments") === "1",
     hasPendingHandoffFiles: hasPendingChatHandoffFiles(),
     autoSendTriggered: autoSendTriggeredRef.current,
-    isCreatingConversation: createConversationMutation.isPending,
   });
 
   return (
@@ -2317,6 +2418,7 @@ export function ChatPageContent({
       onClosePanel={closeRightPanel}
     >
       <div className="flex flex-col h-full w-full min-h-0">
+        <ChatStatusAnnouncer status={status} />
         {/* Full-width top bar: title + the Files/Browser/Apps tab strip. It
             sits above the [chat | panel] split so the panel's resize divider
             only spans the content area below it. */}
@@ -2390,73 +2492,83 @@ export function ChatPageContent({
 
               {conversationId ? (
                 <>
-                  {/* Chat content - hidden on mobile when panels are open */}
-                  <div
-                    className={cn(
-                      "flex-1 min-h-0 relative",
-                      isRightPanelOpen && "hidden md:block",
-                    )}
-                  >
-                    {isScheduledRunInProgress ? (
-                      <ScheduledRunInProgress />
-                    ) : isReadOnlyConversation ? (
-                      <MessageThread
-                        messages={sharedConversationMessages}
-                        chatErrors={conversation?.chatErrors ?? []}
-                        conversationId={conversationId}
-                        containerClassName="h-full"
-                        hideDivider
-                        profileId={conversation?.agent?.id}
-                        agentName={conversation?.agent?.name}
-                        selectedModel={conversation?.modelId ?? undefined}
-                      />
-                    ) : (
-                      <ChatMessages
-                        conversationId={conversationId}
-                        agentId={
-                          currentProfileId || initialAgentId || undefined
-                        }
-                        messages={messages}
-                        status={status}
-                        isContextCompacting={isContextCompacting}
-                        contextCompactionFeedback={manualCompactionFeedback}
-                        optimisticToolCalls={optimisticToolCalls}
-                        isLoadingConversation={isLoadingConversation}
-                        onMessagesUpdate={setMessages}
-                        agentName={
-                          (currentProfileId
-                            ? internalAgents.find(
-                                (a) => a.id === currentProfileId,
-                              )
-                            : internalAgents.find(
-                                (a) => a.id === initialAgentId,
-                              )
-                          )?.name
-                        }
-                        selectedModel={conversation?.modelId ?? initialModel}
-                        modelSource={
-                          conversationModelSource ?? initialModelSource
-                        }
-                        chatErrors={conversation?.chatErrors ?? []}
-                        compactions={conversation?.compactions ?? []}
-                        onRegenerateUserMessage={regenerateUserMessage}
-                        onProviderConnected={handleProviderConnected}
-                        onChatErrorRetry={handleChatErrorRetry}
-                        error={error}
-                        onToolApprovalResponse={
-                          addToolApprovalResponse
-                            ? ({ id, approved, reason }) => {
-                                addToolApprovalResponse({
-                                  id,
-                                  approved,
-                                  reason,
-                                });
-                              }
-                            : undefined
-                        }
-                      />
-                    )}
-                  </div>
+                  {/* Chat content - hidden on mobile when panels are open.
+                      The ViewTransition eases the thread in when the splash
+                      (or another page) hands off to a conversation. */}
+                  <ViewTransition enter="chat-thread-enter" default="none">
+                    <div
+                      className={cn(
+                        "flex-1 min-h-0 relative",
+                        isRightPanelOpen && "hidden md:block",
+                      )}
+                    >
+                      {isScheduledRunInProgress ? (
+                        <ScheduledRunInProgress />
+                      ) : isReadOnlyConversation ? (
+                        <MessageThread
+                          messages={sharedConversationMessages}
+                          chatErrors={conversation?.chatErrors ?? []}
+                          conversationId={conversationId}
+                          containerClassName="h-full"
+                          hideDivider
+                          profileId={conversation?.agent?.id}
+                          agentName={conversation?.agent?.name}
+                          selectedModel={conversation?.modelId ?? undefined}
+                        />
+                      ) : (
+                        <ChatMessages
+                          conversationId={conversationId}
+                          agentId={
+                            currentProfileId || initialAgentId || undefined
+                          }
+                          messages={messages}
+                          status={status}
+                          isContextCompacting={isContextCompacting}
+                          contextCompactionFeedback={manualCompactionFeedback}
+                          optimisticToolCalls={optimisticToolCalls}
+                          isLoadingConversation={isLoadingConversation}
+                          onMessagesUpdate={setMessages}
+                          onMessageFeedback={
+                            // No thumbs until the live session's setter exists —
+                            // a click before then could not apply or roll back.
+                            setMessages ? handleMessageFeedback : undefined
+                          }
+                          feedbackDisabled={setChatMessageFeedback.isPending}
+                          agentName={
+                            (currentProfileId
+                              ? internalAgents.find(
+                                  (a) => a.id === currentProfileId,
+                                )
+                              : internalAgents.find(
+                                  (a) => a.id === initialAgentId,
+                                )
+                            )?.name
+                          }
+                          selectedModel={conversation?.modelId ?? initialModel}
+                          modelSource={
+                            conversationModelSource ?? initialModelSource
+                          }
+                          chatErrors={conversation?.chatErrors ?? []}
+                          compactions={conversation?.compactions ?? []}
+                          onRegenerateUserMessage={regenerateUserMessage}
+                          onProviderConnected={handleProviderConnected}
+                          onChatErrorRetry={handleChatErrorRetry}
+                          error={error}
+                          onToolApprovalResponse={
+                            addToolApprovalResponse
+                              ? ({ id, approved, reason }) => {
+                                  addToolApprovalResponse({
+                                    id,
+                                    approved,
+                                    reason,
+                                  });
+                                }
+                              : undefined
+                          }
+                        />
+                      )}
+                    </div>
+                  </ViewTransition>
 
                   {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
                     <div className="sticky bottom-0 bg-background border-t p-4">
@@ -2526,60 +2638,75 @@ export function ChatPageContent({
                   ) : (
                     activeAgentId && (
                       <div className="sticky bottom-0 bg-background border-t p-4">
-                        <div className="max-w-4xl mx-auto space-y-3">
-                          <ArchestraPromptInput
-                            onSubmit={handleSubmit}
-                            onStop={handleStopStreaming}
-                            status={status}
-                            selectedModel={conversation?.modelId ?? ""}
-                            onModelChange={handleModelChange}
-                            agentId={promptAgentId ?? activeAgentId}
-                            conversationId={conversationId}
-                            currentConversationChatApiKeyId={
-                              conversation?.chatApiKeyId
-                            }
-                            currentProvider={currentProvider}
-                            textareaRef={textareaRef}
-                            onProviderChange={handleProviderChange}
-                            allowFileUploads={
-                              organization?.allowChatFileUploads ?? false
-                            }
-                            isModelsLoading={isModelsLoading}
-                            tokensUsed={tokensUsed}
-                            cachedTokens={tokenUsage?.cacheReadTokens}
-                            maxContextLength={selectedModelContextLength}
-                            contextWindow={contextWindow}
-                            lastCompaction={contextCompaction?.lastCompaction}
-                            inputModalities={selectedModelInputModalities}
-                            agentLlmApiKeyId={
-                              conversation?.agent?.llmApiKeyId ?? null
-                            }
-                            submitDisabled={isPlaywrightSetupVisible}
-                            isContextCompacting={isContextCompacting}
-                            onCompactConversation={handleCompactConversation}
-                            isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                            selectorAgentId={activeAgentId}
-                            selectorAgentName={swappedAgentName ?? undefined}
-                            onAgentChange={handleConversationAgentChange}
-                            modelSource={conversationModelSource}
-                            onResetModelOverride={
-                              handleConversationResetModelOverride
-                            }
-                            agentRequiresPerUserConnect={
-                              conversationPerUserConnect.needsConnect
-                            }
-                            agentModelDisplayName={
-                              conversationPerUserConnect.needsConnect
-                                ? conversationPerUserConnect.modelName
-                                : undefined
-                            }
-                            prefillText={composerPrefill}
-                            onPrefillApplied={handleComposerPrefillApplied}
-                          />
-                          <div className="text-center">
-                            <Version inline />
+                        {/* Shared-element pair with the centered New Chat
+                            composer (and the project-page composer): on the
+                            splash → conversation swap the box morphs from
+                            center screen to its bottom anchor. */}
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="max-w-4xl mx-auto space-y-3">
+                            {conversationToolsUnavailable && (
+                              <NoToolsModelNotice />
+                            )}
+                            <ArchestraPromptInput
+                              onSubmit={handleSubmit}
+                              onStop={handleStopStreaming}
+                              status={status}
+                              selectedModel={conversation?.modelId ?? ""}
+                              onModelChange={handleModelChange}
+                              agentId={promptAgentId ?? activeAgentId}
+                              conversationId={conversationId}
+                              currentConversationChatApiKeyId={
+                                conversation?.chatApiKeyId
+                              }
+                              currentProvider={currentProvider}
+                              textareaRef={textareaRef}
+                              onProviderChange={handleProviderChange}
+                              allowFileUploads={
+                                organization?.allowChatFileUploads ?? false
+                              }
+                              isModelsLoading={isModelsLoading}
+                              tokensUsed={tokensUsed}
+                              cachedTokens={tokenUsage?.cacheReadTokens}
+                              maxContextLength={selectedModelContextLength}
+                              contextWindow={contextWindow}
+                              lastCompaction={contextCompaction?.lastCompaction}
+                              inputModalities={selectedModelInputModalities}
+                              agentLlmApiKeyId={
+                                conversation?.agent?.llmApiKeyId ?? null
+                              }
+                              submitDisabled={isPlaywrightSetupVisible}
+                              isContextCompacting={isContextCompacting}
+                              onCompactConversation={handleCompactConversation}
+                              isPlaywrightSetupVisible={
+                                isPlaywrightSetupVisible
+                              }
+                              selectorAgentId={activeAgentId}
+                              selectorAgentName={swappedAgentName ?? undefined}
+                              onAgentChange={handleConversationAgentChange}
+                              modelSource={conversationModelSource}
+                              onResetModelOverride={
+                                handleConversationResetModelOverride
+                              }
+                              agentRequiresPerUserConnect={
+                                conversationPerUserConnect.needsConnect
+                              }
+                              agentModelDisplayName={
+                                conversationPerUserConnect.needsConnect
+                                  ? conversationPerUserConnect.modelName
+                                  : undefined
+                              }
+                              prefillText={composerPrefill}
+                              onPrefillApplied={handleComposerPrefillApplied}
+                            />
+                            <div className="text-center">
+                              <Version inline />
+                            </div>
                           </div>
-                        </div>
+                        </ViewTransition>
                       </div>
                     )
                   )}
@@ -2592,127 +2719,144 @@ export function ChatPageContent({
               ) : (
                 /* No active chat: centered prompt input */
                 newChatAgentId && (
-                  // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
-                  // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
-                  <div
-                    className="relative flex-1 flex flex-col min-h-0"
-                    onClick={(e) => {
-                      // Focus textarea when clicking empty space outside interactive elements
-                      if (
-                        e.target === e.currentTarget ||
-                        !(e.target as HTMLElement).closest(
-                          "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
-                        )
-                      ) {
-                        textareaRef.current?.focus();
-                      }
-                    }}
-                  >
-                    {((organization?.chatLinks?.length ?? 0) > 0 ||
-                      organization?.onboardingWizard) && (
-                      <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                        {organization?.chatLinks?.map((link) => (
-                          <ChatLinkButton
-                            key={`link-${link.label}-${link.url}`}
-                            url={link.url}
-                            label={link.label}
-                          />
-                        ))}
-                        {organization?.onboardingWizard && (
-                          <OnboardingWizardButton
-                            wizard={organization.onboardingWizard}
-                          />
-                        )}
-                      </div>
-                    )}
-                    {isPlaywrightSetupRequired && canUpdateAgent && (
-                      <PlaywrightInstallDialog
-                        agentId={playwrightSetupAgentId}
-                        conversationId={conversationId}
-                      />
-                    )}
-                    <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
-                      <div className="scale-150">
-                        <AppLogo />
-                      </div>
-                      {(() => {
-                        const currentAgent = internalAgents.find(
-                          (a) => a.id === initialAgentId,
-                        );
-                        const prompts = currentAgent?.suggestedPrompts;
-                        if (!prompts || prompts.length === 0) return null;
-                        return (
-                          <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                            {prompts.map((sp) => (
-                              <Suggestion
-                                key={`${sp.summaryTitle}-${sp.prompt}`}
-                                suggestion={sp.summaryTitle}
-                                onClick={() => {
-                                  trackEvent("prompt_selected", {
-                                    agentId: initialAgentId ?? undefined,
-                                    promptLength: sp.prompt.length,
-                                  });
-                                  submitInitialMessage({
-                                    text: sp.prompt,
-                                    files: [],
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
-                        );
-                      })()}
-                      <div className="w-full max-w-4xl">
-                        <ArchestraPromptInput
-                          onSubmit={handleInitialSubmit}
-                          status={
-                            createConversationMutation.isPending
-                              ? "submitted"
-                              : "ready"
-                          }
-                          selectedModel={initialModel}
-                          onModelChange={handleInitialModelChange}
-                          agentId={newChatAgentId}
-                          currentProvider={initialProvider}
-                          textareaRef={textareaRef}
-                          initialApiKeyId={initialApiKeyId}
-                          onApiKeyChange={setInitialApiKeyId}
-                          onProviderChange={handleInitialProviderChange}
-                          allowFileUploads={
-                            organization?.allowChatFileUploads ?? false
-                          }
-                          isModelsLoading={isModelsLoading}
-                          inputModalities={selectedModelInputModalities}
-                          agentLlmApiKeyId={
-                            (
-                              internalAgents.find(
-                                (a) => a.id === initialAgentId,
-                              ) as Record<string, unknown> | undefined
-                            )?.llmApiKeyId as string | null
-                          }
-                          submitDisabled={isPlaywrightSetupVisible}
-                          isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                          selectorAgentId={initialAgentId}
-                          onAgentChange={handleInitialAgentChange}
-                          modelSource={initialModelSource}
-                          onResetModelOverride={handleResetModelOverride}
-                          agentRequiresPerUserConnect={
-                            initialPerUserConnect.needsConnect
-                          }
-                          agentModelDisplayName={
-                            initialPerUserConnect.needsConnect
-                              ? initialPerUserConnect.modelName
-                              : undefined
-                          }
-                          prefillText={composerPrefill}
-                          onPrefillApplied={handleComposerPrefillApplied}
+                  /* The exit fade covers the splash decoration (logo,
+                     suggestions) when a conversation takes over; the composer
+                     below is excluded — it carries its own shared name and
+                     morphs to the bottom-anchored composer instead. */
+                  <ViewTransition exit="chat-splash-exit" default="none">
+                    {/* biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container */}
+                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container */}
+                    <div
+                      className="relative flex-1 flex flex-col min-h-0"
+                      onClick={(e) => {
+                        // Focus textarea when clicking empty space outside interactive elements
+                        if (
+                          e.target === e.currentTarget ||
+                          !(e.target as HTMLElement).closest(
+                            "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                          )
+                        ) {
+                          textareaRef.current?.focus();
+                        }
+                      }}
+                    >
+                      {((organization?.chatLinks?.length ?? 0) > 0 ||
+                        organization?.onboardingWizard) && (
+                        <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                          {organization?.chatLinks?.map((link) => (
+                            <ChatLinkButton
+                              key={`link-${link.label}-${link.url}`}
+                              url={link.url}
+                              label={link.label}
+                            />
+                          ))}
+                          {organization?.onboardingWizard && (
+                            <OnboardingWizardButton
+                              wizard={organization.onboardingWizard}
+                            />
+                          )}
+                        </div>
+                      )}
+                      {isPlaywrightSetupRequired && canUpdateAgent && (
+                        <PlaywrightInstallDialog
+                          agentId={playwrightSetupAgentId}
+                          conversationId={conversationId}
                         />
+                      )}
+                      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                        <div className="scale-150">
+                          <AppLogo />
+                        </div>
+                        {(() => {
+                          const currentAgent = internalAgents.find(
+                            (a) => a.id === initialAgentId,
+                          );
+                          const prompts = currentAgent?.suggestedPrompts;
+                          if (!prompts || prompts.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                              {prompts.map((sp) => (
+                                <Suggestion
+                                  key={`${sp.summaryTitle}-${sp.prompt}`}
+                                  suggestion={sp.summaryTitle}
+                                  onClick={() => {
+                                    trackEvent("prompt_selected", {
+                                      agentId: initialAgentId ?? undefined,
+                                      promptLength: sp.prompt.length,
+                                    });
+                                    submitInitialMessage({
+                                      text: sp.prompt,
+                                      files: [],
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        {/* Shared-element pair with the conversation composer —
+                          see the bottom-anchored ViewTransition above. */}
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="w-full max-w-4xl space-y-3">
+                            {initialToolsUnavailable && <NoToolsModelNotice />}
+                            <ArchestraPromptInput
+                              onSubmit={handleInitialSubmit}
+                              status={
+                                createConversationMutation.isPending
+                                  ? "submitted"
+                                  : "ready"
+                              }
+                              selectedModel={initialModel}
+                              onModelChange={handleInitialModelChange}
+                              agentId={newChatAgentId}
+                              currentProvider={initialProvider}
+                              textareaRef={textareaRef}
+                              initialApiKeyId={initialApiKeyId}
+                              onApiKeyChange={setInitialApiKeyId}
+                              onProviderChange={handleInitialProviderChange}
+                              allowFileUploads={
+                                organization?.allowChatFileUploads ?? false
+                              }
+                              isModelsLoading={isModelsLoading}
+                              inputModalities={selectedModelInputModalities}
+                              agentLlmApiKeyId={
+                                (
+                                  internalAgents.find(
+                                    (a) => a.id === initialAgentId,
+                                  ) as Record<string, unknown> | undefined
+                                )?.llmApiKeyId as string | null
+                              }
+                              submitDisabled={isPlaywrightSetupVisible}
+                              isPlaywrightSetupVisible={
+                                isPlaywrightSetupVisible
+                              }
+                              selectorAgentId={initialAgentId}
+                              onAgentChange={handleInitialAgentChange}
+                              modelSource={initialModelSource}
+                              onResetModelOverride={handleResetModelOverride}
+                              agentRequiresPerUserConnect={
+                                initialPerUserConnect.needsConnect
+                              }
+                              agentModelDisplayName={
+                                initialPerUserConnect.needsConnect
+                                  ? initialPerUserConnect.modelName
+                                  : undefined
+                              }
+                              prefillText={composerPrefill}
+                              onPrefillApplied={handleComposerPrefillApplied}
+                            />
+                          </div>
+                        </ViewTransition>
+                      </div>
+                      <div className="p-4 text-center">
+                        <Version inline />
                       </div>
                     </div>
-                    <div className="p-4 text-center">
-                      <Version inline />
-                    </div>
-                  </div>
+                  </ViewTransition>
                 )
               )}
             </div>

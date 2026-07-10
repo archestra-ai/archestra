@@ -135,7 +135,9 @@ describe("SearchableMultiSelect", () => {
       />,
     );
 
-    const badges = screen.getAllByRole("button", { name: "" });
+    const badges = screen.getAllByRole("button", {
+      name: "Remove selected item",
+    });
     await user.click(badges[0]);
 
     expect(onValueChange).toHaveBeenCalledWith(["item-2"]);

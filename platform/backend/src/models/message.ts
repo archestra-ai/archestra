@@ -143,6 +143,63 @@ class MessageModel {
     return MessageModel.findByContentId(id);
   }
 
+  /**
+   * Like findByAnyId, but scoped to a single conversation. Content IDs are
+   * client-supplied and carry no uniqueness guarantee across conversations,
+   * so callers that know the conversation must scope the lookup to it.
+   */
+  static async findByAnyIdInConversation(
+    id: string,
+    conversationId: string,
+  ): Promise<Message | null> {
+    if (isUuid(id)) {
+      const [byDbId] = await db
+        .select()
+        .from(schema.messagesTable)
+        .where(
+          and(
+            eq(schema.messagesTable.id, id),
+            eq(schema.messagesTable.conversationId, conversationId),
+          ),
+        );
+      if (byDbId) return byDbId;
+    }
+
+    const [byContentId] = await db
+      .select()
+      .from(schema.messagesTable)
+      .where(
+        and(
+          sql`${schema.messagesTable.content}->>'id' = ${id}`,
+          eq(schema.messagesTable.conversationId, conversationId),
+        ),
+      );
+
+    return byContentId || null;
+  }
+
+  /**
+   * Set or clear the owner's feedback on a message. Deliberately does not
+   * touch the conversation's recency — a rating is not new activity.
+   * Returns null when the row vanished between lookup and update (e.g. a
+   * concurrent regeneration deleted it).
+   */
+  static async updateFeedback(
+    messageId: string,
+    feedback: Message["feedback"],
+  ): Promise<Message | null> {
+    const [updatedMessage] = await db
+      .update(schema.messagesTable)
+      .set({
+        feedback,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.messagesTable.id, messageId))
+      .returning();
+
+    return updatedMessage || null;
+  }
+
   static async updateTextPart(
     messageId: string,
     partIndex: number,

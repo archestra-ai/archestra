@@ -3,6 +3,7 @@ import {
   BUILT_IN_AGENT_IDS,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
+  ChatMessageFeedbackSchema,
   ChatMessageMetadataSchema,
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
@@ -2834,6 +2835,84 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(updatedConversation);
+    },
+  );
+
+  // Message Feedback Route
+  fastify.patch(
+    "/api/chat/messages/:id/feedback",
+    {
+      schema: {
+        operationId: RouteId.SetChatMessageFeedback,
+        description:
+          "Set or clear the owner's thumbs feedback on an assistant message",
+        tags: ["Chat"],
+        params: z.object({ id: z.string() }),
+        body: z.object({
+          conversationId: z.string().uuid(),
+          feedback: ChatMessageFeedbackSchema.nullable(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            id: z.string().uuid(),
+            feedback: ChatMessageFeedbackSchema.nullable(),
+          }),
+        ),
+      },
+    },
+    async (
+      {
+        params: { id },
+        body: { conversationId, feedback },
+        user,
+        organizationId,
+      },
+      reply,
+    ) => {
+      // Verify the user owns the conversation before resolving the message
+      const conversation = await ConversationModel.findById({
+        id: conversationId,
+        userId: user.id,
+        organizationId: organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Message not found or access denied");
+      }
+
+      // Resolve by DB UUID or AI SDK nanoid content ID, scoped to the
+      // conversation — content IDs are client-supplied and not globally unique
+      const message = await MessageModel.findByAnyIdInConversation(
+        id,
+        conversationId,
+      );
+
+      if (!message) {
+        throw new ApiError(404, "Message not found");
+      }
+
+      if (message.role !== "assistant") {
+        throw new ApiError(
+          400,
+          "Feedback is only supported on assistant messages",
+        );
+      }
+
+      const updatedMessage = await MessageModel.updateFeedback(
+        message.id,
+        feedback,
+      );
+
+      // The row can vanish between lookup and update (e.g. a concurrent
+      // regeneration deleted this assistant turn)
+      if (!updatedMessage) {
+        throw new ApiError(404, "Message not found");
+      }
+
+      return reply.send({
+        id: updatedMessage.id,
+        feedback: updatedMessage.feedback ?? null,
+      });
     },
   );
 

@@ -892,6 +892,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatMessage]: {
     chat: ["update"],
   },
+  [RouteId.SetChatMessageFeedback]: {
+    chat: ["update"],
+  },
   [RouteId.GetConversationEnabledTools]: {
     chat: ["read"],
   },

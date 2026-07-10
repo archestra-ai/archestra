@@ -25150,6 +25150,95 @@ export type UpdateChatMessageResponses = {
 
 export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateChatMessageResponses];
 
+export type SetChatMessageFeedbackData = {
+    body: {
+        conversationId: string;
+        feedback: 'up' | 'down';
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/messages/{id}/feedback';
+};
+
+export type SetChatMessageFeedbackErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetChatMessageFeedbackError = SetChatMessageFeedbackErrors[keyof SetChatMessageFeedbackErrors];
+
+export type SetChatMessageFeedbackResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        feedback: 'up' | 'down';
+    };
+};
+
+export type SetChatMessageFeedbackResponse = SetChatMessageFeedbackResponses[keyof SetChatMessageFeedbackResponses];
+
 export type DeleteConversationEnabledToolsData = {
     body?: never;
     path: {

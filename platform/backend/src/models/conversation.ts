@@ -14,6 +14,7 @@ import type {
   Conversation,
   ConversationOrigin,
   InsertConversation,
+  MessageFeedback,
   ToolExposureMode,
   UpdateConversation,
 } from "@/types";
@@ -756,6 +757,7 @@ function shouldReturnPersistedMessageRow(message: {
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
+  feedback: MessageFeedback | null;
   createdAt: Date;
 }) {
   const content =
@@ -775,6 +777,9 @@ function addMessagePersistenceMetadata(message: {
     metadata: {
       ...metadata,
       createdAt: message.createdAt.toISOString(),
+      // The column is authoritative: content JSON may carry a stale copied
+      // value (e.g. a forked conversation), so always override it here.
+      feedback: message.feedback ?? undefined,
     },
   };
 }

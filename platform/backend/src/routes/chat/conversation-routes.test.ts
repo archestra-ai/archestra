@@ -825,6 +825,216 @@ describe("chat conversation and message routes", () => {
       parts: [{ type: "text", text: "Updated text" }],
     });
   });
+
+  describe("message feedback", () => {
+    const setFeedback = (
+      messageId: string,
+      conversationId: string,
+      feedback: "up" | "down" | null,
+    ) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/chat/messages/${messageId}/feedback`,
+        payload: { conversationId, feedback },
+      });
+
+    async function makeConversationWithAssistantMessage(agentId: string) {
+      const conversation = await ConversationModel.create({
+        userId: currentUser.id,
+        organizationId,
+        agentId,
+      });
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "temp-assistant-feedback-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "Assistant reply" }],
+        },
+      });
+      return { conversation, message };
+    }
+
+    test("sets, switches, and clears feedback, surfacing it in conversation reads", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      const { conversation, message } =
+        await makeConversationWithAssistantMessage(agent.id);
+
+      const upResponse = await setFeedback(message.id, conversation.id, "up");
+      expect(upResponse.statusCode).toBe(200);
+      expect(upResponse.json()).toEqual({ id: message.id, feedback: "up" });
+
+      const readBack = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversation.id}`,
+      });
+      expect(readBack.statusCode).toBe(200);
+      expect(readBack.json().messages[0].metadata.feedback).toBe("up");
+
+      const downResponse = await setFeedback(
+        message.id,
+        conversation.id,
+        "down",
+      );
+      expect(downResponse.statusCode).toBe(200);
+      expect(downResponse.json().feedback).toBe("down");
+
+      const clearResponse = await setFeedback(
+        message.id,
+        conversation.id,
+        null,
+      );
+      expect(clearResponse.statusCode).toBe(200);
+      expect(clearResponse.json().feedback).toBeNull();
+
+      const clearedReadBack = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversation.id}`,
+      });
+      expect(
+        clearedReadBack.json().messages[0].metadata.feedback,
+      ).toBeUndefined();
+    });
+
+    test("resolves the AI SDK content id scoped to the conversation", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      // Two conversations whose assistant messages share the same content id
+      const first = await makeConversationWithAssistantMessage(agent.id);
+      const second = await makeConversationWithAssistantMessage(agent.id);
+
+      const response = await setFeedback(
+        "temp-assistant-feedback-1",
+        first.conversation.id,
+        "up",
+      );
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        id: first.message.id,
+        feedback: "up",
+      });
+
+      const untouched = await MessageModel.findById(second.message.id);
+      expect(untouched?.feedback).toBeNull();
+    });
+
+    test("rejects feedback on non-assistant messages", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      const conversation = await ConversationModel.create({
+        userId: currentUser.id,
+        organizationId,
+        agentId: agent.id,
+      });
+      const userMessage = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "temp-user-feedback-1",
+          role: "user",
+          parts: [{ type: "text", text: "A question" }],
+        },
+      });
+
+      const response = await setFeedback(userMessage.id, conversation.id, "up");
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("validates the feedback payload", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      const { conversation, message } =
+        await makeConversationWithAssistantMessage(agent.id);
+
+      const invalidValueResponse = await app.inject({
+        method: "PATCH",
+        url: `/api/chat/messages/${message.id}/feedback`,
+        payload: { conversationId: conversation.id, feedback: "sideways" },
+      });
+      expect(invalidValueResponse.statusCode).toBe(400);
+
+      const missingConversationResponse = await app.inject({
+        method: "PATCH",
+        url: `/api/chat/messages/${message.id}/feedback`,
+        payload: { feedback: "up" },
+      });
+      expect(missingConversationResponse.statusCode).toBe(400);
+    });
+
+    test("returns 404 for an unknown message id", async ({ makeAgent }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      const conversation = await ConversationModel.create({
+        userId: currentUser.id,
+        organizationId,
+        agentId: agent.id,
+      });
+
+      const response = await setFeedback(
+        "00000000-0000-4000-8000-000000000000",
+        conversation.id,
+        "up",
+      );
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("returns 404 for another user's conversation", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+    }) => {
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+      const agent = await makeAgent({
+        organizationId,
+        authorId: otherUser.id,
+        scope: "org",
+      });
+      const conversation = await ConversationModel.create({
+        userId: otherUser.id,
+        organizationId,
+        agentId: agent.id,
+      });
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "temp-assistant-foreign-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "Not yours to rate" }],
+        },
+      });
+
+      const response = await setFeedback(message.id, conversation.id, "up");
+      expect(response.statusCode).toBe(404);
+
+      const untouched = await MessageModel.findById(message.id);
+      expect(untouched?.feedback).toBeNull();
+    });
+  });
 });
 
 describe("chat conversation creation in projects", () => {

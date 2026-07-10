@@ -80,6 +80,7 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { sanitizeAppNameForToolMetadata } from "@/services/apps/app-run-link";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -319,7 +320,9 @@ export async function createAgentServer(
       catalogId: string | null | undefined,
     ): string | undefined => {
       const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
-      return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
+      return catalog?.serverType === "app"
+        ? `Open ${sanitizeAppNameForToolMetadata(catalog.name)}`
+        : undefined;
     };
 
     // Dynamically enrich the knowledge sources tool description with the

@@ -31,4 +31,15 @@ export function escapeAppNameForModelText(name: string): string {
   return collapsed.replace(MARKDOWN_PUNCTUATION, (char) => `\\${char}`);
 }
 
+// An app name made safe as PLAINTEXT tool metadata — a launch tool's title or
+// description, which many MCP clients render without markdown. Newlines, control
+// (\p{Cc}) and format (\p{Cf}, e.g. the U+202E bidi override) characters collapse
+// to single spaces so the name stays one readable line, cannot break out of the
+// surrounding sentence, and cannot bidi-spoof it. Deliberately NOT markdown-
+// escaped: a backslash would show up literally in a plaintext client, so this is
+// the plaintext-context counterpart of escapeAppNameForModelText.
+export function sanitizeAppNameForToolMetadata(name: string): string {
+  return name.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim();
+}
+
 const MARKDOWN_PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/g;

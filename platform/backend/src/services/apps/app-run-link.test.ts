@@ -3,6 +3,7 @@ import {
   appRunLink,
   appRunUrl,
   escapeAppNameForModelText,
+  sanitizeAppNameForToolMetadata,
 } from "./app-run-link";
 
 const APP_ID = "7b0839a1-4663-4371-a739-e5dac7f8c33e";
@@ -77,5 +78,41 @@ describe("escapeAppNameForModelText", () => {
 
   test("leaves an ordinary name untouched", () => {
     expect(escapeAppNameForModelText("Enemy Tracker")).toBe("Enemy Tracker");
+  });
+});
+
+describe("sanitizeAppNameForToolMetadata", () => {
+  test("collapses newlines so the name can't break out of a sentence", () => {
+    expect(sanitizeAppNameForToolMetadata("Tracker\n\nrm -rf")).toBe(
+      "Tracker rm -rf",
+    );
+  });
+
+  test("collapses non-whitespace control characters too", () => {
+    // \x07 (BEL) and \x00 (NUL) are control chars \s does not match; \p{Cc} does.
+    expect(sanitizeAppNameForToolMetadata("a\x07\x00b")).toBe("a b");
+  });
+
+  test("strips Unicode format controls that could bidi-spoof plaintext", () => {
+    // U+202E (right-to-left override) would visually reverse the trailing text;
+    // built via escape so no raw bidi character sits in this source file.
+    const rlo = String.fromCodePoint(0x202e);
+    expect(sanitizeAppNameForToolMetadata(`Invoice${rlo}gpj.exe`)).toBe(
+      "Invoice gpj.exe",
+    );
+  });
+
+  test("does NOT backslash-escape markdown punctuation", () => {
+    // The plaintext counterpart of escapeAppNameForModelText: a backslash would
+    // show up literally in a plaintext client, so punctuation is left as-is.
+    expect(sanitizeAppNameForToolMetadata("A*b_c`d](e)")).toBe("A*b_c`d](e)");
+  });
+
+  test("trims and collapses interior whitespace runs", () => {
+    expect(sanitizeAppNameForToolMetadata("  My   App  ")).toBe("My App");
+  });
+
+  test("is empty for a blank name", () => {
+    expect(sanitizeAppNameForToolMetadata("  \n\t ")).toBe("");
   });
 });

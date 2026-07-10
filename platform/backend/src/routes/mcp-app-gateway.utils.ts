@@ -36,7 +36,10 @@ import {
   UserTokenModel,
 } from "@/models";
 import { appConnectorAudienceRef } from "@/services/apps/app-connector-resource";
-import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import {
+  escapeAppNameForModelText,
+  sanitizeAppNameForToolMetadata,
+} from "@/services/apps/app-run-link";
 import {
   type AppSdkTool,
   injectAppSdk,
@@ -412,8 +415,8 @@ async function buildAppSdkTools(
 function buildAppLaunchTool(appId: string, app: App): McpListTool {
   return {
     name: APP_LAUNCH_TOOL_NAME,
-    title: `Open ${app.name}`,
-    description: `Open the "${app.name}" app and render its UI.`,
+    title: `Open ${sanitizeAppNameForToolMetadata(app.name)}`,
+    description: `Open the "${sanitizeAppNameForToolMetadata(app.name)}" app and render its UI.`,
     inputSchema: { type: "object", properties: {} },
     _meta: { ui: { resourceUri: getArchestraAppResourceUri(appId) } },
   };

@@ -10,6 +10,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import { sanitizeAppNameForToolMetadata } from "@/services/apps/app-run-link";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
@@ -74,7 +75,7 @@ export async function createAppBacking(params: {
         `${app.name}-${app.id.slice(0, 8)}`,
         APP_LAUNCH_TOOL_NAME,
       ),
-      description: `Open the "${app.name}" app and render its UI.`,
+      description: `Open the "${sanitizeAppNameForToolMetadata(app.name)}" app and render its UI.`,
       parameters: { type: "object", properties: {} },
       catalogId: catalog.id,
       meta: {

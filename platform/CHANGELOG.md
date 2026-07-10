@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.3.7](https://github.com/archestra-ai/archestra/compare/platform-v1.3.6...platform-v1.3.7) (2026-07-10)
+
+
+### Features
+
+* **connection:** include shared skills as a marketplace in the Claude Desktop profile ([#6476](https://github.com/archestra-ai/archestra/issues/6476)) ([b4d0cb3](https://github.com/archestra-ai/archestra/commit/b4d0cb3242d7d030d6cfaf1afcc004992aafd0eb))
+* **platform:** default tool assignments to resolve-at-call-time and rename "All" mode to "Auto" ([#6466](https://github.com/archestra-ai/archestra/issues/6466)) ([b511ab8](https://github.com/archestra-ai/archestra/commit/b511ab85d38cbdc27d2592c474c29eb8c6590dd9))
+* **skills:** add edit_skill tool for targeted edits to large skills ([#6478](https://github.com/archestra-ai/archestra/issues/6478)) ([878945c](https://github.com/archestra-ai/archestra/commit/878945c026ba8052b00a40ba2e659cf8b6d4ba6e))
+
+
+### Bug Fixes
+
+* **apps:** correct search and screenshot validation ([#6484](https://github.com/archestra-ai/archestra/issues/6484)) ([d712497](https://github.com/archestra-ai/archestra/commit/d7124972a3846f491d51204c5db9610a1b3132a3))
+* **apps:** degrade gracefully when a third-party MCP UI resource can't be read ([#6487](https://github.com/archestra-ai/archestra/issues/6487)) ([4ab69d3](https://github.com/archestra-ai/archestra/commit/4ab69d311ac43dff228c5386ba85a6cd29cae2ef))
+* **apps:** MCP Apps follow-ups — publish cache refresh, chrome-less standalone mode, pinned-app icons ([#6432](https://github.com/archestra-ai/archestra/issues/6432)) ([39e6e54](https://github.com/archestra-ai/archestra/commit/39e6e543ad9717637b3b28492d0f5ed4a62da2d0))
+* **backend:** return correct statuses for message-edit and secrets failures, cut expected error noise ([#6467](https://github.com/archestra-ai/archestra/issues/6467)) ([67f99ef](https://github.com/archestra-ai/archestra/commit/67f99efa2e79485634951651c80209ea0484818e))
+* **mcp:** make the registry install deep link survive a lost dialog ([#6483](https://github.com/archestra-ai/archestra/issues/6483)) ([fdd5a21](https://github.com/archestra-ai/archestra/commit/fdd5a21905a34739104793882c3fc8ea09f1fd52))
+
+
+### Documentation
+
+* add redirects registry, rename migration-kit page ([#6475](https://github.com/archestra-ai/archestra/issues/6475)) ([70a5d60](https://github.com/archestra-ai/archestra/commit/70a5d6017f1626a7abec7728ca3a0778c7d88057))
+
+## [1.3.6](https://github.com/archestra-ai/archestra/compare/platform-v1.3.5...platform-v1.3.6) (2026-07-09)
+
+
+### Features
+
+* **mcp:** per-team access levels on catalog items ([#6439](https://github.com/archestra-ai/archestra/issues/6439)) ([b5c0b05](https://github.com/archestra-ai/archestra/commit/b5c0b05882e9972722fa6187500b7973cf274f12))
+
+
+### Bug Fixes
+
+* **auth:** stop refresh-token replays from wiping a user's whole OAuth token family ([#6438](https://github.com/archestra-ai/archestra/issues/6438)) ([ab09fde](https://github.com/archestra-ai/archestra/commit/ab09fde989a786b1c19ce5e13e8b8964fc421c06))
+* **chat:** show a declined tool with an orange dot, not a stuck blue one ([#6453](https://github.com/archestra-ai/archestra/issues/6453)) ([095492c](https://github.com/archestra-ai/archestra/commit/095492c1d0b8a0fe3ee8124067d466fe3430c99e))
+
+
+### Miscellaneous Chores
+
+* **backend:** drop inert sourceMap and removeComments from tsconfig ([#6455](https://github.com/archestra-ai/archestra/issues/6455)) ([8971a58](https://github.com/archestra-ai/archestra/commit/8971a58273720c5cef5f372ba036a6936791fe46))
+* **deps:** upgrade TypeScript 7 preview to the 7.0 RC ([#6452](https://github.com/archestra-ai/archestra/issues/6452)) ([b1f55c2](https://github.com/archestra-ai/archestra/commit/b1f55c2bbfa9cd3b8c16bf5fcf7c4fc8167b164f))
+* **frontend:** default local dev to the turbopack bundler ([#6456](https://github.com/archestra-ai/archestra/issues/6456)) ([2a4b091](https://github.com/archestra-ai/archestra/commit/2a4b0913741357ba23928c8f6b2fb1c2dd74a914))
+
 ## [1.3.5](https://github.com/archestra-ai/archestra/compare/platform-v1.3.4...platform-v1.3.5) (2026-07-09)
 
 

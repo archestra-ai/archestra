@@ -6,6 +6,8 @@ description: How MCP servers, gateways, authentication, and orchestration fit to
 lastUpdated: 2026-06-18
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ![MCP overview](/docs/platform-mcp-registry-overview.webp)
 
 MCP is Archestra's tool layer. It lets agents and external MCP clients use tools from remote MCP servers, self-hosted MCP servers, and built-in Archestra tools through one governed control plane.

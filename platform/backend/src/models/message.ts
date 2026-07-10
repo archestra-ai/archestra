@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import type { InsertMessage, Message } from "@/types";
+import { ApiError, type InsertMessage, type Message } from "@/types";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 
 type DbExecutor =
@@ -152,7 +152,7 @@ class MessageModel {
     const message = await MessageModel.findById(messageId);
 
     if (!message) {
-      throw new Error("Message not found");
+      throw new ApiError(404, "Message not found");
     }
 
     // biome-ignore lint/suspicious/noExplicitAny: UIMessage content is dynamic
@@ -160,13 +160,14 @@ class MessageModel {
 
     // Validate that the part exists
     if (!content.parts?.[partIndex]) {
-      throw new Error("Invalid part index");
+      throw new ApiError(400, "Invalid part index");
     }
 
     // Validate that the part is a text part to prevent data corruption
     // Only text parts can have their text property modified
     if (content.parts[partIndex].type !== "text") {
-      throw new Error(
+      throw new ApiError(
+        400,
         `Cannot update non-text part: part at index ${partIndex} is of type "${content.parts[partIndex].type}"`,
       );
     }
@@ -288,7 +289,7 @@ class MessageModel {
         .where(eq(schema.messagesTable.id, messageId));
 
       if (!message) {
-        throw new Error("Message not found");
+        throw new ApiError(404, "Message not found");
       }
 
       // biome-ignore lint/suspicious/noExplicitAny: UIMessage content is dynamic
@@ -296,12 +297,13 @@ class MessageModel {
 
       // Validate that the part exists
       if (!content.parts?.[partIndex]) {
-        throw new Error("Invalid part index");
+        throw new ApiError(400, "Invalid part index");
       }
 
       // Validate that the part is a text part to prevent data corruption
       if (content.parts[partIndex].type !== "text") {
-        throw new Error(
+        throw new ApiError(
+          400,
           `Cannot update non-text part: part at index ${partIndex} is of type "${content.parts[partIndex].type}"`,
         );
       }

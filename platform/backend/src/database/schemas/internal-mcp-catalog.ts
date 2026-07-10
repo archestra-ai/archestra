@@ -55,8 +55,10 @@ const internalMcpCatalogTable = pgTable(
      */
     multitenant: boolean("multitenant").notNull().default(false),
     /**
-     * Agent connections policy for call-time ("dynamic") credential
-     * resolution. NULL (default) = resolve at call time: each caller uses its
+     * Default-credential policy for call-time ("dynamic") credential
+     * resolution — surfaced in the UI as the server's "Default credential"
+     * setting. It governs Auto-mode calls and Custom-mode assignments left on
+     * resolve-at-call-time. NULL (default) = each caller uses its
      * own connection (user token → that user's install, team token → that
      * team's install) and gets an actionable connect prompt when none exists.
      * Set to an mcp_servers.id to pin a service account: every

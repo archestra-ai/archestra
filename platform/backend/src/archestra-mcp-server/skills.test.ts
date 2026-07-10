@@ -5,12 +5,13 @@ import {
   getArchestraToolFullName,
   MEMBER_ROLE_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_EDIT_SKILL_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@archestra/shared";
-import { SkillFileModel, SkillModel } from "@/models";
+import { SkillFileModel, SkillModel, SkillVersionModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
 import {
@@ -809,6 +810,365 @@ describe("skill tool execution", () => {
       );
 
       expect(result.isError).toBe(true);
+    });
+  });
+
+  describe("edit_skill", () => {
+    // seedSkill returns null only on a name collision, which never happens in
+    // these fresh-org tests; narrow it so the row is usable directly.
+    async function seedSkillOrThrow(
+      overrides: Parameters<typeof seedSkill>[0] = {},
+    ) {
+      const skill = await seedSkill(overrides);
+      if (!skill) throw new Error("failed to seed skill");
+      return skill;
+    }
+
+    test("str_replace on the body forks a new version, leaving metadata", async () => {
+      const skill = await seedSkillOrThrow();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "pdfplumber" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const row = await SkillModel.findById(skill.id);
+      expect(row?.content).toBe("# PDF Processing\nUse pdfplumber.");
+      expect(row?.latestVersion).toBe(2);
+      // metadata columns are untouched by a body edit
+      expect(row?.name).toBe("pdf-processing");
+      expect(row?.description).toBe("Extract text from PDF files.");
+      const v2 = await SkillVersionModel.findBySkillAndVersion(skill.id, 2);
+      expect(v2?.content).toBe("# PDF Processing\nUse pdfplumber.");
+    });
+
+    test("edits one bundled file and leaves the body and siblings untouched", async () => {
+      const skill = await seedSkillOrThrow({
+        files: [
+          { path: "references/api.md", content: "# API v1", kind: "reference" },
+          { path: "scripts/run.py", content: "print('a')", kind: "script" },
+        ],
+      });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          path: "references/api.md",
+          edits: [{ old_str: "v1", new_str: "v2" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const files = await SkillFileModel.findBySkillId(skill.id);
+      expect(files.find((f) => f.path === "references/api.md")?.content).toBe(
+        "# API v2",
+      );
+      expect(files.find((f) => f.path === "scripts/run.py")?.content).toBe(
+        "print('a')",
+      );
+      const row = await SkillModel.findById(skill.id);
+      expect(row?.content).toBe("# PDF Processing\nUse pdftotext.");
+      expect(row?.latestVersion).toBe(2);
+    });
+
+    test("replacementContent rewrites a bundled file wholesale", async () => {
+      const skill = await seedSkillOrThrow({
+        files: [
+          { path: "references/api.md", content: "# API v1", kind: "reference" },
+        ],
+      });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          path: "references/api.md",
+          replacementContent: "# Rewritten",
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const files = await SkillFileModel.findBySkillId(skill.id);
+      expect(files.find((f) => f.path === "references/api.md")?.content).toBe(
+        "# Rewritten",
+      );
+    });
+
+    test("rejects a str_replace on a binary (non-utf8) file, no new version", async () => {
+      const skill = await seedSkillOrThrow({
+        files: [
+          {
+            path: "assets/logo.png",
+            content: "aGk=",
+            kind: "asset",
+            encoding: "base64",
+          },
+        ],
+      });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          path: "assets/logo.png",
+          edits: [{ old_str: "a", new_str: "b" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("binary asset");
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
+    });
+
+    test("a 0-match edit fails atomically with no new version", async () => {
+      const skill = await seedSkillOrThrow();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "not-present", new_str: "x" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("0 matches");
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
+    });
+
+    test("an ambiguous (>1 match) edit is rejected", async () => {
+      const skill = await seedSkillOrThrow({
+        skill: { content: "alpha and alpha again" },
+      });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "alpha", new_str: "beta" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("exactly once");
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
+    });
+
+    test("a no-op edit is skipped and creates no new version", async () => {
+      const skill = await seedSkillOrThrow();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "pdftotext" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
+    });
+
+    test("a stale baseVersion is rejected after the head moves (CAS)", async () => {
+      const skill = await seedSkillOrThrow();
+      // First edit takes the head to version 2.
+      await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "pdfplumber" }],
+        },
+        context,
+      );
+      // A second edit still based on version 1 must be rejected.
+      const stale = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "mutool" }],
+        },
+        context,
+      );
+
+      expect(stale.isError).toBe(true);
+      expect(textOf(stale)).toContain("moved to version 2");
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(2);
+    });
+
+    test("errors when baseVersion does not exist", async () => {
+      await seedSkill();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 99,
+          edits: [{ old_str: "pdftotext", new_str: "x" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("no version 99");
+    });
+
+    test("rejects a body edit on a templated skill", async () => {
+      await seedSkill({ skill: { templated: true } });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "x" }],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("templated");
+    });
+
+    test("a member cannot edit a skill they only have read access to", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const author = await makeUser();
+      const skill = await seedSkillOrThrow({
+        skill: {
+          name: "pdf-processing",
+          scope: "personal",
+          authorId: author.id,
+        },
+      });
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "x" }],
+        },
+        { ...context, userId: member.id },
+      );
+
+      expect(result.isError).toBe(true);
+      const row = await SkillModel.findById(skill.id);
+      expect(row?.content).toBe("# PDF Processing\nUse pdftotext.");
+      expect(row?.latestVersion).toBe(1);
+    });
+
+    test("rejects a replacementContent that exceeds the file size cap", async () => {
+      const skill = await seedSkillOrThrow({
+        files: [
+          { path: "references/api.md", content: "# API", kind: "reference" },
+        ],
+      });
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          path: "references/api.md",
+          // one past MAX_SKILL_FILE_CONTENT_CHARS
+          replacementContent: "x".repeat(20 * 1024 * 1024),
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("limit");
+      expect((await SkillModel.findById(skill.id))?.latestVersion).toBe(1);
+    });
+
+    test("edits that net back to the original bytes create no new version", async () => {
+      const skill = await seedSkillOrThrow();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          // applied in order: pdftotext -> mutool -> pdftotext (net identical)
+          edits: [
+            { old_str: "pdftotext", new_str: "mutool" },
+            { old_str: "mutool", new_str: "pdftotext" },
+          ],
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const row = await SkillModel.findById(skill.id);
+      expect(row?.content).toBe("# PDF Processing\nUse pdftotext.");
+      expect(row?.latestVersion).toBe(1);
+    });
+
+    test("rejects passing both edits and replacementContent", async () => {
+      await seedSkill();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "x" }],
+          replacementContent: "# whole",
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+    });
+
+    test("rejects passing neither edits nor replacementContent", async () => {
+      await seedSkill();
+      const result = await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        { name: "pdf-processing", baseVersion: 1 },
+        context,
+      );
+
+      expect(result.isError).toBe(true);
+    });
+
+    test("load_skill surfaces the version the edit must base on", async () => {
+      const skill = await seedSkillOrThrow();
+      const loaded = await executeArchestraTool(
+        TOOL_LOAD_SKILL_FULL_NAME,
+        { name: "pdf-processing" },
+        context,
+      );
+      expect(textOf(loaded)).toContain('version="1"');
+
+      await executeArchestraTool(
+        TOOL_EDIT_SKILL_FULL_NAME,
+        {
+          name: "pdf-processing",
+          baseVersion: 1,
+          edits: [{ old_str: "pdftotext", new_str: "pdfplumber" }],
+        },
+        context,
+      );
+      const reloaded = await executeArchestraTool(
+        TOOL_LOAD_SKILL_FULL_NAME,
+        { name: "pdf-processing" },
+        context,
+      );
+      expect(textOf(reloaded)).toContain('version="2"');
+      expect(skill.latestVersion).toBe(1);
     });
   });
 });

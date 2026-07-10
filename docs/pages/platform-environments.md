@@ -3,8 +3,10 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-09
 ---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 <!--
 This document is the canonical reference for deployment Environments. Include:
@@ -53,7 +55,7 @@ An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and 
 
 Matching is strict: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Built-in servers (the Archestra control-plane server and Playwright) are exempt and always available.
 
-This applies to both explicitly assigned tools/knowledge and the implicit "All tools" access mode — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled.
+This applies to both explicitly assigned tools/knowledge and the implicit **Auto** access mode — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled.
 
 ## Network egress policies
 

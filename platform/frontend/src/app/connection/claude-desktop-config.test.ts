@@ -62,6 +62,28 @@ describe("buildClaudeDesktopConfigProfile", () => {
       },
     ]);
   });
+
+  it("omits the plugins block when no skill marketplace is given", () => {
+    expect(buildClaudeDesktopConfigProfile(base).plugins).toBeUndefined();
+  });
+
+  it("registers the shared-skills marketplace as a git plugin source", () => {
+    const profile = buildClaudeDesktopConfigProfile({
+      ...base,
+      skillMarketplace: {
+        cloneUrl: "https://example.com/skills/m/tok_abc123/repo.git",
+        marketplaceName: "archestra-acme-corp-skills",
+      },
+    });
+
+    expect(profile.plugins?.marketplaces).toEqual([
+      {
+        source: "git",
+        url: "https://example.com/skills/m/tok_abc123/repo.git",
+        expectedName: "archestra-acme-corp-skills",
+      },
+    ]);
+  });
 });
 
 describe("maskConfigSecrets", () => {
@@ -90,6 +112,31 @@ describe("maskConfigSecrets", () => {
     expect(masked.inference.baseUrl).toBe(profile.inference.baseUrl);
     expect(masked.mcp).toEqual(profile.mcp);
     expect(profile.inference.credential.apiKey).toBe("arch_virtual");
+  });
+
+  it("masks the token-bearing marketplace URL but keeps its name", () => {
+    const profile = buildClaudeDesktopConfigProfile({
+      baseUrl: "https://example.com/v1",
+      llmProxyId: "proxy-id",
+      passthroughKey: "arch_passthrough",
+      virtualKey: "arch_virtual",
+      skillMarketplace: {
+        cloneUrl: "https://example.com/skills/m/tok_secret/repo.git",
+        marketplaceName: "archestra-acme-corp-skills",
+      },
+    });
+
+    const masked = maskConfigSecrets(profile);
+
+    expect(masked.plugins?.marketplaces[0].url).not.toContain("tok_secret");
+    // the marketplace name isn't a secret → stays visible
+    expect(masked.plugins?.marketplaces[0].expectedName).toBe(
+      "archestra-acme-corp-skills",
+    );
+    // original object untouched
+    expect(profile.plugins?.marketplaces[0].url).toBe(
+      "https://example.com/skills/m/tok_secret/repo.git",
+    );
   });
 });
 

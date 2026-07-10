@@ -473,7 +473,7 @@ class ToolInvocationPolicyModel {
         }
       }
 
-      // Names the agent has no assignment for (e.g. All-mode tools reached on
+      // Names the agent has no assignment for (e.g. Auto-mode tools reached on
       // the proxy path) fall back to a deterministically-ordered global lookup.
       const unresolvedNames = [...namesToResolve].filter(
         (name) => !toolIdsByName.has(name),

@@ -4,6 +4,8 @@ category: Archestra Platform
 order: 3
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 The Archestra Platform can be deployed using Docker for development and testing, or Helm for production environments. Both deployment methods provide access to the Admin UI on port 3000 and the API on port 9000.
 
 ## Docker Deployment
@@ -822,6 +824,15 @@ The following environment variables can be used to configure Archestra Platform.
   - Values: `true`, `false`
 
 ### Code Sandbox
+
+By default the Helm chart runs a managed Dagger Engine. `archestra.codeRuntime.enabled` and `archestra.codeRuntime.dagger.managed.enabled` are both on, so the chart deploys the engine as a StatefulSet (`dagger-runtime-engine`) in the release namespace. That pod runs privileged, adds all Linux capabilities, runs as root, and needs a 50Gi `ReadWriteOnce` PVC for its cache. It schedules only on nodes whose pod-security policy allows those settings and where the PVC can bind.
+
+The bundled engine is a convenience, not a requirement. The sandbox reaches its engine over `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, a `tcp://` or `kube-pod://` address. Run the engine however you like — the companion `platform/helm/dagger-runtime` chart, a Docker container, a standalone binary, or a separate cluster — as long as it is a reachable Dagger Engine. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
+
+If your nodes can't host the managed pod, you have two options:
+
+- Run the engine elsewhere. Set `archestra.codeRuntime.dagger.managed.enabled=false` and point `archestra.codeRuntime.dagger.runnerHost` (or `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) at it.
+- Turn the sandbox off. Set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm. The second key is what stops the engine pod. For the Docker quickstart, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false`.
 
 - **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enables the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. Needs a Dagger runner host (below) to run; without one the feature stays off. When off, `run_command` and the other sandbox tools are unavailable and skills cannot execute. The quickstart Docker image and the Helm chart set both variables by default; opt out with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
   - Default: `false`

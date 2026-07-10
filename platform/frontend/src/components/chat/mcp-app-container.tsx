@@ -439,6 +439,11 @@ export function McpAppEntryContent({
       // which the runtime gates on a non-null version.
       appVersion={appVersion ?? ownedApp?.latestVersion ?? null}
       reloadNonce={reloadNonce}
+      // Third-party apps (no appId) are incidental to a tool call: if their
+      // upstream can't serve the advertised ui:// resource, fold the app away
+      // and keep the plain tool result rather than showing a load error.
+      // Owned apps keep surfacing errors — a failure there is an authoring bug.
+      degradeResourceLoadError={!appId}
     />
   );
 

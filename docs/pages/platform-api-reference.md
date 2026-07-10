@@ -6,6 +6,8 @@ order: 6
 lastUpdated: 2025-01-10
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Explore the Archestra API using the interactive documentation below.
 
 ## Authentication

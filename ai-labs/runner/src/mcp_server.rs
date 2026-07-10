@@ -4,8 +4,8 @@ use std::sync::Arc;
 use axum::Router;
 use jsonschema::{Draft, Validator};
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
-    PaginatedRequestParams, ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult, PaginatedRequestParams,
+    ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::transport::streamable_http_server::{
@@ -69,9 +69,7 @@ impl BenchmarkMcp {
         let listener = TcpListener::bind(addr)
             .await
             .map_err(|e| McpServerError::Bind(e.to_string()))?;
-        let actual_addr = listener
-            .local_addr()
-            .map_err(|e| McpServerError::Bind(e.to_string()))?;
+        let actual_addr = listener.local_addr().map_err(|e| McpServerError::Bind(e.to_string()))?;
         let base_url = format!("http://{actual_addr}/mcp");
         let cancel = CancellationToken::new();
 
@@ -129,9 +127,7 @@ impl BenchmarkMcp {
         max_attempts: usize,
     ) -> Result<(), McpServerError> {
         if max_attempts < 1 {
-            return Err(McpServerError::Config(
-                "max_attempts must be >= 1".to_string(),
-            ));
+            return Err(McpServerError::Config("max_attempts must be >= 1".to_string()));
         }
         let validator = Validator::options()
             .with_draft(Draft::Draft202012)
@@ -143,7 +139,8 @@ impl BenchmarkMcp {
         // model is blocked from sending could pass grading).
         if validator.is_valid(&JsonValue::Object(serde_json::Map::new())) {
             return Err(McpServerError::Schema(
-                "result_schema must not accept an empty object; the submit tool requires a non-empty result".to_string(),
+                "result_schema must not accept an empty object; the submit tool requires a non-empty result"
+                    .to_string(),
             ));
         }
         *self.ctx.lock().await = Some(TaskContext {
@@ -248,18 +245,16 @@ struct BenchmarkMcpHandler {
 
 impl ServerHandler for BenchmarkMcpHandler {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
-            Implementation::new(self.server_name.clone(), env!("CARGO_PKG_VERSION")),
-        )
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new(self.server_name.clone(), env!("CARGO_PKG_VERSION")))
     }
 
     fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>>
-    + rmcp::service::MaybeSendFuture
-    + '_ {
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + rmcp::service::MaybeSendFuture + '_
+    {
         // `result` is a free-form object whose required fields differ per task and are described in
         // the task prose. The schema is snapshotted to the backend DB at MCP install time (before any
         // task is active), so it must be task-agnostic. `minProperties: 1` forbids the empty object:
@@ -283,16 +278,12 @@ impl ServerHandler for BenchmarkMcpHandler {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>>
-    + rmcp::service::MaybeSendFuture
-    + '_ {
+    ) -> impl std::future::Future<Output = Result<CallToolResult, McpError>> + rmcp::service::MaybeSendFuture + '_ {
         let ctx = self.ctx.clone();
         async move {
             let mut guard = ctx.lock().await;
             let Some(task_ctx) = guard.as_mut() else {
-                return Ok(text_result(
-                    "No task is active; this submission was ignored.",
-                ));
+                return Ok(text_result("No task is active; this submission was ignored."));
             };
             if !task_ctx.accepting {
                 return Ok(text_result(
@@ -328,9 +319,7 @@ impl ServerHandler for BenchmarkMcpHandler {
             let errors = schema_errors(&task_ctx.validator, &result);
             if errors.is_empty() {
                 task_ctx.accepted = Some(canonical_bytes(&result));
-                return Ok(text_result(
-                    "Result accepted. The format is valid; you are done.",
-                ));
+                return Ok(text_result("Result accepted. The format is valid; you are done."));
             }
 
             Ok(reject(task_ctx, errors))
@@ -359,8 +348,7 @@ fn reject(task_ctx: &mut TaskContext, errors: Vec<String>) -> CallToolResult {
 /// per-task `result` schema (the published tool keeps it hidden, being task-agnostic) so a capable
 /// model can correct its types — this hands over the rules, it does not coerce a wrong answer.
 fn retryable_rejection(errors: &[String], result_schema: &JsonValue) -> String {
-    let schema =
-        serde_json::to_string_pretty(result_schema).unwrap_or_else(|_| result_schema.to_string());
+    let schema = serde_json::to_string_pretty(result_schema).unwrap_or_else(|_| result_schema.to_string());
     format!(
         "Your result does not match the required format. Fix these problems and call submit_result again:\n{}\n\nThe `result` argument must match this JSON Schema:\n{}",
         errors.join("\n"),
@@ -388,10 +376,7 @@ fn schema_errors(validator: &Validator, result: &JsonValue) -> Vec<String> {
 }
 
 fn explain(error: &jsonschema::ValidationError) -> String {
-    if !matches!(
-        error.kind,
-        jsonschema::error::ValidationErrorKind::Type { .. }
-    ) {
+    if !matches!(error.kind, jsonschema::error::ValidationErrorKind::Type { .. }) {
         return error.to_string();
     }
     let expected_str = match &error.kind {
@@ -428,9 +413,7 @@ fn json_type_name(value: &JsonValue) -> &'static str {
 
 fn canonical_bytes(result: &JsonValue) -> Vec<u8> {
     let sorted = sort_json_value(result.clone());
-    serde_json::to_string(&sorted)
-        .unwrap_or_default()
-        .into_bytes()
+    serde_json::to_string(&sorted).unwrap_or_default().into_bytes()
 }
 
 fn sort_json_value(value: JsonValue) -> JsonValue {
@@ -511,10 +494,7 @@ mod tests {
         let msg = result_text(&reject(&mut retry, errors.clone()));
         assert!(msg.contains("expected a JSON number"), "{msg}");
         assert!(msg.contains("must match this JSON Schema"), "{msg}");
-        assert!(
-            msg.contains("btc_sol_ratio") && msg.contains("number"),
-            "{msg}"
-        );
+        assert!(msg.contains("btc_sol_ratio") && msg.contains("number"), "{msg}");
         assert!(!retry.failed);
 
         // Terminal (budget exhausted): no schema (retry is impossible) and the task is marked failed.
@@ -543,10 +523,7 @@ mod tests {
             ctx.accepted = Some(canonical_bytes(&serde_json::json!({"answer": "ok"})));
         }
         // a take with the wrong key must NOT consume the captured submission
-        assert!(matches!(
-            mcp.take_submission("other-rollout").await,
-            Submission::None
-        ));
+        assert!(matches!(mcp.take_submission("other-rollout").await, Submission::None));
         // the correct key still returns it
         match mcp.take_submission("rollout-1").await {
             Submission::Accepted(a) => {
@@ -574,11 +551,7 @@ mod tests {
             .build(&schema)
             .unwrap();
         assert!(validator.validate(&serde_json::json!({})).is_err());
-        assert!(
-            validator
-                .validate(&serde_json::json!({"median_salary": 84712}))
-                .is_ok()
-        );
+        assert!(validator.validate(&serde_json::json!({"median_salary": 84712})).is_ok());
     }
 
     #[tokio::test]

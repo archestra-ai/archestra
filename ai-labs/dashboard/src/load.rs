@@ -6,8 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use archestra_bench_core::{
-    AGGREGATE_JSON, CONFIG_JSON, Outcome, RUN_JSON, RolloutId, Rubrics, RunMeta, TriageRecord,
-    rollout_dir,
+    AGGREGATE_JSON, CONFIG_JSON, Outcome, RUN_JSON, RolloutId, Rubrics, RunMeta, TriageRecord, rollout_dir,
 };
 use eyre::{Result, WrapErr};
 use serde::Deserialize;
@@ -237,15 +236,9 @@ impl Run {
     /// observed in the rollouts.
     pub fn lane_names(&self) -> Vec<String> {
         match &self.config {
-            Some(cfg) if !cfg.lanes.is_empty() => {
-                cfg.lanes.iter().map(|l| l.name.clone()).collect()
-            }
+            Some(cfg) if !cfg.lanes.is_empty() => cfg.lanes.iter().map(|l| l.name.clone()).collect(),
             _ => {
-                let mut lanes: Vec<String> = self
-                    .rollouts
-                    .values()
-                    .map(|r| r.id.lane.clone())
-                    .collect();
+                let mut lanes: Vec<String> = self.rollouts.values().map(|r| r.id.lane.clone()).collect();
                 lanes.sort();
                 lanes.dedup();
                 lanes
@@ -255,12 +248,9 @@ impl Run {
 
     pub fn env_names(&self) -> Vec<String> {
         match &self.config {
-            Some(cfg) if !cfg.environments.is_empty() => {
-                cfg.environments.iter().map(|e| e.id.clone()).collect()
-            }
+            Some(cfg) if !cfg.environments.is_empty() => cfg.environments.iter().map(|e| e.id.clone()).collect(),
             _ => {
-                let mut envs: Vec<String> =
-                    self.rollouts.values().map(|r| r.id.env.clone()).collect();
+                let mut envs: Vec<String> = self.rollouts.values().map(|r| r.id.env.clone()).collect();
                 envs.sort();
                 envs.dedup();
                 envs
@@ -467,10 +457,7 @@ fn load_reports(run_dir: &Path, warnings: &mut Vec<String>) -> Result<Vec<Reduce
 
 /// Parse an optional JSON artifact; a malformed file degrades to `None` plus a warning instead of
 /// failing the whole run page.
-fn read_json_lenient<T: serde::de::DeserializeOwned>(
-    path: &Path,
-    warnings: &mut Vec<String>,
-) -> Option<T> {
+fn read_json_lenient<T: serde::de::DeserializeOwned>(path: &Path, warnings: &mut Vec<String>) -> Option<T> {
     let bytes = std::fs::read(path).ok()?;
     match serde_json::from_slice(&bytes) {
         Ok(value) => Some(value),
@@ -483,10 +470,7 @@ fn read_json_lenient<T: serde::de::DeserializeOwned>(
 
 /// Glob `<run>/*/*__*/run.json` and parse each into a [`Rollout`]. Malformed files are skipped
 /// with a warning; identity always comes from the parsed `run.json`, never the directory name.
-fn discover_rollouts(
-    run_dir: &Path,
-    warnings: &mut Vec<String>,
-) -> Result<BTreeMap<String, Rollout>> {
+fn discover_rollouts(run_dir: &Path, warnings: &mut Vec<String>) -> Result<BTreeMap<String, Rollout>> {
     let pattern = run_dir.join("*/*__*").join(RUN_JSON);
     let pattern = pattern.to_string_lossy();
     let mut rollouts = BTreeMap::new();
@@ -523,10 +507,7 @@ fn discover_rollouts(
 /// shadow a newer analysis. Returns `(records, file_found)`. Any malformed line invalidates the
 /// whole file: empty records plus a warning, per the strict-oracle convention — a half-trusted
 /// rubric table is worse than none.
-fn load_rubrics(
-    run_dir: &Path,
-    warnings: &mut Vec<String>,
-) -> Result<(BTreeMap<String, TriageRecord>, bool)> {
+fn load_rubrics(run_dir: &Path, warnings: &mut Vec<String>) -> Result<(BTreeMap<String, TriageRecord>, bool)> {
     let pattern = run_dir.join("trajectory_rubrics*.jsonl");
     let pattern = pattern.to_string_lossy();
     let mut latest: Option<((String, String), PathBuf)> = None;

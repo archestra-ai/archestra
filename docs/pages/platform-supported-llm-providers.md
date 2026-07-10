@@ -6,6 +6,8 @@ description: LLM providers supported by Archestra Platform
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ## Overview
 
 Archestra Platform acts as a security proxy between your AI applications and LLM providers. It currently supports the following LLM providers.

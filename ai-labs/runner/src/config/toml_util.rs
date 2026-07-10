@@ -45,19 +45,11 @@ pub fn req_str(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<String> {
             ctx,
             format!("{key:?} must be a string, got {}", type_name(other)),
         )),
-        None => Err(TomlError::new(
-            ctx,
-            format!("missing required string {key:?}"),
-        )),
+        None => Err(TomlError::new(ctx, format!("missing required string {key:?}"))),
     }
 }
 
-pub fn req_str_with_default(
-    value: &TomlTable,
-    key: &str,
-    ctx: &str,
-    default: impl Into<String>,
-) -> TomlResult<String> {
+pub fn req_str_with_default(value: &TomlTable, key: &str, ctx: &str, default: impl Into<String>) -> TomlResult<String> {
     match value.get(key) {
         Some(toml::Value::String(s)) => Ok(s.clone()),
         Some(other) => Err(TomlError::new(
@@ -119,10 +111,7 @@ pub fn table(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<TomlTable> {
             ctx,
             format!("[{key}] must be a table, got {}", type_name(other)),
         )),
-        None => Err(TomlError::new(
-            ctx,
-            format!("missing required table [{key}]"),
-        )),
+        None => Err(TomlError::new(ctx, format!("missing required table [{key}]"))),
     }
 }
 
@@ -147,10 +136,7 @@ pub fn rows(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<Vec<TomlTable
                     other => {
                         return Err(TomlError::new(
                             ctx,
-                            format!(
-                                "[[{key}]] must be an array of tables, got {}",
-                                type_name(other)
-                            ),
+                            format!("[[{key}]] must be an array of tables, got {}", type_name(other)),
                         ));
                     }
                 }
@@ -159,10 +145,7 @@ pub fn rows(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<Vec<TomlTable
         }
         Some(other) => Err(TomlError::new(
             ctx,
-            format!(
-                "[[{key}]] must be an array of tables, got {}",
-                type_name(other)
-            ),
+            format!("[[{key}]] must be an array of tables, got {}", type_name(other)),
         )),
         None => Ok(Vec::new()),
     }
@@ -187,10 +170,7 @@ pub fn strs(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<Vec<String>> 
         }
         Some(other) => Err(TomlError::new(
             ctx,
-            format!(
-                "{key:?} must be an array of strings, got {}",
-                type_name(other)
-            ),
+            format!("{key:?} must be an array of strings, got {}", type_name(other)),
         )),
         None => Ok(Vec::new()),
     }
@@ -215,10 +195,7 @@ pub fn str_map(value: &TomlTable, key: &str, ctx: &str) -> TomlResult<Vec<(Strin
         }
         Some(other) => Err(TomlError::new(
             ctx,
-            format!(
-                "[{key}] must be a table of string values, got {}",
-                type_name(other)
-            ),
+            format!("[{key}] must be a table of string values, got {}", type_name(other)),
         )),
         None => Ok(Vec::new()),
     }

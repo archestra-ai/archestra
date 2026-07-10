@@ -711,8 +711,8 @@ export function AgentDialog({
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
-  // New agents default to implicit ("All tools") access; editing an existing
-  // agent overwrites this from its stored value.
+  // New agents default to Auto mode (implicit access to all tools); editing an
+  // existing agent overwrites this from its stored value.
   const [accessAllTools, setAccessAllTools] = useState(true);
   // Auto-mode exclusions dirty tracking: { initial, current } normalized
   // payloads reported by the exclusions editor (null until it initializes and
@@ -739,18 +739,19 @@ export function AgentDialog({
         : "The environment for this agent's code sandbox (runtime and network egress) and the tools and knowledge sources it can use.";
   const isBuiltIn = !!agent?.builtIn;
   const agentHooksEnabled = useFeature("agentHooksEnabled");
-  // "All tools" (implicit access) is the default for new agents; admins can
-  // switch an agent to "Custom" (explicitly assigned tools). Implicit access is
-  // scoped to tools/knowledge visible to the user AND in the agent's environment.
-  const allToolsMode = accessAllTools;
-  // Seed the exclusions editor with the backend's All-mode pre-fill whenever
-  // saving would put the agent into All mode from scratch: creating a new
-  // agent on the All tab, or editing an agent whose SAVED accessAllTools is
-  // off while the All tab is selected. An agent already saved in All mode has
+  // "Auto" (implicit access to all tools) is the default for new agents; admins
+  // can switch an agent to "Custom" (explicitly assigned tools). Implicit access
+  // is scoped to tools/knowledge visible to the user AND in the agent's
+  // environment.
+  const autoToolsMode = accessAllTools;
+  // Seed the exclusions editor with the backend's Auto-mode pre-fill whenever
+  // saving would put the agent into Auto mode from scratch: creating a new
+  // agent on the Auto tab, or editing an agent whose SAVED accessAllTools is
+  // off while the Auto tab is selected. An agent already saved in Auto mode has
   // its pre-fill persisted server-side, so the editor just loads it.
   const savedAccessAllTools = (freshAgent || agent)?.accessAllTools ?? false;
   const seedDefaultExclusions =
-    allToolsMode && (agent ? !savedAccessAllTools : true);
+    autoToolsMode && (agent ? !savedAccessAllTools : true);
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -845,8 +846,8 @@ export function AgentDialog({
             autoConfigureOnToolDiscovery: false,
             dualLlmMaxRounds: "5",
             passthroughHeaders: [],
-            // New agents default to "All tools" (implicit access); admins can
-            // switch to "Custom" (explicitly assigned tools).
+            // New agents default to "Auto" (implicit access to all tools);
+            // admins can switch to "Custom" (explicitly assigned tools).
             toolExposureMode: "full",
             accessAllTools: true,
           };
@@ -1102,7 +1103,7 @@ export function AgentDialog({
         });
         savedAgentId = updated?.id ?? agent.id;
         // Auto-mode exclusions (full-replace PUT; no-op when unchanged). Runs
-        // AFTER the agent update so that when accessAllTools flips Custom→All,
+        // AFTER the agent update so that when accessAllTools flips Custom→Auto,
         // the backend's switch-time pre-fill lands first and this full replace
         // is the authoritative last write of the set the user saw and edited.
         if (!isBuiltIn) {
@@ -1666,39 +1667,43 @@ export function AgentDialog({
                     <div className="space-y-2">
                       <Label>Tools & Knowledge Sources</Label>
                       <Tabs
-                        value={allToolsMode ? "all" : "specific"}
+                        value={autoToolsMode ? "auto" : "custom"}
                         onValueChange={(value) => {
-                          const all = value === "all";
-                          setAccessAllTools(all);
+                          const auto = value === "auto";
+                          setAccessAllTools(auto);
                           // Dynamic access only works through the search/run
                           // dispatch surface, so picking it enables that mode.
-                          if (all) {
+                          if (auto) {
                             setToolExposureMode("search_and_run_only");
                           }
                         }}
                       >
                         <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="all">All</TabsTrigger>
-                          <TabsTrigger value="specific">Custom</TabsTrigger>
+                          <TabsTrigger value="auto">Auto</TabsTrigger>
+                          <TabsTrigger value="custom">Custom</TabsTrigger>
                         </TabsList>
                       </Tabs>
-                      {allToolsMode && (
+                      {autoToolsMode ? (
                         <ul className="space-y-1.5 pt-1 text-xs text-muted-foreground">
                           <li className="flex gap-2">
                             <CheckIcon className="mt-px size-3.5 shrink-0" />
-                            Every MCP tool and knowledge source the chatting
-                            user can access, in this agent's environment
+                            Every MCP tool and knowledge source the calling user
+                            can access, in this{" "}
+                            {agentTypeDisplayName[agentType] || "agent"}'s
+                            environment — new servers included automatically
                           </li>
                           <li className="flex gap-2">
                             <CheckIcon className="mt-px size-3.5 shrink-0" />
-                            Connects per the server's policy — on behalf of the
-                            chatting user by default
+                            Credentials resolve at call time per each server's
+                            default credential setting — on behalf of the
+                            calling user unless the server always uses one
+                            account
                           </li>
                           <li className="flex gap-2">
                             <CheckIcon className="mt-px size-3.5 shrink-0" />
                             <span>
-                              Discovered on demand — the catalog never burns
-                              context tokens.{" "}
+                              Tools are discovered on demand — the catalog never
+                              burns context tokens.{" "}
                               <ExternalDocsLink
                                 href={toolExposureDocsUrl}
                                 className="underline"
@@ -1709,6 +1714,12 @@ export function AgentDialog({
                             </span>
                           </li>
                         </ul>
+                      ) : (
+                        <p className="pt-1 text-xs text-muted-foreground">
+                          Only the tools and knowledge sources you assign below
+                          are available to this{" "}
+                          {agentTypeDisplayName[agentType] || "agent"}.
+                        </p>
                       )}
                       {/* Auto-mode exclusions; kept mounted while hidden so
                         pending edits and the save-time ref survive switching
@@ -1716,16 +1727,16 @@ export function AgentDialog({
                       <div
                         className={cn(
                           "space-y-2 pt-2",
-                          !allToolsMode && "hidden",
+                          !autoToolsMode && "hidden",
                         )}
                       >
                         <p className="text-xs font-medium text-muted-foreground">
                           Disabled tools
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          These tools are disabled for this{" "}
+                          These tools stay disabled for this{" "}
                           {agentTypeDisplayName[agentType] || "agent"} while
-                          "All" access is on.
+                          Auto mode is on.
                         </p>
                         <AgentToolExclusionsEditor
                           ref={agentToolExclusionsEditorRef}
@@ -1736,9 +1747,9 @@ export function AgentDialog({
                         />
                       </div>
                       {/* Kept mounted while hidden so pending selections and the
-                        save-time ref survive switching to "All". */}
+                        save-time ref survive switching to "Auto". */}
                       <div
-                        className={cn("space-y-3", allToolsMode && "hidden")}
+                        className={cn("space-y-3", autoToolsMode && "hidden")}
                       >
                         <div className="space-y-2">
                           <p className="text-xs font-medium text-muted-foreground">
@@ -2013,9 +2024,9 @@ export function AgentDialog({
                       </div>
                     </div>
 
-                    {/* Progressive loading is only a choice for custom tools —
-                      "All" requires the search/run dispatch surface. */}
-                    {!allToolsMode && (
+                    {/* Progressive loading is only a choice for Custom mode —
+                      "Auto" requires the search/run dispatch surface. */}
+                    {!autoToolsMode && (
                       <div className="flex items-center justify-between gap-4">
                         <div className="space-y-0.5">
                           <Label htmlFor="load-tools-when-needed">

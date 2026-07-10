@@ -3,21 +3,28 @@
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use serde::Serialize;
+use tracing::debug;
+
 use crate::ToolName;
 use crate::dimension::UserId;
 use crate::engine::{Permit, RejectedPermit};
 use crate::label::Label;
 
+/// A user's contribution to a turn: who spoke, and whether they explicitly
+/// confirmed one named tool. The `confirms` field is structural, not a label:
+/// only user turns carry it, so "only the user confirms" holds by construction
+/// rather than by a runtime check — an assistant or tool actor has no such
+/// field to forge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserTurn {
+    pub id: UserId,
+    pub confirms: Option<ToolName>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Actor {
-    User {
-        id: UserId,
-        /// An explicit confirmation of one named tool. Structural, not a
-        /// label: only user turns can carry it, so "only the user confirms"
-        /// holds by construction rather than by a runtime check — an
-        /// assistant or tool actor has no such field to forge.
-        confirms: Option<ToolName>,
-    },
+    User(UserTurn),
     Assistant,
     Tool(ToolName),
 }
@@ -26,26 +33,23 @@ pub enum Actor {
 /// they enter a trajectory only through [`Trajectory::record_result`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Speaker {
-    User {
-        id: UserId,
-        confirms: Option<ToolName>,
-    },
+    User(UserTurn),
     Assistant,
 }
 
 impl Speaker {
     pub fn user(id: UserId) -> Self {
-        Self::User { id, confirms: None }
+        Self::User(UserTurn { id, confirms: None })
     }
 
     /// A user message that explicitly confirms one named tool. The
     /// confirmation is valid only while this is the newest turn — see
     /// [`Trajectory::pending_confirmation`].
     pub fn confirming(id: UserId, tool: ToolName) -> Self {
-        Self::User {
+        Self::User(UserTurn {
             id,
             confirms: Some(tool),
-        }
+        })
     }
 }
 
@@ -64,7 +68,8 @@ pub struct LabeledTurn {
 
 /// Identity of one trajectory instance, unique within the process; permits
 /// are bound to it so an authorization cannot cross trajectories.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
 pub struct TrajectoryId(u64);
 
 impl TrajectoryId {
@@ -113,7 +118,7 @@ impl Trajectory {
     /// trusted input from the embedding harness.
     pub fn push_message(&mut self, label: Label, speaker: Speaker, content: impl Into<String>) {
         let actor = match speaker {
-            Speaker::User { id, confirms } => Actor::User { id, confirms },
+            Speaker::User(user) => Actor::User(user),
             Speaker::Assistant => Actor::Assistant,
         };
         self.turns.push(LabeledTurn {
@@ -129,24 +134,27 @@ impl Trajectory {
     /// permit is consumed either way; if it was minted for another trajectory
     /// or the trajectory moved past the head it was minted for, the result is
     /// rejected and the flow must be re-evaluated against the real context.
-    pub fn record_result(
-        &mut self,
-        permit: Permit,
-        content: impl Into<String>,
-    ) -> Result<(), RejectedPermit> {
+    pub fn record_result(&mut self, permit: Permit, content: impl Into<String>) -> Result<(), RejectedPermit> {
         let (request, label, trajectory, basis) = permit.into_parts();
         if trajectory != self.id {
+            debug!(minted_for = %trajectory, this = %self.id, "record_result: rejected (foreign trajectory)");
             return Err(RejectedPermit::ForeignTrajectory {
                 minted_for: trajectory,
                 this: self.id,
             });
         }
         if basis != self.turns.len() {
+            debug!(
+                granted_at = basis,
+                current_len = self.turns.len(),
+                "record_result: rejected (stale permit)"
+            );
             return Err(RejectedPermit::Stale {
                 granted_at: basis,
                 current_len: self.turns.len(),
             });
         }
+        debug!(tool = %request.tool, basis, "record_result: recorded tool result");
         self.turns.push(LabeledTurn {
             label,
             turn: Turn {
@@ -171,10 +179,9 @@ impl Trajectory {
                 turn:
                     Turn {
                         actor:
-                            Actor::User {
-                                confirms: Some(tool),
-                                ..
-                            },
+                            Actor::User(UserTurn {
+                                confirms: Some(tool), ..
+                            }),
                         ..
                     },
                 ..
@@ -208,7 +215,7 @@ mod tests {
         );
         trajectory.push_message(
             Label {
-                audience: Audience::Public,
+                audience: Audience::PUBLIC,
                 trust: Trust::SUSPICIOUS,
                 effects: Effects::declared([Effect::Egress]),
                 ..Label::identity()
@@ -241,10 +248,7 @@ mod tests {
             Speaker::confirming(UserId::new("alice"), ToolName::new("db.drop")),
             "yes, drop it",
         );
-        assert_eq!(
-            trajectory.pending_confirmation(),
-            Some(&ToolName::new("db.drop"))
-        );
+        assert_eq!(trajectory.pending_confirmation(), Some(&ToolName::new("db.drop")));
 
         trajectory.push_message(
             Label::identity(),

@@ -372,7 +372,7 @@ class AgentModel {
 
     // All-tools agents are inserted with the toggle OFF and flipped on at the
     // end, in one transaction with the exclusion pre-fill (see below), so a
-    // committed agent can never sit in All mode without its pre-filled
+    // committed agent can never sit in Auto mode without its pre-filled
     // exclusions — a failure between insert and flip leaves it in Custom mode
     // (fail-closed) instead of fail-open.
     const enableAccessAllTools = agent.accessAllTools === true;
@@ -2047,7 +2047,7 @@ class AgentModel {
     // Switching accessAllTools off→on pre-fills the agent's exclusion list
     // with every unassigned built-in tool outside the exempt set. Flip and
     // pre-fill commit in ONE transaction (serialized by the same row lock the
-    // exclusions full-replace takes) so the agent can never sit in All mode
+    // exclusions full-replace takes) so the agent can never sit in Auto mode
     // without its pre-fill; every off→on switch re-runs it (additively).
     // on→on or →off updates never touch the exclusion rows.
     const prefillsExclusions =
@@ -2543,7 +2543,7 @@ class AgentModel {
 
       // This raw INSERT creates the gateways directly in All-tools mode, so
       // pre-fill their exclusion lists in the same transaction — none of them
-      // may commit in All mode without the pre-fill.
+      // may commit in Auto mode without the pre-fill.
       await AgentExcludedToolModel.prefillManyForAllToolsMode(
         insertedRows.map((row) => row.id),
         tx,
@@ -2821,7 +2821,7 @@ class AgentModel {
           toolExposureMode: sourceAgent.toolExposureMode,
           // Clone in Custom mode first and flip below, so a crash before the
           // exclusions are copied can only leave a fail-closed (assigned-tools-
-          // only) clone, never one wide open in All mode with no exclusions.
+          // only) clone, never one wide open in Auto mode with no exclusions.
           accessAllTools: false,
           considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,

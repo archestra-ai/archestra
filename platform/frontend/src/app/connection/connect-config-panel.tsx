@@ -1,7 +1,14 @@
 "use client";
 
 import { providerDisplayNames } from "@archestra/shared";
-import { AlertTriangle, Check, Download, Info, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CircleDashed,
+  Download,
+  Info,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
@@ -13,6 +20,7 @@ import {
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -26,6 +34,7 @@ import {
   useCreateConnectionVirtualKey,
 } from "@/lib/connection-setup.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useCreateSkillShareLink } from "@/lib/skills/skill-share.query";
 import {
   buildClaudeDesktopConfigProfile,
   downloadClaudeDesktopConfig,
@@ -43,6 +52,7 @@ import {
   platformLabels,
   toPlatformOption,
 } from "./platform.utils";
+import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
 import { WizardStep } from "./wizard-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
@@ -99,6 +109,19 @@ export function ConnectConfigPanel({
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
     setEditing((cur) => (cur === row ? null : row));
+
+  // Shared skills ride along as a git-backed plugin marketplace baked into the
+  // profile, gated on the caller being a skill admin with at least one skill.
+  // Whole-org snapshot (no per-skill picker) — Claude Desktop surfaces the
+  // marketplace in its Directory, where the user installs individual skills.
+  const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
+  const { data: allSkills } = useAllSkills({
+    enabled: canAdminSkills === true,
+  });
+  const skills = allSkills ?? [];
+  const skillsEligible = canAdminSkills === true && skills.length > 0;
+  const skillIds = useMemo(() => skills.map((s) => s.id), [skills]);
+  const [includeSkills, setIncludeSkills] = useState(true);
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   const proxy = (llmProxies ?? []).find((p) => p.id === llmProxyId) ?? null;
@@ -180,6 +203,42 @@ export function ConnectConfigPanel({
             through{" "}
             <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>
           </SummaryRow>
+          {skillsEligible && (
+            <SummaryRow
+              done={includeSkills}
+              editable
+              isEditing={editing === "skills"}
+              onToggle={() => toggleEdit("skills")}
+              editor={
+                <label
+                  className="flex items-center gap-2 text-sm font-medium"
+                  htmlFor="config-include-skills"
+                >
+                  <Checkbox
+                    id="config-include-skills"
+                    checked={includeSkills}
+                    onCheckedChange={(c) => setIncludeSkills(c === true)}
+                  />
+                  Install shared skills
+                </label>
+              }
+              detail={
+                includeSkills ? <SkillNamesLine skills={skills} /> : undefined
+              }
+            >
+              {includeSkills ? (
+                <>
+                  Install{" "}
+                  <ResourceLink href="/skills">
+                    {skills.length} shared skill{skills.length === 1 ? "" : "s"}
+                  </ResourceLink>{" "}
+                  as a marketplace
+                </>
+              ) : (
+                "Shared skills not installed"
+              )}
+            </SummaryRow>
+          )}
           {showEndpoint && (
             <SummaryRow
               editable
@@ -254,6 +313,8 @@ export function ConnectConfigPanel({
                 ? { slug: gatewaySlug ?? gateway.id, name: gateway.name }
                 : null
             }
+            includeSkills={skillsEligible && includeSkills}
+            skillIds={skillIds}
           />
         </div>
       </WizardStep>
@@ -348,7 +409,7 @@ function AmberNotice({ children }: { children: React.ReactNode }) {
   );
 }
 
-type EditableRow = "gateway" | "proxy" | "endpoint" | "platform";
+type EditableRow = "gateway" | "proxy" | "skills" | "endpoint" | "platform";
 
 type ProvisionState =
   | { status: "loading" }
@@ -364,15 +425,25 @@ type ProvisionState =
  * The artifact step. Provisions the caller's passthrough + standard virtual
  * keys (the standard key needs a configured Anthropic provider key — mirrors
  * the command panel's handling), builds the profile, and offers the download.
+ *
+ * When skills are included, the token-bearing marketplace clone URL is minted
+ * on the download click (not eagerly), so a visitor who only previews never
+ * spawns a share link, and the "Share link created" toast stays tied to a
+ * deliberate action.
  */
 function ConfigDownloadStep({
   baseUrl,
   llmProxyId,
   gateway,
+  includeSkills,
+  skillIds,
 }: {
   baseUrl: string;
   llmProxyId: string;
   gateway: { slug: string; name: string } | null;
+  /** Already gated on skill-admin eligibility by the parent. */
+  includeSkills: boolean;
+  skillIds: string[];
 }) {
   const { data: canCreateVirtualKey } = useHasPermissions({
     llmVirtualKey: ["create"],
@@ -389,10 +460,15 @@ function ConfigDownloadStep({
   const { mutateAsync: provisionPassthrough } =
     useCreateConnectionPassthroughKey();
   const { mutateAsync: provisionVirtual } = useCreateConnectionVirtualKey();
+  const { mutateAsync: createShareLink, isPending: mintingShareLink } =
+    useCreateSkillShareLink();
 
   const [state, setState] = useState<ProvisionState>({ status: "loading" });
   const [showAddProviderKey, setShowAddProviderKey] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // Set when the share-link mint fails on a download click, so the profile is
+  // never silently downloaded without the skills the user asked for.
+  const [skillMintFailed, setSkillMintFailed] = useState(false);
 
   // Both calls are idempotent server-side (they reuse an existing key), so a
   // single fire is enough; the ref survives strict-mode's double-invoke.
@@ -426,6 +502,48 @@ function ConfigDownloadStep({
     firedRef.current = true;
     provision();
   }, [canCreateVirtualKey, anthropicHasKey, provision]);
+
+  // Build + download on click. When skills are included, the marketplace share
+  // link is minted here (not eagerly) so previewing never spawns a link, and
+  // its failure aborts the download rather than shipping a skill-less profile.
+  const handleDownload = useCallback(async () => {
+    if (state.status !== "ready") return;
+    setSkillMintFailed(false);
+    let skillMarketplace: {
+      cloneUrl: string;
+      marketplaceName: string;
+    } | null = null;
+    if (includeSkills && skillIds.length > 0) {
+      // Never expires — the marketplace must outlive any single download;
+      // admins revoke it from the Skills page. The hook toasts on failure.
+      const link = await createShareLink({ skillIds, expiresAt: null });
+      if (!link) {
+        setSkillMintFailed(true);
+        return;
+      }
+      skillMarketplace = {
+        cloneUrl: link.cloneUrl,
+        marketplaceName: link.marketplaceName,
+      };
+    }
+    const profile = buildClaudeDesktopConfigProfile({
+      baseUrl,
+      llmProxyId,
+      passthroughKey: state.passthroughKey,
+      virtualKey: state.virtualKey,
+      gateway,
+      skillMarketplace,
+    });
+    downloadClaudeDesktopConfig(profile, generateConfigFilename());
+  }, [
+    state,
+    includeSkills,
+    skillIds,
+    createShareLink,
+    baseUrl,
+    llmProxyId,
+    gateway,
+  ]);
 
   if (canCreateVirtualKey === false) {
     return (
@@ -502,7 +620,10 @@ function ConfigDownloadStep({
     );
   }
 
-  const profile = buildClaudeDesktopConfigProfile({
+  // Preview reflects the non-skill profile only: the marketplace clone URL is
+  // minted on download, so there's no real value to show until then. The note
+  // below the button covers the skills part.
+  const previewProfile = buildClaudeDesktopConfigProfile({
     baseUrl,
     llmProxyId,
     passthroughKey: state.passthroughKey,
@@ -524,15 +645,37 @@ function ConfigDownloadStep({
             or the keys it embeds. A fresh file-name token is minted per click. */}
         <Button
           type="button"
-          onClick={() =>
-            downloadClaudeDesktopConfig(profile, generateConfigFilename())
-          }
+          onClick={handleDownload}
+          disabled={mintingShareLink}
           data-testid="connect-download-config"
         >
-          <Download className="size-4" />
-          Download configuration
+          {mintingShareLink ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Download className="size-4" />
+          )}
+          {mintingShareLink ? "Preparing…" : "Download configuration"}
         </Button>
       </div>
+      {includeSkills && (
+        <p className="text-xs text-muted-foreground">
+          The profile also registers your shared skills as a marketplace, using
+          a token-bearing git URL generated when you download.
+        </p>
+      )}
+      {skillMintFailed && (
+        <p className="text-xs text-destructive">
+          Couldn't prepare the skills marketplace.{" "}
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="font-medium underline underline-offset-2"
+          >
+            Retry
+          </button>
+          , or clear "Install shared skills" to download without it.
+        </p>
+      )}
       <button
         type="button"
         onClick={() => setShowPreview((s) => !s)}
@@ -542,7 +685,7 @@ function ConfigDownloadStep({
       </button>
       {showPreview && (
         <pre className="m-0 overflow-x-auto rounded-lg border bg-muted/30 p-3 font-mono text-[12px] leading-relaxed text-foreground">
-          {JSON.stringify(maskConfigSecrets(profile), null, 2)}
+          {JSON.stringify(maskConfigSecrets(previewProfile), null, 2)}
         </pre>
       )}
     </div>
@@ -555,6 +698,7 @@ function ConfigDownloadStep({
  */
 function SummaryRow({
   children,
+  done = true,
   editable = false,
   isEditing = false,
   onToggle,
@@ -562,6 +706,8 @@ function SummaryRow({
   detail,
 }: {
   children: React.ReactNode;
+  /** Green check vs. a muted "not included" indicator. */
+  done?: boolean;
   editable?: boolean;
   isEditing?: boolean;
   onToggle?: () => void;
@@ -572,7 +718,11 @@ function SummaryRow({
   return (
     <li className="text-sm text-muted-foreground">
       <div className="flex items-start gap-2">
-        <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        {done ? (
+          <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        ) : (
+          <CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground/50" />
+        )}
         <span>
           {children}
           {editable && (
@@ -613,6 +763,20 @@ function ResourceLink({
     >
       {children}
     </Link>
+  );
+}
+
+const SKILL_NAME_PREVIEW_LIMIT = 6;
+
+/** Names the skills the marketplace will expose, truncated past the limit. */
+function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+  const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
+  const more = skills.length - shown.length;
+  return (
+    <p className="text-xs text-muted-foreground/80">
+      {shown.map((s) => s.name).join(", ")}
+      {more > 0 ? ` and ${more} more` : ""}
+    </p>
   );
 }
 

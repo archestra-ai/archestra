@@ -95,6 +95,7 @@ import {
   OpenAi,
   Openrouter,
   Perplexity,
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
   Vllm,
   Xai,
   Zhipuai,
@@ -613,6 +614,13 @@ export const createFastifyInstance = () =>
               error_type: "api_error",
               status_code: statusCode,
               ...(internalCode && { internal_code: internalCode }),
+              // A secrets-backend outage fails every route that reads
+              // secrets — group by the root condition, not per endpoint.
+              ...(internalCode ===
+                SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE && {
+                $exception_fingerprint:
+                  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+              }),
             });
           }
         } else if (statusCode >= 400) {

@@ -1,3 +1,6 @@
 [workspace]
-members = ["core", "runner", "analyzer", "cli", "dashboard"]
+members = ["core", "runner", "analyzer", "cli", "dashboard", "baton/baton-core"]
 resolver = "2"
+
+[workspace.lints.rust]
+dead_code = "deny"

@@ -6,6 +6,8 @@ description: Reusable SKILL.md instruction sets that agents load on demand
 lastUpdated: 2026-07-06
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Agent Skills are markdown instruction sets an agent loads on demand. A skill is a `SKILL.md` file plus optional resource files, following the [Agent Skills specification](https://agentskills.io/specification).
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.

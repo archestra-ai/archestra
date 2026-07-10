@@ -5,6 +5,7 @@ import {
   ApiError,
   type ISecretManager,
   parseVaultSecretReference,
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
   type SecretsConnectivityResult,
   type SecretValue,
   type SelectSecret,
@@ -175,8 +176,9 @@ export default class ReadonlyVaultSecretManager
       }
 
       throw new ApiError(
-        500,
+        503,
         "Failed to resolve vault secret references. Please verify the paths exist and Archestra has read access.",
+        SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
       );
     }
   }

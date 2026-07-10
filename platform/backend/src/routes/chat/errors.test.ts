@@ -7,6 +7,7 @@ import {
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -21,6 +22,7 @@ vi.mock("@sentry/node", () => ({
 import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
+  buildAbortiveTurnError,
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -1736,6 +1738,20 @@ describe("mapProviderError - Sentry raw error capture", () => {
     expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 
+  it("does not capture approval-gated tool blocks in autonomous sessions", () => {
+    // Thrown by the chat tool builder when a "Require approval" policy fires
+    // in a session with no human to approve (A2A, Slack, MS Teams,
+    // sub-agents). Policy enforcement working as designed, not a provider
+    // failure — it must stay out of error tracking.
+    const error = new Error(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    );
+
+    mapProviderError(error, "bedrock");
+
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
   it("does not capture client-class 4xx provider rejections", () => {
     const error = {
       name: "AI_APICallError",
@@ -2100,5 +2116,21 @@ describe("getUnavailableToolErrorDetails", () => {
     expect(getUnavailableToolErrorDetails("some other failure")).toBeNull();
     expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
     expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
+  });
+});
+
+describe("buildAbortiveTurnError", () => {
+  it("maps a `length` truncation to a non-retryable ToolCallOutputTruncated", () => {
+    const result = buildAbortiveTurnError("anthropic", "length");
+    expect(result.code).toBe(ChatErrorCode.ToolCallOutputTruncated);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("keeps a non-length abortive turn as a retryable IncompleteToolCall", () => {
+    for (const finishReason of ["tool-calls", "unknown", null, undefined]) {
+      const result = buildAbortiveTurnError("anthropic", finishReason);
+      expect(result.code).toBe(ChatErrorCode.IncompleteToolCall);
+      expect(result.isRetryable).toBe(true);
+    }
   });
 });

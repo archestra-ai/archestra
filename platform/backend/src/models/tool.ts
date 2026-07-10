@@ -406,7 +406,7 @@ class ToolModel {
    * Read the fields the policy editor needs for a tool the caller can access.
    * Unlike findById, catalog-backed tools (agentId null) are scoped by catalog
    * access rather than returned to anyone, so this is safe for user-facing
-   * reads — including All-mode tools that have no agent_tools assignment.
+   * reads — including Auto-mode tools that have no agent_tools assignment.
    */
   static async findByIdForOrg(params: {
     id: string;
@@ -429,7 +429,7 @@ class ToolModel {
       return null;
     }
 
-    // Catalog-backed tools (including All-mode tools with no agent_tools row) are
+    // Catalog-backed tools (including Auto-mode tools with no agent_tools row) are
     // scoped by catalog access, which is org-scoped even for admins. Mirror the
     // discovery path (getMcpToolsAccessibleToUser): catalog visibility is the
     // gate — a visible catalog stays readable even when the caller has no
@@ -1603,7 +1603,7 @@ class ToolModel {
    * enablement would otherwise never receive it: migration 0332 runs in the
    * pre-upgrade hook, before the seed creates these flag-gated rows, so it
    * cannot backfill them. Matching AgentModel.create, this spans every agent
-   * kind and both tool modes — an All-tools agent advertises only assigned
+   * kind and both tool modes — an Auto-mode agent advertises only assigned
    * built-ins in chat, so it needs the rows too — and skips built-in system
    * agents, which bypass the create-time tool hooks by design. Idempotent:
    * only the newly-created short names are assigned, via

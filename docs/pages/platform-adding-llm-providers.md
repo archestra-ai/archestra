@@ -6,6 +6,8 @@ description: Developer guide for implementing new LLM provider support in Arches
 lastUpdated: 2026-04-29
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 This is a development guide for adding new LLM providers to Archestra.
 -->

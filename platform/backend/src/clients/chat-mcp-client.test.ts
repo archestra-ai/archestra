@@ -2244,7 +2244,7 @@ describe("buildArchestraToolOutput", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
-    // "All tools" mode: run_tool dispatches to any tool the user can access
+    // "Auto" mode: run_tool dispatches to any tool the user can access
     // without an agent_tools assignment. The UI resource must still attach so
     // the MCP App renders as an iframe instead of a plain tool-call card.
     const agent = await makeAgent({

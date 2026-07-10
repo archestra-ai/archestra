@@ -1351,13 +1351,13 @@ class McpClient {
       tool = undefined;
     }
 
-    // Dynamic tool access ("All tools" mode): the dispatcher pre-resolved a
+    // Dynamic tool access ("Auto" mode): the dispatcher pre-resolved a
     // tool the agent has no assignment row for. Shape it like an assignment so
     // downstream resolution is identical. It has no row to inherit a credential
     // mode from and can't carry a static pin, so it resolves its connection at
     // call time — which still defers to the MCP server's connection policy
     // (on-behalf-of the caller, or a pinned service account). An assigned row
-    // keeps precedence here; in "All tools" mode the override below then routes
+    // keeps precedence here; in "Auto" mode the override below then routes
     // even a leftover static assignment through the server's connection policy.
     if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
@@ -1421,7 +1421,7 @@ class McpClient {
       };
     }
 
-    // "All tools" mode overrides a leftover per-tool credential pin. When the
+    // "Auto" mode overrides a leftover per-tool credential pin. When the
     // agent has access_all_tools on, credentials follow the MCP server's
     // connection policy (on-behalf-of the caller, or a pinned service account)
     // for every tool — a static assignment left over from Custom mode must not
@@ -1435,7 +1435,7 @@ class McpClient {
           agentId: owner.id,
           mcpServerId: tool.mcpServerId,
         },
-        "All-tools mode: ignoring static assignment pin, resolving via the MCP server's connection policy",
+        "Auto tool mode: ignoring static assignment pin, resolving via the MCP server's default-credential policy",
       );
       tool = {
         ...tool,

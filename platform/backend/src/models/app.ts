@@ -14,6 +14,7 @@ import { softDelete } from "@/database/soft-delete";
 import { ApiError } from "@/types";
 import type { App, InsertApp } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AppAccessModel from "./app-access";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -50,17 +51,20 @@ function buildOrgFilters(params: {
   accessibleAppIds?: string[];
 }) {
   const normalizedSearch = params.search?.trim();
+  const searchPattern = normalizedSearch
+    ? `%${escapeLikePattern(normalizedSearch)}%`
+    : undefined;
   return [
     eq(schema.appsTable.organizationId, params.organizationId),
     notDeleted(schema.appsTable),
     ...(params.accessibleAppIds !== undefined
       ? [inArray(schema.appsTable.id, params.accessibleAppIds)]
       : []),
-    ...(normalizedSearch
+    ...(searchPattern
       ? [
           or(
-            ilike(schema.appsTable.name, `%${normalizedSearch}%`),
-            ilike(schema.appsTable.description, `%${normalizedSearch}%`),
+            ilike(schema.appsTable.name, searchPattern),
+            ilike(schema.appsTable.description, searchPattern),
           ),
         ]
       : []),

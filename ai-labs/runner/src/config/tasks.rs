@@ -6,8 +6,7 @@ use regex::Regex;
 use super::toml_util::{self, TomlTable};
 use super::types::{Stage, StagedFile, Task, Verifier};
 
-static FILE_PLACEHOLDER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{\{file:([^}]+)\}\}").expect("valid regex"));
+static FILE_PLACEHOLDER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{\{file:([^}]+)\}\}").expect("valid regex"));
 const DEFAULT_MAX_FORMAT_ATTEMPTS: i64 = 3;
 
 #[derive(Debug, thiserror::Error)]
@@ -61,12 +60,7 @@ pub fn load_task(task_dir: &Path) -> Result<Task, TaskConfigError> {
     let schema = toml_util::table(&data, "result_schema", &ctx)?;
     let schema_value = toml_table_to_json_value(&schema);
 
-    let max_attempts = toml_util::req_int(
-        &data,
-        "max_format_attempts",
-        &ctx,
-        DEFAULT_MAX_FORMAT_ATTEMPTS,
-    )? as usize;
+    let max_attempts = toml_util::req_int(&data, "max_format_attempts", &ctx, DEFAULT_MAX_FORMAT_ATTEMPTS)? as usize;
     if max_attempts < 1 {
         return Err(TaskConfigError(format!(
             "{ctx}: max_format_attempts must be >= 1, got {max_attempts}"
@@ -133,11 +127,7 @@ fn expand_files(text: &str, task_dir: &Path, ctx: &str) -> Result<String, TaskCo
     Ok(result.into_owned())
 }
 
-fn load_staged_files(
-    row: &TomlTable,
-    ctx: &str,
-    inputs_dir: &Path,
-) -> Result<Vec<StagedFile>, TaskConfigError> {
+fn load_staged_files(row: &TomlTable, ctx: &str, inputs_dir: &Path) -> Result<Vec<StagedFile>, TaskConfigError> {
     let rows = toml_util::rows(row, "files", ctx)?;
     let mut files = Vec::with_capacity(rows.len());
     for (i, file_row) in rows.iter().enumerate() {
@@ -147,12 +137,7 @@ fn load_staged_files(
         files.push(StagedFile {
             src,
             dest: toml_util::req_str(file_row, "dest", &file_ctx)?,
-            mime_type: toml_util::req_str_with_default(
-                file_row,
-                "mime_type",
-                &file_ctx,
-                "application/octet-stream",
-            )?,
+            mime_type: toml_util::req_str_with_default(file_row, "mime_type", &file_ctx, "application/octet-stream")?,
         });
     }
     Ok(files)
@@ -166,9 +151,7 @@ fn check_under_inputs(src: &str, inputs_dir: &Path, ctx: &str) -> Result<(), Tas
     }
     let target = resolve_under(inputs_dir, src).map_err(TaskConfigError)?;
     if !target.is_file() {
-        return Err(TaskConfigError(format!(
-            "{ctx}: staged file {target:?} does not exist"
-        )));
+        return Err(TaskConfigError(format!("{ctx}: staged file {target:?} does not exist")));
     }
     Ok(())
 }
@@ -194,15 +177,10 @@ fn load_verifier(tbl: &TomlTable, ctx: &str, task_dir: &Path) -> Result<Verifier
             "{ctx}: test_file {test_file:?} must be relative (under the task dir)"
         )));
     }
-    let target = resolve_under(task_dir, &test_file).map_err(|e| {
-        TaskConfigError(format!(
-            "{ctx}: test_file {test_file:?} escapes the task dir: {e}"
-        ))
-    })?;
+    let target = resolve_under(task_dir, &test_file)
+        .map_err(|e| TaskConfigError(format!("{ctx}: test_file {test_file:?} escapes the task dir: {e}")))?;
     if !target.is_file() {
-        return Err(TaskConfigError(format!(
-            "{ctx}: verifier {target:?} does not exist"
-        )));
+        return Err(TaskConfigError(format!("{ctx}: verifier {target:?} does not exist")));
     }
     Ok(Verifier {
         deps: toml_util::strs(tbl, "deps", ctx)?,
@@ -257,13 +235,12 @@ fn toml_value_to_json_value(value: &toml::Value) -> serde_json::Value {
     match value {
         toml::Value::String(s) => serde_json::Value::String(s.clone()),
         toml::Value::Integer(i) => serde_json::Value::Number((*i).into()),
-        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
-            .map_or(serde_json::Value::Null, serde_json::Value::Number),
+        toml::Value::Float(f) => {
+            serde_json::Number::from_f64(*f).map_or(serde_json::Value::Null, serde_json::Value::Number)
+        }
         toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
         toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
-        toml::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(toml_value_to_json_value).collect())
-        }
+        toml::Value::Array(arr) => serde_json::Value::Array(arr.iter().map(toml_value_to_json_value).collect()),
         toml::Value::Table(t) => toml_table_to_json_value(t),
     }
 }
@@ -317,9 +294,7 @@ mod tests {
 
     #[test]
     fn stage_new_conversation_parsed_on_later_stage() {
-        let tmp = write_task(
-            "[[stages]]\ntext = \"a\"\n\n[[stages]]\ntext = \"b\"\nnew_conversation = true\n",
-        );
+        let tmp = write_task("[[stages]]\ntext = \"a\"\n\n[[stages]]\ntext = \"b\"\nnew_conversation = true\n");
         let task = load_task(&tmp.path().join("sample-task")).unwrap();
         assert!(!task.stages[0].new_conversation);
         assert!(task.stages[1].new_conversation);
@@ -330,21 +305,15 @@ mod tests {
         let tmp = write_task("[[stages]]\ntext = \"a\"\nnew_conversation = true\n");
         let err = load_task(&tmp.path().join("sample-task")).unwrap_err();
         assert!(
-            err.to_string()
-                .contains("first stage cannot set new_conversation"),
+            err.to_string().contains("first stage cannot set new_conversation"),
             "unexpected error: {err}"
         );
     }
 
     #[test]
     fn stage_new_conversation_rejects_non_bool() {
-        let tmp = write_task(
-            "[[stages]]\ntext = \"a\"\n\n[[stages]]\ntext = \"b\"\nnew_conversation = \"yes\"\n",
-        );
+        let tmp = write_task("[[stages]]\ntext = \"a\"\n\n[[stages]]\ntext = \"b\"\nnew_conversation = \"yes\"\n");
         let err = load_task(&tmp.path().join("sample-task")).unwrap_err();
-        assert!(
-            err.to_string().contains("new_conversation"),
-            "unexpected error: {err}"
-        );
+        assert!(err.to_string().contains("new_conversation"), "unexpected error: {err}");
     }
 }

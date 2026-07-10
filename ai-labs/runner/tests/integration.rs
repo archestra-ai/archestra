@@ -77,10 +77,7 @@ fn generated_binaries(root: &Path) -> Vec<PathBuf> {
 }
 
 fn collect_binaries(base: &Path, fixture_dirs: &[&str], out: &mut Vec<PathBuf>) {
-    for entry in walkdir::WalkDir::new(base)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
+    for entry in walkdir::WalkDir::new(base).into_iter().filter_map(Result::ok) {
         let path = entry.path();
         // A generated binary is a data artefact, never a script (a generator may itself live under
         // expected/, e.g. median-salary/expected/generate.py).
@@ -106,10 +103,7 @@ fn assert_no_fixture_drift(generated: &Path, regenerated_binaries: &[PathBuf]) {
         if !task.is_dir() || !dir_has_generator(&task) {
             continue;
         }
-        for entry in walkdir::WalkDir::new(&task)
-            .into_iter()
-            .filter_map(Result::ok)
-        {
+        for entry in walkdir::WalkDir::new(&task).into_iter().filter_map(Result::ok) {
             let path = entry.path();
             let in_fixture_dir = path
                 .components()
@@ -117,9 +111,7 @@ fn assert_no_fixture_drift(generated: &Path, regenerated_binaries: &[PathBuf]) {
             if !path.is_file() || !in_fixture_dir || !is_text_fixture(path) {
                 continue;
             }
-            let rel = path
-                .strip_prefix(generated)
-                .expect("path under generated root");
+            let rel = path.strip_prefix(generated).expect("path under generated root");
             let regenerated = std::fs::read(path).expect("read regenerated fixture");
             let committed_bytes = std::fs::read(committed_root.join(rel))
                 .unwrap_or_else(|e| panic!("committed fixture {rel:?} missing: {e}"));
@@ -135,9 +127,7 @@ fn assert_no_fixture_drift(generated: &Path, regenerated_binaries: &[PathBuf]) {
         "fixture drift guard checked no text fixtures -- generator discovery is broken"
     );
     for path in regenerated_binaries {
-        let rel = path
-            .strip_prefix(generated)
-            .expect("path under generated root");
+        let rel = path.strip_prefix(generated).expect("path under generated root");
         assert!(
             path.is_file(),
             "binary fixture {rel:?} was not regenerated -- its generate.py did not write it"

@@ -6,9 +6,9 @@
 //! Run with `cargo run --example demo`.
 
 use baton_core::{
-    AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision, Effect,
-    Effects, Grant, KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, TaintPolicy,
-    ToolContract, ToolName, ToolRequest, Trajectory, Trust, UnknownPolicy, UserId, Violation,
+    AttentionRule, Audience, AudienceRule, Authority, AuthorityName, Breach, Decision, Effect, Effects, Grant,
+    KnownTrust, Label, PolicyEngine, Requirements, Ruling, Speaker, TaintPolicy, ToolContract, ToolName, ToolRequest,
+    Trajectory, Trust, UnknownPolicy, UserId, Violation,
 };
 
 /// Scripted stand-in for a real approval UI. This "human" is mandated for
@@ -23,13 +23,9 @@ impl HumanInTheLoop {
         Grant {
             trust: Some(KnownTrust::Trusted),
             audience: Some(
-                [
-                    UserId::new("alice"),
-                    UserId::new("bob"),
-                    UserId::new("charlie"),
-                ]
-                .into_iter()
-                .collect(),
+                [UserId::new("alice"), UserId::new("bob"), UserId::new("charlie")]
+                    .into_iter()
+                    .collect(),
             ),
             effects: None,
             confirms: false,
@@ -78,13 +74,7 @@ impl OnCallAdmin {
 }
 
 impl Authority for OnCallAdmin {
-    fn rule(
-        &self,
-        needed: &Grant,
-        _: &ToolRequest,
-        _: &Label,
-        _: &[Violation],
-    ) -> Option<(AuthorityName, Ruling)> {
+    fn rule(&self, needed: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Option<(AuthorityName, Ruling)> {
         Self::mandate().covers(needed).then(|| {
             (
                 AuthorityName::new("on-call-admin"),
@@ -109,12 +99,7 @@ fn push_alice(trajectory: &mut Trajectory, label: Label, content: &str) {
 }
 
 /// Evaluate one flow, narrate the outcome, and record the result on a permit.
-fn attempt(
-    engine: &PolicyEngine<Panel>,
-    trajectory: &mut Trajectory,
-    request: ToolRequest,
-    result_content: &str,
-) {
+fn attempt(engine: &PolicyEngine<Panel>, trajectory: &mut Trajectory, request: ToolRequest, result_content: &str) {
     println!("-> requesting `{}`", request.tool);
     println!("   context: {}", trajectory.context_label());
     match engine.evaluate(trajectory, &request) {
@@ -137,18 +122,47 @@ fn attempt(
     println!();
 }
 
+/// The `v`s accumulate whether written `-vv` or `-v -v`, and `--verbose`
+/// counts as one — clap's `Count` action.
+#[derive(clap::Parser)]
+#[command(about = "Toy end-to-end IFC policy run.")]
+struct Cli {
+    /// Trace core ops: `-v` the decision path (debug), `-vv` also the label
+    /// algebra (trace). `RUST_LOG` overrides.
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
+}
+
+/// Logs go to stderr so this demo's stdout narration stays clean.
+fn init_tracing(verbosity: u8) {
+    let default = match verbosity {
+        0 => "warn",
+        1 => "baton_core=debug",
+        _ => "baton_core=trace",
+    };
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default)),
+        )
+        .with_writer(std::io::stderr)
+        .init();
+}
+
 fn main() {
+    use clap::Parser;
+    init_tracing(Cli::parse().verbose);
+
     // AllowWithAudit for unprovable gaps; the taint knob on so a degrading
     // step is flagged and signed off rather than propagating silently.
-    let mut engine =
-        PolicyEngine::new((HumanInTheLoop, OnCallAdmin), UnknownPolicy::AllowWithAudit)
-            .with_taint_policy(TaintPolicy::Escalate);
+    let mut engine = PolicyEngine::new((HumanInTheLoop, OnCallAdmin), UnknownPolicy::AllowWithAudit)
+        .with_taint_policy(TaintPolicy::Escalate);
     let contracts = [
         ToolContract {
             name: ToolName::new("web.fetch"),
             requires: Requirements::default(),
             output_label: Label {
-                audience: Audience::Public,
+                audience: Audience::PUBLIC,
                 trust: Trust::SUSPICIOUS,
                 ..Label::identity()
             },
@@ -201,9 +215,7 @@ fn main() {
         "Summarize the quarterly doc against what competitors say online, email it to Bob.",
     );
 
-    println!(
-        "== 2. Fetching the web degrades trust; the taint knob makes the human acknowledge it =="
-    );
+    println!("== 2. Fetching the web degrades trust; the taint knob makes the human acknowledge it ==");
     attempt(
         &engine,
         &mut trajectory,
@@ -227,9 +239,7 @@ fn main() {
         "email to charlie sent",
     );
 
-    println!(
-        "== 5. db.drop without confirmation → routed to the on-call admin by its confirms mandate =="
-    );
+    println!("== 5. db.drop without confirmation → routed to the on-call admin by its confirms mandate ==");
     attempt(
         &engine,
         &mut trajectory,
@@ -246,9 +256,7 @@ fn main() {
         "report built",
     );
 
-    println!(
-        "== 7. An unannotated tool: audited through by policy, taint acknowledged, poisons the fold =="
-    );
+    println!("== 7. An unannotated tool: audited through by policy, taint acknowledged, poisons the fold ==");
     attempt(
         &engine,
         &mut trajectory,

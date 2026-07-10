@@ -6,6 +6,8 @@ description: Get started with Archestra Platform using Docker
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ## Run it locally to try!
 
 We've prepared an all-in-one Docker image to make trying Archestra for the first time simple.

@@ -715,6 +715,64 @@ describe("MessageModel", () => {
     });
   });
 
+  describe("updateTextPartAndDeleteSubsequent", () => {
+    // A stale client can PATCH a part index that no longer exists (e.g. the
+    // message changed under it). That's a client-input problem, so it must
+    // surface as a 400 ApiError rather than an unhandled 500.
+    test("rejects an out-of-range part index with a 400 ApiError", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Edit Part Agent", teams: [] });
+
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Edit Part Test",
+      });
+
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "user",
+        content: {
+          id: "temp-id",
+          role: "user",
+          parts: [{ type: "text", text: "only part" }],
+        },
+      });
+
+      await expect(
+        MessageModel.updateTextPartAndDeleteSubsequent(
+          message.id,
+          5,
+          "new text",
+          false,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: "Invalid part index",
+      });
+    });
+
+    test("rejects an unknown message id with a 404 ApiError", async () => {
+      await expect(
+        MessageModel.updateTextPartAndDeleteSubsequent(
+          "00000000-0000-0000-0000-000000000000",
+          0,
+          "text",
+          false,
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 404,
+        message: "Message not found",
+      });
+    });
+  });
+
   describe("deleteAfterMessage", () => {
     test("deletes messages created after target message", async ({
       makeUser,

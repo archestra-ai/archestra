@@ -39,12 +39,19 @@ pub mod contract;
 pub mod dimension;
 pub mod engine;
 pub mod label;
+pub mod preset;
 pub mod turn;
+
+#[cfg(test)]
+mod test_strategies;
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 /// Identifier of a tool exposed to the agent.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ToolName(String);
 
 impl ToolName {
@@ -65,13 +72,11 @@ impl fmt::Display for ToolName {
 
 pub use authority::{Authority, AuthorityName, Ruling};
 pub use contract::{
-    AttentionRule, AudienceRule, Breach, Requirements, ToolContract, ToolRequest, Unprovable,
-    Verdict, Violation,
+    AttentionRule, AudienceRule, Breach, Requirements, ToolContract, ToolRequest, Unprovable, Verdict, Violation,
 };
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy,
-    UnknownPolicy,
+    BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
 };
 pub use label::{AuditEntry, Grant, Label};
-pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn};
+pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};

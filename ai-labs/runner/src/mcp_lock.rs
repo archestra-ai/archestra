@@ -47,11 +47,7 @@ fn observed_surface(mcps: &[Mcp], registered: &[RegisteredMcp]) -> Surface {
 /// Human-readable per-MCP diff lines, empty when the surfaces match.
 fn drift_lines(expected: &Surface, observed: &Surface) -> Vec<String> {
     let mut lines = Vec::new();
-    let names: BTreeMap<&String, ()> = expected
-        .keys()
-        .chain(observed.keys())
-        .map(|n| (n, ()))
-        .collect();
+    let names: BTreeMap<&String, ()> = expected.keys().chain(observed.keys()).map(|n| (n, ())).collect();
     for name in names.into_keys() {
         match (expected.get(name), observed.get(name)) {
             (Some(_), None) => lines.push(format!("- {name}: MCP missing from this run")),
@@ -97,9 +93,7 @@ pub fn enforce(
         // lock is always a complete, valid snapshot.
         let tmp = path.with_file_name(format!(
             "{}.{}.tmp",
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("mcp.lock"),
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("mcp.lock"),
             Uuid::new_v4().simple()
         ));
         std::fs::write(&tmp, json).map_err(|e| format!("writing {}: {e}", tmp.display()))?;
@@ -121,8 +115,7 @@ pub fn enforce(
         }
         Err(e) => return Err(format!("reading {}: {e}", path.display())),
     };
-    let expected: Surface =
-        serde_json::from_str(&bytes).map_err(|e| format!("parsing {}: {e}", path.display()))?;
+    let expected: Surface = serde_json::from_str(&bytes).map_err(|e| format!("parsing {}: {e}", path.display()))?;
 
     let drift = drift_lines(&expected, &observed);
     if drift.is_empty() {
@@ -159,10 +152,7 @@ mod tests {
 
     #[test]
     fn observed_surface_sorts_and_dedups() {
-        let surface = observed_surface(
-            &[mcp("deepwiki")],
-            &[registered(&["b_tool", "a_tool", "a_tool"])],
-        );
+        let surface = observed_surface(&[mcp("deepwiki")], &[registered(&["b_tool", "a_tool", "a_tool"])]);
         assert_eq!(surface["deepwiki"], vec!["a_tool", "b_tool"]);
     }
 
@@ -188,26 +178,14 @@ mod tests {
         let expected = observed_surface(&[mcp("m1")], &[registered(&["t"])]);
         let observed = observed_surface(&[mcp("m2")], &[registered(&["t"])]);
         let lines = drift_lines(&expected, &observed);
-        assert!(
-            lines.iter().any(|l| l.contains("m1: MCP missing")),
-            "{lines:?}"
-        );
-        assert!(
-            lines.iter().any(|l| l.contains("m2: MCP not in lock")),
-            "{lines:?}"
-        );
+        assert!(lines.iter().any(|l| l.contains("m1: MCP missing")), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("m2: MCP not in lock")), "{lines:?}");
     }
 
     #[test]
     fn missing_lock_is_a_noop() {
         let dir = tempfile::tempdir().unwrap();
-        let out = enforce(
-            dir.path(),
-            "basic",
-            &[mcp("m")],
-            &[registered(&["t"])],
-            false,
-        );
+        let out = enforce(dir.path(), "basic", &[mcp("m")], &[registered(&["t"])], false);
         assert!(out.is_ok(), "{out:?}");
     }
 
@@ -228,14 +206,7 @@ mod tests {
     #[test]
     fn registration_count_mismatch_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
-        let err = enforce(
-            dir.path(),
-            "basic",
-            &[mcp("a"), mcp("b")],
-            &[registered(&["t"])],
-            true,
-        )
-        .unwrap_err();
+        let err = enforce(dir.path(), "basic", &[mcp("a"), mcp("b")], &[registered(&["t"])], true).unwrap_err();
         assert!(err.contains("1 MCP registrations for 2"), "{err}");
     }
 
@@ -243,14 +214,7 @@ mod tests {
     fn malformed_lock_is_an_error_not_a_silent_pass() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("basic.mcp.lock"), "{ not json").unwrap();
-        let err = enforce(
-            dir.path(),
-            "basic",
-            &[mcp("m")],
-            &[registered(&["t"])],
-            false,
-        )
-        .unwrap_err();
+        let err = enforce(dir.path(), "basic", &[mcp("m")], &[registered(&["t"])], false).unwrap_err();
         assert!(err.contains("parsing"), "{err}");
     }
 }

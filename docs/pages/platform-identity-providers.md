@@ -6,6 +6,8 @@ order: 2
 lastUpdated: 2026-05-07
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 This is the INDEX page for identity. It lists what Archestra supports per
 provider, points readers at the relevant sub-page, and keeps short notes for

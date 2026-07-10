@@ -1630,7 +1630,7 @@ export function AgentDialog({
                                   }
                                   placeholder="e.g. Summarize recent changes"
                                   maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
-                                  aria-label="Suggested prompt title"
+                                  aria-label="Button Label"
                                 />
                               </div>
                               <div className="space-y-1">

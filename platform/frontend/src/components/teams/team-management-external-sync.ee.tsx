@@ -190,7 +190,11 @@ export function TeamManagementExternalSyncSection({
                   : "Group Extraction Source"}
               </Label>
               <Input
-                aria-label="Group extraction source"
+                aria-label={
+                  selectedGroupsExpression
+                    ? "Group Extraction Template"
+                    : "Group Extraction Source"
+                }
                 readOnly
                 className="font-mono text-sm"
                 value={

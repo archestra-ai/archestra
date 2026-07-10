@@ -40,7 +40,7 @@ static HEAD_OR_HTML: LazyLock<Regex> =
 // This backstops the DOM loops for tag shapes `tl` drops without treating
 // custom or namespace-like elements as native resource tags.
 static RESOURCE_TAG_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?is)<(script|link)([\x20\t\n\x0c\r/][^>]*|>)")
+    Regex::new(r"(?s)<(?i-u:(script|link))([\x20\t\n\x0c\r/][^>]*|>)")
         .expect("static resource tag fallback regex")
 });
 
@@ -51,7 +51,7 @@ static RESOURCE_TAG_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
 // entity-spliced markers) can still slip it — the render-time CSP stays the
 // real security boundary.
 static RESOURCE_ATTR_FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?is)[\s/"'](src|href)\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#)
+    Regex::new(r#"(?is)[\s/"'](?i-u:(src|href))\s*=\s*(?:["']([^"']*)["']|([^\s>"']+))"#)
         .expect("static resource attribute fallback regex")
 });
 
@@ -137,30 +137,26 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     //    matches this can add (e.g. inside HTML comments) are fail-closed.
     for tag_capture in RESOURCE_TAG_FALLBACK.captures_iter(html) {
         let tag_name = &tag_capture[1];
-        let attr_name = if tag_name.eq_ignore_ascii_case("script") {
-            "src"
-        } else {
-            "href"
-        };
-        let Some(attr_capture) = RESOURCE_ATTR_FALLBACK
-            .captures_iter(&tag_capture[2])
-            .find(|capture| capture[1].eq_ignore_ascii_case(attr_name))
-        else {
+        let Some(attr_capture) = RESOURCE_ATTR_FALLBACK.captures(&tag_capture[2]) else {
             continue;
         };
+        let attr_name = &attr_capture[1];
         let value = attr_capture
             .get(2)
             .or_else(|| attr_capture.get(3))
             .map_or("", |matched| matched.as_str());
         let normalized = normalize_resource_ref(value);
-        if tag_name.eq_ignore_ascii_case("script") {
+        if tag_name.eq_ignore_ascii_case("script") && attr_name.eq_ignore_ascii_case("src") {
             if PLATFORM_SCRIPT_SRC_MARKERS
                 .iter()
                 .any(|marker| normalized.contains(marker))
             {
                 return reject(RejectionKind::PlatformScriptSrc, value.to_string());
             }
-        } else if normalized.contains(PLATFORM_BASE_CSS_MARKER) {
+        } else if tag_name.eq_ignore_ascii_case("link")
+            && attr_name.eq_ignore_ascii_case("href")
+            && normalized.contains(PLATFORM_BASE_CSS_MARKER)
+        {
             return reject(RejectionKind::PlatformBaseCss, value.to_string());
         }
     }
@@ -425,6 +421,8 @@ mod tests {
             r#"<html><head><link-widget href="/_sandbox/archestra-app-base.css"></head></html>"#,
             r#"<html><head><script:widget src="/_sandbox/archestra-app-sdk.js"></script:widget></head></html>"#,
             "<html><head><link\u{00a0}href=\"/_sandbox/archestra-app-base.css\"></head></html>",
+            "<html><head><ſcript src=\"/_sandbox/archestra-app-sdk.js\"></ſcript></head></html>",
+            "<html><head><linK href=\"/_sandbox/archestra-app-base.css\"></head></html>",
         ];
         for html in cases {
             assert_eq!(scan_app_html(html).rejection, None, "{html}");
@@ -432,10 +430,12 @@ mod tests {
     }
 
     #[test]
-    fn fallback_uses_the_first_effective_resource_attribute() {
+    fn fallback_preserves_browser_effective_resource_attributes() {
         let cases = [
             r#"<html><head><script src="safe.js" src="/_sandbox/archestra-app-sdk.js"></script></head></html>"#,
             r#"<html><head><link href="safe.css" href="/_sandbox/archestra-app-base.css"></head></html>"#,
+            r#"<html><head><script href="safe" data-note="src=/_sandbox/archestra-app-sdk.js"></script></head></html>"#,
+            r#"<html><head><link src="safe" data-note="href=/_sandbox/archestra-app-base.css"></head></html>"#,
         ];
         for html in cases {
             assert_eq!(scan_app_html(html).rejection, None, "{html}");

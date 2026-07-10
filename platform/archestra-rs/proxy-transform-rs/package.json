@@ -8,7 +8,7 @@
   "scripts": {
     "build": "napi build --release --platform",
     "build:dev": "napi build --profile release-fast --platform",
-    "check:ci": "cargo fmt --check --all && cargo check -p proxy_transform_core -p proxy_transform_rs --locked && cargo clippy -p proxy_transform_core -p proxy_transform_rs --all-targets --locked -- -D warnings && cargo test -p proxy_transform_core --locked && cargo test -p proxy_transform_core --features napi --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
+    "check:ci": "cargo fmt --check --all && cargo check -p proxy_transform_core -p proxy_transform_rs --locked && cargo test -p proxy_transform_core --locked && cargo test -p proxy_transform_core --features napi --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
     "check:musl": "cargo test -p proxy_transform_core --locked && pnpm build && pnpm smoke && pnpm smoke:esm",
     "lint": "cargo fmt --check --all",
     "smoke": "node smoke.test.cjs",

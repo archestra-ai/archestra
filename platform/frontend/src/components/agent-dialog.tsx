@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
+  InfoIcon,
   Loader2,
   Plus,
   RotateCcw,
@@ -2209,14 +2210,18 @@ export function AgentDialog({
                               )}
                             </div>
                             {showNoToolsModelNotice && (
-                              <Alert variant="info">
-                                <AlertDescription className="text-sm">
+                              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <InfoIcon
+                                  className="mt-0.5 size-3 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                <span>
                                   This model doesn&apos;t support tools, so this{" "}
                                   {agentTypeDisplayName[agentType] || "agent"}
                                   &apos;s tools won&apos;t be used in its chats.
                                   Pick a different model to use tools.
-                                </AlertDescription>
-                              </Alert>
+                                </span>
+                              </p>
                             )}
                           </>
                         )}

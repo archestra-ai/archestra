@@ -2809,8 +2809,7 @@ export function ChatPageContent({
                           share="chat-composer-morph"
                           default="none"
                         >
-                          <div className="w-full max-w-4xl space-y-3">
-                            {initialToolsUnavailable && <NoToolsModelNotice />}
+                          <div className="relative w-full max-w-4xl">
                             <ArchestraPromptInput
                               onSubmit={handleInitialSubmit}
                               status={
@@ -2857,6 +2856,14 @@ export function ChatPageContent({
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}
                             />
+                            {/* Out of flow so the centered composer sits at
+                                the same spot whether or not the notice shows;
+                                below the box, where nothing can overlap. */}
+                            {initialToolsUnavailable && (
+                              <div className="absolute inset-x-0 top-full mt-3">
+                                <NoToolsModelNotice />
+                              </div>
+                            )}
                           </div>
                         </ViewTransition>
                       </div>

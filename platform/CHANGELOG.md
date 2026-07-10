@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.8](https://github.com/archestra-ai/archestra/compare/platform-v1.3.7...platform-v1.3.8) (2026-07-10)
+
+
+### Features
+
+* **chatops:** Telegram messaging channel (beta-gated) ([#6494](https://github.com/archestra-ai/archestra/issues/6494)) ([c7852d3](https://github.com/archestra-ai/archestra/commit/c7852d3d5eb88cf7b22dafc025610bec3f82b253))
+* **chat:** thumbs up/down feedback on assistant messages ([#6491](https://github.com/archestra-ai/archestra/issues/6491)) ([a9da766](https://github.com/archestra-ai/archestra/commit/a9da7667ddeaa60f9826c29abffd8eba22620952))
+* **frontend:** WCAG 2.2 A/AA accessibility pass + icon-button lint guard ([#6495](https://github.com/archestra-ai/archestra/issues/6495)) ([6779273](https://github.com/archestra-ai/archestra/commit/677927391d396497a4f6fb9f01ba33d3535914fe))
+* **llm:** add Microsoft Copilot as an LLM provider ([#6434](https://github.com/archestra-ai/archestra/issues/6434)) ([32a0720](https://github.com/archestra-ai/archestra/commit/32a07205617baf7040b4497af801199883532aa6))
+
+
+### Bug Fixes
+
+* **frontend:** show built-in environment egress as unrestricted, not restricted ([#6493](https://github.com/archestra-ai/archestra/issues/6493)) ([f736655](https://github.com/archestra-ai/archestra/commit/f736655650d7077e0e00c2725019d5456ea3af17))
+* smooth new-chat to conversation transition ([#6490](https://github.com/archestra-ai/archestra/issues/6490)) ([67e89b6](https://github.com/archestra-ai/archestra/commit/67e89b6df9fddcbc742bf9ebd4d9d9d82e6ad033))
+
 ## [1.3.7](https://github.com/archestra-ai/archestra/compare/platform-v1.3.6...platform-v1.3.7) (2026-07-10)
 
 

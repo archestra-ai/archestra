@@ -321,6 +321,12 @@ export enum ChatErrorCode {
    * to link their account rather than showing a generic key error.
    */
   ProviderAuthRequired = "provider_auth_required",
+  /**
+   * The request declared tools but the model can't take them (e.g. Microsoft
+   * 365 Copilot). NOT retryable — the same agent/model pairing re-hits the
+   * same rejection until the tools or the model change.
+   */
+  ToolsUnsupported = "tools_unsupported",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -364,6 +370,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The model ran out of output space while writing a tool call, so it couldn't finish — the tool input was too large for one turn. Break the change into smaller steps and try again.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
+  [ChatErrorCode.ToolsUnsupported]:
+    "This model doesn't support tools, but the request included some. Remove the agent's tools or switch to a model that supports tool calling.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 

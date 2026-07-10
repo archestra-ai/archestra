@@ -24,6 +24,7 @@ import type {
   Gemini,
   GithubCopilot,
   Groq,
+  Microsoft365Copilot,
   Minimax,
   Mistral,
   OpenAi,
@@ -51,6 +52,7 @@ type ProviderMessages = {
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
   deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];
   "github-copilot": GithubCopilot.Types.ChatCompletionsRequest["messages"];
+  "microsoft-365-copilot": Microsoft365Copilot.Types.ChatCompletionsRequest["messages"];
 };
 
 /**

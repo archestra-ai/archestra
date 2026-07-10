@@ -64,6 +64,13 @@ export interface CreateClientOptions {
   defaultHeaders?: Record<string, string>;
   /** Interaction source for observability metrics (e.g. "api", "chat", "knowledge:embedding") */
   source: InteractionSource;
+  /**
+   * Id of the llm_provider_api_keys row the request's credential resolved
+   * from, when known. Adapters whose upstream rotates the stored credential
+   * (Microsoft 365 Copilot's Entra refresh tokens) use it to persist the rotated
+   * secret back to the key; other adapters ignore it.
+   */
+  llmProviderApiKeyId?: string;
 }
 
 /**

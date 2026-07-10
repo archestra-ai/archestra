@@ -14,6 +14,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -268,6 +269,18 @@ const PROVIDER_CONFIG: Record<
     description:
       "No API key to find — just use Sign in with GitHub below to connect your Copilot subscription. Keys are per-user: everyone using a Copilot model signs in with their own GitHub account.",
     // Copilot only exposes chat-completion models through Archestra.
+    supportsEmbeddings: false,
+  },
+  "microsoft-365-copilot": {
+    name: "Microsoft 365 Copilot",
+    icon: "/icons/microsoft-365-copilot.png",
+    placeholder: "Auto-filled after sign in",
+    enabled: true,
+    consoleUrl: "https://m365.cloud.microsoft/chat",
+    consoleName: "Microsoft 365 Copilot",
+    description:
+      "No API key to find — just use Sign in with Microsoft below to connect your work account. Requires a Microsoft 365 Copilot license; keys are per-user, so everyone using Microsoft 365 Copilot signs in with their own account.",
+    // The Graph Chat API is text-only chat; no embeddings.
     supportsEmbeddings: false,
   },
 } as const;
@@ -724,9 +737,13 @@ export function LlmProviderApiKeyForm({
 
             {!isBedrockSigV4 &&
               bedrockAuthMethod !== "iam" &&
-              (provider === "github-copilot" ? (
+              (isPerUserProvider ? (
                 <>
-                  <Label>GitHub Copilot account</Label>
+                  <Label>
+                    {provider === "github-copilot"
+                      ? "GitHub Copilot account"
+                      : "Microsoft 365 Copilot account"}
+                  </Label>
                   {providerConfig.description && (
                     <p className="text-xs text-muted-foreground">
                       {providerConfig.description}
@@ -737,11 +754,14 @@ export function LlmProviderApiKeyForm({
                       <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-500" />
                       <div>
                         <p className="font-medium text-green-600 dark:text-green-400">
-                          GitHub account connected
+                          {provider === "github-copilot"
+                            ? "GitHub account connected"
+                            : "Microsoft account connected"}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          Your Copilot subscription is linked through your
-                          GitHub account.
+                          {provider === "github-copilot"
+                            ? "Your Copilot subscription is linked through your GitHub account."
+                            : "Your Microsoft 365 Copilot license is linked through your Microsoft account."}
                           {isEditMode
                             ? " Sign in again below to refresh the token."
                             : ""}
@@ -749,12 +769,21 @@ export function LlmProviderApiKeyForm({
                       </div>
                     </div>
                   )}
-                  <GithubCopilotSignIn
-                    disabled={isPending}
-                    onToken={(token) =>
-                      form.setValue("apiKey", token, { shouldDirty: true })
-                    }
-                  />
+                  {provider === "github-copilot" ? (
+                    <GithubCopilotSignIn
+                      disabled={isPending}
+                      onToken={(token) =>
+                        form.setValue("apiKey", token, { shouldDirty: true })
+                      }
+                    />
+                  ) : (
+                    <Microsoft365CopilotSignIn
+                      disabled={isPending}
+                      onToken={(token) =>
+                        form.setValue("apiKey", token, { shouldDirty: true })
+                      }
+                    />
+                  )}
                 </>
               ) : (
                 <>

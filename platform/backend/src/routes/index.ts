@@ -38,6 +38,7 @@ export { default as mcpServerInstallationRequestRoutes } from "./mcp-server-inst
 export { default as mcpServerProxyRoutes } from "./mcp-server-proxy";
 export { default as mcpToolCallRoutes } from "./mcp-tool-call";
 export { default as memberRoutes } from "./member";
+export { default as microsoft365CopilotAuthRoutes } from "./microsoft-365-copilot-auth/microsoft-365-copilot-auth.routes";
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
@@ -55,6 +56,7 @@ export { default as deepseekProxyRoutes } from "./proxy/routes/deepseek";
 export { default as geminiProxyRoutes } from "./proxy/routes/gemini";
 export { default as githubCopilotProxyRoutes } from "./proxy/routes/github-copilot";
 export { default as groqProxyRoutes } from "./proxy/routes/groq";
+export { default as microsoft365CopilotProxyRoutes } from "./proxy/routes/microsoft-365-copilot";
 export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";
 export { default as mistralProxyRoutes } from "./proxy/routes/mistral";
 export { default as modelRouterProxyRoutes } from "./proxy/routes/model-router";

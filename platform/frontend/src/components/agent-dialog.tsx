@@ -907,16 +907,27 @@ export function AgentDialog({
     [availableApiKeys, llmApiKeyId],
   );
 
-  // Derive provider from selected model (like prompt input's initialProvider/currentProvider)
-  const currentLlmProvider = useMemo((): SupportedProvider | null => {
+  // The selected model's row: source of the derived provider (like prompt
+  // input's initialProvider/currentProvider) and of the capability gating
+  // for the no-tools notice below.
+  const selectedLlmModelRow = useMemo(() => {
     if (!llmModel) return null;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === llmModel)) {
-        return provider as SupportedProvider;
-      }
+    for (const models of Object.values(modelsByProvider)) {
+      const match = models?.find((m) => m.dbId === llmModel);
+      if (match) return match;
     }
     return null;
   }, [llmModel, modelsByProvider]);
+
+  const currentLlmProvider: SupportedProvider | null =
+    selectedLlmModelRow?.provider ?? null;
+
+  // Pairing a no-tools model (e.g. Microsoft 365 Copilot) with a tooled
+  // agent is allowed — chat omits the tools for that model — but the user
+  // must learn that before the first message, not from a silent no-op.
+  const showNoToolsModelNotice =
+    selectedLlmModelRow?.capabilities?.supportsToolCalling === false &&
+    (accessAllTools || selectedToolsCount > 0);
 
   // Track the provider that was active when auto-selection last ran,
   // so we only auto-select when the provider actually changes (not when the user clears the key).
@@ -2192,6 +2203,16 @@ export function AgentDialog({
                                 />
                               )}
                             </div>
+                            {showNoToolsModelNotice && (
+                              <Alert variant="info">
+                                <AlertDescription className="text-sm">
+                                  This model doesn&apos;t support tools, so this{" "}
+                                  {agentTypeDisplayName[agentType] || "agent"}
+                                  &apos;s tools won&apos;t be used in its chats.
+                                  Pick a different model to use tools.
+                                </AlertDescription>
+                              </Alert>
+                            )}
                           </>
                         )}
                       </div>

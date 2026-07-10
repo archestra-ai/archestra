@@ -2656,9 +2656,6 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
-                            {conversationToolsUnavailable && (
-                              <NoToolsModelNotice />
-                            )}
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               onStop={handleStopStreaming}
@@ -2710,6 +2707,12 @@ export function ChatPageContent({
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}
                             />
+                            {/* Below the box, matching the splash composer, so
+                                the notice doesn't jump when the splash morphs
+                                into the conversation view. */}
+                            {conversationToolsUnavailable && (
+                              <NoToolsModelNotice />
+                            )}
                             <div className="text-center">
                               <Version inline />
                             </div>

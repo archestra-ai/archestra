@@ -23,9 +23,3 @@ export type BillingMode = z.infer<typeof BillingModeSchema>;
 
 /** Fallback used when no per-token billing signal is available. */
 export const DEFAULT_BILLING_MODE: BillingMode = "metered";
-
-/** Human-readable labels for the billing modes (used by settings UI + badges). */
-export const BILLING_MODE_DISPLAY: Record<BillingMode, { label: string }> = {
-  metered: { label: "Metered" },
-  subscription: { label: "Subscription" },
-};

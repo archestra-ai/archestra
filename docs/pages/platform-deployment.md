@@ -499,7 +499,7 @@ A namespace-wide default-deny baseline also selects every MCP pod, so a pod that
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
 - `127.0.0.0/8`, `0.0.0.0/8` - Loopback and unspecified addresses
 - `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
-- `::ffff:0:0/96`, `64:ff9b::/96` - IPv4-mapped and NAT64 (block reaching the IPv4 ranges via IPv6)
+- `64:ff9b::/96` - NAT64 (blocks reaching the IPv4 ranges via IPv6; IPv4-mapped IPv6 is already covered by the IPv4 rules)
 
 **Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 

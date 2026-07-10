@@ -563,13 +563,7 @@ describe("MCP egress floor and default-deny baseline builders", () => {
               {
                 ipBlock: {
                   cidr: "::/0",
-                  except: [
-                    "::1/128",
-                    "fc00::/7",
-                    "fe80::/10",
-                    "::ffff:0:0/96",
-                    "64:ff9b::/96",
-                  ],
+                  except: ["::1/128", "fc00::/7", "fe80::/10", "64:ff9b::/96"],
                 },
               },
             ],

@@ -349,12 +349,15 @@ const FLOOR_DENIED_IPV4_CIDRS = [
   "0.0.0.0/8",
   "168.63.129.16/32",
 ];
-// IPv4-mapped and NAT64 prefixes block reaching the IPv4 ranges above via IPv6.
+// 64:ff9b::/96 (NAT64) blocks reaching the IPv4 ranges above via IPv6. The
+// IPv4-mapped prefix ::ffff:0:0/96 is intentionally omitted: the Kubernetes
+// NetworkPolicy validator rejects it as an ipBlock `except` ("must be a strict
+// subset of ::/0" — Go parses the IPv4-mapped form as IPv4), and it is redundant
+// since the kernel routes IPv4-mapped IPv6 as IPv4, already covered above.
 const FLOOR_DENIED_IPV6_CIDRS = [
   "::1/128",
   "fc00::/7",
   "fe80::/10",
-  "::ffff:0:0/96",
   "64:ff9b::/96",
 ];
 

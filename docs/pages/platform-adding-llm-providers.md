@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-07-10
+lastUpdated: 2026-07-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -172,7 +172,7 @@ The function must:
 1. Iterate through provider-specific message array structure
 2. Find tool result messages (e.g., `role: "tool"` in OpenAI, `tool_result` blocks in Anthropic, `functionResponse` parts in Gemini)
 3. Batch the extracted results through `toonEncodeToolResults()` from `backend/src/routes/proxy/utils/toon-native.ts`. The native addon unwraps, parses, and encodes them — never encode TOON in the adapter
-4. Count tokens with the provider tokenizer; keep the TOON version only when it saves tokens
+4. Get token counts to compare. For cl100k providers, pass a before-source to `toonEncodeToolResults()` and read the counts it returns; Anthropic and Bedrock count with their own tokenizer. Keep the TOON version only when it saves tokens
 5. Return compressed messages and compression statistics
 
 `toonEncodeToolResults()` returns `null` when the native addon is unavailable. The adapter must then keep the original results and report the `addon_unavailable` skip reason.

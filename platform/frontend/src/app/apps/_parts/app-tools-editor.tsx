@@ -73,7 +73,7 @@ export function AppToolsEditor({
   selectedToolIds?: Set<string>;
   onSelectionChange?: (next: Set<string>) => void;
 }) {
-  const { data: app } = useApp(appId);
+  const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
   const { data: canEdit } = useHasPermissions({ app: ["update"] });

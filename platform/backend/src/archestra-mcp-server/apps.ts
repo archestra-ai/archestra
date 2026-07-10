@@ -1194,6 +1194,7 @@ const registry = defineArchestraTools([
         },
         appOwner(app.id),
         tokenAuth,
+        { abortSignal: context.abortSignal },
       );
       return formatPreviewResult(resolvedToolName, result);
     },

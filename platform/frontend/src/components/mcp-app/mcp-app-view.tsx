@@ -156,6 +156,7 @@ export const McpAppRuntime = function McpAppRuntime({
   // host-side connect banner above the iframe (see McpAppAuthBanner).
   const [toolCallAuthError, setToolCallAuthError] =
     useState<McpAppToolCallAuthError | null>(null);
+  const dismissToolCallAuthErrorRef = useRef<() => void>(() => {});
 
   // Stable identity for the bridge-creation effect — re-run when the endpoint or
   // resource changes, never on unrelated re-renders. The effect derives its
@@ -403,20 +404,53 @@ export const McpAppRuntime = function McpAppRuntime({
     // connect banner OUTSIDE the iframe — the app may only print the error
     // text, and the sandbox blocks popups so an in-app link couldn't open.
     // A fresh render (endpoint/resource/reload change) starts with no banner.
+    let nextToolCallGeneration = 0;
+    const latestAuthoritativeGenerationByTool = new Map<string, number>();
+    let activeAuthError: ActiveMcpAppToolCallAuthError | null = null;
+    dismissToolCallAuthErrorRef.current = () => {
+      activeAuthError = null;
+      setToolCallAuthError(null);
+    };
     setToolCallAuthError(null);
     const proxyToolCall = async (params: {
       name: string;
       arguments?: unknown;
     }) => {
+      const generation = ++nextToolCallGeneration;
       const result = await mcpProxy("tools/call", params);
+      if (cancelled) return result;
+
       const authState = resolveMcpAppToolCallAuthState(result);
       if (authState) {
-        const next = { toolName: params.name, authState };
+        const latestGeneration =
+          latestAuthoritativeGenerationByTool.get(params.name) ?? 0;
+        if (generation < latestGeneration) return result;
+
+        latestAuthoritativeGenerationByTool.set(params.name, generation);
+        if (activeAuthError && generation < activeAuthError.generation) {
+          return result;
+        }
+
+        const next = { toolName: params.name, authState, generation };
+        activeAuthError = next;
         // Keep the previous object when the same refusal repeats (an app retry
         // loop) so the banner doesn't re-render on every failed call.
         setToolCallAuthError((prev) =>
           prev && isSameToolCallAuthError(prev, next) ? prev : next,
         );
+      } else if (isSuccessfulMcpToolCallResult(result)) {
+        const latestGeneration =
+          latestAuthoritativeGenerationByTool.get(params.name) ?? 0;
+        if (generation < latestGeneration) return result;
+
+        latestAuthoritativeGenerationByTool.set(params.name, generation);
+        if (
+          activeAuthError?.toolName === params.name &&
+          generation > activeAuthError.generation
+        ) {
+          activeAuthError = null;
+          setToolCallAuthError(null);
+        }
       }
       return result;
     };
@@ -716,7 +750,7 @@ export const McpAppRuntime = function McpAppRuntime({
         <McpAppAuthBanner
           toolName={toolCallAuthError.toolName}
           authState={toolCallAuthError.authState}
-          onDismiss={() => setToolCallAuthError(null)}
+          onDismiss={() => dismissToolCallAuthErrorRef.current()}
         />
       )}
       {loadError && (
@@ -787,6 +821,10 @@ type McpAppToolCallAuthError = {
   authState: ConnectableAuthState;
 };
 
+type ActiveMcpAppToolCallAuthError = McpAppToolCallAuthError & {
+  generation: number;
+};
+
 /** Same auth refusal (tool + kind + action URL): the banner needn't update. */
 function isSameToolCallAuthError(
   a: McpAppToolCallAuthError,
@@ -799,6 +837,14 @@ function isSameToolCallAuthError(
     a.authState.kind === b.authState.kind &&
     urlOf(a.authState) === urlOf(b.authState)
   );
+}
+
+function isSuccessfulMcpToolCallResult(
+  result: unknown,
+): result is McpCallToolResult {
+  if (typeof result !== "object" || result === null) return false;
+  const candidate = result as { content?: unknown; isError?: unknown };
+  return Array.isArray(candidate.content) && candidate.isError !== true;
 }
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";

@@ -701,6 +701,191 @@ test("synthesizes an interrupted tool result for a tool call parked at approval-
   expect(results[0].output.value).toContain("interrupted");
 });
 
+test("does NOT synthesize an interrupted result for an approved tool call (the SDK executes it on resume)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // Resume turn: the model called a tool that needs approval and the user
+  // approved it. The tool has not executed yet — the AI SDK executes an
+  // approved call itself on this request, but only when no tool-result exists
+  // for the call. Fabricating an "interrupted" result here strands the approval
+  // and the tool silently never runs.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "delete the file" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "filesystem__delete",
+          toolCallId: "call-approved",
+          state: "approval-responded",
+          input: { path: "/tmp/x" },
+          approval: { id: "approval-1", approved: true },
+        },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  // Sanity: the approval-response the SDK needs to resume execution is present.
+  const approvalResponses = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .filter((p) => (p as { type?: string }).type === "tool-approval-response");
+  expect(approvalResponses).toHaveLength(1);
+
+  // The exclusion maps approvalId -> toolCallId via the assistant's
+  // tool-approval-request part. convertToModelMessages (not the internal
+  // language-model converter that strips them later) emits it into the
+  // assistant content; if a future SDK stopped doing so the exclusion would
+  // silently break and drop the approved call again.
+  const approvalRequests = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .filter((p) => (p as { type?: string }).type === "tool-approval-request");
+  expect(approvalRequests).toHaveLength(1);
+
+  // The approved tool-call itself must survive — it is what the SDK executes on
+  // resume. A regression that dropped it entirely would also produce no
+  // fabricated result, so assert its presence, not just the absence below.
+  const approvedToolCall = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .find(
+      (p) =>
+        (p as { type?: string }).type === "tool-call" &&
+        (p as { toolCallId?: string }).toolCallId === "call-approved",
+    );
+  expect(approvedToolCall).toBeDefined();
+
+  // The bug: a synthetic error-text tool-result is fabricated for the approved
+  // call, so the SDK's collectToolApprovals skips executing it.
+  const fabricated = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .find(
+      (p) =>
+        (p as { type?: string }).type === "tool-result" &&
+        (p as { toolCallId?: string }).toolCallId === "call-approved",
+    );
+  expect(fabricated).toBeUndefined();
+});
+
+test("does NOT synthesize an interrupted result for a declined tool call (the SDK denies it on resume)", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // The user declined the approval. Like an approved call, the SDK's
+  // approval-resume owns the outcome — it produces the denial itself — so the
+  // call must be left result-less; a synthetic "interrupted" result would
+  // pre-empt that and the model would see the wrong reason.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "delete the file" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "filesystem__delete",
+          toolCallId: "call-declined",
+          state: "approval-responded",
+          input: { path: "/tmp/x" },
+          approval: { id: "approval-1", approved: false },
+        },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const fabricated = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .find(
+      (p) =>
+        (p as { type?: string }).type === "tool-result" &&
+        (p as { toolCallId?: string }).toolCallId === "call-declined",
+    );
+  expect(fabricated).toBeUndefined();
+});
+
+test("excludes every approved call when a turn carries multiple approvals", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // The model requested two tools in one turn and the user approved both. The
+  // exclusion must apply per-call, not just to the first, so neither approved
+  // call is stranded with a synthetic result.
+  const messages: ChatMessage[] = [
+    { role: "user", parts: [{ type: "text", text: "do both" }] },
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "tool_a",
+          toolCallId: "call-a",
+          state: "approval-responded",
+          input: {},
+          approval: { id: "approval-a", approved: true },
+        },
+        {
+          type: "dynamic-tool",
+          toolName: "tool_b",
+          toolCallId: "call-b",
+          state: "approval-responded",
+          input: {},
+          approval: { id: "approval-b", approved: true },
+        },
+      ],
+    },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "anthropic",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  const toolResults = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .filter((p) => (p as { type?: string }).type === "tool-result");
+  expect(toolResults).toHaveLength(0);
+
+  // Both approved calls must survive for the SDK to execute — dropping one would
+  // also leave zero fabricated results, so assert presence explicitly.
+  const survivingToolCallIds = modelMessages
+    .flatMap((m) => (Array.isArray(m.content) ? (m.content as unknown[]) : []))
+    .filter((p) => (p as { type?: string }).type === "tool-call")
+    .map((p) => (p as { toolCallId?: string }).toolCallId);
+  expect(survivingToolCallIds).toEqual(
+    expect.arrayContaining(["call-a", "call-b"]),
+  );
+});
+
 test("merges synthetic results into an existing tool message when only some calls resolved", async ({
   makeAgent,
   makeConversation,

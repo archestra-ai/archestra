@@ -122,6 +122,48 @@ describe("createFastifyInstance", () => {
       captureSpy.mockRestore();
     });
 
+    test("maps transient database connectivity errors to a retryable 503 with root-cause grouping", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+
+      const app = createFastifyInstance();
+      // Mimic the ORM's per-query wrapper around an underlying DNS failure
+      app.get("/test-db-unavailable", async () => {
+        throw new Error('Failed query: select "id" from "agents"', {
+          cause: new Error("getaddrinfo EAI_AGAIN db.example.internal"),
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-db-unavailable",
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({
+        error: {
+          message: "Database temporarily unavailable, please retry",
+          type: "api_service_unavailable_error",
+        },
+      });
+
+      // Captured once, grouped by root cause rather than by query text
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+      expect(captureSpy.mock.calls[0][0].properties).toMatchObject({
+        error_type: "db_unavailable",
+        db_error_code: "EAI_AGAIN",
+        status_code: 503,
+        $exception_fingerprint: "db-transient/EAI_AGAIN",
+      });
+
+      captureSpy.mockRestore();
+    });
+
     test("handles standard Error objects correctly", async () => {
       const app = createFastifyInstance();
 

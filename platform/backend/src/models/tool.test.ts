@@ -120,6 +120,59 @@ describe("ToolModel", () => {
         expect(result).toMatch(pattern);
       }
     });
+
+    test("leaves a name at exactly the 64-char limit unchanged", () => {
+      // server + "__" + tool == 64
+      const server = "a".repeat(61);
+      const result = ToolModel.slugifyName(server, "t");
+      expect(result).toBe(`${server}${MCP_SERVER_TOOL_NAME_SEPARATOR}t`);
+      expect(result).toHaveLength(64);
+    });
+
+    test("trims only the server prefix when the slug exceeds 64 chars", () => {
+      const tool = "list_repositories";
+      const result = ToolModel.slugifyName("a".repeat(80), tool);
+      expect(result).toHaveLength(64);
+      // The full raw tool name (and its separator) is preserved verbatim...
+      expect(result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`)).toBe(
+        true,
+      );
+      // ...so it still round-trips to the raw upstream name.
+      expect(ToolModel.unslugifyName(result)).toBe(tool);
+    });
+
+    test("preserves a raw tool name that itself contains the separator", () => {
+      const tool = "get__user";
+      const result = ToolModel.slugifyName("s".repeat(80), tool);
+      expect(result).toHaveLength(64);
+      expect(result.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}${tool}`)).toBe(
+        true,
+      );
+    });
+
+    test("does not collide two distinct tools on the same long-named server", () => {
+      const server = "a".repeat(80);
+      const a = ToolModel.slugifyName(server, "get__user");
+      const b = ToolModel.slugifyName(server, "user");
+      expect(a).not.toBe(b);
+    });
+
+    test("is deterministic for the same inputs", () => {
+      const a = ToolModel.slugifyName("x".repeat(90), "do_something");
+      const b = ToolModel.slugifyName("x".repeat(90), "do_something");
+      expect(a).toBe(b);
+      expect(a.length).toBeLessThanOrEqual(64);
+    });
+
+    test("hard-caps at 64 and keeps distinct over-long raw names unique", () => {
+      // Raw names longer than the cap can't fit in the slug; a hash suffix keeps
+      // two distinct ones from colliding (the real name lives in raw_name).
+      const a = ToolModel.slugifyName("srv", `${"z".repeat(65)}_alpha`);
+      const b = ToolModel.slugifyName("srv", `${"z".repeat(65)}_beta`);
+      expect(a).toHaveLength(64);
+      expect(b).toHaveLength(64);
+      expect(a).not.toBe(b);
+    });
   });
 
   describe("unslugifyName", () => {
@@ -443,6 +496,7 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({
         toolName: "github_mcp_server__list_issues",
+        rawName: "list_issues",
         mcpServerId: null,
         catalogId: catalogItem.id,
         catalogName: "github-mcp-server",
@@ -2985,6 +3039,76 @@ describe("ToolModel", () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe(created.id);
       expect(result[0].meta).toEqual(updatedMeta);
+    });
+
+    test("refreshes description and parameters on existing tools when they change", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      const [created] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "refresh-tool",
+          description: "old description",
+          parameters: { type: "object", properties: { a: { type: "string" } } },
+          catalogId: catalog.id,
+          rawToolName: "refresh-tool",
+        },
+      ]);
+
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: "refresh-tool",
+          description: "new description",
+          parameters: { type: "object", properties: { b: { type: "number" } } },
+          catalogId: catalog.id,
+          rawToolName: "refresh-tool",
+        },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(created.id);
+      expect(result[0].description).toBe("new description");
+      expect(result[0].parameters).toEqual({
+        type: "object",
+        properties: { b: { type: "number" } },
+      });
+    });
+
+    test("stores raw_name from rawToolName", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+
+      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: ToolModel.slugifyName(catalog.name, "do__thing"),
+          description: null,
+          parameters: {},
+          catalogId: catalog.id,
+          rawToolName: "do__thing",
+        },
+      ]);
+
+      expect(tool.rawName).toBe("do__thing");
+    });
+
+    test("derives raw_name from the slugified name when rawToolName is absent", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const slug = ToolModel.slugifyName(catalog.name, "plain_tool");
+
+      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: slug,
+          description: null,
+          parameters: {},
+          catalogId: catalog.id,
+        },
+      ]);
+
+      expect(tool.rawName).toBe("plain_tool");
     });
 
     test("preserves meta on existing tools when it has not changed", async ({

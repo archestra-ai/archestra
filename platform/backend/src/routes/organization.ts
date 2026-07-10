@@ -10,6 +10,7 @@ import {
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { hasPermission } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -29,6 +30,7 @@ import {
   MemberModel,
   ModelModel,
   OrganizationModel,
+  TeamModel,
   ToolModel,
   UserModel,
   UserTokenModel,
@@ -900,7 +902,8 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetOrganizationMembers,
-        description: "Get all members of the organization",
+        description:
+          "List organization members visible to the caller. Callers with the member:read permission (admins and equivalent custom roles) receive the full organization roster; other authenticated users receive only the members they share a team with.",
         tags: ["Organization"],
         response: constructResponseSchema(
           z.array(
@@ -913,9 +916,36 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId }, reply) => {
-      const members = await MemberModel.findAllByOrganization(organizationId);
-      return reply.send(members);
+    async ({ organizationId, user, headers, serviceAccount }, reply) => {
+      // member:read (admins, custom roles) sees the whole roster; everyone else
+      // sees only the users they share a team with, so a member can pick a chat
+      // share recipient without the org directory being exposed to (or scanned
+      // for) them. Forward serviceAccount + the resolved userContext exactly as
+      // the auth middleware does, so service-account callers are checked against
+      // their own permissions (not the synthetic user) and user callers against
+      // request.organizationId rather than the session cookie.
+      const { success: canSeeAllMembers } = await hasPermission(
+        { member: ["read"] },
+        headers,
+        serviceAccount,
+        { userId: user.id, organizationId },
+      );
+      const members = canSeeAllMembers
+        ? await MemberModel.findAllByOrganization(organizationId)
+        : await MemberModel.findByUserIdsInOrganization({
+            organizationId,
+            userIds: await TeamModel.getTeammateUserIdsInOrganization({
+              userId: user.id,
+              organizationId,
+            }),
+          });
+      // These model queries also select role/systemRole for admin surfaces that
+      // reuse them; this endpoint exposes identity only. Project explicitly so
+      // the privileged fields never depend on response-schema serialization to
+      // be dropped — a member without member:read must not learn teammates' roles.
+      return reply.send(
+        members.map(({ id, name, email }) => ({ id, name, email })),
+      );
     },
   );
 

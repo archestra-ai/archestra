@@ -107,7 +107,7 @@ function CompactCircle({
   catalogId,
 }: {
   toolName: string;
-  state: "running" | "completed" | "error";
+  state: "running" | "completed" | "error" | "denied";
   isExpanded: boolean;
   isExpandable?: boolean;
   onClick: () => void;
@@ -143,6 +143,7 @@ function CompactCircle({
                 state === "completed" && "bg-green-500",
                 state === "running" && "bg-blue-500 animate-pulse",
                 state === "error" && "bg-destructive",
+                state === "denied" && "bg-orange-500",
               )}
             />
           </button>
@@ -153,7 +154,9 @@ function CompactCircle({
             ? " (running)"
             : state === "error"
               ? " (error)"
-              : ""}
+              : state === "denied"
+                ? " (denied)"
+                : ""}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -177,7 +180,7 @@ function ToolCallSkillPill({
 }: {
   toolName: string;
   skillName: string | null;
-  state: "running" | "completed" | "error";
+  state: "running" | "completed" | "error" | "denied";
 }) {
   const tooltipLabel = (() => {
     const base = skillName ? `Skill: ${skillName}` : "Loading skill";

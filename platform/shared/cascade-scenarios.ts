@@ -182,6 +182,29 @@ export const setLabels =
     labels,
   });
 
+export const setScope =
+  (scope: CatalogShapeFixture["scope"]) =>
+  (base: CatalogShapeFixture): CatalogShapeFixture => ({
+    ...base,
+    scope,
+  });
+
+export const setTeams =
+  (teams: NonNullable<CatalogShapeFixture["teams"]>) =>
+  (base: CatalogShapeFixture): CatalogShapeFixture => ({
+    ...base,
+    teams,
+  });
+
+export const setTeamLevel =
+  (teamId: string, level: "use" | "write") =>
+  (base: CatalogShapeFixture): CatalogShapeFixture => ({
+    ...base,
+    teams: (base.teams ?? []).map((team) =>
+      team.id === teamId ? { ...team, level } : team,
+    ),
+  });
+
 type UserConfigField = {
   type?: string;
   title?: string;
@@ -256,6 +279,40 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     sharedPredicate: "metadata-only-diff",
     rationale:
       "`labels` is in METADATA_ONLY_CATALOG_FIELDS. Labels live in a separate junction table (`mcp_catalog_labels`) and never get propagated to the pod spec, env vars, headers, image, command, or any other runtime concern. Pure organizational metadata — install keeps running on its current config.",
+  },
+  {
+    id: "team-level-only-change",
+    shape: "teamScopedLocal",
+    userAction: "Admin downgrades a team's access level from write to use",
+    edit: setTeamLevel("team-platform", "use"),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "A per-team access level governs who may discover, install, and modify the catalog item. It reaches no pod spec, env var, header, image, or command, so running installs are untouched. Not in METADATA_ONLY_CATALOG_FIELDS (hence a non-metadata diff), but excluded from the runtime projection — the forward-compatible gate skips it. Restarting pods when an admin adjusts sharing would be a severe over-reaction.",
+  },
+  {
+    id: "teams-only-change",
+    shape: "teamScopedLocal",
+    userAction: "Admin shares a team-scoped catalog with an additional team",
+    edit: setTeams([
+      { id: "team-platform", name: "platform", level: "write" },
+      { id: "team-data", name: "data", level: "use" },
+      { id: "team-ml", name: "ml", level: "use" },
+    ]),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Team assignments live in the `mcp_catalog_team` junction table and never propagate to the pod spec. Adding an audience changes who can reach the item, not how any install runs.",
+  },
+  {
+    id: "scope-change-team-to-org",
+    shape: "teamScopedLocal",
+    userAction: "Admin widens a team-scoped catalog to the whole organization",
+    edit: setScope("org"),
+    expected: "skip",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "`scope` decides who the item is visible and installable to. It is excluded from the runtime projection, so widening the audience must not restart the pods of existing installs.",
   },
   {
     id: "desc-only-docker-only-streamable-http",

@@ -429,11 +429,45 @@ jobs:
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        run: cargo install cargo-deny --version 0.20.2 --locked
 
       - name: Rust dependency policy
         working-directory: ./platform/archestra-rs
-        run: cargo deny check --config deny.toml advisories bans licenses sources
+        run: cargo deny --config deny.toml check advisories bans licenses sources
+
+  ai-labs-rust-checks:
+    name: AI Labs Rust Checks
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./ai-labs
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup Rust
+        run: rustup show
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Rust check
+        run: cargo check --workspace --locked
+
+      - name: Rust lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --workspace --locked
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
   # slices the file list deterministically (SHA1 of each path), so the four

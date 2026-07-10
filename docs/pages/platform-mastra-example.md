@@ -5,6 +5,8 @@ order: 3
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ## Overview
 
 Mastra is a TypeScript framework that helps developers build AI agents and workflows quickly. Unlike visual workflow builders, Mastra requires you to write code. You can run Mastra apps on your computer or deploy it to the cloud.

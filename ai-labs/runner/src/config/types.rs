@@ -146,10 +146,7 @@ mod tests {
 
     #[test]
     fn tool_exposure_mode_default_preserves_current_behavior() {
-        assert_eq!(
-            ToolExposureMode::default(),
-            ToolExposureMode::SearchAndRunOnly
-        );
+        assert_eq!(ToolExposureMode::default(), ToolExposureMode::SearchAndRunOnly);
     }
 
     #[test]

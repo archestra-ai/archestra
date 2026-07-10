@@ -22,7 +22,7 @@ export async function expectAuthenticated(
   await expect(page).not.toHaveURL(/\/auth\/sign-in/, { timeout });
 }
 
-export async function expandSidebar(page: Page): Promise<void> {
+async function expandSidebar(page: Page): Promise<void> {
   const sidebar = page.locator("[data-slot=sidebar]");
   if (!(await sidebar.isVisible({ timeout: 2_000 }).catch(() => false))) {
     return;

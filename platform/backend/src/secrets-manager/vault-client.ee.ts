@@ -5,10 +5,11 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { SignatureV4 } from "@smithy/signature-v4";
 import Vault from "node-vault";
 import logger from "@/logging";
-import type {
-  VaultConfig,
-  VaultFolderConnectivityResult,
-  VaultSecretListItem,
+import {
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+  type VaultConfig,
+  type VaultFolderConnectivityResult,
+  type VaultSecretListItem,
 } from "@/types/secrets-manager";
 import { extractVaultErrorMessage } from "./utils";
 
@@ -245,7 +246,11 @@ export class VaultClient {
       this.initialized = true;
     } catch (error) {
       logger.error({ error }, "VaultClient: initialization failed");
-      throw new ApiError(500, extractVaultErrorMessage(error));
+      throw new ApiError(
+        503,
+        extractVaultErrorMessage(error),
+        SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+      );
     }
   }
 
@@ -263,7 +268,11 @@ export class VaultClient {
       throw error;
     }
 
-    throw new ApiError(500, extractVaultErrorMessage(error));
+    throw new ApiError(
+      503,
+      extractVaultErrorMessage(error),
+      SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+    );
   }
 
   /**
@@ -443,7 +452,11 @@ export class VaultClient {
         { error, tokenPath, role: this.config.k8sRole },
         "VaultClient: Kubernetes authentication failed",
       );
-      throw new ApiError(500, extractVaultErrorMessage(error));
+      throw new ApiError(
+        503,
+        extractVaultErrorMessage(error),
+        SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+      );
     }
   }
 

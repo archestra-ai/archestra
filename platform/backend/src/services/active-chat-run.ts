@@ -287,30 +287,30 @@ export class ActiveChatRunService {
 
         try {
           while (!isCancelled) {
-            const events = await ActiveChatRunModel.readEventsAfter({
+            // Status and events come from one statement snapshot: observing a
+            // terminal status guarantees every event is already in `events`
+            // (see readStatusAndEventsAfter), so closing right after draining
+            // them can never lose a tail chunk.
+            const snapshot = await ActiveChatRunModel.readStatusAndEventsAfter({
               runId,
               seq: lastSeq,
             });
 
-            for (const event of events) {
+            // Run row gone: its conversation was hard-deleted and cascaded,
+            // taking all events with it. Nothing left to replay.
+            if (!snapshot) {
+              controller.close();
+              return;
+            }
+
+            for (const event of snapshot.events) {
               for (const payload of event.payloads) {
                 controller.enqueue(payload);
               }
               lastSeq = event.seq;
             }
 
-            const run = await ActiveChatRunModel.findById(runId);
-            if (!run || run.status !== "running") {
-              const finalEvents = await ActiveChatRunModel.readEventsAfter({
-                runId,
-                seq: lastSeq,
-              });
-              for (const event of finalEvents) {
-                for (const payload of event.payloads) {
-                  controller.enqueue(payload);
-                }
-                lastSeq = event.seq;
-              }
+            if (snapshot.status !== "running") {
               controller.close();
               return;
             }

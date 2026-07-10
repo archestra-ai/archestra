@@ -36,6 +36,24 @@ updates:
     cooldown:
       default-days: 7
 
+  - package-ecosystem: cargo
+    directory: ai-labs
+    schedule:
+      interval: weekly
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+
   - package-ecosystem: github-actions
     directory: /
     groups:

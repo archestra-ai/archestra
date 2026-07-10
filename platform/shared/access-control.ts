@@ -694,6 +694,12 @@ export const requiredEndpointPermissionsMap: Partial<
     // more. Requiring :update here locked owners out of reinstalling their own.
     mcpServerInstallation: ["create"],
   },
+  [RouteId.ReloadMcpServerTools]: {
+    // Reloading tools is a strict subset of reinstalling (tool re-sync with no
+    // redeploy), so it is gated identically; the handler's
+    // assertScopedLifecycleAuthorization does the same finer-grained scope check.
+    mcpServerInstallation: ["create"],
+  },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
   },
@@ -1183,7 +1189,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetFeedbackPopupActivation]: { organizationSettings: ["update"] }, // Feedback pop-up activation signal - admins only (the pop-up is admin-only)
   [RouteId.GetMemberSignupStatus]: {}, // Member signup status - available to all authenticated users
   [RouteId.GetMembers]: { member: ["read"] }, // List organization members (paginated)
-  [RouteId.GetOrganizationMembers]: { member: ["read"] }, // List organization members
+  // Visibility is scoped in the handler: member:read sees the full roster,
+  // everyone else only the users they share a team with (the chat share
+  // recipient picker), so the route itself is open to any authenticated user.
+  [RouteId.GetOrganizationMembers]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)

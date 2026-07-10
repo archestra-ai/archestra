@@ -81,6 +81,13 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import {
+  type AppliedEditSpan,
+  applyStrReplaceEdits,
+  buildAppliedEditExcerpts,
+  formatSkippedEditsNote,
+  type SkippedEdit,
+} from "./str-replace-edits";
 import type { ArchestraContext } from "./types";
 
 const toolsField = z
@@ -110,6 +117,22 @@ const ReadAppSchema = z.strictObject({
     .positive()
     .optional()
     .describe("Specific version to read; defaults to the current head."),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Start of the read window as a 0-based character offset (a JavaScript string index / UTF-16 code unit) into the stored HTML — character-based, not line-based, since minified HTML can be one enormous line. Defaults to 0. An offset past the end returns an empty window, not an error. A window never splits a character in half: its edges shift by one unit when they would.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Maximum number of characters to return, starting at offset. Omitted reads to the end of the document; 0 returns no content, just the size metadata.",
+    ),
 });
 
 const EditAppSchema = z.strictObject({
@@ -216,10 +239,25 @@ const ReadAppOutputSchema = z.object({
   name: z.string(),
   scope: AppScopeSchema,
   version: z.number(),
-  byteSize: z.number(),
+  byteSize: z
+    .number()
+    .describe("UTF-8 byte size of the full stored HTML (never the window's)."),
+  totalChars: z
+    .number()
+    .describe("Total character length of the full stored HTML."),
+  offset: z
+    .number()
+    .describe(
+      "Effective 0-based character offset of the returned window (0 for a full read; clamped to the end when past it).",
+    ),
+  hasMore: z
+    .boolean()
+    .describe("True when the document continues past the returned window."),
   html: z
     .string()
-    .describe("The stored HTML, pre-injection (no SDK/base CSS)."),
+    .describe(
+      "The stored HTML, pre-injection (no SDK/base CSS) — the requested character window when offset/limit was passed.",
+    ),
 });
 
 const ValidateAppSchema = z.strictObject({
@@ -474,7 +512,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -668,7 +706,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_APP_SHORT_NAME,
     title: "Read App",
     description:
-      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. A successful edit_app already confirms its changes with context excerpts, so re-reading right after one is wasted work — read again only when the next edit needs source outside those excerpts. Defaults to the head version; pass version to read an older one. (render_app displays the app to a viewer; this returns the raw saved source.)",
+      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. A successful edit_app already confirms its changes with context excerpts, so re-reading right after one is wasted work — read again only when the next edit needs source outside those excerpts. Defaults to the head version; pass version to read an older one. For a large document, pass offset and/or limit (character-based, 0-based offset) to read a window of the source instead of the whole thing; the result reports totalChars and hasMore so you can page through. (render_app displays the app to a viewer; this returns the raw saved source.)",
     schema: ReadAppSchema,
     outputSchema: ReadAppOutputSchema,
     async handler({ args, context }) {
@@ -683,6 +721,38 @@ const registry = defineArchestraTools([
         return errorResult(`App ${args.appId} has no version ${version}.`);
       }
       const byteSize = Buffer.byteLength(row.html, "utf8");
+      const totalChars = row.html.length;
+      // Character-based window (not line-based: minified HTML can be a single
+      // enormous line). Out-of-range values clamp instead of erroring. Indices
+      // are UTF-16 code units; edges snap so a surrogate pair is never split —
+      // a start on a pair's second half advances by one, an end that would
+      // strand a pair's first half extends by one — keeping `offset +
+      // html.length` a valid next offset for lossless paging.
+      const windowed = args.offset !== undefined || args.limit !== undefined;
+      let offset = Math.min(args.offset ?? 0, totalChars);
+      if (windowed && isInsideSurrogatePair(row.html, offset)) {
+        offset += 1;
+      }
+      let end =
+        args.limit !== undefined
+          ? Math.min(offset + args.limit, totalChars)
+          : totalChars;
+      if (windowed && end > offset && isInsideSurrogatePair(row.html, end)) {
+        end += 1;
+      }
+      const html = windowed ? row.html.slice(offset, end) : row.html;
+      const hasMore = offset + html.length < totalChars;
+      // The continuation hint only makes sense for a progressing window; a
+      // limit-0 probe would otherwise be told to continue from where it is.
+      const continuation =
+        hasMore && html.length > 0
+          ? ` (more follows — continue from offset ${offset + html.length})`
+          : hasMore
+            ? " (pass a limit to read content)"
+            : "";
+      const windowNote = windowed
+        ? `, window ${offset}–${offset + html.length} of ${totalChars} characters${continuation}`
+        : "";
       return structuredSuccessResult(
         {
           id: app.id,
@@ -690,9 +760,12 @@ const registry = defineArchestraTools([
           scope: app.scope,
           version: row.version,
           byteSize,
-          html: row.html,
+          totalChars,
+          offset,
+          hasMore,
+          html,
         },
-        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}`,
+        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes${windowNote}:\n\n${html}`,
       );
     },
   }),
@@ -744,13 +817,18 @@ const registry = defineArchestraTools([
       let warnings: string[];
       let editedHtml: string;
       let editSpans: AppliedEditSpan[] = [];
+      let skippedEdits: SkippedEdit[] = [];
       try {
         if (mode.kind === "replacement") {
           editedHtml = mode.html;
         } else {
-          const applied = applyStrReplaceEdits(base.html, mode.edits);
-          editedHtml = applied.html;
+          const applied = applyStrReplaceEdits(base.html, mode.edits, {
+            sourceNoun: "HTML",
+            rereadHint: "Call read_app for the current source.",
+          });
+          editedHtml = applied.content;
           editSpans = applied.spans;
+          skippedEdits = applied.skipped;
         }
         // A *partial* edit that strips the document root the base still had
         // (e.g. deletes part of the doc) would otherwise save with only a soft
@@ -800,24 +878,35 @@ const registry = defineArchestraTools([
         return errorResult(`Failed to edit app ${args.appId}.`);
       }
 
+      // Skipped no-op sub-edits don't count as applied; an all-skipped batch
+      // must not claim it applied anything.
+      const appliedEditCount =
+        mode.kind === "edits" ? mode.edits.length - skippedEdits.length : 0;
       const editLabel =
         mode.kind === "replacement"
           ? "a full-document replacement"
-          : `${mode.edits.length} edit${mode.edits.length === 1 ? "" : "s"}`;
+          : `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`;
       // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
       // equal); when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
       const forked = updated.latestVersion !== args.baseVersion;
       const summary = forked
         ? `Applied ${editLabel} to app "${updated.name}" (now at version ${updated.latestVersion}).`
-        : `Applied ${editLabel} to app "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
+        : mode.kind === "edits" && appliedEditCount === 0
+          ? `No edits were applied to app "${updated.name}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
+          : `Applied ${editLabel} to app "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
       const warningsNote = formatWarningsNote(warnings);
+      const skippedNote = formatSkippedEditsNote(skippedEdits);
       // The context block lets the model verify str_replace edits landed
       // without a follow-up read_app. A replacement carries no news (the model
       // just wrote the document), and an unforked result saved nothing new.
       const excerptsNote =
         mode.kind === "edits" && forked
           ? buildAppliedEditExcerpts(editedHtml, editSpans)
+          : "";
+      const replacementNote =
+        mode.kind === "replacement" && forked
+          ? "\nThe saved document is exactly the HTML just sent — no need to call read_app to verify it."
           : "";
       return structuredSuccessResult(
         {
@@ -828,7 +917,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary} Rendered inline when viewed in chat; standalone page: ${appRunUrl(updated.id)}${warningsNote}${excerptsNote}`,
+        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -1295,247 +1384,21 @@ async function safeAppName(name: string): Promise<string> {
   return (await escapeAngleBrackets(name)).replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Next-edit rider on scaffold_app/edit_app success texts: names the head
+ * version the next edit_app call must pass as baseVersion, so the model never
+ * has to guess (or re-read) it.
+ */
+function nextEditBaseVersionHint(latestVersion: number): string {
+  return ` Use baseVersion=${latestVersion} for the next edit_app call.`;
+}
+
 // The soft save-time validation-warnings note appended to a mutation's result
 // text (empty when there are none).
 function formatWarningsNote(warnings: string[]): string {
   return warnings.length > 0
     ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
     : "";
-}
-
-/**
- * Apply ordered str_replace edits to a document. Each `old_str` must occur
- * exactly once in the running text; 0 or >1 matches (or `old_str === new_str`)
- * throws `ApiError(400)` naming the offending edit, so the whole call fails
- * before any version is created.
- */
-type AppliedEditSpan = { start: number; end: number; laterModified: boolean };
-
-function applyStrReplaceEdits(
-  html: string,
-  edits: Array<{ old_str: string; new_str: string }>,
-): { html: string; spans: AppliedEditSpan[] } {
-  let working = html;
-  // One span per applied edit, kept in FINAL-document coordinates: each later
-  // replacement shifts the earlier spans it lands before, and a replacement
-  // that overlaps an earlier span re-points that span at its own region (marked
-  // laterModified) — so an excerpt built from a span never shows text a later
-  // edit removed.
-  const spans: AppliedEditSpan[] = [];
-  const applyAt = (params: {
-    start: number;
-    oldLength: number;
-    newStr: string;
-  }) => {
-    const { start, oldLength, newStr } = params;
-    working =
-      working.slice(0, start) + newStr + working.slice(start + oldLength);
-    const end = start + newStr.length;
-    const delta = newStr.length - oldLength;
-    for (const span of spans) {
-      if (span.end <= start) continue;
-      if (span.start >= start + oldLength) {
-        span.start += delta;
-        span.end += delta;
-      } else {
-        span.laterModified = true;
-        span.start = start;
-        span.end = end;
-      }
-    }
-    spans.push({ start, end, laterModified: false });
-  };
-  edits.forEach((edit, index) => {
-    const label = `edit ${index + 1}`;
-    if (edit.old_str === edit.new_str) {
-      throw new ApiError(
-        400,
-        `${label}: old_str and new_str are identical (no-op).`,
-      );
-    }
-    const count = countOccurrences(working, edit.old_str);
-    if (count === 0) {
-      // Formatting drift (a re-indented or re-wrapped copy) is the common cause
-      // of a 0-match. If the text still matches uniquely once whitespace runs
-      // are collapsed, apply the edit at that exact span rather than failing —
-      // the model's intent is unambiguous. A genuine content mismatch (a typo
-      // in a non-whitespace character) stays a hard error below.
-      const span = findWhitespaceInsensitiveSpan(working, edit.old_str);
-      if (span) {
-        applyAt({
-          start: span.start,
-          oldLength: span.end - span.start,
-          newStr: edit.new_str,
-        });
-        return;
-      }
-      const hint =
-        describeNearMiss(working, edit.old_str) ??
-        "Call read_app for the current source.";
-      throw new ApiError(
-        400,
-        `${label}: old_str not found in the current HTML (0 matches). ${hint}`,
-      );
-    }
-    if (count > 1) {
-      throw new ApiError(
-        400,
-        `${label}: old_str matched ${count} times; it must match exactly once. Add surrounding context to make it unique.`,
-      );
-    }
-    applyAt({
-      start: working.indexOf(edit.old_str),
-      oldLength: edit.old_str.length,
-      newStr: edit.new_str,
-    });
-  });
-  return { html: working, spans };
-}
-
-// Bounds for the applied-edit context block on edit_app success: enough to
-// verify a change landed without re-reading the app, small enough to never
-// rival the document itself.
-const EDIT_EXCERPT_CONTEXT_CHARS = 150;
-const EDIT_EXCERPT_SPAN_MAX_CHARS = 600;
-const EDIT_EXCERPT_MAX_EDITS = 5;
-
-/**
- * Per-edit windows into the final saved document, so the model can verify its
- * edits without a follow-up read_app. Spans arrive in final-document
- * coordinates from applyStrReplaceEdits; overlong inserted text is elided in
- * the middle and window truncation is marked with `…`.
- */
-function buildAppliedEditExcerpts(
-  html: string,
-  spans: AppliedEditSpan[],
-): string {
-  const shown = spans.slice(0, EDIT_EXCERPT_MAX_EDITS);
-  const blocks = shown.map((span, index) => {
-    const beforeStart = Math.max(0, span.start - EDIT_EXCERPT_CONTEXT_CHARS);
-    const afterEnd = Math.min(
-      html.length,
-      span.end + EDIT_EXCERPT_CONTEXT_CHARS,
-    );
-    const before = `${beforeStart > 0 ? "…" : ""}${html.slice(beforeStart, span.start)}`;
-    const after = `${html.slice(span.end, afterEnd)}${afterEnd < html.length ? "…" : ""}`;
-    const body =
-      span.start === span.end
-        ? "⟦deleted⟧"
-        : capHint(
-            html.slice(span.start, span.end),
-            EDIT_EXCERPT_SPAN_MAX_CHARS,
-          );
-    const notes = [
-      ...(span.start === span.end ? ["deletion point"] : []),
-      ...(span.laterModified ? ["region modified by a later edit"] : []),
-    ];
-    const label = `edit ${index + 1}${notes.length > 0 ? ` (${notes.join("; ")})` : ""}`;
-    return `${label}:\n${before}${body}${after}`;
-  });
-  const omitted = spans.length - shown.length;
-  const omittedNote =
-    omitted > 0
-      ? `\n(+${omitted} more edit${omitted === 1 ? "" : "s"} applied, not shown)`
-      : "";
-  return `\nApplied-edit context (from the saved document — no need to re-read to verify):\n${blocks.join("\n")}${omittedNote}`;
-}
-
-/** Cap a span shown in an error hint, eliding the middle of an overlong one. */
-function capHint(span: string, max = 1500): string {
-  if (span.length <= max) return span;
-  const half = Math.floor((max - 20) / 2);
-  return `${span.slice(0, half)}\n…[elided]…\n${span.slice(span.length - half)}`;
-}
-
-/**
- * Collapse each run of whitespace in `s` to a single space, returning the
- * normalized text plus a map from each normalized code-unit index to the
- * original index it began at (a collapsed space maps to its run's first char).
- * Operates on JS code units so the map composes with the `indexOf`/`slice` the
- * edit path already uses.
- */
-function normalizeWhitespace(s: string): { text: string; map: number[] } {
-  let text = "";
-  const map: number[] = [];
-  let i = 0;
-  while (i < s.length) {
-    if (/\s/.test(s[i])) {
-      const runStart = i;
-      while (i < s.length && /\s/.test(s[i])) i++;
-      text += " ";
-      map.push(runStart);
-    } else {
-      text += s[i];
-      map.push(i);
-      i++;
-    }
-  }
-  return { text, map };
-}
-
-/**
- * Locate `oldStr` in `haystack` ignoring differences in whitespace runs, so an
- * edit whose old_str drifted only in indentation or line-wrapping still applies.
- * Returns the exact original-byte span (the replacement then preserves the real
- * surrounding text) only when the whitespace-normalized needle matches exactly
- * once; returns null when it is absent or ambiguous, leaving the strict 0/>1
- * match errors to fire.
- */
-function findWhitespaceInsensitiveSpan(
-  haystack: string,
-  oldStr: string,
-): { start: number; end: number } | null {
-  const needle = oldStr.replace(/\s+/g, " ").trim();
-  if (needle.length === 0) return null;
-  const norm = normalizeWhitespace(haystack);
-  const first = norm.text.indexOf(needle);
-  if (first === -1) return null;
-  if (norm.text.indexOf(needle, first + needle.length) !== -1) return null;
-  const start = norm.map[first];
-  const afterIdx = first + needle.length;
-  const end = afterIdx < norm.map.length ? norm.map[afterIdx] : haystack.length;
-  return { start, end };
-}
-
-/**
- * Best-effort, advisory recovery hint when an `old_str` matched 0 times and was
- * not whitespace-recoverable either (a genuine content mismatch, not just
- * reformatting): anchor the model at the nearest ground-truth line so it copies
- * the real current text instead of replaying a corrupted literal. Never changes
- * match semantics — returns a hint sentence or null.
- */
-function describeNearMiss(haystack: string, oldStr: string): string | null {
-  // Anchor window — the longest line of old_str that occurs exactly once in
-  // the current HTML anchors a ±3-line window of ground truth, so a one-char
-  // drift elsewhere in the block is visible against the real source.
-  const anchors = oldStr
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length >= 8)
-    .sort((a, b) => b.length - a.length);
-  for (const anchor of anchors) {
-    const first = haystack.indexOf(anchor);
-    if (first === -1) continue;
-    if (haystack.indexOf(anchor, first + anchor.length) !== -1) continue;
-    const window = lineWindowAround(haystack, first, 3);
-    return `The closest unique anchor from your old_str appears here in the current HTML (±3 lines); re-copy the exact current text:\n${capHint(window)}`;
-  }
-  return null;
-}
-
-/** The text of the line containing `at` in `s`, plus `radius` lines on each side. */
-function lineWindowAround(s: string, at: number, radius: number): string {
-  let start = s.lastIndexOf("\n", at - 1) + 1;
-  for (let k = 0; k < radius && start > 0; k++) {
-    start = s.lastIndexOf("\n", start - 2) + 1;
-  }
-  let end = s.indexOf("\n", at);
-  if (end === -1) end = s.length;
-  for (let k = 0; k < radius && end < s.length; k++) {
-    const next = s.indexOf("\n", end + 1);
-    end = next === -1 ? s.length : next;
-  }
-  return s.slice(start, end);
 }
 
 /**
@@ -1819,6 +1682,16 @@ function textPartsOf(result: CommonToolResult): string[] {
 }
 
 /** Truncate to a UTF-8 byte budget without splitting a multi-byte character. */
+// True when `index` falls inside a surrogate pair — the unit at `index` is a
+// low surrogate preceded by a high surrogate — so a read-window edge there
+// would split a character into an unpaired half.
+function isInsideSurrogatePair(html: string, index: number): boolean {
+  if (index <= 0 || index >= html.length) return false;
+  const unit = html.charCodeAt(index);
+  const prev = html.charCodeAt(index - 1);
+  return unit >= 0xdc00 && unit <= 0xdfff && prev >= 0xd800 && prev <= 0xdbff;
+}
+
 function truncateUtf8(
   text: string,
   maxBytes: number,
@@ -1829,20 +1702,6 @@ function truncateUtf8(
   // back off out of any continuation-byte run so we cut on a char boundary
   while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
   return { text: buf.subarray(0, end).toString("utf8"), truncated: true };
-}
-
-// Count every start position where `needle` matches, including overlapping ones
-// (e.g. "\n\n" twice in "\n\n\n"). The edit path uses this to enforce a unique
-// match, so a self-overlapping old_str must read as ambiguous — not collapse to
-// one and silently replace the first occurrence. Advance by one position.
-function countOccurrences(haystack: string, needle: string): number {
-  let count = 0;
-  let pos = haystack.indexOf(needle);
-  while (pos !== -1) {
-    count++;
-    pos = haystack.indexOf(needle, pos + 1);
-  }
-  return count;
 }
 
 type ResolvedTools = Array<{ id: string; name: string }>;
@@ -1899,7 +1758,7 @@ export function scaffoldPartialToolFailureResult(
       latestVersion: app.latestVersion,
       status: "partial" as const,
     },
-    `Created app "${app.name}" (${app.id}), but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+    `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
 }
 

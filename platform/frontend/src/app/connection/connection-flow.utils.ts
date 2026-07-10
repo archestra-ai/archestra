@@ -50,6 +50,22 @@ export function toMcpServerSlug(appName: string): string {
 }
 
 /**
+ * Gateway name → the server name the setup registers in the client (e.g. the
+ * `claude mcp add` arg). Mirrors the backend's toServerName so the UI can
+ * reference the exact name the user will see inside their client; falls back
+ * to the app-name slug for unnamed gateways.
+ */
+export function deriveMcpServerName(params: {
+  gatewayName: string;
+  appName: string;
+}): string {
+  const trimmed = params.gatewayName.trim();
+  return trimmed
+    ? trimmed.toLowerCase().replace(/\s+/g, "_")
+    : toMcpServerSlug(params.appName);
+}
+
+/**
  * Narrow `organization.connectionShownProviders` (typed as `string[] | null`
  * by the generated API client) to `SupportedProvider[] | null`, dropping any
  * provider IDs the frontend doesn't know about.
@@ -77,9 +93,10 @@ export function getShownProviders(
 /**
  * Decide which client to pre-select on the `/connection` page.
  *
- * Priority: URL param (`?clientId=`) → admin default. If neither is set, no
- * client is pre-selected. Candidates that aren't in the visible set are
- * skipped so we never select a tile the user can't see.
+ * Priority: URL param (`?clientId=`) → admin default → first visible client,
+ * so the wizard always opens with a working selection. Candidates that aren't
+ * in the visible set are skipped so we never select a client the user can't
+ * see.
  */
 export function resolveInitialClientId(params: {
   urlClientId: string | null;
@@ -90,7 +107,12 @@ export function resolveInitialClientId(params: {
   const visible = new Set(visibleClientIds);
   const pick = (id: string | null | undefined): string | null =>
     id && visible.has(id) ? id : null;
-  return pick(urlClientId) ?? pick(adminDefaultClientId);
+  return (
+    pick(urlClientId) ??
+    pick(adminDefaultClientId) ??
+    visibleClientIds[0] ??
+    null
+  );
 }
 
 export function resolveEffectiveId(params: {

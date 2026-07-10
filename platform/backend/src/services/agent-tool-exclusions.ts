@@ -130,6 +130,63 @@ class AgentToolExclusionsService {
   }
 
   /**
+   * Add tool ids to the agent's excluded-tools set (a union, leaving existing
+   * exclusions in place), then evict the cached chat MCP client after commit.
+   * The current set is re-read INSIDE the same row lock the full replace takes,
+   * so concurrent adds/replaces for one agent can't lose each other's writes.
+   * Used to "remove" a tool from an Auto-tool ("access all tools") agent, where
+   * deleting an assignment row would be a no-op.
+   */
+  async addExclusions(params: {
+    agentId: string;
+    organizationId: string;
+    toolIds: string[];
+  }): Promise<AgentToolExclusions> {
+    const { agentId, organizationId } = params;
+    const toAdd = [...new Set(params.toolIds)];
+
+    await this.validateToolIds(toAdd, organizationId);
+
+    let excludedToolIds: string[] = [];
+    try {
+      await withDbTransaction(async (tx) => {
+        await AgentModel.lockRowForUpdate(agentId, tx);
+        const current = await AgentExcludedToolModel.findToolIdsByAgent(
+          agentId,
+          tx,
+        );
+        excludedToolIds = [...new Set([...current, ...toAdd])];
+        await AgentExcludedToolModel.replaceForAgent(
+          agentId,
+          excludedToolIds,
+          tx,
+        );
+      });
+    } catch (error) {
+      // TOCTOU: a tool deleted between validation and insert surfaces as an FK
+      // violation — map it to a client error instead of a 500.
+      if (isForeignKeyViolation(error)) {
+        throw new ApiError(400, "One or more excluded tools no longer exist");
+      }
+      throw error;
+    }
+
+    const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
+    clearChatMcpClient(agentId);
+
+    logger.info(
+      {
+        agentId,
+        addedCount: toAdd.length,
+        excludedToolCount: excludedToolIds.length,
+      },
+      "Added agent tool exclusions",
+    );
+
+    return { excludedToolIds };
+  }
+
+  /**
    * The agent's exclusion sets for enforcement callers. Does NOT check the
    * agent's accessAllTools setting — use when the caller has already
    * established Auto-tool mode (e.g. via dynamicAccessContext).

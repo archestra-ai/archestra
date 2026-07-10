@@ -39,6 +39,8 @@ export const TOOL_DEPLOY_MCP_SERVER_SHORT_NAME = "deploy_mcp_server";
 export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME =
   "list_mcp_server_deployments";
 export const TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME = "get_mcp_server_logs";
+export const TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME =
+  "reload_mcp_server_tools";
 export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME =
   "create_mcp_server_installation_request";
 export const TOOL_CREATE_TEAM_SHORT_NAME = "create_team";
@@ -82,6 +84,8 @@ export const TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME =
   "delete_trusted_data_policy";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME =
   "bulk_assign_tools_to_agents";
+export const TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME =
+  "bulk_remove_tools_from_agents";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME =
   "bulk_assign_tools_to_mcp_gateways";
 export const TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME =
@@ -125,6 +129,7 @@ export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
 export const TOOL_LOAD_SKILL_SHORT_NAME = "load_skill";
 export const TOOL_CREATE_SKILL_SHORT_NAME = "create_skill";
 export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
+export const TOOL_EDIT_SKILL_SHORT_NAME = "edit_skill";
 // code execution sandbox — implicit per-conversation sandbox; the create step
 // is hidden (lazy default).
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
@@ -176,6 +181,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_DEPLOY_MCP_SERVER_SHORT_NAME,
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME,
+  TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_CREATE_TEAM_SHORT_NAME,
   TOOL_GET_TEAM_SHORT_NAME,
@@ -204,6 +210,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME,
   TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
+  TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_CREATE_KNOWLEDGE_BASE_SHORT_NAME,
@@ -232,6 +239,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
+  TOOL_EDIT_SKILL_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
@@ -402,6 +410,8 @@ export const TOOL_CREATE_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_SKILL_SHORT_NAME}` as const;
 export const TOOL_UPDATE_SKILL_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_SKILL_SHORT_NAME}` as const;
+export const TOOL_EDIT_SKILL_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_EDIT_SKILL_SHORT_NAME}` as const;
 export const TOOL_RUN_COMMAND_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RUN_COMMAND_SHORT_NAME}` as const;
 export const TOOL_DOWNLOAD_FILE_FULL_NAME =
@@ -449,6 +459,7 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
+  TOOL_EDIT_SKILL_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
@@ -469,8 +480,8 @@ export function isSkillRuntimeTool(toolName: string): boolean {
 
 /**
  * MCP App management tools — assigned to new agents by default, so "build me
- * an app" works without per-agent setup. delete_app completes the lifecycle
- * but stays search-gated in `search_and_run_only` mode (see
+ * an app" works without per-agent setup. In `search_and_run_only` mode the
+ * whole group is reached through `search_tools`/`run_tool` (see
  * ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES).
  */
 export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -573,13 +584,17 @@ export function getCreationDefaultArchestraToolShortNames(params: {
  * agent is created in (or switched to) All-tools mode, every unassigned
  * built-in tool is pre-added to its exclusion list EXCEPT this set: the
  * search_tools/run_tool dispatch surface that All-tools mode runs on, the
- * sandbox runtime + persistent-files tools, and query_knowledge_sources.
+ * sandbox runtime + persistent-files tools, the skill tools, and
+ * query_knowledge_sources. Skill tools are part of the default agent surface
+ * (every org gets the opt-in enabled at startup), so pre-disabling them for
+ * All-tools agents would diverge from what a newly created agent gets.
  */
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+  ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
@@ -596,15 +611,12 @@ export function isPrefillExemptArchestraToolShortName(
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
  * and file-transfer path behind `search_tools`/`run_tool` would make the common
- * runtime flow depend on deferred tool loading. App tools stay top-level
- * because "build me an app" intents compete with the model's default of
- * writing code in the reply — the model won't search for a capability it
- * doesn't know exists, so the scaffold/read/edit/render authoring surface stays
- * top-level. delete_app stays behind search (destructive, never
- * intent-time-critical); preview_app_tool, get_app_diagnostics, and
- * set_app_tools likewise — they are follow-up steps the scaffold/edit tool
- * descriptions and the authoring guidance name explicitly, so the model reaches
- * them via run_tool once it is already building.
+ * runtime flow depend on deferred tool loading. App tools are deliberately
+ * absent: apps are a secondary flow, reached through `search_tools`/`run_tool`
+ * and steered by the `search_and_run_only` system-prompt section, which names
+ * the authoring tools verbatim so `run_tool` can dispatch them without a
+ * search round-trip. Inline chat rendering of app results is unaffected — chat
+ * resolves a `run_tool` call to its target tool before the app-render check.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -614,14 +626,6 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   // persistent file is part of the everyday file-management flow, not a rare
   // destructive escape hatch.
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
-  TOOL_REFINE_APP_SHORT_NAME,
-  TOOL_EDIT_APP_SHORT_NAME,
-  TOOL_VALIDATE_APP_SHORT_NAME,
-  TOOL_PUBLISH_APP_SHORT_NAME,
-  TOOL_READ_APP_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
-  TOOL_LIST_APPS_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
@@ -703,6 +707,68 @@ export function getArchestraToolShortName(
   return rawToolName;
 }
 
+/**
+ * Looser sibling of {@link isArchestraMcpServerTool} for the LLM-proxy
+ * auto-discovery filter ONLY — never for tool dispatch, RBAC, or policy
+ * evaluation, which must stay strict (use {@link getArchestraToolShortName}).
+ *
+ * Real MCP clients decorate our gateway tool names with their own labels, e.g.
+ * `archestra_staging__my_mcp_gateway_1234567__run_tool`, where the client
+ * inserts its own MCP-server label between our server name and the tool's short
+ * name. The strict parser splits on the LAST `__` and requires everything
+ * before it to be exactly an allowed server name, so it misses these decorated
+ * twins and they get re-recorded as "discovered" proxy tools — duplicates of
+ * tools we already serve.
+ *
+ * This matcher returns true when, after splitting the full name on
+ * {@link MCP_SERVER_TOOL_NAME_SEPARATOR}:
+ *  1. the trailing segment(s) form a known Archestra tool short name, AND
+ *  2. some earlier segment equals one of the allowed server names (the default
+ *     `archestra` or the org's branded name).
+ *
+ * Bare short names (`run_tool` with no server segment) are intentionally NOT
+ * matched — an unrelated external MCP server could legitimately expose a tool
+ * with the same short name, and there is no server segment to disambiguate.
+ */
+export function isLikelyArchestraToolName(
+  toolName: string,
+  options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },
+): boolean {
+  // The canonical `<server>__<short>` shape is already covered strictly.
+  if (getArchestraToolShortName(toolName, options) !== null) {
+    return true;
+  }
+
+  const segments = toolName.split(MCP_SERVER_TOOL_NAME_SEPARATOR);
+  // Need at least a server segment plus a short-name segment.
+  if (segments.length < 2) {
+    return false;
+  }
+
+  // Try each trailing-segment span as a candidate short name (from the longest
+  // tail down to the last segment alone), requiring an allowed server name in
+  // the segments that precede it. `tailStart >= 1` guarantees at least one
+  // preceding segment to carry the server name, which also excludes bare short
+  // names. This is a membership test, not a disambiguation: any matching span
+  // wins, so the iteration order does not affect the result.
+  for (let tailStart = 1; tailStart < segments.length; tailStart++) {
+    const candidateShortName = segments
+      .slice(tailStart)
+      .join(MCP_SERVER_TOOL_NAME_SEPARATOR);
+    if (!isArchestraToolShortName(candidateShortName)) {
+      continue;
+    }
+    const precedesShortName = segments
+      .slice(0, tailStart)
+      .some((segment) => isAllowedServerName(segment, options));
+    if (precedesShortName) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function getArchestraToolFullName<
   ShortName extends ArchestraToolShortName,
 >(shortName: ShortName): ArchestraToolFullName<ShortName>;
@@ -775,17 +841,27 @@ function parseArchestraToolName(params: {
   const rawToolName = toolName.slice(
     separatorIndex + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
   );
-  const allowedServerNames = new Set<string>([
-    getArchestraMcpServerName(options),
-  ]);
 
-  if (options?.includeDefaultPrefix !== false) {
-    allowedServerNames.add(ARCHESTRA_MCP_SERVER_NAME);
-  }
-
-  if (!allowedServerNames.has(serverName)) {
+  if (!isAllowedServerName(serverName, options)) {
     return { serverName: null, toolName: rawToolName };
   }
 
   return { serverName, toolName: rawToolName };
+}
+
+/**
+ * Whether `serverName` is accepted as "one of ours": the org's (possibly
+ * branded) server name, or the default `archestra` unless the caller opts out
+ * via `includeDefaultPrefix: false`. A direct comparison rather than a Set —
+ * it runs on every tool-name parse, so it must not allocate.
+ */
+function isAllowedServerName(
+  serverName: string,
+  options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },
+): boolean {
+  return (
+    serverName === getArchestraMcpServerName(options) ||
+    (options?.includeDefaultPrefix !== false &&
+      serverName === ARCHESTRA_MCP_SERVER_NAME)
+  );
 }

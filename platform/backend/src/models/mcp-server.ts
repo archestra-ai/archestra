@@ -25,6 +25,8 @@ import type {
   ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
+import { escapeLikePattern } from "@/utils/sql-search";
+import { toolRequiresInputs } from "@/utils/tool-inputs";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpHttpSessionModel from "./mcp-http-session";
@@ -217,6 +219,29 @@ class McpServerModel {
     return row?.createdAt ?? null;
   }
 
+  /**
+   * One installed server per catalog, for the periodic tools refresher. Tool
+   * rows are shared per catalog item, so re-syncing one install covers every
+   * install of that catalog. Only local/remote servers participate — app and
+   * builtin servers manage their tools in-process. Oldest install wins for a
+   * stable pick across ticks.
+   */
+  static async findOnePerCatalogForToolsRefresh(): Promise<McpServer[]> {
+    return db
+      .selectDistinctOn([schema.mcpServersTable.catalogId])
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          isNotNull(schema.mcpServersTable.catalogId),
+          inArray(schema.mcpServersTable.serverType, ["local", "remote"]),
+        ),
+      )
+      .orderBy(
+        asc(schema.mcpServersTable.catalogId),
+        asc(schema.mcpServersTable.createdAt),
+      );
+  }
+
   static async findAll(
     userId?: string,
     isMcpServerAdmin?: boolean,
@@ -371,6 +396,8 @@ class McpServerModel {
       toolName: string;
       toolDescription: string | null;
       resourceUri: string;
+      /** The tool declares required inputs, so a bare render can't succeed. */
+      requiresInput: boolean;
     }>
   > {
     const { userId, organizationId, search } = params;
@@ -407,6 +434,7 @@ class McpServerModel {
         toolName: app.toolName,
         toolDescription: app.toolDescription,
         resourceUri: app.resourceUri,
+        requiresInput: toolRequiresInputs(app.toolParameters),
       })),
     );
   }
@@ -472,7 +500,12 @@ class McpServerModel {
     name: string;
     description: string | null;
     resourceUri: string;
-    resources: Array<{ resourceUri: string; toolName: string; name: string }>;
+    resources: Array<{
+      resourceUri: string;
+      toolName: string;
+      name: string;
+      requiresInput: boolean;
+    }>;
     defaultMcpServerId: string | null;
     installs: Array<{
       mcpServerId: string;
@@ -511,6 +544,7 @@ class McpServerModel {
         resourceUri: app.resourceUri,
         toolName: app.toolName,
         name: `${app.serverName} / ${app.toolName}`,
+        requiresInput: toolRequiresInputs(app.toolParameters),
       })),
       defaultMcpServerId: McpServerModel.pickDefaultInstall(installs),
       installs,
@@ -586,6 +620,9 @@ class McpServerModel {
     const { catalogIds, search } = params;
     if (catalogIds.length === 0) return [];
     const searchTerm = search?.trim();
+    const searchPattern = searchTerm
+      ? `%${escapeLikePattern(searchTerm)}%`
+      : undefined;
     const uiResourceUri = toolUiResourceUriSql();
     const rows = await db
       .select({
@@ -610,15 +647,15 @@ class McpServerModel {
           // the platform CSP — never surfaced as external apps.
           ne(schema.internalMcpCatalogTable.serverType, "app"),
           sql`${uiResourceUri} IS NOT NULL`,
-          searchTerm
+          searchPattern
             ? or(
-                ilike(schema.internalMcpCatalogTable.name, `%${searchTerm}%`),
+                ilike(schema.internalMcpCatalogTable.name, searchPattern),
                 ilike(
                   schema.internalMcpCatalogTable.description,
-                  `%${searchTerm}%`,
+                  searchPattern,
                 ),
-                ilike(schema.toolsTable.name, `%${searchTerm}%`),
-                ilike(schema.toolsTable.description, `%${searchTerm}%`),
+                ilike(schema.toolsTable.name, searchPattern),
+                ilike(schema.toolsTable.description, searchPattern),
               )
             : undefined,
         ),
@@ -647,29 +684,6 @@ class McpServerModel {
           a.serverName.localeCompare(b.serverName) ||
           a.toolName.localeCompare(b.toolName),
       );
-  }
-
-  /**
-   * Catalog ids the caller has an accessible install of (own personal + team +
-   * org). Distinct from catalog *visibility* (McpCatalogTeamModel): an
-   * org-scoped catalog is visible to every member, but if its only install is
-   * another user's personal server it is absent here. Scopes the search_tools /
-   * run_tool dynamic-discovery space so it cannot reach another user's servers.
-   */
-  static async getAccessibleInstallCatalogIds(
-    userId: string,
-  ): Promise<Set<string>> {
-    const installIds = await McpServerModel.getAccessibleInstallIds(userId);
-    if (installIds.length === 0) return new Set();
-    const rows = await db
-      .select({ catalogId: schema.mcpServersTable.catalogId })
-      .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.id, installIds));
-    const catalogIds = new Set<string>();
-    for (const row of rows) {
-      if (row.catalogId) catalogIds.add(row.catalogId);
-    }
-    return catalogIds;
   }
 
   /**

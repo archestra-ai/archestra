@@ -336,13 +336,13 @@ export function McpAssignmentsDialog({
             pending?.credentialId ?? assignment?.credentialId ?? null,
         });
       } else {
-        // Toggle ON: pre-select all tools with default credential
+        // Toggle ON: pre-select all tools. New assignments default to
+        // resolve-at-call-time, which follows the server's default credential
+        // setting; pinning a static credential is an explicit choice.
         const allToolIds = new Set(allTools.map((t) => t.id));
         const defaultCredential =
           pending?.credentialId ??
           assignment?.credentialId ??
-          (prefersEnterpriseManaged ? DYNAMIC_CREDENTIAL_VALUE : null) ??
-          mcpServers[0]?.id ??
           DYNAMIC_CREDENTIAL_VALUE;
         updatePendingChanges(profileId, {
           selectedToolIds: allToolIds,
@@ -350,14 +350,7 @@ export function McpAssignmentsDialog({
         });
       }
     },
-    [
-      pendingChanges,
-      assignmentsByProfile,
-      allTools,
-      mcpServers,
-      prefersEnterpriseManaged,
-      updatePendingChanges,
-    ],
+    [pendingChanges, assignmentsByProfile, allTools, updatePendingChanges],
   );
 
   // Build combobox items and selected IDs for each section
@@ -695,8 +688,9 @@ function ProfileAssignmentPill({
           <div className="p-4 border-b space-y-2 shrink-0">
             <Label className="text-sm font-medium">Connect on behalf of</Label>
             <p className="text-xs text-muted-foreground">
-              Choose whether this tool uses a fixed server connection or
-              resolves credentials for the current caller at runtime.
+              By default, credentials resolve at call time per the server's
+              default credential setting. Pin a specific connection to always
+              use it for these tools instead.
             </p>
             <TokenSelect
               catalogId={catalogId}

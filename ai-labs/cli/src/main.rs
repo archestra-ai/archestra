@@ -52,23 +52,11 @@ struct CommonBenchArgs {
         default_value = default_bench_dir()
     )]
     bench_dir: PathBuf,
-    #[arg(
-        short = 'e',
-        long,
-        help = "Run only environments matching comma-separated names"
-    )]
+    #[arg(short = 'e', long, help = "Run only environments matching comma-separated names")]
     env: Option<String>,
-    #[arg(
-        short = 't',
-        long,
-        help = "Run only tasks matching comma-separated ids"
-    )]
+    #[arg(short = 't', long, help = "Run only tasks matching comma-separated ids")]
     task: Option<String>,
-    #[arg(
-        short = 'l',
-        long,
-        help = "Run only lanes matching comma-separated names"
-    )]
+    #[arg(short = 'l', long, help = "Run only lanes matching comma-separated names")]
     lanes: Option<String>,
     #[arg(long, help = "Override path to lanes.toml")]
     lanes_file: Option<PathBuf>,
@@ -94,15 +82,9 @@ struct CommonBenchArgs {
 struct AnalyzeKnobs {
     #[arg(long, help = "Lane (from lanes.toml) for the per-trajectory map phase")]
     map: String,
-    #[arg(
-        long,
-        help = "Lane (from lanes.toml) for the repo-grounded reduce phase"
-    )]
+    #[arg(long, help = "Lane (from lanes.toml) for the repo-grounded reduce phase")]
     reduce: String,
-    #[arg(
-        long,
-        help = "Repo root the reduce agent crawls (default: autodetected git root)"
-    )]
+    #[arg(long, help = "Repo root the reduce agent crawls (default: autodetected git root)")]
     explore_root: Option<PathBuf>,
     #[arg(long, default_value_t = 6, help = "Max concurrent map-phase LLM calls")]
     concurrency: usize,
@@ -112,11 +94,7 @@ struct AnalyzeKnobs {
 struct BenchArgs {
     #[command(flatten)]
     common: CommonBenchArgs,
-    #[arg(
-        short = 'o',
-        long,
-        help = "Write markdown report to file instead of stdout"
-    )]
+    #[arg(short = 'o', long, help = "Write markdown report to file instead of stdout")]
     out: Option<PathBuf>,
     #[arg(long, help = "Reuse an existing run directory")]
     run_dir: Option<PathBuf>,
@@ -135,10 +113,7 @@ struct AnalyzeArgs {
     knobs: AnalyzeKnobs,
     #[arg(long, help = "Override path to lanes.toml")]
     lanes_file: Option<PathBuf>,
-    #[arg(
-        long,
-        help = "Output report path (default: <run-dir>/trajectory_analysis_<ts>.md)"
-    )]
+    #[arg(long, help = "Output report path (default: <run-dir>/trajectory_analysis_<ts>.md)")]
     out: Option<PathBuf>,
 }
 
@@ -208,14 +183,7 @@ fn init_tracing(default: &str) {
 }
 
 async fn run_benchmark(a: BenchArgs) -> ExitCode {
-    match guarded_run(
-        &a.common,
-        a.out.as_deref(),
-        a.run_dir.as_deref(),
-        a.update_mcp_lock,
-    )
-    .await
-    {
+    match guarded_run(&a.common, a.out.as_deref(), a.run_dir.as_deref(), a.update_mcp_lock).await {
         GuardedRun::Interrupted(code) => ExitCode::from(code),
         GuardedRun::Completed(Err(e)) => {
             tracing::error!("benchmark failed: {e}");
@@ -411,11 +379,7 @@ async fn run_until_signal(work: impl std::future::Future<Output = ExitCode>) -> 
 }
 
 fn benchmark_exit(outcome: &RunOutcome) -> ExitCode {
-    let passed = outcome
-        .results
-        .iter()
-        .filter(|r| r.outcome == Outcome::Passed)
-        .count();
+    let passed = outcome.results.iter().filter(|r| r.outcome == Outcome::Passed).count();
     let total = outcome.results.len();
     let all_passed = total > 0 && passed == total;
     let mark = if all_passed { '✓' } else { '✗' };

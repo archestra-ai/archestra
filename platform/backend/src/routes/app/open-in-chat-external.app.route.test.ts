@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
 import { ConversationModel, MemberModel, MessageModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -75,7 +75,12 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
     const part = messages[0].content.parts[0] as {
       type: string;
       state: string;
-      output: { _meta: { ui: { resourceUri: string; mcpServerId: string } } };
+      output: {
+        _meta: {
+          ui: { resourceUri: string; mcpServerId: string };
+          [SEEDED_APP_RENDER_META_KEY]?: boolean;
+        };
+      };
     };
     expect(part.type).toBe("dynamic-tool");
     expect(part.state).toBe("output-available");
@@ -85,6 +90,10 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       resourceUri: "ui://pm/board.html",
       mcpServerId: install.id,
     });
+    // The platform-authored marker keeps the seeded render from being treated
+    // as untrusted external tool output (which would flip the whole new
+    // conversation to sensitive context before the user ever sends a message).
+    expect(part.output._meta[SEEDED_APP_RENDER_META_KEY]).toBe(true);
   });
 
   test("returns prompt mode (empty conversation) when the tool has required inputs", async ({

@@ -69,12 +69,12 @@ export interface AgentToolExclusionsEditorRef {
 interface AgentToolExclusionsEditorProps {
   agentId?: string;
   /**
-   * Seed the entries with the backend's All-mode exclusion pre-fill: the
+   * Seed the entries with the backend's Auto-mode exclusion pre-fill: the
    * initial state becomes the UNION of the server-saved exclusions and the
    * client-computed default set (every unassigned built-in tool outside the
-   * pre-fill-exempt set). Pass true when saving would put the agent into All
-   * mode from scratch — creating a new agent on the All tab, or editing an
-   * agent whose SAVED accessAllTools is off while the All tab is selected —
+   * pre-fill-exempt set). Pass true when saving would put the agent into Auto
+   * mode from scratch — creating a new agent on the Auto tab, or editing an
+   * agent whose SAVED accessAllTools is off while the Auto tab is selected —
    * so the form shows the pre-filled reality instead of an empty list, and a
    * later full-replace save can't wipe the server pre-fill with a stale
    * baseline. While the underlying queries load (or this prop flips), the
@@ -104,7 +104,7 @@ interface AgentToolExclusionsEditorProps {
 }
 
 /**
- * Auto-mode ("All tools") exclusion editor: pick MCP servers to exclude tools
+ * Auto-mode (access all tools) exclusion editor: pick MCP servers to exclude tools
  * from the agent's implicit tool surface. Tools are grouped by server for
  * display; every selection resolves to individual tool ids in the saved
  * payload (exclusion is purely per-tool — there is no whole-server exclusion).
@@ -131,7 +131,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     useAgentToolExclusions(agentId);
   const updateExclusions = useUpdateAgentToolExclusions();
 
-  // Inputs for the seeded default exclusion set (mirrors the backend All-mode
+  // Inputs for the seeded default exclusion set (mirrors the backend Auto-mode
   // pre-fill): the agent's saved assignments, or — for a new agent — the
   // creation-default set the backend will auto-assign, composed from the same
   // org/deployment flags the create path reads.

@@ -3,9 +3,9 @@ name: Platform E2E Tests
 # Runs automatically in merge queue as the required E2E gate.
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
 # Remove and re-add the label to re-trigger after new commits.
-# Merge-queue / label runs cover chromium only; firefox + webkit run nightly on
-# the schedule trigger to keep the queue fast (those projects only carry the 8
-# @firefox/@webkit-tagged tests).
+# Merge-queue / label runs cover chromium only; the nightly schedule (and
+# manual workflow_dispatch, which matches it) additionally runs the firefox +
+# webkit projects, which only carry the @firefox/@webkit-tagged tests.
 on:
   workflow_dispatch:
   schedule:
@@ -146,23 +146,32 @@ jobs:
           # tree of HEAD, which is all `rev-parse HEAD:platform` needs).
           TREE_HASH=$(git rev-parse "HEAD:platform")
           TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
+          SLIM_TREE_TAG="${TREE_TAG}-slim"
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
+          SLIM_SHA_TAG="${SHA_TAG}-slim"
           echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
-          # Default to a build; only skip it if we actually land the reused image
-          # on the SHA tag. A missing/just-pruned tree tag or a transient registry
+          echo "slim_tree_tag=${SLIM_TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          # Default to a build; only skip it if we actually land the reused images
+          # on the SHA tags. A missing/just-pruned tree tag or a transient registry
           # error then falls back to building instead of failing the required gate.
+          # BOTH variants must be present: the shards pull the -slim image (no
+          # Dagger engine tar) while quickstart pulls the full one, so a tree
+          # cached before the slim variant existed cannot be reused.
           REUSE=false
-          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1; then
-            echo "Found cached platform image for tree ${TREE_HASH}; copying to ${SHA_TAG}"
-            # Registry-side manifest copy (no layer pull/push) onto the SHA tag
-            # the shards pull. Seconds, versus the ~85-226s build it replaces.
-            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"; then
+          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1 \
+            && docker buildx imagetools inspect "${SLIM_TREE_TAG}" >/dev/null 2>&1; then
+            echo "Found cached platform images for tree ${TREE_HASH}; copying to ${SHA_TAG} (+ -slim)"
+            # Registry-side manifest copy (no layer pull/push) onto the SHA tags
+            # the shards/quickstart pull. Seconds, versus the ~85-226s build it
+            # replaces.
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}" \
+              && docker buildx imagetools create --tag "${SLIM_SHA_TAG}" "${SLIM_TREE_TAG}"; then
               REUSE=true
             else
               echo "::warning::reuse retag failed (tree tag may have just been pruned); building instead"
             fi
           else
-            echo "No cached image for platform tree ${TREE_HASH}; building."
+            echo "No cached image pair for platform tree ${TREE_HASH}; building."
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
@@ -171,7 +180,12 @@ jobs:
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          push: "true"
+          # outputs= replaces the push:"true" shorthand to push with zstd-compressed
+          # layers: zstd is ~3-5x faster to decompress than gzip, cutting the e2e
+          # shard's image pull ~15-20s (the pull is dominated by single-threaded gunzip).
+          # (A tree-tag REUSED image keeps whatever compression it was built with;
+          # only fresh builds are guaranteed zstd.)
+          outputs: type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true
           # Publish under both the commit SHA (what the shards pull) and the
           # tree-OID tag, so a later run of the same ./platform tree reuses this
           # image instead of rebuilding.
@@ -185,9 +199,29 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-blacksmith-builder
+      # Slim variant for the e2e shards: the same image minus the ~352MB
+      # Dagger engine tar that only quickstart uses. Every layer is already in
+      # the builder cache from the full build above, so this push takes
+      # seconds. (blacksmith-build-push directly: the builder is already set
+      # up from the full build.)
+      - name: Build slim Platform image (shards, no Dagger engine tar) and push
+        if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
+        uses: ./.github/actions/blacksmith-build-push
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: "true"
+          target: unified-slim
+          # Same dual-tag scheme as the full image: the SHA tag the shards
+          # pull, plus the tree-OID tag the reuse step checks.
+          tags: |
+            ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-slim
+            ${{ steps.platform-reuse.outputs.slim_tree_tag }}
+          provenance: "false"
+          network: host
+          secrets: |
+            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -196,8 +230,43 @@ jobs:
           service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
           workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
+      # Same tree-based reuse as the Platform image above. This image rarely
+      # changes, and quickstart waits for this job — so on a match, a
+      # seconds-long registry retag replaces the ~100s rebuild.
+      - name: Resolve MCP server base image reuse
+        id: mcp-base-reuse
+        if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
+        shell: bash
+        env:
+          IMAGE_REPO: ${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TREE_HASH=$(git rev-parse "HEAD:platform/mcp_server_docker_image")
+          TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
+          SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"
+          echo "tree_tag=${TREE_TAG}" >> "${GITHUB_OUTPUT}"
+          REUSE=false
+          if docker buildx imagetools inspect "${TREE_TAG}" >/dev/null 2>&1; then
+            echo "Found cached MCP server base image for tree ${TREE_HASH}; copying to ${SHA_TAG}"
+            if docker buildx imagetools create --tag "${SHA_TAG}" "${TREE_TAG}"; then
+              REUSE=true
+            else
+              echo "::warning::mcp base reuse retag failed (tree tag may have just been pruned); building instead"
+            fi
+          else
+            echo "No cached MCP server base image for tree ${TREE_HASH}; building."
+          fi
+          echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
+
+      # The builder is only needed for an actual build; the reuse check above
+      # talks straight to the registry. Fork PRs always build.
+      - name: Setup Blacksmith Builder
+        if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
+        uses: ./.github/actions/setup-blacksmith-builder
+
       - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
+        if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
         uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
@@ -205,7 +274,9 @@ jobs:
           platforms: linux/amd64
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
-          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
+          # tree OID (what the reuse step above checks next time).
+          tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
 
       # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
       # only: they are the sole consumer (shards use source=artifact for forks,
@@ -263,28 +334,28 @@ jobs:
   # E2E tests - runs the generic non-quickstart suites plus the Vault K8s startup
   # coverage against one shared CI deployment in the standard DB secrets mode.
   # Quickstart remains separate because it validates the docker run path.
+  #
+  # One 16vcpu environment, no sharding: every extra shard pays the full
+  # ~4min environment setup again to split a few minutes of tests, and bigger
+  # runners don't speed the tests up either (the serial spec groups set the
+  # floor). The job ID keeps its old name; the required check is
+  # "Merge E2E Test Reports", not this job.
   platform-e2e-tests-shards:
-    name: Platform E2E Tests Shard (${{ matrix.shard }}/2)
-    # Deliberately NO `needs: [platform-e2e-build]`: the shards start alongside
-    # the image build and do all image-independent setup (checkout, pnpm, Kind
+    name: Platform E2E Tests
+    # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
+    # the image build and does all image-independent setup (checkout, pnpm, Kind
     # cluster, MCP dependency images) while the build runs. Setup Archestra
     # Platform then polls the registry (image-pull-timeout-seconds) until the
     # freshly pushed image appears; fork PRs poll for the build artifact in the
     # load steps below. This overlap takes ~2.5 min off the merge-queue critical
-    # path. Trade-off: if the build fails, the shards burn the poll deadline
+    # path. Trade-off: if the build fails, this job burns the poll deadline
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    # Observed worst-case shard wall-clock is ~10 min (setup + tests); 30 caps a
+    # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
     # hung run instead of letting it burn a 16vcpu runner for the GitHub default.
     timeout-minutes: 30
-    strategy:
-      # A failing shard must not cancel its siblings: a cancelled leg would
-      # collapse the matrix result to "cancelled" and produce a partial report.
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -338,8 +409,15 @@ jobs:
           e2e-dependencies-extra-helm-set: "vault.k8sAuth.enabled=true,vault.k8sAuth.boundServiceAccountName=archestra-platform,vault.k8sAuth.boundServiceAccountNamespace=default"
           e2e-dependencies-wait-for-vault: "true"
           build-platform-image: "false"
-          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          # Trusted runs pull the -slim variant (no ~352MB dagger-engine.tar —
+          # only quickstart consumes it); fork PRs load the full image from the
+          # build artifact since only one variant travels as an artifact.
+          platform-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
           platform-context: ./platform
+          # Trusted runs: the Kind node pulls the (public) registry image
+          # itself when the pod schedules — no host pull, no ~77s kind-load.
+          # Fork PRs load a local artifact tag, which must be kind-loaded.
+          platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
           image-pull-timeout-seconds: "900"
 
@@ -352,7 +430,6 @@ jobs:
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'api --project=chromium --project=firefox --project=webkit --project=identity-providers --project=vault-k8s' || 'api --project=chromium --project=identity-providers --project=vault-k8s' }}
-          shard: "--shard=${{ matrix.shard }}/2"
           extra_args: "--grep-invert '@quickstart'"
           timeout: "20"
 
@@ -360,7 +437,9 @@ jobs:
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-shard-${{ matrix.shard }}
+          # Suffixed so the report job's blob-report-* download glob (which
+          # also matches the quickstart leg's artifact) picks it up.
+          name: blob-report-tests
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -424,16 +503,13 @@ jobs:
           echo "=== Recent Cluster Events ==="
           kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true
 
-      - name: Cleanup Kind cluster
-        if: always()
-        run: kind delete cluster --name archestra-ci-cluster || true
+      # No "kind delete cluster" teardown: the runner VM is thrown away after
+      # the job anyway.
 
       - name: Fail if non-quickstart E2E tests failed
         if: ${{ always() && steps.e2e.outcome == 'failure' }}
-        env:
-          SHARD: ${{ matrix.shard }}
         run: |
-          echo "The non-quickstart E2E run (shard ${SHARD}/2) failed."
+          echo "The non-quickstart E2E run failed."
           exit 1
 
   # NOTE: there is deliberately no separate "Platform E2E Tests" fan-in job. The

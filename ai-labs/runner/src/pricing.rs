@@ -63,12 +63,7 @@ impl PriceBook {
         } else {
             0.0
         };
-        Some(
-            prompt * price.input
-                + cache_read * cache_read_price
-                + cache_write_cost
-                + completion * price.output,
-        )
+        Some(prompt * price.input + cache_read * cache_read_price + cache_write_cost + completion * price.output)
     }
 }
 
@@ -151,14 +146,8 @@ mod tests {
         assert!(book.get("vendor/free").is_some()); // free is a real 0 price
         assert!(book.get("vendor/dynamic").is_none()); // -1 dynamic router → unknown
         assert!(book.get("vendor/partial").is_none()); // missing completion → unknown
-        assert_eq!(
-            book.get("vendor/cached").unwrap().cache_read,
-            Some(0.0000001)
-        );
-        assert_eq!(
-            book.get("vendor/cached").unwrap().cache_write,
-            Some(0.00000125)
-        );
+        assert_eq!(book.get("vendor/cached").unwrap().cache_read, Some(0.0000001));
+        assert_eq!(book.get("vendor/cached").unwrap().cache_write, Some(0.00000125));
         assert_eq!(book.get("vendor/cheap").unwrap().cache_read, None);
         assert_eq!(book.get("vendor/cheap").unwrap().cache_write, None);
     }
@@ -177,13 +166,7 @@ mod tests {
         // input (1000) is already net of cache; cache reads (200) are disjoint and priced separately:
         // 1000*1e-6 + 200*1e-7 + 500*2e-6
         let cost = book
-            .cost(
-                Some(1000),
-                Some(500),
-                Some(200),
-                None,
-                Some("vendor/cached"),
-            )
+            .cost(Some(1000), Some(500), Some(200), None, Some("vendor/cached"))
             .unwrap();
         assert!((cost - (0.001 + 0.00002 + 0.001)).abs() < 1e-12);
     }
@@ -194,13 +177,7 @@ mod tests {
         // cache writes (400) are disjoint and billed at the published write rate (1.25e-6):
         // 1000*1e-6 + 200*1e-7 + 400*1.25e-6 + 500*2e-6
         let cost = book
-            .cost(
-                Some(1000),
-                Some(500),
-                Some(200),
-                Some(400),
-                Some("vendor/cached"),
-            )
+            .cost(Some(1000), Some(500), Some(200), Some(400), Some("vendor/cached"))
             .unwrap();
         assert!((cost - (0.001 + 0.00002 + 0.0005 + 0.001)).abs() < 1e-12);
     }
@@ -237,13 +214,7 @@ mod tests {
         let book = book();
         // A malformed negative count must not produce a negative cost.
         let cost = book
-            .cost(
-                Some(-5),
-                Some(-5),
-                Some(-5),
-                Some(-5),
-                Some("vendor/cached"),
-            )
+            .cost(Some(-5), Some(-5), Some(-5), Some(-5), Some("vendor/cached"))
             .unwrap();
         assert_eq!(cost, 0.0);
     }
@@ -251,18 +222,9 @@ mod tests {
     #[test]
     fn unknown_slug_or_missing_tokens_is_none() {
         let book = book();
-        assert_eq!(
-            book.cost(Some(10), Some(10), None, None, Some("nope")),
-            None
-        );
+        assert_eq!(book.cost(Some(10), Some(10), None, None, Some("nope")), None);
         assert_eq!(book.cost(Some(10), Some(10), None, None, None), None);
-        assert_eq!(
-            book.cost(None, Some(10), None, None, Some("vendor/cheap")),
-            None
-        );
-        assert_eq!(
-            book.cost(Some(10), None, None, None, Some("vendor/cheap")),
-            None
-        );
+        assert_eq!(book.cost(None, Some(10), None, None, Some("vendor/cheap")), None);
+        assert_eq!(book.cost(Some(10), None, None, None, Some("vendor/cheap")), None);
     }
 }

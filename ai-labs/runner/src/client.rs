@@ -32,11 +32,7 @@ pub struct ArchestraApiError {
 
 impl std::fmt::Display for ArchestraApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} {} -> {}: {}",
-            self.method, self.url, self.status, self.body
-        )
+        write!(f, "{} {} -> {}: {}", self.method, self.url, self.status, self.body)
     }
 }
 
@@ -179,11 +175,7 @@ impl EvalClient {
         }
     }
 
-    pub fn new_with_timeout(
-        base_url: impl Into<String>,
-        api_key: Option<String>,
-        timeout: Duration,
-    ) -> Self {
+    pub fn new_with_timeout(base_url: impl Into<String>, api_key: Option<String>, timeout: Duration) -> Self {
         let client = Self::new(base_url, api_key);
         client.set_timeout(timeout);
         client
@@ -199,8 +191,7 @@ impl EvalClient {
     }
 
     fn set_timeout(&self, timeout: Duration) {
-        self.timeout_secs
-            .store(timeout.as_secs().max(1), Ordering::SeqCst);
+        self.timeout_secs.store(timeout.as_secs().max(1), Ordering::SeqCst);
     }
 
     fn url(&self, path: &str, params: Option<&[(String, String)]>) -> String {
@@ -288,18 +279,13 @@ impl EvalClient {
         }
     }
 
-    pub async fn wait_ready(
-        &self,
-        timeout_s: f64,
-        interval_s: f64,
-    ) -> Result<JsonValue, ClientError> {
+    pub async fn wait_ready(&self, timeout_s: f64, interval_s: f64) -> Result<JsonValue, ClientError> {
         let deadline = tokio::time::Instant::now() + Duration::from_secs_f64(timeout_s);
         let mut last: Option<String>;
         loop {
             match self.request(Method::GET, "ready", None, None).await {
                 Ok(body) => {
-                    let db_connected =
-                        body.get("database").and_then(|v| v.as_str()) == Some("connected");
+                    let db_connected = body.get("database").and_then(|v| v.as_str()) == Some("connected");
                     if db_connected {
                         match sandbox_readiness(&body) {
                             SandboxReadiness::Ready => return Ok(body),
@@ -308,9 +294,7 @@ impl EvalClient {
                             // not recover — fail now instead of waiting out the deadline. A dedicated
                             // variant (not Config) so the caller's retry loop treats this as terminal.
                             SandboxReadiness::Fatal(reason) => {
-                                return Err(ClientError::SandboxFatal(format!(
-                                    "{reason} — see backend log"
-                                )));
+                                return Err(ClientError::SandboxFatal(format!("{reason} — see backend log")));
                             }
                             SandboxReadiness::Pending => {
                                 last = Some(format!("db connected, sandbox not ready yet: {body}"));
@@ -382,16 +366,11 @@ impl EvalClient {
         }
         let params_ref: Vec<(String, String)> = params;
         let slice: &[(String, String)] = &params_ref;
-        let body = self
-            .request(Method::GET, "/api/agents", Some(slice), None)
-            .await?;
+        let body = self.request(Method::GET, "/api/agents", Some(slice), None).await?;
         items(body)
     }
 
-    pub async fn create_agent(
-        &self,
-        payload: &AgentCreate,
-    ) -> Result<HashMap<String, JsonValue>, ClientError> {
+    pub async fn create_agent(&self, payload: &AgentCreate) -> Result<HashMap<String, JsonValue>, ClientError> {
         require_dict(
             self.request(
                 Method::POST,
@@ -435,16 +414,10 @@ impl EvalClient {
         require_str_field(&body, "id", "POST /api/projects")
     }
 
-    pub async fn list_skills(
-        &self,
-        search: Option<&str>,
-    ) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
+    pub async fn list_skills(&self, search: Option<&str>) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         let params = search.map(|s| vec![("search".to_string(), s.to_string())]);
         let slice = params.as_deref();
-        items(
-            self.request(Method::GET, "/api/skills", slice, None)
-                .await?,
-        )
+        items(self.request(Method::GET, "/api/skills", slice, None).await?)
     }
 
     pub async fn enable_skill_defaults(&self) -> Result<(), ClientError> {
@@ -496,10 +469,7 @@ impl EvalClient {
     ) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         let params = catalog_id.map(|s| vec![("catalogId".to_string(), s.to_string())]);
         let slice = params.as_deref();
-        items(
-            self.request(Method::GET, "/api/mcp_server", slice, None)
-                .await?,
-        )
+        items(self.request(Method::GET, "/api/mcp_server", slice, None).await?)
     }
 
     pub async fn list_llm_keys(
@@ -522,10 +492,7 @@ impl EvalClient {
         )
     }
 
-    pub async fn create_llm_key(
-        &self,
-        payload: &LlmKeyCreate,
-    ) -> Result<HashMap<String, JsonValue>, ClientError> {
+    pub async fn create_llm_key(&self, payload: &LlmKeyCreate) -> Result<HashMap<String, JsonValue>, ClientError> {
         require_dict(
             self.request(
                 Method::POST,
@@ -538,10 +505,7 @@ impl EvalClient {
         )
     }
 
-    pub async fn list_tools(
-        &self,
-        search: Option<&str>,
-    ) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
+    pub async fn list_tools(&self, search: Option<&str>) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         let params = search.map(|s| vec![("search".to_string(), s.to_string())]);
         let slice = params.as_deref();
         items(self.request(Method::GET, "/api/tools", slice, None).await?)
@@ -553,29 +517,16 @@ impl EvalClient {
     ) -> Result<HashMap<String, JsonValue>, ClientError> {
         let body = serde_json::json!({ "assignments": assignments });
         require_dict(
-            self.request(
-                Method::POST,
-                "/api/agents/tools/bulk-assign",
-                None,
-                Some(&body),
-            )
-            .await?,
+            self.request(Method::POST, "/api/agents/tools/bulk-assign", None, Some(&body))
+                .await?,
             "POST /api/agents/tools/bulk-assign",
         )
     }
 
-    pub async fn list_agent_tools(
-        &self,
-        agent_id: &str,
-    ) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
+    pub async fn list_agent_tools(&self, agent_id: &str) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         items(
-            self.request(
-                Method::GET,
-                &format!("/api/agents/{agent_id}/tools"),
-                None,
-                None,
-            )
-            .await?,
+            self.request(Method::GET, &format!("/api/agents/{agent_id}/tools"), None, None)
+                .await?,
         )
     }
 
@@ -600,10 +551,7 @@ impl EvalClient {
     /// that elicits mid-call blocks server-side until this POST answers it, and no human watches a
     /// benchmark stream. A non-elicitation event is a no-op; an answer POST that fails returns `Err`
     /// so the caller can fail the stage rather than wait out the backend's 10-minute timeout.
-    pub async fn answer_if_elicitation(
-        &self,
-        event: &HashMap<String, JsonValue>,
-    ) -> Result<(), ClientError> {
+    pub async fn answer_if_elicitation(&self, event: &HashMap<String, JsonValue>) -> Result<(), ClientError> {
         let req = match parse_elicitation_event(event) {
             ElicitationParse::NotElicitation => return Ok(()),
             // A `data-mcp-elicitation` event we can't answer would otherwise leave the tool blocked
@@ -617,8 +565,7 @@ impl EvalClient {
             ElicitationParse::Request(req) => req,
         };
         let answer = answer_for(&req);
-        self.resolve_elicitation(&req.id, &req.conversation_id, &answer)
-            .await?;
+        self.resolve_elicitation(&req.id, &req.conversation_id, &answer).await?;
         info!(
             "auto-answered MCP elicitation {} ({:?}) with {}",
             req.id,
@@ -643,13 +590,8 @@ impl EvalClient {
         if let Some(content) = &answer.content {
             body["content"] = JsonValue::Object(content.clone());
         }
-        self.request(
-            Method::POST,
-            &format!("/api/chat/elicitation/{id}"),
-            None,
-            Some(&body),
-        )
-        .await?;
+        self.request(Method::POST, &format!("/api/chat/elicitation/{id}"), None, Some(&body))
+            .await?;
         Ok(())
     }
 
@@ -662,24 +604,15 @@ impl EvalClient {
         project_id: Option<&str>,
     ) -> Result<HashMap<String, JsonValue>, ClientError> {
         let mut body = serde_json::Map::new();
-        body.insert(
-            "agentId".to_string(),
-            JsonValue::String(agent_id.to_string()),
-        );
+        body.insert("agentId".to_string(), JsonValue::String(agent_id.to_string()));
         if let Some(project_id) = project_id {
-            body.insert(
-                "projectId".to_string(),
-                JsonValue::String(project_id.to_string()),
-            );
+            body.insert("projectId".to_string(), JsonValue::String(project_id.to_string()));
         }
         if let Some(title) = title {
             body.insert("title".to_string(), JsonValue::String(title.to_string()));
         }
         if let Some(model_id) = model_id {
-            body.insert(
-                "modelId".to_string(),
-                JsonValue::String(model_id.to_string()),
-            );
+            body.insert("modelId".to_string(), JsonValue::String(model_id.to_string()));
         }
         if let Some(chat_api_key_id) = chat_api_key_id {
             body.insert(
@@ -702,10 +635,7 @@ impl EvalClient {
     /// Fetch a conversation's persisted messages in UI-message shape (`{id, role, parts, ...}`).
     /// The platform chat route is request-body-authoritative — it never backfills history from the
     /// DB — so callers must resend these on follow-up turns to preserve context across stages.
-    pub async fn get_conversation_messages(
-        &self,
-        conversation_id: &str,
-    ) -> Result<Vec<JsonValue>, ClientError> {
+    pub async fn get_conversation_messages(&self, conversation_id: &str) -> Result<Vec<JsonValue>, ClientError> {
         let body = self
             .get_json(&format!("/api/chat/conversations/{conversation_id}"))
             .await?;
@@ -721,10 +651,7 @@ impl EvalClient {
     /// effective prompt the model received. Pages the capped API and waits out the write race: the
     /// proxy persists each row in a `finally` after the chat stream ends, so a naive single fetch
     /// can miss the last call.
-    pub async fn fetch_session_interactions(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<JsonValue>, ClientError> {
+    pub async fn fetch_session_interactions(&self, session_id: &str) -> Result<Vec<JsonValue>, ClientError> {
         const PAGE: usize = 100;
         const MAX_REFETCH: usize = 5;
         // The total can keep growing while we page (the proxy is still flushing rows), so settle on a
@@ -817,20 +744,13 @@ impl EvalClient {
             .get("data")
             .and_then(JsonValue::as_array)
             .cloned()
-            .ok_or_else(|| {
-                ContractError(format!(
-                    "GET /api/interactions: missing `data` array: {body}"
-                ))
-            })?;
+            .ok_or_else(|| ContractError(format!("GET /api/interactions: missing `data` array: {body}")))?;
         let total = body
             .get("pagination")
             .and_then(|p| p.get("total"))
             .and_then(JsonValue::as_u64)
-            .ok_or_else(|| {
-                ContractError(format!(
-                    "GET /api/interactions: missing `pagination.total`: {body}"
-                ))
-            })? as usize;
+            .ok_or_else(|| ContractError(format!("GET /api/interactions: missing `pagination.total`: {body}")))?
+            as usize;
         Ok((data, total))
     }
 
@@ -886,8 +806,7 @@ impl EvalClient {
     }
 
     pub async fn warm_user_token(&self) -> Result<(), ClientError> {
-        self.request(Method::GET, "/api/user-tokens/me", None, None)
-            .await?;
+        self.request(Method::GET, "/api/user-tokens/me", None, None).await?;
         Ok(())
     }
 
@@ -907,11 +826,7 @@ impl EvalClient {
         )
     }
 
-    pub async fn download_file_bytes(
-        &self,
-        content_url: &str,
-        timeout_s: f64,
-    ) -> Result<Vec<u8>, ClientError> {
+    pub async fn download_file_bytes(&self, content_url: &str, timeout_s: f64) -> Result<Vec<u8>, ClientError> {
         let url = self.url(content_url, None);
         let mut req = self
             .http
@@ -957,15 +872,11 @@ impl EvalClient {
     }
 
     pub async fn list_models(&self) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
-        items(
-            self.request(Method::GET, "/api/llm-models", None, None)
-                .await?,
-        )
+        items(self.request(Method::GET, "/api/llm-models", None, None).await?)
     }
 
     pub async fn sync_models(&self) -> Result<(), ClientError> {
-        self.request(Method::POST, "/api/llm-models/sync", None, None)
-            .await?;
+        self.request(Method::POST, "/api/llm-models/sync", None, None).await?;
         Ok(())
     }
 
@@ -976,10 +887,7 @@ impl EvalClient {
         ref_: Option<&str>,
     ) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         let mut body = serde_json::Map::new();
-        body.insert(
-            "repoUrl".to_string(),
-            JsonValue::String(pin_repo_url(repo_url, ref_)),
-        );
+        body.insert("repoUrl".to_string(), JsonValue::String(pin_repo_url(repo_url, ref_)));
         if let Some(path) = path {
             body.insert("path".to_string(), JsonValue::String(path.to_string()));
         }
@@ -1013,18 +921,10 @@ impl EvalClient {
         ref_: Option<&str>,
     ) -> Result<HashMap<String, JsonValue>, ClientError> {
         let mut body = serde_json::Map::new();
-        body.insert(
-            "repoUrl".to_string(),
-            JsonValue::String(pin_repo_url(repo_url, ref_)),
-        );
+        body.insert("repoUrl".to_string(), JsonValue::String(pin_repo_url(repo_url, ref_)));
         body.insert(
             "skillPaths".to_string(),
-            JsonValue::Array(
-                skill_paths
-                    .iter()
-                    .map(|s| JsonValue::String(s.clone()))
-                    .collect(),
-            ),
+            JsonValue::Array(skill_paths.iter().map(|s| JsonValue::String(s.clone())).collect()),
         );
         body.insert("scope".to_string(), JsonValue::String(scope.to_string()));
         with_github_token(&mut body);
@@ -1045,18 +945,10 @@ impl EvalClient {
         result
     }
 
-    pub async fn list_mcp_server_tools(
-        &self,
-        server_id: &str,
-    ) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
+    pub async fn list_mcp_server_tools(&self, server_id: &str) -> Result<Vec<HashMap<String, JsonValue>>, ClientError> {
         items(
-            self.request(
-                Method::GET,
-                &format!("/api/mcp_server/{server_id}/tools"),
-                None,
-                None,
-            )
-            .await?,
+            self.request(Method::GET, &format!("/api/mcp_server/{server_id}/tools"), None, None)
+                .await?,
         )
     }
 
@@ -1069,30 +961,17 @@ impl EvalClient {
     ) -> Result<HashMap<String, JsonValue>, ClientError> {
         let mut body = serde_json::Map::new();
         body.insert("name".to_string(), JsonValue::String(name.to_string()));
-        body.insert(
-            "catalogId".to_string(),
-            JsonValue::String(catalog_id.to_string()),
-        );
+        body.insert("catalogId".to_string(), JsonValue::String(catalog_id.to_string()));
         body.insert("scope".to_string(), JsonValue::String(scope.to_string()));
         if let Some(agent_ids) = agent_ids {
             body.insert(
                 "agentIds".to_string(),
-                JsonValue::Array(
-                    agent_ids
-                        .iter()
-                        .map(|s| JsonValue::String(s.clone()))
-                        .collect(),
-                ),
+                JsonValue::Array(agent_ids.iter().map(|s| JsonValue::String(s.clone())).collect()),
             );
         }
         require_dict(
-            self.request(
-                Method::POST,
-                "/api/mcp_server",
-                None,
-                Some(&JsonValue::Object(body)),
-            )
-            .await?,
+            self.request(Method::POST, "/api/mcp_server", None, Some(&JsonValue::Object(body)))
+                .await?,
             "POST /api/mcp_server",
         )
     }
@@ -1109,11 +988,7 @@ fn map_to_hashmap(m: serde_json::Map<String, JsonValue>) -> HashMap<String, Json
     m.into_iter().collect()
 }
 
-fn require_str_field(
-    obj: &HashMap<String, JsonValue>,
-    key: &str,
-    ctx: &str,
-) -> Result<String, ClientError> {
+fn require_str_field(obj: &HashMap<String, JsonValue>, key: &str, ctx: &str) -> Result<String, ClientError> {
     match obj.get(key) {
         Some(JsonValue::String(s)) if !s.is_empty() => Ok(s.clone()),
         other => Err(ContractError(format!(
@@ -1132,9 +1007,7 @@ fn items(body: JsonValue) -> Result<Vec<HashMap<String, JsonValue>>, ClientError
             } else if let Some(JsonValue::Array(arr)) = obj.get("data") {
                 arr.clone()
             } else {
-                return Err(
-                    ContractError(format!("unexpected list-response shape: {body}")).into(),
-                );
+                return Err(ContractError(format!("unexpected list-response shape: {body}")).into());
             }
         }
         _ => {
@@ -1144,9 +1017,7 @@ fn items(body: JsonValue) -> Result<Vec<HashMap<String, JsonValue>>, ClientError
     rows.into_iter()
         .map(|row| match row {
             JsonValue::Object(m) => Ok(map_to_hashmap(m)),
-            other => {
-                Err(ContractError(format!("unexpected list item (not an object): {other}")).into())
-            }
+            other => Err(ContractError(format!("unexpected list item (not an object): {other}")).into()),
         })
         .collect()
 }
@@ -1192,9 +1063,7 @@ fn github_token() -> Option<String> {
                 .ok()
                 .and_then(|out| {
                     if out.status.success() {
-                        String::from_utf8(out.stdout)
-                            .ok()
-                            .map(|s| s.trim().to_string())
+                        String::from_utf8(out.stdout).ok().map(|s| s.trim().to_string())
                     } else {
                         None
                     }
@@ -1260,10 +1129,7 @@ fn sandbox_readiness(body: &JsonValue) -> SandboxReadiness {
         // and proceed rather than poll out the deadline.
         None => SandboxReadiness::Ready,
         Some(other) => {
-            let reason = body
-                .get("sandboxReason")
-                .and_then(|v| v.as_str())
-                .unwrap_or(other);
+            let reason = body.get("sandboxReason").and_then(|v| v.as_str()).unwrap_or(other);
             SandboxReadiness::Fatal(format!("sandbox {reason}"))
         }
     }
@@ -1276,10 +1142,7 @@ mod tests {
     #[test]
     fn test_sandbox_readiness_classifies_each_state() {
         use serde_json::json;
-        assert_eq!(
-            sandbox_readiness(&json!({"sandbox": "ready"})),
-            SandboxReadiness::Ready
-        );
+        assert_eq!(sandbox_readiness(&json!({"sandbox": "ready"})), SandboxReadiness::Ready);
         assert_eq!(
             sandbox_readiness(&json!({"sandbox": "initializing"})),
             SandboxReadiness::Pending
@@ -1342,23 +1205,14 @@ mod tests {
         };
         let v = serde_json::to_value(&agent).unwrap();
         assert_eq!(v["toolExposureMode"], "search_and_run_only");
-        assert!(
-            v.get("tool_exposure_mode").is_none(),
-            "snake_case key leaked"
-        );
-        assert!(
-            v.get("systemPrompt").is_none(),
-            "empty prompt must be omitted"
-        );
+        assert!(v.get("tool_exposure_mode").is_none(), "snake_case key leaked");
+        assert!(v.get("systemPrompt").is_none(), "empty prompt must be omitted");
 
         let full = AgentCreate {
             tool_exposure_mode: ToolExposureMode::Full,
             ..agent
         };
-        assert_eq!(
-            serde_json::to_value(&full).unwrap()["toolExposureMode"],
-            "full"
-        );
+        assert_eq!(serde_json::to_value(&full).unwrap()["toolExposureMode"], "full");
     }
 
     #[test]

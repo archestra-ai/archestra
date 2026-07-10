@@ -1,7 +1,8 @@
 import config from "@/config";
+import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 
-const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000;
 const CAPTURE_TIMEOUT_MS = 10_000;
 const INSTANCE_STARTED_EVENT = "instance_started";
 const INSTANCE_HEARTBEAT_EVENT = "instance_heartbeat";
@@ -17,6 +18,8 @@ type InstanceAnalyticsConfig = {
 };
 
 class InstanceAnalyticsService {
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+
   constructor(
     private readonly options: {
       analyticsConfig?: InstanceAnalyticsConfig;
@@ -26,11 +29,41 @@ class InstanceAnalyticsService {
     } = {},
   ) {}
 
-  async trackStartup(): Promise<void> {
-    const analyticsConfig = this.options.analyticsConfig ?? config.analytics;
+  // instance_heartbeat is a stateless hourly ping carrying the instance id;
+  // dashboards count unique ids per day (DAU semantics), so restarts and
+  // extra replicas can only duplicate events, never inflate the daily count.
+  // Deliberately no send-once-per-day dedup state: a startup-only or
+  // DB-deduped capture undercounts always-on deployments.
+  async start(): Promise<void> {
+    const analyticsConfig = this.getAnalyticsConfig();
     if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
 
-    const now = this.getNow();
+    if (!this.heartbeatTimer) {
+      this.heartbeatTimer = setInterval(() => {
+        this.captureHeartbeat().catch((error) => {
+          logger.warn(
+            { err: error },
+            "Failed to send instance analytics heartbeat",
+          );
+        });
+      }, HEARTBEAT_INTERVAL_MS);
+      this.heartbeatTimer.unref();
+    }
+
+    await this.captureHeartbeat();
+  }
+
+  stop(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private async captureHeartbeat(): Promise<void> {
+    const analyticsConfig = this.getAnalyticsConfig();
+    if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
+
     const state = await OrganizationModel.getAnalyticsState();
 
     if (!state.analyticsInstanceStartedAt) {
@@ -41,21 +74,15 @@ class InstanceAnalyticsService {
       });
       await OrganizationModel.updateAnalyticsState({
         id: state.id,
-        analyticsInstanceStartedAt: now,
+        analyticsInstanceStartedAt: this.getNow(),
       });
     }
 
-    if (shouldSendHeartbeat(state.analyticsInstanceLastHeartbeatAt, now)) {
-      await this.capture({
-        analyticsConfig,
-        event: INSTANCE_HEARTBEAT_EVENT,
-        distinctId: state.analyticsInstanceId,
-      });
-      await OrganizationModel.updateAnalyticsState({
-        id: state.id,
-        analyticsInstanceLastHeartbeatAt: now,
-      });
-    }
+    await this.capture({
+      analyticsConfig,
+      event: INSTANCE_HEARTBEAT_EVENT,
+      distinctId: state.analyticsInstanceId,
+    });
   }
 
   private async capture({
@@ -95,6 +122,10 @@ class InstanceAnalyticsService {
     }
   }
 
+  private getAnalyticsConfig(): InstanceAnalyticsConfig {
+    return this.options.analyticsConfig ?? config.analytics;
+  }
+
   private getFetch(): Fetch {
     return this.options.fetch ?? fetch;
   }
@@ -105,12 +136,6 @@ class InstanceAnalyticsService {
 }
 
 export const instanceAnalyticsService = new InstanceAnalyticsService();
-
-function shouldSendHeartbeat(lastHeartbeatAt: Date | null, now: Date): boolean {
-  if (!lastHeartbeatAt) return true;
-
-  return now.getTime() - lastHeartbeatAt.getTime() >= HEARTBEAT_INTERVAL_MS;
-}
 
 function getCaptureUrl(analyticsConfig: InstanceAnalyticsConfig): string {
   return new URL("/capture/", analyticsConfig.posthog.host).toString();

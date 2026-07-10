@@ -178,6 +178,59 @@ describe("internal MCP catalog built-in protection & ownership gates", () => {
     ).resolves.not.toBeNull();
   });
 
+  test("DELETE forbids an admin of a write-level team, though they may edit (403)", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const author = await makeUser();
+    const teamAdmin = await makeUser();
+    await makeMember(teamAdmin.id, organizationId, { role: "member" });
+    const team = await makeTeam(organizationId, author.id);
+    await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+
+    const teamItem = await InternalMcpCatalogModel.create(
+      {
+        name: "team-write-server",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "team",
+        teams: [{ id: team.id, level: "write" }],
+      },
+      { organizationId, authorId: author.id },
+    );
+
+    user = teamAdmin;
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+
+    // The same actor holds write — an edit at the item's scope succeeds.
+    const edit = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${teamItem.id}`,
+      payload: {
+        name: "team-write-server",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        description: "edited by the team admin",
+      },
+    });
+    expect(edit.statusCode).toBe(200);
+
+    // …but write does not confer deletion, which cascades to installs/secrets.
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/internal_mcp_catalog/${teamItem.id}`,
+    });
+    expect(del.statusCode).toBe(403);
+    expect(del.json().error.message).toBe(
+      "You can only delete your own personal catalog items",
+    );
+    await expect(
+      InternalMcpCatalogModel.findById(teamItem.id),
+    ).resolves.not.toBeNull();
+  });
+
   test("DELETE by-name forbids a non-admin from removing an org-scoped item (403)", async ({
     makeUser,
     makeMember,

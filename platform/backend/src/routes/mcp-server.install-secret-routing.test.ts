@@ -117,6 +117,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-env-secret",
         serverType: "local",
         localConfig: {
@@ -166,6 +167,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-env-plain",
         serverType: "local",
         localConfig: {
@@ -220,6 +222,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       });
 
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-env-mixed",
         serverType: "local",
         localConfigSecretId: catalogSecret.id,
@@ -275,6 +278,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-sensitive-local",
         serverType: "local",
         userConfig: {
@@ -317,6 +321,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-plain-local",
         serverType: "local",
         userConfig: {
@@ -359,6 +364,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-sensitive-remote",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
@@ -394,6 +400,7 @@ describe("MCP Server Install - Per-User Value Routing", () => {
       makeInternalMcpCatalog,
     }) => {
       const catalog = await makeInternalMcpCatalog({
+        organizationId,
         name: "install-header-plain-remote",
         serverType: "remote",
         serverUrl: "https://example.com/mcp",

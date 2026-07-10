@@ -6,6 +6,8 @@ description: Invoke agents by sending emails to auto-generated addresses
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Incoming Email lets users invoke agents by sending mail to agent-specific aliases. Archestra watches a shared mailbox, extracts the target agent from the alias, and turns the email body into the agent's first message.
 
 Use **Agent Triggers** → **Email** to:

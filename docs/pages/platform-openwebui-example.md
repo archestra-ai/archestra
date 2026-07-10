@@ -5,6 +5,8 @@ order: 5
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ## Overview
 
 OpenWebUI is a client for LLMs. It has no built-in mechanism to prevent data leaks or malicious commands via tool calls. You can integrate it with Archestra, which intercepts malicious tool calls and prevents untrusted context from influencing the LLM’s behaviour.

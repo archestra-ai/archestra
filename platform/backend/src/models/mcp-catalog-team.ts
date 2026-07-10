@@ -1,6 +1,18 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import {
+  type CatalogTeamAccessLevel,
+  type CatalogTeamInput,
+  DEFAULT_CATALOG_TEAM_ACCESS_LEVEL,
+  normalizeCatalogTeamInput,
+} from "@/types/catalog-team-level";
+
+interface CatalogTeamDetail {
+  id: string;
+  name: string;
+  level: CatalogTeamAccessLevel;
+}
 
 class McpCatalogTeamModel {
   /**
@@ -109,27 +121,48 @@ class McpCatalogTeamModel {
   }
 
   /**
-   * Sync team assignments for a catalog item (replaces all existing assignments)
+   * Replace a catalog item's team assignments.
+   *
+   * An entry without a `level` keeps the level already stored for that team, so
+   * an id-only caller (the agent-callable edit tools, a legacy API client)
+   * cannot silently promote a `use` team to `write`. A team assigned for the
+   * first time without a level takes the default, `write`.
    */
   static async syncCatalogTeams(
     catalogId: string,
-    teamIds: string[],
+    teams: CatalogTeamInput[],
     tx?: Transaction,
   ): Promise<number> {
+    const assignments = normalizeCatalogTeamInput(teams);
     logger.debug(
-      { catalogId, teamCount: teamIds.length },
+      { catalogId, teamCount: assignments.length },
       "McpCatalogTeamModel.syncCatalogTeams: syncing teams",
     );
     const run = async (t: Transaction) => {
+      const existing = await t
+        .select({
+          teamId: schema.mcpCatalogTeamsTable.teamId,
+          level: schema.mcpCatalogTeamsTable.level,
+        })
+        .from(schema.mcpCatalogTeamsTable)
+        .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));
+      const storedLevels = new Map(
+        existing.map((row) => [row.teamId, row.level]),
+      );
+
       await t
         .delete(schema.mcpCatalogTeamsTable)
         .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));
 
-      if (teamIds.length > 0) {
+      if (assignments.length > 0) {
         await t.insert(schema.mcpCatalogTeamsTable).values(
-          teamIds.map((teamId) => ({
+          assignments.map(({ id, level }) => ({
             catalogId,
-            teamId,
+            teamId: id,
+            level:
+              level ??
+              storedLevels.get(id) ??
+              DEFAULT_CATALOG_TEAM_ACCESS_LEVEL,
           })),
         );
       }
@@ -140,19 +173,17 @@ class McpCatalogTeamModel {
       await withDbTransaction(run);
     }
 
-    return teamIds.length;
+    return assignments.length;
   }
 
-  /**
-   * Get team details (id and name) for a specific catalog item
-   */
   static async getTeamDetailsForCatalog(
     catalogId: string,
-  ): Promise<Array<{ id: string; name: string }>> {
+  ): Promise<CatalogTeamDetail[]> {
     const catalogTeams = await db
       .select({
         teamId: schema.mcpCatalogTeamsTable.teamId,
         teamName: schema.teamsTable.name,
+        level: schema.mcpCatalogTeamsTable.level,
       })
       .from(schema.mcpCatalogTeamsTable)
       .innerJoin(
@@ -164,6 +195,7 @@ class McpCatalogTeamModel {
     return catalogTeams.map((ct) => ({
       id: ct.teamId,
       name: ct.teamName,
+      level: ct.level,
     }));
   }
 
@@ -172,7 +204,7 @@ class McpCatalogTeamModel {
    */
   static async getTeamDetailsForCatalogs(
     catalogIds: string[],
-  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
+  ): Promise<Map<string, CatalogTeamDetail[]>> {
     if (catalogIds.length === 0) return new Map();
 
     const catalogTeams = await db
@@ -180,6 +212,7 @@ class McpCatalogTeamModel {
         catalogId: schema.mcpCatalogTeamsTable.catalogId,
         teamId: schema.mcpCatalogTeamsTable.teamId,
         teamName: schema.teamsTable.name,
+        level: schema.mcpCatalogTeamsTable.level,
       })
       .from(schema.mcpCatalogTeamsTable)
       .innerJoin(
@@ -188,15 +221,19 @@ class McpCatalogTeamModel {
       )
       .where(inArray(schema.mcpCatalogTeamsTable.catalogId, catalogIds));
 
-    const teamsMap = new Map<string, Array<{ id: string; name: string }>>();
+    const teamsMap = new Map<string, CatalogTeamDetail[]>();
 
     for (const catalogId of catalogIds) {
       teamsMap.set(catalogId, []);
     }
 
-    for (const { catalogId, teamId, teamName } of catalogTeams) {
+    for (const { catalogId, teamId, teamName, level } of catalogTeams) {
       const teams = teamsMap.get(catalogId) || [];
-      teams.push({ id: teamId, name: teamName });
+      teams.push({
+        id: teamId,
+        name: teamName,
+        level,
+      });
       teamsMap.set(catalogId, teams);
     }
 

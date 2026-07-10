@@ -20,6 +20,7 @@ import {
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
+import { DelegationLoopError } from "@/agents/errors";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
@@ -68,6 +69,14 @@ export interface A2AAttachment {
   /** Optional filename for context */
   name?: string;
 }
+
+/**
+ * Longest delegation chain (root agent + delegated descendants) allowed before
+ * a further hop is refused. Mirrors MAX_AGENT_STEPS: a named constant, not
+ * configuration.
+ * @public exported for tests; used internally otherwise.
+ */
+export const MAX_DELEGATION_DEPTH = 5;
 
 /** @public — exported for testability */
 export interface A2AExecuteParams {
@@ -206,6 +215,24 @@ export async function executeA2AMessage(
   const delegationChain = parentDelegationChain
     ? `${parentDelegationChain}:${agentId}`
     : agentId;
+
+  // The parent chain is this run's ancestor path, so re-entering an agent
+  // already on it is a delegation cycle that would recurse until the LLM budget
+  // runs out. Both existing loop guards are per-run (a fresh step budget and a
+  // fresh repeat tracker per delegation), so neither sees it. Refuse before any
+  // I/O; `handleDelegation` turns the throw into a tool error the model can
+  // recover from. Agent ids are uuids, so ":" cannot appear inside one.
+  const ancestors = parentDelegationChain?.split(":") ?? [];
+  if (ancestors.includes(agentId)) {
+    throw new DelegationLoopError(
+      "That agent is already in the current delegation chain. Answer directly instead of delegating back to it.",
+    );
+  }
+  if (ancestors.length + 1 > MAX_DELEGATION_DEPTH) {
+    throw new DelegationLoopError(
+      `Delegation depth limit of ${MAX_DELEGATION_DEPTH} reached. Answer directly instead of delegating further.`,
+    );
+  }
 
   // Fetch the internal agent
   const agent = await AgentModel.findById(agentId);

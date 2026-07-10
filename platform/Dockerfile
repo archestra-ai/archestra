@@ -281,8 +281,14 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm deploy --filter=@backend --prod --legacy /prod/backend
 
-# <----- Final unified stage ----->
-FROM base AS unified
+# <----- Final unified stage (slim: everything except the Dagger Engine tar) ----->
+# `unified-slim` is the complete, runnable platform image minus the ~352MB
+# dagger-engine.tar, which only the quickstart docker-run path consumes (the
+# entrypoint kind-loads it into the embedded KinD cluster). CI e2e shards build
+# --target unified-slim so they never pull or kind-load that dead weight; the
+# default `unified` stage below layers the tar back on top for quickstart and
+# published release images.
+FROM base AS unified-slim
 WORKDIR /app
 
 ARG VERSION=dev
@@ -369,7 +375,32 @@ RUN apk add --no-cache supervisor && \
     # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
     rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
            /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
-           /usr/lib/python*/ensurepip
+           /usr/lib/python*/ensurepip && \
+    # CVE-2026-23949: jaraco-context 5.3.0 (fixed in 6.1.0). Vendored inside py3-setuptools
+    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
+    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/jaraco/context.py \
+           /usr/lib/python*/site-packages/setuptools/_vendor/jaraco.context-*.dist-info
+
+# CVE-2026-23949: jaraco.context 5.3.0, also vendored inside py3-setuptools.
+# Unlike the vendored wheel above it can't be deleted — jaraco.text imports
+# jaraco.context at setuptools/pkg_resources import time — so replace it with
+# the fixed 6.1.0 wheel from PyPI, pinned by sha256. 6.1.0 ships jaraco/context
+# as a package directory (5.3.0 was a single context.py module), hence the
+# directory copy.
+RUN wget -O /tmp/jaraco_context-6.1.0-py3-none-any.whl \
+        "https://files.pythonhosted.org/packages/8d/48/aa685dbf1024c7bd82bede569e3a85f82c32fd3d79ba5fea578f0159571a/jaraco_context-6.1.0-py3-none-any.whl" && \
+    echo "a43b5ed85815223d0d3cfdb6d7ca0d2bc8946f28f30b6f3216bda070f68badda  /tmp/jaraco_context-6.1.0-py3-none-any.whl" | sha256sum -c - && \
+    VENDOR=$(echo /usr/lib/python3*/site-packages/setuptools/_vendor) && \
+    python3 -m zipfile -e /tmp/jaraco_context-6.1.0-py3-none-any.whl /tmp/jaraco_context && \
+    rm -rf "$VENDOR"/jaraco/context.py \
+           "$VENDOR"/jaraco/__pycache__/context.* \
+           "$VENDOR"/jaraco.context-*.dist-info && \
+    cp -r /tmp/jaraco_context/jaraco/context "$VENDOR"/jaraco/context && \
+    cp -r /tmp/jaraco_context/jaraco_context-6.1.0.dist-info "$VENDOR"/ && \
+    rm -rf /tmp/jaraco_context /tmp/jaraco_context-6.1.0-py3-none-any.whl && \
+    # sanity check: the swapped-in module must keep the setuptools import chain intact
+    python3 -c "import pkg_resources, setuptools" && \
+    supervisord --version
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
@@ -386,10 +417,10 @@ COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
 # applied into the embedded KinD cluster in quickstart mode; backs the skill
-# sandbox / code runtime (archestra__run_command and friends).
+# sandbox / code runtime (archestra__run_command and friends). The engine
+# IMAGE archive itself is added only in the final `unified` stage below —
+# the entrypoint falls back to a registry pull when the tar is absent.
 COPY --from=dagger-manifest /dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
-# engine image baked in (kind-loaded into the node at boot to avoid a registry pull)
-COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
@@ -437,3 +468,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
+
+# <----- Final unified stage (default target: quickstart / release) ----->
+# unified-slim plus the pre-baked Dagger Engine docker-archive. Quickstart
+# kind-loads it into the embedded node at boot so the engine starts offline
+# instead of pulling ~352MB from the registry on every run (KinD recreates its
+# node each boot and its containerd cannot see the host Docker image cache) —
+# see docker-entrypoint.sh and the commit that introduced the tar (#5275).
+# This MUST remain the last stage: builds without --target (releases,
+# quickstart CI, fork PRs, local docker build) get the full image.
+FROM unified-slim AS unified
+COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar

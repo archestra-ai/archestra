@@ -362,7 +362,12 @@ export function handleError(
   }
 
   const errorMessage = extractErrorMessage(error);
-  const internalCode = extractInternalCode(error);
+  // Prefer the adapter's classification, but fall back to a code already
+  // carried by an ApiError (e.g. the adapter threw one tagged with
+  // upstream_empty_response) so re-wrapping below doesn't drop it.
+  const internalCode =
+    extractInternalCode(error) ??
+    (error instanceof ApiError ? error.internalCode : undefined);
 
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
@@ -375,6 +380,9 @@ export function handleError(
       error: {
         type: "api_error",
         message: errorMessage,
+        // Surface the normalized code (e.g. provider_insufficient_balance)
+        // mid-stream too, so a failure after headers commit stays classifiable.
+        ...(internalCode ? { internal_code: internalCode } : {}),
       },
     };
     try {

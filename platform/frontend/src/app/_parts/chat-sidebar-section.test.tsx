@@ -76,6 +76,7 @@ let mockApps: Array<{
   mcpServerId?: string;
   resourceUri?: string;
   name: string;
+  icon?: string | null;
   pinnedAt: string | null;
 }> = [];
 
@@ -118,6 +119,13 @@ vi.mock("@/lib/app.query", () => ({
 vi.mock("@/components/agent-icon", () => ({
   AgentIcon: ({ icon }: { icon?: string | null }) => (
     <span data-testid="project-emoji">{icon}</span>
+  ),
+}));
+
+// External pinned apps render the backing MCP server's registry icon.
+vi.mock("@/components/mcp-catalog-icon", () => ({
+  McpCatalogIcon: ({ icon }: { icon?: string | null }) => (
+    <span data-testid="app-catalog-icon">{icon}</span>
   ),
 }));
 
@@ -456,6 +464,7 @@ describe("ChatSidebarSection", () => {
         mcpServerId: "server-1",
         resourceUri: "ui://pm/board.html",
         name: "Archestra PM / show_board",
+        icon: "📋",
         pinnedAt: "2026-01-04T00:00:00Z",
       },
       {
@@ -472,6 +481,28 @@ describe("ChatSidebarSection", () => {
     expect(screen.getByText("Sprint Board")).toBeInTheDocument();
     expect(screen.getByText("Archestra PM / show_board")).toBeInTheDocument();
     expect(screen.queryByText("Unpinned App")).not.toBeInTheDocument();
+    // The external app shows its MCP server's registry icon; the owned app
+    // keeps the generic AppWindow glyph (exactly one catalog icon rendered).
+    expect(screen.getByTestId("app-catalog-icon")).toHaveTextContent("📋");
+  });
+
+  it("renders the catalog icon fallback for an external app without an icon", () => {
+    mockApps = [
+      {
+        source: "external",
+        mcpServerId: "server-1",
+        resourceUri: "ui://pm/board.html",
+        name: "Archestra PM / show_board",
+        icon: null,
+        pinnedAt: "2026-01-04T00:00:00Z",
+      },
+    ];
+
+    render(<ChatSidebarSection fadeIn={fadeIn} />);
+
+    // McpCatalogIcon owns the fallback (generic Server glyph); the sidebar
+    // still routes the null icon through it rather than a hardcoded glyph.
+    expect(screen.getByTestId("app-catalog-icon")).toBeEmptyDOMElement();
   });
 
   it("shows a chat's project emoji and name when its project has an emoji", () => {

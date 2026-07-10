@@ -195,6 +195,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // The server's registry icon (emoji or data URL) so the card can
           // show which server the app comes from.
           icon: catalogApp.serverIcon,
+          requiresInput: catalogApp.requiresInput,
           executionModel: "server-scoped" as const,
           cspOrigin: "author-declared" as const,
           pinnedAt:
@@ -855,7 +856,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "invalid image data URL.");
       }
       const [, mimeType, data] = match;
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+      if (!isCanonicalBase64(data)) {
         throw new ApiError(400, "image data is not valid base64.");
       }
       await AppRenderScreenshotModel.record({
@@ -980,6 +981,13 @@ function isAssignmentError(
   result: ToolAssignmentError | "duplicate" | "updated" | null,
 ): result is ToolAssignmentError {
   return result !== null && result !== "duplicate" && result !== "updated";
+}
+
+function isCanonicalBase64(value: string): boolean {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+
+  const canonical = Buffer.from(value, "base64").toString("base64");
+  return value === canonical || value === canonical.replace(/=+$/, "");
 }
 
 /**

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
@@ -12,6 +12,15 @@ import type { SelectUserToken } from "@/types";
  * 2. They might not work with BYOS Vault (which is read-only from customer's Vault)
  */
 const FORCE_DB = true;
+
+/**
+ * Minimum age of lastUsedAt before validateToken refreshes it. Every request
+ * on a token validates it, so an unconditional write turns the token row into
+ * a lock hot spot — concurrent requests serialize behind the row lock and can
+ * exceed the statement timeout under bursts. The staleness window collapses a
+ * burst into at most one write.
+ */
+const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
 
 /** Raised by `create` when a concurrent request already created the (org, user) token. */
 class UserTokenConflictError extends Error {
@@ -140,13 +149,26 @@ class UserTokenModel {
   }
 
   /**
-   * Update last used timestamp for a token
+   * Update last used timestamp for a token.
+   *
+   * Skips the write when lastUsedAt is already fresh (see
+   * {@link LAST_USED_REFRESH_INTERVAL_MS}); concurrent callers that lose the
+   * race re-check the condition after the winner commits and skip too.
    */
   static async updateLastUsed(id: string): Promise<void> {
+    const cutoff = new Date(Date.now() - LAST_USED_REFRESH_INTERVAL_MS);
     await db
       .update(schema.userTokensTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.userTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          or(
+            isNull(schema.userTokensTable.lastUsedAt),
+            lt(schema.userTokensTable.lastUsedAt, cutoff),
+          ),
+        ),
+      );
   }
 
   /**
@@ -250,8 +272,14 @@ class UserTokenModel {
         secret?.secret &&
         (secret.secret as { token?: string }).token === tokenValue
       ) {
-        // Update last used timestamp
-        await UserTokenModel.updateLastUsed(token.id);
+        // Update last used timestamp — best-effort bookkeeping that must
+        // never block or fail the authentication path.
+        UserTokenModel.updateLastUsed(token.id).catch((error) => {
+          logger.warn(
+            { tokenId: token.id, error: String(error) },
+            "Failed to update user token lastUsedAt",
+          );
+        });
         return token;
       }
     }

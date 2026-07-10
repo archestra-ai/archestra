@@ -57,7 +57,7 @@ test("prepends the skill activation block to the last user message", async ({
   });
 
   const text = result[0].parts?.[0]?.text ?? "";
-  expect(text).toContain('<skill_content name="Research">');
+  expect(text).toContain('<skill_content name="Research" version="1">');
   expect(text).toContain("Follow the Research steps.");
   expect(text).toContain("summarize this paper");
   // the original message is left untouched for persistence / display

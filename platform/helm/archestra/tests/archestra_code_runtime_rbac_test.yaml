@@ -2,21 +2,21 @@ suite: test archestra platform -- code runtime RBAC
 templates:
   - code-runtime-rbac.yaml
 tests:
-  - it: should not create code runtime RBAC by default
+  - it: should not create code runtime RBAC when code runtime is disabled
+    set:
+      archestra.codeRuntime.enabled: false
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: should create narrow Dagger pod exec Role when code runtime is enabled
+  - it: should create narrow Dagger pod exec Role by default
     documentIndex: 0
-    set:
-      archestra.codeRuntime.enabled: true
     asserts:
       - isKind:
           of: Role
       - equal:
           path: metadata.namespace
-          value: dagger
+          value: NAMESPACE
       - contains:
           path: rules
           content:
@@ -32,14 +32,12 @@ tests:
 
   - it: should bind Dagger pod exec Role to the Archestra ServiceAccount
     documentIndex: 1
-    set:
-      archestra.codeRuntime.enabled: true
     asserts:
       - isKind:
           of: RoleBinding
       - equal:
           path: metadata.namespace
-          value: dagger
+          value: NAMESPACE
       - equal:
           path: subjects[0].kind
           value: ServiceAccount
@@ -53,26 +51,23 @@ tests:
   - it: should support a custom Dagger RBAC namespace
     documentIndex: 0
     set:
-      archestra.codeRuntime.enabled: true
       archestra.codeRuntime.dagger.rbac.namespace: code-runtime
     asserts:
       - equal:
           path: metadata.namespace
           value: code-runtime
 
-  - it: should use the release namespace for managed Dagger RBAC
+  - it: should use the external companion-chart namespace when managed Dagger is disabled
     documentIndex: 0
     set:
-      archestra.codeRuntime.enabled: true
-      archestra.codeRuntime.dagger.managed.enabled: true
+      archestra.codeRuntime.dagger.managed.enabled: false
     asserts:
       - equal:
           path: metadata.namespace
-          value: NAMESPACE
+          value: dagger
 
   - it: should not create code runtime RBAC for explicit TCP runner hosts
     set:
-      archestra.codeRuntime.enabled: true
       archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.dagger.svc.cluster.local:1234
     asserts:
       - hasDocuments:
@@ -80,7 +75,6 @@ tests:
 
   - it: should allow disabling code runtime RBAC
     set:
-      archestra.codeRuntime.enabled: true
       archestra.codeRuntime.dagger.rbac.create: false
     asserts:
       - hasDocuments:

@@ -6,6 +6,7 @@ import {
   IDENTITY_PROVIDER_ID,
   IDENTITY_TRUSTED_PROVIDER_IDS,
   MEMBER_ROLE_NAME,
+  TimeInMs,
 } from "@archestra/shared";
 import type { SSOOptions } from "@better-auth/sso";
 import { APIError } from "better-auth";
@@ -16,9 +17,11 @@ import {
   cacheIdpGroups,
   extractGroupsFromClaims,
 } from "@/auth/idp-team-sync-cache.ee";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { evaluateRoleMappingTemplate } from "@/templating";
 import type {
   IdentityProvider,
@@ -53,6 +56,21 @@ export type IdpGetRoleData = Parameters<
 >[0];
 
 class IdentityProviderModel {
+  /**
+   * Process-local cache for {@link getTrustedAccountLinkingProviderIds}. The
+   * lookup backs better-auth's account-linking `trustedProviders` option, which
+   * is evaluated on auth requests (including session reads), so without a cache
+   * it costs one `select distinct` per request for a list that only changes
+   * when an admin edits identity providers. Writes in this process clear the
+   * cache immediately; other pods converge within the TTL.
+   */
+  private static readonly trustedProviderIdsCache = registerProcessLocalCache(
+    new LRUCacheManager<string[]>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
   /**
    * Evaluates role mapping rules against SSO user data using Handlebars templates.
    *
@@ -469,6 +487,13 @@ class IdentityProviderModel {
   }
 
   static async getTrustedAccountLinkingProviderIds(): Promise<string[]> {
+    const cached = IdentityProviderModel.trustedProviderIdsCache.get(
+      TRUSTED_PROVIDER_IDS_CACHE_KEY,
+    );
+    if (cached) {
+      return cached;
+    }
+
     let configuredProviderIds: Array<{ providerId: string }> = [];
 
     try {
@@ -482,13 +507,15 @@ class IdentityProviderModel {
         error instanceof Error &&
         error.message.includes("Database not initialized")
       ) {
+        // Pre-initialization fallback: don't cache it, so the DB-backed list
+        // takes over on the first call after the database comes up.
         return [...IDENTITY_TRUSTED_PROVIDER_IDS];
       }
 
       throw error;
     }
 
-    return [
+    const providerIds = [
       ...new Set([
         ...IDENTITY_TRUSTED_PROVIDER_IDS,
         ...configuredProviderIds
@@ -497,6 +524,13 @@ class IdentityProviderModel {
           .sort((a, b) => a.localeCompare(b)),
       ]),
     ];
+
+    IdentityProviderModel.trustedProviderIdsCache.set(
+      TRUSTED_PROVIDER_IDS_CACHE_KEY,
+      providerIds,
+    );
+
+    return providerIds;
   }
 
   /**
@@ -709,6 +743,8 @@ class IdentityProviderModel {
       throw new Error("Failed to update identity provider after creation");
     }
 
+    IdentityProviderModel.trustedProviderIdsCache.clear();
+
     return {
       ...updatedProvider,
       domainVerified: true,
@@ -788,6 +824,8 @@ class IdentityProviderModel {
 
     if (!updatedProvider) return null;
 
+    IdentityProviderModel.trustedProviderIdsCache.clear();
+
     return {
       ...updatedProvider,
       oidcConfig: updatedProvider.oidcConfig
@@ -849,6 +887,8 @@ class IdentityProviderModel {
         throw new Error("Failed to delete identity provider");
       }
     });
+
+    IdentityProviderModel.trustedProviderIdsCache.clear();
 
     return true;
   }
@@ -913,6 +953,7 @@ export default IdentityProviderModel;
 
 const OIDC_DISCOVERY_TIMEOUT_MS = 10_000;
 const SSO_REGISTRATION_PLACEHOLDER_DOMAIN = "sso-placeholder.example.com";
+const TRUSTED_PROVIDER_IDS_CACHE_KEY = "trusted-provider-ids";
 
 function serializeConfigValue(
   value: string | object | null | undefined,

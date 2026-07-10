@@ -4,7 +4,9 @@
  * Unit tests for shared helper functions extracted from llm-proxy-handler.ts.
  */
 
+import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
+import type { FastifyReply } from "fastify";
 import { vi } from "vitest";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import { describe, expect, test } from "@/test";
@@ -79,6 +81,7 @@ import { metrics } from "@/observability";
 import {
   buildInteractionRecord,
   calculateInteractionCosts,
+  handleError,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
@@ -503,5 +506,91 @@ describe("shouldForwardAnthropicBeta", () => {
 
   test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
     expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
+  });
+});
+
+describe("handleError", () => {
+  function makeReply(headersSent: boolean) {
+    const writes: string[] = [];
+    const reply = {
+      raw: {
+        headersSent,
+        write: (chunk: string) => {
+          writes.push(chunk);
+          return true;
+        },
+        end: () => {},
+      },
+    } as unknown as FastifyReply;
+    return { reply, writes };
+  }
+
+  const extractMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "Internal server error";
+
+  test("preserves the internal code carried by a thrown ApiError", () => {
+    const { reply } = makeReply(false);
+    const upstreamError = new ApiError(
+      503,
+      "empty upstream response",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    let thrown: unknown;
+    try {
+      handleError(upstreamError, reply, extractMessage, true, () => undefined);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect((thrown as ApiError).statusCode).toBe(503);
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+  });
+
+  test("prefers the adapter's classification over the ApiError's own code", () => {
+    const { reply } = makeReply(false);
+    const upstreamError = new ApiError(
+      400,
+      "context too long",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    let thrown: unknown;
+    try {
+      handleError(
+        upstreamError,
+        reply,
+        extractMessage,
+        false,
+        () => ArchestraInternalErrorCode.ContextLengthExceeded,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect((thrown as ApiError).internalCode).toBe(
+      ArchestraInternalErrorCode.ContextLengthExceeded,
+    );
+  });
+
+  test("surfaces the internal code in the mid-stream SSE error event", () => {
+    const { reply, writes } = makeReply(true);
+    const upstreamError = new ApiError(
+      503,
+      "empty upstream response",
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+
+    handleError(upstreamError, reply, extractMessage, true, () => undefined);
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
+    expect(payload.error.internal_code).toBe(
+      ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    );
+    expect(payload.error.message).toBe("empty upstream response");
   });
 });

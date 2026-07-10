@@ -202,14 +202,8 @@ mod tests {
         assert!(md.contains("### Tool result"));
         assert!(md.contains("boom"));
         assert!(md.contains("none found"));
-        assert!(
-            md.contains("boot failed"),
-            "infra_error must render its message"
-        );
-        assert!(
-            md.contains("bad chunk"),
-            "parse_error must render its reason"
-        );
+        assert!(md.contains("boot failed"), "infra_error must render its message");
+        assert!(md.contains("bad chunk"), "parse_error must render its reason");
     }
 
     #[test]
@@ -228,18 +222,15 @@ mod tests {
 
     #[test]
     fn null_finish_reason_parses() {
-        let (_dir, path) = write_fixture(&[
-            r#"{"sequence":1,"timestamp":"t","kind":"finish","finish_reason":null}"#,
-        ]);
+        let (_dir, path) = write_fixture(&[r#"{"sequence":1,"timestamp":"t","kind":"finish","finish_reason":null}"#]);
         let events = load_trajectory(&path).unwrap();
         assert!(matches!(events.as_slice(), [Event::Finish]));
     }
 
     #[test]
     fn unknown_kind_degrades_to_unknown_not_error() {
-        let (_dir, path) = write_fixture(&[
-            r#"{"sequence":1,"timestamp":"t","kind":"some_future_kind","whatever":true}"#,
-        ]);
+        let (_dir, path) =
+            write_fixture(&[r#"{"sequence":1,"timestamp":"t","kind":"some_future_kind","whatever":true}"#]);
         let events = load_trajectory(&path).unwrap();
         assert!(matches!(events.as_slice(), [Event::Unknown]));
     }

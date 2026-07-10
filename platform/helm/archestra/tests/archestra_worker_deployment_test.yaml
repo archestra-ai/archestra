@@ -124,9 +124,7 @@ tests:
             mountPath: /var/diagnostics
             readOnly: false
 
-  - it: worker receives code runtime environment variables when enabled
-    set:
-      archestra.codeRuntime.enabled: true
+  - it: worker receives code runtime environment variables by default
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -137,7 +135,20 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
+            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
+
+  - it: worker does not receive code runtime environment variables when disabled
+    set:
+      archestra.codeRuntime.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
 
   - it: worker sets heap snapshot env var when diagnostics heap snapshots are enabled
     set:

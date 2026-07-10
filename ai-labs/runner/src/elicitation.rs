@@ -74,10 +74,7 @@ pub(crate) fn parse_elicitation_event(event: &HashMap<String, JsonValue>) -> Eli
     let parsed = (|| {
         let data = event.get("data").and_then(|v| v.as_object())?;
         let id = data.get("id").and_then(|v| v.as_str())?.to_string();
-        let conversation_id = data
-            .get("conversationId")
-            .and_then(|v| v.as_str())?
-            .to_string();
+        let conversation_id = data.get("conversationId").and_then(|v| v.as_str())?.to_string();
         let mode = match data.get("mode").and_then(|v| v.as_str()) {
             // The backend defaults an absent mode to "form" (chat-mcp-elicitation.ts), so mirror it.
             Some("url") => ElicitationMode::Url,
@@ -116,10 +113,7 @@ pub(crate) fn answer_for(req: &ElicitationRequest) -> ElicitationAnswer {
 /// backend-allowed union; a property that cannot yield an allowed value is omitted.
 pub(crate) fn default_content_from_schema(schema: Option<&JsonValue>) -> Map<String, JsonValue> {
     let mut content = Map::new();
-    let Some(properties) = schema
-        .and_then(|s| s.get("properties"))
-        .and_then(|p| p.as_object())
-    else {
+    let Some(properties) = schema.and_then(|s| s.get("properties")).and_then(|p| p.as_object()) else {
         return content;
     };
     for (key, prop) in properties {
@@ -210,10 +204,7 @@ mod tests {
     #[test]
     fn non_elicitation_event_is_ignored() {
         let event = event_from(json!({ "type": "text-delta", "delta": "hi" }));
-        assert_eq!(
-            parse_elicitation_event(&event),
-            ElicitationParse::NotElicitation
-        );
+        assert_eq!(parse_elicitation_event(&event), ElicitationParse::NotElicitation);
     }
 
     #[test]

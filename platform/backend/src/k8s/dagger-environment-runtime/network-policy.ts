@@ -65,16 +65,11 @@ export type DaggerEgressPolicyObject =
  * pod, given the environment's effective egress policy and the cluster's CNI
  * capabilities. Pure — performs no cluster calls — so it is unit-testable.
  *
- * Returns `[]` when the environment policy is `unrestricted` or absent (nothing
- * to manage; the engine keeps fully open egress). There is NO metadata/RFC1918
- * floor in the per-env path — unlike the chart's default engine, these pods carry
- * no egress-firewall sidecar — so an `unrestricted` environment can reach
- * link-local, RFC1918, and the cloud metadata endpoint. Confining egress is what
- * a non-`unrestricted` policy is for; `unrestricted` is an explicit allow-all
- * opt-in. Mirrors the provider precedence in
- * `K8sDeployment.applyK8sNetworkPolicy`: Cilium > GKE-FQDN > AWS > Kubernetes;
- * the GKE-FQDN path additionally emits a plain NetworkPolicy for the CIDR rules
- * (FQDN policies only carry domains).
+ * `unrestricted` (and the built-in default) get an open-egress floor: all public
+ * egress is allowed, private/link-local ranges are not. `off`/`restricted` use
+ * the shared MCP builders, mirroring the provider precedence in
+ * `K8sDeployment.applyK8sNetworkPolicy`: Cilium > GKE-FQDN > AWS > Kubernetes
+ * (the GKE-FQDN path additionally emits a plain NetworkPolicy for the CIDR rules).
  */
 export function buildDaggerEgressPolicies(params: {
   environmentId: string;
@@ -90,14 +85,20 @@ export function buildDaggerEgressPolicies(params: {
   const { environmentId, effectivePolicy, capabilities } = params;
   const clusterDnsIps = params.clusterDnsIps ?? [];
 
-  if (!shouldManageK8sNetworkPolicy(effectivePolicy)) {
-    return [];
-  }
-
   const podSelectorLabels = daggerEnginePodLabels(environmentId);
   const name = constructManagedNetworkPolicyName(
     daggerEngineDeploymentName(environmentId),
   );
+
+  if (!shouldManageK8sNetworkPolicy(effectivePolicy)) {
+    // unrestricted / built-in default: open public egress, private ranges blocked.
+    return [
+      {
+        kind: "NetworkPolicy",
+        object: buildUnrestrictedFloorPolicy({ name, podSelectorLabels }),
+      },
+    ];
+  }
 
   if (shouldUseCiliumNetworkPolicy({ effectivePolicy, capabilities })) {
     return [
@@ -157,4 +158,56 @@ export function buildDaggerEgressPolicies(params: {
       }),
     },
   ];
+}
+
+// Private/link-local ranges excluded from the open-egress floor.
+const FLOOR_DENIED_IPV4_CIDRS = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "169.254.0.0/16",
+  "100.64.0.0/10",
+  "127.0.0.0/8",
+  "0.0.0.0/32",
+];
+const FLOOR_DENIED_IPV6_CIDRS = ["::1/128", "fc00::/7", "fe80::/10"];
+
+// Open-egress floor for `unrestricted` engines: DNS + all public egress with the
+// ranges above blocked.
+function buildUnrestrictedFloorPolicy(params: {
+  name: string;
+  podSelectorLabels: Record<string, string>;
+}): k8s.V1NetworkPolicy {
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: {
+        "app.kubernetes.io/managed-by": "archestra",
+        "archestra.io/resource": "dagger-egress-policy",
+      },
+    },
+    spec: {
+      podSelector: { matchLabels: params.podSelectorLabels },
+      policyTypes: ["Egress"],
+      egress: [
+        // DNS on :53 to any resolver.
+        {
+          ports: [
+            { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
+            { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
+          ],
+        },
+        {
+          to: [
+            { ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } },
+          ],
+        },
+        {
+          to: [{ ipBlock: { cidr: "::/0", except: FLOOR_DENIED_IPV6_CIDRS } }],
+        },
+      ],
+    },
+  };
 }

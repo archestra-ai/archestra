@@ -4,6 +4,8 @@ category: Development
 order: 1
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ## Prerequisites
 
 Ensure you have the following tools installed:

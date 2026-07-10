@@ -48,6 +48,10 @@ import {
   exchangeIdentityAssertionForAccessToken,
   MCP_RESOURCE_REFERENCE_PREFIX,
 } from "@/services/identity-providers/enterprise-managed/authorization";
+import {
+  shieldRefreshTokenGrant,
+  shieldRevocationRequest,
+} from "@/services/oauth-refresh-replay";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   isLoopbackRedirectUri,
@@ -509,6 +513,43 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const tokenEndpointOrigin = getPublicRequestOrigin(request);
+
+      // Replay shield: better-auth answers a replayed (already-rotated)
+      // refresh token by deleting EVERY token for the (client_id, user_id)
+      // pair, and CIMD clients share one client_id product-wide — so a benign
+      // rotation race (backend restart mid-exchange, a second process holding
+      // the same stored token) wipes all of a user's MCP grants at once.
+      // Intercept refresh grants so replays never reach that path; everything
+      // else forwards untouched. See services/oauth-refresh-replay.ts.
+      if (body?.grant_type === "refresh_token") {
+        const interception = await shieldRefreshTokenGrant({
+          refreshToken:
+            typeof body.refresh_token === "string"
+              ? body.refresh_token
+              : undefined,
+          clientId:
+            typeof body.client_id === "string" ? body.client_id : undefined,
+        });
+        if (interception.action === "respond") {
+          // A re-issued pair honors the org token-lifetime policy exactly like
+          // a better-auth-issued one.
+          const shieldedBody =
+            interception.statusCode === 200
+              ? await applyOrganizationOAuthTokenLifetimeToResponse({
+                  responseText: JSON.stringify(interception.body),
+                  ok: true,
+                  resource,
+                  tokenEndpointOrigin,
+                })
+              : null;
+          return reply
+            .status(interception.statusCode)
+            .header("cache-control", "no-store")
+            .header("pragma", "no-cache")
+            .send(shieldedBody ? JSON.parse(shieldedBody) : interception.body);
+        }
+      }
+
       const url = new URL(request.url, tokenEndpointOrigin);
       const headers = buildBetterAuthForwardedHeaders(
         request,
@@ -591,6 +632,81 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "[auth:oauth2/token] Token request failed",
         );
       }
+
+      reply.status(response.status);
+      response.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "content-length") {
+          return;
+        }
+        reply.header(key, value);
+      });
+      reply.send(responseBody);
+    },
+  });
+
+  // RFC 7009 Token Revocation — shielded against better-auth's family
+  // invalidation (see services/oauth-refresh-replay.ts). Refresh-token
+  // revocations are handled here in full: idempotent 200s per RFC 7009 §2.2,
+  // where better-auth 400s and — for an already-rotated token — deletes the
+  // whole (client, user) token family. Access-token revocations forward to
+  // better-auth, which deletes just that row. Without this explicit route the
+  // request reaches better-auth through the /api/auth/* catch-all.
+  fastify.route({
+    method: "POST",
+    url: "/api/auth/oauth2/revoke",
+    schema: {
+      tags: ["Auth"],
+    },
+    async handler(request, reply) {
+      const body = request.body as Record<string, unknown> | undefined;
+
+      // Same client_secret_basic → client_secret_post lift as the token
+      // endpoint, and for the same reason (the apiKey plugin intercepts the
+      // Authorization header before better-auth's OAuth handlers see it).
+      const authorizationHeader = request.headers.authorization;
+      const usesClientSecretBasic =
+        typeof authorizationHeader === "string" &&
+        authorizationHeader.startsWith("Basic ");
+      if (usesClientSecretBasic && body) {
+        const { clientId: basicClientId, clientSecret: basicClientSecret } =
+          extractOAuthClientCredentials({ authorizationHeader, body });
+        if (basicClientId && body.client_id === undefined) {
+          body.client_id = basicClientId;
+        }
+        if (basicClientSecret && body.client_secret === undefined) {
+          body.client_secret = basicClientSecret;
+        }
+      }
+
+      const interception = await shieldRevocationRequest({
+        token: typeof body?.token === "string" ? body.token : undefined,
+      });
+      if (interception.action === "respond") {
+        return reply.status(interception.statusCode).send(interception.body);
+      }
+
+      const url = new URL(request.url, getPublicRequestOrigin(request));
+      const headers = buildBetterAuthForwardedHeaders(
+        request,
+        usesClientSecretBasic
+          ? (name) => name.toLowerCase() === "authorization"
+          : undefined,
+      );
+      const contentType = request.headers["content-type"] || "";
+      const serializedBody = contentType.includes(
+        "application/x-www-form-urlencoded",
+      )
+        ? new URLSearchParams(body as Record<string, string>).toString()
+        : JSON.stringify(body);
+
+      const response = await betterAuth.handler(
+        new Request(url.toString(), {
+          method: request.method,
+          headers,
+          body: serializedBody,
+        }),
+      );
+      const responseBody = response.body ? await response.text() : null;
 
       reply.status(response.status);
       response.headers.forEach((value: string, key: string) => {

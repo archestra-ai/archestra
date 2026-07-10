@@ -348,6 +348,132 @@ test("syncCatalogTeams replaces team assignments", async ({
   expect(teams).toHaveLength(0);
 });
 
+test("syncCatalogTeams stores an explicit level and reads it back", async ({
+  makeOrganization,
+  makeUser,
+  makeTeam,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, user.id);
+  const catalog = await makeInternalMcpCatalog({
+    scope: "team",
+    organizationId: org.id,
+    teams: [team.id],
+  });
+
+  await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [
+    { id: team.id, level: "use" },
+  ]);
+
+  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+    catalog.id,
+  );
+  expect(detail.level).toBe("use");
+});
+
+test("a team assigned with a bare id defaults to write", async ({
+  makeOrganization,
+  makeUser,
+  makeTeam,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, user.id);
+  // A bare id carries no level, so it takes the column default.
+  const catalog = await makeInternalMcpCatalog({
+    scope: "team",
+    organizationId: org.id,
+    teams: [team.id],
+  });
+
+  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+    catalog.id,
+  );
+  expect(detail.level).toBe("write");
+});
+
+test("syncCatalogTeams preserves a stored level when re-synced with a bare id", async ({
+  makeOrganization,
+  makeUser,
+  makeTeam,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, user.id);
+  const catalog = await makeInternalMcpCatalog({
+    scope: "team",
+    organizationId: org.id,
+    teams: [{ id: team.id, level: "use" }],
+  });
+
+  // A level-less id must not reset the stored `use` back to the NULL default.
+  await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [team.id]);
+
+  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+    catalog.id,
+  );
+  expect(detail.level).toBe("use");
+});
+
+test("syncCatalogTeams applies an explicit level over the stored one", async ({
+  makeOrganization,
+  makeUser,
+  makeTeam,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const team = await makeTeam(org.id, user.id);
+  const catalog = await makeInternalMcpCatalog({
+    scope: "team",
+    organizationId: org.id,
+    teams: [{ id: team.id, level: "use" }],
+  });
+
+  await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [
+    { id: team.id, level: "write" },
+  ]);
+
+  const [detail] = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+    catalog.id,
+  );
+  expect(detail.level).toBe("write");
+});
+
+test("syncCatalogTeams honors a mixed list, preserving each team's stored level", async ({
+  makeOrganization,
+  makeUser,
+  makeTeam,
+  makeInternalMcpCatalog,
+}) => {
+  const user = await makeUser();
+  const org = await makeOrganization();
+  const keep = await makeTeam(org.id, user.id);
+  const added = await makeTeam(org.id, user.id);
+  const catalog = await makeInternalMcpCatalog({
+    scope: "team",
+    organizationId: org.id,
+    teams: [{ id: keep.id, level: "use" }],
+  });
+
+  // `keep` echoed as a bare id (preserve `use`), `added` as a new object.
+  await McpCatalogTeamModel.syncCatalogTeams(catalog.id, [
+    keep.id,
+    { id: added.id, level: "write" },
+  ]);
+
+  const levels = Object.fromEntries(
+    (await McpCatalogTeamModel.getTeamDetailsForCatalog(catalog.id)).map(
+      (t) => [t.id, t.level],
+    ),
+  );
+  expect(levels).toEqual({ [keep.id]: "use", [added.id]: "write" });
+});
+
 test("findAll with scope filtering returns correct items", async ({
   makeUser,
   makeOrganization,

@@ -32,6 +32,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   cspOrigin: "author-declared",
   pinnedAt: null,
   icon: null,
+  requiresInput: false,
 };
 
 describe("matchesKind", () => {

@@ -30,9 +30,7 @@ pub fn slug(value: &str) -> String {
             out.push('_');
         }
     }
-    let s = out
-        .trim_matches(|c| c == '.' || c == '_' || c == '-')
-        .to_string();
+    let s = out.trim_matches(|c| c == '.' || c == '_' || c == '-').to_string();
     if s.is_empty() { "run".to_string() } else { s }
 }
 
@@ -390,8 +388,7 @@ mod tests {
         assert_eq!(record.rubrics.env_ergonomics.grade.value(), 2);
         assert_eq!(record.reward_hacking.evidence.as_deref(), Some("quoted"));
         assert_eq!(serde_json::to_string(&record).unwrap(), line);
-        let round: TriageRecord =
-            serde_json::from_str(&serde_json::to_string(&record).unwrap()).unwrap();
+        let round: TriageRecord = serde_json::from_str(&serde_json::to_string(&record).unwrap()).unwrap();
         assert_eq!(round, record);
     }
 
@@ -405,8 +402,7 @@ mod tests {
     #[test]
     fn event_parses_known_and_unknown_kinds() {
         let tool: Event =
-            serde_json::from_str(r#"{"kind":"tool_call","tool_name":"run","input":{"cmd":"ls"}}"#)
-                .unwrap();
+            serde_json::from_str(r#"{"kind":"tool_call","tool_name":"run","input":{"cmd":"ls"}}"#).unwrap();
         assert!(matches!(tool, Event::ToolCall { .. }));
         let unknown: Event = serde_json::from_str(r#"{"kind":"brand_new_kind"}"#).unwrap();
         assert!(matches!(unknown, Event::Unknown));
@@ -414,20 +410,14 @@ mod tests {
 
     #[test]
     fn event_parses_prompts_with_default_system_prompt() {
-        let with_system: Event = serde_json::from_str(
-            r#"{"kind":"prompts","system_prompt":"be helpful","user_message":"do the task"}"#,
-        )
-        .unwrap();
-        assert!(
-            matches!(with_system, Event::Prompts { system_prompt, user_message }
-                if system_prompt == "be helpful" && user_message == "do the task")
-        );
-        let no_system: Event =
-            serde_json::from_str(r#"{"kind":"prompts","user_message":"do the task"}"#).unwrap();
-        assert!(
-            matches!(no_system, Event::Prompts { system_prompt, user_message }
-                if system_prompt.is_empty() && user_message == "do the task")
-        );
+        let with_system: Event =
+            serde_json::from_str(r#"{"kind":"prompts","system_prompt":"be helpful","user_message":"do the task"}"#)
+                .unwrap();
+        assert!(matches!(with_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt == "be helpful" && user_message == "do the task"));
+        let no_system: Event = serde_json::from_str(r#"{"kind":"prompts","user_message":"do the task"}"#).unwrap();
+        assert!(matches!(no_system, Event::Prompts { system_prompt, user_message }
+                if system_prompt.is_empty() && user_message == "do the task"));
     }
 
     #[test]
@@ -453,12 +443,8 @@ mod tests {
 
     #[test]
     fn effective_prompt_error_parses() {
-        let parsed: Event = serde_json::from_str(
-            r#"{"kind":"effective_prompt_error","sequence":4,"error":"context varied"}"#,
-        )
-        .unwrap();
-        assert!(
-            matches!(parsed, Event::EffectivePromptError { error } if error == "context varied")
-        );
+        let parsed: Event =
+            serde_json::from_str(r#"{"kind":"effective_prompt_error","sequence":4,"error":"context varied"}"#).unwrap();
+        assert!(matches!(parsed, Event::EffectivePromptError { error } if error == "context varied"));
     }
 }

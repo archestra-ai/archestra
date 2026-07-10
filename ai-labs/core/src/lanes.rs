@@ -81,12 +81,10 @@ impl Lane {
     /// wins; otherwise an `openrouter` lane prices off its own `model`; other providers have no slug
     /// unless one is given (so their cost is reported as unknown rather than guessed).
     pub fn price_model(&self) -> Option<String> {
-        self.openrouter_model
-            .clone()
-            .or_else(|| match self.provider {
-                Provider::Openrouter => Some(self.model.clone()),
-                _ => None,
-            })
+        self.openrouter_model.clone().or_else(|| match self.provider {
+            Provider::Openrouter => Some(self.model.clone()),
+            _ => None,
+        })
     }
 
     /// Env var holding this lane's key, defaulting to `<PROVIDER>_API_KEY`.
@@ -131,14 +129,9 @@ struct RawLane {
 /// "first lane per provider is primary" rule depends on). Names are slug-normalized and de-duplicated;
 /// a bad provider is reported with its lane name in scope.
 pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneError> {
-    let ctx = path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
+    let ctx = path.file_name().unwrap_or_default().to_string_lossy().to_string();
     let content = std::fs::read_to_string(path).map_err(|e| LaneError(format!("{ctx}: {e}")))?;
-    let parsed: RawLanesFile =
-        toml::from_str(&content).map_err(|e| LaneError(format!("{ctx}: {e}")))?;
+    let parsed: RawLanesFile = toml::from_str(&content).map_err(|e| LaneError(format!("{ctx}: {e}")))?;
     if parsed.lane.is_empty() {
         return Err(LaneError(format!("{ctx}: no [[lane]] defined")));
     }
@@ -150,8 +143,8 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
         if !seen.insert(name.clone()) {
             return Err(LaneError(format!("{ctx}: duplicate lane name {:?}", name)));
         }
-        let provider = Provider::from_str(&raw.provider)
-            .map_err(|e| LaneError(format!("{ctx}: lane {:?}: {e}", name)))?;
+        let provider =
+            Provider::from_str(&raw.provider).map_err(|e| LaneError(format!("{ctx}: lane {:?}: {e}", name)))?;
         catalog.push(Lane {
             name,
             provider,
@@ -166,11 +159,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
         None => Ok(catalog),
         Some(raw_names) => {
             let names: Vec<String> = raw_names.iter().map(|n| slug(n)).collect();
-            let unknown: Vec<String> = names
-                .iter()
-                .filter(|n| !seen.contains(*n))
-                .cloned()
-                .collect();
+            let unknown: Vec<String> = names.iter().filter(|n| !seen.contains(*n)).cloned().collect();
             if !unknown.is_empty() {
                 let mut available: Vec<String> = catalog.iter().map(|l| l.name.clone()).collect();
                 available.sort();
@@ -182,16 +171,10 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
             // silently dropped or break the runner's one-rollout-per-model scheduling invariant.
             let mut requested: HashSet<&str> = HashSet::new();
             if let Some(dup) = names.iter().find(|n| !requested.insert(n.as_str())) {
-                return Err(LaneError(format!(
-                    "duplicate lane {dup:?} in --lanes selection"
-                )));
+                return Err(LaneError(format!("duplicate lane {dup:?} in --lanes selection")));
             }
-            let by_name: HashMap<&str, &Lane> =
-                catalog.iter().map(|l| (l.name.as_str(), l)).collect();
-            Ok(names
-                .into_iter()
-                .map(|n| by_name[n.as_str()].clone())
-                .collect())
+            let by_name: HashMap<&str, &Lane> = catalog.iter().map(|l| (l.name.as_str(), l)).collect();
+            Ok(names.into_iter().map(|n| by_name[n.as_str()].clone()).collect())
         }
     }
 }
@@ -200,11 +183,7 @@ pub fn load_lanes(path: &Path, select: Option<&str>) -> Result<Vec<Lane>, LaneEr
 pub fn find_lane<'a>(lanes: &'a [Lane], name: &str) -> Result<&'a Lane, LaneError> {
     let target = slug(name);
     lanes.iter().find(|l| l.name == target).ok_or_else(|| {
-        let known = lanes
-            .iter()
-            .map(|l| l.name.clone())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let known = lanes.iter().map(|l| l.name.clone()).collect::<Vec<_>>().join(", ");
         LaneError(format!("unknown lane `{name}`; known lanes: {known}"))
     })
 }
@@ -260,10 +239,7 @@ model = "b"
     fn split_names_trims_and_drops_empties() {
         assert_eq!(split_names(None), None);
         assert_eq!(split_names(Some("")), None);
-        assert_eq!(
-            split_names(Some("a, b")),
-            Some(vec!["a".to_string(), "b".to_string()])
-        );
+        assert_eq!(split_names(Some("a, b")), Some(vec!["a".to_string(), "b".to_string()]));
     }
 
     #[test]
@@ -327,10 +303,7 @@ api_key_env = "KIMI_API_KEY"
         .unwrap();
         let kimi = &lanes[0];
         assert_eq!(kimi.provider, Provider::Anthropic);
-        assert_eq!(
-            kimi.base_url.as_deref(),
-            Some("https://api.kimi.com/coding/")
-        );
+        assert_eq!(kimi.base_url.as_deref(), Some("https://api.kimi.com/coding/"));
         assert_eq!(kimi.key_env(), "KIMI_API_KEY");
     }
 

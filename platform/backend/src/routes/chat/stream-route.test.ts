@@ -1463,6 +1463,16 @@ const ABORTIVE_TOOL_CALL_STREAM_EVENTS = [
   { type: "finish-step", finishReason: "tool-calls" },
   { type: "finish", finishReason: "tool-calls" },
 ];
+// Like ABORTIVE_TOOL_CALL_STREAM_EVENTS but truncated by the output-token cap
+// (finishReason "length") — deterministic, so it is surfaced without a retry.
+const ABORTIVE_LENGTH_TOOL_CALL_STREAM_EVENTS = [
+  { type: "start" },
+  { type: "start-step" },
+  { type: "tool-input-start" },
+  { type: "tool-input-delta" },
+  { type: "finish-step", finishReason: "length" },
+  { type: "finish", finishReason: "length" },
+];
 
 // Like fakeStreamResult, but fires the config's onStepFinish as the step
 // finishes during probe consumption — mimicking how real streamText invokes the
@@ -1808,6 +1818,34 @@ describe("POST /api/chat handler composition", () => {
     }>;
     const errorChunk = chunks.find((c) => c.type === "error");
     expect(errorChunk?.errorText).toContain("incomplete_tool_call");
+  });
+
+  test("surfaces a non-retryable ToolCallOutputTruncated for a length-truncated tool call", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(ABORTIVE_LENGTH_TOOL_CALL_STREAM_EVENTS, {
+        uiChunks: [
+          { type: "tool-input-start", toolCallId: "t1", toolName: "x" },
+        ],
+      }),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // Deterministic truncation: surfaced on the first attempt, never retried.
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    const merged = mergedStreams.at(-1);
+    const chunks = (await readAll(merged as ReadableStream<unknown>)) as Array<{
+      type?: string;
+      errorText?: string;
+    }>;
+    const errorChunk = chunks.find((c) => c.type === "error");
+    const payload = JSON.parse(errorChunk?.errorText ?? "{}");
+    expect(payload.code).toBe("tool_call_output_truncated");
+    expect(payload.isRetryable).toBe(false);
   });
 
   test("does not emit token-usage from a discarded abortive retry attempt", async ({

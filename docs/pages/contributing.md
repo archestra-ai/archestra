@@ -5,6 +5,8 @@ order: 1
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ![Contributing](/docs/one-person-is-handling-a-box-for-the-other-over.webp)
 
 Thank you for your interest in contributing to Archestra.

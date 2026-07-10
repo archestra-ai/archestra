@@ -17,8 +17,10 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 
 export type McpServerInstallScope = "personal" | "team" | "org";
 
@@ -97,6 +99,29 @@ export function SelectMcpServerCredentialTypeAndTeams({
   const { data: teams, isLoading: isLoadingTeams } = useAssignableTeams({
     isResourceAdmin: !!isMcpServerAdmin,
   });
+
+  // Creating a team-shared install of a `team`-scoped item requires `write` on
+  // it (mirrors the backend gate). A `use`-level member lacks it, so the team
+  // option is withheld from them — they can still install personally. While the
+  // write check is still resolving, don't block: a transient `false` would
+  // otherwise steer a genuine write-holder to personal via the self-heal below
+  // and never switch back once the check loads.
+  //
+  // The item is resolved from the (cached) catalog list by id rather than
+  // taken as a prop, so every caller that passes `catalogId` is gated — a prop
+  // is easy for a caller to forget, silently skipping the gate.
+  const { data: catalogItems } = useInternalMcpCatalog();
+  const catalogItem = useMemo(
+    () =>
+      catalogId
+        ? (catalogItems?.find((item) => item.id === catalogId) ?? null)
+        : null,
+    [catalogItems, catalogId],
+  );
+  const { canModify: canModifyCatalog, isLoading: isCanModifyLoading } =
+    useCanModifyCatalogItem(catalogItem);
+  const blockTeamForCatalogAccess =
+    catalogItem?.scope === "team" && !isCanModifyLoading && !canModifyCatalog;
 
   const { hasPersonalInstallation, teamsWithInstallation, hasOrgInstallation } =
     useMemo(() => {
@@ -190,7 +215,9 @@ export function SelectMcpServerCredentialTypeAndTeams({
       ? true
       : lockToExistingScope
         ? initialScope !== "team"
-        : !hasMcpServerUpdate || availableTeams.length === 0;
+        : !hasMcpServerUpdate ||
+          availableTeams.length === 0 ||
+          blockTeamForCatalogAccess;
 
   const isOrgDisabled = personalOnly
     ? true
@@ -240,11 +267,13 @@ export function SelectMcpServerCredentialTypeAndTeams({
         disabled: isTeamDisabled,
         disabledReason: !hasMcpServerUpdate
           ? "You need mcpServerInstallation:update to share with a team"
-          : availableTeams.length === 0
-            ? teams?.length === 0
-              ? "Create a team first to share this connection"
-              : "All teams already have this server installed"
-            : undefined,
+          : blockTeamForCatalogAccess
+            ? "Sharing this server with a team needs write access to it."
+            : availableTeams.length === 0
+              ? teams?.length === 0
+                ? "Create a team first to share this connection"
+                : "All teams already have this server installed"
+              : undefined,
       });
     }
 
@@ -272,6 +301,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
     isOrgDisabled,
     hasPersonalInstallation,
     hasMcpServerUpdate,
+    blockTeamForCatalogAccess,
     availableTeams.length,
     teams?.length,
     isMcpServerAdmin,

@@ -1,0 +1,24 @@
+[package]
+name = "baton-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "ADT-based information-flow label engine for agent trajectories (prototype)"
+
+[dependencies]
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+criterion = "0.5"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+proptest = "1"
+clap = { version = "4", features = ["derive"] }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "resolution"
+harness = false

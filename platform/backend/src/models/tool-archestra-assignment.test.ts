@@ -483,6 +483,119 @@ describe("Archestra Tools Dynamic Assignment", () => {
     }
   });
 
+  test("backfillNewSandboxToolsToAgents assigns the new sandbox tools to every agent kind, skipping built-in system agents", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    // Agents created while the runtime is off (the beforeEach pins the flag
+    // false): the create-time sandbox assignment no-ops for all of them.
+    const chatAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Chat Agent",
+    });
+    const allToolsAgent = await makeAgent({
+      organizationId: org.id,
+      name: "All-tools Agent",
+      accessAllTools: true,
+    });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      name: "Gateway",
+      agentType: "mcp_gateway",
+      scope: "personal",
+    });
+    const [builtInAgent] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId: org.id,
+        name: "System Agent",
+        agentType: "agent",
+        scope: "org",
+        builtInAgentConfig: { name: "app-runtime-llm-agent" },
+      })
+      .returning();
+
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    sandboxConfig.enabled = true;
+    try {
+      // First seed with the runtime on: the sandbox tools are newly created.
+      const newToolNames = await ToolModel.seedArchestraTools(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+      await ToolModel.backfillNewSandboxToolsToAgents(newToolNames);
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+    }
+
+    for (const agent of [chatAgent, allToolsAgent, gateway]) {
+      const names = await assignedToolNames(agent.id);
+      expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      for (const shortName of PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
+        expect(names).toContain(getArchestraToolFullName(shortName));
+      }
+    }
+    expect(await assignedToolNames(builtInAgent.id)).not.toContain(
+      TOOL_RUN_COMMAND_FULL_NAME,
+    );
+  });
+
+  test("backfillNewSandboxToolsToAgents is idempotent and only assigns the newly created short names", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, name: "Agent" });
+
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    sandboxConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      // Simulate a later boot where only run_command is newly created.
+      await ToolModel.backfillNewSandboxToolsToAgents([
+        TOOL_RUN_COMMAND_FULL_NAME,
+      ]);
+      await ToolModel.backfillNewSandboxToolsToAgents([
+        TOOL_RUN_COMMAND_FULL_NAME,
+      ]);
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+    }
+
+    const names = await assignedToolNames(agent.id);
+    expect(
+      names.filter((name) => name === TOOL_RUN_COMMAND_FULL_NAME),
+    ).toHaveLength(1);
+    expect(names).not.toContain(TOOL_UPLOAD_FILE_FULL_NAME);
+  });
+
+  test("backfillNewSandboxToolsToAgents is a no-op when no sandbox tools were created", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, name: "Agent" });
+
+    const sandboxConfig = config.skillsSandbox as { enabled: boolean };
+    const originalSandbox = sandboxConfig.enabled;
+    sandboxConfig.enabled = true;
+    try {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      // A re-seed creates nothing new; a non-sandbox name must not backfill.
+      await ToolModel.backfillNewSandboxToolsToAgents([
+        TOOL_LOAD_SKILL_FULL_NAME,
+      ]);
+    } finally {
+      sandboxConfig.enabled = originalSandbox;
+    }
+
+    expect(await assignedToolNames(agent.id)).not.toContain(
+      TOOL_RUN_COMMAND_FULL_NAME,
+    );
+  });
+
   test("AgentModel.create assigns no sandbox or file tools when the runtime is disabled", async ({
     makeAgent,
   }) => {

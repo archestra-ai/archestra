@@ -42,8 +42,7 @@ impl TriageJudgment {
 pub fn parse_triage(reply: &str) -> Result<TriageJudgment> {
     let trimmed = reply.trim();
     let body = strip_fence(trimmed).unwrap_or(trimmed);
-    let judgment: TriageJudgment =
-        serde_json::from_str(body).map_err(|e| eyre!("invalid triage JSON: {e}"))?;
+    let judgment: TriageJudgment = serde_json::from_str(body).map_err(|e| eyre!("invalid triage JSON: {e}"))?;
     if judgment.observations.len() > 6 {
         bail!(
             "invalid triage JSON: observations must have at most 6 entries, got {}",
@@ -139,10 +138,7 @@ mod tests {
     #[test]
     fn absent_evidence_parses_to_none() {
         // Node normalizes an absent key to null; Option<String> must land on the same record.
-        let reply = valid_json().replace(
-            r#"{"suspected":false,"evidence":null}"#,
-            r#"{"suspected":false}"#,
-        );
+        let reply = valid_json().replace(r#"{"suspected":false,"evidence":null}"#, r#"{"suspected":false}"#);
         let judgment = parse_triage(&reply).unwrap();
         assert_eq!(judgment.reward_hacking.evidence, None);
     }
@@ -198,9 +194,7 @@ mod tests {
 
     #[test]
     fn into_record_stamps_pipeline_identity() {
-        let record = parse_triage(&valid_json())
-            .unwrap()
-            .into_record(&rollout(), "failed");
+        let record = parse_triage(&valid_json()).unwrap().into_record(&rollout(), "failed");
         assert_eq!(record.rollout, "basic/pi__glm");
         assert_eq!(record.outcome, "failed");
         assert_eq!(record.verdict, "minor friction — one submit retry");
@@ -208,9 +202,7 @@ mod tests {
 
     #[test]
     fn renders_without_reward_hacking_line_when_not_suspected() {
-        let record = parse_triage(&valid_json())
-            .unwrap()
-            .into_record(&rollout(), "failed");
+        let record = parse_triage(&valid_json()).unwrap().into_record(&rollout(), "failed");
         let section = render_section(&record);
         assert_eq!(
             section,
@@ -230,9 +222,7 @@ mod tests {
             r#"{"suspected":false,"evidence":null}"#,
             r#"{"suspected":true,"evidence":"hardcoded the answer"}"#,
         );
-        let record = parse_triage(&with_evidence)
-            .unwrap()
-            .into_record(&rollout(), "failed");
+        let record = parse_triage(&with_evidence).unwrap().into_record(&rollout(), "failed");
         assert_eq!(
             render_section(&record),
             "minor friction — one submit retry\n\n\
@@ -269,9 +259,7 @@ mod tests {
     #[test]
     fn omits_observations_block_when_empty() {
         let reply = valid_json().replace(r#"["one bullet"]"#, "[]");
-        let record = parse_triage(&reply)
-            .unwrap()
-            .into_record(&rollout(), "passed");
+        let record = parse_triage(&reply).unwrap().into_record(&rollout(), "passed");
         assert_eq!(
             render_section(&record),
             "minor friction — one submit retry\n\n\

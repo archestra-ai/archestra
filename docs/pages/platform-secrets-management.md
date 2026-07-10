@@ -6,6 +6,8 @@ order: 4
 lastUpdated: 2026-05-13
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 This document covers Vault secret manager configuration. Include:
 - Overview of secret storage options (DB vs Vault)

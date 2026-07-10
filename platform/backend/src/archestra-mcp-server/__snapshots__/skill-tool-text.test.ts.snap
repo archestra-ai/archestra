@@ -174,6 +174,68 @@ exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__edit_skill 1`] = `
+{
+  "description": "Make a targeted edit to an existing Agent Skill without resending the whole SKILL.md. Load the skill first with load_skill, then pass str_replace \`edits\` (or \`replacementContent\` for a small file) against the \`version\` shown on the loaded frame as \`baseVersion\`. Omit \`path\` to edit the SKILL.md body, or pass a bundled file's path to edit that file. Prefer this over update_skill for changes to a large skill. You can only edit skills you are allowed to manage; the skill keeps its current visibility scope.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "baseVersion": {
+        "description": "The version the edit is based on — the \`version\` shown on the <skill_content>/<skill_file> frame you loaded with load_skill. The edit is rejected if the skill's head has moved past it.",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer",
+      },
+      "edits": {
+        "description": "str_replace edits applied in order to the target; the whole edit is atomic (any failure leaves the skill unchanged). This is the way to change a large SKILL.md without resending it all. Pass either edits or replacementContent, never both.",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "new_str": {
+              "description": "Replacement text (may be empty to delete).",
+              "type": "string",
+            },
+            "old_str": {
+              "description": "Exact text to replace; must occur exactly once in the target (add surrounding context to disambiguate).",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "old_str",
+            "new_str",
+          ],
+          "type": "object",
+        },
+        "minItems": 1,
+        "type": "array",
+      },
+      "name": {
+        "description": "The current name of the skill to edit, as named by list_skills.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Omit (or pass an empty string) to edit the SKILL.md body; pass a bundled file path (from the <skill_resources> list) to edit that file instead. Only text (utf8) files are editable — binary assets are not.",
+        "type": "string",
+      },
+      "replacementContent": {
+        "description": "The complete new content of the target, replacing it outright with no old_str matching — use it for a small file or a full rewrite. Prefer edits for the SKILL.md body so you don't resend the whole thing. Pass either edits or replacementContent, never both.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "baseVersion",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__edit_skill",
+  "title": "Edit Skill",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 {
   "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call load_skill with a skill name to load its full instructions.",
@@ -368,7 +430,7 @@ exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 
 exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 {
-  "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
+  "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. For a small change to a large skill, prefer edit_skill (targeted str_replace) over resending the whole manifest. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

@@ -11,16 +11,8 @@ fn fixtures() -> PathBuf {
     // newer rubric file really is newer, and run_a's dir is more recent than run_b's.
     let now = filetime::FileTime::from_system_time(SystemTime::now());
     let older = filetime::FileTime::from_system_time(SystemTime::now() - Duration::from_secs(3600));
-    filetime::set_file_mtime(
-        dir.join("run_a/trajectory_rubrics_20260101-000000.jsonl"),
-        older,
-    )
-    .unwrap();
-    filetime::set_file_mtime(
-        dir.join("run_a/trajectory_rubrics_20260701-120000.jsonl"),
-        now,
-    )
-    .unwrap();
+    filetime::set_file_mtime(dir.join("run_a/trajectory_rubrics_20260101-000000.jsonl"), older).unwrap();
+    filetime::set_file_mtime(dir.join("run_a/trajectory_rubrics_20260701-120000.jsonl"), now).unwrap();
     filetime::set_file_mtime(dir.join("run_b"), older).unwrap();
     filetime::set_file_mtime(dir.join("run_a"), now).unwrap();
     dir
@@ -43,13 +35,7 @@ fn list_runs_finds_run_dirs_newest_first() {
     assert_eq!(run_a.counts.passed, 2);
     assert_eq!(run_a.counts.failed, 1);
     assert!((run_a.pass_rate.unwrap() - 2.0 / 3.0).abs() < 1e-9);
-    assert_eq!(
-        run_a.rubric_status,
-        RubricStatus::Partial {
-            present: 2,
-            total: 3
-        }
-    );
+    assert_eq!(run_a.rubric_status, RubricStatus::Partial { present: 2, total: 3 });
 }
 
 #[test]
@@ -76,11 +62,7 @@ fn rollout_identity_comes_from_run_json_not_dir_name() {
 fn malformed_rollout_dir_is_skipped_with_a_warning() {
     let run = load_run(&fixtures(), "run_a").unwrap().unwrap();
     assert!(!run.rollouts.keys().any(|k| k.contains("broken")));
-    let dir_warnings: Vec<&String> = run
-        .warnings
-        .iter()
-        .filter(|w| w.contains("broken__kimi"))
-        .collect();
+    let dir_warnings: Vec<&String> = run.warnings.iter().filter(|w| w.contains("broken__kimi")).collect();
     assert_eq!(dir_warnings.len(), 1, "one warning for the malformed dir");
 }
 
@@ -97,19 +79,10 @@ fn latest_rubric_file_by_mtime_wins() {
 #[test]
 fn partial_rubrics_average_only_over_present_records() {
     let run = load_run(&fixtures(), "run_a").unwrap().unwrap();
-    assert_eq!(
-        run.rubric_status,
-        RubricStatus::Partial {
-            present: 2,
-            total: 3
-        }
-    );
+    assert_eq!(run.rubric_status, RubricStatus::Partial { present: 2, total: 3 });
     // kimi has two records: knowledge grades 4 (alpha) and 2 (tricky__part) -> mean 3.0.
     assert_eq!(run.lane_rubric_avg("kimi", RubricKey::Knowledge), Some(3.0));
-    assert_eq!(
-        run.lane_rubric_avg("kimi", RubricKey::EnvErgonomics),
-        Some(3.5)
-    );
+    assert_eq!(run.lane_rubric_avg("kimi", RubricKey::EnvErgonomics), Some(3.5));
     // glm's only rollout has no record -> no average, not 0.
     assert_eq!(run.lane_rubric_avg("glm", RubricKey::Knowledge), None);
 }
@@ -133,14 +106,8 @@ fn reduce_reports_load_latest_per_source_in_order() {
     let run = load_run(&fixtures(), "run_a").unwrap().unwrap();
     let sources: Vec<ReduceSource> = run.reports.iter().map(|r| r.source).collect();
     assert_eq!(sources, [ReduceSource::Analyzer, ReduceSource::Claude]);
-    assert_eq!(
-        run.reports[0].filename,
-        "trajectory_analysis_20260701-120000.md"
-    );
-    assert_eq!(
-        run.reports[1].filename,
-        "trajectory_analysis_claude_20260701-120000.md"
-    );
+    assert_eq!(run.reports[0].filename, "trajectory_analysis_20260701-120000.md");
+    assert_eq!(run.reports[1].filename, "trajectory_analysis_claude_20260701-120000.md");
 
     // A run with no reduce report has no reports.
     let run_b = load_run(&fixtures(), "run_b").unwrap().unwrap();
@@ -153,9 +120,7 @@ fn malformed_rubric_file_degrades_to_rubric_less_with_warning() {
     assert_eq!(run.rubric_status, RubricStatus::None);
     assert!(run.rubrics.is_empty());
     assert!(
-        run.warnings
-            .iter()
-            .any(|w| w.contains("trajectory_rubrics")),
+        run.warnings.iter().any(|w| w.contains("trajectory_rubrics")),
         "warnings: {:?}",
         run.warnings
     );

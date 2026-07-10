@@ -88,6 +88,13 @@ vi.mock("@/lib/config/config", () => ({
   },
 }));
 
+// Bespoke factory (not the canonical __mocks__ one): this file partially
+// mocks @/lib/config/config above, which the canonical mock's importActual
+// chain would break on. Beta off means message-queue draining stays inert.
+vi.mock("@/lib/config/config.query", () => ({
+  useFeature: () => false,
+}));
+
 describe("ChatProvider retries", () => {
   let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
 
@@ -1442,6 +1449,95 @@ describe("context window breakdown state", () => {
 
     expect(sessionA.current?.contextWindow).toBeNull();
     expect(sessionB.current?.contextWindow).toBeNull();
+  });
+});
+
+describe("ChatProvider app-tool cache invalidation", () => {
+  let chatOptions: Parameters<typeof mocks.useChat>[0] | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    chatOptions = undefined;
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        error: undefined,
+        messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  const publishMessage = (partOverrides: Record<string, unknown> = {}) =>
+    ({
+      id: "assistant-1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-archestra__publish_app",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { appId: "app-1", scope: "org" },
+          output: { id: "app-1", scope: "org", runUrl: "/a/app-1" },
+          ...partOverrides,
+        },
+      ],
+    }) as unknown as UIMessage;
+
+  it("invalidates the app caches when a publish_app result finishes", async () => {
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // publish_app mutates the app's scope server-side, inside the chat loop —
+    // no frontend mutation hook runs, so onFinish must mark the app caches
+    // stale or the settings dialog serves the pre-publish scope from cache.
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: publishMessage(),
+        isAbort: false,
+      });
+    });
+
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["apps"],
+    });
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["mcp-catalog"],
+    });
+  });
+
+  it("does not invalidate the app caches for an errored publish_app", async () => {
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    await act(async () => {
+      await chatOptions?.onFinish?.({
+        message: publishMessage({ state: "output-error", errorText: "denied" }),
+        isAbort: false,
+      });
+    });
+
+    expect(mocks.invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: ["apps"],
+    });
   });
 });
 

@@ -644,7 +644,8 @@ export function useTestEmbeddingConnection() {
 }
 
 /**
- * Get all members of the organization (for admin filtering)
+ * Users the current caller can see: the full organization roster with
+ * member:read, otherwise only the caller's teammates (may be empty).
  */
 export function useOrganizationMembers(enabled = true) {
   return useQuery({

@@ -1,11 +1,13 @@
 import {
   AnthropicErrorTypes,
+  ArchestraInternalErrorCode,
   BedrockErrorTypes,
   ChatErrorCode,
   ChatErrorMessages,
   GeminiErrorCodes,
   GeminiErrorReasons,
   OpenAIErrorTypes,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -20,6 +22,7 @@ vi.mock("@sentry/node", () => ({
 import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
+  buildAbortiveTurnError,
   EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -372,6 +375,22 @@ describe("mapProviderError - Anthropic", () => {
       expect(result.code).toBe(ChatErrorCode.InvalidRequest);
       expect(result.isRetryable).toBe(false);
       expect(result.originalError?.provider).toBe("anthropic");
+    });
+
+    it("reclassifies a balance-too-low envelope (internal_code) to a non-retryable ProviderInsufficientBalance card", () => {
+      const error = createAnthropicError(
+        400,
+        "api_validation_error",
+        "Provider API key remaining usage balance is too low. Please contact your administrator or try again later.",
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+      const result = mapProviderError(error, "anthropic");
+
+      expect(result.code).toBe(ChatErrorCode.ProviderInsufficientBalance);
+      expect(result.isRetryable).toBe(false);
+      expect(result.message).toBe(
+        ChatErrorMessages[ChatErrorCode.ProviderInsufficientBalance],
+      );
     });
   });
 
@@ -1599,6 +1618,63 @@ describe("mapProviderError - Fallback behavior", () => {
 
     expect(result.originalError?.message).toBe("Simple string error");
   });
+
+  it("should map OpenRouter upstream provider failures to retryable server errors", () => {
+    // Faithful to the real shape: a mid-stream SSE error part reaches the
+    // mapper as a bare `{ message, type }` object with no status code, so the
+    // per-provider mapper would land on the dead-end Unknown card.
+    const error = {
+      message: "Upstream error from SomeInferenceHost: undefined",
+      type: "api_error",
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.message).toBe(
+      "Upstream error from SomeInferenceHost: undefined",
+    );
+    // A transient provider-side failure is expected noise, not a bug.
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("should map a mid-stream upstream empty response to a retryable empty-response card", () => {
+    // The proxy surfaces its empty-completion detection mid-stream as a bare
+    // SSE error part carrying the normalized internal code.
+    const error = {
+      message:
+        "OpenRouter returned an empty response without content or tool calls",
+      type: "api_error",
+      internal_code: ArchestraInternalErrorCode.UpstreamEmptyResponse,
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.EmptyResponse]);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("should map a pre-stream upstream empty response 503 to a retryable empty-response card", () => {
+    // The other delivery shape: detection before headers commit arrives as an
+    // HTTP 503 whose body carries the normalized internal code.
+    const error = {
+      statusCode: 503,
+      responseBody: JSON.stringify({
+        error: {
+          message:
+            "OpenRouter returned an empty response without content or tool calls",
+          type: "unknown_api_error",
+          internal_code: ArchestraInternalErrorCode.UpstreamEmptyResponse,
+        },
+      }),
+    };
+    const result = mapProviderError(error, "openrouter");
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
 });
 
 // =============================================================================
@@ -1606,7 +1682,44 @@ describe("mapProviderError - Fallback behavior", () => {
 // =============================================================================
 
 describe("mapProviderError - Sentry raw error capture", () => {
-  it("captures a Sentry exception event for rawErrorJson provider errors", () => {
+  it("captures errors that fail classification (Unknown)", () => {
+    const error = {
+      name: "AI_APICallError",
+      responseBody: JSON.stringify({
+        error: { message: "novel provider failure shape" },
+      }),
+    };
+
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.Unknown);
+    expect(mockSentryCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "RawProviderError",
+        message: "novel provider failure shape",
+      }),
+      expect.objectContaining({
+        level: "error",
+        fingerprint: [
+          "chat-provider-error-raw-error-json",
+          "openai",
+          "unknown",
+          ChatErrorCode.Unknown,
+        ],
+        tags: expect.objectContaining({
+          provider: "openai",
+          mapped_code: ChatErrorCode.Unknown,
+          raw_error_json: "true",
+        }),
+        extra: expect.objectContaining({
+          errorMessage: "novel provider failure shape",
+          rawErrorJson: expect.stringContaining("AI_APICallError"),
+        }),
+      }),
+    );
+  });
+
+  it("does not capture transient retryable provider-side errors", () => {
     const error = {
       name: "AI_APICallError",
       statusCode: 500,
@@ -1619,33 +1732,43 @@ describe("mapProviderError - Sentry raw error capture", () => {
       isRetryable: true,
     };
 
-    mapProviderError(error, "openai");
+    const result = mapProviderError(error, "openai");
 
-    expect(mockSentryCaptureException).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "RawProviderError",
-        message: "Provider failed",
-      }),
-      expect.objectContaining({
-        level: "error",
-        fingerprint: [
-          "chat-provider-error-raw-error-json",
-          "openai",
-          "500",
-          ChatErrorCode.ServerError,
-        ],
-        tags: expect.objectContaining({
-          provider: "openai",
-          mapped_code: ChatErrorCode.ServerError,
-          raw_error_json: "true",
-          status_code: "500",
-        }),
-        extra: expect.objectContaining({
-          errorMessage: "Provider failed",
-          rawErrorJson: expect.stringContaining("AI_APICallError"),
-        }),
-      }),
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("does not capture approval-gated tool blocks in autonomous sessions", () => {
+    // Thrown by the chat tool builder when a "Require approval" policy fires
+    // in a session with no human to approve (A2A, Slack, MS Teams,
+    // sub-agents). Policy enforcement working as designed, not a provider
+    // failure — it must stay out of error tracking.
+    const error = new Error(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     );
+
+    mapProviderError(error, "bedrock");
+
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("does not capture client-class 4xx provider rejections", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          type: "api_validation_error",
+          message: "Provider returned error",
+        },
+      }),
+      isRetryable: false,
+    };
+
+    const result = mapProviderError(error, "openai");
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
   });
 });
 
@@ -1993,5 +2116,21 @@ describe("getUnavailableToolErrorDetails", () => {
     expect(getUnavailableToolErrorDetails("some other failure")).toBeNull();
     expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
     expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
+  });
+});
+
+describe("buildAbortiveTurnError", () => {
+  it("maps a `length` truncation to a non-retryable ToolCallOutputTruncated", () => {
+    const result = buildAbortiveTurnError("anthropic", "length");
+    expect(result.code).toBe(ChatErrorCode.ToolCallOutputTruncated);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("keeps a non-length abortive turn as a retryable IncompleteToolCall", () => {
+    for (const finishReason of ["tool-calls", "unknown", null, undefined]) {
+      const result = buildAbortiveTurnError("anthropic", finishReason);
+      expect(result.code).toBe(ChatErrorCode.IncompleteToolCall);
+      expect(result.isRetryable).toBe(true);
+    }
   });
 });

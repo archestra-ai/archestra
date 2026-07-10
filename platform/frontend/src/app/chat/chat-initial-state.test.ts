@@ -270,7 +270,6 @@ describe("isAutoSendHandoffInProgress", () => {
     hasAttachmentsMarker: false,
     hasPendingHandoffFiles: false,
     autoSendTriggered: false,
-    isCreatingConversation: false,
   };
 
   test("true on first render of a prompt handoff (before the send fires)", () => {
@@ -296,10 +295,12 @@ describe("isAutoSendHandoffInProgress", () => {
     ).toBe(true);
   });
 
-  test("true while the create-conversation mutation is pending", () => {
-    expect(
-      isAutoSendHandoffInProgress({ ...base, isCreatingConversation: true }),
-    ).toBe(true);
+  test("false during an interactive submit (no handoff signals)", () => {
+    // Pressing Enter on the splash runs the same create mutation, but the
+    // splash must stay visible: its composer keeps focus and is the old half
+    // of the shared-element morph into the conversation view. Handoffs are
+    // identified by their own signals, never by the mutation being pending.
+    expect(isAutoSendHandoffInProgress(base)).toBe(false);
   });
 
   test("true for a files-only handoff whose stashed files are still in memory", () => {
@@ -337,7 +338,6 @@ describe("isAutoSendHandoffInProgress", () => {
         conversationId: "conv-1",
         initialUserPrompt: "Say hello",
         autoSendTriggered: true,
-        isCreatingConversation: true,
       }),
     ).toBe(false);
   });

@@ -31,12 +31,13 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
     });
 
     expect(result).toBe(
-      '<skill_content name="Research">\nDo research.\n</skill_content>',
+      '<skill_content name="Research" version="1">\nDo research.\n</skill_content>',
     );
   });
 
@@ -49,6 +50,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [
         { path: "references/REF.md", kind: "reference" },
         { path: "scripts/run.py", kind: "script" },
@@ -72,6 +74,7 @@ describe("formatSkillActivation", () => {
         allowedTools: "slack__send jira__create",
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
     });
@@ -90,6 +93,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [{ path: "scripts/run.py", kind: "script" }],
       canRunSandbox: true,
     });
@@ -120,6 +124,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [{ path: "scripts/run.py", kind: "script" }],
       canRunSandbox: false,
     });
@@ -151,6 +156,7 @@ describe("formatSkillActivation", () => {
           allowedTools: null,
           templated: false,
         },
+        version: 1,
         files: [{ path: "scripts/run.py", kind: "script" }],
         canRunSandbox: true,
       });
@@ -183,6 +189,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
     });
@@ -200,6 +207,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: true,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
       promptContext: adaContext,
@@ -218,6 +226,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
       promptContext: adaContext,
@@ -235,6 +244,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: true,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
       promptContext: null,
@@ -252,6 +262,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [{ path: "refs/notes.md", kind: "reference" }],
       canRunSandbox: true,
     });
@@ -270,6 +281,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
     });
@@ -291,6 +303,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
     });
@@ -321,6 +334,7 @@ describe("formatSkillActivation", () => {
         allowedTools: null,
         templated: false,
       },
+      version: 1,
       files: [],
       canRunSandbox: true,
     });
@@ -350,6 +364,7 @@ describe("formatSkillActivation", () => {
           allowedTools: "slack__send jira__create",
           templated: false,
         },
+        version: 1,
         files: [
           { path: "references/REF.md", kind: "reference" },
           { path: "scripts/run.py", kind: "script" },
@@ -369,6 +384,7 @@ describe("formatSkillActivation", () => {
           allowedTools: null,
           templated: false,
         },
+        version: 1,
         files: [{ path: "scripts/run.py", kind: "script" }],
         canRunSandbox: false,
       }),
@@ -410,6 +426,7 @@ describe("buildSkillActivationPromptContext", () => {
         allowedTools: null,
         templated: true,
       },
+      version: 1,
       files: [],
       canRunSandbox: false,
       promptContext,

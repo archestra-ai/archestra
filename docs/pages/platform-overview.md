@@ -6,6 +6,8 @@ description: High-level architecture overview of Archestra Platform components
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Archestra is a centralized AI platform for organizations where engineers and non-technical teams both work with AI agents. A non-technical user works through a chat UI and gets results right away. An engineer builds agents in LangChain, n8n, Python, or another stack, using the MCP orchestrator, guardrails, and observability. Both use the same platform.
 
 > Fun fact: the team behind Archestra.AI previously worked on Grafana OnCall.

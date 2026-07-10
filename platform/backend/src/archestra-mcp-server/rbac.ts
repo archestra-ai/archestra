@@ -47,6 +47,7 @@ export const TOOL_PERMISSIONS: Record<
   deploy_mcp_server: { resource: "mcpRegistry", action: "update" },
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
+  reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
   create_mcp_server_installation_request: {
     resource: "mcpServerInstallationRequest",
     action: "create",
@@ -91,6 +92,7 @@ export const TOOL_PERMISSIONS: Record<
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },
+  bulk_remove_tools_from_agents: { resource: "agent", action: "update" },
   bulk_assign_tools_to_mcp_gateways: {
     resource: "mcpGateway",
     action: "update",
@@ -150,6 +152,7 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
+  edit_skill: { resource: "skill", action: "update" },
   // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
   // assignment. The implicit per-conversation sandbox is created lazily; the
   // create step is not a tool. load_skill (skill:read) mounts a skill into

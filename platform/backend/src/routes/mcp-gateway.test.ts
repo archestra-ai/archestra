@@ -1,29 +1,21 @@
 import {
-  getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
-  TOOL_EDIT_APP_SHORT_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-  TOOL_LIST_APPS_SHORT_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
-  TOOL_PUBLISH_APP_SHORT_NAME,
-  TOOL_READ_APP_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
-  TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
-  TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
-  TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -1189,7 +1181,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
-  test("keeps sandbox runtime and app tools top-level in tools/list when the sandbox runtime is enabled", async ({
+  test("keeps sandbox runtime tools top-level in tools/list when the sandbox runtime is enabled", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1248,6 +1240,8 @@ describe("MCP Gateway (stateless mode)", () => {
       const toolNames = response
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
+      // App tools are deliberately absent: in search_and_run_only mode the
+      // whole app surface is reached through search_tools/run_tool.
       expect(toolNames.sort()).toEqual(
         [
           TOOL_DELETE_FILE_FULL_NAME,
@@ -1262,15 +1256,6 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_UPLOAD_FILE_FULL_NAME,
-          getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_REFINE_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_VALIDATE_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
-          getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
-          // render_app is deliberately absent: it renders only inside
-          // Archestra's own chat, so gateway-type agents don't list it.
-          getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
         ].sort(),
       );
     } finally {

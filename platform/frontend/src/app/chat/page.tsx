@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -93,6 +94,7 @@ import {
   drainAppDiagnostics,
 } from "@/lib/chat/app-diagnostics-store";
 import {
+  fetchAgentMcpTools,
   fetchConversationEnabledTools,
   invalidateConversationFileQueries,
   useCompactConversation,
@@ -108,6 +110,7 @@ import {
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
   useConversationShare,
   useForkConversation,
@@ -119,6 +122,7 @@ import {
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
@@ -127,7 +131,6 @@ import {
 } from "@/lib/chat/pending-chat-handoff-files";
 import { takePendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import {
-  applyPendingActions,
   clearPendingActions,
   getPendingActions,
 } from "@/lib/chat/pending-tool-state";
@@ -136,7 +139,7 @@ import {
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
-import { useConfig } from "@/lib/config/config.query";
+import { useConfig, useFeature } from "@/lib/config/config.query";
 import {
   type ConnectivityState,
   useConnectivity,
@@ -155,6 +158,7 @@ import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
+import { ViewTransition } from "@/lib/view-transition";
 import {
   buildCreateConversationInput,
   isAutoSendHandoffInProgress,
@@ -553,15 +557,36 @@ export function ChatPageContent({
   // Update URL when conversation changes
   const selectConversation = useCallback(
     (id: string | undefined) => {
-      setConversationId(id);
+      // A React Transition so the <ViewTransition> boundaries below animate
+      // the splash → conversation swap (plain setState swaps instantly).
+      startTransition(() => setConversationId(id));
       if (id) {
-        router.push(`/chat/${id}`);
+        // Shallow-route to the canonical URL: history.pushState syncs
+        // usePathname/useSearchParams without an RSC navigation, so this
+        // instance keeps rendering the conversation it just started. A real
+        // router.push to /chat/[conversationId] would mount that segment's
+        // keyed page and remount everything mid-stream (visible flicker).
+        // Refresh, deep links, and back/forward still resolve through the
+        // /chat/[conversationId] route.
+        window.history.pushState(null, "", `/chat/${id}`);
       } else {
         router.push("/chat");
       }
     },
     [router],
   );
+
+  // After the shallow pushState above, this /chat instance stays mounted while
+  // the URL reads /chat/<id> — so navigating back to /chat (sidebar "New
+  // Chat", browser back) can land on this same instance instead of a fresh
+  // mount. Derive the reset from the URL: when the pathname returns to /chat,
+  // clear the selection so the New Chat splash renders again.
+  const isNewChatUrl = !routeConversationId && pathname === "/chat";
+  useEffect(() => {
+    if (isNewChatUrl) {
+      startTransition(() => setConversationId(undefined));
+    }
+  }, [isNewChatUrl]);
 
   // App render diagnostics are conversation-scoped: drop any leftovers when
   // switching conversations so they never attach to an unrelated send.
@@ -985,6 +1010,8 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
+  const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
 
   // A scheduled run's transcript is persisted only when it completes, so a run
   // opened while still running seeds the live chat session empty. When the run
@@ -1391,17 +1418,24 @@ export function ChatPageContent({
     }
 
     const initialAppDiagnostics = drainAppDiagnostics();
-    sendMessage({
-      role: "user",
-      parts: ensureNonEmptyParts(parts),
-      metadata: {
-        createdAt: new Date().toISOString(),
-        ...(skillToSend ? { skill: skillToSend } : {}),
-        ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
-        ...(initialAppDiagnostics.length > 0
-          ? { appDiagnostics: initialAppDiagnostics }
-          : {}),
-      },
+    // This effect fires right after the splash → conversation swap commits,
+    // while its view transition (the composer morph) is still animating. An
+    // urgent update here would make React skip that animation mid-flight, so
+    // schedule the optimistic user-message append as a transition too — it
+    // joins the running animation instead of snapping it to the end.
+    startTransition(() => {
+      sendMessage({
+        role: "user",
+        parts: ensureNonEmptyParts(parts),
+        metadata: {
+          createdAt: new Date().toISOString(),
+          ...(skillToSend ? { skill: skillToSend } : {}),
+          ...(sandboxCommandToSend ? { sandboxCommand: true as const } : {}),
+          ...(initialAppDiagnostics.length > 0
+            ? { appDiagnostics: initialAppDiagnostics }
+            : {}),
+        },
+      });
     });
 
     trackEvent("message_sent", {
@@ -1485,6 +1519,20 @@ export function ChatPageContent({
     });
   }, []);
 
+  // Stop the in-flight response. Wired to the submit button's Stop face in
+  // the prompt input; also pauses queue auto-drain (see ChatSessionHook).
+  const handleStopStreaming = () => {
+    if (conversationId) {
+      // Set the cache flag first, THEN close the connection so the
+      // connection-close handler on the backend finds the flag.
+      stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
+        stop?.();
+      });
+    } else {
+      stop?.();
+    }
+  };
+
   const handleSubmit: ArchestraPromptInputProps["onSubmit"] = (
     message,
     e,
@@ -1493,20 +1541,40 @@ export function ChatPageContent({
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
     if (status === "submitted" || status === "streaming") {
-      if (conversationId) {
-        // Set the cache flag first, THEN close the connection so the
-        // connection-close handler on the backend finds the flag.
-        stopChatStreamMutation.mutateAsync(conversationId).finally(() => {
-          stop?.();
-        });
-      } else {
-        stop?.();
+      // With queueing on, a submit while a response is in-flight queues the
+      // message; the conversation's ChatSessionHook sends it once the turn
+      // settles. (Stopping is the submit button's onClick, not a form
+      // submit.) With queueing off, the submit button doubles as Stop.
+      if (!isMessageQueueEnabled || !conversationId) {
+        handleStopStreaming();
+        // Throw to keep the textarea and draft intact — see onSubmit
+        // contract in ArchestraPromptInputProps.
+        throw new Error("stop-not-submit");
       }
-      // Throw to keep the textarea and draft intact — see onSubmit contract
-      // in ArchestraPromptInputProps. The submit button doubles as Stop while
-      // streaming; treating that click as an accepted submit would clear any
-      // follow-up the user had already started typing.
-      throw new Error("stop-not-submit");
+      if (message.files && message.files.length > 0) {
+        toast.error(
+          "Attachments can't be queued. Wait for the current response to finish, then send.",
+        );
+        // Keep the typed text, draft, and attachments for a later submit.
+        throw new Error("attachments-not-queueable");
+      }
+      const queueText = message.text?.trim();
+      if (!queueText && !options?.skill) {
+        // Nothing to queue (Enter on an empty composer while streaming).
+        throw new Error("empty-queue-submit");
+      }
+      chatMessageQueue.enqueue(conversationId, {
+        text: message.text ?? "",
+        ...(options?.skill ? { skill: options.skill } : {}),
+        ...(options?.sandboxCommand ? { sandboxCommand: true as const } : {}),
+      });
+      trackEvent("message_queued", {
+        conversationId,
+        agentId: conversation?.agentId ?? undefined,
+        messageLength: message.text?.length ?? 0,
+      });
+      // Returning normally clears the textarea and draft, like a send.
+      return;
     }
 
     const { kind: connectivityKind } = connectivity.state;
@@ -1864,18 +1932,31 @@ export function ChatPageContent({
           // Get the default enabled tools from the conversation (backend sets these)
           // We need to fetch them first to apply our pending actions on top
           try {
-            // The backend creates conversation with default enabled tools
-            // We need to apply pending actions to modify that default
-            const enabledToolsResult = await fetchConversationEnabledTools(
-              newConversation.id,
-            );
-            if (enabledToolsResult?.data) {
-              const baseEnabledToolIds =
-                enabledToolsResult.data.enabledToolIds || [];
-              const newEnabledToolIds = applyPendingActions(
-                baseEnabledToolIds,
+            // Fetch the conversation's default enabled-tools and the CURRENT
+            // agent's tool set fresh — fetching the agent's tools here (rather
+            // than reading a keepPreviousData hook) avoids persisting a previous
+            // agent's tool IDs right after an agent switch.
+            const [enabledToolsResult, agentTools] = await Promise.all([
+              fetchConversationEnabledTools(newConversation.id),
+              fetchAgentMcpTools(initialAgentId),
+            ]);
+            const allToolIds = agentTools.map((t) => t.id);
+            // A fresh conversation carries no custom selection, so the pending
+            // actions must apply on top of the agent's full tool set — not the
+            // GET's empty array, which would turn "disable a subset" into
+            // "enable nothing" and drop every tool. Without that set (agent has
+            // no tools, or the fetch failed) the base is unknown, so leave the
+            // conversation on its default rather than persist an empty allowlist.
+            const canResolveBase =
+              enabledToolsResult?.data?.hasCustomSelection ||
+              allToolIds.length > 0;
+            if (enabledToolsResult?.data && canResolveBase) {
+              const newEnabledToolIds = resolveEnabledToolIds({
+                hasCustomSelection: enabledToolsResult.data.hasCustomSelection,
+                enabledToolIds: enabledToolsResult.data.enabledToolIds || [],
+                allToolIds,
                 pendingActions,
-              );
+              });
 
               // Pre-populate the query cache so useConversationEnabledTools
               // immediately sees the correct state when conversationId is set.
@@ -1889,17 +1970,36 @@ export function ChatPageContent({
                 },
               );
 
-              // Update the enabled tools
-              updateEnabledToolsMutation.mutate({
+              // Await the persist before the first message sends below: the
+              // backend rebuilds the tool set from the DB, so a fire-and-forget
+              // PUT could lose the race and run turn one with the just-declined
+              // tool still enabled. This mutation resolves with null (it does not
+              // throw) on API failure, so branch on the result rather than a
+              // catch.
+              const persisted = await updateEnabledToolsMutation.mutateAsync({
                 conversationId: newConversation.id,
                 toolIds: newEnabledToolIds,
               });
+              if (persisted) {
+                // Clear the pending action only once the selection is durable.
+                clearPendingActions();
+              } else {
+                // Persist failed: undo the optimistic cache so it matches the DB,
+                // and keep the pending action to retry on the next new
+                // conversation rather than silently dropping the decline.
+                queryClient.invalidateQueries({
+                  queryKey: [
+                    "conversation",
+                    newConversation.id,
+                    "enabled-tools",
+                  ],
+                });
+              }
             }
           } catch {
-            // Silently fail - the default tools will be used
+            // Leave pending actions intact on failure; the first turn falls back
+            // to the agent's default tools.
           }
-          // Clear pending actions regardless of success
-          clearPendingActions();
         }
 
         selectConversation(newConversation.id);
@@ -2236,7 +2336,6 @@ export function ChatPageContent({
     hasAttachmentsMarker: searchParams.get("attachments") === "1",
     hasPendingHandoffFiles: hasPendingChatHandoffFiles(),
     autoSendTriggered: autoSendTriggeredRef.current,
-    isCreatingConversation: createConversationMutation.isPending,
   });
 
   return (
@@ -2320,73 +2419,77 @@ export function ChatPageContent({
 
               {conversationId ? (
                 <>
-                  {/* Chat content - hidden on mobile when panels are open */}
-                  <div
-                    className={cn(
-                      "flex-1 min-h-0 relative",
-                      isRightPanelOpen && "hidden md:block",
-                    )}
-                  >
-                    {isScheduledRunInProgress ? (
-                      <ScheduledRunInProgress />
-                    ) : isReadOnlyConversation ? (
-                      <MessageThread
-                        messages={sharedConversationMessages}
-                        chatErrors={conversation?.chatErrors ?? []}
-                        conversationId={conversationId}
-                        containerClassName="h-full"
-                        hideDivider
-                        profileId={conversation?.agent?.id}
-                        agentName={conversation?.agent?.name}
-                        selectedModel={conversation?.modelId ?? undefined}
-                      />
-                    ) : (
-                      <ChatMessages
-                        conversationId={conversationId}
-                        agentId={
-                          currentProfileId || initialAgentId || undefined
-                        }
-                        messages={messages}
-                        status={status}
-                        isContextCompacting={isContextCompacting}
-                        contextCompactionFeedback={manualCompactionFeedback}
-                        optimisticToolCalls={optimisticToolCalls}
-                        isLoadingConversation={isLoadingConversation}
-                        onMessagesUpdate={setMessages}
-                        agentName={
-                          (currentProfileId
-                            ? internalAgents.find(
-                                (a) => a.id === currentProfileId,
-                              )
-                            : internalAgents.find(
-                                (a) => a.id === initialAgentId,
-                              )
-                          )?.name
-                        }
-                        selectedModel={conversation?.modelId ?? initialModel}
-                        modelSource={
-                          conversationModelSource ?? initialModelSource
-                        }
-                        chatErrors={conversation?.chatErrors ?? []}
-                        compactions={conversation?.compactions ?? []}
-                        onRegenerateUserMessage={regenerateUserMessage}
-                        onProviderConnected={handleProviderConnected}
-                        onChatErrorRetry={handleChatErrorRetry}
-                        error={error}
-                        onToolApprovalResponse={
-                          addToolApprovalResponse
-                            ? ({ id, approved, reason }) => {
-                                addToolApprovalResponse({
-                                  id,
-                                  approved,
-                                  reason,
-                                });
-                              }
-                            : undefined
-                        }
-                      />
-                    )}
-                  </div>
+                  {/* Chat content - hidden on mobile when panels are open.
+                      The ViewTransition eases the thread in when the splash
+                      (or another page) hands off to a conversation. */}
+                  <ViewTransition enter="chat-thread-enter" default="none">
+                    <div
+                      className={cn(
+                        "flex-1 min-h-0 relative",
+                        isRightPanelOpen && "hidden md:block",
+                      )}
+                    >
+                      {isScheduledRunInProgress ? (
+                        <ScheduledRunInProgress />
+                      ) : isReadOnlyConversation ? (
+                        <MessageThread
+                          messages={sharedConversationMessages}
+                          chatErrors={conversation?.chatErrors ?? []}
+                          conversationId={conversationId}
+                          containerClassName="h-full"
+                          hideDivider
+                          profileId={conversation?.agent?.id}
+                          agentName={conversation?.agent?.name}
+                          selectedModel={conversation?.modelId ?? undefined}
+                        />
+                      ) : (
+                        <ChatMessages
+                          conversationId={conversationId}
+                          agentId={
+                            currentProfileId || initialAgentId || undefined
+                          }
+                          messages={messages}
+                          status={status}
+                          isContextCompacting={isContextCompacting}
+                          contextCompactionFeedback={manualCompactionFeedback}
+                          optimisticToolCalls={optimisticToolCalls}
+                          isLoadingConversation={isLoadingConversation}
+                          onMessagesUpdate={setMessages}
+                          agentName={
+                            (currentProfileId
+                              ? internalAgents.find(
+                                  (a) => a.id === currentProfileId,
+                                )
+                              : internalAgents.find(
+                                  (a) => a.id === initialAgentId,
+                                )
+                            )?.name
+                          }
+                          selectedModel={conversation?.modelId ?? initialModel}
+                          modelSource={
+                            conversationModelSource ?? initialModelSource
+                          }
+                          chatErrors={conversation?.chatErrors ?? []}
+                          compactions={conversation?.compactions ?? []}
+                          onRegenerateUserMessage={regenerateUserMessage}
+                          onProviderConnected={handleProviderConnected}
+                          onChatErrorRetry={handleChatErrorRetry}
+                          error={error}
+                          onToolApprovalResponse={
+                            addToolApprovalResponse
+                              ? ({ id, approved, reason }) => {
+                                  addToolApprovalResponse({
+                                    id,
+                                    approved,
+                                    reason,
+                                  });
+                                }
+                              : undefined
+                          }
+                        />
+                      )}
+                    </div>
+                  </ViewTransition>
 
                   {isScheduledRunInProgress ? null : isReadOnlyConversation ? (
                     <div className="sticky bottom-0 bg-background border-t p-4">
@@ -2456,59 +2559,72 @@ export function ChatPageContent({
                   ) : (
                     activeAgentId && (
                       <div className="sticky bottom-0 bg-background border-t p-4">
-                        <div className="max-w-4xl mx-auto space-y-3">
-                          <ArchestraPromptInput
-                            onSubmit={handleSubmit}
-                            status={status}
-                            selectedModel={conversation?.modelId ?? ""}
-                            onModelChange={handleModelChange}
-                            agentId={promptAgentId ?? activeAgentId}
-                            conversationId={conversationId}
-                            currentConversationChatApiKeyId={
-                              conversation?.chatApiKeyId
-                            }
-                            currentProvider={currentProvider}
-                            textareaRef={textareaRef}
-                            onProviderChange={handleProviderChange}
-                            allowFileUploads={
-                              organization?.allowChatFileUploads ?? false
-                            }
-                            isModelsLoading={isModelsLoading}
-                            tokensUsed={tokensUsed}
-                            cachedTokens={tokenUsage?.cacheReadTokens}
-                            maxContextLength={selectedModelContextLength}
-                            contextWindow={contextWindow}
-                            lastCompaction={contextCompaction?.lastCompaction}
-                            inputModalities={selectedModelInputModalities}
-                            agentLlmApiKeyId={
-                              conversation?.agent?.llmApiKeyId ?? null
-                            }
-                            submitDisabled={isPlaywrightSetupVisible}
-                            isContextCompacting={isContextCompacting}
-                            onCompactConversation={handleCompactConversation}
-                            isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                            selectorAgentId={activeAgentId}
-                            selectorAgentName={swappedAgentName ?? undefined}
-                            onAgentChange={handleConversationAgentChange}
-                            modelSource={conversationModelSource}
-                            onResetModelOverride={
-                              handleConversationResetModelOverride
-                            }
-                            agentRequiresPerUserConnect={
-                              conversationPerUserConnect.needsConnect
-                            }
-                            agentModelDisplayName={
-                              conversationPerUserConnect.needsConnect
-                                ? conversationPerUserConnect.modelName
-                                : undefined
-                            }
-                            prefillText={composerPrefill}
-                            onPrefillApplied={handleComposerPrefillApplied}
-                          />
-                          <div className="text-center">
-                            <Version inline />
+                        {/* Shared-element pair with the centered New Chat
+                            composer (and the project-page composer): on the
+                            splash → conversation swap the box morphs from
+                            center screen to its bottom anchor. */}
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="max-w-4xl mx-auto space-y-3">
+                            <ArchestraPromptInput
+                              onSubmit={handleSubmit}
+                              onStop={handleStopStreaming}
+                              status={status}
+                              selectedModel={conversation?.modelId ?? ""}
+                              onModelChange={handleModelChange}
+                              agentId={promptAgentId ?? activeAgentId}
+                              conversationId={conversationId}
+                              currentConversationChatApiKeyId={
+                                conversation?.chatApiKeyId
+                              }
+                              currentProvider={currentProvider}
+                              textareaRef={textareaRef}
+                              onProviderChange={handleProviderChange}
+                              allowFileUploads={
+                                organization?.allowChatFileUploads ?? false
+                              }
+                              isModelsLoading={isModelsLoading}
+                              tokensUsed={tokensUsed}
+                              cachedTokens={tokenUsage?.cacheReadTokens}
+                              maxContextLength={selectedModelContextLength}
+                              contextWindow={contextWindow}
+                              lastCompaction={contextCompaction?.lastCompaction}
+                              inputModalities={selectedModelInputModalities}
+                              agentLlmApiKeyId={
+                                conversation?.agent?.llmApiKeyId ?? null
+                              }
+                              submitDisabled={isPlaywrightSetupVisible}
+                              isContextCompacting={isContextCompacting}
+                              onCompactConversation={handleCompactConversation}
+                              isPlaywrightSetupVisible={
+                                isPlaywrightSetupVisible
+                              }
+                              selectorAgentId={activeAgentId}
+                              selectorAgentName={swappedAgentName ?? undefined}
+                              onAgentChange={handleConversationAgentChange}
+                              modelSource={conversationModelSource}
+                              onResetModelOverride={
+                                handleConversationResetModelOverride
+                              }
+                              agentRequiresPerUserConnect={
+                                conversationPerUserConnect.needsConnect
+                              }
+                              agentModelDisplayName={
+                                conversationPerUserConnect.needsConnect
+                                  ? conversationPerUserConnect.modelName
+                                  : undefined
+                              }
+                              prefillText={composerPrefill}
+                              onPrefillApplied={handleComposerPrefillApplied}
+                            />
+                            <div className="text-center">
+                              <Version inline />
+                            </div>
                           </div>
-                        </div>
+                        </ViewTransition>
                       </div>
                     )
                   )}
@@ -2521,127 +2637,143 @@ export function ChatPageContent({
               ) : (
                 /* No active chat: centered prompt input */
                 newChatAgentId && (
-                  // biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container
-                  // biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container
-                  <div
-                    className="relative flex-1 flex flex-col min-h-0"
-                    onClick={(e) => {
-                      // Focus textarea when clicking empty space outside interactive elements
-                      if (
-                        e.target === e.currentTarget ||
-                        !(e.target as HTMLElement).closest(
-                          "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
-                        )
-                      ) {
-                        textareaRef.current?.focus();
-                      }
-                    }}
-                  >
-                    {((organization?.chatLinks?.length ?? 0) > 0 ||
-                      organization?.onboardingWizard) && (
-                      <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
-                        {organization?.chatLinks?.map((link) => (
-                          <ChatLinkButton
-                            key={`link-${link.label}-${link.url}`}
-                            url={link.url}
-                            label={link.label}
-                          />
-                        ))}
-                        {organization?.onboardingWizard && (
-                          <OnboardingWizardButton
-                            wizard={organization.onboardingWizard}
-                          />
-                        )}
-                      </div>
-                    )}
-                    {isPlaywrightSetupRequired && canUpdateAgent && (
-                      <PlaywrightInstallDialog
-                        agentId={playwrightSetupAgentId}
-                        conversationId={conversationId}
-                      />
-                    )}
-                    <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
-                      <div className="scale-150">
-                        <AppLogo />
-                      </div>
-                      {(() => {
-                        const currentAgent = internalAgents.find(
-                          (a) => a.id === initialAgentId,
-                        );
-                        const prompts = currentAgent?.suggestedPrompts;
-                        if (!prompts || prompts.length === 0) return null;
-                        return (
-                          <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
-                            {prompts.map((sp) => (
-                              <Suggestion
-                                key={`${sp.summaryTitle}-${sp.prompt}`}
-                                suggestion={sp.summaryTitle}
-                                onClick={() => {
-                                  trackEvent("prompt_selected", {
-                                    agentId: initialAgentId ?? undefined,
-                                    promptLength: sp.prompt.length,
-                                  });
-                                  submitInitialMessage({
-                                    text: sp.prompt,
-                                    files: [],
-                                  });
-                                }}
-                              />
-                            ))}
-                          </div>
-                        );
-                      })()}
-                      <div className="w-full max-w-4xl">
-                        <ArchestraPromptInput
-                          onSubmit={handleInitialSubmit}
-                          status={
-                            createConversationMutation.isPending
-                              ? "submitted"
-                              : "ready"
-                          }
-                          selectedModel={initialModel}
-                          onModelChange={handleInitialModelChange}
-                          agentId={newChatAgentId}
-                          currentProvider={initialProvider}
-                          textareaRef={textareaRef}
-                          initialApiKeyId={initialApiKeyId}
-                          onApiKeyChange={setInitialApiKeyId}
-                          onProviderChange={handleInitialProviderChange}
-                          allowFileUploads={
-                            organization?.allowChatFileUploads ?? false
-                          }
-                          isModelsLoading={isModelsLoading}
-                          inputModalities={selectedModelInputModalities}
-                          agentLlmApiKeyId={
-                            (
-                              internalAgents.find(
-                                (a) => a.id === initialAgentId,
-                              ) as Record<string, unknown> | undefined
-                            )?.llmApiKeyId as string | null
-                          }
-                          submitDisabled={isPlaywrightSetupVisible}
-                          isPlaywrightSetupVisible={isPlaywrightSetupVisible}
-                          selectorAgentId={initialAgentId}
-                          onAgentChange={handleInitialAgentChange}
-                          modelSource={initialModelSource}
-                          onResetModelOverride={handleResetModelOverride}
-                          agentRequiresPerUserConnect={
-                            initialPerUserConnect.needsConnect
-                          }
-                          agentModelDisplayName={
-                            initialPerUserConnect.needsConnect
-                              ? initialPerUserConnect.modelName
-                              : undefined
-                          }
-                          prefillText={composerPrefill}
-                          onPrefillApplied={handleComposerPrefillApplied}
+                  /* The exit fade covers the splash decoration (logo,
+                     suggestions) when a conversation takes over; the composer
+                     below is excluded — it carries its own shared name and
+                     morphs to the bottom-anchored composer instead. */
+                  <ViewTransition exit="chat-splash-exit" default="none">
+                    {/* biome-ignore lint/a11y/noStaticElementInteractions: click-to-focus container */}
+                    {/* biome-ignore lint/a11y/useKeyWithClickEvents: click-to-focus container */}
+                    <div
+                      className="relative flex-1 flex flex-col min-h-0"
+                      onClick={(e) => {
+                        // Focus textarea when clicking empty space outside interactive elements
+                        if (
+                          e.target === e.currentTarget ||
+                          !(e.target as HTMLElement).closest(
+                            "button, a, input, textarea, [role=combobox], [data-slot=input-group]",
+                          )
+                        ) {
+                          textareaRef.current?.focus();
+                        }
+                      }}
+                    >
+                      {((organization?.chatLinks?.length ?? 0) > 0 ||
+                        organization?.onboardingWizard) && (
+                        <div className="absolute top-4 right-4 z-10 flex flex-wrap justify-end gap-2 max-w-[min(100%,36rem)]">
+                          {organization?.chatLinks?.map((link) => (
+                            <ChatLinkButton
+                              key={`link-${link.label}-${link.url}`}
+                              url={link.url}
+                              label={link.label}
+                            />
+                          ))}
+                          {organization?.onboardingWizard && (
+                            <OnboardingWizardButton
+                              wizard={organization.onboardingWizard}
+                            />
+                          )}
+                        </div>
+                      )}
+                      {isPlaywrightSetupRequired && canUpdateAgent && (
+                        <PlaywrightInstallDialog
+                          agentId={playwrightSetupAgentId}
+                          conversationId={conversationId}
                         />
+                      )}
+                      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-8">
+                        <div className="scale-150">
+                          <AppLogo />
+                        </div>
+                        {(() => {
+                          const currentAgent = internalAgents.find(
+                            (a) => a.id === initialAgentId,
+                          );
+                          const prompts = currentAgent?.suggestedPrompts;
+                          if (!prompts || prompts.length === 0) return null;
+                          return (
+                            <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl">
+                              {prompts.map((sp) => (
+                                <Suggestion
+                                  key={`${sp.summaryTitle}-${sp.prompt}`}
+                                  suggestion={sp.summaryTitle}
+                                  onClick={() => {
+                                    trackEvent("prompt_selected", {
+                                      agentId: initialAgentId ?? undefined,
+                                      promptLength: sp.prompt.length,
+                                    });
+                                    submitInitialMessage({
+                                      text: sp.prompt,
+                                      files: [],
+                                    });
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        {/* Shared-element pair with the conversation composer —
+                          see the bottom-anchored ViewTransition above. */}
+                        <ViewTransition
+                          name="chat-composer"
+                          share="chat-composer-morph"
+                          default="none"
+                        >
+                          <div className="w-full max-w-4xl">
+                            <ArchestraPromptInput
+                              onSubmit={handleInitialSubmit}
+                              status={
+                                createConversationMutation.isPending
+                                  ? "submitted"
+                                  : "ready"
+                              }
+                              selectedModel={initialModel}
+                              onModelChange={handleInitialModelChange}
+                              agentId={newChatAgentId}
+                              currentProvider={initialProvider}
+                              textareaRef={textareaRef}
+                              initialApiKeyId={initialApiKeyId}
+                              onApiKeyChange={setInitialApiKeyId}
+                              onProviderChange={handleInitialProviderChange}
+                              allowFileUploads={
+                                organization?.allowChatFileUploads ?? false
+                              }
+                              isModelsLoading={isModelsLoading}
+                              inputModalities={selectedModelInputModalities}
+                              agentLlmApiKeyId={
+                                (
+                                  internalAgents.find(
+                                    (a) => a.id === initialAgentId,
+                                  ) as Record<string, unknown> | undefined
+                                )?.llmApiKeyId as string | null
+                              }
+                              submitDisabled={isPlaywrightSetupVisible}
+                              isPlaywrightSetupVisible={
+                                isPlaywrightSetupVisible
+                              }
+                              selectorAgentId={initialAgentId}
+                              onAgentChange={handleInitialAgentChange}
+                              modelSource={initialModelSource}
+                              onResetModelOverride={handleResetModelOverride}
+                              agentRequiresPerUserConnect={
+                                initialPerUserConnect.needsConnect
+                              }
+                              agentModelDisplayName={
+                                initialPerUserConnect.needsConnect
+                                  ? initialPerUserConnect.modelName
+                                  : undefined
+                              }
+                              prefillText={composerPrefill}
+                              onPrefillApplied={handleComposerPrefillApplied}
+                            />
+                          </div>
+                        </ViewTransition>
+                      </div>
+                      <div className="p-4 text-center">
+                        <Version inline />
                       </div>
                     </div>
-                    <div className="p-4 text-center">
-                      <Version inline />
-                    </div>
-                  </div>
+                  </ViewTransition>
                 )
               )}
             </div>

@@ -186,6 +186,7 @@ describe("gemini model fetchers", () => {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
           get: vi.fn(),
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
 
@@ -265,6 +266,7 @@ describe("gemini model fetchers", () => {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
           get: mockGet,
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
 
@@ -328,6 +330,7 @@ describe("gemini model fetchers", () => {
         models: {
           list: vi.fn().mockResolvedValue(mockPager),
           get: mockGet,
+          countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         },
       } as unknown as GoogleGenAI;
 
@@ -363,6 +366,111 @@ describe("gemini model fetchers", () => {
           displayName: "Gemini 2.5 Flash Lite",
           provider: "gemini",
         },
+      ]);
+    });
+
+    test("drops catalog models the project cannot invoke (404 access probe)", async () => {
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          for (const id of [
+            "gemini-2.5-pro",
+            "gemini-3.1-pro-preview",
+            "gemini-embedding-001",
+          ]) {
+            yield {
+              name: `publishers/google/models/${id}`,
+              version: "default",
+              tunedModelInfo: {},
+            };
+          }
+        },
+      };
+
+      const mockCountTokens = vi.fn(async ({ model }: { model: string }) => {
+        if (model === "gemini-3.1-pro-preview") {
+          // Gated preview: the catalog lists it, but the project is not
+          // allowlisted, so inference-family calls 404.
+          throw Object.assign(
+            new Error(
+              '{"error":{"code":404,"message":"Publisher Model was not found or your project does not have access to it.","status":"NOT_FOUND"}}',
+            ),
+            { status: 404 },
+          );
+        }
+        if (model === "gemini-embedding-001") {
+          // Accessible embedding models reject countTokens with a 400 while
+          // still being fully usable — they must be kept.
+          throw Object.assign(
+            new Error(
+              '{"error":{"code":400,"message":"Should provide instances for text model prediction.","status":"INVALID_ARGUMENT"}}',
+            ),
+            { status: 400 },
+          );
+        }
+        return { totalTokens: 1 };
+      });
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
+          countTokens: mockCountTokens,
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      expect(models.map((model) => model.id)).toEqual([
+        "gemini-2.5-pro",
+        "gemini-embedding-001",
+      ]);
+    });
+
+    test("keeps models when the access probe fails transiently (non-404)", async () => {
+      const mockPager = {
+        [Symbol.asyncIterator]: async function* () {
+          yield {
+            name: "publishers/google/models/gemini-2.5-pro",
+            version: "default",
+            tunedModelInfo: {},
+          };
+          yield {
+            name: "publishers/google/models/gemini-2.5-flash",
+            version: "default",
+            tunedModelInfo: {},
+          };
+          yield {
+            name: "publishers/google/models/gemini-embedding-001",
+            version: "default",
+            tunedModelInfo: {},
+          };
+        },
+      };
+
+      const mockClient = {
+        models: {
+          list: vi.fn().mockResolvedValue(mockPager),
+          get: vi.fn(),
+          countTokens: vi
+            .fn()
+            .mockRejectedValue(
+              Object.assign(new Error("Resource exhausted"), { status: 429 }),
+            ),
+        },
+      } as unknown as GoogleGenAI;
+
+      mockCreateGoogleGenAIClient.mockReturnValue(mockClient);
+
+      const models = await fetchGeminiModelsViaVertexAi();
+
+      // A rate-limited or otherwise transiently failing probe must not empty
+      // the catalog.
+      expect(models.map((model) => model.id)).toEqual([
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-embedding-001",
       ]);
     });
   });

@@ -13,8 +13,11 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
  * services/agent-tool-exclusions.ts.
  */
 class AgentExcludedToolModel {
-  static async findToolIdsByAgent(agentId: string): Promise<string[]> {
-    const rows = await db
+  static async findToolIdsByAgent(
+    agentId: string,
+    tx?: Transaction,
+  ): Promise<string[]> {
+    const rows = await (tx ?? db)
       .select({ toolId: schema.agentExcludedToolsTable.toolId })
       .from(schema.agentExcludedToolsTable)
       .where(eq(schema.agentExcludedToolsTable.agentId, agentId))
@@ -76,7 +79,7 @@ class AgentExcludedToolModel {
   }
 
   /**
-   * Pre-fill the agent's exclusion list for "All tools" mode: every built-in
+   * Pre-fill the agent's exclusion list for "Auto" mode: every built-in
    * Archestra tool that is not assigned to the agent and whose short name is
    * not pre-fill-exempt gets an exclusion row. Additive and idempotent —
    * existing rows are never updated or deleted, so callers can re-run it on

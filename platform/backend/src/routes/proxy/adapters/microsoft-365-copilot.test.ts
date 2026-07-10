@@ -133,6 +133,7 @@ async function collectChunks(
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("microsoft365CopilotAdapterFactory execute (non-streaming)", () => {
@@ -420,6 +421,50 @@ describe("microsoft365CopilotAdapterFactory executeStream", () => {
     expect(first.value?.choices[0].delta).toMatchObject({ role: "assistant" });
     await iterator.return?.();
 
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  test("fails a stream that goes silent mid-answer with a 504 and cancels the body", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ text: "Once upon a" })}\n\n`,
+          ),
+        );
+        // The stream then stalls: no further events, never closes.
+      },
+      cancel,
+    });
+    stubGraphFetch({
+      chatOverStream: () =>
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    });
+
+    const iterable = await microsoft365CopilotAdapterFactory.executeStream(
+      createClient(),
+      makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
+    );
+    // Attach handlers before advancing the clock so the rejection is observed
+    // (never an unhandled rejection).
+    const outcome = collectChunks(iterable).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+
+    const error = await outcome;
+    expect(error).toMatchObject({
+      status: 504,
+      message: expect.stringContaining("stopped streaming"),
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 

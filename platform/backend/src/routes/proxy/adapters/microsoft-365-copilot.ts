@@ -15,7 +15,9 @@
  * - non-streaming: `POST …/chat`, mapped to an OpenAI `chat.completion`;
  * - streaming: `POST …/chatOverStream` (SSE) parsed defensively into OpenAI
  *   chunks — a non-SSE Graph answer is converted directly, while an SSE stream
- *   with no recognizable text is retried through the sync endpoint;
+ *   with no recognizable text is retried through the sync endpoint; a stream
+ *   that goes silent mid-answer is failed with a 504 (see
+ *   STREAM_IDLE_TIMEOUT_MS) instead of blocking its chat run indefinitely;
  * - auth: the incoming "API key" is the user's long-lived Entra ID refresh
  *   token, swapped per request for a short-lived Graph access token inside a
  *   fetch wrapper (see services/microsoft-365-copilot-token), because
@@ -374,8 +376,20 @@ function graphShapeError(message: string): Error {
 }
 
 /**
+ * Maximum silence tolerated on the Graph SSE stream before the request is
+ * failed. chatOverStream can stall mid-answer without closing the connection;
+ * unbounded, that read blocks until undici's 5-minute body timeout (or far
+ * longer when ARCHESTRA_LLM_PROXY_UPSTREAM_TIMEOUT_MS raises it) while the
+ * conversation's active chat run stays `running` and 409-blocks every new
+ * message. Failing loudly instead routes through the standard mid-stream
+ * error path, which marks the run terminal so the user can retry immediately.
+ */
+const STREAM_IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+
+/**
  * Minimal incremental SSE parser: yields each event's joined `data:` payload.
  * Tolerates comment lines, CRLF, and multi-line data fields per the SSE spec.
+ * Throws a 504 when the stream stays silent for STREAM_IDLE_TIMEOUT_MS.
  */
 async function* parseSseEvents(response: Response): AsyncGenerator<string> {
   if (!response.body) return;
@@ -394,7 +408,7 @@ async function* parseSseEvents(response: Response): AsyncGenerator<string> {
   let reachedEnd = false;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithIdleTimeout(reader);
       if (done) {
         reachedEnd = true;
         break;
@@ -434,4 +448,40 @@ async function* parseSseEvents(response: Response): AsyncGenerator<string> {
   }
   const data = flush();
   if (data !== undefined) yield data;
+}
+
+/**
+ * One reader.read() bounded by STREAM_IDLE_TIMEOUT_MS of silence. On expiry
+ * this throws in the adapter error shape (`status` + `error.message`, like
+ * throwGraphError); parseSseEvents' cleanup then cancels the reader, which
+ * releases the underlying Graph connection.
+ */
+async function readWithIdleTimeout(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  const read = reader.read();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      read,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const message = `Microsoft 365 Copilot stopped streaming a response (no data received for ${STREAM_IDLE_TIMEOUT_MS / 1000} seconds). Please try again.`;
+          reject(
+            Object.assign(new Error(message), {
+              status: 504,
+              error: { message },
+            }),
+          );
+        }, STREAM_IDLE_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (error) {
+    // The losing read settles later (when the caller's cleanup cancels the
+    // reader); swallow it so it can't surface as an unhandled rejection.
+    read.catch(() => {});
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }

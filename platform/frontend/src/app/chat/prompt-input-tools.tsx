@@ -16,6 +16,7 @@ import {
   PromptInputTools,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
+import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -25,7 +26,6 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -256,10 +256,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   <>
                     {modelSource && (
                       <div className="flex items-center gap-1.5">
-                        <Badge
-                          variant="secondary"
-                          className="gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
-                        >
+                        <ComposerBadge>
                           {modelSourceLabel}
                           {modelSource === "user" && onResetModelOverride && (
                             <button
@@ -271,7 +268,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                               <XIcon className="size-3" />
                             </button>
                           )}
-                        </Badge>
+                        </ComposerBadge>
                       </div>
                     )}
                     {toolsUnavailable && (
@@ -468,10 +465,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 fallbackModelName={agentModelDisplayName}
               />
               {modelSource && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 mr-2 gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-3 py-1 text-xs font-medium"
-                >
+                <ComposerBadge className="ml-1 mr-2">
                   {modelSourceLabel}
                   {modelSource === "user" && onResetModelOverride && (
                     <button
@@ -483,7 +477,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       <XIcon className="size-3" />
                     </button>
                   )}
-                </Badge>
+                </ComposerBadge>
               )}
             </div>
           )}

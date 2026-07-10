@@ -24,7 +24,10 @@
 //!   `[1]{""}:` that the decoder rejects ("Field name cannot be empty");
 //! - string content limits control/whitespace characters to `\n`, `\t` and
 //!   space: exotic ones are emitted raw in unquoted positions and lost on
-//!   decode (e.g. a vertical tab in `"A\u{b} x"` decodes as `"A x"`).
+//!   decode (e.g. a vertical tab in `"A\u{b} x"` decodes as `"A x"`);
+//! - a ROOT-level document that is a bare digit-leading string gets a space
+//!   inserted after the digit run by the decoder (`"0¡"` decodes as `"0 ¡"`);
+//!   container positions are unaffected, so only the root string is dodged.
 
 use proptest::prelude::*;
 use proxy_transform_core::{ToonEncodeItem, toon_encode_tool_results};
@@ -76,6 +79,18 @@ fn arb_json() -> impl Strategy<Value = Value> {
         ]
     })
     .prop_map(dodge_list_layout_quirk)
+    .prop_map(dodge_root_digit_string_quirk)
+}
+
+/// See module docs: only a root-level digit-leading string trips the decoder's
+/// digit-run split, so prefix it the same way the list-layout dodge does.
+fn dodge_root_digit_string_quirk(value: Value) -> Value {
+    match value {
+        Value::String(text) if text.starts_with(|c: char| c.is_ascii_digit()) => {
+            Value::String(format!("_{text}"))
+        }
+        other => other,
+    }
 }
 
 /// Unconstrained JSON generator for encode-only properties: no decoder-quirk
@@ -169,6 +184,46 @@ fn semantically_equal(a: &Value, b: &Value) -> bool {
 }
 
 proptest! {
+    /// Differential parity oracle: our encoder must produce byte-identical
+    /// output to `toon_format::encode_default` for any parseable JSON. Uses
+    /// the unconstrained generator — encode-only, so no decoder-quirk
+    /// exclusions apply. The allowed divergences are the deliberate
+    /// anti-amplification limits: when our encoder returns `None`, either the
+    /// input exceeds the per-item cap or the crate's output must genuinely
+    /// exceed `max(2 x input bytes, 16KiB)`. (The aggregate batch budget never
+    /// binds here: a single-item batch is gated before any output exists.)
+    #[test]
+    fn encoder_matches_toon_format_crate(value in arb_json_encode_only()) {
+        let raw = serde_json::to_string(&value).expect("serialize generated value");
+        let parsed: Value = serde_json::from_str(&raw).expect("reparse generated document");
+        let raw_len = raw.len();
+        let budget = (2 * raw_len).max(16 * 1024);
+        let results = toon_encode_tool_results(vec![ToonEncodeItem {
+            id: "diff".to_string(),
+            raw_content: raw,
+            unwrap: false,
+        }]);
+        let expected = toon_format::encode_default(&parsed).ok();
+        match (&results[0].encoded, &expected) {
+            (None, Some(crate_output)) => prop_assert!(
+                raw_len > proxy_transform_core::MAX_ITEM_INPUT_BYTES
+                    || crate_output.len() > budget,
+                "our encoder returned None but no skip condition held (input {} bytes, \
+                 crate output {} bytes, budget {}) for value: {}",
+                raw_len,
+                crate_output.len(),
+                budget,
+                parsed
+            ),
+            (ours, expected) => prop_assert_eq!(
+                ours,
+                expected,
+                "encoder diverged from toon-format crate for value: {}",
+                parsed
+            ),
+        }
+    }
+
     #[test]
     fn encode_decode_roundtrips(value in arb_json()) {
         let raw = serde_json::to_string(&value).expect("serialize generated value");

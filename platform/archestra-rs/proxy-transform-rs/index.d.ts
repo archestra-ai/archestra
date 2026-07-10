@@ -15,7 +15,9 @@ export interface ToonEncodeItem {
  * The transformation output for one item. `normalized` is the unwrapped string
  * when unwrapping was requested and matched, else the original `raw_content`
  * (adapters tokenize it for accounting). `encoded` is the TOON encoding, or
- * `None` when the content is not parseable JSON.
+ * `None` when the content is not parseable JSON — or when encoding would
+ * exceed the anti-amplification output budget (see `encode` module docs);
+ * adapters keep the original payload either way.
  *
  * `use_nullable` makes `encoded: None` cross the boundary as an explicit JS
  * `null` (typed `string | null`) instead of an omitted key.

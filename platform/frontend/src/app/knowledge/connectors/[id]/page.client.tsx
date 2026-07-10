@@ -312,7 +312,12 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Connector actions"
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -488,6 +493,7 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
             size="icon"
             className="h-5 w-5"
             onClick={() => setIsAddDialogOpen(true)}
+            aria-label="Add knowledge base"
           >
             <Plus className="h-3.5 w-3.5" />
           </Button>
@@ -504,6 +510,7 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
                 className="h-4 w-4 ml-0.5 hover:bg-destructive/20"
                 onClick={() => handleUnassign(kb.id)}
                 disabled={unassignMutation.isPending}
+                aria-label="Remove knowledge base"
               >
                 <X className="h-3 w-3" />
               </Button>
@@ -515,6 +522,7 @@ function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {
             className="h-5 w-5"
             onClick={() => setIsAddDialogOpen(true)}
             disabled={availableKbs.length === 0}
+            aria-label="Add knowledge base"
           >
             <Plus className="h-3.5 w-3.5" />
           </Button>

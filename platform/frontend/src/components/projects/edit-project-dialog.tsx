@@ -194,6 +194,7 @@ function EditProjectDialogForm({
         />
         <div className="flex-1 space-y-3 min-w-0">
           <Input
+            aria-label="Project name"
             placeholder="Project name"
             maxLength={PROJECT_NAME_MAX_LENGTH}
             aria-invalid={!!form.formState.errors.name}
@@ -211,6 +212,7 @@ function EditProjectDialogForm({
             </p>
           )}
           <Textarea
+            aria-label="Project description"
             placeholder="What is this project about?"
             rows={3}
             maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}

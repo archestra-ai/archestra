@@ -1,0 +1,42 @@
+// Project-specific Biome (GritQL) lint plugin — accessibility regression guard.
+//
+// Flags a shadcn `<Button>` rendered at an icon size (`icon`, `icon-sm`,
+// `icon-lg`) whose only content is an icon (a self-closing JSX element such as
+// a lucide `<X />`) and which has no accessible name. Icon-only buttons render
+// no readable text, so without a name they are invisible to screen-reader and
+// voice-control users — a WCAG 2.2 SC 4.1.2 (Name, Role, Value) / 1.1.1
+// (Non-text Content) failure. This was the single most common gap found in the
+// WCAG 2.2 A/AA audit, and Biome's built-in a11y rules cannot detect it
+// (they can't reason about an element's computed accessible name), so this
+// plugin guards against the pattern regressing.
+//
+// A button is considered named — and is intentionally NOT flagged — when it
+// carries `aria-label`, `aria-labelledby`, or `title`, contains a
+// visually-hidden `className="sr-only"` text child (the other convention used
+// in this codebase), or uses `asChild` to delegate rendering to a child that
+// carries the name. Icon-sized buttons whose content is visible text (e.g. a
+// day number or an hour in a picker) are not flagged, because that text is
+// itself the accessible name.
+//
+// If an icon button is genuinely named some other way this plugin can't see,
+// give it an explicit `aria-label` (plugin diagnostics are not suppressible via
+// biome-ignore).
+language js
+
+`<Button $props>$children</Button>` where {
+  $props <: or {
+    contains `size="icon"`,
+    contains `size="icon-sm"`,
+    contains `size="icon-lg"`
+  },
+  $props <: not contains `asChild`,
+  $props <: not contains `aria-label`,
+  $props <: not contains `aria-labelledby`,
+  $props <: not contains `title`,
+  $children <: contains jsx_self_closing_element(),
+  $children <: not contains `className="sr-only"`,
+  register_diagnostic(
+    span = $props,
+    message = "Icon-only <Button> needs an accessible name: add aria-label or a visually-hidden sr-only text child (WCAG 2.2 SC 4.1.2 Name, Role, Value)."
+  )
+}

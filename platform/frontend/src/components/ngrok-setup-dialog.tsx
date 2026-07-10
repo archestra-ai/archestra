@@ -123,6 +123,7 @@ export function NgrokSetupDialog({
           </div>
           <div className="space-y-1.5">
             <Input
+              aria-label="Reserved domain"
               placeholder="reserved domain (optional)"
               value={domain}
               onChange={(e) => {

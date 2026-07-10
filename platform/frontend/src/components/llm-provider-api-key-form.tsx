@@ -1069,12 +1069,14 @@ export function LlmProviderApiKeyForm({
               {extraHeadersFieldArray.fields.map((field, index) => (
                 <div key={field.id} className="flex items-start gap-2">
                   <Input
+                    aria-label="Header name"
                     placeholder="Header name"
                     disabled={isPending}
                     className="flex-1"
                     {...form.register(`extraHeaders.${index}.name` as const)}
                   />
                   <Input
+                    aria-label="Header value"
                     placeholder="Header value"
                     disabled={isPending}
                     className="flex-1"

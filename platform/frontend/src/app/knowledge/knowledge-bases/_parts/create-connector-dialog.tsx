@@ -221,6 +221,7 @@ export function CreateConnectorDialog({
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleBackToChooser}
+                    aria-label="Go back"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
@@ -284,6 +285,7 @@ export function CreateConnectorDialog({
                     size="icon"
                     className="h-7 w-7"
                     onClick={handleBack}
+                    aria-label="Go back"
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>

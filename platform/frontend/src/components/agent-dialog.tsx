@@ -276,6 +276,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
           size="sm"
           className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
           onClick={() => onToggle(agent.id)}
+          aria-label="Remove agent"
         >
           <X className="h-3 w-3" />
         </Button>
@@ -303,6 +304,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
             size="sm"
             className="h-6 w-6 p-0 shrink-0"
             onClick={() => setOpen(false)}
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -1596,6 +1598,7 @@ export function AgentDialog({
                                 variant="ghost"
                                 size="icon"
                                 className="absolute top-2 right-2 h-6 w-6"
+                                aria-label="Remove suggested prompt"
                                 onClick={() => {
                                   setSuggestedPrompts((prev) => {
                                     const next = prev.filter(
@@ -1627,6 +1630,7 @@ export function AgentDialog({
                                   }
                                   placeholder="e.g. Summarize recent changes"
                                   maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                                  aria-label="Suggested prompt title"
                                 />
                               </div>
                               <div className="space-y-1">
@@ -1645,6 +1649,7 @@ export function AgentDialog({
                                   placeholder="The full prompt sent when clicked"
                                   className="min-h-[60px]"
                                   maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                                  aria-label="Suggested prompt"
                                 />
                               </div>
                             </div>
@@ -2273,6 +2278,7 @@ export function AgentDialog({
                                       variant="ghost"
                                       size="icon"
                                       className="h-4 w-4 p-0 hover:bg-transparent"
+                                      aria-label="Remove header"
                                       onClick={() =>
                                         setPassthroughHeaders((prev) =>
                                           prev.filter((h) => h !== header),
@@ -2288,6 +2294,7 @@ export function AgentDialog({
                                 MAX_PASSTHROUGH_HEADERS && (
                                 <Input
                                   placeholder="Type header name and press Enter"
+                                  aria-label="Add passthrough header"
                                   onKeyDown={(e) => {
                                     if (e.key !== "Enter") return;
                                     e.preventDefault();

@@ -139,6 +139,12 @@ class CohereOpenaiStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
+    // Known non-conforming (ledger: tool-events-untranslated-empty-history):
+    // this wrapper never translates Cohere tool-call events to OpenAI SSE, so
+    // model-router Cohere tool calls are never streamed or flushed to clients.
+    // Implementing that translation is new behavior tracked separately, not a
+    // replay-contract fix, so this adapter is exempt from the full-history
+    // contract documented on LLMStreamAdapter.getRawToolCallEvents.
     return [];
   }
 

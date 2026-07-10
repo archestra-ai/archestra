@@ -991,6 +991,10 @@ export class OpenAIStreamAdapter
   readonly provider: SupportedProvider;
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
+  // SSE encoding of each state.rawToolCallEvents entry, cached at accumulation
+  // time. getRawToolCallEvents runs once per tool-call chunk, so serializing
+  // there would re-encode the whole history per chunk (O(k^2) per stream).
+  private serializedToolCallEvents: string[] = [];
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal. formatEndSSE then finishes the turn as "stop" instead of replaying
   // the upstream "tool_calls" finish reason (a text-only turn ending in
@@ -1104,7 +1108,10 @@ export class OpenAIStreamAdapter
         }
       }
 
+      // Serialize before pushing so a throwing stringify can't desync the two arrays.
+      const serializedChunk = `data: ${JSON.stringify(chunk)}\n\n`;
       this.state.rawToolCallEvents.push(chunk);
+      this.serializedToolCallEvents.push(serializedChunk);
       isToolCallChunk = true;
     }
 
@@ -1152,9 +1159,7 @@ export class OpenAIStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.rawToolCallEvents.map(
-      (event) => `data: ${JSON.stringify(event)}\n\n`,
-    );
+    return this.serializedToolCallEvents;
   }
 
   formatCompleteTextSSE(text: string): string[] {

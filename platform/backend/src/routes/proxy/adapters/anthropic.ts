@@ -608,6 +608,10 @@ class AnthropicStreamAdapter
 {
   readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
+  // SSE encoding of each state.rawToolCallEvents entry, cached at accumulation
+  // time. getRawToolCallEvents runs once per tool-call chunk, so serializing
+  // there would re-encode the whole history per chunk (O(k^2) per stream).
+  private serializedToolCallEvents: string[] = [];
   private toolUseBlockIndices = new Set<number>();
   private currentToolCallIndex = -1;
   // Highest content-block index actually forwarded to the client, so a refusal
@@ -681,7 +685,7 @@ class AnthropicStreamAdapter
             arguments: "",
           });
           // Store raw event for replay after policy approval
-          this.state.rawToolCallEvents.push(chunk);
+          this.accumulateRawToolCallEvent(chunk);
           isToolCallChunk = true;
         } else {
           // Everything except client tool calls (text, thinking,
@@ -707,7 +711,7 @@ class AnthropicStreamAdapter
               chunk.delta.partial_json;
           }
           // Store raw event for replay after policy approval
-          this.state.rawToolCallEvents.push(chunk);
+          this.accumulateRawToolCallEvent(chunk);
           isToolCallChunk = true;
         } else {
           // input_json_delta outside a tool_use block belongs to a
@@ -724,7 +728,7 @@ class AnthropicStreamAdapter
           sseData = `event: content_block_stop\ndata: ${JSON.stringify(chunk)}\n\n`;
         } else {
           // Store raw event for replay after policy approval
-          this.state.rawToolCallEvents.push(chunk);
+          this.accumulateRawToolCallEvent(chunk);
           isToolCallChunk = true;
         }
         break;
@@ -782,10 +786,7 @@ class AnthropicStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.state.rawToolCallEvents.map(
-      (event) =>
-        `event: ${(event as { type: string }).type}\ndata: ${JSON.stringify(event)}\n\n`,
-    );
+    return this.serializedToolCallEvents;
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -898,6 +899,13 @@ class AnthropicStreamAdapter
         output_tokens: this.state.usage?.outputTokens ?? 0,
       },
     };
+  }
+
+  private accumulateRawToolCallEvent(chunk: AnthropicStreamChunk): void {
+    // Serialize before pushing so a throwing stringify can't desync the two arrays.
+    const serialized = `event: ${chunk.type}\ndata: ${JSON.stringify(chunk)}\n\n`;
+    this.state.rawToolCallEvents.push(chunk);
+    this.serializedToolCallEvents.push(serialized);
   }
 }
 

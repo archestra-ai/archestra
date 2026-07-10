@@ -1947,6 +1947,125 @@ describe("model router proxy routes", () => {
     expect(response.body).not.toContain("event: message_start");
   });
 
+  test("streams Anthropic model router tool calls with the name event and every argument delta", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    anthropicStubOptions.includeToolUse = true;
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({
+      provider: "anthropic",
+      modelId: "claude-opus-4-6-20250918",
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "anthropic",
+      makeSecret,
+      makeLlmProviderApiKey,
+      apiKeyValue: "test-anthropic-key",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Tool Streaming Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "anthropic:claude-opus-4-6-20250918",
+        messages: [{ role: "user", content: "What is the weather?" }],
+        stream: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const dataLines = response.body
+      .split("\n\n")
+      .map((event) => event.trim())
+      .filter((event) => event.startsWith("data: "))
+      .map((event) => event.slice("data: ".length));
+    expect(dataLines.at(-1)).toBe("[DONE]");
+
+    // The complete ordered choice sequence: the tool-call name event and every
+    // argument delta must each arrive exactly once. The wrapper adapter used
+    // to drain its event buffer per getRawToolCallEvents call, which made the
+    // handler's index dedup drop every argument delta after the name event.
+    const choices = dataLines.slice(0, -1).map((line) => {
+      const chunk = JSON.parse(line) as {
+        object: string;
+        choices: Array<{ delta: unknown; finish_reason: string | null }>;
+      };
+      expect(chunk.object).toBe("chat.completion.chunk");
+      return chunk.choices[0];
+    });
+    expect(choices).toEqual([
+      {
+        index: 0,
+        delta: { role: "assistant" },
+        finish_reason: null,
+        logprobs: null,
+      },
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: "toolu_test_weather",
+              type: "function",
+              function: { name: "get_weather", arguments: "" },
+            },
+          ],
+        },
+        finish_reason: null,
+        logprobs: null,
+      },
+      {
+        index: 0,
+        delta: {
+          tool_calls: [{ index: 0, function: { arguments: '{"location":"' } }],
+        },
+        finish_reason: null,
+        logprobs: null,
+      },
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            { index: 0, function: { arguments: 'San Francisco",' } },
+          ],
+        },
+        finish_reason: null,
+        logprobs: null,
+      },
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            { index: 0, function: { arguments: '"unit":"fahrenheit"}' } },
+          ],
+        },
+        finish_reason: null,
+        logprobs: null,
+      },
+      // The stub's message_delta reports stop_reason "end_turn", which the
+      // wrapper maps to "stop".
+      { index: 0, delta: {}, finish_reason: "stop", logprobs: null },
+    ]);
+  });
+
   test("lists only models for providers mapped on the virtual key", async ({
     makeAgent,
     makeOrganization,

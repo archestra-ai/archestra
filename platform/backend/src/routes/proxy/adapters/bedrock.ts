@@ -972,6 +972,12 @@ class BedrockStreamAdapter
 {
   readonly provider = "bedrock" as const;
   readonly state: StreamAccumulatorState;
+  // Event-stream encoding of each accumulated tool-call event (tool names
+  // already decoded) and of the buffered final events, cached at accumulation
+  // time. getRawToolCallEvents runs once per tool-call chunk, so encoding
+  // there would re-encode the whole history per chunk (O(k^2) per stream).
+  private encodedToolCallEvents: Uint8Array[] = [];
+  private encodedPendingFinalEvents: Uint8Array[] = [];
   private currentToolCallIndex = -1;
   private toolNameMapping: ToolNameMapping = createEmptyToolNameMapping();
   // Set to the refusal text when the streamed response was replaced by a policy
@@ -985,9 +991,6 @@ class BedrockStreamAdapter
   private bedrockState: {
     latencyMs: number | null;
     trace: unknown | null;
-    // Buffer for messageStop and metadata events when tool calls are pending
-    // These must be sent AFTER tool call events in the correct stream order
-    pendingFinalEvents: BedrockStreamEventWithRaw[];
   };
 
   constructor() {
@@ -1007,7 +1010,6 @@ class BedrockStreamAdapter
     this.bedrockState = {
       latencyMs: null,
       trace: null,
-      pendingFinalEvents: [],
     };
   }
 
@@ -1045,13 +1047,28 @@ class BedrockStreamAdapter
       ) {
         // Tool use block - buffer for policy evaluation
         const toolUse = blockStart.start.toolUse;
+        const decodedName = decodeToolName(
+          toolUse.name ?? "",
+          this.toolNameMapping,
+        );
         this.currentToolCallIndex = this.state.toolCalls.length;
         this.state.toolCalls.push({
           id: toolUse.toolUseId ?? "",
-          name: decodeToolName(toolUse.name ?? "", this.toolNameMapping),
+          name: decodedName,
           arguments: "",
         });
+        // Re-encode with the decoded tool name for replay; the raw bytes
+        // contain the encoded name (hyphens replaced with underscores).
+        // Encode before pushing so a throwing encoder can't desync the arrays.
+        const encodedBlockStart = encodeEventStreamMessage(
+          "contentBlockStart",
+          {
+            ...blockStart,
+            start: { toolUse: { ...toolUse, name: decodedName } },
+          },
+        );
         this.state.rawToolCallEvents.push(chunk);
+        this.encodedToolCallEvents.push(encodedBlockStart);
         isToolCallChunk = true;
       } else {
         sseData =
@@ -1086,7 +1103,12 @@ class BedrockStreamAdapter
           this.state.toolCalls[this.currentToolCallIndex].arguments +=
             toolUseDelta.input;
         }
+        const encodedBlockDelta = encodeEventStreamMessage(
+          "contentBlockDelta",
+          chunk.contentBlockDelta,
+        );
         this.state.rawToolCallEvents.push(chunk);
+        this.encodedToolCallEvents.push(encodedBlockDelta);
         isToolCallChunk = true;
       }
     } else if ("contentBlockStop" in chunk && chunk.contentBlockStop) {
@@ -1095,7 +1117,12 @@ class BedrockStreamAdapter
         this.currentToolCallIndex === this.state.toolCalls.length - 1;
 
       if (isToolBlock) {
+        const encodedBlockStop = encodeEventStreamMessage(
+          "contentBlockStop",
+          chunk.contentBlockStop,
+        );
         this.state.rawToolCallEvents.push(chunk);
+        this.encodedToolCallEvents.push(encodedBlockStop);
         isToolCallChunk = true;
       } else {
         sseData =
@@ -1107,7 +1134,12 @@ class BedrockStreamAdapter
       // If we have pending tool calls, buffer this event to send after tool blocks
       // The stream order must be: text blocks → tool blocks → messageStop → metadata
       if (this.state.toolCalls.length > 0) {
-        this.bedrockState.pendingFinalEvents.push(chunk);
+        // Buffer for replay after the tool events; raw bytes are safe here
+        // because final events carry no tool names.
+        this.encodedPendingFinalEvents.push(
+          rawBytes ??
+            encodeEventStreamMessage("messageStop", chunk.messageStop),
+        );
         isToolCallChunk = true; // Mark as tool-related so it's not streamed yet
       } else {
         sseData =
@@ -1144,7 +1176,10 @@ class BedrockStreamAdapter
       }
       // If we have pending tool calls, buffer this event to send after tool blocks
       if (this.state.toolCalls.length > 0) {
-        this.bedrockState.pendingFinalEvents.push(chunk);
+        // Raw bytes are safe here: final events carry no tool names.
+        this.encodedPendingFinalEvents.push(
+          rawBytes ?? encodeEventStreamMessage("metadata", chunk.metadata),
+        );
         isToolCallChunk = true; // Mark as tool-related so it's not streamed yet
       } else {
         // Pass through metadata chunk as-is - this is the final event
@@ -1237,80 +1272,11 @@ class BedrockStreamAdapter
   }
 
   getRawToolCallEvents(): Uint8Array[] {
-    const result: Uint8Array[] = [];
-
-    // Re-encode all tool call content blocks with decoded tool names
-    // We cannot use raw bytes because they contain encoded names (hyphens replaced with underscores)
-    for (const rawEvent of this.state.rawToolCallEvents) {
-      const event = rawEvent as BedrockStreamEventWithRaw;
-
-      if ("contentBlockStart" in event && event.contentBlockStart) {
-        const blockStart = event.contentBlockStart;
-        // Decode tool name if this is a tool use block
-        if (
-          blockStart.start &&
-          "toolUse" in blockStart.start &&
-          blockStart.start.toolUse
-        ) {
-          const originalName = blockStart.start.toolUse.name ?? "";
-          const decodedName = decodeToolName(
-            originalName,
-            this.toolNameMapping,
-          );
-          const decodedEvent = {
-            ...blockStart,
-            start: {
-              toolUse: {
-                ...blockStart.start.toolUse,
-                name: decodedName,
-              },
-            },
-          };
-          result.push(
-            encodeEventStreamMessage("contentBlockStart", decodedEvent),
-          );
-        } else {
-          result.push(
-            encodeEventStreamMessage(
-              "contentBlockStart",
-              event.contentBlockStart,
-            ),
-          );
-        }
-      } else if ("contentBlockDelta" in event && event.contentBlockDelta) {
-        result.push(
-          encodeEventStreamMessage(
-            "contentBlockDelta",
-            event.contentBlockDelta,
-          ),
-        );
-      } else if ("contentBlockStop" in event && event.contentBlockStop) {
-        result.push(
-          encodeEventStreamMessage("contentBlockStop", event.contentBlockStop),
-        );
-      }
-    }
-
-    // Then, add the buffered final events (messageStop and metadata) in order
-    // These must come AFTER all content blocks for correct stream order
-    for (const finalEvent of this.bedrockState.pendingFinalEvents) {
-      const event = finalEvent as BedrockStreamEventWithRaw;
-
-      // Use original raw bytes if available (these don't contain tool names)
-      if (event.__rawBytes) {
-        result.push(event.__rawBytes);
-        continue;
-      }
-
-      // Fallback to re-encoding
-      if ("messageStop" in event && event.messageStop) {
-        result.push(encodeEventStreamMessage("messageStop", event.messageStop));
-      } else if ("metadata" in event && event.metadata) {
-        result.push(encodeEventStreamMessage("metadata", event.metadata));
-      }
-    }
-
-    return result;
+    // Both caches are encoded at accumulation time. The buffered final events
+    // (messageStop and metadata) must come AFTER all content blocks for
+    // correct stream order; Bedrock emits them last, so appending the second
+    // cache preserves arrival order and keeps indices stable across calls.
+    return [...this.encodedToolCallEvents, ...this.encodedPendingFinalEvents];
   }
 
   formatCompleteTextSSE(text: string): Uint8Array[] {

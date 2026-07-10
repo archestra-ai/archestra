@@ -807,6 +807,10 @@ export function reportKbLlmCall(params: {
   for (const key of currentLabelKeys) {
     labels[key] = "";
   }
+  // Knowledge-base calls use a real (metered) provider key. `billing_mode` is a
+  // required label on llm_cost_total; the token/duration metrics ignore extra
+  // labels, so setting it here is safe for all of them.
+  const costLabels = { ...labels, billing_mode: "metered" };
 
   const exemplarLabels = getExemplarLabels();
 
@@ -848,7 +852,7 @@ export function reportKbLlmCall(params: {
 
   if (llmCostTotal && params.cost) {
     llmCostTotal.inc({
-      labels,
+      labels: costLabels,
       value: params.cost,
       exemplarLabels,
     });

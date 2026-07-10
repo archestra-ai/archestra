@@ -94,10 +94,12 @@ export function BilledCost({
     );
   }
 
-  const billed =
-    derivedBilled != null
-      ? Number.parseFloat(derivedBilled)
-      : Number.parseFloat(cost);
+  // Billed spend is the metered portion. `derivedBilled` is null only when no
+  // metered cost was recorded (SUM(cost) FILTER (billing_mode='metered') is NULL
+  // over zero metered rows), i.e. a fully subscription-covered session — so
+  // billed spend is $0. Falling back to the full `cost` here would re-show the
+  // phantom cost this feature exists to remove.
+  const billed = derivedBilled != null ? Number.parseFloat(derivedBilled) : 0;
 
   return (
     <Tooltip>

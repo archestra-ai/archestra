@@ -34,7 +34,10 @@ import { CatalogDocsLink } from "@/components/catalog-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { OAuthConfirmationDialog } from "@/components/oauth-confirmation-dialog";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
-import { TokenSelect } from "@/components/token-select";
+import {
+  DYNAMIC_CREDENTIAL_VALUE,
+  TokenSelect,
+} from "@/components/token-select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -280,7 +283,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
-            {/* In "All tools" mode the agent reaches everything dynamically,
+            {/* In Auto mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
                 meaningless — hide them. */}
             {!currentAgent?.accessAllTools && (
@@ -830,9 +833,11 @@ function AgentSettingsView({
             <Label className="mb-1.5">Tools &amp; Knowledge Sources</Label>
             <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
               This agent uses{" "}
-              <span className="font-medium text-foreground">All tools</span> —
-              every MCP tool and knowledge source the chatting user can access,
-              discovered on demand.
+              <span className="font-medium text-foreground">
+                Auto tool access
+              </span>{" "}
+              — every MCP tool and knowledge source the chatting user can
+              access, discovered on demand.
             </p>
           </div>
         ) : (
@@ -1453,8 +1458,10 @@ function ConfigureToolView({
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     new Set(),
   );
+  // Resolve-at-call-time is the default; pinning a static credential is an
+  // explicit choice.
   const [credential, setCredential] = useState<string | null>(
-    mcpServers[0]?.id ?? null,
+    DYNAMIC_CREDENTIAL_VALUE,
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1469,13 +1476,6 @@ function ConfigureToolView({
     }
   }, [allTools, assignedToolIds]);
 
-  // Auto-set default credential once loaded
-  useEffect(() => {
-    if (!credential && mcpServers.length > 0) {
-      setCredential(mcpServers[0].id);
-    }
-  }, [credential, mcpServers]);
-
   const isBuiltin = catalog.serverType === "builtin";
   const showCredentialSelector = !isBuiltin && mcpServers.length > 0;
 
@@ -1489,12 +1489,24 @@ function ConfigureToolView({
         (id) => !selectedToolIds.has(id),
       );
 
+      const useDynamicCredential =
+        !credential || credential === DYNAMIC_CREDENTIAL_VALUE;
+
       await Promise.all([
         ...toAdd.map((toolId) =>
           assignTool.mutateAsync({
             agentId,
             toolId,
-            mcpServerId: !isBuiltin ? (credential ?? undefined) : undefined,
+            mcpServerId:
+              !isBuiltin && !useDynamicCredential
+                ? (credential ?? undefined)
+                : undefined,
+            ...(!isBuiltin && {
+              resolveAtCallTime: useDynamicCredential,
+              credentialResolutionMode: useDynamicCredential
+                ? ("dynamic" as const)
+                : ("static" as const),
+            }),
             skipInvalidation: true,
           }),
         ),

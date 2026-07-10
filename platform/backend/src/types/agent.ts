@@ -203,10 +203,22 @@ function validateIncomingEmailDomain(
   }
 }
 
-export const SelectAgentSchema = createSelectSchema(
+const AgentRowSchema = createSelectSchema(
   schema.agentsTable,
   selectExtendedFields,
-).extend({
+);
+
+/**
+ * Hot-path agent shape for the MCP gateway: the raw agents row plus labels,
+ * without the tools/teams/knowledge/connector/author/prompt/resolved-LLM
+ * hydration a full `Agent` carries. See `AgentModel.findGatewayAgentById`.
+ */
+const GatewayAgentSchema = AgentRowSchema.extend({
+  labels: z.array(AgentLabelWithDetailsSchema),
+});
+export type GatewayAgent = z.infer<typeof GatewayAgentSchema>;
+
+export const SelectAgentSchema = AgentRowSchema.extend({
   tools: z.array(SelectToolSchema),
   teams: z.array(AgentTeamInfoSchema),
   labels: z.array(AgentLabelWithDetailsSchema),

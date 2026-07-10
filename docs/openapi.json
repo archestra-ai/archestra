@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.3"
+    "version": "1.3.7"
   },
   "components": {
     "schemas": {
@@ -54490,6 +54490,9 @@
                               "icon": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "requiresInput": {
+                                "type": "boolean"
                               }
                             },
                             "required": [
@@ -54503,7 +54506,8 @@
                               "mcpServerId",
                               "scope",
                               "resourceUri",
-                              "icon"
+                              "icon",
+                              "requiresInput"
                             ],
                             "additionalProperties": false
                           }
@@ -54919,19 +54923,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -54939,7 +54947,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -55304,12 +55313,16 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "requiresInput": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
                           "resourceUri",
                           "toolName",
-                          "name"
+                          "name",
+                          "requiresInput"
                         ],
                         "additionalProperties": false
                       }
@@ -57681,19 +57694,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -57701,7 +57718,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -58151,19 +58169,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -58171,7 +58193,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -58835,19 +58858,23 @@
                         "type": "object",
                         "properties": {
                           "summary": {
-                            "type": "string"
+                            "type": "string",
+                            "description": "One-line summary of what the app is for."
                           },
                           "features": {
                             "type": "array",
                             "items": {
                               "type": "string"
-                            }
+                            },
+                            "description": "Concrete capabilities the app should provide."
                           },
                           "data": {
+                            "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                             "nullable": true,
                             "type": "string"
                           },
                           "ui": {
+                            "description": "UI / style direction as a free-form prose string, not a structured object.",
                             "nullable": true,
                             "type": "string"
                           },
@@ -58855,7 +58882,8 @@
                             "type": "array",
                             "items": {
                               "type": "string"
-                            }
+                            },
+                            "description": "Full names of the MCP tools the app calls through window.archestra."
                           }
                         },
                         "required": [
@@ -59214,19 +59242,23 @@
                       "type": "object",
                       "properties": {
                         "summary": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
                         },
                         "features": {
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
                         "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -59234,7 +59266,8 @@
                           "type": "array",
                           "items": {
                             "type": "string"
-                          }
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
                         }
                       },
                       "required": [
@@ -62007,6 +62040,18 @@
       }
     },
     "/api/auth/oauth2/token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth2/revoke": {
       "post": {
         "tags": [
           "Auth"
@@ -79080,6 +79125,7 @@
                                     "network_error",
                                     "empty_response",
                                     "incomplete_tool_call",
+                                    "tool_call_output_truncated",
                                     "provider_auth_required",
                                     "unknown"
                                   ]
@@ -79844,6 +79890,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -80579,6 +80626,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -81355,6 +81403,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -83867,6 +83916,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -85245,6 +85295,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -86936,6 +86987,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -87695,6 +87747,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -88446,6 +88499,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -89207,6 +89261,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -95955,10 +96010,14 @@
                             "insufficient_balance",
                             "unverified"
                           ]
+                        },
+                        "keyName": {
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "kind"
+                        "kind",
+                        "keyName"
                       ],
                       "additionalProperties": false
                     }
@@ -96278,10 +96337,14 @@
                             "insufficient_balance",
                             "unverified"
                           ]
+                        },
+                        "keyName": {
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "kind"
+                        "kind",
+                        "keyName"
                       ],
                       "additionalProperties": false
                     }
@@ -111947,6 +112010,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -112909,6 +112973,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -113579,6 +113644,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -114238,6 +114304,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -114768,6 +114835,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -115309,6 +115377,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -117801,6 +117870,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -118342,6 +118412,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -118883,6 +118954,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -119424,6 +119496,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -119965,6 +120038,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -120506,6 +120580,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -121047,6 +121122,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -121588,6 +121664,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -122118,6 +122195,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -122648,6 +122726,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -123189,6 +123268,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -123730,6 +123810,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -126442,6 +126523,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -126983,6 +127065,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -127758,6 +127841,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -128720,6 +128804,7 @@
                                             "network_error",
                                             "empty_response",
                                             "incomplete_tool_call",
+                                            "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "unknown"
                                           ]
@@ -130763,6 +130848,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -131725,6 +131811,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -132395,6 +132482,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -133054,6 +133142,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -133584,6 +133673,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -134125,6 +134215,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -136617,6 +136708,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -137158,6 +137250,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -137699,6 +137792,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -138240,6 +138334,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -138781,6 +138876,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -139322,6 +139418,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -139863,6 +139960,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -140404,6 +140502,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -140934,6 +141033,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -141464,6 +141564,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -142005,6 +142106,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -142546,6 +142648,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -145258,6 +145361,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -145799,6 +145903,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -146574,6 +146679,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -147536,6 +147642,7 @@
                                       "network_error",
                                       "empty_response",
                                       "incomplete_tool_call",
+                                      "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "unknown"
                                     ]
@@ -148559,11 +148666,19 @@
                             },
                             "name": {
                               "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
                             }
                           },
                           "required": [
                             "id",
-                            "name"
+                            "name",
+                            "level"
                           ],
                           "additionalProperties": false
                         }
@@ -149415,7 +149530,31 @@
                   "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        }
+                      ]
                     }
                   },
                   "oauthClientSecretVaultPath": {
@@ -150032,11 +150171,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -150939,11 +151086,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -151763,7 +151918,31 @@
                   "teams": {
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        }
+                      ]
                     }
                   },
                   "oauthClientSecretVaultPath": {
@@ -152388,11 +152567,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -154433,11 +154620,19 @@
                             },
                             "name": {
                               "type": "string"
+                            },
+                            "level": {
+                              "type": "string",
+                              "enum": [
+                                "use",
+                                "write"
+                              ]
                             }
                           },
                           "required": [
                             "id",
-                            "name"
+                            "name",
+                            "level"
                           ],
                           "additionalProperties": false
                         }
@@ -155341,11 +155536,19 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "use",
+                              "write"
+                            ]
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "level"
                         ],
                         "additionalProperties": false
                       }
@@ -228980,6 +229183,7 @@
                                   "network_error",
                                   "empty_response",
                                   "incomplete_tool_call",
+                                  "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "unknown"
                                 ]
@@ -244149,6 +244353,13 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "myRole": {
+                            "type": "string",
+                            "enum": [
+                              "admin",
+                              "member"
+                            ]
                           }
                         },
                         "required": [
@@ -244610,6 +244821,13 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "myRole": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
                     }
                   },
                   "required": [
@@ -244982,6 +245200,13 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "myRole": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
                     }
                   },
                   "required": [
@@ -245405,6 +245630,13 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "myRole": {
+                      "type": "string",
+                      "enum": [
+                        "admin",
+                        "member"
+                      ]
                     }
                   },
                   "required": [

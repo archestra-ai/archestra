@@ -8,9 +8,8 @@ type CatalogItem =
 /**
  * Frontend mirror of the backend `requireMcpCatalogModifyPermission` rule that
  * gates editing a catalog item's metadata/config/visibility: an
- * mcpServerInstallation admin, a mcpRegistry:team-admin who is a member of one
- * of the item's teams (for team-scoped items), or the author of a personal
- * item.
+ * mcpServerInstallation admin, the author of a personal item, or an admin of one
+ * of the item's teams that holds the `write` access level.
  */
 export function useCanModifyCatalogItem(
   catalog: CatalogItem | null | undefined,
@@ -18,18 +17,13 @@ export function useCanModifyCatalogItem(
   const { data: isAdmin, isLoading: isAdminLoading } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
-  const { data: isTeamAdmin, isLoading: isTeamAdminLoading } =
-    useHasPermissions({ mcpRegistry: ["team-admin"] });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: userTeams, isLoading: teamsLoading } = useMyTeams({
     enabled: !!canReadTeams,
   });
   const { data: session, isPending: isSessionLoading } = useSession();
   const isLoading =
-    isAdminLoading ||
-    isTeamAdminLoading ||
-    isSessionLoading ||
-    (!!canReadTeams && teamsLoading);
+    isAdminLoading || isSessionLoading || (!!canReadTeams && teamsLoading);
 
   if (!catalog) return { canModify: false, isLoading };
   if (isAdmin) return { canModify: true, isLoading };
@@ -41,10 +35,14 @@ export function useCanModifyCatalogItem(
       isLoading,
     };
   }
-  if (catalog.scope === "team" && isTeamAdmin) {
-    const userTeamIdSet = new Set((userTeams ?? []).map((t) => t.id));
+  if (catalog.scope === "team") {
+    const adminTeamIds = new Set(
+      (userTeams ?? []).filter((t) => t.myRole === "admin").map((t) => t.id),
+    );
     return {
-      canModify: !!catalog.teams?.some((t) => userTeamIdSet.has(t.id)),
+      canModify: !!catalog.teams?.some(
+        (t) => t.level === "write" && adminTeamIds.has(t.id),
+      ),
       isLoading,
     };
   }

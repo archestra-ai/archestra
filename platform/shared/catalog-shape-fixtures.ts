@@ -74,6 +74,7 @@ export type CatalogShapeFixture = {
   authorId: string | null;
   scope: "personal" | "team" | "org";
   labels?: Array<{ key: string; value: string }>;
+  teams?: Array<{ id: string; name: string; level: "use" | "write" }>;
 };
 
 /**
@@ -105,6 +106,35 @@ export const CATALOG_SHAPES = {
     authorId: "user-1",
     scope: "personal",
     labels: [],
+  },
+
+  teamScopedLocal: {
+    id: "fixture-team-scoped-local",
+    name: "team-scoped-local",
+    description: "local stdio shared with two teams at different access levels",
+    serverType: "local",
+    multitenant: false,
+    serverUrl: null,
+    clientSecretId: null,
+    localConfigSecretId: null,
+    localConfig: {
+      command: "sh",
+      arguments: ["-c", "echo hi"],
+      environment: [],
+      transportType: "stdio",
+    },
+    userConfig: {},
+    oauthConfig: null,
+    enterpriseManagedConfig: null,
+    icon: null,
+    organizationId: "org-1",
+    authorId: "user-1",
+    scope: "team",
+    labels: [],
+    teams: [
+      { id: "team-platform", name: "platform", level: "write" },
+      { id: "team-data", name: "data", level: "use" },
+    ],
   },
 
   hdrprobeDockerOnly: {

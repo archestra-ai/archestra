@@ -3,11 +3,12 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-09
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
 Run `pnpm codegen:access-control-docs` to regenerate.
+Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
 Archestra uses a role-based access control (RBAC) system to manage user permissions. This system provides both predefined roles for common use cases and the flexibility to create custom roles with specific permission combinations.

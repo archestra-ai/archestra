@@ -19,6 +19,10 @@ export const SelectTeamMemberListItemSchema = SelectTeamMemberSchema.extend({
 export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
   members: z.array(SelectTeamMemberSchema).optional(),
   labels: z.array(AgentLabelWithDetailsSchema).optional(),
+  // The requesting user's role in this team. Populated only when the listing is
+  // restricted to the caller's own teams; absent when a team manager lists teams
+  // they may not belong to.
+  myRole: TeamMemberRoleSchema.optional(),
 });
 
 export const InsertTeamSchema = createInsertSchema(schema.teamsTable);

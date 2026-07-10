@@ -11,6 +11,7 @@ import {
   OpenAIErrorTypes,
   RetryableErrorCodes,
   type SupportedProvider,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   VllmErrorTypes,
   ZhipuaiErrorTypes,
 } from "@archestra/shared";
@@ -1482,17 +1483,26 @@ function createErrorResponse(
 /**
  * Build the error surfaced when a turn ends with a tool call the model started
  * streaming but never completed — nothing executes and the turn produces no
- * reply. Uses the dedicated retryable IncompleteToolCall code so telemetry and
- * the rendered card distinguish it from a cleanly empty turn (EmptyResponse).
+ * reply. A `length` finishReason means the model hit its output cap mid tool
+ * call (a deterministic, too-large payload): surface the non-retryable
+ * ToolCallOutputTruncated code so the card stops advertising a retry that would
+ * just re-truncate. Any other finishReason keeps the retryable IncompleteToolCall
+ * code (a transient mid-stream drop). Both distinguish it from a cleanly empty
+ * turn (EmptyResponse) for telemetry and the rendered card.
  */
 export function buildAbortiveTurnError(
   provider: SupportedProvider,
+  finishReason?: string | null,
 ): ChatErrorResponse {
+  const code =
+    finishReason === "length"
+      ? ChatErrorCode.ToolCallOutputTruncated
+      : ChatErrorCode.IncompleteToolCall;
   return createErrorResponse(
-    ChatErrorCode.IncompleteToolCall,
+    code,
     provider,
     undefined,
-    ChatErrorMessages[ChatErrorCode.IncompleteToolCall],
+    ChatErrorMessages[code],
     "AbortiveTurn",
     undefined,
   );
@@ -1798,7 +1808,12 @@ export function mapProviderError(
   // indicate a bug.
   const isExpectedProviderError =
     (statusCode !== undefined && statusCode >= 400 && statusCode < 500) ||
-    RetryableErrorCodes.has(errorCode);
+    RetryableErrorCodes.has(errorCode) ||
+    // An approval-gated tool call rejected in an autonomous session (A2A,
+    // Slack, MS Teams, sub-agents) is our own policy enforcement doing its
+    // job, not a provider failure. It reaches this mapper as a bare Error
+    // with no HTTP envelope, so match the policy reason it was thrown with.
+    isToolApprovalPolicyBlockError(errorMessage);
 
   if (!isTerminatedStream && !isExpectedProviderError) {
     captureRawProviderErrorInSentry({
@@ -1854,6 +1869,13 @@ function isStreamTerminatedError(error: unknown): boolean {
 
 function isUpstreamIdleTimeoutError(message: string): boolean {
   return /idle timeout/i.test(message);
+}
+
+// `includes` rather than equality: the error may pick up wrapper prefixes on
+// its way through the tool-execution stack, but the thrown message is always
+// the shared policy-reason constant verbatim.
+function isToolApprovalPolicyBlockError(message: string): boolean {
+  return message.includes(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
 }
 
 function isUpstreamProviderError(message: string): boolean {

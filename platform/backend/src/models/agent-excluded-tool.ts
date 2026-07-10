@@ -79,7 +79,7 @@ class AgentExcludedToolModel {
   }
 
   /**
-   * Pre-fill the agent's exclusion list for "All tools" mode: every built-in
+   * Pre-fill the agent's exclusion list for "Auto" mode: every built-in
    * Archestra tool that is not assigned to the agent and whose short name is
    * not pre-fill-exempt gets an exclusion row. Additive and idempotent —
    * existing rows are never updated or deleted, so callers can re-run it on

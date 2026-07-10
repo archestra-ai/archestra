@@ -980,6 +980,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // onStepFinish callbacks must not emit usage events.
                 let hasCommittedResult = false;
 
+                // The committed turn's last step finishReason, captured for the
+                // abortive-turn tracker (which taps the UI stream and can't see
+                // it) so a `length`-truncated tool call surfaces the
+                // non-retryable ToolCallOutputTruncated error, not a futile
+                // "retrying may help".
+                let lastFinishReason: string | null = null;
+
                 const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
@@ -1080,6 +1087,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     if (!hasCommittedResult) {
                       return;
                     }
+                    // Fires for the truncated step before the tracker's flush,
+                    // so this holds the finishReason the tracker keys off.
+                    lastFinishReason = finishReason;
                     writer.write({
                       type: "data-token-usage",
                       data: {
@@ -1168,30 +1178,31 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ceiling: config.chat.maxOutputTokensCeiling,
                 });
 
-                const { result } = await runAgentStream({
-                  config: streamTextConfig,
-                  recovery: {
-                    logContext: { conversationId },
-                    onEmptyResponseExhausted: async () => {
-                      // Persist before the throw — nothing has merged yet, so the
-                      // stream onError/onFinish won't fire to do it.
-                      if (claimMessagesPersisted()) {
-                        try {
-                          await persistNewMessages(
-                            conversationId,
-                            messages,
-                            "onExecuteError",
-                          );
-                        } catch (persistError) {
-                          logger.error(
-                            { persistError, conversationId },
-                            "Failed to persist messages during empty-response error",
-                          );
+                const { result, getAbortiveFinishReason } =
+                  await runAgentStream({
+                    config: streamTextConfig,
+                    recovery: {
+                      logContext: { conversationId },
+                      onEmptyResponseExhausted: async () => {
+                        // Persist before the throw — nothing has merged yet, so the
+                        // stream onError/onFinish won't fire to do it.
+                        if (claimMessagesPersisted()) {
+                          try {
+                            await persistNewMessages(
+                              conversationId,
+                              messages,
+                              "onExecuteError",
+                            );
+                          } catch (persistError) {
+                            logger.error(
+                              { persistError, conversationId },
+                              "Failed to persist messages during empty-response error",
+                            );
+                          }
                         }
-                      }
+                      },
                     },
-                  },
-                });
+                  });
                 // The committed result's steps finish after this point; allow
                 // their usage events through (discarded attempts already drained).
                 hasCommittedResult = true;
@@ -1385,7 +1396,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           ) {
                             return null;
                           }
-                          const mappedError = buildAbortiveTurnError(provider);
+                          // Prefer the probe's finishReason (authoritative when
+                          // the committed turn's onStepFinish fired during the
+                          // probe, before hasCommittedResult); fall back to the
+                          // step-captured one for a turn that opened with content.
+                          const mappedError = buildAbortiveTurnError(
+                            provider,
+                            getAbortiveFinishReason() ?? lastFinishReason,
+                          );
                           activeRunError = mappedError.message;
                           return {
                             type: "error",

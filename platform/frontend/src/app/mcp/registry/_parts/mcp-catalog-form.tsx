@@ -54,7 +54,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -581,11 +580,6 @@ export function McpCatalogForm({
   const { data: isAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
-  // Sharing to teams needs mcpRegistry:team-admin (admins bypass) plus team:read
-  // to populate the picker. Mirrors the agent/skill visibility gating.
-  const { data: isTeamAdmin } = useHasPermissions({
-    mcpRegistry: ["team-admin"],
-  });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   // All teams for a full admin, otherwise only the user's own teams (the only
   // ones the backend lets a non-admin assign).
@@ -593,6 +587,9 @@ export function McpCatalogForm({
     isResourceAdmin: !!isAdmin,
     enabled: !!canReadTeams,
   });
+  // Sharing with a team requires administering it (admins bypass), matching the
+  // backend gate. `myRole` is populated only on the caller's own teams.
+  const administersATeam = (teams ?? []).some((t) => t.myRole === "admin");
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
   const defaultEnvironment = useDefaultEnvironment();
@@ -659,7 +656,21 @@ export function McpCatalogForm({
   }
   const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
-  const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
+  const selectedTeams = form.watch("teams") ?? [];
+  // A team-scoped item may be shared with teams the editor doesn't belong to,
+  // which the assignable-teams picker never lists — take their names from the
+  // item so the access rows never fall back to a raw id.
+  const teamNameById = useMemo(
+    () =>
+      new Map([
+        ...(initialValues?.teams ?? []).map(
+          (t) => [t.id, t.name] as [string, string],
+        ),
+        ...(teams ?? []).map((t) => [t.id, t.name] as [string, string]),
+      ]),
+    [initialValues, teams],
+  );
+  const canShareWithTeams = (isAdmin ?? false) || administersATeam;
   // Shared items are one-way: an item that is already team/org-scoped cannot be
   // demoted back to personal (mirrors the agent dialog).
   const initialScope = initialValues?.scope;
@@ -708,13 +719,14 @@ export function McpCatalogForm({
         disabledReason: !canReadTeams
           ? "Team sharing is unavailable without team:read permission."
           : !canShareWithTeams
-            ? "You need mcpRegistry:team-admin permission to share with teams."
+            ? "You need to be an admin of a team to share with it."
             : "Create a team first to share this MCP server.",
       },
       {
         value: "org",
         label: "Organization",
-        description: "Anyone in your organization can access this MCP server.",
+        description:
+          "Everyone in your organization can use this MCP server. Only admins can modify it.",
         icon: Globe,
         disabled: !isAdmin,
         disabledReason: "Only admins can make MCP servers organization-wide.",
@@ -864,18 +876,30 @@ export function McpCatalogForm({
   // returns (which we do early to show the bar), so it can't drive the
   // bar's spinner — track the bar→save phase ourselves.
   const [isConfirming, setIsConfirming] = useState(false);
+  // A synchronous in-flight latch. The Save button's `disabled` reflects the
+  // mutation's `isPending`, but that is React state and only takes effect on
+  // the next render — a fast double-click fires two submits before it flips.
+  // Two concurrent saves race the team-assignment delete-then-reinsert and the
+  // loser hits a unique-constraint violation. This latch drops the second call.
+  const submitInFlightRef = useRef(false);
 
   const performSubmit = async (values: McpCatalogFormValues) => {
-    // Save any unsaved label before submitting
-    const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
-    const submittedValues = { ...values, labels: updatedLabels };
-    await onSubmit(submittedValues, form);
-    // Reset baselines to what was just submitted so isDirty becomes false.
-    // initialValues from the parent may not change reference after save
-    // (TanStack Query structural sharing), and secret values are stored
-    // separately so the catalog item itself may round-trip unchanged.
-    form.reset(submittedValues, { keepValues: true });
-    setLabelsBaseline(updatedLabels);
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    try {
+      // Save any unsaved label before submitting
+      const updatedLabels = labelsRef.current?.saveUnsavedLabel() || labels;
+      const submittedValues = { ...values, labels: updatedLabels };
+      await onSubmit(submittedValues, form);
+      // Reset baselines to what was just submitted so isDirty becomes false.
+      // initialValues from the parent may not change reference after save
+      // (TanStack Query structural sharing), and secret values are stored
+      // separately so the catalog item itself may round-trip unchanged.
+      form.reset(submittedValues, { keepValues: true });
+      setLabelsBaseline(updatedLabels);
+    } finally {
+      submitInFlightRef.current = false;
+    }
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
@@ -1019,6 +1043,7 @@ export function McpCatalogForm({
                   <FormItem>
                     <FormControl>
                       <VisibilitySelector
+                        label="Access"
                         value={
                           (field.value ?? "personal") as
                             | "personal"
@@ -1034,24 +1059,117 @@ export function McpCatalogForm({
                         }}
                       >
                         {currentScope === "team" && (
-                          <div className="space-y-2">
-                            <Label>Teams</Label>
-                            <MultiSelectCombobox
-                              options={
-                                teams?.map((t) => ({
-                                  label: t.name,
+                          <div className="space-y-6">
+                            <div className="space-y-2">
+                              <Label>Add Team</Label>
+                              <SearchableSelect
+                                value=""
+                                onValueChange={(teamId) =>
+                                  form.setValue(
+                                    "teams",
+                                    [
+                                      ...selectedTeams,
+                                      { id: teamId, level: "use" },
+                                    ],
+                                    { shouldDirty: true },
+                                  )
+                                }
+                                items={(teams ?? []).map((t) => ({
                                   value: t.id,
-                                })) ?? []
-                              }
-                              value={form.watch("teams") ?? []}
-                              onChange={(ids) =>
-                                form.setValue("teams", ids, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              placeholder="Select teams..."
-                              emptyMessage="No teams found"
-                            />
+                                  label: t.name,
+                                  disabled: selectedTeams.some(
+                                    (s) => s.id === t.id,
+                                  ),
+                                }))}
+                                placeholder="Select a team"
+                                searchPlaceholder="Search teams by name"
+                                emptyMessage="No matching teams found."
+                                className="w-full"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Teams ({selectedTeams.length})</Label>
+                              {selectedTeams.length === 0 ? (
+                                <div className="rounded-lg border border-dashed p-4 text-center">
+                                  <p className="text-sm text-muted-foreground">
+                                    No teams added yet
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {selectedTeams.map((selected) => (
+                                    <div
+                                      key={selected.id}
+                                      className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
+                                    >
+                                      <p className="truncate text-sm font-medium">
+                                        {teamNameById.get(selected.id) ??
+                                          selected.id}
+                                      </p>
+                                      <Select
+                                        value={selected.level}
+                                        onValueChange={(level) =>
+                                          form.setValue(
+                                            "teams",
+                                            selectedTeams.map((t) =>
+                                              t.id === selected.id
+                                                ? {
+                                                    ...t,
+                                                    level: level as
+                                                      | "use"
+                                                      | "write",
+                                                  }
+                                                : t,
+                                            ),
+                                            { shouldDirty: true },
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger className="w-full">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="use">
+                                            Use
+                                          </SelectItem>
+                                          <SelectItem value="write">
+                                            Manage
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() =>
+                                          form.setValue(
+                                            "teams",
+                                            selectedTeams.filter(
+                                              (t) => t.id !== selected.id,
+                                            ),
+                                            { shouldDirty: true },
+                                          )
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                        <span className="sr-only">
+                                          Remove team
+                                        </span>
+                                      </Button>
+                                    </div>
+                                  ))}
+                                  <FormDescription>
+                                    <strong>Use</strong> — members can find this
+                                    MCP server, install it for themselves, and
+                                    use shared connections.{" "}
+                                    <strong>Manage</strong> additionally lets
+                                    the team&apos;s admins edit it, change its
+                                    environment, and manage sharing.
+                                  </FormDescription>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </VisibilitySelector>

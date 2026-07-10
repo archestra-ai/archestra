@@ -29,24 +29,11 @@ const REDUCE_COMPACT_THRESHOLD: u64 = 180_000;
 
 /// Map a lane's provider onto nitpicker's `LLMProvider`. `base_url` is unsupported for OpenRouter, so
 /// passing it there is a hard error rather than a silently ignored flag.
-pub fn to_provider(
-    provider: Provider,
-    base_url: Option<String>,
-    api_key_env: Option<String>,
-) -> Result<LLMProvider> {
+pub fn to_provider(provider: Provider, base_url: Option<String>, api_key_env: Option<String>) -> Result<LLMProvider> {
     let provider = match provider {
-        Provider::Anthropic => LLMProvider::Anthropic {
-            base_url,
-            api_key_env,
-        },
-        Provider::Gemini => LLMProvider::Gemini {
-            base_url,
-            api_key_env,
-        },
-        Provider::Openai => LLMProvider::OpenAi {
-            base_url,
-            api_key_env,
-        },
+        Provider::Anthropic => LLMProvider::Anthropic { base_url, api_key_env },
+        Provider::Gemini => LLMProvider::Gemini { base_url, api_key_env },
+        Provider::Openai => LLMProvider::OpenAi { base_url, api_key_env },
         Provider::Openrouter => {
             if base_url.is_some() {
                 bail!("base_url is not supported for the openrouter provider");
@@ -392,23 +379,14 @@ mod tests {
 
     #[test]
     fn map_prompt_embeds_rollout_summary_and_trajectory() {
-        let p = build_map_prompt(
-            &cid("basic", "pi", "glm"),
-            "outcome=failed",
-            "# Agent trajectory",
-        );
+        let p = build_map_prompt(&cid("basic", "pi", "glm"), "outcome=failed", "# Agent trajectory");
         assert!(p.contains("basic/pi__glm"));
         assert!(p.contains("outcome=failed"));
         assert!(p.contains("# Agent trajectory"));
         // The untrusted trajectory must sit behind the do-not-follow boundary, never above it.
-        let boundary = p
-            .find("UNTRUSTED DATA")
-            .expect("untrusted boundary present");
+        let boundary = p.find("UNTRUSTED DATA").expect("untrusted boundary present");
         let traj = p.find("# Agent trajectory").unwrap();
-        assert!(
-            boundary < traj,
-            "trajectory must follow the untrusted boundary"
-        );
+        assert!(boundary < traj, "trajectory must follow the untrusted boundary");
     }
 
     #[test]
@@ -459,20 +437,13 @@ mod tests {
     fn reduce_message_requires_loop_first_and_rubric() {
         let m = build_reduce_message("work/analyses.md", None);
         // The primary (agentic-loop) section must come before the demoted fixture-polish section.
-        let loop_idx = m
-            .find("Archestra agentic-loop")
-            .expect("primary loop section present");
+        let loop_idx = m.find("Archestra agentic-loop").expect("primary loop section present");
         let fixture_idx = m
             .find("Benchmark fixture issues")
             .expect("demoted fixture section present");
-        let cluster_idx = m
-            .find("Root-cause notes")
-            .expect("failure-cluster section present");
+        let cluster_idx = m.find("Root-cause notes").expect("failure-cluster section present");
         assert!(loop_idx < fixture_idx, "loop section must lead fixtures");
-        assert!(
-            fixture_idx < cluster_idx,
-            "fixtures before root-cause notes"
-        );
+        assert!(fixture_idx < cluster_idx, "fixtures before root-cause notes");
         // Every rubric field label must be spelled out so each finding is forced through it.
         for field in [
             "Surface & tier",

@@ -168,7 +168,7 @@ export function McpAppPill({
   /** App icon (e.g. an McpCatalogIcon); falls back to the generic app glyph. */
   icon?: React.ReactNode;
   /** Tool-call state for the status dot; omitted renders no dot. */
-  state?: "running" | "completed" | "error";
+  state?: "running" | "completed" | "error" | "denied";
   /** Pressed = the app's inline render is expanded under the pill. */
   pressed?: boolean;
   /** Show a red status dot for an app runtime error. */
@@ -203,6 +203,7 @@ export function McpAppPill({
                   dotState === "completed" && "bg-green-500",
                   dotState === "running" && "bg-blue-500 animate-pulse",
                   dotState === "error" && "bg-destructive",
+                  dotState === "denied" && "bg-orange-500",
                 )}
               />
             ) : null}

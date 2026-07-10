@@ -266,7 +266,7 @@ const usage = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-function finished(unified: "stop" | "tool-calls" | "error") {
+function finished(unified: "stop" | "tool-calls" | "error" | "length") {
   return { unified, raw: unified };
 }
 
@@ -293,6 +293,17 @@ function abortiveChunks(): ModelStreamPart[] {
     { type: "tool-input-start", id: "t1", toolName: "foo" },
     { type: "tool-input-delta", id: "t1", delta: "{" },
     { type: "finish", finishReason: finished("tool-calls"), usage },
+  ];
+}
+
+// An abortive tool call truncated by the output-token cap (finishReason
+// "length") — deterministic in the payload size, so it must not be retried.
+function abortiveLengthChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "tool-input-start", id: "t1", toolName: "foo" },
+    { type: "tool-input-delta", id: "t1", delta: "{" },
+    { type: "finish", finishReason: finished("length"), usage },
   ];
 }
 
@@ -375,6 +386,33 @@ describe("runAgentStream", () => {
     await drain(result);
 
     expect(model.doStreamCalls).toHaveLength(2);
+  });
+
+  test("does not retry a `length`-truncated tool call and exposes its finishReason", async () => {
+    // A renderable second attempt is provided but must never be reached: a
+    // length truncation re-truncates, so it is surfaced on the first attempt.
+    const model = modelFor(abortiveLengthChunks(), renderableChunks());
+
+    const { result, getAbortiveFinishReason } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    // The tracker classifies the abortive turn from this, since onStepFinish may
+    // have fired during the probe (before the caller committed the result).
+    expect(getAbortiveFinishReason()).toBe("length");
+  });
+
+  test("a renderable turn exposes no abortive finishReason", async () => {
+    const model = modelFor(renderableChunks());
+
+    const { result, getAbortiveFinishReason } = await runAgentStream({
+      config: { model, prompt: "hello" },
+    });
+    await drain(result);
+
+    expect(getAbortiveFinishReason()).toBeNull();
   });
 
   test("trims and retries on a context-length rejection when messages are present", async () => {

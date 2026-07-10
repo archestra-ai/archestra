@@ -280,8 +280,9 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
   // reasoning. Only a failure resets it (the card unmounts on success).
   const [isOpening, setIsOpening] = useState(false);
 
-  // Run page pinned to this exact install for explicit "open in new tab".
-  const runHref = `/apps/catalog/${app.catalogId}/run?install=${encodeURIComponent(app.mcpServerId)}&resource=${encodeURIComponent(app.resourceUri)}`;
+  // Standalone run page (chrome-less /a namespace, like the owned /a/[appId]),
+  // pinned to this exact install for explicit "open in new tab".
+  const runHref = `/a/catalog/${app.catalogId}?install=${encodeURIComponent(app.mcpServerId)}&resource=${encodeURIComponent(app.resourceUri)}`;
   const serverHref = `/mcp/registry/${app.catalogId}`;
 
   const handleOpen = async () => {
@@ -324,12 +325,16 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
             resourceUri: app.resourceUri,
           }}
         />
-        <DropdownMenuItem asChild>
-          <Link href={runHref} target="_blank" rel="noreferrer">
-            <SquareArrowOutUpRight className="h-4 w-4" />
-            Open in new tab
-          </Link>
-        </DropdownMenuItem>
+        {/* A tool with required inputs only opens via the chat prompt flow —
+            its standalone page can't render anything useful, so don't offer it. */}
+        {app.requiresInput ? null : (
+          <DropdownMenuItem asChild>
+            <Link href={runHref} target="_blank" rel="noreferrer">
+              <SquareArrowOutUpRight className="h-4 w-4" />
+              Open in new tab
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href={serverHref}>
             <Server className="h-4 w-4" />

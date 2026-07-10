@@ -331,7 +331,7 @@ export const BUILT_IN_SKILLS: BuiltInSkill[] = [
     builtInSkillId: "build-app",
     name: "Build App",
     description:
-      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions.",
+      "Build an interactive app for a user (dashboard, form, tracker, game, or custom UI): the staged scaffold → refine → edit → validate → publish flow and the window.archestra SDK, storage, tools, and CSP conventions. Use whenever the user asks to make, build, or create an app or interactive UI, authoring it through that flow.",
     content: BUILD_APP_SKILL,
     files: [],
   },

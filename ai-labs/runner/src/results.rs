@@ -126,9 +126,7 @@ impl GroupAggregate {
     /// is unpriced the total is incomplete, so it is nulled — the `cost_unpriced_n` field carries the
     /// loud signal that would otherwise be lost (serde_json renders a NaN sentinel as null anyway).
     pub fn cost_usd_json(&self) -> Option<f64> {
-        (self.cost_unpriced_n == 0)
-            .then(|| self.cost_usd())
-            .flatten()
+        (self.cost_unpriced_n == 0).then(|| self.cost_usd()).flatten()
     }
 }
 
@@ -207,14 +205,8 @@ fn group_aggregate(key: String, rows: &[&RunResult]) -> GroupAggregate {
                 RunCost::Unpriced | RunCost::NoSpend => None,
             })
             .sum(),
-        cost_n: rows
-            .iter()
-            .filter(|r| matches!(r.cost, RunCost::Priced(_)))
-            .count(),
-        cost_unpriced_n: rows
-            .iter()
-            .filter(|r| matches!(r.cost, RunCost::Unpriced))
-            .count(),
+        cost_n: rows.iter().filter(|r| matches!(r.cost, RunCost::Priced(_))).count(),
+        cost_unpriced_n: rows.iter().filter(|r| matches!(r.cost, RunCost::Unpriced)).count(),
     }
 }
 
@@ -224,10 +216,7 @@ where
 {
     let mut grouped: HashMap<String, Vec<&RunResult>> = HashMap::new();
     for result in results {
-        grouped
-            .entry(key_fn(result).to_string())
-            .or_default()
-            .push(result);
+        grouped.entry(key_fn(result).to_string()).or_default().push(result);
     }
     let mut keys: Vec<_> = grouped.keys().cloned().collect();
     keys.sort();
@@ -414,10 +403,7 @@ mod tests {
         a.total_tokens = Some(1500);
         a.cost = RunCost::Priced(0.0123);
         let md = render_markdown(&[a, result("basic", "t2", "l1", Outcome::Failed)]);
-        assert!(
-            !md.contains("Pass matrix"),
-            "default report drops the raw table"
-        );
+        assert!(!md.contains("Pass matrix"), "default report drops the raw table");
         assert!(md.contains("**overall**: 1/2 passed (50%)"));
         assert!(md.contains("avg turns"));
         assert!(md.contains("avg tokens"));
@@ -434,10 +420,7 @@ mod tests {
         let mut b = result("basic", "t2", "l1", Outcome::Passed);
         b.cost = RunCost::Unpriced;
         let md = render_markdown(&[a, b]);
-        assert!(
-            md.contains("(+1 unpriced)"),
-            "incomplete total is loud: {md}"
-        );
+        assert!(md.contains("(+1 unpriced)"), "incomplete total is loud: {md}");
     }
 
     #[test]

@@ -117,26 +117,15 @@ async fn stage(
     artifact_bytes: Option<&[u8]>,
     state_bytes: Option<&[u8]>,
 ) -> Result<(PathBuf, HashMap<String, String>), VerifyError> {
-    let mut env: HashMap<String, String> = task
-        .verifier
-        .env
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    let mut env: HashMap<String, String> = task.verifier.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
     let result_path = workdir.join(RESULT_NAME);
     fs::write(&result_path, report_bytes).await?;
-    env.insert(
-        RESULT_ENV.to_string(),
-        result_path.to_string_lossy().to_string(),
-    );
+    env.insert(RESULT_ENV.to_string(), result_path.to_string_lossy().to_string());
 
     let fixtures_root = workdir.join(FIXTURES_DIR);
     let mut staged_any = false;
-    for (sub, source) in [
-        ("inputs", task.inputs_dir()),
-        ("expected", task.expected_dir()),
-    ] {
+    for (sub, source) in [("inputs", task.inputs_dir()), ("expected", task.expected_dir())] {
         if source.is_dir() {
             let target = fixtures_root.join(sub);
             copy_dir(&source, &target).await?;
@@ -144,28 +133,19 @@ async fn stage(
         }
     }
     if staged_any {
-        env.insert(
-            FIXTURES_ENV.to_string(),
-            fixtures_root.to_string_lossy().to_string(),
-        );
+        env.insert(FIXTURES_ENV.to_string(), fixtures_root.to_string_lossy().to_string());
     }
 
     if let Some(bytes) = artifact_bytes {
         let output_path = workdir.join(OUTPUT_NAME);
         fs::write(&output_path, bytes).await?;
-        env.insert(
-            OUTPUT_ENV.to_string(),
-            output_path.to_string_lossy().to_string(),
-        );
+        env.insert(OUTPUT_ENV.to_string(), output_path.to_string_lossy().to_string());
     }
 
     if let Some(bytes) = state_bytes {
         let state_path = workdir.join(STATE_NAME);
         fs::write(&state_path, bytes).await?;
-        env.insert(
-            STATE_ENV.to_string(),
-            state_path.to_string_lossy().to_string(),
-        );
+        env.insert(STATE_ENV.to_string(), state_path.to_string_lossy().to_string());
     }
 
     let verifier_source = task.dir.join(&task.verifier.test_file);
@@ -202,9 +182,7 @@ async fn run_pytest(
     timeout_duration: Duration,
 ) -> Result<VerifyOutcome, VerifyError> {
     let mut full_env = std::env::vars()
-        .filter(|(k, _)| {
-            k != "PYTHONPATH" && !k.starts_with("PYTEST") && !k.starts_with("COVERAGE")
-        })
+        .filter(|(k, _)| k != "PYTHONPATH" && !k.starts_with("PYTEST") && !k.starts_with("COVERAGE"))
         .collect::<HashMap<_, _>>();
     full_env.extend(env);
 
@@ -280,6 +258,48 @@ mod tests {
         let outcome = run_verifier(&task, b"{}", None, None, 120.0).await.unwrap();
         assert!(outcome.passed, "stderr: {}", outcome.stderr);
         assert!(!outcome.timed_out);
+    }
+
+    #[tokio::test]
+    async fn test_tool_calls_decodes_run_tool_and_keeps_args_raw() {
+        if !uv_available() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let verifier = tmp.path().join("verifier.py");
+        // The strict-oracle contract: only the run_tool envelope is decoded; a
+        // wrapper shape inside tool_args reaches the verifier untouched, a
+        // direct call passes through as-is, and a run_tool call with no
+        // tool_name is skipped.
+        tokio::fs::write(
+            &verifier,
+            r#"from bench_verifier import tool_calls
+
+def test_raw_args():
+    calls = list(tool_calls())
+    assert calls == [
+        ("deepwiki__ask", {"appId": {"value": "a1"}}),
+        ("archestra__scaffold_app", {"name": "x"}),
+    ]
+"#,
+        )
+        .await
+        .unwrap();
+
+        let state = serde_json::json!({
+            "tool_calls": [
+                {"name": "archestra__run_tool", "input": {"tool_name": "deepwiki__ask", "tool_args": {"appId": {"value": "a1"}}}},
+                {"name": "archestra__scaffold_app", "input": {"name": "x"}},
+                {"name": "archestra__run_tool", "input": {"tool_args": {"dropped": true}}},
+            ]
+        })
+        .to_string();
+
+        let task = make_task(tmp.path(), "verifier.py", vec![]);
+        let outcome = run_verifier(&task, b"{}", None, Some(state.as_bytes()), 120.0)
+            .await
+            .unwrap();
+        assert!(outcome.passed, "stdout: {}\nstderr: {}", outcome.stdout, outcome.stderr);
     }
 
     #[tokio::test]

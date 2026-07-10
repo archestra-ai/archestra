@@ -323,6 +323,7 @@ const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
 // Default OTEL OTLP endpoint for HTTP/Protobuf (4318). For gRPC, the typical port is 4317.
 const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
+const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
@@ -418,6 +419,34 @@ export const parseContentMaxLength = (
       `Invalid ARCHESTRA_OTEL_CONTENT_MAX_LENGTH value "${value}", using default ${DEFAULT_OTEL_CONTENT_MAX_LENGTH}`,
     );
     return DEFAULT_OTEL_CONTENT_MAX_LENGTH;
+  }
+
+  return parsed;
+};
+
+/**
+ * Grace window (seconds) during which a replayed — i.e. already-rotated —
+ * refresh token is treated as a benign rotation race (a lost token-exchange
+ * response the client retried) and a fresh pair is re-issued, rather than a
+ * reuse attack. See services/oauth-refresh-replay.ts. `0` disables the grace,
+ * so every replay is treated as reuse immediately.
+ *
+ * @public — exercised by config.test.ts
+ */
+export const parseRefreshTokenReuseGraceSeconds = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS value "${value}", using default ${DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS}`,
+    );
+    return DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS;
   }
 
   return parsed;
@@ -1182,6 +1211,15 @@ const config = {
      */
     dynamicClientRegistrationEnabled:
       process.env.ARCHESTRA_AUTH_DCR_ENABLED !== "false",
+    /**
+     * Grace window (seconds) for the OAuth refresh-token replay shield: a
+     * replayed refresh token revoked within this window is treated as a benign
+     * rotation race and re-issued instead of triggering reuse invalidation.
+     * See services/oauth-refresh-replay.ts.
+     */
+    refreshTokenReuseGraceSeconds: parseRefreshTokenReuseGraceSeconds(
+      process.env.ARCHESTRA_AUTH_REFRESH_TOKEN_REUSE_GRACE_SECONDS,
+    ),
     devAutoAuthenticateEmail,
   },
   analytics: getAnalyticsConfig(),

@@ -6,6 +6,8 @@ description: The system subagents Archestra seeds into every organization, and w
 lastUpdated: 2026-07-05
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 Archestra seeds a set of built-in subagents into every organization. Each one handles a specific internal job — proposing tool policies, quarantining untrusted output, summarizing long chats, and so on. They run automatically; you rarely invoke them directly.
 
 An admin can open a built-in subagent in its settings and change its **system prompt** and **model** (requires `agent:admin`), and reset either back to the shipped default. Built-in subagents cannot be deleted or exported. When one has no model set, it falls back to the organization's default model.

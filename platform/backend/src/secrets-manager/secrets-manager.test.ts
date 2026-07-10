@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import SecretModel from "@/models/secret";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { DbSecretsManager } from "./db";
 import {
   createSecretManager,
@@ -923,9 +924,15 @@ describe("SecretsManager", async () => {
           new Error("Vault unavailable"),
         );
 
-        await expect(vaultManager.getSecret(created.id)).rejects.toThrow(
-          "An error occurred while accessing secrets. Please try again later or contact your administrator.",
-        );
+        // A secrets-backend failure is an upstream outage, not an app bug:
+        // it must surface as a retryable 503 tagged with the internal code
+        // that error tracking uses to group one outage into one issue.
+        await expect(vaultManager.getSecret(created.id)).rejects.toMatchObject({
+          statusCode: 503,
+          internalCode: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+          message:
+            "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+        });
 
         // Cleanup
         await SecretModel.delete(created.id);

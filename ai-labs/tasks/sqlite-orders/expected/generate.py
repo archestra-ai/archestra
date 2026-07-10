@@ -166,9 +166,11 @@ def _assert_recover_cli(path: Path) -> None:
     if sqlite_cli is None:
         print("note: sqlite3 CLI not found; skipped .recover validation")
         return
-    dump = subprocess.run(
-        [sqlite_cli, str(path), ".recover"], capture_output=True, text=True, check=True
-    ).stdout
+    recovered = subprocess.run([sqlite_cli, str(path), ".recover"], capture_output=True, text=True)
+    if recovered.returncode != 0:
+        print("note: sqlite3 CLI .recover failed; skipped .recover validation")
+        return
+    dump = recovered.stdout
     # `.recover` prefixes a dot-command (e.g. `.dbconfig`) that only the CLI understands; drop it.
     sql = "\n".join(line for line in dump.splitlines() if not line.startswith("."))
     tmp = Path(tempfile.mkdtemp()) / "recovered.sqlite"

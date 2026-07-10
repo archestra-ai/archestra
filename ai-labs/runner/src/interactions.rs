@@ -79,10 +79,7 @@ pub fn extract_effective_prompts(interactions: &[Value]) -> ExtractionOutcome {
     // We were handed interactions yet produced neither a prompt nor an error (e.g. every row was an
     // embedding) — surface it rather than returning an empty, signal-free outcome.
     if prompts.is_empty() && errors.is_empty() && !interactions.is_empty() {
-        errors.push(
-            "interactions present but no model-facing prompt could be extracted from any of them"
-                .to_string(),
-        );
+        errors.push("interactions present but no model-facing prompt could be extracted from any of them".to_string());
     }
 
     ExtractionOutcome { prompts, errors }
@@ -126,10 +123,7 @@ impl RunUsage {
     }
 
     pub fn total_tokens(&self) -> i64 {
-        self.prompt_tokens
-            + self.completion_tokens
-            + self.cache_read_tokens
-            + self.cache_write_tokens
+        self.prompt_tokens + self.completion_tokens + self.cache_read_tokens + self.cache_write_tokens
     }
 }
 
@@ -140,10 +134,7 @@ impl RunUsage {
 pub fn sum_usage(interactions: &[Value]) -> RunUsage {
     let mut usage = RunUsage::default();
     for interaction in interactions {
-        let type_tag = interaction
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let type_tag = interaction.get("type").and_then(Value::as_str).unwrap_or("");
         if type_tag.ends_with(":embeddings") {
             continue;
         }
@@ -181,12 +172,7 @@ fn request_body(interaction: &Value) -> &Value {
 
 /// Accumulate an extracted context into the distinct-context list, comparing by everything except the
 /// running count so repeated identical calls collapse into one entry.
-fn merge(
-    prompts: &mut Vec<EffectivePromptData>,
-    system_prompt: String,
-    tools: Vec<String>,
-    sampling: SamplingParams,
-) {
+fn merge(prompts: &mut Vec<EffectivePromptData>, system_prompt: String, tools: Vec<String>, sampling: SamplingParams) {
     if let Some(existing) = prompts
         .iter_mut()
         .find(|p| p.system_prompt == system_prompt && p.tools == tools && p.sampling == sampling)
@@ -244,9 +230,7 @@ fn extract_openai_chat(req: &Value) -> Option<(String, Vec<String>, SamplingPara
         .find(|m| is_system_role(m.get("role")))
         .and_then(|m| m.get("content"))
         .and_then(join_text)?;
-    let tools = names(req.get("tools"), |t| {
-        t.get("function").and_then(|f| f.get("name"))
-    });
+    let tools = names(req.get("tools"), |t| t.get("function").and_then(|f| f.get("name")));
     let sampling = SamplingParams {
         temperature: f64_at(req, "temperature"),
         max_tokens: i64_at(req, "max_tokens").or_else(|| i64_at(req, "max_completion_tokens")),
@@ -380,10 +364,7 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "denial rule");
         assert_eq!(out.prompts[0].tools, vec!["run_tool"]);
-        assert_eq!(
-            out.prompts[0].sampling,
-            sampling(Some(1.0), Some(4096), Some(0.9))
-        );
+        assert_eq!(out.prompts[0].sampling, sampling(Some(1.0), Some(4096), Some(0.9)));
     }
 
     #[test]
@@ -400,10 +381,7 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "sys a\nsys b");
         assert_eq!(out.prompts[0].tools, vec!["f1", "f2"]);
-        assert_eq!(
-            out.prompts[0].sampling,
-            sampling(Some(0.5), Some(2048), Some(0.8))
-        );
+        assert_eq!(out.prompts[0].sampling, sampling(Some(0.5), Some(2048), Some(0.8)));
     }
 
     #[test]
@@ -420,10 +398,7 @@ mod tests {
         assert!(out.errors.is_empty());
         assert_eq!(out.prompts[0].system_prompt, "responses sys");
         assert_eq!(out.prompts[0].tools, vec!["t1"]);
-        assert_eq!(
-            out.prompts[0].sampling,
-            sampling(Some(0.2), Some(1000), None)
-        );
+        assert_eq!(out.prompts[0].sampling, sampling(Some(0.2), Some(1000), None));
     }
 
     #[test]

@@ -129,6 +129,7 @@ export async function injectSkillActivation({
         allowedTools: skill.allowedTools,
         templated: skill.templated,
       },
+      version: version.version,
       files,
       // only claim sandbox runnability when this skill actually holds the mount.
       canRunSandbox: mounted,

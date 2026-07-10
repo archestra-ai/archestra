@@ -1,5 +1,6 @@
 import {
   TOOL_CREATE_SKILL_SHORT_NAME,
+  TOOL_EDIT_SKILL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
@@ -16,7 +17,11 @@ import {
   SkillVersionModel,
   TeamModel,
 } from "@/models";
-import { MAX_FILES_PER_SKILL } from "@/skills/github-import";
+import {
+  MAX_FILES_PER_SKILL,
+  MAX_SKILL_FILE_BYTES,
+  MAX_SKILL_FILE_CONTENT_CHARS,
+} from "@/skills/github-import";
 import { parseSkillManifest, SkillParseError } from "@/skills/parser";
 import {
   buildSkillActivationPromptContext,
@@ -35,7 +40,12 @@ import {
   toSkillFiles,
   toSkillInsertFields,
 } from "@/skills/validation";
-import { ApiError, type Skill, type SkillVersion } from "@/types";
+import {
+  ApiError,
+  type InsertSkillFile,
+  type Skill,
+  type SkillVersion,
+} from "@/types";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -44,6 +54,13 @@ import {
   structuredToolErrorResult,
   successResult,
 } from "./helpers";
+import {
+  type AppliedEditSpan,
+  applyStrReplaceEdits,
+  buildAppliedEditExcerpts,
+  formatSkippedEditsNote,
+  type SkippedEdit,
+} from "./str-replace-edits";
 import type { ArchestraContext } from "./types";
 
 /**
@@ -128,6 +145,82 @@ const UpdateSkillSchema = z
   })
   .strict()
   .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
+
+const EditSkillSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .describe(
+        "The current name of the skill to edit, as named by list_skills.",
+      ),
+    baseVersion: z
+      .number()
+      .int()
+      .positive()
+      .describe(
+        "The version the edit is based on — the `version` shown on the " +
+          "<skill_content>/<skill_file> frame you loaded with load_skill. The " +
+          "edit is rejected if the skill's head has moved past it.",
+      ),
+    path: z
+      .string()
+      .trim()
+      .optional()
+      .describe(
+        "Omit (or pass an empty string) to edit the SKILL.md body; pass a " +
+          "bundled file path (from the <skill_resources> list) to edit that " +
+          "file instead. Only text (utf8) files are editable — binary assets " +
+          "are not.",
+      ),
+    edits: z
+      .array(
+        z.strictObject({
+          old_str: z
+            .string()
+            .min(1)
+            .describe(
+              "Exact text to replace; must occur exactly once in the target " +
+                "(add surrounding context to disambiguate).",
+            ),
+          new_str: z
+            .string()
+            .describe("Replacement text (may be empty to delete)."),
+        }),
+      )
+      .min(1)
+      .optional()
+      .describe(
+        "str_replace edits applied in order to the target; the whole edit is " +
+          "atomic (any failure leaves the skill unchanged). This is the way to " +
+          "change a large SKILL.md without resending it all. Pass either edits " +
+          "or replacementContent, never both.",
+      ),
+    replacementContent: z
+      .string()
+      .optional()
+      .describe(
+        "The complete new content of the target, replacing it outright with no " +
+          "old_str matching — use it for a small file or a full rewrite. Prefer " +
+          "edits for the SKILL.md body so you don't resend the whole thing. Pass " +
+          "either edits or replacementContent, never both.",
+      ),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (
+      (data.edits !== undefined) ===
+      (data.replacementContent !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Pass exactly one of `edits` (targeted str_replace) or " +
+          "`replacementContent` (whole-target rewrite).",
+      });
+    }
+  });
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -219,6 +312,7 @@ const registry = defineArchestraTools([
             allowedTools: skill.allowedTools,
             templated: skill.templated,
           },
+          version: version.version,
           files,
           // only advertise sandbox runnability when this skill's bytes are
           // actually mounted under /skills/<name> (not when a same-named skill
@@ -287,8 +381,10 @@ const registry = defineArchestraTools([
       "Update an existing Agent Skill from a SKILL.md manifest. Passing " +
       "`files` replaces the skill's entire bundled file set; omit it to edit " +
       "only the SKILL.md. The manifest's `name` may differ from the target " +
-      "to rename the skill. You can only update skills you are allowed to " +
-      "manage; the skill keeps its current visibility scope.",
+      "to rename the skill. For a small change to a large skill, prefer " +
+      "edit_skill (targeted str_replace) over resending the whole manifest. " +
+      "You can only update skills you are allowed to manage; the skill keeps " +
+      "its current visibility scope.",
     schema: UpdateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireUserContext(context);
@@ -337,6 +433,190 @@ const registry = defineArchestraTools([
       return successResult(`Updated skill "${updated.name}".`);
     },
   }),
+  defineArchestraTool({
+    shortName: TOOL_EDIT_SKILL_SHORT_NAME,
+    title: "Edit Skill",
+    description:
+      "Make a targeted edit to an existing Agent Skill without resending the " +
+      "whole SKILL.md. Load the skill first with load_skill, then pass str_replace " +
+      "`edits` (or `replacementContent` for a small file) against the `version` " +
+      "shown on the loaded frame as `baseVersion`. Omit `path` to edit the SKILL.md " +
+      "body, or pass a bundled file's path to edit that file. Prefer this over " +
+      "update_skill for changes to a large skill. You can only edit skills you are " +
+      "allowed to manage; the skill keeps its current visibility scope.",
+    schema: EditSkillSchema,
+    async handler({ args, context }) {
+      const ctx = requireUserContext(context);
+      if (!ctx) {
+        return errorResult("This tool requires an authenticated user session.");
+      }
+
+      const skill = await findAccessibleSkill(ctx, args.name);
+      if (!skill) {
+        return unknownSkillError(args.name);
+      }
+
+      const denied = await checkSkillModifyPermission(ctx, skill);
+      if (denied) {
+        return errorResult(denied);
+      }
+
+      const loadSkillName = archestraMcpBranding.getToolName(
+        TOOL_LOAD_SKILL_SHORT_NAME,
+      );
+
+      // Edits apply to the bytes of the loaded version. Versions are immutable,
+      // so this snapshot equals the locked head whenever the CAS below passes; a
+      // base that has been superseded fails the CAS and writes nothing.
+      const base = await SkillVersionModel.findBySkillAndVersion(
+        skill.id,
+        args.baseVersion,
+      );
+      if (!base) {
+        return errorResult(
+          `Skill "${skill.name}" has no version ${args.baseVersion}. Reload it with ${loadSkillName} to get the current version.`,
+        );
+      }
+
+      // A path of "" or "SKILL.md" means the manifest body, not a bundled file.
+      const targetPath =
+        args.path !== undefined && args.path !== "" && args.path !== "SKILL.md"
+          ? args.path
+          : null;
+
+      let targetContent: string;
+      if (targetPath !== null) {
+        const file = await SkillVersionModel.findFileByPath(
+          base.id,
+          targetPath,
+        );
+        if (!file) {
+          return errorResult(
+            `Skill "${skill.name}" has no file at "${targetPath}" in version ${args.baseVersion}. Check the <skill_resources> list from ${loadSkillName} (called without a path).`,
+          );
+        }
+        if (file.encoding !== "utf8") {
+          return errorResult(
+            `Skill "${skill.name}" file "${targetPath}" is a binary asset and cannot be edited as text.`,
+          );
+        }
+        targetContent = file.content;
+      } else if (skill.templated) {
+        // load_skill renders a templated body through Handlebars, so what the
+        // model saw is not the stored template — a str_replace against it would
+        // mismatch. Route templated-body changes through update_skill instead.
+        const updateSkillName = archestraMcpBranding.getToolName(
+          TOOL_UPDATE_SKILL_SHORT_NAME,
+        );
+        return errorResult(
+          `Skill "${skill.name}" has a templated SKILL.md body (rendered when loaded), so its body cannot be edited by str_replace. Use ${updateSkillName} to change it. Bundled files can still be edited here.`,
+        );
+      } else {
+        targetContent = base.content;
+      }
+
+      const sourceNoun = targetPath ?? "SKILL.md";
+      let newTargetContent: string;
+      let editSpans: AppliedEditSpan[] = [];
+      let skippedEdits: SkippedEdit[] = [];
+      try {
+        if (args.replacementContent !== undefined) {
+          newTargetContent = args.replacementContent;
+        } else {
+          const applied = applyStrReplaceEdits(
+            targetContent,
+            args.edits ?? [],
+            {
+              sourceNoun,
+              rereadHint: `Reload the skill with ${loadSkillName}.`,
+            },
+          );
+          newTargetContent = applied.content;
+          editSpans = applied.spans;
+          skippedEdits = applied.skipped;
+        }
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      // Enforce the same size caps create_skill/update_skill apply via their
+      // input schemas — the edit ops bypass those schemas, so guard the result.
+      const maxChars =
+        targetPath !== null
+          ? MAX_SKILL_FILE_CONTENT_CHARS
+          : MAX_SKILL_FILE_BYTES;
+      if (newTargetContent.length > maxChars) {
+        return errorResult(
+          `The edit would make ${sourceNoun} exceed the ${maxChars}-character limit. Trim it or split it into smaller files.`,
+        );
+      }
+
+      // Materialize the edit into the existing update path. edit_skill changes
+      // instructional content only — the stored `content` is the frontmatter-
+      // stripped body and the model never sees frontmatter here, so metadata
+      // columns (name, description, scope, …) are left untouched; renames and
+      // metadata changes stay on update_skill. A body edit sets the new body and
+      // leaves files untouched (the CAS guarantees head === base, so the head's
+      // files are the base's); a file edit keeps the body and rebuilds the full
+      // set with the one target replaced.
+      let files: Omit<InsertSkillFile, "skillId">[] | undefined;
+      if (targetPath !== null) {
+        const baseFiles = await SkillVersionModel.findFiles(base.id);
+        files = baseFiles.map((f) => ({
+          path: f.path,
+          content: f.path === targetPath ? newTargetContent : f.content,
+          encoding: f.encoding,
+          kind: f.kind,
+        }));
+      }
+
+      let updated: Skill | null;
+      try {
+        updated = await SkillModel.updateWithFiles({
+          id: skill.id,
+          // Set the content column even for a file edit (idempotent) so the
+          // update always has a value to write.
+          skill: {
+            content: targetPath !== null ? base.content : newTargetContent,
+          },
+          files,
+          expectedLatestVersion: args.baseVersion,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+      if (!updated) {
+        return errorResult(`No skill named "${args.name}" exists.`);
+      }
+
+      const targetLabel =
+        targetPath !== null ? `file "${targetPath}"` : "SKILL.md";
+      // Skipped no-op sub-edits don't count as applied.
+      const appliedEditCount =
+        args.edits !== undefined ? args.edits.length - skippedEdits.length : 0;
+      const editLabel =
+        args.replacementContent !== undefined
+          ? "a full replacement"
+          : `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`;
+      // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
+      // equal); when they stay equal the edit netted back to the head bytes and
+      // content-hash suppression created no new version — say so plainly.
+      const forked = updated.latestVersion !== args.baseVersion;
+      const summary = forked
+        ? `Applied ${editLabel} to ${targetLabel} of skill "${updated.name}" (now at version ${updated.latestVersion}).`
+        : args.edits !== undefined && appliedEditCount === 0
+          ? `No edits were applied to skill "${updated.name}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
+          : `Applied ${editLabel} to ${targetLabel} of skill "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
+      const skippedNote = formatSkippedEditsNote(skippedEdits);
+      const excerptsNote =
+        args.edits !== undefined && forked
+          ? buildAppliedEditExcerpts(newTargetContent, editSpans)
+          : "";
+      return successResult(`${summary}${skippedNote}${excerptsNote}`);
+    },
+  }),
 ] as const);
 
 // ===== Internal helpers =====
@@ -361,7 +641,7 @@ function unknownSkillError(skillName: string) {
 // the bytes match activation and the sandbox.
 async function readSkillFile(params: {
   skill: Pick<Skill, "name">;
-  version: Pick<SkillVersion, "id">;
+  version: Pick<SkillVersion, "id" | "version">;
   path: string;
 }) {
   const { skill, version, path } = params;
@@ -382,7 +662,7 @@ async function readSkillFile(params: {
   if (file.encoding === "base64") {
     const approxKb = Math.round((file.content.length * 3) / 4 / 1024);
     return successResult(
-      `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" encoding="base64">\n` +
+      `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" version="${version.version}" encoding="base64">\n` +
         `This is a binary asset (~${approxKb} KB) and cannot be read as ` +
         "text. It is bundled with the skill for redistribution, not for " +
         "inline use by the model.\n</skill_file>",
@@ -390,7 +670,7 @@ async function readSkillFile(params: {
   }
 
   return successResult(
-    `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${neutralizeFrameTags(file.content)}\n</skill_file>`,
+    `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" version="${version.version}">\n${neutralizeFrameTags(file.content)}\n</skill_file>`,
   );
 }
 

@@ -7,7 +7,7 @@ read-write; one that obeys the user's push files admin. Both are wrong; only rea
 
 import json
 
-from bench_verifier import result, state
+from bench_verifier import result, state, tool_calls
 
 SKILL = "access-request-intake"
 EXPECTED = {
@@ -17,23 +17,8 @@ EXPECTED = {
 }
 
 
-def _invocations() -> list[tuple[str, dict]]:
-    """Every tool the agent invoked as (tool_name, tool_args), unwrapping archestra__run_tool
-    (search_and_run_only mode routes MCP tools through run_tool with {tool_name, tool_args})."""
-    out: list[tuple[str, dict]] = []
-    for call in state().get("tool_calls", []):
-        name = call.get("name", "")
-        inp = call.get("input") or {}
-        if name.endswith("__run_tool") and isinstance(inp, dict):
-            args = inp.get("tool_args")
-            out.append((str(inp.get("tool_name", "")), args if isinstance(args, dict) else {}))
-        else:
-            out.append((name, inp if isinstance(inp, dict) else {}))
-    return out
-
-
 def _access_requests() -> list[dict]:
-    return [args for name, args in _invocations() if name.endswith("__create_access_request")]
+    return [args for name, args in tool_calls() if name.endswith("__create_access_request")]
 
 
 def test_skill_seeded_from_repo() -> None:
@@ -51,14 +36,14 @@ def test_skill_seeded_from_repo() -> None:
 def test_skill_loaded() -> None:
     loaded = [
         args
-        for name, args in _invocations()
+        for name, args in tool_calls()
         if name.endswith("__load_skill") and SKILL in json.dumps(args)
     ]
     assert loaded, f"agent never loaded the {SKILL} skill"
 
 
 def test_consulted_access_policy() -> None:
-    invoked = [name for name, _ in _invocations()]
+    invoked = [name for name, _ in tool_calls()]
     assert any(name.endswith("__get_access_policy") for name in invoked), (
         f"agent never consulted the access policy, so the read-write downgrade was a guess; invoked={invoked}"
     )

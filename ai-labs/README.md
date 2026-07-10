@@ -271,6 +271,10 @@ three tasks —
   updated in place (version advanced, not recreated), and ran the bundled script on both files, and
   that the submitted normalized rows match the recompute.
 
+`apps` exercises MCP App authoring with the built-in app tools and the synthetic `acme_it` MCP. It uses
+`share_backend = true` and includes `repo-docs-app`, `access-request-app`, `standup-notes-app`, and
+`keyboard-kanban-app`.
+
 ## Lifecycle: fresh backend over shared infra
 
 The harness does not run its own Tilt stack. It resolves a Dagger code-runtime engine (see the ladder
@@ -340,8 +344,9 @@ Each (env, task, provider, model) cell resolves to exactly one outcome:
 
 ## Run
 
-The harness is a single Rust binary, `archestra-bench`, with three subcommands: `benchmark` (run the
-eval), `analyze` (turn a finished run into a recommendations report), and `full` (do both).
+The harness is a single Rust binary, `archestra-bench`, with five subcommands: `benchmark` (run the
+benchmark), `analyze` (turn a finished run into a recommendations report), `full` (do both), `prepare`
+(render a run manifest for external analysis), and `dashboard` (serve a local read-only dashboard).
 
 ```bash
 cargo build --release            # target/release/archestra-bench
@@ -358,6 +363,10 @@ archestra-bench analyze --run-dir experiments/<id> --map kimi --reduce glm
 
 # both at once: a fresh run, then its analysis
 archestra-bench full --env basic --lanes kimi --map kimi --reduce glm
+
+# prepare or browse finished runs without LLM calls
+archestra-bench prepare --run-dir experiments/<id>
+archestra-bench dashboard --experiments-dir experiments
 ```
 
 `--env` and `--task` each accept one name or a comma-separated list (default: all). A **lane** is a

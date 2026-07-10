@@ -5,6 +5,8 @@ order: 7
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 ## Overview
 
 [**AI SDK**](https://ai-sdk.dev) \- an open-source toolkit from Vercel that simplifies building AI-driven applications: unified provider support (OpenAI, Claude, Hugging-Face, etc.), streaming, tools execution, error handling, and more. Out of the box it does _not_ enforce runtime controls to guard against data leakage, untrusted context influence, or malicious tool-calls. You can pair it with Archestra, which intercepts or sanitizes dangerous tool invocations and ensures that only trusted context influences model behavior.
@@ -83,13 +85,13 @@ docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
 
 Change the baseUrl to point to Archestra's proxy. For OpenAI, this is [`http://localhost:9000/v1/openai`](http://localhost:9000/v1/openai). For other providers, see [Supported LLM Providers](/docs/platform-supported-llm-providers).
 
-**Important for OpenAI**: Ensure your agent uses `/chat/completions` (not `/responses`, which Archestra doesn't support yet - [issue #720](https://github.com/archestra-ai/archestra/issues/720)). Append `.chat` to the OpenAI provider instance. See [AI SDK docs](https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models) for details.
+**For this example**: Append `.chat` to the OpenAI provider instance so the AI SDK uses `/chat/completions`. Archestra also supports OpenAI `/responses` requests. See [AI SDK docs](https://ai-sdk.dev/providers/ai-sdk-providers/openai#language-models) for details.
 
 ```ts
 const customOpenAI = createOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
   baseURL: 'http://localhost:9000/v1/openai', // 1. use Archestra URL with provider
-}).chat; // 2. Add .chat because Archestra supports Chat Completions API
+}).chat; // 2. Add .chat because this example uses Chat Completions
 
 // Make sure to add all messages from the AI SDK result to conversation history
 // This includes assistant messages with tool_calls and tool result messages

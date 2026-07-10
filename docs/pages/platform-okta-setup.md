@@ -7,6 +7,8 @@ order: 9
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 <!--
 Six top-level sections, mirroring the Entra page structure:
 1. Register Okta App for SSO

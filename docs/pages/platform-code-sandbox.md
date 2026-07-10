@@ -6,6 +6,8 @@ description: A private Linux container where an agent runs code during a chat
 lastUpdated: 2026-07-06
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 The code sandbox is a private Linux container where an agent runs code during a chat. It runs shell commands and Python, isolated from your own infrastructure — no host access, and no network beyond what the agent's [environment](./platform-environments) allows. Each conversation gets its own sandbox, created the first time the agent runs something.
 
 ![A chat where the agent runs a shell command in the sandbox with run_command and reports the result](/docs/automated_screenshots/platform-code-sandbox_run-command.webp)
@@ -52,7 +54,7 @@ Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 
 
 ## Enabling the Sandbox
 
-The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or `archestra.codeRuntime.enabled=false` in Helm values. A manual deployment needs two settings: `ARCHESTRA_CODE_RUNTIME_ENABLED=true` and a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. See [Deployment](./platform-deployment#code-sandbox) for the full list.
+The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm values — the second is what stops the managed Dagger engine pod from being deployed. A manual deployment needs a Dagger runner host in `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`. Without a reachable runner host, the feature stays off. `ARCHESTRA_CODE_RUNTIME_ENABLED` only controls whether local dev, quickstart, and Helm deploy the embedded Dagger engine. See [Deployment](./platform-deployment#code-sandbox) for the full list.
 
 Running a command needs the `sandbox:execute` permission. See [Access Control](./platform-access-control).
 

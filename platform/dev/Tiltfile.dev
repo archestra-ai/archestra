@@ -132,9 +132,17 @@ else:
     deps=['../.env', 'run-backend-dev.sh'],
   )
 
+  # Standardize Tilt local dev on Turbopack for the Next dev server. Left to
+  # itself, scripts/dev.mjs falls back to webpack on macOS arm64 (the
+  # @next/swc-darwin-arm64 IOAccelerator memory leak under Turbopack,
+  # vercel/next.js#92055). Set ARCHESTRA_DEV_BUNDLER=webpack in .env (or the
+  # shell) to opt back out.
+  dev_bundler = os.getenv('ARCHESTRA_DEV_BUNDLER', 'turbopack')
+
   # Frontend dev server - waits for backend to be ready
   frontend_serve_env = dict(frontend_env_vars)
   frontend_serve_env['PORT'] = frontend_port
+  frontend_serve_env['ARCHESTRA_DEV_BUNDLER'] = dev_bundler
   local_resource(
     dev_resource_name + '-frontend',
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; pnpm dev --filter @frontend & wait $!',
@@ -155,14 +163,15 @@ else:
   local_resource(
     dev_resource_name + '-frontend-int-tests',
     # Route through scripts/dev.mjs so the int-tests frontend gets the same
-    # platform-aware bundler choice as `pnpm dev`: Turbopack on Linux/CI, webpack
-    # on macOS arm64 (the unfixed @next/swc-darwin-arm64 memory bug, see the
-    # "//dev" comment in frontend/package.json). The script adds `-H 127.0.0.1`.
+    # bundler handling as `pnpm dev` (ARCHESTRA_DEV_BUNDLER validation plus the
+    # platform-aware fallback outside Tilt — see the "//dev" comment in
+    # frontend/package.json). The script adds `-H 127.0.0.1`.
     serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && node ./scripts/dev.mjs -p ' + frontend_int_tests_port + ' & wait $!',
     serve_cmd_bat='cd ..\\frontend && node .\\scripts\\dev.mjs -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],
     serve_env={
+      'ARCHESTRA_DEV_BUNDLER': dev_bundler,
       'NEXT_DIST_DIR': '.next-pw',
       'NEXT_PUBLIC_API_MOCKING': 'enabled',
       # Both must be pinned: the SSR path reads ARCHESTRA_INTERNAL_API_BASE_URL,

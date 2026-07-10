@@ -119,6 +119,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   cspOrigin: "author-declared",
   pinnedAt: null,
   icon: null,
+  requiresInput: false,
 };
 
 describe("ExternalAppCard", () => {
@@ -188,7 +189,7 @@ describe("ExternalAppCard", () => {
     render(<AppCard app={externalApp} />);
 
     const expectedRun =
-      "/apps/catalog/cat-1/run?install=srv-1&resource=ui%3A%2F%2Fpm%2Fboard.html";
+      "/a/catalog/cat-1?install=srv-1&resource=ui%3A%2F%2Fpm%2Fboard.html";
 
     const newTab = screen.getByRole("link", { name: /open in new tab/i });
     expect(newTab).toHaveAttribute("href", expectedRun);
@@ -197,6 +198,20 @@ describe("ExternalAppCard", () => {
     expect(
       screen.getByRole("link", { name: /manage mcp server/i }),
     ).toHaveAttribute("href", "/mcp/registry/cat-1");
+  });
+
+  it("hides 'Open in new tab' when the tool needs inputs (prompt-mode only)", () => {
+    render(<AppCard app={{ ...externalApp, requiresInput: true }} />);
+
+    // The standalone run page can't render a tool that needs inputs, so the
+    // card offers only the chat flow.
+    expect(
+      screen.queryByRole("link", { name: /open in new tab/i }),
+    ).not.toBeInTheDocument();
+    // The rest of the menu is unaffected.
+    expect(
+      screen.getByRole("link", { name: /manage mcp server/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows the server's registry icon, falling back to the generic glyph without one", () => {

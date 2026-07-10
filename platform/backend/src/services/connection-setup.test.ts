@@ -436,7 +436,7 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     const orgKey = await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic", scope: "org", name: "Org Anthropic" },
     );
     verdictByApiKey({ "exhausted-key": "exhausted" });
 
@@ -450,7 +450,11 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
       },
     );
 
-    expect(creditWarning).toEqual({ kind: "insufficient_balance" });
+    // The warning names the exhausted key so the user knows which one to fix.
+    expect(creditWarning).toEqual({
+      kind: "insufficient_balance",
+      keyName: "Org Anthropic",
+    });
     // Setup is never blocked — the resolved key is still bound.
     expect(
       await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
@@ -470,7 +474,7 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic", scope: "org", name: "Org Anthropic" },
     );
     verdictByApiKey({ "inconclusive-key": "inconclusive" });
 
@@ -482,7 +486,10 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
       provider: "anthropic",
     });
 
-    expect(creditWarning).toEqual({ kind: "unverified" });
+    expect(creditWarning).toEqual({
+      kind: "unverified",
+      keyName: "Org Anthropic",
+    });
   });
 
   test("prefers 'insufficient_balance' over 'unverified' when both occur", async ({
@@ -498,12 +505,17 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "exhausted-key" } })).id,
-      { provider: "anthropic", scope: "personal", userId: user.id },
+      {
+        provider: "anthropic",
+        scope: "personal",
+        userId: user.id,
+        name: "Personal Anthropic",
+      },
     );
     await makeLlmProviderApiKey(
       org.id,
       (await makeSecret({ secret: { apiKey: "inconclusive-key" } })).id,
-      { provider: "anthropic", scope: "org" },
+      { provider: "anthropic", scope: "org", name: "Org Anthropic" },
     );
     verdictByApiKey({
       "exhausted-key": "exhausted",
@@ -518,7 +530,11 @@ describe("ensureConnectionVirtualKey — Anthropic credit failover", () => {
       provider: "anthropic",
     });
 
-    expect(creditWarning).toEqual({ kind: "insufficient_balance" });
+    // Names the definitively exhausted key, not the merely unverifiable one.
+    expect(creditWarning).toEqual({
+      kind: "insufficient_balance",
+      keyName: "Personal Anthropic",
+    });
   });
 
   test("does not credit-probe non-Anthropic providers", async ({

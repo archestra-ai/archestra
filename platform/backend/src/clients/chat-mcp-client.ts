@@ -187,10 +187,15 @@ function getToolCacheKey(
   agentId: string,
   userId: string,
   isolationKey?: string,
+  delegationChain?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
   if (isolationKey) parts.push(isolationKey);
+  // One agent can run at several depths of a delegation tree, concurrently and
+  // under one isolation key. Each depth needs its own entry: the tools close
+  // over the chain, which the executor reads to detect delegation cycles.
+  if (delegationChain) parts.push(delegationChain);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -205,7 +210,7 @@ export const __test = {
   },
   async clearToolCache(cacheKey?: string) {
     if (cacheKey) {
-      toolCache.delete(`${CacheKey.ChatMcpTools}-${cacheKey}`);
+      deleteToolCacheScope(`${CacheKey.ChatMcpTools}-${cacheKey}`);
     } else {
       toolCache.clear();
     }
@@ -453,8 +458,7 @@ export function closeChatMcpClient(
   }
 
   // Also clear tool cache for this conversation/execution
-  const toolCacheKey = getToolCacheKey(agentId, userId, isolationKey);
-  toolCache.delete(toolCacheKey);
+  deleteToolCacheScope(getToolCacheKey(agentId, userId, isolationKey));
 }
 
 /**
@@ -819,7 +823,12 @@ export async function getChatMcpTools({
   repeatTracker?: ToolCallRepeatTracker;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
-  const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
+  const toolCacheKey = getToolCacheKey(
+    agentId,
+    userId,
+    scopeKey,
+    delegationChain,
+  );
   const shouldUseToolCache = !abortSignal;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
@@ -1228,4 +1237,16 @@ async function filterToolsByEnabledIds(
   );
 
   return filteredTools;
+}
+
+/**
+ * Deletes a scope's tool-cache entry and every per-delegation-chain variant of
+ * it. One agent can run at several depths of a delegation tree under a single
+ * isolation key, so a scope owns one entry per chain, all sharing this prefix.
+ */
+function deleteToolCacheScope(toolCacheKey: string): void {
+  toolCache.delete(toolCacheKey);
+  // The separator keeps the match on a key boundary: isolation key `exec-1`
+  // must not reclaim `exec-10`'s entries.
+  toolCache.deleteByPrefix(`${toolCacheKey}:`);
 }

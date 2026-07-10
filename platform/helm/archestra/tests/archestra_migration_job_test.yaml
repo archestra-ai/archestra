@@ -119,6 +119,50 @@ tests:
             secretRef:
               name: migration-job-env
 
+  - it: sets a PostgreSQL lock_timeout for the migration session by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGOPTIONS
+            value: "-c lock_timeout=5s"
+
+  - it: supports a custom migration lock_timeout
+    set:
+      archestra.migrationJob.lockTimeout: 2500ms
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGOPTIONS
+            value: "-c lock_timeout=2500ms"
+
+  - it: omits the lock_timeout when disabled
+    set:
+      archestra.migrationJob.lockTimeout: null
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGOPTIONS
+          any: true
+
+  - it: defers to operator-supplied PGOPTIONS over the lock_timeout default
+    set:
+      archestra.migrationJob.env:
+        PGOPTIONS: "-c lock_timeout=30s -c statement_timeout=10min"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGOPTIONS
+            value: "-c lock_timeout=30s -c statement_timeout=10min"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGOPTIONS
+            value: "-c lock_timeout=5s"
+
   - it: uses only the vault volume mount and not shared diagnostics mounts
     set:
       archestra.diagnostics.enabled: true

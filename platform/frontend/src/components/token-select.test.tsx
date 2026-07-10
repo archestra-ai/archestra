@@ -54,6 +54,31 @@ vi.mock("@/components/ui/select", () => ({
 }));
 
 describe("TokenSelect", () => {
+  it("defaults to resolve-at-call-time even when static credentials exist", () => {
+    useMcpServersGroupedByCatalogMock.mockReturnValue({
+      "catalog-1": [
+        {
+          id: "user-credential",
+          ownerEmail: "member@example.com",
+          scope: "personal",
+          teamDetails: null,
+        },
+      ],
+    });
+    const onValueChange = vi.fn();
+
+    render(
+      <TokenSelect
+        value={null}
+        onValueChange={onValueChange}
+        catalogId="catalog-1"
+        shouldSetDefaultValue={true}
+      />,
+    );
+
+    expect(onValueChange).toHaveBeenCalledWith(DYNAMIC_CREDENTIAL_VALUE);
+  });
+
   it("renders separate team, organization, and user static credential groups by scope", () => {
     const groupedCredentials = {
       "catalog-1": [

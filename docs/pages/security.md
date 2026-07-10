@@ -5,6 +5,8 @@ order: 4
 description: Security policies and contact information for Archestra.ai
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 For all security-related matters, please email: **security@archestra.ai**
 
 ## Bug Bounty Program

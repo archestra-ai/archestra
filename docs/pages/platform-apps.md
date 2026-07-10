@@ -6,6 +6,8 @@ description: User-authored MCP Apps — sandboxed HTML interfaces with their own
 lastUpdated: 2026-07-03
 ---
 
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
 MCP Apps are interactive interfaces authored inside Archestra. An app is an HTML document that runs in a hardened sandbox iframe and talks to the host only through tools. Apps are first-class, scoped entities — created from chat or the `/apps` page, versioned on every edit, runnable standalone or inside a conversation, and governed by the same personal/team/org RBAC as agents and skills.
 
 Archestra already hosts and renders MCP Apps served by external MCP servers. This feature adds the authoring side: apps you own, backed by a data store and your own assignable tools, deliberately decoupled from agents.
@@ -22,7 +24,7 @@ Authoring is a staged flow — each tool's result points at the next step:
 
 Editing the HTML forks a new immutable version, and the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
 
-Run an app full-page at `/a/:id` (no chat chrome, no sidebar), author it (preview, model context, versions, name and description) at `/apps/:id`, or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
+Run or author an app at `/a/:id` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
 
 The `/apps` gallery lists everything the viewer can reach as one grid: apps you own and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). A single server may expose several UIs, so each `ui://` resource is its own card, titled `<MCP server> / <tool>` (the server's display name, e.g. *Archestra PM / show_board*). An owned card opens in a new chat, with **Open in new tab** and **Delete** in its overflow menu; an external card opens its standalone runtime, with **Open in new tab** and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 

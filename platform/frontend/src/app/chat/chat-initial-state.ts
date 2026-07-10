@@ -205,10 +205,17 @@ export function shouldResetInitialChatState(params: {
  * or the empty home flashes before the conversation view mounts.
  *
  * Mirrors the auto-send effect's trigger conditions. `autoSendTriggered` (the
- * effect's ref) keeps it true across the frame where `user_prompt` has been
- * stripped from the URL but the create mutation has not yet reported pending. A
- * files-only handoff whose stashed files were lost (e.g. a hard reload) has no
- * prompt and no pending files, so this stays false and the composer shows.
+ * effect's ref, set synchronously before the create fires) keeps it true from
+ * the frame where `user_prompt` is stripped from the URL through the whole
+ * create request. A files-only handoff whose stashed files were lost (e.g. a
+ * hard reload) has no prompt and no pending files, so this stays false and the
+ * composer shows.
+ *
+ * Deliberately NOT keyed on the create mutation being pending: an interactive
+ * submit from the splash also runs that mutation, and the splash must stay on
+ * screen during it — the composer keeps focus and is the "old" half of the
+ * shared-element morph into the conversation view. Only true handoffs (which
+ * always set one of the signals below) suppress the splash.
  */
 export function isAutoSendHandoffInProgress(params: {
   conversationId?: string;
@@ -216,7 +223,6 @@ export function isAutoSendHandoffInProgress(params: {
   hasAttachmentsMarker: boolean;
   hasPendingHandoffFiles: boolean;
   autoSendTriggered: boolean;
-  isCreatingConversation: boolean;
 }): boolean {
   if (params.conversationId) {
     return false;
@@ -225,7 +231,6 @@ export function isAutoSendHandoffInProgress(params: {
   return (
     Boolean(params.initialUserPrompt) ||
     (params.hasAttachmentsMarker && params.hasPendingHandoffFiles) ||
-    params.autoSendTriggered ||
-    params.isCreatingConversation
+    params.autoSendTriggered
   );
 }

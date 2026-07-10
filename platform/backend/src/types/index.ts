@@ -16,6 +16,7 @@ export * from "./app";
 export * from "./app-diagnostics";
 export * from "./audit-log";
 export * from "./autonomy-policies";
+export * from "./catalog-team-level";
 export * from "./chat";
 export * from "./chat-active-run";
 export * from "./chatops";

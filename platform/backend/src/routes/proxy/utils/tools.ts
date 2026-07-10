@@ -48,17 +48,20 @@ export const persistTools = async (
   // tools, or are agent delegation tools (agent__*). Also deduplicate by tool name
   // to avoid constraint violations.
   //
-  // Built-ins are matched with `archestraMcpBranding.isToolName`, which recognizes
-  // BOTH the default `archestra__` prefix and the org's branded prefix
-  // (e.g. `archestra_staging__`). A client (including chat routed through this proxy)
-  // can hand us a built-in under the off-brand prefix; matching only the current
-  // brand would auto-discover that twin, and seeding would later promote it into the
-  // catalog as a duplicate built-in.
+  // Built-ins are matched with `archestraMcpBranding.isLikelyToolName`, the loose
+  // discovery-only recognizer. It recognizes BOTH the default `archestra__` prefix
+  // and the org's branded prefix (e.g. `archestra_staging__`), AND the same
+  // built-in when a client decorates it with its own label between the server name
+  // and the short name (e.g. `archestra_staging__my_mcp_gateway_1234567__run_tool`).
+  // A client (including chat routed through this proxy) can hand us a built-in under
+  // any of these shapes; matching only the strict prefix would auto-discover the
+  // twin, and seeding would later promote it into the catalog as a duplicate
+  // built-in.
   const seenToolNames = new Set<string>();
   const toolsToAutoDiscover = tools.filter(({ toolName }) => {
     if (
       existingToolNamesSet.has(toolName) ||
-      archestraMcpBranding.isToolName(toolName) ||
+      archestraMcpBranding.isLikelyToolName(toolName) ||
       isAgentTool(toolName) ||
       seenToolNames.has(toolName)
     ) {
@@ -77,7 +80,7 @@ export const persistTools = async (
         existingToolNamesSet.has(t.toolName),
       ).length,
       skippedArchestraTools: tools.filter((t) =>
-        archestraMcpBranding.isToolName(t.toolName),
+        archestraMcpBranding.isLikelyToolName(t.toolName),
       ).length,
       skippedAgentTools: tools.filter((t) => isAgentTool(t.toolName)).length,
     },

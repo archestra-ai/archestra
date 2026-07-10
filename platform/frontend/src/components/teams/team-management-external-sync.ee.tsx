@@ -4,6 +4,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   DocsPage,
+  E2eTestId,
   getDocsUrl,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -339,7 +340,10 @@ function ExternalGroupRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border p-3">
+    <div
+      className="flex items-center justify-between rounded-lg border p-3"
+      data-testid={E2eTestId.TeamExternalGroupMappingRow}
+    >
       <div className="flex-1 min-w-0">
         <p className="text-sm font-mono truncate">{group.groupIdentifier}</p>
         <p className="text-xs text-muted-foreground">

@@ -75,7 +75,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
    * The id of the tool row the gateway resolved to execute. When supplied, the
    * policy is evaluated against this exact row (instead of a name lookup) and
    * the id rides along on the structured block so the chat "Edit policy" modal
-   * can resolve the tool even when it has no agent_tools assignment (All mode).
+   * can resolve the tool even when it has no agent_tools assignment (Auto mode).
    */
   resolvedToolId?: string;
 }): Promise<PolicyBlockResult | null> {

@@ -592,7 +592,10 @@ class TeamModel {
 
     const [teams, totalResult] = await Promise.all([
       db
-        .select(getTableColumns(schema.teamsTable))
+        .select({
+          ...getTableColumns(schema.teamsTable),
+          myRole: schema.teamMembersTable.role,
+        })
         .from(schema.teamMembersTable)
         .innerJoin(
           schema.teamsTable,

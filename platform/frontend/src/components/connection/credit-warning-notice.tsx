@@ -1,6 +1,6 @@
 import {
-  ANTHROPIC_BILLING_BLOCK_BODY,
-  ANTHROPIC_BILLING_BLOCK_TITLE,
+  PROVIDER_BILLING_BLOCK_BODY,
+  PROVIDER_BILLING_BLOCK_TITLE,
 } from "@archestra/shared";
 import { AlertTriangle, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,11 +9,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
  * Signal returned by the connection-setup endpoints when the bound Anthropic key
  * couldn't be confirmed to have a usable balance. Mirrors the backend
  * `creditWarning`. `insufficient_balance` is a definitive block (out of credit or
- * over a usage limit); `unverified` is a transient check failure.
+ * over a usage limit); `unverified` is a transient check failure. `keyName` names
+ * the provider API key the verdict is about.
  */
 export type ConnectionCreditWarning =
-  | { kind: "insufficient_balance" }
-  | { kind: "unverified" };
+  | { kind: "insufficient_balance"; keyName: string }
+  | { kind: "unverified"; keyName: string };
 
 /**
  * Renders the connection-page warning when the Anthropic key a setup bound has no
@@ -32,8 +33,10 @@ export function CreditWarningNotice({
     return (
       <Alert variant="warning" data-testid="connection-credit-warning">
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>{ANTHROPIC_BILLING_BLOCK_TITLE}</AlertTitle>
-        <AlertDescription>{ANTHROPIC_BILLING_BLOCK_BODY}</AlertDescription>
+        <AlertTitle>{PROVIDER_BILLING_BLOCK_TITLE}</AlertTitle>
+        <AlertDescription>
+          {`Provider API key name: ${warning.keyName}. ${PROVIDER_BILLING_BLOCK_BODY}`}
+        </AlertDescription>
       </Alert>
     );
   }
@@ -43,9 +46,7 @@ export function CreditWarningNotice({
       <Info className="h-4 w-4" />
       <AlertTitle>Couldn&apos;t verify the key&apos;s balance</AlertTitle>
       <AlertDescription>
-        We couldn&apos;t confirm the Anthropic key&apos;s remaining balance
-        right now (a temporary error). Setup still works; if requests fail,
-        re-check the key or try again in a moment.
+        {`Provider API key name: ${warning.keyName}. We couldn't confirm its remaining balance right now (a temporary error). Setup still works; if requests fail, re-check the key or try again in a moment.`}
       </AlertDescription>
     </Alert>
   );

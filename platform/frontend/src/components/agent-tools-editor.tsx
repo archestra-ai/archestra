@@ -631,13 +631,13 @@ const AgentToolsEditorContent = forwardRef<
         const tools = (toolQuery?.data as CatalogTool[] | undefined) ?? [];
         const allToolIds = new Set(tools.map((t) => t.id));
 
-        // Get default credential
-        const credentials = allCredentials?.[catalogId] ?? [];
-        const defaultCredential = credentials[0]?.id ?? null;
-
         registerPendingChanges(catalogId, {
           selectedToolIds: allToolIds,
-          credentialSourceId: pending?.credentialSourceId ?? defaultCredential,
+          // Newly assigned tools default to resolve-at-call-time, which follows
+          // the server's default credential setting; pinning a static
+          // credential is an explicit per-assignment choice.
+          credentialSourceId:
+            pending?.credentialSourceId ?? DYNAMIC_CREDENTIAL_VALUE,
           catalogItem: catalog,
           selectAll: true,
           isActive: true,
@@ -648,7 +648,6 @@ const AgentToolsEditorContent = forwardRef<
       catalogItems,
       assignedToolsByCatalog,
       toolCountQueries,
-      allCredentials,
       registerPendingChanges,
     ],
   );
@@ -912,12 +911,13 @@ function McpServerPill({
   const mcpServers = credentials?.[catalogItem.id] ?? [];
   const prefersEnterpriseManaged = catalogItem.enterpriseManagedConfig != null;
 
+  // Static assignments show their pinned connection; everything else —
+  // dynamic, enterprise-managed, or a brand-new assignment — defaults to
+  // resolve-at-call-time.
   const currentCredentialSource =
-    assignedTools[0]?.credentialResolutionMode === "dynamic"
-      ? DYNAMIC_CREDENTIAL_VALUE
-      : assignedTools[0]?.credentialResolutionMode === "enterprise_managed"
-        ? DYNAMIC_CREDENTIAL_VALUE
-        : (assignedTools[0]?.mcpServerId ?? mcpServers[0]?.id ?? null);
+    assignedTools[0]?.credentialResolutionMode === "static"
+      ? (assignedTools[0].mcpServerId ?? DYNAMIC_CREDENTIAL_VALUE)
+      : DYNAMIC_CREDENTIAL_VALUE;
 
   // Currently assigned tool IDs - use sorted string for stable comparison
   const currentAssignedToolIds = useMemo(
@@ -955,6 +955,12 @@ function McpServerPill({
   }, [currentAssignedToolIdsKey]);
 
   useEffect(() => {
+    // Wait until credentials load so a valid static pin isn't reset to
+    // dynamic while the list is still empty.
+    if (!credentials) {
+      return;
+    }
+
     if (selectedCredential === DYNAMIC_CREDENTIAL_VALUE) {
       return;
     }
@@ -966,15 +972,9 @@ function McpServerPill({
       return;
     }
 
-    if (prefersEnterpriseManaged) {
-      setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
-      return;
-    }
-
-    if (mcpServers.length > 0) {
-      setSelectedCredential(mcpServers[0].id);
-    }
-  }, [mcpServers, prefersEnterpriseManaged, selectedCredential]);
+    // Unset or stale selection — fall back to resolve-at-call-time.
+    setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
+  }, [credentials, mcpServers, selectedCredential]);
 
   // Auto-select all tools when selectAll flag is set and tools finish loading.
   // Use a ref so auto-select only fires once (at mount) and doesn't fight user deselections.
@@ -1064,8 +1064,9 @@ function McpServerPill({
         <div className="p-4 border-b space-y-2 shrink-0">
           <Label className="text-sm font-medium">Connect on behalf of</Label>
           <p className="text-xs text-muted-foreground">
-            Choose whether this tool uses a fixed server connection or resolves
-            credentials for the current caller at runtime.
+            By default, credentials resolve at call time per the server's
+            default credential setting. Pin a specific connection to always use
+            it for these tools instead.
           </p>
           <TokenSelect
             catalogId={catalogItem.id}

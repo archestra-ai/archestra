@@ -12,16 +12,11 @@ use serde::Deserialize;
 
 use archestra_bench_core::{Outcome, RolloutId, TriageRecord};
 
-use crate::load::{
-    ReduceSource, Rollout, RubricKey, RubricStatus, Run, RunListEntry, mean_grade,
-};
+use crate::load::{ReduceSource, Rollout, RubricKey, RubricStatus, Run, RunListEntry, mean_grade};
 
 /// Everything outside `[A-Za-z0-9._-]` is percent-encoded, including `/` — rollout ids travel as a
 /// single opaque path segment.
-const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'_')
-    .remove(b'.');
+const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.');
 
 const ALL_OUTCOMES: [Outcome; 5] = [
     Outcome::Passed,
@@ -147,10 +142,7 @@ pub fn build_index(experiments_dir: &Path, entries: Vec<RunListEntry>) -> IndexT
                 lanes: e.lanes.join(", "),
                 outcomes,
                 pass_rate: fmt_rate(e.pass_rate),
-                pass_pct: e
-                    .pass_rate
-                    .map(|r| format!("{:.0}", r * 100.0))
-                    .unwrap_or_default(),
+                pass_pct: e.pass_rate.map(|r| format!("{:.0}", r * 100.0)).unwrap_or_default(),
                 rubric_badge: RubricBadge::from_status(e.rubric_status),
                 reports: e.report_sources.iter().copied().map(ReportChip::of).collect(),
                 id: e.id,
@@ -189,10 +181,7 @@ impl GridFilters {
                 lane: query.get("lane").cloned().unwrap_or_default(),
                 outcome: query.get("outcome").cloned().unwrap_or_default(),
                 mingrade: query.get("mingrade").cloned().unwrap_or_default(),
-                rhonly: matches!(
-                    query.get("rhonly").map(String::as_str),
-                    Some("true") | Some("1")
-                ),
+                rhonly: matches!(query.get("rhonly").map(String::as_str), Some("true") | Some("1")),
             },
         }
     }
@@ -667,10 +656,7 @@ fn render_trajectory(rollout_dir: &Path) -> (String, String) {
         ),
         Ok(_) => match std::fs::read_to_string(&path) {
             Ok(md) => (render_markdown(&md), String::new()),
-            Err(err) => (
-                String::new(),
-                format!("failed to read {}: {err}", path.display()),
-            ),
+            Err(err) => (String::new(), format!("failed to read {}: {err}", path.display())),
         },
     }
 }
@@ -687,9 +673,7 @@ fn render_markdown(md: &str) -> String {
     // its own start so dropping an unsafe link never swallows a safe nested image's end tag.
     let mut dropped: Vec<bool> = Vec::new();
     let parser = Parser::new_ext(md, options).filter_map(|event| match event {
-        Event::Html(raw) | Event::InlineHtml(raw) => {
-            Some(Event::Text(CowStr::from(raw.into_string())))
-        }
+        Event::Html(raw) | Event::InlineHtml(raw) => Some(Event::Text(CowStr::from(raw.into_string()))),
         Event::Start(Tag::Link { ref dest_url, .. }) => {
             let drop = !is_safe_link(dest_url);
             dropped.push(drop);
@@ -700,9 +684,7 @@ fn render_markdown(md: &str) -> String {
             dropped.push(drop);
             (!drop).then_some(event)
         }
-        Event::End(TagEnd::Link | TagEnd::Image) => {
-            (!dropped.pop().unwrap_or(false)).then_some(event)
-        }
+        Event::End(TagEnd::Link | TagEnd::Image) => (!dropped.pop().unwrap_or(false)).then_some(event),
         other => Some(other),
     });
     let mut out = String::with_capacity(md.len() * 2);
@@ -761,7 +743,10 @@ mod tests {
 
     #[test]
     fn remote_and_protocol_relative_images_are_stripped_to_alt_text() {
-        for md in ["![beacon](https://evil.example/x.png)", "![beacon](//evil.example/x.png)"] {
+        for md in [
+            "![beacon](https://evil.example/x.png)",
+            "![beacon](//evil.example/x.png)",
+        ] {
             let html = render_markdown(md);
             assert!(!html.contains("<img"), "{html}");
             assert!(html.contains("beacon"), "{html}");

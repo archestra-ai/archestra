@@ -21,8 +21,8 @@ use tower_http::trace::TraceLayer;
 
 use crate::load::{Run, load_run};
 use crate::views::{
-    GridFilters, GridTemplate, IndexTemplate, RolloutTemplate, RunTemplate, build_grid,
-    build_index, build_rollout, build_run,
+    GridFilters, GridTemplate, IndexTemplate, RolloutTemplate, RunTemplate, build_grid, build_index, build_rollout,
+    build_run,
 };
 
 #[derive(Debug, Clone)]
@@ -50,11 +50,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg).into_response(),
             AppError::Internal(err) => {
                 tracing::error!("handler error: {err:#}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("internal error: {err}"),
-                )
-                    .into_response()
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("internal error: {err}")).into_response()
             }
         }
     }
@@ -119,8 +115,7 @@ pub fn default_experiments_dir() -> PathBuf {
 }
 
 fn load_run_or_404(experiments_dir: &std::path::Path, run_id: &str) -> Result<Run, AppError> {
-    load_run(experiments_dir, run_id)?
-        .ok_or_else(|| AppError::NotFound(format!("no such run: {run_id}")))
+    load_run(experiments_dir, run_id)?.ok_or_else(|| AppError::NotFound(format!("no such run: {run_id}")))
 }
 
 #[tracing::instrument(skip(state))]
@@ -131,10 +126,7 @@ async fn index(State(state): State<AppState>) -> Result<Html<String>, AppError> 
 }
 
 #[tracing::instrument(skip(state))]
-async fn run_page(
-    State(state): State<AppState>,
-    AxumPath(run_id): AxumPath<String>,
-) -> Result<Html<String>, AppError> {
+async fn run_page(State(state): State<AppState>, AxumPath(run_id): AxumPath<String>) -> Result<Html<String>, AppError> {
     let run = load_run_or_404(&state.experiments_dir, &run_id)?;
     let grid = build_grid(&run, &GridFilters::default());
     let grid_html = GridTemplate { grid }.render()?;

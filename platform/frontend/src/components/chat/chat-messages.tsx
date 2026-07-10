@@ -81,6 +81,7 @@ import {
   getMessageFeedback,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
+import { chatOpsAuthorLabel } from "@/lib/chat/chatops-origin";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
@@ -957,8 +958,21 @@ export function ChatMessages({
 
                         // Use editable component for user messages
                         if (message.role === "user") {
+                          const authorLabel =
+                            message.parts?.findIndex(
+                              (p) => p.type === "text",
+                            ) === i
+                              ? chatOpsAuthorLabel(message.metadata)
+                              : null;
                           return (
                             <Fragment key={partKey}>
+                              {authorLabel && (
+                                <div className="mb-1 flex justify-end">
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {authorLabel}
+                                  </span>
+                                </div>
+                              )}
                               <EditableUserMessage
                                 messageId={message.id}
                                 partIndex={i}

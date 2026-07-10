@@ -72,6 +72,7 @@ import {
   getConversationDisplayTitle,
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
+import { chatOpsOriginLabel } from "@/lib/chat/chatops-origin";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import type { Once } from "@/lib/hooks/use-once";
@@ -454,6 +455,11 @@ export function ChatSidebarSection({
                   className="ml-1 h-2 w-2 shrink-0 rounded-full bg-primary"
                 />
               ) : null}
+              {chatOpsOriginLabel(conv.origin) && (
+                <span className="ml-1 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {chatOpsOriginLabel(conv.origin)}
+                </span>
+              )}
               {conv.projectName && (
                 <span className="ml-1 flex max-w-24 shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                   {conv.projectIcon ? (

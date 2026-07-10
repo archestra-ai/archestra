@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { TypingText } from "@/components/ui/typing-text";
 import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
+import { chatOpsOriginLabel } from "@/lib/chat/chatops-origin";
 import { useProject } from "@/lib/projects/projects.query";
 import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
 import { cn } from "@/lib/utils";
@@ -134,6 +135,12 @@ export function ConversationHeader({
                   this chat was opened from a schedule's run. */}
               {scheduleTriggerId && (
                 <ScheduledTaskPrefix triggerId={scheduleTriggerId} />
+              )}
+              {/* Where a cross-interface chat started (Slack / Teams / Telegram) */}
+              {chatOpsOriginLabel(conversation.origin) && (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {chatOpsOriginLabel(conversation.origin)}
+                </span>
               )}
               {/* Skip TruncatedTooltip while the title animates: its resize
                   measurement re-renders on every TypingText tick, which loops

@@ -1,6 +1,7 @@
 /** Minimum shape needed to collapse a project's chat list. */
 export type CollapsibleChat = {
-  origin: "user" | "schedule_trigger";
+  /** Conversation origin; only `schedule_trigger` is special here. */
+  origin: string;
   lastMessageAt: string;
   scheduleTriggerId: string | null;
 };

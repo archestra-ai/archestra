@@ -78935,7 +78935,8 @@
                         "type": "string",
                         "enum": [
                           "user",
-                          "schedule_trigger"
+                          "schedule_trigger",
+                          "app_open"
                         ]
                       },
                       "pinnedAt": {
@@ -79700,7 +79701,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -80436,7 +80438,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -81213,7 +81216,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -83726,7 +83730,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -85105,7 +85110,8 @@
                           "type": "string",
                           "enum": [
                             "user",
-                            "schedule_trigger"
+                            "schedule_trigger",
+                            "app_open"
                           ]
                         },
                         "pinnedAt": {
@@ -86797,7 +86803,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -87557,7 +87564,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -88309,7 +88317,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -89071,7 +89080,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {
@@ -224154,7 +224164,8 @@
                         "type": "string",
                         "enum": [
                           "user",
-                          "schedule_trigger"
+                          "schedule_trigger",
+                          "app_open"
                         ]
                       },
                       "lastMessageAt": {
@@ -228993,7 +229004,8 @@
                       "type": "string",
                       "enum": [
                         "user",
-                        "schedule_trigger"
+                        "schedule_trigger",
+                        "app_open"
                       ]
                     },
                     "pinnedAt": {

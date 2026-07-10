@@ -289,8 +289,9 @@ describe("GET /api/apps", () => {
       source: "external",
       catalogId: catalog.id,
       scope: "org",
-      // "<server> / <tool>" title, tool description as subtitle.
-      name: "Get Time / get-time",
+      // A single-UI-tool server titles as just the server name (no "/ <tool>"
+      // suffix), tool description as subtitle.
+      name: "Get Time",
       description: "Tells the current time",
       resourceUri: "ui://get-time/app.html",
       executionModel: "server-scoped",
@@ -418,11 +419,50 @@ describe("GET /api/apps", () => {
     const external = items.filter(
       (i) => i.source === "external" && i.catalogId === catalog.id,
     );
-    // Each tool is its own card, titled "<server> / <tool>".
+    // Each tool is its own card; with several UI tools on one server the
+    // titles carry the "/ <tool>" suffix to disambiguate.
     expect(external.map((i) => i.name).sort()).toEqual([
       "Archestra PM / show_backlog",
       "Archestra PM / show_board",
     ]);
+  });
+
+  test("a search matching one of a multi-tool server's tools keeps the suffixed title", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0&search=show_board",
+    });
+    const items = res.json().data as Array<Record<string, unknown>>;
+    const external = items.filter(
+      (i) => i.source === "external" && i.catalogId === catalog.id,
+    );
+    // The search narrowed the server's cards down to one, but the server still
+    // exposes two UI tools — the surviving card must not be retitled as if the
+    // server were single-tool.
+    expect(external.map((i) => i.name)).toEqual(["Archestra PM / show_board"]);
   });
 
   test("excludes catalogs without a ui:// tool from the unified listing", async ({

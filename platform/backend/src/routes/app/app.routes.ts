@@ -63,6 +63,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { externalAppLabel } from "@/utils/external-app-label";
 
 // REST bodies extend the shared create/update schemas with team assignments,
 // which only the REST surface needs for team-scoped apps.
@@ -187,9 +188,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogId: catalogApp.catalogId,
           mcpServerId: catalogApp.mcpServerId,
           scope: catalogApp.scope,
-          // "Server / Tool" as the title (short tool name, never the slug
-          // prefix); the tool's own description as the subtitle.
-          name: `${catalogApp.serverName} / ${catalogApp.toolName}`,
+          // The server name as the title, suffixed with "/ <tool>" (short
+          // tool name, never the slug prefix) only when the server exposes
+          // several UI tools; the tool's own description as the subtitle.
+          name: externalAppLabel(catalogApp),
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
           // The server's registry icon (emoji or data URL) so the card can

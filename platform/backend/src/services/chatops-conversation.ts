@@ -12,6 +12,7 @@
  */
 import type { ChatErrorResponse } from "@archestra/shared";
 import type { UIMessage } from "ai";
+import logger from "@/logging";
 import {
   AgentModel,
   ChatOpsThreadConversationModel,
@@ -126,12 +127,21 @@ export async function resolveOrCreateThreadConversation(params: {
     origin: chatOpsOrigin(provider),
   });
 
-  const { mapping, created: won } =
-    await ChatOpsThreadConversationModel.createIfAbsent({
+  let casResult: Awaited<
+    ReturnType<typeof ChatOpsThreadConversationModel.createIfAbsent>
+  >;
+  try {
+    casResult = await ChatOpsThreadConversationModel.createIfAbsent({
       bindingId,
       threadId: effectiveThreadId,
       conversationId: created.id,
     });
+  } catch (error) {
+    // Never strand the just-created conversation without a mapping.
+    await ConversationModel.delete(created.id, senderUserId, organizationId);
+    throw error;
+  }
+  const { mapping, created: won } = casResult;
   if (won) {
     return { mapping, conversation: created, senderIsOwner: true };
   }
@@ -212,11 +222,21 @@ export async function ingestProviderDelta(params: {
   }
 
   const newestTs = sorted[sorted.length - 1].providerTs;
-  await ChatOpsThreadConversationModel.advanceLastSyncedProviderTs({
-    id: mapping.id,
-    expectedTs: mapping.lastSyncedProviderTs,
-    newTs: newestTs,
-  });
+  const advanced =
+    await ChatOpsThreadConversationModel.advanceLastSyncedProviderTs({
+      id: mapping.id,
+      expectedTs: mapping.lastSyncedProviderTs,
+      newTs: newestTs,
+    });
+  if (!advanced) {
+    // A stale cursor never double-ingests (providerMessageId dedupes above);
+    // it only means the next turn re-scans older entries. Log it so a
+    // persistently failing CAS is visible.
+    logger.warn(
+      { mappingId: mapping.id, newestTs },
+      "[ChatOpsConversation] provider cursor CAS lost; relying on providerMessageId dedupe",
+    );
+  }
 }
 
 /**

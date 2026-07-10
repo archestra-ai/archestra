@@ -98,23 +98,6 @@ class ChatOpsThreadConversationModel {
 
     return result.length > 0;
   }
-
-  static async findByConversationId(
-    conversationId: string,
-  ): Promise<ChatOpsThreadConversation | null> {
-    const [mapping] = await db
-      .select()
-      .from(schema.chatopsThreadConversationsTable)
-      .where(
-        eq(
-          schema.chatopsThreadConversationsTable.conversationId,
-          conversationId,
-        ),
-      )
-      .limit(1);
-
-    return (mapping as ChatOpsThreadConversation) ?? null;
-  }
 }
 
 export default ChatOpsThreadConversationModel;

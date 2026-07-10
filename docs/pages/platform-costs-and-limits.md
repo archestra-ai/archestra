@@ -99,7 +99,7 @@ Compression is skipped when:
 - TOON is disabled
 - a response has no tool results
 - the TOON version would not save tokens
-- the compression engine is unavailable (`addon_unavailable`) — an infrastructure failure; the request proceeds with uncompressed tool results
+- the compression engine is unavailable (reported as `addon_unavailable`)
 
 Archestra records before/after token counts and savings when compression is applied, so those savings appear in logs and aggregate cost reporting.
 

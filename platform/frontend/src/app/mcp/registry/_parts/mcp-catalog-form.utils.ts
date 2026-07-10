@@ -9,6 +9,83 @@ import {
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 
+/**
+ * Parses the raw text entered into the "Arguments" textarea into an array
+ * of individual argument strings.
+ *
+ * Historically the textarea only supported one argument per line, but many
+ * MCP catalogs display their `args` as a JSON array (as found in a typical
+ * `mcpServers` config block), so copy-pasting one of those directly used to
+ * produce a single, malformed "argument" containing the whole JSON snippet.
+ *
+ * This now transparently supports:
+ *  - Plain one-argument-per-line text (existing behavior), e.g.
+ *      /path/to/server.js
+ *      --verbose
+ *  - A full JSON array, e.g.
+ *      ["run", "-i", "--rm", "mcp/server"]
+ *  - The *inner* contents of a JSON array (no surrounding brackets), which
+ *    is what you get pasting just the "args" lines out of a larger config:
+ *      "run",
+ *      "-i",
+ *      "--rm",
+ *
+ * Anything that isn't valid/parseable JSON falls back to the original
+ * line-splitting behavior so existing configs keep working unchanged.
+ */
+export function parseArgumentsInput(input: string): string[] {
+  const trimmed = input.trim();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  const fromJson = tryParseJsonArgsArray(trimmed);
+  if (fromJson) {
+    return fromJson;
+  }
+
+  // Fall back to legacy one-per-line parsing
+  return trimmed
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
+function tryParseJsonArgsArray(trimmed: string): string[] | null {
+  const candidates: string[] = [];
+
+  if (trimmed.startsWith("[")) {
+    // Looks like a full JSON array already
+    candidates.push(trimmed);
+  } else {
+    // Might be the inner lines of a JSON array, pasted without brackets,
+    // e.g.:
+    //   "run",
+    //   "-i",
+    //   "--rm",
+    // Strip a trailing comma (common when copy-pasting) and wrap it.
+    const withoutTrailingComma = trimmed.replace(/,\s*$/, "");
+    candidates.push(`[${withoutTrailingComma}]`);
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((item) => typeof item === "string")
+      ) {
+        return parsed;
+      }
+    } catch {
+      // Not valid JSON - ignore and try the next candidate / fall back
+    }
+  }
+
+  return null;
+}
+
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
 
@@ -34,12 +111,10 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
+    // Parse arguments string into array (supports both one-per-line and
+    // JSON array formats, see parseArgumentsInput)
     const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
+      ? parseArgumentsInput(values.localConfig.arguments)
       : [];
 
     data.localConfig = {

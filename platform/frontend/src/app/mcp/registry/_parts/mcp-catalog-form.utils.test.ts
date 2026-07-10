@@ -1,6 +1,7 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
+  parseArgumentsInput,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
@@ -1096,6 +1097,69 @@ describe("team access levels", () => {
     expect(data.teams).toEqual([
       { id: "t1", level: "write" },
       { id: "t2", level: "use" },
+    ]);
+  });
+});
+
+describe("parseArgumentsInput", () => {
+  it("returns an empty array for empty input", () => {
+    expect(parseArgumentsInput("")).toEqual([]);
+    expect(parseArgumentsInput("   \n  ")).toEqual([]);
+  });
+
+  it("parses one-argument-per-line input (legacy behavior)", () => {
+    expect(parseArgumentsInput("/path/to/server.js\n--verbose")).toEqual([
+      "/path/to/server.js",
+      "--verbose",
+    ]);
+  });
+
+  it("trims whitespace and drops blank lines for plain input", () => {
+    expect(parseArgumentsInput("  --foo  \n\n  --bar  \n")).toEqual([
+      "--foo",
+      "--bar",
+    ]);
+  });
+
+  it("parses a single-line JSON array", () => {
+    expect(
+      parseArgumentsInput('["run", "-i", "--rm", "mcp/server"]'),
+    ).toEqual(["run", "-i", "--rm", "mcp/server"]);
+  });
+
+  it("parses a multi-line JSON array", () => {
+    const input = `[
+      "run",
+      "--init",
+      "--pull=always",
+      "-i",
+      "--rm"
+    ]`;
+    expect(parseArgumentsInput(input)).toEqual([
+      "run",
+      "--init",
+      "--pull=always",
+      "-i",
+      "--rm",
+    ]);
+  });
+
+  it("parses JSON array contents pasted without the surrounding brackets", () => {
+    const input = `"run",\n"-i",\n"--rm",`;
+    expect(parseArgumentsInput(input)).toEqual(["run", "-i", "--rm"]);
+  });
+
+  it("falls back to line-splitting when the input isn't valid JSON", () => {
+    // Looks JSON-ish but isn't valid (unquoted token) - should not throw,
+    // should gracefully fall back to treating it as plain lines.
+    expect(parseArgumentsInput("[not, valid, json]")).toEqual([
+      "[not, valid, json]",
+    ]);
+  });
+
+  it("falls back to line-splitting when JSON array contains non-string items", () => {
+    expect(parseArgumentsInput('["--port", 8080]')).toEqual([
+      '["--port", 8080]',
     ]);
   });
 });

@@ -1415,16 +1415,21 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`One per line:\n/path/to/server.js\n--verbose\n\nor paste a JSON array:\n["run", "-i", "--rm", "mcp/server"]`}
                             className="font-mono min-h-20"
                             {...field}
                           />
                         </FormControl>
+                        <FormDescription>
+                          One argument per line, or paste a JSON array (e.g.
+                          copied from an MCP catalog&apos;s{" "}
+                          <code>args</code> field).
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

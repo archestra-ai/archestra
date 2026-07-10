@@ -381,6 +381,12 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Automatically converts JSON tool results to TOON format before sending to LLM
 - Particularly useful for agents dealing with structured data from database or API tools
 
+**LLM Cost Billing Mode**:
+
+- Every interaction records a `billing_mode` (`metered` | `subscription`, default `metered`) alongside `cost`. `cost` stays the list-price estimate; **billed spend** = `cost` for metered rows, `0` for subscription rows. Never re-interpret `cost` as billed spend — derive billed spend with a `billing_mode = 'metered'` filter (statistics/session aggregations already do this).
+- Resolved at proxy write time by `resolveInteractionBillingMode` (`routes/proxy/utils/billing-mode.ts`): a DB provider key's admin-set `chat_api_keys.billing_mode` wins; else raw passthrough is `subscription` only when the request is a Claude client (robust `detectClaudeClientId` body signal) AND forwards an OAuth Bearer (`provider.isForwardedSubscriptionCredential`), gated by `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT` (default true). This excludes metered Bearer flows (e.g. Workload Identity) so real spend is never silently zeroed.
+- Read sites split billed vs subscription: `statistics.getCostSavingsStatistics` (`totalSubscriptionCost` + per-bucket `subscriptionCost`), `interaction.getSessions` (`totalBilledCost`/`totalSubscriptionCost`). Frontend uses the `<BilledCost>` component. Metric `llm_cost_total` carries a `billing_mode` label. **Not yet billing-aware (documented follow-up): cost-based usage limits in `models/limit.ts`.**
+
 **Chat Feature**:
 
 - Agent-based conversations: Each conversation is tied to a specific agent

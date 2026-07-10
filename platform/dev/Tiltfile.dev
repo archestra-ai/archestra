@@ -73,6 +73,8 @@ if code_runtime_enabled:
   backend_resource_deps.append('sandbox-rs-build')
 # The MCP App runtime addon must be built before the backend boots.
 backend_resource_deps.append('app-runtime-rs-build')
+# The LLM proxy's TOON transform addon must be built before the backend boots.
+backend_resource_deps.append('proxy-transform-rs-build')
 
 local_resource(
   'pnpm-install',
@@ -104,6 +106,24 @@ local_resource(
   ],
   resource_deps=['pnpm-install'],
   labels=['apps'],
+)
+
+# Rebuild the native proxy-transform addon (napi) when its Rust sources change.
+# The LLM proxy's TOON compression loads it, so it must exist before the
+# backend boots. Mirrors app-runtime-rs-build.
+local_resource(
+  'proxy-transform-rs-build',
+  cmd='pnpm --filter @archestra/proxy-transform-rs build:dev',
+  deps=[
+    '../archestra-rs/proxy-transform-rs/src',
+    '../archestra-rs/proxy-transform-core/src',
+    '../archestra-rs/proxy-transform-rs/Cargo.toml',
+    '../archestra-rs/proxy-transform-core/Cargo.toml',
+    '../archestra-rs/Cargo.toml',
+    '../archestra-rs/Cargo.lock',
+  ],
+  resource_deps=['pnpm-install'],
+  labels=['dev'],
 )
 
 # Main dev/prod bundle

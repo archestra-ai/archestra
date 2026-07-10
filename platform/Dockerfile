@@ -154,6 +154,7 @@ COPY archestra-rs/napi-loader/package.json archestra-rs/napi-loader/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 COPY archestra-rs/image-rs/package.json archestra-rs/image-rs/
+COPY archestra-rs/proxy-transform-rs/package.json archestra-rs/proxy-transform-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -195,6 +196,7 @@ COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
 COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
+COPY --from=deps /app/archestra-rs/proxy-transform-rs/node_modules ./archestra-rs/proxy-transform-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -209,6 +211,8 @@ COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
 COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 COPY archestra-rs/image-core ./archestra-rs/image-core
 COPY archestra-rs/image-rs ./archestra-rs/image-rs
+COPY archestra-rs/proxy-transform-core ./archestra-rs/proxy-transform-core
+COPY archestra-rs/proxy-transform-rs ./archestra-rs/proxy-transform-rs
 
 # Build all workspace
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -224,7 +228,7 @@ FROM builder-base AS rust-napi-musl-smoke
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/archestra-rs/target \
-    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs --filter @archestra/image-rs --filter @archestra/proxy-transform-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder
@@ -259,7 +263,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
 # Assemble the production backend with `pnpm deploy` — pnpm's recommended
 # monorepo packaging step (https://pnpm.io/cli/deploy). It produces a
 # self-contained /prod/backend whose node_modules includes every workspace
-# dependency (the three NAPI crates, @archestra/napi-loader, @archestra/shared)
+# dependency (the four NAPI crates, @archestra/napi-loader, @archestra/shared)
 # alongside their transitive production deps, with each crate able to resolve
 # @archestra/napi-loader from a nested store. This replaces the old hand-rolled
 # COPY of each crate's *.node / index.cjs into a workspace-shaped, root-hoisted
@@ -435,7 +439,7 @@ RUN rm -rf /root/.cache/node/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
 # Copy the fully-assembled backend from the builder's `pnpm deploy` output.
 # /prod/backend contains backend/dist, scripts, drizzle.config.ts and the
 # migrations (scoped by the backend package's `files` field) plus a
-# self-contained node_modules — including the three NAPI crates with their
+# self-contained node_modules — including the four NAPI crates with their
 # compiled *.node addons and a resolvable @archestra/napi-loader. This single
 # tree replaces the previous per-crate .node/index.cjs copy choreography and
 # the runtime `pnpm install`.

@@ -1204,21 +1204,54 @@ describe("McpAppSection error handling", () => {
     vi.clearAllMocks();
   });
 
-  it("shows error message when fetch fails (no preloaded resource)", async () => {
-    // Mock global fetch to simulate a network error
+  it("degrades silently for a third-party app when the UI resource can't be read", async () => {
+    // A third-party tool advertises a ui:// resource its upstream server can't
+    // serve (e.g. -32601 Method not found). The tool result is shown regardless,
+    // so the failed app load must fold away rather than show a "Failed to load
+    // app" card. defaultProps is an agent (third-party) render — no appId.
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("MCP error -32601: Method not found"));
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          toolDetails={<div data-testid="tool-details">details</div>}
+        />,
+      );
+    });
+
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    // Flush the rejection handler + re-render.
+    await act(async () => {});
+
+    expect(screen.queryByText(/failed to load app/i)).not.toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    // The app folded away, but its tool-call details stay inspectable.
+    expect(screen.getByTestId("tool-details")).toBeInTheDocument();
+
+    fetchSpy.mockRestore();
+  });
+
+  it("shows the error for an owned app when the UI resource can't be read", async () => {
+    // Owned (Archestra-authored) apps do not degrade: a load failure is an
+    // authoring bug the author needs to see, so the error card stays.
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("Network error"));
 
     await act(async () => {
-      render(<McpAppSection {...defaultProps} />);
+      render(
+        <McpAppSection
+          {...defaultProps}
+          appId="11111111-1111-1111-1111-111111111111"
+        />,
+      );
     });
 
-    // Wait for the async fetch to complete and error state to render
     await vi.waitFor(() => {
-      expect(
-        screen.getByText(/failed to load/i) || screen.getByText(/error/i),
-      ).toBeTruthy();
+      expect(screen.getByText(/failed to load app/i)).toBeInTheDocument();
     });
 
     fetchSpy.mockRestore();

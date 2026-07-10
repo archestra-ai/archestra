@@ -103,6 +103,7 @@ export const McpAppRuntime = function McpAppRuntime({
   containerDimensions,
   reloadNonce,
   inlineInitialHeight,
+  degradeResourceLoadError,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -129,6 +130,18 @@ export const McpAppRuntime = function McpAppRuntime({
   /** Last measured inline height; seeds the iframe + loading box so a fresh
    * mount (e.g. returning from the panel) doesn't collapse before the app loads. */
   inlineInitialHeight?: number;
+  /**
+   * Degrade silently instead of showing a "Failed to load app" card when the
+   * UI resource can't be read. Set for incidental chat renders of third-party
+   * apps: a tool advertises a `ui://` resource its upstream server may not
+   * actually serve (e.g. a server that added MCP-UI hints without implementing
+   * `resources/read`, which fails with -32601 Method not found), and the tool
+   * result is shown regardless — so a failed app load falls back to that plain
+   * result rather than a scary error. Left false where the app was opened
+   * deliberately (run pages) or is Archestra-authored (an authoring bug the
+   * author must see), so failures stay visible there.
+   */
+  degradeResourceLoadError?: boolean;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -178,6 +191,8 @@ export const McpAppRuntime = function McpAppRuntime({
   onSendMessageRef.current = onSendMessage;
   const onResourceStateChangeRef = useRef(onResourceStateChange);
   onResourceStateChangeRef.current = onResourceStateChange;
+  const degradeResourceLoadErrorRef = useRef(degradeResourceLoadError);
+  degradeResourceLoadErrorRef.current = degradeResourceLoadError;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -581,9 +596,19 @@ export const McpAppRuntime = function McpAppRuntime({
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
-          setLoadError(error.message);
-          onResourceStateChangeRef.current("renderable");
-          onErrorRef.current?.(error);
+          if (degradeResourceLoadErrorRef.current) {
+            // Incidental third-party app whose upstream couldn't serve the UI
+            // resource: fall back to the plain tool result (state "empty" folds
+            // the app away) rather than a "Failed to load app" card. The tool
+            // output itself is shown independently, so nothing is lost.
+            // biome-ignore lint/suspicious/noConsole: intentional — helps support diagnose a silently-skipped app
+            console.debug("[MCP App] resource unavailable, degrading", error);
+            onResourceStateChangeRef.current("empty");
+          } else {
+            setLoadError(error.message);
+            onResourceStateChangeRef.current("renderable");
+            onErrorRef.current?.(error);
+          }
         }
       }
     })();

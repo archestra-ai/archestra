@@ -23,9 +23,7 @@ const agentExcludedSubagentsTable = pgTable(
       .references(() => agentsTable.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
-  (table) => [
-    primaryKey({ columns: [table.agentId, table.targetAgentId] }),
-  ],
+  (table) => [primaryKey({ columns: [table.agentId, table.targetAgentId] })],
 );
 
 export default agentExcludedSubagentsTable;

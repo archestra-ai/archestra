@@ -9,6 +9,15 @@ Use this skill for migration work.
 
 Run commands from `platform/` unless specifically instructed otherwise.
 
+## Large / hot tables
+
+If the migration touches the `interactions` table (or any other very large,
+write-hot table), read `archestra-dev-interactions-migrations` first. A blocking
+operation on that table stalls the LLM proxy's write path, and its most common
+trap — rebuilding an index inside a transactional migration — cannot be made
+concurrent. That skill covers safe vs risky operations and a read-only audit of
+the staging table.
+
 ## Merge/rebase conflicts
 
 When git reports merge/rebase conflicts in Drizzle migration metadata or generated clients, follow `resolve-conflicts.md` instead of the normal migration flow.

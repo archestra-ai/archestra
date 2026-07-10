@@ -1535,6 +1535,7 @@ async function handleStreaming<
           actualModel,
           costs.actualCost,
           source,
+          billingMode,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1812,6 +1813,7 @@ async function handleNonStreaming<
           actualModel,
           costs.actualCost,
           source,
+          billingMode,
         );
         metrics.llm.reportLLMCacheCost(
           providerName,
@@ -1887,6 +1889,7 @@ async function handleNonStreaming<
       actualModel,
       costs.actualCost,
       source,
+      billingMode,
     );
     metrics.llm.reportLLMCacheCost(
       providerName,

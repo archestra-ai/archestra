@@ -1,5 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import {
+  type BillingMode,
+  BillingModeSchema,
   isProviderApiKeyOptional,
   providerRequiresPerUserCredential,
   RouteId,
@@ -283,6 +285,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             scope: ResourceVisibilityScopeSchema.default("personal"),
             teamId: z.string().optional(),
             isPrimary: z.boolean().optional(),
+            // Mark a key `subscription` when its secret is a flat-rate
+            // subscription/OAuth token so its usage is reported as $0 billed spend.
+            billingMode: BillingModeSchema.optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
             /** Bedrock-only: AWS access key ID for SigV4 auth */
@@ -521,6 +526,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: body.scope === "personal" ? user.id : null,
           teamId: body.scope === "team" ? body.teamId : null,
           isPrimary: body.isPrimary ?? false,
+          billingMode: body.billingMode ?? "metered",
         });
       } catch (error) {
         if (isUniqueConstraintError(error)) {
@@ -660,6 +666,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             scope: ResourceVisibilityScopeSchema.optional(),
             teamId: z.string().uuid().nullable().optional(),
             isPrimary: z.boolean().optional(),
+            billingMode: BillingModeSchema.optional(),
             vaultSecretPath: z.string().min(1).optional(),
             vaultSecretKey: z.string().min(1).optional(),
             /** Bedrock-only: AWS access key ID for SigV4 auth */
@@ -911,6 +918,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamId: string | null;
         secretId: string | null;
         isPrimary: boolean;
+        billingMode: BillingMode;
       }> = {};
 
       if (body.name) {
@@ -931,6 +939,10 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (body.isPrimary !== undefined) {
         updateData.isPrimary = body.isPrimary;
+      }
+
+      if (body.billingMode !== undefined) {
+        updateData.billingMode = body.billingMode;
       }
 
       if (newSecretId) {

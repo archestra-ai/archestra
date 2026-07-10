@@ -8,7 +8,11 @@
  * rate(llm_request_duration_seconds_count{provider="openai"}[10s])
  */
 
-import type { InteractionSource, SupportedProvider } from "@archestra/shared";
+import type {
+  BillingMode,
+  InteractionSource,
+  SupportedProvider,
+} from "@archestra/shared";
 import type { GoogleGenAI } from "@google/genai";
 import client from "prom-client";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
@@ -198,8 +202,11 @@ export function initializeMetrics(labelKeys: string[]): void {
 
   llmCostTotal = new client.Counter({
     name: "llm_cost_total",
-    help: "Total estimated cost in USD",
-    labelNames: [...baseLabelNames, ...nextLabelKeys],
+    // List-price estimate. `billing_mode` distinguishes metered spend (a real
+    // per-token charge) from subscription-covered traffic (flat-rate, not
+    // billed), so billed spend is sum(llm_cost_total{billing_mode="metered"}).
+    help: "Total estimated (list-price) cost in USD",
+    labelNames: [...baseLabelNames, "billing_mode", ...nextLabelKeys],
     enableExemplars: true,
   });
 
@@ -406,6 +413,7 @@ export function reportLLMCost(
   model: string,
   cost: number | null | undefined,
   source: InteractionSource,
+  billingMode: BillingMode,
 ): void {
   if (!llmCostTotal) {
     logger.warn("LLM metrics not initialized, skipping cost reporting");
@@ -415,7 +423,12 @@ export function reportLLMCost(
     return;
   }
   llmCostTotal.inc({
-    labels: buildMetricLabels(profile, { provider }, model, source),
+    labels: buildMetricLabels(
+      profile,
+      { provider, billing_mode: billingMode },
+      model,
+      source,
+    ),
     value: cost,
     exemplarLabels: getExemplarLabels(),
   });

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import { ChatOpsChannelBindingModel } from "@/models";
 import type {
@@ -355,10 +356,7 @@ class TelegramProvider implements ChatOpsProvider {
   }
 
   identityVerificationFailureText(): string {
-    return [
-      "This Telegram account isn't linked to a user account yet.",
-      "Open the Telegram page under Messaging Channels in the web app and use your personal linking link, then send /start here.",
-    ].join(" ");
+    return "This Telegram account isn't linked to a user account yet. Send me /start in a direct message and I'll reply with a sign-in link to connect it.";
   }
 
   async getChannelName(channelId: string): Promise<string | null> {
@@ -570,9 +568,15 @@ class TelegramProvider implements ChatOpsProvider {
   }
 
   /**
-   * Link a Telegram account to a user via a pending DM binding.
-   * The /start payload is the binding's UUID — created in the web UI, shared
-   * as a t.me deep link, unguessable, and consumed on first use.
+   * Link a Telegram account to a user, replying with what to do next.
+   *
+   * Two paths:
+   * - Plain /start (the normal flow): mint a one-shot code and reply with a
+   *   sign-in link. The user opens it, signs in as themselves, and the link
+   *   endpoint ties this chat to their account — the email comes from their
+   *   web session, so it can't be spoofed from Telegram.
+   * - /start <bindingId> (t.me deep links from the admin channels table):
+   *   fulfill that pending DM binding directly.
    */
   private async linkAccount(
     message: TelegramMessage,
@@ -590,10 +594,22 @@ class TelegramProvider implements ChatOpsProvider {
     }
 
     if (!payload) {
-      return this.identityVerificationFailureText();
+      const code = randomUUID();
+      await cacheManager.set(
+        `${CacheKey.TelegramLinkCode}-${code}`,
+        { chatId },
+        LINK_CODE_TTL_MS,
+      );
+      return [
+        "Let's link this Telegram account to your user account.",
+        "",
+        `Open ${config.frontendBaseUrl}/link-telegram?code=${code} and sign in — that's it.`,
+        "",
+        "The link is valid for 15 minutes. Send /start again for a fresh one.",
+      ].join("\n");
     }
     if (!UUID_RE.test(payload)) {
-      return "That linking code doesn't look valid. Use your personal link from the web app.";
+      return "That linking code doesn't look valid. Send /start without a code to get a sign-in link.";
     }
 
     const binding = await ChatOpsChannelBindingModel.findById(payload);
@@ -1046,6 +1062,8 @@ const POLL_ERROR_BACKOFF_MS = 5_000;
 const POLL_CONFLICT_BACKOFF_MS = 30_000;
 /** How long approval buttons stay clickable. */
 const APPROVAL_CALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** How long a /start sign-in link stays valid. */
+const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 const AGENT_SELECT_PREFIX = "agent_select";
 const MAX_SELECTION_AGENTS = 25;
 const UUID_RE =
@@ -1056,7 +1074,7 @@ const HELP_TEXT = [
   "• Send me a message and I'll pass it to your assigned agent.",
   "• /select-agent — choose which agent answers in this chat.",
   "• AgentName > message — route one message to a different agent.",
-  "• /start <code> — link your Telegram account (DM only).",
+  "• /start — link your Telegram account (DM only).",
 ].join("\n");
 
 // Minimal Telegram Bot API shapes — only the fields this provider reads.

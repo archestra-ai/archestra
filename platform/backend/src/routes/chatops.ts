@@ -1569,6 +1569,98 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Link the signed-in user's Telegram account.
+   * The code comes from the bot's /start reply and proves control of the
+   * Telegram chat; the email comes from the web session — so neither side
+   * can be spoofed. Open to any authenticated user (self-service).
+   */
+  fastify.post(
+    "/api/chatops/telegram/link",
+    {
+      schema: {
+        operationId: RouteId.LinkTelegramChatOpsAccount,
+        description:
+          "Link the current user's Telegram account using a code from the bot",
+        tags: ["ChatOps"],
+        body: z.object({ code: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment.",
+        );
+      }
+
+      const payload = await cacheManager.getAndDelete<{ chatId: string }>(
+        `${CacheKey.TelegramLinkCode}-${request.body.code}`,
+      );
+      if (!payload) {
+        throw new ApiError(
+          400,
+          "This linking code is invalid or expired. Send /start to the bot again to get a fresh link.",
+        );
+      }
+
+      const email = request.user.email;
+      const chatBinding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "telegram",
+        channelId: payload.chatId,
+        workspaceId: null,
+      });
+      if (
+        chatBinding?.dmOwnerEmail &&
+        chatBinding.dmOwnerEmail.toLowerCase() !== email.toLowerCase()
+      ) {
+        throw new ApiError(
+          400,
+          "This Telegram account is already linked to another user.",
+        );
+      }
+
+      if (!chatBinding) {
+        // Reuse the user's pending/stale DM binding when one exists so an
+        // agent assignment made in the UI survives the link.
+        const existingDm =
+          await ChatOpsChannelBindingModel.findDmBindingByEmail(
+            "telegram",
+            email,
+          );
+        if (existingDm) {
+          await ChatOpsChannelBindingModel.fulfillDmBinding(
+            existingDm.id,
+            payload.chatId,
+            null,
+          );
+        } else {
+          await ChatOpsChannelBindingModel.create({
+            organizationId: request.organizationId,
+            provider: "telegram",
+            channelId: payload.chatId,
+            isDm: true,
+            dmOwnerEmail: email,
+            channelName: `Direct Message - ${email}`,
+            agentId: null,
+          });
+        }
+      }
+
+      // Confirm in the Telegram chat (non-blocking)
+      chatOpsManager
+        .getTelegramProvider()
+        ?.sendDirectMessage({
+          userId: payload.chatId,
+          text: `✅ Linked to ${email}. Send me a message to start!`,
+        })
+        .catch(() => {});
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the

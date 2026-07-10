@@ -464,7 +464,7 @@ describe("account linking via /start", () => {
     expect(await provider.getUserEmail("555")).toBeNull();
   });
 
-  test("plain /start replies with linking guidance", async () => {
+  test("plain /start replies with a one-shot sign-in link", async () => {
     const provider = makeProvider(makeEventHandler());
     const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
       ok: true,
@@ -474,7 +474,13 @@ describe("account linking via /start", () => {
 
     await dispatchUpdate(provider, dmUpdate({ text: "/start" }));
 
-    expect(String(sendMessage.mock.calls[0][0].text)).toContain("linking");
+    const reply = String(sendMessage.mock.calls[0][0].text);
+    const code = /link-telegram\?code=([0-9a-f-]{36})/.exec(reply)?.[1];
+    expect(code).toBeDefined();
+    // The code resolves back to the chat that asked for it
+    await expect(
+      cacheManager.get(`${CacheKey.TelegramLinkCode}-${code}`),
+    ).resolves.toEqual({ chatId: "555" });
   });
 
   test("forwards ordinary messages to the event handler", async () => {

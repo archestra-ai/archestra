@@ -97,13 +97,13 @@ export default function TelegramPage() {
           <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
           <div className="flex flex-col gap-1">
             <span className="font-medium text-sm">
-              Telegram accounts must be linked
+              Each user links their Telegram account once
             </span>
             <span className="text-muted-foreground text-xs">
-              Telegram doesn't share email addresses, so each user links their
-              account once: assign an agent to your Direct Message row below,
-              then open the generated t.me link and tap Start. Group members
-              must link their own DM the same way before the bot answers them.
+              Telegram doesn't share email addresses, so the bot has to learn
+              who is who: a user sends /start to the bot, opens the sign-in link
+              it replies with, and clicks Link. That's it — this works for every
+              member, including in group chats.
             </span>
           </div>
         </div>

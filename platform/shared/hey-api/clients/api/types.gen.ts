@@ -26710,6 +26710,91 @@ export type UpdateTelegramChatOpsConfigResponses = {
 
 export type UpdateTelegramChatOpsConfigResponse = UpdateTelegramChatOpsConfigResponses[keyof UpdateTelegramChatOpsConfigResponses];
 
+export type LinkTelegramChatOpsAccountData = {
+    body: {
+        code: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/telegram/link';
+};
+
+export type LinkTelegramChatOpsAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LinkTelegramChatOpsAccountError = LinkTelegramChatOpsAccountErrors[keyof LinkTelegramChatOpsAccountErrors];
+
+export type LinkTelegramChatOpsAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type LinkTelegramChatOpsAccountResponse = LinkTelegramChatOpsAccountResponses[keyof LinkTelegramChatOpsAccountResponses];
+
 export type RefreshChatOpsChannelDiscoveryData = {
     body: {
         provider: 'ms-teams' | 'slack' | 'telegram';

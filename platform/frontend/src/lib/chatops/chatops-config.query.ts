@@ -145,6 +145,27 @@ export function useUpdateTelegramChatOpsConfig() {
   });
 }
 
+export function useLinkTelegramAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const { data, error } = await archestraApiSdk.linkTelegramChatOpsAccount({
+        body: { code },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 

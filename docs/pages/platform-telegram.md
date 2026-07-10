@@ -19,16 +19,16 @@ The integration is off by default and hidden. Set `ARCHESTRA_CHATOPS_TELEGRAM_EN
 
 Archestra validates the token and starts polling immediately.
 
-## Linking Telegram accounts
+## Linking Telegram Accounts
 
-Telegram does not expose user email addresses, so unlike Slack and MS Teams, users cannot be matched to their accounts automatically. Each user links their Telegram account once:
+Telegram does not expose email addresses, so the bot cannot match users to their accounts automatically like Slack and MS Teams do. Each user links their Telegram account once:
 
-1. On the Telegram channels page, the user assigns an agent to their Direct Message row. This creates a personal linking link (`https://t.me/<bot>?start=<code>`).
-2. Opening the link and tapping Start ties their Telegram account to their email.
+1. Send `/start` to the bot in a direct message.
+2. The bot replies with a sign-in link — open it and click **Link Telegram account**.
 
-The code is an unguessable one-time value; once used, it cannot link another Telegram account. Whoever opens the link claims the account, so treat it like an invitation link.
+The signed-in web session provides the identity, and the one-time code in the link proves control of the Telegram chat, so neither side can be spoofed. The link expires after 15 minutes; `/start` always issues a fresh one.
 
-Group members must link their own account the same way before the bot answers them — messages from unlinked users get a short reply explaining how to link. Access control is the same as other channels: users can only reach agents their teams have access to, and unknown emails are auto-provisioned as members.
+Group members link the same way before the bot answers them — an unlinked user gets a short reply telling them to send `/start`. Access control matches the other channels: users only reach agents their teams have access to.
 
 ## Usage
 
@@ -53,7 +53,7 @@ In supergroups with Topics enabled, each forum topic is a separate conversation 
 | Command | Description |
 |---------|-------------|
 | `/select-agent` | Change which agent handles this chat |
-| `/start <code>` | Link your Telegram account (DM only) |
+| `/start` | Link your Telegram account (DM only) |
 | `/help` | Show available commands |
 
 ### Switching agents inline
@@ -87,7 +87,7 @@ Photos and documents sent to the bot are downloaded and passed to the agent, sub
 - Address it explicitly (@mention, reply, or command), or disable Group Privacy in BotFather and re-add the bot to the group
 
 **"This Telegram account isn't linked" reply**
-- Assign an agent to your Direct Message row on the Telegram channels page and open the generated linking link
+- Send `/start` to the bot and follow the sign-in link it replies with
 
 **409 conflict errors in backend logs**
 - Another process is polling with the same bot token — stop it or issue a new token via BotFather (`/revoke`)

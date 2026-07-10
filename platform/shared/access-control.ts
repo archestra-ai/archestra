@@ -1276,6 +1276,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateTelegramChatOpsConfig]: {
     agentTrigger: ["update"],
   },
+  // Any authenticated user can link their own Telegram account
+  [RouteId.LinkTelegramChatOpsAccount]: {},
   [RouteId.ConnectNgrok]: {
     agentTrigger: ["update"],
   },

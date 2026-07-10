@@ -525,6 +525,7 @@ export const RouteId = {
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
+  LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",
   GetNgrokConfig: "getNgrokConfig",

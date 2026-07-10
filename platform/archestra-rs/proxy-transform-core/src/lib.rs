@@ -64,7 +64,10 @@ pub const MAX_ITEM_INPUT_BYTES: usize = 10 * 1024 * 1024;
 /// once the running total exceeds it, remaining items are not encoded
 /// (`encoded: None`, fail-open like the per-item budget, unwrap still applied).
 pub fn toon_encode_tool_results(items: Vec<ToonEncodeItem>) -> Vec<ToonEncodeResult> {
-    let total_input: usize = items.iter().map(|item| item.raw_content.len()).sum();
+    let total_input: usize = items
+        .iter()
+        .map(|item| item.raw_content.len())
+        .fold(0usize, usize::saturating_add);
     let batch_budget = total_input
         .saturating_mul(2)
         .saturating_add(encode::OUTPUT_BUDGET_FLOOR);

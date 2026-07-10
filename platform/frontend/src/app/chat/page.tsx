@@ -42,7 +42,6 @@ import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { NoToolsModelNotice } from "@/components/chat/no-tools-model-notice";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   PlaywrightInstallDialog,
@@ -2658,6 +2657,7 @@ export function ChatPageContent({
                           <div className="max-w-4xl mx-auto space-y-3">
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
+                              toolsUnavailable={conversationToolsUnavailable}
                               onStop={handleStopStreaming}
                               status={status}
                               selectedModel={conversation?.modelId ?? ""}
@@ -2707,12 +2707,6 @@ export function ChatPageContent({
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}
                             />
-                            {/* Below the box, matching the splash composer, so
-                                the notice doesn't jump when the splash morphs
-                                into the conversation view. */}
-                            {conversationToolsUnavailable && (
-                              <NoToolsModelNotice />
-                            )}
                             <div className="text-center">
                               <Version inline />
                             </div>
@@ -2812,9 +2806,10 @@ export function ChatPageContent({
                           share="chat-composer-morph"
                           default="none"
                         >
-                          <div className="relative w-full max-w-4xl">
+                          <div className="w-full max-w-4xl">
                             <ArchestraPromptInput
                               onSubmit={handleInitialSubmit}
+                              toolsUnavailable={initialToolsUnavailable}
                               status={
                                 createConversationMutation.isPending
                                   ? "submitted"
@@ -2859,14 +2854,6 @@ export function ChatPageContent({
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}
                             />
-                            {/* Out of flow so the centered composer sits at
-                                the same spot whether or not the notice shows;
-                                below the box, where nothing can overlap. */}
-                            {initialToolsUnavailable && (
-                              <div className="absolute inset-x-0 top-full mt-3">
-                                <NoToolsModelNotice />
-                              </div>
-                            )}
                           </div>
                         </ViewTransition>
                       </div>

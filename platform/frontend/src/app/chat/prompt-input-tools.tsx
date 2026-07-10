@@ -24,6 +24,7 @@ import {
   ModelSelector,
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
+import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,6 +86,12 @@ export interface ChatPromptInputToolsProps {
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
   modelSource?: ModelSource | null;
+  /**
+   * The selected model can't take tools while the agent has some — the turn
+   * will run tool-less. Shown as a compact toolbar chip so the composer never
+   * shifts when it toggles.
+   */
+  toolsUnavailable?: boolean;
   /** Callback to reset user model override back to agent/org default */
   onResetModelOverride?: () => void;
   /**
@@ -135,6 +142,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   selectorAgentName,
   onAgentChange,
   modelSource,
+  toolsUnavailable = false,
   onResetModelOverride,
   agentRequiresPerUserConnect = false,
   agentModelDisplayName,
@@ -264,6 +272,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                             </button>
                           )}
                         </Badge>
+                      </div>
+                    )}
+                    {toolsUnavailable && (
+                      <div className="flex items-center gap-1.5">
+                        <NoToolsModelBadge />
                       </div>
                     )}
                     {(conversationId || onApiKeyChange) && (
@@ -474,6 +487,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               )}
             </div>
           )}
+          {toolsUnavailable && <NoToolsModelBadge />}
           {tokensUsed > 0 && maxContextLength && (
             <ContextWindowDialog
               breakdown={contextWindow ?? null}

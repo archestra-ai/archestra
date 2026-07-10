@@ -35659,7 +35659,7 @@ export type GetInteractionsResponses = {
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
-            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results' | 'addon_unavailable';
             createdAt: string;
             chatErrors?: Array<{
                 id: string;
@@ -40101,7 +40101,7 @@ export type GetInteractionResponses = {
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
-        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results' | 'addon_unavailable';
         createdAt: string;
         chatErrors?: Array<{
             id: string;

@@ -130479,7 +130479,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -152156,7 +152157,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {

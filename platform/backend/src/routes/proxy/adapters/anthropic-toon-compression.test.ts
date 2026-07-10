@@ -1,42 +1,25 @@
 // Pins the Anthropic adapter's TOON compression cutover to the native addon:
 // full transformed-request exact equality (TOON content from the committed v3
-// golden corpus, everything else byte-equal) and the exact
-// ToolCompressionStats accounting matrix. Anthropic-specific semantics pinned
-// here: candidates come from BOTH tool_result content shapes (string content
-// and every text sub-block of array content — several blocks can share one
-// tool_use_id), each text block is counted individually, rejected payloads
-// count their original tokens in both totals, and hadToolResults reflects
-// every non-error tool_result block (even unparseable ones). Requires the
-// built addon: mandatory in CI; locally it skips visibly — run
+// golden corpus, everything else byte-equal). Anthropic-specific semantics
+// pinned here: candidates come from BOTH tool_result content shapes (string
+// content and every text sub-block of array content — several blocks can
+// share one tool_use_id), each text block is counted individually, rejected
+// payloads count their original tokens in both totals, and hadToolResults
+// reflects every non-error tool_result block (even unparseable ones).
+// Requires the built addon: mandatory in CI; locally it skips visibly — run
 // `pnpm test:native` from platform/backend.
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
-import { getTokenizer } from "@/tokenizers";
+import { expect, test } from "@/test";
+import {
+  corpusEntry,
+  describeNative,
+  makeCountTokens,
+  upsertOneDollarPerTokenPricing,
+} from "@/test/toon-golden";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
 
 type AnthropicRequest = Anthropic.Types.MessagesRequest;
-
-type GoldenEntry = {
-  name: string;
-  rawContent: string;
-  unwrap: boolean;
-  expected: { normalized: string; encoded: string | null };
-};
-
-const CORPUS_PATH = path.resolve(
-  import.meta.dirname,
-  "../../../../../archestra-rs/proxy-transform-core/tests/fixtures/golden-corpus.json",
-);
-const corpus: GoldenEntry[] = JSON.parse(readFileSync(CORPUS_PATH, "utf8"));
-function corpusEntry(name: string): GoldenEntry {
-  const entry = corpus.find((candidate) => candidate.name === name);
-  if (!entry) throw new Error(`golden corpus entry not found: ${name}`);
-  return entry;
-}
 
 // Corpus picks: a uniform array (compression wins), a wrapped
 // [{type:"text",...}] payload (unwrapped, compression wins), malformed JSON
@@ -47,46 +30,16 @@ const WRAPPED = corpusEntry("wrapped-single-text");
 const MALFORMED = corpusEntry("malformed-prose");
 const NEAR_BOUNDARY = corpusEntry("boundary-obj-1");
 
-const tokenizer = getTokenizer("anthropic");
-const countTokens = (content: string) =>
-  tokenizer.countTokens([{ role: "user", content }]);
-
-// $1,000,000 per million input tokens = $1 per token, so expected costSavings
-// equals tokens saved exactly.
-async function upsertOneDollarPerTokenPricing() {
-  await ModelModel.upsert({
-    externalId: "anthropic/claude-sonnet-4-5",
+const countTokens = makeCountTokens("anthropic");
+const upsertPricing = () =>
+  upsertOneDollarPerTokenPricing({
     provider: "anthropic",
     modelId: "claude-sonnet-4-5",
-    inputModalities: null,
-    outputModalities: null,
-    customPricePerMillionInput: "1000000.00",
-    customPricePerMillionOutput: "1000000.00",
-    lastSyncedAt: new Date(),
   });
-}
-
-const addonLoadError: unknown = await import(
-  "@archestra/proxy-transform-rs"
-).then(
-  () => null,
-  (error) => error,
-);
-
-// In CI the suite must FAIL (never skip) when the addon is missing.
-const describeNative =
-  addonLoadError === null || process.env.CI ? describe : describe.skip;
-if (addonLoadError !== null && !process.env.CI) {
-  console.warn(
-    `[anthropic-toon-compression.test] skipping: @archestra/proxy-transform-rs is not built (${String(
-      addonLoadError,
-    )}). Run \`pnpm test:native\` from platform/backend.`,
-  );
-}
 
 describeNative("Anthropic adapter TOON compression (native addon)", () => {
   test("transforms the full provider request exactly (goldens for TOON, byte-equal elsewhere)", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     const makeRequest = (): AnthropicRequest => ({
       model: "claude-sonnet-4-5",
@@ -184,7 +137,7 @@ describeNative("Anthropic adapter TOON compression (native addon)", () => {
   });
 
   test("compresses every text block of a multi-block tool_result sharing one tool_use_id", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     // One tool_result carries three text blocks under a single tool_use_id:
     // positional (locator-based) application must compress the first and
@@ -246,7 +199,7 @@ describeNative("Anthropic adapter TOON compression (native addon)", () => {
   });
 
   test("applies native results to the right blocks when non-candidate blocks are interleaved", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     // Non-candidates between candidates: a plain text block, an is_error
     // tool_result (whose content WOULD compress if wrongly collected), and a
@@ -324,82 +277,75 @@ describeNative("Anthropic adapter TOON compression (native addon)", () => {
     });
   });
 
-  describe("exact ToolCompressionStats accounting matrix", () => {
-    // Unlike the OpenAI family, hadToolResults is true even for malformed
-    // content: Anthropic counts every non-error tool_result block it sees.
-    const rows: {
-      row: string;
-      entry: GoldenEntry;
-      compressed: boolean;
-      counted: boolean;
-    }[] = [
-      { row: "malformed", entry: MALFORMED, compressed: false, counted: false },
-      {
-        row: "ineffective (rejected: original counted in both totals)",
-        entry: NEAR_BOUNDARY,
-        compressed: false,
-        counted: true,
-      },
-      { row: "effective", entry: UNIFORM, compressed: true, counted: true },
-      {
-        row: "wrapped-array",
-        entry: WRAPPED,
-        compressed: true,
-        counted: true,
-      },
-    ];
+  // The case the combined request cannot isolate: unlike the OpenAI family,
+  // hadToolResults is true even when the only non-error tool_result block is
+  // malformed — Anthropic counts every block it sees.
+  test("a lone malformed result: zeroed totals but hadToolResults=true, message untouched", async () => {
+    await upsertPricing();
 
-    for (const { row, entry, compressed, counted } of rows) {
-      test(row, async () => {
-        await upsertOneDollarPerTokenPricing();
-
-        const adapter = anthropicAdapterFactory.createRequestAdapter({
-          model: "claude-sonnet-4-5",
-          max_tokens: 1024,
-          messages: [
-            { role: "user", content: "run the tool" },
-            {
-              role: "user",
-              content: [
-                {
-                  type: "tool_result",
-                  tool_use_id: "toolu_1",
-                  content: entry.rawContent,
-                },
-              ],
-            },
-          ],
-        });
-        const stats = await adapter.applyToonCompression("claude-sonnet-4-5");
-
-        const tokensBefore = counted
-          ? countTokens(entry.expected.normalized)
-          : 0;
-        const tokensAfter = compressed
-          ? countTokens(entry.expected.encoded as string)
-          : tokensBefore;
-        expect(stats).toStrictEqual({
-          tokensBefore,
-          tokensAfter,
-          costSavings: tokensBefore - tokensAfter,
-          wasEffective: compressed,
-          hadToolResults: true,
-        });
-
-        const [, toolMessage] = adapter.getProviderMessages();
-        expect(toolMessage).toStrictEqual({
+    const makeRequest = (): AnthropicRequest => ({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1024,
+      messages: [
+        { role: "user", content: "run the tool" },
+        {
           role: "user",
           content: [
             {
               type: "tool_result",
               tool_use_id: "toolu_1",
-              content: compressed
-                ? (entry.expected.encoded as string)
-                : entry.rawContent,
+              content: MALFORMED.rawContent,
             },
           ],
-        });
-      });
-    }
+        },
+      ],
+    });
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(makeRequest());
+    const stats = await adapter.applyToonCompression("claude-sonnet-4-5");
+
+    expect(stats).toStrictEqual({
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+    expect(adapter.toProviderRequest()).toStrictEqual(makeRequest());
+  });
+
+  test("a lone rejected result: original counted in both totals, wasEffective=false", async () => {
+    await upsertPricing();
+
+    const makeRequest = (): AnthropicRequest => ({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1024,
+      messages: [
+        { role: "user", content: "run the tool" },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_1",
+              content: NEAR_BOUNDARY.rawContent,
+            },
+          ],
+        },
+      ],
+    });
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(makeRequest());
+    const stats = await adapter.applyToonCompression("claude-sonnet-4-5");
+
+    const boundaryTokens = countTokens(NEAR_BOUNDARY.expected.normalized);
+    expect(stats).toStrictEqual({
+      tokensBefore: boundaryTokens,
+      tokensAfter: boundaryTokens,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+    expect(adapter.toProviderRequest()).toStrictEqual(makeRequest());
   });
 });

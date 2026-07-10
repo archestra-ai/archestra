@@ -1,39 +1,23 @@
 // Pins the MiniMax adapter's TOON compression cutover to the native addon:
-// full transformed-request exact equality (TOON content from the committed v3
-// golden corpus, everything else byte-equal) and the exact
-// ToolCompressionStats accounting matrix. MiniMax-specific semantics pinned
-// here: compression is applied UNCONDITIONALLY (no keep/reject — encoded
-// tokens are always recorded, even when TOON is larger). Requires the built
-// addon: mandatory in CI; locally it skips visibly — run `pnpm test:native`
-// from platform/backend.
+// full transformed-messages exact equality (TOON content from the committed
+// v3 golden corpus, everything else byte-equal). MiniMax-specific semantics
+// pinned here: compression is applied UNCONDITIONALLY (no keep/reject —
+// encoded tokens are always recorded, even when TOON is larger). Requires the
+// built addon: mandatory in CI; locally it skips visibly — run
+// `pnpm test:native` from platform/backend.
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
-import { getTokenizer } from "@/tokenizers";
+import { expect, test } from "@/test";
+import {
+  corpusEntry,
+  describeNative,
+  makeCountTokens,
+  makeToolCall,
+  upsertOneDollarPerTokenPricing,
+} from "@/test/toon-golden";
 import type { Minimax } from "@/types/llm-providers";
 import { minimaxAdapterFactory } from "./minimax";
 
 type MinimaxRequest = Minimax.Types.ChatCompletionsRequest;
-
-type GoldenEntry = {
-  name: string;
-  rawContent: string;
-  unwrap: boolean;
-  expected: { normalized: string; encoded: string | null };
-};
-
-const CORPUS_PATH = path.resolve(
-  import.meta.dirname,
-  "../../../../../archestra-rs/proxy-transform-core/tests/fixtures/golden-corpus.json",
-);
-const corpus: GoldenEntry[] = JSON.parse(readFileSync(CORPUS_PATH, "utf8"));
-function corpusEntry(name: string): GoldenEntry {
-  const entry = corpus.find((candidate) => candidate.name === name);
-  if (!entry) throw new Error(`golden corpus entry not found: ${name}`);
-  return entry;
-}
 
 // Corpus picks: a uniform array (TOON smaller), a wrapped [{type:"text",...}]
 // payload (unwrapped, TOON smaller), malformed JSON (kept as-is), and a
@@ -44,54 +28,16 @@ const WRAPPED = corpusEntry("wrapped-single-text");
 const MALFORMED = corpusEntry("malformed-prose");
 const LARGER = corpusEntry("boundary-hetero-arr-1");
 
-const tokenizer = getTokenizer("minimax");
-const countTokens = (content: string) =>
-  tokenizer.countTokens([{ role: "user", content }]);
-
-// $1,000,000 per million input tokens = $1 per token, so expected costSavings
-// equals tokens saved exactly.
-async function upsertOneDollarPerTokenPricing() {
-  await ModelModel.upsert({
-    externalId: "minimax/MiniMax-M2",
+const countTokens = makeCountTokens("minimax");
+const upsertPricing = () =>
+  upsertOneDollarPerTokenPricing({
     provider: "minimax",
     modelId: "MiniMax-M2",
-    inputModalities: null,
-    outputModalities: null,
-    customPricePerMillionInput: "1000000.00",
-    customPricePerMillionOutput: "1000000.00",
-    lastSyncedAt: new Date(),
   });
-}
-
-const addonLoadError: unknown = await import(
-  "@archestra/proxy-transform-rs"
-).then(
-  () => null,
-  (error) => error,
-);
-
-// In CI the suite must FAIL (never skip) when the addon is missing.
-const describeNative =
-  addonLoadError === null || process.env.CI ? describe : describe.skip;
-if (addonLoadError !== null && !process.env.CI) {
-  console.warn(
-    `[minimax-toon-compression.test] skipping: @archestra/proxy-transform-rs is not built (${String(
-      addonLoadError,
-    )}). Run \`pnpm test:native\` from platform/backend.`,
-  );
-}
-
-function makeToolCall(id: string, name: string) {
-  return {
-    id,
-    type: "function" as const,
-    function: { name, arguments: '{"directory":"."}' },
-  };
-}
 
 describeNative("MiniMax adapter TOON compression (native addon)", () => {
   test("transforms the full messages exactly (goldens for TOON, byte-equal elsewhere)", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     const makeRequest = (): MinimaxRequest => ({
       model: "MiniMax-M2",
@@ -175,7 +121,7 @@ describeNative("MiniMax adapter TOON compression (native addon)", () => {
   });
 
   test("applies native results to the right candidates when non-string tool messages are interleaved", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     // Non-string (array-content) tool messages are NOT candidates for the
     // native batch: the native result index diverges from both the message
@@ -236,65 +182,61 @@ describeNative("MiniMax adapter TOON compression (native addon)", () => {
     });
   });
 
-  describe("exact ToolCompressionStats accounting matrix", () => {
-    const rows: {
-      row: string;
-      entry: GoldenEntry;
-      compressed: boolean;
-      counted: boolean;
-    }[] = [
-      { row: "malformed", entry: MALFORMED, compressed: false, counted: false },
-      {
-        row: "unconditional apply (encoded larger, still applied and recorded)",
-        entry: LARGER,
-        compressed: true,
-        counted: true,
-      },
-      { row: "effective", entry: UNIFORM, compressed: true, counted: true },
-      {
-        row: "wrapped-array",
-        entry: WRAPPED,
-        compressed: true,
-        counted: true,
-      },
-    ];
+  // The two cases the combined request cannot isolate.
+  test("a lone malformed result: zeroed stats (hadToolResults=false), message untouched", async () => {
+    await upsertPricing();
 
-    for (const { row, entry, compressed, counted } of rows) {
-      test(row, async () => {
-        await upsertOneDollarPerTokenPricing();
+    const adapter = minimaxAdapterFactory.createRequestAdapter({
+      model: "MiniMax-M2",
+      messages: [
+        { role: "user", content: "run the tool" },
+        { role: "tool", tool_call_id: "call_1", content: MALFORMED.rawContent },
+      ],
+    });
+    const stats = await adapter.applyToonCompression("MiniMax-M2");
 
-        const adapter = minimaxAdapterFactory.createRequestAdapter({
-          model: "MiniMax-M2",
-          messages: [
-            { role: "user", content: "run the tool" },
-            { role: "tool", tool_call_id: "call_1", content: entry.rawContent },
-          ],
-        });
-        const stats = await adapter.applyToonCompression("MiniMax-M2");
+    expect(stats).toStrictEqual({
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: false,
+    });
+    const [, toolMessage] = adapter.getProviderMessages();
+    expect(toolMessage).toStrictEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: MALFORMED.rawContent,
+    });
+  });
 
-        const tokensBefore = counted
-          ? countTokens(entry.expected.normalized)
-          : 0;
-        const tokensAfter = compressed
-          ? countTokens(entry.expected.encoded as string)
-          : tokensBefore;
-        expect(stats).toStrictEqual({
-          tokensBefore,
-          tokensAfter,
-          costSavings: Math.max(0, tokensBefore - tokensAfter),
-          wasEffective: tokensAfter < tokensBefore,
-          hadToolResults: counted,
-        });
+  test("unconditional apply: a lone larger encoding is still applied, wasEffective=false", async () => {
+    await upsertPricing();
 
-        const [, toolMessage] = adapter.getProviderMessages();
-        expect(toolMessage).toStrictEqual({
-          role: "tool",
-          tool_call_id: "call_1",
-          content: compressed
-            ? (entry.expected.encoded as string)
-            : entry.rawContent,
-        });
-      });
-    }
+    const adapter = minimaxAdapterFactory.createRequestAdapter({
+      model: "MiniMax-M2",
+      messages: [
+        { role: "user", content: "run the tool" },
+        { role: "tool", tool_call_id: "call_1", content: LARGER.rawContent },
+      ],
+    });
+    const stats = await adapter.applyToonCompression("MiniMax-M2");
+
+    const tokensBefore = countTokens(LARGER.expected.normalized);
+    const tokensAfter = countTokens(LARGER.expected.encoded as string);
+    expect(tokensAfter).toBeGreaterThan(tokensBefore);
+    expect(stats).toStrictEqual({
+      tokensBefore,
+      tokensAfter,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+    const [, toolMessage] = adapter.getProviderMessages();
+    expect(toolMessage).toStrictEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: LARGER.expected.encoded as string,
+    });
   });
 });

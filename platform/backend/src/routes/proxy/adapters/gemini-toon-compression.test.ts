@@ -1,42 +1,27 @@
 // Pins the Gemini adapter's TOON compression cutover to the native addon:
 // full transformed-contents exact equality (TOON content from the committed
-// v3 golden corpus, everything else byte-equal) and the exact
-// ToolCompressionStats accounting matrix. Gemini-specific semantics pinned
-// here: the adapter serializes functionResponse.response itself and tokenizes
-// that ORIGINAL serialization (not the unwrapped string) while parsing goes
-// through the unwrap path, a winning part is replaced with
-// { functionResponse: { ..., response: { tool_result: "<TOON>" } } }, and
-// rejected payloads count their original tokens in both totals. Requires the
+// v3 golden corpus, everything else byte-equal). Gemini-specific semantics
+// pinned here: the adapter serializes functionResponse.response itself and
+// tokenizes that ORIGINAL serialization (not the unwrapped string) while
+// parsing goes through the unwrap path, a winning part is replaced with
+// { functionResponse: { ..., response: { tool_result: "<TOON>" } } }, rejected
+// payloads count their original tokens in both totals, and hadToolResults
+// reflects every functionResponse part (even unparseable ones). Requires the
 // built addon: mandatory in CI; locally it skips visibly — run
 // `pnpm test:native` from platform/backend.
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
-import { getTokenizer } from "@/tokenizers";
+import { expect, test } from "@/test";
+import {
+  corpusEntry,
+  describeNative,
+  type GoldenEntry,
+  makeCountTokens,
+  upsertOneDollarPerTokenPricing,
+} from "@/test/toon-golden";
 import type { Gemini } from "@/types";
 import { geminiAdapterFactory } from "./gemini";
 
 type GeminiRequest = Gemini.Types.GenerateContentRequest;
-
-type GoldenEntry = {
-  name: string;
-  rawContent: string;
-  unwrap: boolean;
-  expected: { normalized: string; encoded: string | null };
-};
-
-const CORPUS_PATH = path.resolve(
-  import.meta.dirname,
-  "../../../../../archestra-rs/proxy-transform-core/tests/fixtures/golden-corpus.json",
-);
-const corpus: GoldenEntry[] = JSON.parse(readFileSync(CORPUS_PATH, "utf8"));
-function corpusEntry(name: string): GoldenEntry {
-  const entry = corpus.find((candidate) => candidate.name === name);
-  if (!entry) throw new Error(`golden corpus entry not found: ${name}`);
-  return entry;
-}
 
 // Corpus picks: a uniform array (compression wins), a wrapped
 // [{type:"text",...}] payload (unwrapped for parsing, compression wins), a
@@ -49,50 +34,21 @@ const WRAPPED = corpusEntry("wrapped-single-text");
 const UNPARSEABLE = corpusEntry("wrapped-text-not-json");
 const NEAR_BOUNDARY = corpusEntry("boundary-obj-1");
 
-const tokenizer = getTokenizer("gemini");
-const countTokens = (content: string) =>
-  tokenizer.countTokens([{ role: "user", content }]);
+const countTokens = makeCountTokens("gemini");
 // Gemini accounting uses the adapter's own serialization of the response
 // object — recompute it here instead of trusting the corpus rawContent.
 const serialized = (entry: GoldenEntry) =>
   JSON.stringify(JSON.parse(entry.rawContent));
 
-// $1,000,000 per million input tokens = $1 per token, so expected costSavings
-// equals tokens saved exactly.
-async function upsertOneDollarPerTokenPricing() {
-  await ModelModel.upsert({
-    externalId: "gemini/gemini-2.0-flash",
+const upsertPricing = () =>
+  upsertOneDollarPerTokenPricing({
     provider: "gemini",
     modelId: "gemini-2.0-flash",
-    inputModalities: null,
-    outputModalities: null,
-    customPricePerMillionInput: "1000000.00",
-    customPricePerMillionOutput: "1000000.00",
-    lastSyncedAt: new Date(),
   });
-}
-
-const addonLoadError: unknown = await import(
-  "@archestra/proxy-transform-rs"
-).then(
-  () => null,
-  (error) => error,
-);
-
-// In CI the suite must FAIL (never skip) when the addon is missing.
-const describeNative =
-  addonLoadError === null || process.env.CI ? describe : describe.skip;
-if (addonLoadError !== null && !process.env.CI) {
-  console.warn(
-    `[gemini-toon-compression.test] skipping: @archestra/proxy-transform-rs is not built (${String(
-      addonLoadError,
-    )}). Run \`pnpm test:native\` from platform/backend.`,
-  );
-}
 
 describeNative("Gemini adapter TOON compression (native addon)", () => {
   test("transforms the full contents exactly (goldens for TOON, byte-equal elsewhere)", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     const makeRequest = (): GeminiRequest => ({
       contents: [
@@ -180,7 +136,7 @@ describeNative("Gemini adapter TOON compression (native addon)", () => {
   });
 
   test("applies native results to the right parts when non-candidate parts are interleaved", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     // Text parts and a model turn between functionResponse parts: the
     // winning candidate sits at native index 2, content index 3, part index
@@ -254,83 +210,73 @@ describeNative("Gemini adapter TOON compression (native addon)", () => {
     });
   });
 
-  describe("exact ToolCompressionStats accounting matrix", () => {
-    // hadToolResults is true even for the unparseable row: Gemini counts
-    // every functionResponse part it sees.
-    const rows: {
-      row: string;
-      entry: GoldenEntry;
-      compressed: boolean;
-      counted: boolean;
-    }[] = [
+  // The case the combined request cannot isolate: hadToolResults is true even
+  // when the only functionResponse is unparseable after unwrap — Gemini
+  // counts every functionResponse part it sees.
+  test("a lone unparseable response: zeroed totals but hadToolResults=true, contents untouched", async () => {
+    await upsertPricing();
+
+    const makeContents = (): GeminiRequest["contents"] => [
+      { role: "user", parts: [{ text: "run the tool" }] },
       {
-        row: "unparseable after unwrap",
-        entry: UNPARSEABLE,
-        compressed: false,
-        counted: false,
-      },
-      {
-        row: "ineffective (rejected: original counted in both totals)",
-        entry: NEAR_BOUNDARY,
-        compressed: false,
-        counted: true,
-      },
-      { row: "effective", entry: UNIFORM, compressed: true, counted: true },
-      {
-        row: "wrapped-array (tokenized as the whole wrapper serialization)",
-        entry: WRAPPED,
-        compressed: true,
-        counted: true,
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              name: "the_tool",
+              response: JSON.parse(UNPARSEABLE.rawContent),
+            },
+          },
+        ],
       },
     ];
 
-    for (const { row, entry, compressed, counted } of rows) {
-      test(row, async () => {
-        await upsertOneDollarPerTokenPricing();
+    const adapter = geminiAdapterFactory.createRequestAdapter({
+      contents: makeContents(),
+    });
+    const stats = await adapter.applyToonCompression("gemini-2.0-flash");
 
-        const makeContents = (): GeminiRequest["contents"] => [
-          { role: "user", parts: [{ text: "run the tool" }] },
+    expect(stats).toStrictEqual({
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+    expect(adapter.getProviderMessages()).toStrictEqual(makeContents());
+  });
+
+  test("a lone rejected response: original counted in both totals, wasEffective=false", async () => {
+    await upsertPricing();
+
+    const makeContents = (): GeminiRequest["contents"] => [
+      { role: "user", parts: [{ text: "run the tool" }] },
+      {
+        role: "user",
+        parts: [
           {
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: "the_tool",
-                  response: JSON.parse(entry.rawContent),
-                },
-              },
-            ],
-          },
-        ];
-
-        const adapter = geminiAdapterFactory.createRequestAdapter({
-          contents: makeContents(),
-        });
-        const stats = await adapter.applyToonCompression("gemini-2.0-flash");
-
-        const tokensBefore = counted ? countTokens(serialized(entry)) : 0;
-        const tokensAfter = compressed
-          ? countTokens(entry.expected.encoded as string)
-          : tokensBefore;
-        expect(stats).toStrictEqual({
-          tokensBefore,
-          tokensAfter,
-          costSavings: tokensBefore - tokensAfter,
-          wasEffective: compressed,
-          hadToolResults: true,
-        });
-
-        const expectedContents = makeContents();
-        if (compressed) {
-          expectedContents[1].parts[0] = {
             functionResponse: {
               name: "the_tool",
-              response: { tool_result: entry.expected.encoded as string },
+              response: JSON.parse(NEAR_BOUNDARY.rawContent),
             },
-          };
-        }
-        expect(adapter.getProviderMessages()).toStrictEqual(expectedContents);
-      });
-    }
+          },
+        ],
+      },
+    ];
+
+    const adapter = geminiAdapterFactory.createRequestAdapter({
+      contents: makeContents(),
+    });
+    const stats = await adapter.applyToonCompression("gemini-2.0-flash");
+
+    const boundaryTokens = countTokens(serialized(NEAR_BOUNDARY));
+    expect(stats).toStrictEqual({
+      tokensBefore: boundaryTokens,
+      tokensAfter: boundaryTokens,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+    expect(adapter.getProviderMessages()).toStrictEqual(makeContents());
   });
 });

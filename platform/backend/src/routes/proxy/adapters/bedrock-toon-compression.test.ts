@@ -1,42 +1,25 @@
 // Pins the Bedrock adapter's TOON compression cutover to the native addon:
 // full transformed-request exact equality (TOON content from the committed v3
-// golden corpus, everything else byte-equal) and the exact
-// ToolCompressionStats accounting matrix. Bedrock-specific semantics pinned
-// here: compression is applied UNCONDITIONALLY (no keep/reject — encoded
-// tokens are always recorded, even when TOON is larger), NEITHER branch
-// unwraps client wrappers, only content[0] of a toolResult is read, a
+// golden corpus, everything else byte-equal). Bedrock-specific semantics
+// pinned here: compression is applied UNCONDITIONALLY (no keep/reject —
+// encoded tokens are always recorded, even when TOON is larger), NEITHER
+// branch unwraps client wrappers, only content[0] of a toolResult is read, a
 // compressed result replaces the WHOLE content array with one text item (the
 // json branch is rewritten to text too), and error-status results are skipped
 // entirely. Requires the built addon: mandatory in CI; locally it skips
 // visibly — run `pnpm test:native` from platform/backend.
 
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
-import { getTokenizer } from "@/tokenizers";
+import { expect, test } from "@/test";
+import {
+  corpusEntry,
+  describeNative,
+  makeCountTokens,
+  upsertOneDollarPerTokenPricing,
+} from "@/test/toon-golden";
 import type { Bedrock } from "@/types";
 import { bedrockAdapterFactory } from "./bedrock";
 
 type BedrockRequest = Bedrock.Types.ConverseRequest;
-
-type GoldenEntry = {
-  name: string;
-  rawContent: string;
-  unwrap: boolean;
-  expected: { normalized: string; encoded: string | null };
-};
-
-const CORPUS_PATH = path.resolve(
-  import.meta.dirname,
-  "../../../../../archestra-rs/proxy-transform-core/tests/fixtures/golden-corpus.json",
-);
-const corpus: GoldenEntry[] = JSON.parse(readFileSync(CORPUS_PATH, "utf8"));
-function corpusEntry(name: string): GoldenEntry {
-  const entry = corpus.find((candidate) => candidate.name === name);
-  if (!entry) throw new Error(`golden corpus entry not found: ${name}`);
-  return entry;
-}
 
 // Corpus picks: a uniform array (TOON smaller), malformed JSON (kept as-is),
 // a json-branch twin of the uniform array, and a wrapped [{type:"text",...}]
@@ -52,51 +35,22 @@ const WRAPPED_NO_UNWRAP = corpusEntry("wrapped-but-unwrap-false");
 const JSON_LARGER = corpusEntry("boundary-obj-3");
 
 // Bedrock accounting uses the Anthropic tokenizer as an approximation.
-const tokenizer = getTokenizer("anthropic");
-const countTokens = (content: string) =>
-  tokenizer.countTokens([{ role: "user", content }]);
+const countTokens = makeCountTokens("anthropic");
 // The json branch tokenizes the adapter's own serialization of the json
 // value — recompute it here instead of trusting the corpus rawContent.
 const jsonBranchSerialized = JSON.stringify(JSON.parse(JSON_BRANCH.rawContent));
 
 const BEDROCK_MODEL = "anthropic.claude-sonnet-4-5-20250929-v1:0";
 
-// $1,000,000 per million input tokens = $1 per token, so expected costSavings
-// equals tokens saved exactly.
-async function upsertOneDollarPerTokenPricing() {
-  await ModelModel.upsert({
-    externalId: `bedrock/${BEDROCK_MODEL}`,
+const upsertPricing = () =>
+  upsertOneDollarPerTokenPricing({
     provider: "bedrock",
     modelId: BEDROCK_MODEL,
-    inputModalities: null,
-    outputModalities: null,
-    customPricePerMillionInput: "1000000.00",
-    customPricePerMillionOutput: "1000000.00",
-    lastSyncedAt: new Date(),
   });
-}
-
-const addonLoadError: unknown = await import(
-  "@archestra/proxy-transform-rs"
-).then(
-  () => null,
-  (error) => error,
-);
-
-// In CI the suite must FAIL (never skip) when the addon is missing.
-const describeNative =
-  addonLoadError === null || process.env.CI ? describe : describe.skip;
-if (addonLoadError !== null && !process.env.CI) {
-  console.warn(
-    `[bedrock-toon-compression.test] skipping: @archestra/proxy-transform-rs is not built (${String(
-      addonLoadError,
-    )}). Run \`pnpm test:native\` from platform/backend.`,
-  );
-}
 
 describeNative("Bedrock adapter TOON compression (native addon)", () => {
   test("transforms the full provider request exactly (goldens for TOON, byte-equal elsewhere)", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     const makeRequest = (): BedrockRequest => ({
       modelId: BEDROCK_MODEL,
@@ -193,7 +147,7 @@ describeNative("Bedrock adapter TOON compression (native addon)", () => {
   });
 
   test("applies native results to the right blocks when non-candidate blocks are interleaved", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     // Non-candidates between candidates: a plain text block, an error-status
     // toolResult (whose content WOULD compress if wrongly collected), an
@@ -272,7 +226,7 @@ describeNative("Bedrock adapter TOON compression (native addon)", () => {
   });
 
   test("reads only content[0] and replaces the whole content array (multi-item content)", async () => {
-    await upsertOneDollarPerTokenPricing();
+    await upsertPricing();
 
     const makeRequest = (): BedrockRequest => ({
       modelId: BEDROCK_MODEL,
@@ -329,211 +283,175 @@ describeNative("Bedrock adapter TOON compression (native addon)", () => {
     });
   });
 
-  describe("exact ToolCompressionStats accounting matrix", () => {
-    // hadToolResults is true even for malformed content: Bedrock counts every
-    // non-error toolResult block it sees. There is no reject rule — when the
-    // encoding is larger it is still applied and both totals recorded.
-    const rows: {
-      row: string;
-      entry: GoldenEntry;
-      compressed: boolean;
-      counted: boolean;
-    }[] = [
-      { row: "malformed", entry: MALFORMED, compressed: false, counted: false },
-      {
-        row: "unconditional apply (encoded larger, no unwrap, still applied)",
-        entry: WRAPPED_NO_UNWRAP,
-        compressed: true,
-        counted: true,
-      },
-      { row: "effective", entry: UNIFORM, compressed: true, counted: true },
-    ];
+  // Cases the combined request cannot isolate: hadToolResults is true even
+  // for malformed-only content (Bedrock counts every non-error toolResult),
+  // there is no reject rule on either branch, and error-status results are
+  // skipped entirely.
+  test("a lone malformed result: zeroed totals but hadToolResults=true, message untouched", async () => {
+    await upsertPricing();
 
-    for (const { row, entry, compressed, counted } of rows) {
-      test(row, async () => {
-        await upsertOneDollarPerTokenPricing();
-
-        const adapter = bedrockAdapterFactory.createRequestAdapter({
-          modelId: BEDROCK_MODEL,
-          messages: [
-            { role: "user", content: [{ text: "run the tool" }] },
-            {
-              role: "user",
-              content: [
-                {
-                  toolResult: {
-                    toolUseId: "tooluse_1",
-                    content: [{ text: entry.rawContent }],
-                  },
-                },
-              ],
-            },
-          ],
-        });
-        const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
-
-        const tokensBefore = counted ? countTokens(entry.rawContent) : 0;
-        const tokensAfter = compressed
-          ? countTokens(entry.expected.encoded as string)
-          : tokensBefore;
-        expect(stats).toStrictEqual({
-          tokensBefore,
-          tokensAfter,
-          costSavings: Math.max(0, tokensBefore - tokensAfter),
-          wasEffective: tokensAfter < tokensBefore,
-          hadToolResults: true,
-        });
-
-        const [, toolMessage] = adapter.getProviderMessages();
-        expect(toolMessage).toStrictEqual({
+    const makeRequest = (): BedrockRequest => ({
+      modelId: BEDROCK_MODEL,
+      messages: [
+        { role: "user", content: [{ text: "run the tool" }] },
+        {
           role: "user",
           content: [
             {
               toolResult: {
                 toolUseId: "tooluse_1",
-                content: [
-                  {
-                    text: compressed
-                      ? (entry.expected.encoded as string)
-                      : entry.rawContent,
-                  },
-                ],
+                content: [{ text: MALFORMED.rawContent }],
               },
             },
           ],
-        });
-      });
-    }
-
-    test("json branch (encodes the json value, unconditional apply)", async () => {
-      await upsertOneDollarPerTokenPricing();
-
-      const adapter = bedrockAdapterFactory.createRequestAdapter({
-        modelId: BEDROCK_MODEL,
-        messages: [
-          { role: "user", content: [{ text: "run the tool" }] },
-          {
-            role: "user",
-            content: [
-              {
-                toolResult: {
-                  toolUseId: "tooluse_json",
-                  content: [{ json: JSON.parse(JSON_BRANCH.rawContent) }],
-                },
-              },
-            ],
-          },
-        ],
-      });
-      const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
-
-      const tokensBefore = countTokens(jsonBranchSerialized);
-      const tokensAfter = countTokens(JSON_BRANCH.expected.encoded as string);
-      expect(stats).toStrictEqual({
-        tokensBefore,
-        tokensAfter,
-        costSavings: tokensBefore - tokensAfter,
-        wasEffective: true,
-        hadToolResults: true,
-      });
-
-      const [, toolMessage] = adapter.getProviderMessages();
-      expect(toolMessage).toStrictEqual({
-        role: "user",
-        content: [
-          {
-            toolResult: {
-              toolUseId: "tooluse_json",
-              content: [{ text: JSON_BRANCH.expected.encoded as string }],
-            },
-          },
-        ],
-      });
+        },
+      ],
     });
 
-    test("json branch unconditional apply (encoded larger, still applied)", async () => {
-      await upsertOneDollarPerTokenPricing();
+    const adapter = bedrockAdapterFactory.createRequestAdapter(makeRequest());
+    const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
 
-      const jsonLargerSerialized = JSON.stringify(
-        JSON.parse(JSON_LARGER.rawContent),
-      );
-      const adapter = bedrockAdapterFactory.createRequestAdapter({
-        modelId: BEDROCK_MODEL,
-        messages: [
-          { role: "user", content: [{ text: "run the tool" }] },
-          {
-            role: "user",
-            content: [
-              {
-                toolResult: {
-                  toolUseId: "tooluse_json_larger",
-                  content: [{ json: JSON.parse(JSON_LARGER.rawContent) }],
-                },
+    expect(stats).toStrictEqual({
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+    expect(adapter.toProviderRequest()).toStrictEqual(makeRequest());
+  });
+
+  test("text branch unconditional apply (encoded larger, no unwrap, still applied)", async () => {
+    await upsertPricing();
+
+    const adapter = bedrockAdapterFactory.createRequestAdapter({
+      modelId: BEDROCK_MODEL,
+      messages: [
+        { role: "user", content: [{ text: "run the tool" }] },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tooluse_1",
+                content: [{ text: WRAPPED_NO_UNWRAP.rawContent }],
               },
-            ],
-          },
-        ],
-      });
-      const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
-
-      const tokensBefore = countTokens(jsonLargerSerialized);
-      const tokensAfter = countTokens(JSON_LARGER.expected.encoded as string);
-      expect(tokensAfter).toBeGreaterThan(tokensBefore);
-      expect(stats).toStrictEqual({
-        tokensBefore,
-        tokensAfter,
-        costSavings: 0,
-        wasEffective: false,
-        hadToolResults: true,
-      });
-
-      // Still applied despite being larger — no keep/reject on this branch.
-      const [, toolMessage] = adapter.getProviderMessages();
-      expect(toolMessage).toStrictEqual({
-        role: "user",
-        content: [
-          {
-            toolResult: {
-              toolUseId: "tooluse_json_larger",
-              content: [{ text: JSON_LARGER.expected.encoded as string }],
             },
-          },
-        ],
-      });
+          ],
+        },
+      ],
+    });
+    const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
+
+    const tokensBefore = countTokens(WRAPPED_NO_UNWRAP.rawContent);
+    const tokensAfter = countTokens(
+      WRAPPED_NO_UNWRAP.expected.encoded as string,
+    );
+    expect(tokensAfter).toBeGreaterThan(tokensBefore);
+    expect(stats).toStrictEqual({
+      tokensBefore,
+      tokensAfter,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
     });
 
-    test("error-status result is skipped entirely (not counted as a tool result)", async () => {
-      await upsertOneDollarPerTokenPricing();
-
-      const makeRequest = (): BedrockRequest => ({
-        modelId: BEDROCK_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                toolResult: {
-                  toolUseId: "tooluse_error",
-                  content: [{ text: UNIFORM.rawContent }],
-                  status: "error",
-                },
-              },
-            ],
+    const [, toolMessage] = adapter.getProviderMessages();
+    expect(toolMessage).toStrictEqual({
+      role: "user",
+      content: [
+        {
+          toolResult: {
+            toolUseId: "tooluse_1",
+            content: [{ text: WRAPPED_NO_UNWRAP.expected.encoded as string }],
           },
-        ],
-      });
+        },
+      ],
+    });
+  });
 
-      const adapter = bedrockAdapterFactory.createRequestAdapter(makeRequest());
-      const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
+  test("json branch unconditional apply (encoded larger, still applied)", async () => {
+    await upsertPricing();
 
-      expect(adapter.toProviderRequest()).toStrictEqual(makeRequest());
-      expect(stats).toStrictEqual({
-        tokensBefore: 0,
-        tokensAfter: 0,
-        costSavings: 0,
-        wasEffective: false,
-        hadToolResults: false,
-      });
+    const jsonLargerSerialized = JSON.stringify(
+      JSON.parse(JSON_LARGER.rawContent),
+    );
+    const adapter = bedrockAdapterFactory.createRequestAdapter({
+      modelId: BEDROCK_MODEL,
+      messages: [
+        { role: "user", content: [{ text: "run the tool" }] },
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tooluse_json_larger",
+                content: [{ json: JSON.parse(JSON_LARGER.rawContent) }],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
+
+    const tokensBefore = countTokens(jsonLargerSerialized);
+    const tokensAfter = countTokens(JSON_LARGER.expected.encoded as string);
+    expect(tokensAfter).toBeGreaterThan(tokensBefore);
+    expect(stats).toStrictEqual({
+      tokensBefore,
+      tokensAfter,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: true,
+    });
+
+    // Still applied despite being larger — no keep/reject on this branch.
+    const [, toolMessage] = adapter.getProviderMessages();
+    expect(toolMessage).toStrictEqual({
+      role: "user",
+      content: [
+        {
+          toolResult: {
+            toolUseId: "tooluse_json_larger",
+            content: [{ text: JSON_LARGER.expected.encoded as string }],
+          },
+        },
+      ],
+    });
+  });
+
+  test("error-status result is skipped entirely (not counted as a tool result)", async () => {
+    await upsertPricing();
+
+    const makeRequest = (): BedrockRequest => ({
+      modelId: BEDROCK_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tooluse_error",
+                content: [{ text: UNIFORM.rawContent }],
+                status: "error",
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const adapter = bedrockAdapterFactory.createRequestAdapter(makeRequest());
+    const stats = await adapter.applyToonCompression(BEDROCK_MODEL);
+
+    expect(adapter.toProviderRequest()).toStrictEqual(makeRequest());
+    expect(stats).toStrictEqual({
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: false,
     });
   });
 });

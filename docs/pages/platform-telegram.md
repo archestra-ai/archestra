@@ -3,7 +3,7 @@ title: Telegram
 category: Agents
 order: 6
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-10
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.
@@ -47,6 +47,12 @@ Add the bot to a group. It replies when addressed:
 By default Telegram's privacy mode means the bot only receives these messages anyway. To let an agent observe all group messages (and decide when to chime in), disable Group Privacy for the bot in BotFather, then remove and re-add the bot to the group — Telegram caches the setting.
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
+
+### Continuing on the Web
+
+Every Telegram chat the agent participates in is persisted as a regular chat conversation. The agent's replies include a link to it, and the conversation appears in the chat sidebar of whoever sent the first message — that person owns the conversation and can keep chatting with the agent on the web. When they return to Telegram, the agent remembers the web session too, and other participants' messages are recorded with their names.
+
+Web-side context stays private to the owner: when someone else invokes the agent in the same shared Telegram chat, it answers using only what happened there.
 
 ### Commands
 

@@ -9,7 +9,7 @@ import { LoadingSpinner } from "@/components/loading";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Savings } from "@/components/savings";
+import { BilledCost } from "@/components/billed-cost";
 import { SourceBadge } from "@/components/source-badge";
 import {
   Accordion,
@@ -168,8 +168,9 @@ function LogDetail({
               <div className="font-mono">
                 {dynamicInteraction.cost ? (
                   <TooltipProvider>
-                    <Savings
+                    <BilledCost
                       cost={dynamicInteraction.cost}
+                      billingMode={dynamicInteraction.billingMode}
                       baselineCost={
                         dynamicInteraction.baselineCost ||
                         dynamicInteraction.cost

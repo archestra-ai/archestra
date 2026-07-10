@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { use } from "react";
 import MessageThread from "@/components/message-thread";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
-import { Savings } from "@/components/savings";
+import { BilledCost } from "@/components/billed-cost";
 import { SourceBadge } from "@/components/source-badge";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
@@ -101,6 +101,8 @@ export default function SessionDetailPage({
   const totalRequests =
     sessionData?.requestCount ?? paginationMeta?.total ?? interactions.length;
   const totalCost = sessionData?.totalCost;
+  const totalBilledCost = sessionData?.totalBilledCost;
+  const totalSubscriptionCost = sessionData?.totalSubscriptionCost;
   const totalBaselineCost = sessionData?.totalBaselineCost;
   const totalToonCostSavings = sessionData?.totalToonCostSavings;
 
@@ -234,8 +236,10 @@ export default function SessionDetailPage({
           <div className="font-mono">
             {totalCost && totalBaselineCost ? (
               <TooltipProvider>
-                <Savings
+                <BilledCost
                   cost={totalCost}
+                  billedCost={totalBilledCost}
+                  subscriptionCost={totalSubscriptionCost}
                   baselineCost={totalBaselineCost}
                   toonCostSavings={totalToonCostSavings}
                   format="percent"
@@ -386,8 +390,9 @@ export default function SessionDetailPage({
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       <TooltipProvider>
-                        <Savings
+                        <BilledCost
                           cost={interaction.cost || "0"}
+                          billingMode={interaction.billingMode}
                           baselineCost={
                             interaction.baselineCost || interaction.cost || "0"
                           }

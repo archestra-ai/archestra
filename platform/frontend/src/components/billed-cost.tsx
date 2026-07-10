@@ -1,3 +1,4 @@
+import type { archestraApiTypes, BillingMode } from "@archestra/shared";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -25,8 +26,14 @@ export function BilledCost({
   cost,
   billedCost,
   subscriptionCost,
+  billingMode,
   baselineCost,
   toonCostSavings,
+  toonTokensBefore,
+  toonTokensAfter,
+  toonSkipReason,
+  baselineModel,
+  actualModel,
   format = "percent",
   tooltip = "never",
   variant = "default",
@@ -38,15 +45,34 @@ export function BilledCost({
   billedCost?: string | null;
   /** Would-be list price of subscription-covered rows (not billed). */
   subscriptionCost?: string | null;
+  /**
+   * Single-interaction convenience: when `subscription`, the whole `cost` is
+   * subscription-covered (billed $0). Ignored when billedCost/subscriptionCost
+   * are provided (the aggregate/session case).
+   */
+  billingMode?: BillingMode | null;
   baselineCost: string;
   toonCostSavings?: string | null;
+  toonTokensBefore?: number | null;
+  toonTokensAfter?: number | null;
+  toonSkipReason?:
+    | archestraApiTypes.GetInteractionResponses["200"]["toonSkipReason"]
+    | null;
+  baselineModel?: string | null;
+  actualModel?: string | null;
   format?: "percent" | "number";
   tooltip?: "never" | "always" | "hover";
   variant?: "default" | "session" | "interaction";
   className?: string;
 }) {
-  const subscription = subscriptionCost
-    ? Number.parseFloat(subscriptionCost)
+  // Derive the split from billingMode when explicit sums aren't supplied.
+  const derivedBilled =
+    billedCost ?? (billingMode === "subscription" ? "0" : null);
+  const derivedSubscription =
+    subscriptionCost ?? (billingMode === "subscription" ? cost : null);
+
+  const subscription = derivedSubscription
+    ? Number.parseFloat(derivedSubscription)
     : 0;
 
   if (subscription <= 0) {
@@ -55,6 +81,11 @@ export function BilledCost({
         cost={cost}
         baselineCost={baselineCost}
         toonCostSavings={toonCostSavings}
+        toonTokensBefore={toonTokensBefore}
+        toonTokensAfter={toonTokensAfter}
+        toonSkipReason={toonSkipReason}
+        baselineModel={baselineModel}
+        actualModel={actualModel}
         format={format}
         tooltip={tooltip}
         variant={variant}
@@ -64,7 +95,9 @@ export function BilledCost({
   }
 
   const billed =
-    billedCost != null ? Number.parseFloat(billedCost) : Number.parseFloat(cost);
+    derivedBilled != null
+      ? Number.parseFloat(derivedBilled)
+      : Number.parseFloat(cost);
 
   return (
     <Tooltip>

@@ -193,6 +193,9 @@ importers:
       '@archestra/image-rs':
         specifier: workspace:*
         version: link:../archestra-rs/image-rs
+      '@archestra/proxy-transform-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/proxy-transform-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs

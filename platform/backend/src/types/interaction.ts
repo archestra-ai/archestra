@@ -485,6 +485,7 @@ export const ToonSkipReasonCountsSchema = z.object({
   notEnabled: z.number(),
   notEffective: z.number(),
   noToolResults: z.number(),
+  addonUnavailable: z.number(),
 });
 
 /**

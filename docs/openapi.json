@@ -111917,7 +111917,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -112880,7 +112881,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -113551,7 +113553,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -114211,7 +114214,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -114742,7 +114746,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -115284,7 +115289,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -117777,7 +117783,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -118319,7 +118326,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -118861,7 +118869,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -119403,7 +119412,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -119945,7 +119955,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -120487,7 +120498,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -121029,7 +121041,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -121571,7 +121584,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -122102,7 +122116,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -122633,7 +122648,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -123175,7 +123191,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -123717,7 +123734,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -126430,7 +126448,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -126972,7 +126991,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -127748,7 +127768,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -128711,7 +128732,8 @@
                                 "enum": [
                                   "not_enabled",
                                   "not_effective",
-                                  "no_tool_results"
+                                  "no_tool_results",
+                                  "addon_unavailable"
                                 ]
                               },
                               "createdAt": {
@@ -129447,13 +129469,17 @@
                               },
                               "noToolResults": {
                                 "type": "number"
+                              },
+                              "addonUnavailable": {
+                                "type": "number"
                               }
                             },
                             "required": [
                               "applied",
                               "notEnabled",
                               "notEffective",
-                              "noToolResults"
+                              "noToolResults",
+                              "addonUnavailable"
                             ],
                             "additionalProperties": false
                           },
@@ -130755,7 +130781,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -131718,7 +131745,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -132389,7 +132417,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -133049,7 +133078,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -133580,7 +133610,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -134122,7 +134153,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -136615,7 +136647,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -137157,7 +137190,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -137699,7 +137733,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -138241,7 +138276,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -138783,7 +138819,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -139325,7 +139362,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -139867,7 +139905,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -140409,7 +140448,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -140940,7 +140980,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -141471,7 +141512,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -142013,7 +142055,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -142555,7 +142598,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -145268,7 +145312,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -145810,7 +145855,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -146586,7 +146632,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {
@@ -147549,7 +147596,8 @@
                           "enum": [
                             "not_enabled",
                             "not_effective",
-                            "no_tool_results"
+                            "no_tool_results",
+                            "addon_unavailable"
                           ]
                         },
                         "createdAt": {

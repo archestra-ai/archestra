@@ -104,6 +104,7 @@ import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
 import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
+import { initToonNative } from "./routes/proxy/utils/toon-native";
 import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
@@ -1127,6 +1128,10 @@ const startWebServer = async () => {
 
     const labelKeys = await initializeObservabilityMetrics();
 
+    // Eagerly load the native proxy-transform addon so a broken deployment
+    // surfaces at boot (error log + metric); the proxy itself fails open.
+    await initToonNative();
+
     // Start metrics server
     await startMetricsServer();
 
@@ -1486,6 +1491,10 @@ const startWorker = async () => {
       includeMcpMetrics: true,
       includeAgentExecutionMetrics: false,
     });
+
+    // Worker mode registers LLM proxy routes too (registerWorkerRoutes below),
+    // so eagerly load the native proxy-transform addon here as well.
+    await initToonNative();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();

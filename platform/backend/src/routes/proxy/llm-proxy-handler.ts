@@ -839,7 +839,11 @@ export async function handleLLMProxy<
 
     if (shouldApplyToonCompression) {
       toonStats = await requestAdapter.applyToonCompression(actualModel);
-      if (!toonStats.hadToolResults) {
+      if (toonStats.skipReason) {
+        // Infrastructure failure (native addon unavailable) — never derive
+        // not_effective/no_tool_results from stats that were never computed.
+        toonSkipReason = toonStats.skipReason;
+      } else if (!toonStats.hadToolResults) {
         toonSkipReason = "no_tool_results";
       } else if (!toonStats.wasEffective) {
         toonSkipReason = "not_effective";

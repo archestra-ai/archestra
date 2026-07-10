@@ -335,7 +335,10 @@ export function isAwsApplicationNetworkPolicyProvider(
 
 const BASELINE_POD_SELECTOR_LABELS = { app: "mcp-server" };
 
-// Reserved/private ranges the unrestricted floor excludes from open public egress.
+// Reserved, private, and cloud-metadata ranges the unrestricted floor blocks
+// (spec egress-policy.md LIM-1). 168.63.129.16/32 (Azure platform metadata) is a
+// public IP covered by no range, so it is listed explicitly; the other metadata
+// endpoints fall under 169.254.0.0/16 (IMDS, container creds) and 100.64.0.0/10.
 const FLOOR_DENIED_IPV4_CIDRS = [
   "10.0.0.0/8",
   "172.16.0.0/12",
@@ -343,9 +346,17 @@ const FLOOR_DENIED_IPV4_CIDRS = [
   "169.254.0.0/16",
   "100.64.0.0/10",
   "127.0.0.0/8",
-  "0.0.0.0/32",
+  "0.0.0.0/8",
+  "168.63.129.16/32",
 ];
-const FLOOR_DENIED_IPV6_CIDRS = ["::1/128", "fc00::/7", "fe80::/10"];
+// IPv4-mapped and NAT64 prefixes block reaching the IPv4 ranges above via IPv6.
+const FLOOR_DENIED_IPV6_CIDRS = [
+  "::1/128",
+  "fc00::/7",
+  "fe80::/10",
+  "::ffff:0:0/96",
+  "64:ff9b::/96",
+];
 
 // DNS to any resolver + all public egress with the reserved ranges above blocked.
 // Shared by the plain NetworkPolicy and AWS ApplicationNetworkPolicy floor

@@ -112,28 +112,23 @@ pub fn scan_app_html(html: &str) -> ScanResult {
 
     // 2. Platform script self-load via <script src>, document order.
     for tag in tags().filter(|tag| exact_resource_tag_is(tag, "script")) {
-        if let Some(src) = resource_ref(tag, "src")
-            && PLATFORM_SCRIPT_SRC_MARKERS
+        if let Some(src) = resource_ref(tag, "src") {
+            let normalized = normalize_resource_ref(&src);
+            if PLATFORM_SCRIPT_SRC_MARKERS
                 .iter()
-                .any(|marker| src.contains(marker))
-        {
-            return reject(RejectionKind::PlatformScriptSrc, src);
+                .any(|marker| normalized.contains(marker))
+            {
+                return reject(RejectionKind::PlatformScriptSrc, src);
+            }
         }
     }
 
-    // 3. Platform stylesheet self-load via <link href>. Strip whitespace the
-    //    browser ignores when resolving the URL so a spliced tab/newline (or a
-    //    ZWNBSP, which JS `\s` strips but Rust's `is_whitespace` does not) can't
-    //    sneak the marker past.
+    // 3. Platform stylesheet self-load via <link href>.
     for tag in tags().filter(|tag| exact_resource_tag_is(tag, "link")) {
-        if let Some(href) = resource_ref(tag, "href") {
-            let collapsed: String = href
-                .chars()
-                .filter(|c| !c.is_whitespace() && *c != '\u{feff}')
-                .collect();
-            if collapsed.contains(PLATFORM_BASE_CSS_MARKER) {
-                return reject(RejectionKind::PlatformBaseCss, href);
-            }
+        if let Some(href) = resource_ref(tag, "href")
+            && normalize_resource_ref(&href).contains(PLATFORM_BASE_CSS_MARKER)
+        {
+            return reject(RejectionKind::PlatformBaseCss, href);
         }
     }
 
@@ -149,22 +144,18 @@ pub fn scan_app_html(html: &str) -> ScanResult {
                 .or_else(|| attr_capture.get(3))
                 .map_or("", |m| m.as_str());
             if tag_name.eq_ignore_ascii_case("script") && attr_name.eq_ignore_ascii_case("src") {
+                let normalized = normalize_resource_ref(value);
                 if PLATFORM_SCRIPT_SRC_MARKERS
                     .iter()
-                    .any(|marker| value.contains(marker))
+                    .any(|marker| normalized.contains(marker))
                 {
                     return reject(RejectionKind::PlatformScriptSrc, value.to_string());
                 }
             } else if tag_name.eq_ignore_ascii_case("link")
                 && attr_name.eq_ignore_ascii_case("href")
+                && normalize_resource_ref(value).contains(PLATFORM_BASE_CSS_MARKER)
             {
-                let collapsed: String = value
-                    .chars()
-                    .filter(|c| !c.is_whitespace() && *c != '\u{feff}')
-                    .collect();
-                if collapsed.contains(PLATFORM_BASE_CSS_MARKER) {
-                    return reject(RejectionKind::PlatformBaseCss, value.to_string());
-                }
+                return reject(RejectionKind::PlatformBaseCss, value.to_string());
             }
         }
     }
@@ -243,6 +234,13 @@ fn exact_resource_tag_is(tag: &tl::HTMLTag, expected: &str) -> bool {
         })
 }
 
+fn normalize_resource_ref(reference: &str) -> String {
+    reference
+        .chars()
+        .filter(|character| !matches!(character, '\t' | '\n' | '\r'))
+        .collect()
+}
+
 fn reject(kind: RejectionKind, offender: String) -> ScanResult {
     ScanResult {
         rejection: Some(Rejection { kind, offender }),
@@ -304,16 +302,6 @@ mod tests {
         let html = "<html><head><link href=\"/_sandbox/archestra-app-\n\tbase.css\"></head></html>";
         let rejection = scan_app_html(html).rejection.expect("should reject");
         assert_eq!(rejection.kind, RejectionKind::PlatformBaseCss);
-    }
-
-    #[test]
-    fn zwnbsp_spliced_href_is_still_caught() {
-        let html =
-            "<html><head><link href=\"/_sandbox/archestra-app-\u{feff}base.css\"></head></html>";
-        assert_eq!(
-            scan_app_html(html).rejection.expect("should reject").kind,
-            RejectionKind::PlatformBaseCss
-        );
     }
 
     #[test]
@@ -461,6 +449,47 @@ mod tests {
                 RejectionKind::PlatformBaseCss,
                 "{link}"
             );
+        }
+    }
+
+    #[test]
+    fn ignored_url_controls_cannot_splice_platform_resource_markers() {
+        for control in ["\t", "\n", "\r"] {
+            let script_ref = format!("/_sandbox/archestra-app-{control}sdk.js");
+            for html in [
+                format!(r#"<html><head><script src="{script_ref}"></script></head></html>"#),
+                format!(r#"<html><head><script /src="{script_ref}"></script></head></html>"#),
+            ] {
+                let rejection = scan_app_html(&html).rejection.expect("should reject");
+                assert_eq!(rejection.kind, RejectionKind::PlatformScriptSrc);
+                assert_eq!(rejection.offender, script_ref);
+            }
+
+            let stylesheet_ref = format!("/_sandbox/archestra-app-{control}base.css");
+            for html in [
+                format!(r#"<html><head><link href="{stylesheet_ref}"></head></html>"#),
+                format!(r#"<html><head><link /href="{stylesheet_ref}"></head></html>"#),
+            ] {
+                let rejection = scan_app_html(&html).rejection.expect("should reject");
+                assert_eq!(rejection.kind, RejectionKind::PlatformBaseCss);
+                assert_eq!(rejection.offender, stylesheet_ref);
+            }
+        }
+    }
+
+    #[test]
+    fn non_ignored_url_characters_do_not_reconstruct_platform_resource_markers() {
+        for preserved in [" ", "\u{000c}", "\u{feff}"] {
+            let script_ref = format!("/_sandbox/archestra-app-{preserved}sdk.js");
+            let stylesheet_ref = format!("/_sandbox/archestra-app-{preserved}base.css");
+            for html in [
+                format!(r#"<html><head><script src="{script_ref}"></script></head></html>"#),
+                format!(r#"<html><head><script /src="{script_ref}"></script></head></html>"#),
+                format!(r#"<html><head><link href="{stylesheet_ref}"></head></html>"#),
+                format!(r#"<html><head><link /href="{stylesheet_ref}"></head></html>"#),
+            ] {
+                assert_eq!(scan_app_html(&html).rejection, None, "{html}");
+            }
         }
     }
 

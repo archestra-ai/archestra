@@ -50,6 +50,25 @@ import {
 } from "./constants";
 import { buildHistorySkippedAttachmentsNote } from "./utils";
 
+/**
+ * Prior thread turns now reach the executor as structured conversation
+ * history (originalUiMessages), not as prose baked into `message`.
+ */
+function historyTurns(call: {
+  originalUiMessages?: Array<{
+    parts?: Array<{ type: string; text?: string }>;
+    metadata?: { chatops?: { authorName?: string } };
+  }>;
+}): Array<{ text: string; author: string | undefined }> {
+  return (call.originalUiMessages ?? []).map((m) => ({
+    text: (m.parts ?? [])
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("\n"),
+    author: m.metadata?.chatops?.authorName,
+  }));
+}
+
 describe("matchesAgentName", () => {
   test("matches exact name", () => {
     expect(matchesAgentName("Sales", "Sales")).toBe(true);
@@ -2918,9 +2937,10 @@ describe("ChatOpsManager attachment passthrough", () => {
         reason: "total_limit_reached",
       },
     ]);
-    expect(executorSpy.mock.calls[0][0].message.split("\n")).toContain(
-      `Test User: Here is the report${trimNote}`,
-    );
+    expect(historyTurns(executorSpy.mock.calls[0][0])).toContainEqual({
+      text: `Here is the report${trimNote}`,
+      author: "Test User",
+    });
   });
 
   test("appends a provider-skip note to the history turn the file came from", async ({
@@ -3036,13 +3056,17 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
 
     expect(result.success).toBe(true);
-    const skipRunLines = executorSpy.mock.calls[0][0].message.split("\n");
+    const skipRunTurns = historyTurns(executorSpy.mock.calls[0][0]);
     // The note lands on the turn the skipped file came from...
-    expect(skipRunLines).toContain(
-      `Bob: and the budget sheet${buildHistorySkippedAttachmentsNote([skippedSheet])}`,
-    );
+    expect(skipRunTurns).toContainEqual({
+      text: `and the budget sheet${buildHistorySkippedAttachmentsNote([skippedSheet])}`,
+      author: "Bob",
+    });
     // ...while the delivered file's turn stays untouched.
-    expect(skipRunLines).toContain("Alice: here is the deck");
+    expect(skipRunTurns).toContainEqual({
+      text: "here is the deck",
+      author: "Alice",
+    });
     // Only the delivered attachment reaches the agent.
     expect(executorSpy.mock.calls[0][0].attachments).toEqual([
       expect.objectContaining({ name: "deck.pdf" }),
@@ -3063,8 +3087,12 @@ describe("ChatOpsManager attachment passthrough", () => {
       }),
       provider: mockProvider,
     });
-    const noSkipRunLines = executorSpy.mock.calls[1][0].message.split("\n");
-    expect(skipRunLines.length).toBe(noSkipRunLines.length);
+    // Ingestion is idempotent by provider message id, so the re-run adds no
+    // duplicate provider turns.
+    const secondRunProviderTurns = historyTurns(
+      executorSpy.mock.calls[1][0],
+    ).filter((t) => t.author === "Alice" || t.author === "Bob");
+    expect(secondRunProviderTurns).toHaveLength(2);
   });
 
   test("leaves history lines untouched when every file is delivered", async ({
@@ -3266,16 +3294,13 @@ describe("ChatOpsManager attachment passthrough", () => {
     });
     expect(result.success).toBe(true);
 
-    // The file-only turn renders as an Alice line naming its attachment
-    // (sender and file name are data, not pinned wording; capture the line
+    // The file-only turn renders as an Alice turn naming its attachment
+    // (sender and file name are data, not pinned wording; capture the turn
     // instead of hardcoding the prose around them).
-    const fileOnlyLine = executorSpy.mock.calls[0][0].message
-      .split("\n")
-      .find(
-        (line: string) =>
-          line.startsWith("Alice:") && line.includes("photo.png"),
-      );
-    expect(fileOnlyLine).toBeDefined();
+    const fileOnlyTurn = historyTurns(executorSpy.mock.calls[0][0]).find(
+      (turn) => turn.author === "Alice" && turn.text.includes("photo.png"),
+    );
+    expect(fileOnlyTurn).toBeDefined();
 
     // When the provider skips that file, the note lands on the same line.
     const skippedPhoto: SkippedAttachment = {
@@ -3286,17 +3311,22 @@ describe("ChatOpsManager attachment passthrough", () => {
     mockProvider.downloadFiles = async () => [
       { status: "skipped", skipped: skippedPhoto },
     ];
+    // Ingestion is idempotent, so the already-persisted Alice turn is not
+    // rewritten; a fresh thread whose file is skipped ingests the note.
     await manager.processMessage({
       message: createMockMessage({
         messageId: "test-attach-msg-2",
-        threadId: "thread-123",
+        threadId: "thread-456",
         isThreadReply: true,
         text: "what is in the photo?",
       }),
       provider: mockProvider,
     });
-    expect(executorSpy.mock.calls[1][0].message.split("\n")).toContain(
-      `${fileOnlyLine}${buildHistorySkippedAttachmentsNote([skippedPhoto])}`,
+    const freshThreadTurn = historyTurns(executorSpy.mock.calls[1][0]).find(
+      (turn) => turn.author === "Alice" && turn.text.includes("photo.png"),
+    );
+    expect(freshThreadTurn?.text).toBe(
+      `${fileOnlyTurn?.text}${buildHistorySkippedAttachmentsNote([skippedPhoto])}`,
     );
   });
 
@@ -3441,11 +3471,14 @@ describe("ChatOpsManager attachment passthrough", () => {
       provider: mockProvider,
     });
 
-    const sent = JSON.stringify(executorSpy.mock.calls[0][0].message);
-    expect(sent).toContain("Conversation so far:");
-    expect(sent).toContain("what's 2+2?");
-    // The directive that stops an empty-prompt agent denying it has context.
-    expect(sent).toContain("you DO have access to it and remember it");
+    // History arrives as structured conversation turns, not prose replay.
+    expect(historyTurns(executorSpy.mock.calls[0][0])).toContainEqual({
+      text: "what's 2+2?",
+      author: "Joey",
+    });
+    expect(executorSpy.mock.calls[0][0].message).not.toContain(
+      "Conversation so far:",
+    );
   });
 
   test("hands off to swapped chatops agent in the same turn", async ({
@@ -3564,7 +3597,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: "Specialist response",
-        footer: `🤖 ${specialistAgent.name}`,
+        footer: expect.stringContaining(`🤖 ${specialistAgent.name}`),
       }),
     );
   });
@@ -3662,7 +3695,7 @@ describe("ChatOpsManager attachment passthrough", () => {
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
         text: "Switched to French Agent. Bonjour!",
-        footer: `🤖 ${specialistAgent.name}`,
+        footer: expect.stringContaining(`🤖 ${specialistAgent.name}`),
       }),
     );
   });

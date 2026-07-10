@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import {
   ChatErrorCode,
+  type ChatErrorResponse,
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
+import type { UIMessage } from "ai";
 import {
   A2AManager,
   type A2ASendMessageResult,
@@ -15,25 +17,40 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  ActiveChatRunModel,
   AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
   ChatOpsThreadAgentOverrideModel,
+  ChatOpsThreadConversationModel,
+  ConversationModel,
   LlmProviderApiKeyModel,
+  MessageModel,
   OrganizationModel,
   TeamModel,
   UserModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
+import {
+  collectProviderMessageIds,
+  filterHistoryForChatOpsContext,
+  ingestProviderDelta,
+  persistChatOpsAssistantTurn,
+  persistChatOpsUserTurn,
+  recordChatOpsConversationError,
+  resolveOrCreateThreadConversation,
+} from "@/services/chatops-conversation";
 import type {
+  ChatMessage,
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
+  ChatThreadMessage,
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
@@ -767,9 +784,13 @@ export class ChatOpsManager {
       return { success: false, error: authResult.error };
     }
 
-    // Build context from thread history (includes downloading historical image attachments)
-    const { contextMessages, historyAttachments } =
-      await this.fetchThreadHistory(message, provider);
+    // Thread history: attachments still ride the current turn; the text
+    // context now comes from the persisted conversation (rawHistory feeds the
+    // delta ingestion in executeAndReply).
+    const { historyAttachments, rawHistory } = await this.fetchThreadHistory(
+      message,
+      provider,
+    );
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
@@ -843,10 +864,10 @@ export class ChatOpsManager {
       ].join("\n");
     }
 
+    // Prior turns are supplied to the model as structured conversation
+    // history (persisted messages + provider delta), not as a flattened
+    // prose replay — the prefix only frames the current turn.
     let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
-    if (contextMessages.length > 0) {
-      fullMessage = `${systemPrefix}\n\nThe earlier messages in this thread are below — this is your shared history in this conversation, so you DO have access to it and remember it. Use it to answer follow-up questions and references to "earlier", "before", or "what I just asked".\n\nConversation so far:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
-    }
 
     // Tell the model about files that were attached but not delivered (e.g. too
     // large), so it doesn't deny they exist. History drops get per-turn notes
@@ -872,6 +893,8 @@ export class ChatOpsManager {
       },
       provider,
       fullMessage,
+      cleanedMessageText,
+      rawHistory,
       sendReply,
       userId: authResult.userId,
     });
@@ -1142,8 +1165,14 @@ export class ChatOpsManager {
     message: IncomingChatMessage,
     provider: ChatOpsProvider,
   ): Promise<{
-    contextMessages: string[];
     historyAttachments: A2AAttachment[];
+    /**
+     * Provider entries with ingestion-ready text: bot footers stripped,
+     * file-only turns rendered as attachment lines, and skipped-attachment
+     * notes appended to the turn they belong to — so the persisted
+     * conversation carries the same per-turn context the prose replay did.
+     */
+    rawHistory: ChatThreadMessage[];
   }> {
     logger.debug(
       {
@@ -1160,7 +1189,7 @@ export class ChatOpsManager {
       logger.debug(
         "[ChatOps] No prior thread context, skipping thread history fetch",
       );
-      return { contextMessages: [], historyAttachments: [] };
+      return { historyAttachments: [], rawHistory: [] };
     }
 
     try {
@@ -1176,18 +1205,17 @@ export class ChatOpsManager {
         "[ChatOps] Thread history fetched",
       );
 
-      const contextMessages = history.map((msg) => {
+      const renderedTexts = history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
-        const sender = msg.isFromBot ? "You (Archestra)" : msg.senderName;
         // A file-only turn has no text; name its attachments so the turn is
         // meaningful (the file arrives separately or gets a skip note below).
         if (!text.trim() && msg.files?.length) {
           const names = msg.files
             .map((f) => (f.name ? `"${f.name}"` : "an unnamed file"))
             .join(", ");
-          return `${sender}: [sent ${msg.files.length === 1 ? "an attachment" : "attachments"}: ${names}]`;
+          return `[sent ${msg.files.length === 1 ? "an attachment" : "attachments"}: ${names}]`;
         }
-        return `${sender}: ${text}`;
+        return text;
       });
 
       // Collect files from non-bot user messages, remembering the turn each
@@ -1281,20 +1309,24 @@ export class ChatOpsManager {
       // Surface drops on the turn they belong to, so "use the screenshot
       // above" gets an explanation instead of a denial.
       for (const [turnIndex, skips] of skippedByTurn) {
-        const line = contextMessages[turnIndex];
+        const line = renderedTexts[turnIndex];
         if (line !== undefined) {
-          contextMessages[turnIndex] =
+          renderedTexts[turnIndex] =
             line + buildHistorySkippedAttachmentsNote(skips);
         }
       }
 
-      return { contextMessages, historyAttachments };
+      const rawHistory = history.map((msg, index) => ({
+        ...msg,
+        text: renderedTexts[index] ?? msg.text,
+      }));
+      return { historyAttachments, rawHistory };
     } catch (error) {
       logger.error(
         { error: errorMessage(error) },
         "[ChatOps] Failed to fetch thread history",
       );
-      return { contextMessages: [], historyAttachments: [] };
+      return { historyAttachments: [], rawHistory: [] };
     }
   }
 
@@ -1561,10 +1593,19 @@ export class ChatOpsManager {
 
   private async executeAndReply(params: {
     agent: { id: string; name: string };
-    binding: { id: string; organizationId: string; agentId: string | null };
+    binding: {
+      id: string;
+      organizationId: string;
+      agentId: string | null;
+      isDm?: boolean | null;
+    };
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     fullMessage: string;
+    /** The user's text without the system prefix — what gets persisted. */
+    cleanedMessageText: string;
+    /** Raw provider thread entries, for conversation delta ingestion. */
+    rawHistory: ChatThreadMessage[];
     sendReply: boolean;
     userId: string;
   }): Promise<ChatOpsProcessingResult> {
@@ -1574,6 +1615,8 @@ export class ChatOpsManager {
       message,
       provider,
       fullMessage,
+      cleanedMessageText,
+      rawHistory,
       sendReply,
       userId,
     } = params;
@@ -1598,50 +1641,175 @@ export class ChatOpsManager {
         .catch(() => {});
     }
 
+    let conversationIdForError: string | undefined;
     try {
-      const executeParams = {
-        agent,
-        binding,
-        message,
-        provider,
-        fullMessage,
-        userId,
-      };
-      let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
-      try {
-        execution = await this.executeMessage(executeParams);
-      } catch (error) {
-        // Web chat surfaces transient provider failures as a retry button;
-        // chatops has no interactive affordance, so one automatic retry
-        // stands in for it. The retry re-runs the whole agent turn, exactly
-        // like a user-clicked retry would.
-        if (!isTransientProviderError(error)) {
-          throw error;
-        }
-        logger.info(
-          {
-            messageId: message.messageId,
-            agentId: agent.id,
-            errorCode: error.chatErrorResponse.code,
-          },
-          "[ChatOps] Retrying execution once after a transient provider error",
-        );
-        execution = await this.executeMessage(executeParams);
-      }
-      const { result, responseAgent } = execution;
-
-      return await this.replyByMessageExecutionResult({
-        agent: responseAgent,
-        message,
-        provider,
-        sendReply,
-        result: result.response,
+      // The thread's persisted conversation is the canonical history for this
+      // turn and the lock scope for concurrency with web runs.
+      const effectiveThreadId =
+        message.threadId ?? message.channelId ?? message.messageId;
+      const turn = await resolveOrCreateThreadConversation({
+        bindingId: binding.id,
+        organizationId: binding.organizationId,
+        effectiveThreadId,
+        provider: provider.providerId,
+        senderUserId: userId,
+        agentId: agent.id,
+        seedTitle: cleanedMessageText,
       });
+      const conversationId = turn.conversation.id;
+      conversationIdForError = conversationId;
+      const fullHistoryScope = turn.senderIsOwner || binding.isDm === true;
+
+      const runLock = await ActiveChatRunModel.create({
+        conversationId,
+        userId,
+        organizationId: binding.organizationId,
+      });
+      if (!runLock) {
+        if (sendReply) {
+          await provider.sendReply({
+            originalMessage: message,
+            text: "The agent is already responding to this conversation — try again once it finishes.",
+            footer: buildAgentFooter(agent.name),
+            conversationReference: message.metadata?.conversationReference,
+          });
+        }
+        return { success: false, error: "conversation run already active" };
+      }
+
+      let runStatus: "completed" | "failed" = "failed";
+      try {
+        // Ingest provider-side turns this conversation hasn't seen (chatter
+        // between invocations; a pre-persistence thread's prior human turns)
+        // under the lock, so cursor advancement can't race a concurrent turn.
+        const loadRows = async (): Promise<ChatMessage[]> =>
+          (await MessageModel.findByConversation(conversationId)).map(
+            (row) => row.content as ChatMessage,
+          );
+        let contents = await loadRows();
+        const deltaEntries = rawHistory
+          .filter((m) => !m.isFromBot && m.messageId !== message.messageId)
+          .map((m) => ({
+            providerMessageId: m.messageId,
+            providerTs: m.messageId,
+            text: m.text,
+            authorName: m.senderName,
+            sentAt: m.timestamp,
+          }));
+        if (deltaEntries.length > 0) {
+          await ingestProviderDelta({
+            mapping: turn.mapping,
+            provider: provider.providerId,
+            entries: deltaEntries,
+            existingProviderMessageIds: collectProviderMessageIds(contents),
+          });
+          contents = await loadRows();
+        }
+        const conversationHistory = filterHistoryForChatOpsContext({
+          messages: contents,
+          provider: provider.providerId,
+          senderIsOwner: turn.senderIsOwner,
+          isDm: binding.isDm === true,
+        });
+
+        // Persist the invoking turn before execution, with the same message
+        // id the A2A layer will use — transcript and generation share one
+        // turn. The persisted copy is the clean user text; the per-turn
+        // system prefix is regenerated each turn and never enters history.
+        const requestMessageId = crypto.randomUUID();
+        await persistChatOpsUserTurn({
+          conversationId,
+          messageId: requestMessageId,
+          text: cleanedMessageText,
+          provider: provider.providerId,
+          providerMessageId: message.messageId,
+          authorName: message.senderName,
+          authorUserId: userId,
+        });
+
+        const executeParams = {
+          agent,
+          binding,
+          message,
+          provider,
+          fullMessage,
+          userId,
+          conversationTurn: {
+            conversationId,
+            conversationHistory,
+            requestMessageId,
+          },
+        };
+        let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
+        try {
+          execution = await this.executeMessage(executeParams);
+        } catch (error) {
+          // Web chat surfaces transient provider failures as a retry button;
+          // chatops has no interactive affordance, so one automatic retry
+          // stands in for it. The retry re-runs the whole agent turn, exactly
+          // like a user-clicked retry would.
+          if (!isTransientProviderError(error)) {
+            throw error;
+          }
+          logger.info(
+            {
+              messageId: message.messageId,
+              agentId: agent.id,
+              errorCode: error.chatErrorResponse.code,
+            },
+            "[ChatOps] Retrying execution once after a transient provider error",
+          );
+          execution = await this.executeMessage(executeParams);
+        }
+        const { result, responseAgent } = execution;
+
+        // Persist the full assistant turn (tool parts included), tagged with
+        // the history scope that produced it (the channel-leak guard input).
+        if (result.responseUiMessage) {
+          await persistChatOpsAssistantTurn({
+            conversationId,
+            assistantMessage: result.responseUiMessage,
+            provider: provider.providerId,
+            contextScope: fullHistoryScope ? "full" : "provider",
+          });
+        }
+
+        runStatus = "completed";
+        return await this.replyByMessageExecutionResult({
+          agent: responseAgent,
+          message,
+          provider,
+          sendReply,
+          result: result.response,
+          conversationId,
+        });
+      } finally {
+        await ActiveChatRunModel.markTerminal({
+          runId: runLock.id,
+          status: runStatus,
+        });
+      }
     } catch (error) {
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
         "[ChatOps] Failed to execute A2A message",
       );
+
+      // Surface the failure on the conversation so the web view renders the
+      // same inline error card interactive chat shows.
+      if (conversationIdForError) {
+        const chatError: ChatErrorResponse = (
+          error as { chatErrorResponse?: ChatErrorResponse }
+        ).chatErrorResponse ?? {
+          code: ChatErrorCode.Unknown,
+          message: errorMessage(error),
+          isRetryable: false,
+        };
+        await recordChatOpsConversationError({
+          conversationId: conversationIdForError,
+          error: chatError,
+        });
+      }
 
       if (sendReply) {
         await this.sendExecutionErrorReply({
@@ -1780,6 +1948,55 @@ export class ChatOpsManager {
     }
   }
 
+  /**
+   * When swap_agent hands a thread to a different agent, the mapped
+   * conversation follows — web continuation must run the swapped agent, not
+   * the stale pre-swap one. Inline `AgentName >` routing is deliberately
+   * one-shot and never lands here. Model/key re-resolve from the swapped
+   * agent's own configuration, mirroring conversation creation.
+   */
+  private async syncConversationAgent(params: {
+    conversationId: string | undefined;
+    organizationId: string;
+    swappedAgent: {
+      id: string;
+      llmApiKeyId?: string | null;
+      modelId?: string | null;
+    };
+    userId: string;
+  }): Promise<void> {
+    const { conversationId, organizationId, swappedAgent, userId } = params;
+    if (!conversationId) {
+      return;
+    }
+    const conversation = await ConversationModel.findByIdInOrganization({
+      id: conversationId,
+      organizationId,
+    });
+    if (!conversation || conversation.agentId === swappedAgent.id) {
+      return;
+    }
+    const llmSelection = await resolveConversationLlmSelectionForAgent({
+      agent: {
+        llmApiKeyId: swappedAgent.llmApiKeyId ?? null,
+        modelId: swappedAgent.modelId ?? null,
+      },
+      organizationId,
+      userId,
+      includeMemberChatDefault: false,
+    });
+    await ConversationModel.update(
+      conversation.id,
+      conversation.userId,
+      organizationId,
+      {
+        agentId: swappedAgent.id,
+        modelId: llmSelection.modelId,
+        chatApiKeyId: llmSelection.chatApiKeyId,
+      },
+    );
+  }
+
   private async replyByMessageExecutionResult(params: {
     agent: { id: string; name: string };
     message: IncomingChatMessage;
@@ -1787,9 +2004,18 @@ export class ChatOpsManager {
     sendReply: boolean;
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    /** When set, the reply footer links to the web copy of the conversation. */
+    conversationId?: string;
   }): Promise<ChatOpsProcessingResult> {
-    const { agent, message, provider, sendReply, currentApprovalId, result } =
-      params;
+    const {
+      agent,
+      message,
+      provider,
+      sendReply,
+      currentApprovalId,
+      result,
+      conversationId,
+    } = params;
 
     const approvalRequests =
       extractApprovalRequestsFromSendMessageResult(result);
@@ -1830,7 +2056,12 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: agentResponse,
-        footer: buildAgentFooter(agent.name),
+        footer: buildAgentFooter(
+          agent.name,
+          conversationId
+            ? `continue on the web: ${config.frontendBaseUrl}/chat/${conversationId}`
+            : undefined,
+        ),
         // Teach the off switch once per channel thread: sticky auto-reply only
         // applies in channels, so the hint rides the bot's first reply there.
         ...((await this.shouldHintThreadMute(provider, message)) && {
@@ -1992,11 +2223,29 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     userId: string;
+    /**
+     * Conversation-backed mode (the normal path): the thread's persisted
+     * conversation id, the access-filtered prior history, and the message id
+     * the persisted user turn was written with.
+     */
+    conversationTurn?: {
+      conversationId: string;
+      conversationHistory: ChatMessage[];
+      requestMessageId: string;
+    };
   }): Promise<{
     result: A2ASendMessageResult;
     responseAgent: { id: string; name: string };
   }> {
-    const { agent, binding, message, provider, fullMessage, userId } = params;
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      userId,
+      conversationTurn,
+    } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
     // so all messages in the same thread are grouped together in logs
@@ -2009,6 +2258,7 @@ export class ChatOpsManager {
       message.threadId ?? message.channelId ?? message.messageId;
 
     const request = buildSendMessageRequest({
+      messageId: conversationTurn?.requestMessageId,
       parts: [
         { text: fullMessage },
         ...buildAttachmentsMessageParts(message.attachments || []),
@@ -2022,6 +2272,11 @@ export class ChatOpsManager {
       routeCategory: RouteCategory.CHATOPS,
       chatOpsBindingId: binding.id,
       chatOpsThreadId: effectiveThreadId,
+      conversationId: conversationTurn?.conversationId,
+      // ChatMessage is the persisted, structurally UIMessage-compatible shape.
+      conversationHistory: conversationTurn?.conversationHistory as
+        | UIMessage[]
+        | undefined,
     };
 
     const initialResult = await this.a2aManager.sendMessage({
@@ -2062,6 +2317,12 @@ export class ChatOpsManager {
           initialResponseTextIsEmpty && initialResponseNoApprovalRequests;
 
         if (!initialResponseIsEmpty) {
+          await this.syncConversationAgent({
+            conversationId: conversationTurn?.conversationId,
+            organizationId: binding.organizationId,
+            swappedAgent,
+            userId,
+          });
           return {
             result: initialResult,
             responseAgent: {
@@ -2080,6 +2341,13 @@ export class ChatOpsManager {
           },
           "[ChatOps] Thread agent override detected, handing off to swapped agent",
         );
+
+        await this.syncConversationAgent({
+          conversationId: conversationTurn?.conversationId,
+          organizationId: binding.organizationId,
+          swappedAgent,
+          userId,
+        });
 
         const handoffResult = await this.a2aManager.sendMessage({
           actor: {
@@ -2189,40 +2457,109 @@ export class ChatOpsManager {
         });
       }
 
-      const result = await this.a2aManager.sendMessage({
-        actor: {
-          kind: "user" as const,
-          id: user.id,
-          organizationId: binding.organizationId,
-        },
-        agentId: binding.agentId,
-        request: buildApprovalDecisionSendMessageRequest({
-          taskId: decision.taskId,
-          approvalDecisions: [
-            {
-              approvalId: decision.approvalId,
-              approved: decision.approved,
-            },
-          ],
-        }),
-        systemParams: {
-          sessionId: buildChatOpsSessionId(
-            provider.providerId,
-            decision.channelId,
-            originalMessage.threadId,
-          ),
-          source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
-        },
-      });
+      // Approval continuation runs against the thread's persisted
+      // conversation like any other turn: same lock, same conversation-backed
+      // execution scope, and the approval-request row updated in place.
+      const effectiveThreadId =
+        originalMessage.threadId ??
+        originalMessage.channelId ??
+        originalMessage.messageId;
+      const mapping =
+        await ChatOpsThreadConversationModel.findByBindingAndThread(
+          binding.id,
+          effectiveThreadId,
+        );
+      const conversation = mapping
+        ? await ConversationModel.findByIdInOrganization({
+            id: mapping.conversationId,
+            organizationId: binding.organizationId,
+          })
+        : null;
 
-      await this.replyByMessageExecutionResult({
-        agent,
-        message: originalMessage,
-        provider,
-        sendReply: true,
-        currentApprovalId: decision.approvalId,
-        result: result.response,
-      });
+      let runLock = null;
+      if (conversation) {
+        runLock = await ActiveChatRunModel.create({
+          conversationId: conversation.id,
+          userId: user.id,
+          organizationId: binding.organizationId,
+        });
+        if (!runLock) {
+          await provider.sendReply({
+            originalMessage,
+            text: "The agent is already responding to this conversation — try the approval again once it finishes.",
+            footer: buildAgentFooter(agent.name),
+            conversationReference:
+              originalMessage.metadata?.conversationReference,
+          });
+          return;
+        }
+      }
+
+      let runStatus: "completed" | "failed" = "failed";
+      try {
+        const result = await this.a2aManager.sendMessage({
+          actor: {
+            kind: "user" as const,
+            id: user.id,
+            organizationId: binding.organizationId,
+          },
+          agentId: binding.agentId,
+          request: buildApprovalDecisionSendMessageRequest({
+            taskId: decision.taskId,
+            approvalDecisions: [
+              {
+                approvalId: decision.approvalId,
+                approved: decision.approved,
+              },
+            ],
+          }),
+          systemParams: {
+            sessionId: buildChatOpsSessionId(
+              provider.providerId,
+              decision.channelId,
+              originalMessage.threadId,
+            ),
+            source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+            routeCategory: RouteCategory.CHATOPS,
+            chatOpsBindingId: binding.id,
+            chatOpsThreadId: effectiveThreadId,
+            conversationId: conversation?.id,
+          },
+        });
+
+        // The decision mutated the approval-request assistant message; the
+        // persisted row is updated in place so web never shows stale
+        // pending-tool state.
+        if (conversation && result.responseUiMessage) {
+          await persistChatOpsAssistantTurn({
+            conversationId: conversation.id,
+            assistantMessage: result.responseUiMessage,
+            provider: provider.providerId,
+            contextScope:
+              conversation.userId === user.id || binding.isDm === true
+                ? "full"
+                : "provider",
+          });
+        }
+
+        runStatus = "completed";
+        await this.replyByMessageExecutionResult({
+          agent,
+          message: originalMessage,
+          provider,
+          sendReply: true,
+          currentApprovalId: decision.approvalId,
+          result: result.response,
+          conversationId: conversation?.id,
+        });
+      } finally {
+        if (runLock) {
+          await ActiveChatRunModel.markTerminal({
+            runId: runLock.id,
+            status: runStatus,
+          });
+        }
+      }
     } catch (error) {
       logger.error(
         {

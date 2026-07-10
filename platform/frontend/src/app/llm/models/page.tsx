@@ -80,10 +80,7 @@ import {
   useSyncLlmModels,
   useUpdateModel,
 } from "@/lib/llm-models.query";
-import {
-  type ResourceVisibilityScope,
-  useLlmProviderApiKeys,
-} from "@/lib/llm-provider-api-keys.query";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
@@ -115,32 +112,10 @@ export default function ModelsPage() {
     null,
   );
 
-  const availableApiKeys = useMemo(() => {
-    const keyMap = new Map<
-      string,
-      {
-        name: string;
-        provider: keyof typeof PROVIDER_CONFIG;
-        scope: ResourceVisibilityScope;
-      }
-    >();
-    for (const model of models) {
-      for (const key of model.apiKeys) {
-        keyMap.set(key.id, {
-          name: key.name,
-          provider: key.provider as keyof typeof PROVIDER_CONFIG,
-          scope: key.scope as ResourceVisibilityScope,
-        });
-      }
-    }
-    return Array.from(keyMap.entries()).sort((a, b) =>
-      a[1].name.localeCompare(b[1].name),
-    );
-  }, [models]);
-
   const canFilterFreeModels = useMemo(
-    () => canFilterFreeModelsForApiKey({ availableApiKeys, apiKeyFilter }),
-    [availableApiKeys, apiKeyFilter],
+    () =>
+      canFilterFreeModelsForApiKey({ availableApiKeys: apiKeys, apiKeyFilter }),
+    [apiKeys, apiKeyFilter],
   );
 
   useEffect(() => {
@@ -412,20 +387,7 @@ export default function ModelsPage() {
               syncQueryParams={false}
             />
             <LlmProviderApiKeyDropdown
-              availableKeys={availableApiKeys.flatMap(
-                ([id, { name, provider, scope }]) => {
-                  const config = PROVIDER_CONFIG[provider];
-                  if (!config) return [];
-                  return [
-                    {
-                      id,
-                      name,
-                      provider,
-                      scope,
-                    },
-                  ];
-                },
-              )}
+              availableKeys={apiKeys}
               selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
               open={apiKeyFilterOpen}
               onOpenChange={setApiKeyFilterOpen}

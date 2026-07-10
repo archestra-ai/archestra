@@ -215,5 +215,5 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   minimax: "minimax:chatCompletions",
   azure: "azure:chatCompletions",
   "github-copilot": "github-copilot:chatCompletions",
-  "microsoft-copilot": "microsoft-copilot:chatCompletions",
+  "microsoft-365-copilot": "microsoft-365-copilot:chatCompletions",
 };

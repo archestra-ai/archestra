@@ -7,8 +7,8 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   entraErrorLogFields,
-  MICROSOFT_COPILOT_OAUTH_SCOPES,
-} from "@/services/microsoft-copilot-token";
+  MICROSOFT_365_COPILOT_OAUTH_SCOPES,
+} from "@/services/microsoft-365-copilot-token";
 import { ApiError, constructResponseSchema } from "@/types";
 
 const DEVICE_AUTH_START_RATE_LIMIT = {
@@ -22,7 +22,7 @@ const DEVICE_AUTH_POLL_RATE_LIMIT = {
 };
 
 /**
- * Entra ID OAuth device flow for Microsoft Copilot (RFC 8628), proxied
+ * Entra ID OAuth device flow for Microsoft 365 Copilot (RFC 8628), proxied
  * through the backend because Entra's device endpoints do not allow browser
  * CORS.
  *
@@ -39,17 +39,19 @@ const DEVICE_AUTH_POLL_RATE_LIMIT = {
  * - poll "errors" like authorization_pending arrive as HTTP 400 with the
  *   error name in the JSON body (GitHub returns 200 + error field);
  * - there is no community client id — the operator must register an Entra
- *   public-client app and set ARCHESTRA_MICROSOFT_COPILOT_CLIENT_ID.
+ *   public-client app and set ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID.
  */
-const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const microsoft365CopilotAuthRoutes: FastifyPluginAsyncZod = async (
+  fastify,
+) => {
   fastify.post(
-    "/api/microsoft-copilot-auth/device/start",
+    "/api/microsoft-365-copilot-auth/device/start",
     {
       schema: {
-        operationId: RouteId.MicrosoftCopilotDeviceAuthStart,
+        operationId: RouteId.Microsoft365CopilotDeviceAuthStart,
         description:
           "Start the Entra ID device flow used to connect a Microsoft 365 Copilot account",
-        tags: ["Microsoft Copilot Auth"],
+        tags: ["Microsoft 365 Copilot Auth"],
         response: constructResponseSchema(DeviceStartResponseSchema),
       },
     },
@@ -60,7 +62,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // client can't drive Microsoft rate-limit pressure through the backend.
       if (
         await isRateLimited(
-          `${CacheKey.MicrosoftCopilotDeviceAuthRateLimit}-start-${user.id}`,
+          `${CacheKey.Microsoft365CopilotDeviceAuthRateLimit}-start-${user.id}`,
           DEVICE_AUTH_START_RATE_LIMIT,
         )
       ) {
@@ -77,15 +79,15 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "content-type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
-          client_id: config.llm["microsoft-copilot"].clientId,
-          scope: MICROSOFT_COPILOT_OAUTH_SCOPES,
+          client_id: config.llm["microsoft-365-copilot"].clientId,
+          scope: MICROSOFT_365_COPILOT_OAUTH_SCOPES,
         }),
       });
       if (!response.ok) {
         const body = await response.text();
         logger.error(
           { status: response.status, ...entraErrorLogFields(body) },
-          "[MicrosoftCopilotAuth] device code request failed",
+          "[Microsoft365CopilotAuth] device code request failed",
         );
         throw new ApiError(
           502,
@@ -116,13 +118,13 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/microsoft-copilot-auth/device/poll",
+    "/api/microsoft-365-copilot-auth/device/poll",
     {
       schema: {
-        operationId: RouteId.MicrosoftCopilotDeviceAuthPoll,
+        operationId: RouteId.Microsoft365CopilotDeviceAuthPoll,
         description:
           "Poll the Entra ID device flow once; returns the refresh token when the user has authorized",
-        tags: ["Microsoft Copilot Auth"],
+        tags: ["Microsoft 365 Copilot Auth"],
         body: z.object({
           deviceCode: z.string().min(1),
         }),
@@ -136,7 +138,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // only trips on clients ignoring interval/slow_down.
       if (
         await isRateLimited(
-          `${CacheKey.MicrosoftCopilotDeviceAuthRateLimit}-poll-${user.id}`,
+          `${CacheKey.Microsoft365CopilotDeviceAuthRateLimit}-poll-${user.id}`,
           DEVICE_AUTH_POLL_RATE_LIMIT,
         )
       ) {
@@ -153,7 +155,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "content-type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
-          client_id: config.llm["microsoft-copilot"].clientId,
+          client_id: config.llm["microsoft-365-copilot"].clientId,
           device_code: body.deviceCode,
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         }),
@@ -171,7 +173,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch {
         logger.error(
           { status: response.status },
-          "[MicrosoftCopilotAuth] device token poll returned a non-JSON body",
+          "[Microsoft365CopilotAuth] device token poll returned a non-JSON body",
         );
         throw new ApiError(
           502,
@@ -184,7 +186,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // offline_access missing from the app registration's consented
           // scopes: without a refresh token the key would die within an hour.
           logger.error(
-            "[MicrosoftCopilotAuth] token response has no refresh_token — check that offline_access is consented",
+            "[Microsoft365CopilotAuth] token response has no refresh_token — check that offline_access is consented",
           );
           throw new ApiError(
             502,
@@ -212,7 +214,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         default:
           logger.error(
             { status: response.status, error: payload.error },
-            "[MicrosoftCopilotAuth] device token poll returned an error",
+            "[Microsoft365CopilotAuth] device token poll returned an error",
           );
           throw new ApiError(
             502,
@@ -223,7 +225,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default microsoftCopilotAuthRoutes;
+export default microsoft365CopilotAuthRoutes;
 
 // ===== Internal helpers =====
 
@@ -270,15 +272,15 @@ const EntraDeviceCodePayloadSchema = z.looseObject({
 });
 
 function assertClientIdConfigured(): void {
-  if (!config.llm["microsoft-copilot"].clientId) {
+  if (!config.llm["microsoft-365-copilot"].clientId) {
     throw new ApiError(
       400,
-      "Microsoft Copilot sign-in is not configured — set ARCHESTRA_MICROSOFT_COPILOT_CLIENT_ID to the Application (client) ID of an Entra app registration with public client flows enabled",
+      "Microsoft 365 Copilot sign-in is not configured — set ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID to the Application (client) ID of an Entra app registration with public client flows enabled",
     );
   }
 }
 
 function oauthBaseUrl(): string {
-  const { authBaseUrl, tenantId } = config.llm["microsoft-copilot"];
+  const { authBaseUrl, tenantId } = config.llm["microsoft-365-copilot"];
   return `${authBaseUrl.replace(/\/+$/, "")}/${tenantId}`;
 }

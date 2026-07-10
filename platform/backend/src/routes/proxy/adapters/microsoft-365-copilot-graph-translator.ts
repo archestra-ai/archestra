@@ -4,7 +4,7 @@
  *
  * The Graph Chat API is stateful (conversation + per-turn messages), text-only
  * (no tool calling, no model selection), and returns no token usage. The
- * adapter's Graph client (see ./microsoft-copilot.ts) creates a fresh
+ * adapter's Graph client (see ./microsoft-365-copilot.ts) creates a fresh
  * conversation per request and uses these helpers to map the payloads:
  * - the latest user message becomes the Graph `message.text`;
  * - the system prompt and all prior turns are serialized into one
@@ -31,8 +31,8 @@ export interface GraphChatBody {
  * The one string the chat error mapper keys on to classify the proxy's tools
  * rejection as ChatErrorCode.ToolsUnsupported (see routes/chat/errors.ts).
  */
-export const MICROSOFT_COPILOT_TOOLS_UNSUPPORTED_MESSAGE =
-  "Microsoft Copilot does not support tool calling. Remove the tools from this request (or the MCP tools from this agent), or use a different provider for tool-based workflows.";
+export const MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE =
+  "Microsoft 365 Copilot does not support tool calling. Remove the tools from this request (or the MCP tools from this agent), or use a different provider for tool-based workflows.";
 
 /**
  * The Graph Chat API has no tool calling at all, so a request that declares
@@ -46,7 +46,7 @@ export function assertNoTools(request: ChatCompletionsRequest): void {
     (request.tool_choice !== undefined && request.tool_choice !== "none") ||
     (Array.isArray(legacyFunctions) && legacyFunctions.length > 0)
   ) {
-    throw new ApiError(400, MICROSOFT_COPILOT_TOOLS_UNSUPPORTED_MESSAGE);
+    throw new ApiError(400, MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE);
   }
 }
 
@@ -70,7 +70,7 @@ export function buildGraphChatBody(
   if (lastUserIndex === -1) {
     throw new ApiError(
       400,
-      "Microsoft Copilot requires at least one user message in the request.",
+      "Microsoft 365 Copilot requires at least one user message in the request.",
     );
   }
 
@@ -78,7 +78,7 @@ export function buildGraphChatBody(
   if (!promptText.trim()) {
     throw new ApiError(
       400,
-      "Microsoft Copilot requires a non-empty text user message (images and other non-text content are not supported).",
+      "Microsoft 365 Copilot requires a non-empty text user message (images and other non-text content are not supported).",
     );
   }
 
@@ -264,7 +264,7 @@ export function estimateUsage(params: {
   request: ChatCompletionsRequest;
   responseText: string;
 }): Usage {
-  const tokenizer = getTokenizer("microsoft-copilot");
+  const tokenizer = getTokenizer("microsoft-365-copilot");
   const messages = Array.isArray(params.request.messages)
     ? params.request.messages
     : [];

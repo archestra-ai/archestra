@@ -5,9 +5,9 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import {
-  createMicrosoftCopilotFetch,
-  microsoftCopilotTokenManager,
-} from "@/services/microsoft-copilot-token";
+  createMicrosoft365CopilotFetch,
+  microsoft365CopilotTokenManager,
+} from "@/services/microsoft-365-copilot-token";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 
@@ -62,7 +62,7 @@ afterEach(() => {
   secretManagerMock.mockReset();
 });
 
-describe("microsoftCopilotTokenManager.getAccessToken", () => {
+describe("microsoft365CopilotTokenManager.getAccessToken", () => {
   test("redeems the refresh token with a form-encoded grant", async () => {
     const refreshToken = uniqueRefreshToken();
     const fetchMock = vi
@@ -70,7 +70,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
       .mockResolvedValue(redemptionResponse({ refreshToken: null }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const accessToken = await microsoftCopilotTokenManager.getAccessToken({
+    const accessToken = await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
     });
 
@@ -98,11 +98,11 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
       .mockResolvedValue(redemptionResponse({ refreshToken: null }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await microsoftCopilotTokenManager.getAccessToken({
+    await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId,
     });
-    await microsoftCopilotTokenManager.getAccessToken({
+    await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId,
     });
@@ -120,8 +120,8 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await microsoftCopilotTokenManager.getAccessToken({ refreshToken });
-    await microsoftCopilotTokenManager.getAccessToken({ refreshToken });
+    await microsoft365CopilotTokenManager.getAccessToken({ refreshToken });
+    await microsoft365CopilotTokenManager.getAccessToken({ refreshToken });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -139,11 +139,11 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const [first, second] = [
-      microsoftCopilotTokenManager.getAccessToken({
+      microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
-      microsoftCopilotTokenManager.getAccessToken({
+      microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
@@ -173,11 +173,11 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await microsoftCopilotTokenManager.getAccessToken({
+    await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId,
     });
-    const accessToken = await microsoftCopilotTokenManager.getAccessToken({
+    const accessToken = await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId,
     });
@@ -201,7 +201,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
 
     const originalToken = uniqueRefreshToken();
     expect(
-      await microsoftCopilotTokenManager.getAccessToken({
+      await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken: originalToken,
         providerApiKeyId,
       }),
@@ -212,7 +212,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     // served for the new one.
     const replacementToken = uniqueRefreshToken();
     expect(
-      await microsoftCopilotTokenManager.getAccessToken({
+      await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken: replacementToken,
         providerApiKeyId,
       }),
@@ -239,7 +239,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
       typeof secretManager
     >);
 
-    await microsoftCopilotTokenManager.getAccessToken({
+    await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId,
     });
@@ -269,7 +269,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
       typeof secretManager
     >);
 
-    await microsoftCopilotTokenManager.getAccessToken({
+    await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId: uniqueKeyId(),
     });
@@ -290,7 +290,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     );
     findByIdMock.mockRejectedValue(new Error("db down"));
 
-    const accessToken = await microsoftCopilotTokenManager.getAccessToken({
+    const accessToken = await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId: uniqueKeyId(),
     });
@@ -313,7 +313,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     );
 
     await expect(
-      microsoftCopilotTokenManager.getAccessToken({ refreshToken }),
+      microsoft365CopilotTokenManager.getAccessToken({ refreshToken }),
     ).rejects.toMatchObject({
       statusCode: 401,
       message: expect.stringContaining("Reconnect your Microsoft account"),
@@ -328,7 +328,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     );
 
     await expect(
-      microsoftCopilotTokenManager.getAccessToken({ refreshToken }),
+      microsoft365CopilotTokenManager.getAccessToken({ refreshToken }),
     ).rejects.toMatchObject({ statusCode: 502 });
   });
 
@@ -342,13 +342,13 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      microsoftCopilotTokenManager.getAccessToken({
+      microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
     ).rejects.toThrow(ApiError);
 
-    const accessToken = await microsoftCopilotTokenManager.getAccessToken({
+    const accessToken = await microsoft365CopilotTokenManager.getAccessToken({
       refreshToken,
       providerApiKeyId,
     });
@@ -366,15 +366,15 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     expect(
-      await microsoftCopilotTokenManager.getAccessToken({
+      await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
     ).toBe("fresh");
     // A concurrent 401 handler that used an older token must not evict it.
-    microsoftCopilotTokenManager.invalidate(providerApiKeyId, "stale");
+    microsoft365CopilotTokenManager.invalidate(providerApiKeyId, "stale");
     expect(
-      await microsoftCopilotTokenManager.getAccessToken({
+      await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
@@ -396,14 +396,14 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     expect(
-      await microsoftCopilotTokenManager.getAccessToken({
+      await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
     ).toBe("first");
-    microsoftCopilotTokenManager.invalidate(providerApiKeyId);
+    microsoft365CopilotTokenManager.invalidate(providerApiKeyId);
     expect(
-      await microsoftCopilotTokenManager.getAccessToken({
+      await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       }),
@@ -414,7 +414,7 @@ describe("microsoftCopilotTokenManager.getAccessToken", () => {
   });
 });
 
-describe("createMicrosoftCopilotFetch", () => {
+describe("createMicrosoft365CopilotFetch", () => {
   test("injects the redeemed access token into requests", async () => {
     const refreshToken = uniqueRefreshToken();
     vi.stubGlobal(
@@ -423,7 +423,7 @@ describe("createMicrosoftCopilotFetch", () => {
     );
     const innerFetch = vi.fn().mockResolvedValue(new Response("ok"));
 
-    const graphFetch = createMicrosoftCopilotFetch({
+    const graphFetch = createMicrosoft365CopilotFetch({
       refreshToken,
       innerFetch,
     });
@@ -457,7 +457,7 @@ describe("createMicrosoftCopilotFetch", () => {
       .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }))
       .mockResolvedValueOnce(new Response("ok", { status: 200 }));
 
-    const graphFetch = createMicrosoftCopilotFetch({
+    const graphFetch = createMicrosoft365CopilotFetch({
       refreshToken,
       providerApiKeyId: uniqueKeyId(),
       innerFetch,
@@ -486,7 +486,7 @@ describe("createMicrosoftCopilotFetch", () => {
     );
     const innerFetch = vi.fn();
 
-    const graphFetch = createMicrosoftCopilotFetch({
+    const graphFetch = createMicrosoft365CopilotFetch({
       refreshToken,
       innerFetch,
     });
@@ -509,7 +509,7 @@ describe("createMicrosoftCopilotFetch", () => {
     const redemptionMock = vi.fn();
     vi.stubGlobal("fetch", redemptionMock);
 
-    const graphFetch = createMicrosoftCopilotFetch({
+    const graphFetch = createMicrosoft365CopilotFetch({
       refreshToken: undefined,
       innerFetch,
     });

@@ -1,5 +1,5 @@
 /**
- * Microsoft Copilot (Entra ID) token redemption.
+ * Microsoft 365 Copilot (Entra ID) token redemption.
  *
  * The Microsoft 365 Copilot Chat API only supports delegated auth, so each
  * user holds a long-lived Entra ID refresh token (obtained via the Entra
@@ -49,7 +49,7 @@ import { ApiError } from "@/types";
  * Shared by the device-flow start route and the refresh-token redemption so
  * the two can never drift.
  */
-export const MICROSOFT_COPILOT_OAUTH_SCOPES = [
+export const MICROSOFT_365_COPILOT_OAUTH_SCOPES = [
   "offline_access",
   "openid",
   "profile",
@@ -66,7 +66,7 @@ export const MICROSOFT_COPILOT_OAUTH_SCOPES = [
 // read by a field initializer when the singleton is constructed at module eval.
 const MAX_CACHED_TOKENS = 1000;
 
-class MicrosoftCopilotTokenManager {
+class Microsoft365CopilotTokenManager {
   private tokenCache = new LRUCacheManager<CachedAccessToken>({
     maxSize: MAX_CACHED_TOKENS,
   });
@@ -214,7 +214,7 @@ class MicrosoftCopilotTokenManager {
         // Entra accepts the previously stored token until its own expiry.
         logger.warn(
           { providerApiKeyId, error },
-          "[MicrosoftCopilot] failed to persist rotated refresh token",
+          "[Microsoft365Copilot] failed to persist rotated refresh token",
         );
       });
     this.persistQueues.set(providerApiKeyId, next);
@@ -241,7 +241,7 @@ class MicrosoftCopilotTokenManager {
       // vault we must not (and cannot) overwrite.
       logger.warn(
         { providerApiKeyId },
-        "[MicrosoftCopilot] skipping rotated refresh token persistence for vault-referenced key",
+        "[Microsoft365Copilot] skipping rotated refresh token persistence for vault-referenced key",
       );
       return;
     }
@@ -252,14 +252,15 @@ class MicrosoftCopilotTokenManager {
 }
 
 /** @public — exercised directly by unit tests (cache/single-flight/rotation) */
-export const microsoftCopilotTokenManager = new MicrosoftCopilotTokenManager();
+export const microsoft365CopilotTokenManager =
+  new Microsoft365CopilotTokenManager();
 
 /**
  * Wraps fetch so every Microsoft Graph request carries a fresh short-lived
  * access token (redeemed from the stored Entra refresh token). A 401 on a
  * cached access token invalidates it and retries exactly once.
  *
- * Used by the microsoft-copilot proxy adapter's Graph client and the model
+ * Used by the microsoft-365-copilot proxy adapter's Graph client and the model
  * fetcher (the chat LLM client routes through the local proxy instead, so the
  * redemption happens exactly once — in the adapter).
  *
@@ -268,7 +269,7 @@ export const microsoftCopilotTokenManager = new MicrosoftCopilotTokenManager();
  * standard OpenAI-shaped provider error path instead of a generic
  * connection failure.
  */
-export function createMicrosoftCopilotFetch(params: {
+export function createMicrosoft365CopilotFetch(params: {
   refreshToken: string | undefined;
   providerApiKeyId?: string;
   innerFetch?: FetchLike;
@@ -291,7 +292,7 @@ export function createMicrosoftCopilotFetch(params: {
 
     let accessToken: string;
     try {
-      accessToken = await microsoftCopilotTokenManager.getAccessToken({
+      accessToken = await microsoft365CopilotTokenManager.getAccessToken({
         refreshToken,
         providerApiKeyId,
       });
@@ -309,14 +310,19 @@ export function createMicrosoftCopilotFetch(params: {
       await response.body?.cancel();
       if (providerApiKeyId) {
         // Without a key id nothing was cached — the retry below re-redeems.
-        microsoftCopilotTokenManager.invalidate(providerApiKeyId, accessToken);
+        microsoft365CopilotTokenManager.invalidate(
+          providerApiKeyId,
+          accessToken,
+        );
       }
       let freshAccessToken: string;
       try {
-        freshAccessToken = await microsoftCopilotTokenManager.getAccessToken({
-          refreshToken,
-          providerApiKeyId,
-        });
+        freshAccessToken = await microsoft365CopilotTokenManager.getAccessToken(
+          {
+            refreshToken,
+            providerApiKeyId,
+          },
+        );
       } catch (error) {
         return redemptionErrorResponse(error);
       }
@@ -457,7 +463,8 @@ async function redeemWithEntra(refreshToken: string): Promise<{
   expiresAtMs: number;
   rotatedRefreshToken?: string;
 }> {
-  const { authBaseUrl, tenantId, clientId } = config.llm["microsoft-copilot"];
+  const { authBaseUrl, tenantId, clientId } =
+    config.llm["microsoft-365-copilot"];
 
   const response = await fetch(`${authBaseUrl}/${tenantId}/oauth2/v2.0/token`, {
     method: "POST",
@@ -466,7 +473,7 @@ async function redeemWithEntra(refreshToken: string): Promise<{
       client_id: clientId,
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      scope: MICROSOFT_COPILOT_OAUTH_SCOPES,
+      scope: MICROSOFT_365_COPILOT_OAUTH_SCOPES,
     }),
   });
 
@@ -474,18 +481,18 @@ async function redeemWithEntra(refreshToken: string): Promise<{
     const body = await response.text();
     logger.warn(
       { status: response.status, ...entraErrorLogFields(body) },
-      "[MicrosoftCopilot] refresh token redemption failed",
+      "[Microsoft365Copilot] refresh token redemption failed",
     );
     // Entra reports expired/revoked refresh tokens as 400 invalid_grant.
     if (response.status === 400 || response.status === 401) {
       throw new ApiError(
         401,
-        "Microsoft sign-in has expired or been revoked. Reconnect your Microsoft account to keep using Microsoft Copilot.",
+        "Microsoft sign-in has expired or been revoked. Reconnect your Microsoft account to keep using Microsoft 365 Copilot.",
       );
     }
     throw new ApiError(
       502,
-      `Microsoft Copilot token redemption failed with status ${response.status}`,
+      `Microsoft 365 Copilot token redemption failed with status ${response.status}`,
     );
   }
 
@@ -497,7 +504,7 @@ async function redeemWithEntra(refreshToken: string): Promise<{
   if (!payload.access_token || typeof payload.expires_in !== "number") {
     throw new ApiError(
       502,
-      "Microsoft Copilot token redemption returned an unexpected payload",
+      "Microsoft 365 Copilot token redemption returned an unexpected payload",
     );
   }
 

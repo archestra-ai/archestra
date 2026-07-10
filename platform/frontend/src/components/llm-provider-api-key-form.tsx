@@ -14,7 +14,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
-import { MicrosoftCopilotSignIn } from "@/components/microsoft-copilot-sign-in";
+import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -271,15 +271,15 @@ const PROVIDER_CONFIG: Record<
     // Copilot only exposes chat-completion models through Archestra.
     supportsEmbeddings: false,
   },
-  "microsoft-copilot": {
-    name: "Microsoft Copilot",
-    icon: "/icons/microsoft-copilot.png",
+  "microsoft-365-copilot": {
+    name: "Microsoft 365 Copilot",
+    icon: "/icons/microsoft-365-copilot.png",
     placeholder: "Auto-filled after sign in",
     enabled: true,
     consoleUrl: "https://m365.cloud.microsoft/chat",
     consoleName: "Microsoft 365 Copilot",
     description:
-      "No API key to find — just use Sign in with Microsoft below to connect your work account. Requires a Microsoft 365 Copilot license; keys are per-user, so everyone using Microsoft Copilot signs in with their own account.",
+      "No API key to find — just use Sign in with Microsoft below to connect your work account. Requires a Microsoft 365 Copilot license; keys are per-user, so everyone using Microsoft 365 Copilot signs in with their own account.",
     // The Graph Chat API is text-only chat; no embeddings.
     supportsEmbeddings: false,
   },
@@ -742,7 +742,7 @@ export function LlmProviderApiKeyForm({
                   <Label>
                     {provider === "github-copilot"
                       ? "GitHub Copilot account"
-                      : "Microsoft Copilot account"}
+                      : "Microsoft 365 Copilot account"}
                   </Label>
                   {providerConfig.description && (
                     <p className="text-xs text-muted-foreground">
@@ -777,7 +777,7 @@ export function LlmProviderApiKeyForm({
                       }
                     />
                   ) : (
-                    <MicrosoftCopilotSignIn
+                    <Microsoft365CopilotSignIn
                       disabled={isPending}
                       onToken={(token) =>
                         form.setValue("apiKey", token, { shouldDirty: true })

@@ -932,9 +932,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // personal github-copilot key, so it's self-service like the create route.
   [RouteId.GithubCopilotDeviceAuthStart]: {},
   [RouteId.GithubCopilotDeviceAuthPoll]: {},
-  // Same self-service rationale for Microsoft Copilot's Entra device flow.
-  [RouteId.MicrosoftCopilotDeviceAuthStart]: {},
-  [RouteId.MicrosoftCopilotDeviceAuthPoll]: {},
+  // Same self-service rationale for Microsoft 365 Copilot's Entra device flow.
+  [RouteId.Microsoft365CopilotDeviceAuthStart]: {},
+  [RouteId.Microsoft365CopilotDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },

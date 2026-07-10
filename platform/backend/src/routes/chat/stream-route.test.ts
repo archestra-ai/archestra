@@ -916,8 +916,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     // supportsToolCalling=false, so the turn must run tool-less instead of
     // letting the provider reject the declared tools.
     const noToolsModel = await ModelModel.create({
-      externalId: "microsoft-copilot/microsoft-365-copilot",
-      provider: "microsoft-copilot",
+      externalId: "microsoft-365-copilot/microsoft-365-copilot",
+      provider: "microsoft-365-copilot",
       modelId: "microsoft-365-copilot",
       description: "Microsoft 365 Copilot",
       contextLength: null,

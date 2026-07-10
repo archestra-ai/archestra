@@ -7,7 +7,7 @@ import {
   estimateUsage,
   extractGraphResponseText,
   graphChatResponseToOpenAi,
-} from "./microsoft-copilot-graph-translator";
+} from "./microsoft-365-copilot-graph-translator";
 
 type Request = OpenAi.Types.ChatCompletionsRequest;
 

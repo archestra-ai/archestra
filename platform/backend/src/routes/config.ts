@@ -159,7 +159,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
           "github-copilot": config.llm["github-copilot"].baseUrl || null,
-          "microsoft-copilot": config.llm["microsoft-copilot"].baseUrl || null,
+          "microsoft-365-copilot":
+            config.llm["microsoft-365-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });

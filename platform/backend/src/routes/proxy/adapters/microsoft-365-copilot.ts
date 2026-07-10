@@ -1,5 +1,5 @@
 /**
- * Microsoft Copilot LLM Proxy Adapter
+ * Microsoft 365 Copilot LLM Proxy Adapter
  *
  * The proxy's inbound wire format is OpenAI chat completions, so the whole
  * adapter is OpenAI's, configured via createOpenAiCompatibleAdapterFactory.
@@ -8,7 +8,7 @@
  * answers, no tool calling, no model selection, no usage counts. The factory
  * only ever calls `client.chat.completions.create(params)`, so instead of the
  * real OpenAI SDK the client below duck-types that single method and performs
- * the Graph translation (see ./microsoft-copilot-graph-translator):
+ * the Graph translation (see ./microsoft-365-copilot-graph-translator):
  *
  * - per request: create a fresh Graph conversation, send the latest user
  *   message as the prompt with prior turns as additional context;
@@ -18,7 +18,7 @@
  *   with no recognizable text is retried through the sync endpoint;
  * - auth: the incoming "API key" is the user's long-lived Entra ID refresh
  *   token, swapped per request for a short-lived Graph access token inside a
- *   fetch wrapper (see services/microsoft-copilot-token), because
+ *   fetch wrapper (see services/microsoft-365-copilot-token), because
  *   `createClient` is synchronous.
  */
 import { randomUUID } from "node:crypto";
@@ -26,7 +26,7 @@ import type OpenAIProvider from "openai";
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
-import { createMicrosoftCopilotFetch } from "@/services/microsoft-copilot-token";
+import { createMicrosoft365CopilotFetch } from "@/services/microsoft-365-copilot-token";
 import type { CreateClientOptions, OpenAi } from "@/types";
 import {
   assertNoTools,
@@ -39,29 +39,29 @@ import {
   makeContentDeltaChunk,
   makeFinishChunk,
   makeRoleChunk,
-} from "./microsoft-copilot-graph-translator";
+} from "./microsoft-365-copilot-graph-translator";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
 
-export const microsoftCopilotAdapterFactory =
+export const microsoft365CopilotAdapterFactory =
   createOpenAiCompatibleAdapterFactory({
-    provider: "microsoft-copilot",
-    interactionType: "microsoft-copilot:chatCompletions",
-    getBaseUrl: () => config.llm["microsoft-copilot"].baseUrl,
+    provider: "microsoft-365-copilot",
+    interactionType: "microsoft-365-copilot:chatCompletions",
+    getBaseUrl: () => config.llm["microsoft-365-copilot"].baseUrl,
     createClient(
       apiKey: string | undefined,
       options: CreateClientOptions,
     ): OpenAIProvider {
       const observableFetch = options.agent
         ? metrics.llm.getObservableFetch(
-            "microsoft-copilot",
+            "microsoft-365-copilot",
             options.agent,
             options.source,
           )
         : undefined;
 
-      const client = new MicrosoftCopilotGraphClient({
-        baseUrl: options.baseUrl ?? config.llm["microsoft-copilot"].baseUrl,
-        fetch: createMicrosoftCopilotFetch({
+      const client = new Microsoft365CopilotGraphClient({
+        baseUrl: options.baseUrl ?? config.llm["microsoft-365-copilot"].baseUrl,
+        fetch: createMicrosoft365CopilotFetch({
           refreshToken: apiKey,
           providerApiKeyId: options.llmProviderApiKeyId,
           innerFetch: observableFetch,
@@ -84,7 +84,7 @@ type FetchLike = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-class MicrosoftCopilotGraphClient {
+class Microsoft365CopilotGraphClient {
   chat = {
     completions: {
       create: (
@@ -219,7 +219,7 @@ class MicrosoftCopilotGraphClient {
           // statefulness, and free under seat licensing (revisit if Microsoft
           // ever bills per conversation).
           logger.warn(
-            "[MicrosoftCopilot] chatOverStream yielded no recognizable text; falling back to the sync chat endpoint",
+            "[Microsoft365Copilot] chatOverStream yielded no recognizable text; falling back to the sync chat endpoint",
           );
           const responseText = await self.runSyncChat(graphBody);
           const chunks = completionTextToChunks({
@@ -264,7 +264,7 @@ class MicrosoftCopilotGraphClient {
     const responseText = extractGraphResponseText(payload);
     if (responseText === undefined) {
       throw graphShapeError(
-        "Microsoft Copilot returned a response without any message text",
+        "Microsoft 365 Copilot returned a response without any message text",
       );
     }
     return responseText;
@@ -285,7 +285,7 @@ class MicrosoftCopilotGraphClient {
     const payload = (await response.json()) as { id?: string };
     if (!payload.id) {
       throw graphShapeError(
-        "Microsoft Copilot conversation creation returned no conversation id",
+        "Microsoft 365 Copilot conversation creation returned no conversation id",
       );
     }
     return payload.id;
@@ -297,13 +297,13 @@ class MicrosoftCopilotGraphClient {
       payload = await response.json();
     } catch {
       throw graphShapeError(
-        "Microsoft Copilot returned a stream response in an unexpected format",
+        "Microsoft 365 Copilot returned a stream response in an unexpected format",
       );
     }
     const responseText = extractGraphResponseText(payload);
     if (responseText === undefined) {
       throw graphShapeError(
-        "Microsoft Copilot returned a response without any message text",
+        "Microsoft 365 Copilot returned a response without any message text",
       );
     }
     return responseText;
@@ -349,7 +349,7 @@ function nowUnixSeconds(): number {
  * missing-Copilot-license 403) instead of a generic 500.
  */
 async function throwGraphError(response: Response): Promise<never> {
-  let message = `Microsoft Copilot request failed with status ${response.status}`;
+  let message = `Microsoft 365 Copilot request failed with status ${response.status}`;
   try {
     const body = (await response.json()) as {
       error?: { message?: string };

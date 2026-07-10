@@ -139,7 +139,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   minimax: "minimax",
   azure: "azure",
   "github-copilot": "github-copilot",
-  "microsoft-copilot": "microsoft-copilot",
+  "microsoft-365-copilot": "microsoft-365-copilot",
 };
 
 /**

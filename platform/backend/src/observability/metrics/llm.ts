@@ -56,7 +56,7 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   deepseek: getOpenAIUsage,
   "github-copilot": getOpenAIUsage,
   // Responses are OpenAI-shaped by our own Graph translation (usage estimated)
-  "microsoft-copilot": getOpenAIUsage,
+  "microsoft-365-copilot": getOpenAIUsage,
   gemini: null,
   bedrock: null,
 };

@@ -30,7 +30,7 @@ import {
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
-import { MICROSOFT_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-copilot-graph-translator";
+import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
@@ -1317,18 +1317,20 @@ const openAiCompatibleErrorHandler = providerErrorHandler(
 );
 
 /**
- * Microsoft Copilot shares the OpenAI-compatible error body; its one
+ * Microsoft 365 Copilot shares the OpenAI-compatible error body; its one
  * provider-specific case is the proxy adapter's tools rejection, which must
  * surface as the actionable ToolsUnsupported headline instead of the generic
  * invalid-request copy (whose details are visible to admins only).
  */
-function mapMicrosoftCopilotErrorToCode(
+function mapMicrosoft365CopilotErrorToCode(
   statusCode: number | undefined,
   parsedError: ParsedOpenAIError | null,
 ): ChatErrorCode {
   if (
     statusCode === 400 &&
-    parsedError?.message?.includes(MICROSOFT_COPILOT_TOOLS_UNSUPPORTED_MESSAGE)
+    parsedError?.message?.includes(
+      MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE,
+    )
   ) {
     return ChatErrorCode.ToolsUnsupported;
   }
@@ -1357,9 +1359,9 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   "github-copilot": openAiCompatibleErrorHandler,
-  "microsoft-copilot": providerErrorHandler(
+  "microsoft-365-copilot": providerErrorHandler(
     parseOpenAIError,
-    mapMicrosoftCopilotErrorToCode,
+    mapMicrosoft365CopilotErrorToCode,
   ),
   minimax: providerErrorHandler(parseMinimaxError, mapMinimaxErrorToCode),
   azure: openAiCompatibleErrorHandler,

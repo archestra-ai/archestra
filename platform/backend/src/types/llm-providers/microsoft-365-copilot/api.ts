@@ -1,7 +1,7 @@
 /**
- * Microsoft Copilot API schemas - OpenAI-compatible inbound wire format
+ * Microsoft 365 Copilot API schemas - OpenAI-compatible inbound wire format
  *
- * The proxy exposes Microsoft Copilot as an OpenAI-compatible chat completions
+ * The proxy exposes Microsoft 365 Copilot as an OpenAI-compatible chat completions
  * surface; the adapter translates to the Microsoft 365 Copilot Chat API
  * (Microsoft Graph beta) upstream. We reuse OpenAI schemas and use
  * .passthrough() on request/response for forward compatibility.

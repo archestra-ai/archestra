@@ -16,7 +16,7 @@ vi.mock("@/cache-manager");
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
     llm: {
-      "microsoft-copilot": {
+      "microsoft-365-copilot": {
         clientId: "test-entra-client-id",
         tenantId: "organizations",
         authBaseUrl: "https://login.microsoftonline.com",
@@ -25,7 +25,7 @@ vi.mock("@/config", async () =>
   }),
 );
 
-describe("POST /api/microsoft-copilot-auth/device/poll", () => {
+describe("POST /api/microsoft-365-copilot-auth/device/poll", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
 
@@ -41,10 +41,10 @@ describe("POST /api/microsoft-copilot-auth/device/poll", () => {
       (request as typeof request & { user: User }).user = user;
     });
 
-    const { default: microsoftCopilotAuthRoutes } = await import(
-      "./microsoft-copilot-auth.routes"
+    const { default: microsoft365CopilotAuthRoutes } = await import(
+      "./microsoft-365-copilot-auth.routes"
     );
-    await app.register(microsoftCopilotAuthRoutes);
+    await app.register(microsoft365CopilotAuthRoutes);
   });
 
   afterEach(async () => {
@@ -55,7 +55,7 @@ describe("POST /api/microsoft-copilot-auth/device/poll", () => {
   function poll() {
     return app.inject({
       method: "POST",
-      url: "/api/microsoft-copilot-auth/device/poll",
+      url: "/api/microsoft-365-copilot-auth/device/poll",
       payload: { deviceCode: "device-123" },
     });
   }

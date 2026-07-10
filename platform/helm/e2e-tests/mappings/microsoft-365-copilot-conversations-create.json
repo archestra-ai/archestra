@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPath": "/microsoft-copilot/copilot/conversations",
+    "urlPath": "/microsoft-365-copilot/copilot/conversations",
     "headers": {
       "Authorization": {
         "matches": "Bearer .*"

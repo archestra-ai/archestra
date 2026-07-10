@@ -1103,20 +1103,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `Iv1.b507a08c87ecfe98` (the community-standard VS Code client id accepted by the Copilot token exchange)
   - Override this if your organization registers its own GitHub App with Copilot API access
 
-- **`ARCHESTRA_MICROSOFT_COPILOT_CLIENT_ID`** - Application (client) ID of your Entra app registration for the Microsoft Copilot device flow.
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`** - Application (client) ID of your Entra app registration for the Microsoft 365 Copilot device flow.
   - No default. The "Sign in with Microsoft" flow is unavailable until this is set.
   - The registration needs public client flows enabled and admin-consented delegated Graph scopes (see [Supported LLM Providers](/docs/platform-supported-llm-providers))
 
-- **`ARCHESTRA_MICROSOFT_COPILOT_TENANT_ID`** - Entra tenant segment of the OAuth endpoints used for Microsoft Copilot sign-in and token redemption.
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`** - Entra tenant segment of the OAuth endpoints used for Microsoft 365 Copilot sign-in and token redemption.
   - Default: `organizations` (any work or school account)
   - Pin your tenant id to restrict sign-in to one directory
 
-- **`ARCHESTRA_MICROSOFT_COPILOT_BASE_URL`** - Override the Microsoft Graph base URL serving the M365 Copilot Chat API.
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL`** - Override the Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API.
   - Default: `https://graph.microsoft.com/beta`
 
-- **`ARCHESTRA_MICROSOFT_COPILOT_AUTH_BASE_URL`** - Entra ID host serving the OAuth device-flow and token endpoints.
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL`** - Entra ID host serving the OAuth device-flow and token endpoints.
   - Default: `https://login.microsoftonline.com`
-  - Microsoft Copilot has no static API keys: provider keys store the user's long-lived Entra refresh token, and the proxy redeems it (with caching) on every request
+  - Microsoft 365 Copilot has no static API keys: provider keys store the user's long-lived Entra refresh token, and the proxy redeems it (with caching) on every request
 
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`

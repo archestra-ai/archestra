@@ -4,7 +4,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
-import { MicrosoftCopilotSignIn } from "@/components/microsoft-copilot-sign-in";
+import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import { Button } from "@/components/ui/button";
 import { useCreateLlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
 
@@ -65,18 +65,18 @@ export function ProviderAuthRequiredCard({
                 }
               }}
             />
-          ) : provider === "microsoft-copilot" ? (
-            <MicrosoftCopilotSignIn
+          ) : provider === "microsoft-365-copilot" ? (
+            <Microsoft365CopilotSignIn
               disabled={createKey.isPending}
               onToken={async (token) => {
                 try {
                   await createKey.mutateAsync({
-                    name: "Microsoft Copilot",
-                    provider: "microsoft-copilot",
+                    name: "Microsoft 365 Copilot",
+                    provider: "microsoft-365-copilot",
                     apiKey: token,
                     scope: "personal",
                   });
-                  toast.success("Microsoft Copilot connected — retrying…");
+                  toast.success("Microsoft 365 Copilot connected — retrying…");
                   // Re-run the original prompt now that the key exists; the
                   // create mutation already invalidated the model/key caches.
                   onConnected?.();

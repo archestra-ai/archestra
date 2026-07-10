@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
 import type { OpenAi } from "@/types";
-import { microsoftCopilotAdapterFactory } from "./microsoft-copilot";
+import { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 
 type ChatCompletionsRequest = OpenAi.Types.ChatCompletionsRequest;
 type ChatCompletionsResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -116,7 +116,7 @@ function stubGraphFetch(handlers: {
 }
 
 function createClient() {
-  return microsoftCopilotAdapterFactory.createClient(uniqueRefreshToken(), {
+  return microsoft365CopilotAdapterFactory.createClient(uniqueRefreshToken(), {
     source: "api",
   });
 }
@@ -135,13 +135,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("microsoftCopilotAdapterFactory execute (non-streaming)", () => {
+describe("microsoft365CopilotAdapterFactory execute (non-streaming)", () => {
   test("creates a conversation, sends the chat turn, and maps the answer to an OpenAI completion", async () => {
     const { calls } = stubGraphFetch({
       chat: () => graphChatAnswer("Your 9 AM is quarterly planning."),
     });
 
-    const response = (await microsoftCopilotAdapterFactory.execute(
+    const response = (await microsoft365CopilotAdapterFactory.execute(
       createClient(),
       makeRequest({
         messages: [
@@ -178,7 +178,7 @@ describe("microsoftCopilotAdapterFactory execute (non-streaming)", () => {
     const { fetchMock } = stubGraphFetch({});
 
     await expect(
-      microsoftCopilotAdapterFactory.execute(
+      microsoft365CopilotAdapterFactory.execute(
         createClient(),
         makeRequest({
           tools: [
@@ -211,7 +211,7 @@ describe("microsoftCopilotAdapterFactory execute (non-streaming)", () => {
     });
 
     await expect(
-      microsoftCopilotAdapterFactory.execute(createClient(), makeRequest()),
+      microsoft365CopilotAdapterFactory.execute(createClient(), makeRequest()),
     ).rejects.toMatchObject({
       status: 403,
       message: expect.stringContaining("Copilot license"),
@@ -219,7 +219,7 @@ describe("microsoftCopilotAdapterFactory execute (non-streaming)", () => {
   });
 });
 
-describe("microsoftCopilotAdapterFactory executeStream", () => {
+describe("microsoft365CopilotAdapterFactory executeStream", () => {
   test("translates SSE events carrying cumulative snapshots into content deltas", async () => {
     stubGraphFetch({
       chatOverStream: () =>
@@ -231,7 +231,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     const chunks = await collectChunks(
-      await microsoftCopilotAdapterFactory.executeStream(
+      await microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),
@@ -257,7 +257,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     const chunks = await collectChunks(
-      await microsoftCopilotAdapterFactory.executeStream(
+      await microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),
@@ -294,7 +294,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     const chunks = await collectChunks(
-      await microsoftCopilotAdapterFactory.executeStream(
+      await microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),
@@ -312,7 +312,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     const chunks = await collectChunks(
-      await microsoftCopilotAdapterFactory.executeStream(
+      await microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),
@@ -342,7 +342,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     const chunks = await collectChunks(
-      await microsoftCopilotAdapterFactory.executeStream(
+      await microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),
@@ -386,7 +386,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     const chunks = await collectChunks(
-      await microsoftCopilotAdapterFactory.executeStream(
+      await microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),
@@ -410,7 +410,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
         }),
     });
 
-    const iterable = await microsoftCopilotAdapterFactory.executeStream(
+    const iterable = await microsoft365CopilotAdapterFactory.executeStream(
       createClient(),
       makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
     );
@@ -433,7 +433,7 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     });
 
     await expect(
-      microsoftCopilotAdapterFactory.executeStream(
+      microsoft365CopilotAdapterFactory.executeStream(
         createClient(),
         makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
       ),

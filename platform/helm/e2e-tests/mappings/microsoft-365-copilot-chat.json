@@ -1,7 +1,7 @@
 {
   "request": {
     "method": "POST",
-    "urlPathPattern": "/microsoft-copilot/copilot/conversations/[^/]+/chat",
+    "urlPathPattern": "/microsoft-365-copilot/copilot/conversations/[^/]+/chat",
     "headers": {
       "Authorization": {
         "matches": "Bearer .*"
@@ -23,7 +23,7 @@
         {
           "@odata.type": "#microsoft.graph.copilotConversationResponseMessage",
           "id": "msg-e2e-1",
-          "text": "Hello from Microsoft Copilot (WireMock).",
+          "text": "Hello from Microsoft 365 Copilot (WireMock).",
           "createdDateTime": "2026-01-01T00:00:01.0000000Z",
           "adaptiveCards": [],
           "attributions": []

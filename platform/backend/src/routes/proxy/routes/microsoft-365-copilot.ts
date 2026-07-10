@@ -5,13 +5,13 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { fetchMicrosoftCopilotModels } from "@/routes/chat/model-fetchers/microsoft-copilot";
+import { fetchMicrosoft365CopilotModels } from "@/routes/chat/model-fetchers/microsoft-365-copilot";
 import {
   constructResponseSchema,
-  MicrosoftCopilot,
+  Microsoft365Copilot,
   UuidIdSchema,
 } from "@/types";
-import { microsoftCopilotAdapterFactory } from "../adapters";
+import { microsoft365CopilotAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import {
@@ -23,21 +23,25 @@ import {
 } from "./proxy-model-listing";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
-const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
-  const API_PREFIX = `${PROXY_API_PREFIX}/microsoft-copilot`;
+const microsoft365CopilotProxyRoutes: FastifyPluginAsyncZod = async (
+  fastify,
+) => {
+  const API_PREFIX = `${PROXY_API_PREFIX}/microsoft-365-copilot`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-  logger.info("[UnifiedProxy] Registering unified Microsoft Copilot routes");
+  logger.info(
+    "[UnifiedProxy] Registering unified Microsoft 365 Copilot routes",
+  );
 
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm["microsoft-copilot"].baseUrl,
+    upstream: config.llm["microsoft-365-copilot"].baseUrl,
     prefix: API_PREFIX,
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
       endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
-      upstream: config.llm["microsoft-copilot"].baseUrl,
-      providerName: "MicrosoftCopilot",
+      upstream: config.llm["microsoft-365-copilot"].baseUrl,
+      providerName: "Microsoft365Copilot",
       // Graph only accepts the redeemed short-lived access token, and the
       // upstream is not OpenAI-compatible anyway — never forward the raw Entra
       // refresh token for an unsupported path; reject instead. With this flag
@@ -54,27 +58,27 @@ const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.MicrosoftCopilotChatCompletionsWithDefaultAgent,
+        operationId: RouteId.Microsoft365CopilotChatCompletionsWithDefaultAgent,
         description:
-          "Create a chat completion with Microsoft Copilot (uses default agent)",
+          "Create a chat completion with Microsoft 365 Copilot (uses default agent)",
         tags: ["LLM Proxy"],
-        body: MicrosoftCopilot.API.ChatCompletionRequestSchema,
-        headers: MicrosoftCopilot.API.ChatCompletionsHeadersSchema,
+        body: Microsoft365Copilot.API.ChatCompletionRequestSchema,
+        headers: Microsoft365Copilot.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          MicrosoftCopilot.API.ChatCompletionResponseSchema,
+          Microsoft365Copilot.API.ChatCompletionResponseSchema,
         ),
       },
     },
     async (request, reply) => {
       logger.debug(
         { url: request.url },
-        "[UnifiedProxy] Handling Microsoft Copilot request (default agent)",
+        "[UnifiedProxy] Handling Microsoft 365 Copilot request (default agent)",
       );
       return handleLLMProxy(
         request.body,
         request,
         reply,
-        microsoftCopilotAdapterFactory,
+        microsoft365CopilotAdapterFactory,
       );
     },
   );
@@ -84,36 +88,36 @@ const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       bodyLimit: PROXY_BODY_LIMIT,
       schema: {
-        operationId: RouteId.MicrosoftCopilotChatCompletionsWithAgent,
+        operationId: RouteId.Microsoft365CopilotChatCompletionsWithAgent,
         description:
-          "Create a chat completion with Microsoft Copilot for a specific agent",
+          "Create a chat completion with Microsoft 365 Copilot for a specific agent",
         tags: ["LLM Proxy"],
         params: z.object({
           agentId: UuidIdSchema,
         }),
-        body: MicrosoftCopilot.API.ChatCompletionRequestSchema,
-        headers: MicrosoftCopilot.API.ChatCompletionsHeadersSchema,
+        body: Microsoft365Copilot.API.ChatCompletionRequestSchema,
+        headers: Microsoft365Copilot.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          MicrosoftCopilot.API.ChatCompletionResponseSchema,
+          Microsoft365Copilot.API.ChatCompletionResponseSchema,
         ),
       },
     },
     async (request, reply) => {
       logger.debug(
         { url: request.url, agentId: request.params.agentId },
-        "[UnifiedProxy] Handling Microsoft Copilot request (with agent)",
+        "[UnifiedProxy] Handling Microsoft 365 Copilot request (with agent)",
       );
       return handleLLMProxy(
         request.body,
         request,
         reply,
-        microsoftCopilotAdapterFactory,
+        microsoft365CopilotAdapterFactory,
       );
     },
   );
 
   /**
-   * Lists the static Microsoft Copilot pseudo-model for a virtual or raw key.
+   * Lists the static Microsoft 365 Copilot pseudo-model for a virtual or raw key.
    * A dedicated route is needed for the same precedence reason as OpenAI's,
    * and doubly so here: the catch-all http-proxy would forward the raw Entra
    * refresh token upstream, but Graph only accepts the redeemed short-lived
@@ -126,15 +130,15 @@ const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   ) {
     const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
       request,
-      provider: "microsoft-copilot",
+      provider: "microsoft-365-copilot",
       token: extractBearerToken(request.headers.authorization),
     });
     logger.debug(
       { agentId },
-      "[UnifiedProxy] Listing Microsoft Copilot models",
+      "[UnifiedProxy] Listing Microsoft 365 Copilot models",
     );
     return toOpenAiModelsList(
-      await fetchMicrosoftCopilotModels(apiKey, baseUrl, extraHeaders),
+      await fetchMicrosoft365CopilotModels(apiKey, baseUrl, extraHeaders),
     );
   }
 
@@ -142,8 +146,8 @@ const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/models`,
     {
       schema: {
-        operationId: RouteId.MicrosoftCopilotListModelsWithDefaultAgent,
-        description: "List Microsoft Copilot models (default agent)",
+        operationId: RouteId.Microsoft365CopilotListModelsWithDefaultAgent,
+        description: "List Microsoft 365 Copilot models (default agent)",
         tags: ["LLM Proxy"],
         headers: OpenAiModelsHeadersSchema,
         response: constructResponseSchema(OpenAiModelsListResponseSchema),
@@ -156,8 +160,8 @@ const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     `${API_PREFIX}/:agentId/models`,
     {
       schema: {
-        operationId: RouteId.MicrosoftCopilotListModelsWithAgent,
-        description: "List Microsoft Copilot models (specific agent)",
+        operationId: RouteId.Microsoft365CopilotListModelsWithAgent,
+        description: "List Microsoft 365 Copilot models (specific agent)",
         tags: ["LLM Proxy"],
         params: z.object({ agentId: UuidIdSchema }),
         headers: OpenAiModelsHeadersSchema,
@@ -168,4 +172,4 @@ const microsoftCopilotProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 };
 
-export default microsoftCopilotProxyRoutes;
+export default microsoft365CopilotProxyRoutes;

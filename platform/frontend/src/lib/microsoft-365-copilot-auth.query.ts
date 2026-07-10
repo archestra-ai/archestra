@@ -2,22 +2,24 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation } from "@tanstack/react-query";
 import { handleApiError } from "@/lib/utils";
 
-const { microsoftCopilotDeviceAuthStart, microsoftCopilotDeviceAuthPoll } =
-  archestraApiSdk;
+const {
+  microsoft365CopilotDeviceAuthStart,
+  microsoft365CopilotDeviceAuthPoll,
+} = archestraApiSdk;
 
-export type MicrosoftCopilotDeviceStart =
-  archestraApiTypes.MicrosoftCopilotDeviceAuthStartResponses["200"];
-export type MicrosoftCopilotDevicePoll =
-  archestraApiTypes.MicrosoftCopilotDeviceAuthPollResponses["200"];
+export type Microsoft365CopilotDeviceStart =
+  archestraApiTypes.Microsoft365CopilotDeviceAuthStartResponses["200"];
+export type Microsoft365CopilotDevicePoll =
+  archestraApiTypes.Microsoft365CopilotDeviceAuthPollResponses["200"];
 
-export function useStartMicrosoftCopilotDeviceFlow() {
+export function useStartMicrosoft365CopilotDeviceFlow() {
   return useMutation({
-    mutationFn: async (): Promise<MicrosoftCopilotDeviceStart | null> => {
+    mutationFn: async (): Promise<Microsoft365CopilotDeviceStart | null> => {
       // Toast even when the SDK call throws (network down, backend
       // restarting) instead of returning an API error — otherwise the
       // sign-in button fails with no feedback at all.
       try {
-        const { data, error } = await microsoftCopilotDeviceAuthStart();
+        const { data, error } = await microsoft365CopilotDeviceAuthStart();
         if (error) {
           handleApiError(error);
           return null;
@@ -31,12 +33,12 @@ export function useStartMicrosoftCopilotDeviceFlow() {
   });
 }
 
-export function usePollMicrosoftCopilotDeviceFlow() {
+export function usePollMicrosoft365CopilotDeviceFlow() {
   return useMutation({
     mutationFn: async (
       deviceCode: string,
-    ): Promise<MicrosoftCopilotDevicePoll | null> => {
-      const { data, error } = await microsoftCopilotDeviceAuthPoll({
+    ): Promise<Microsoft365CopilotDevicePoll | null> => {
+      const { data, error } = await microsoft365CopilotDeviceAuthPoll({
         body: { deviceCode },
       });
       if (error) {

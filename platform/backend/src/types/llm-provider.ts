@@ -67,7 +67,7 @@ export interface CreateClientOptions {
   /**
    * Id of the llm_provider_api_keys row the request's credential resolved
    * from, when known. Adapters whose upstream rotates the stored credential
-   * (Microsoft Copilot's Entra refresh tokens) use it to persist the rotated
+   * (Microsoft 365 Copilot's Entra refresh tokens) use it to persist the rotated
    * secret back to the key; other adapters ignore it.
    */
   llmProviderApiKeyId?: string;

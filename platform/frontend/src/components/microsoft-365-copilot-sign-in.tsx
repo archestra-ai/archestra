@@ -4,12 +4,12 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  type MicrosoftCopilotDeviceStart,
-  usePollMicrosoftCopilotDeviceFlow,
-  useStartMicrosoftCopilotDeviceFlow,
-} from "@/lib/microsoft-copilot-auth.query";
+  type Microsoft365CopilotDeviceStart,
+  usePollMicrosoft365CopilotDeviceFlow,
+  useStartMicrosoft365CopilotDeviceFlow,
+} from "@/lib/microsoft-365-copilot-auth.query";
 
-interface MicrosoftCopilotSignInProps {
+interface Microsoft365CopilotSignInProps {
   /** Receives the user's Entra refresh token once the device flow completes. */
   onToken: (token: string) => void;
   disabled?: boolean;
@@ -18,15 +18,15 @@ interface MicrosoftCopilotSignInProps {
 /**
  * "Sign in with Microsoft" device flow (RFC 8628): shows a one-time code the
  * user enters at microsoft.com/devicelogin, then polls until Entra hands back
- * the refresh token that becomes the Microsoft Copilot provider key.
+ * the refresh token that becomes the Microsoft 365 Copilot provider key.
  */
-export function MicrosoftCopilotSignIn({
+export function Microsoft365CopilotSignIn({
   onToken,
   disabled,
-}: MicrosoftCopilotSignInProps) {
-  const start = useStartMicrosoftCopilotDeviceFlow();
-  const poll = usePollMicrosoftCopilotDeviceFlow();
-  const [flow, setFlow] = useState<MicrosoftCopilotDeviceStart | null>(null);
+}: Microsoft365CopilotSignInProps) {
+  const start = useStartMicrosoft365CopilotDeviceFlow();
+  const poll = usePollMicrosoft365CopilotDeviceFlow();
+  const [flow, setFlow] = useState<Microsoft365CopilotDeviceStart | null>(null);
   const [completed, setCompleted] = useState(false);
   const [expired, setExpired] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
@@ -115,7 +115,9 @@ export function MicrosoftCopilotSignIn({
   // keeps the document focused for the clipboard write; Entra omits the RFC
   // 8628 verification_uri_complete field, so the copy is the fastest path to a
   // paste.
-  const copyCodeAndOpen = async (deviceFlow: MicrosoftCopilotDeviceStart) => {
+  const copyCodeAndOpen = async (
+    deviceFlow: Microsoft365CopilotDeviceStart,
+  ) => {
     try {
       await navigator.clipboard.writeText(deviceFlow.userCode);
       markCopied();

@@ -42,4 +42,18 @@ export function sanitizeAppNameForToolMetadata(name: string): string {
   return name.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim();
 }
 
+// The launch tool's human-facing title and description for an app, as shown in
+// MCP tool lists (plaintext in many clients). Derived from the app name and
+// sanitized as tool metadata so both stay one readable line and cannot smuggle
+// control or bidi characters. Kept here so every producer — backing-tool
+// creation, the gateway serve path, and rename sync — renders one identical,
+// safe string instead of re-inlining the template.
+export function appLaunchToolTitle(name: string): string {
+  return `Open ${sanitizeAppNameForToolMetadata(name)}`;
+}
+
+export function appLaunchToolDescription(name: string): string {
+  return `Open the "${sanitizeAppNameForToolMetadata(name)}" app and render its UI.`;
+}
+
 const MARKDOWN_PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/g;

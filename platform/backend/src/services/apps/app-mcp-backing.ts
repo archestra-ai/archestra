@@ -10,7 +10,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
-import { sanitizeAppNameForToolMetadata } from "@/services/apps/app-run-link";
+import { appLaunchToolDescription } from "@/services/apps/app-run-link";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
@@ -75,7 +75,7 @@ export async function createAppBacking(params: {
         `${app.name}-${app.id.slice(0, 8)}`,
         APP_LAUNCH_TOOL_NAME,
       ),
-      description: `Open the "${sanitizeAppNameForToolMetadata(app.name)}" app and render its UI.`,
+      description: appLaunchToolDescription(app.name),
       parameters: { type: "object", properties: {} },
       catalogId: catalog.id,
       meta: {
@@ -147,6 +147,22 @@ export async function syncAppBacking(app: App): Promise<void> {
         environmentId: app.environmentId,
       });
       await McpCatalogTeamModel.syncCatalogTeams(server.catalogId, teamIds);
+      // Keep the launch tool's derived, sanitized description in lockstep with
+      // the app name — a rename must not leave a stale (or raw pre-sanitization)
+      // name in the persisted metadata. The gateway also re-derives this at
+      // serve time; refreshing storage here keeps non-model readers (the
+      // guardrails UI) current too.
+      const desiredDescription = appLaunchToolDescription(app.name);
+      const launchTool = (
+        await ToolModel.findByCatalogIdWithMeta(server.catalogId)
+      ).find(
+        (tool) => ToolModel.unslugifyName(tool.name) === APP_LAUNCH_TOOL_NAME,
+      );
+      if (launchTool && launchTool.description !== desiredDescription) {
+        await ToolModel.update(launchTool.id, {
+          description: desiredDescription,
+        });
+      }
     }
   } catch (error) {
     logger.warn(

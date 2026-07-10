@@ -166,6 +166,7 @@ class ToolModel {
     data: Partial<
       Pick<
         UpdateTool,
+        | "description"
         | "policiesAutoConfiguredAt"
         | "policiesAutoConfiguringStartedAt"
         | "policiesAutoConfiguredReasoning"

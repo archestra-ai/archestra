@@ -3,7 +3,7 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatOpsChannelBindingModel } from "@/models";
+import { ChatOpsChannelBindingModel, OrganizationModel } from "@/models";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -21,7 +21,10 @@ import type {
   ThreadHistoryParams,
   UpdateApprovalRequestOptions,
 } from "@/types";
-import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
+import {
+  CHATOPS_ATTACHMENT_LIMITS,
+  TELEGRAM_LINK_CODE_TTL_MS,
+} from "./constants";
 import { errorMessage, formatApprovalToolArgs } from "./utils";
 
 /**
@@ -32,13 +35,13 @@ import { errorMessage, formatApprovalToolArgs } from "./utils";
  *   no webhook signature handling, no ngrok. The only credential is the bot
  *   token from @BotFather.
  * - Plain fetch against the Bot API — no SDK dependency.
- * - No new tables. Identity is the existing pending-DM-binding flow: Telegram
- *   exposes no user emails, so a user links their account by opening
- *   https://t.me/<bot>?start=<bindingId> (the UI creates the pending binding;
- *   its UUID doubles as an unguessable one-time link code). After that, the
- *   fulfilled DM binding maps their Telegram user ID to their email — in
- *   Telegram a private chat ID equals the user ID, so the same binding also
- *   authorizes them in group chats.
+ * - No new tables. Telegram exposes no user emails, so identity is a one-shot
+ *   linking code that works in both directions: the signed-in web UI mints a
+ *   code carried to the bot via a t.me ?start= deep link, or the bot's /start
+ *   reply carries a code back to the web as a sign-in link. Either way the
+ *   result is a fulfilled DM binding mapping the Telegram user ID to an
+ *   email — and since a private chat ID equals the user ID, the same binding
+ *   also authorizes the user in group chats.
  */
 class TelegramProvider implements ChatOpsProvider {
   readonly providerId: ChatOpsProviderType = "telegram";
@@ -598,7 +601,7 @@ class TelegramProvider implements ChatOpsProvider {
       await cacheManager.set(
         `${CacheKey.TelegramLinkCode}-${code}`,
         { chatId },
-        LINK_CODE_TTL_MS,
+        TELEGRAM_LINK_CODE_TTL_MS,
       );
       return [
         "Let's link this Telegram account to your user account.",
@@ -612,25 +615,43 @@ class TelegramProvider implements ChatOpsProvider {
       return "That linking code doesn't look valid. Send /start without a code to get a sign-in link.";
     }
 
-    const binding = await ChatOpsChannelBindingModel.findById(payload);
-    if (
-      !binding ||
-      binding.provider !== this.providerId ||
-      !binding.isDm ||
-      !binding.dmOwnerEmail
-    ) {
-      return "That linking code doesn't match a pending link. Use your personal link from the web app.";
-    }
-    if (!binding.channelId.startsWith("dm:pending:")) {
-      return "That linking link was already used. If this wasn't you, ask your administrator to remove the Telegram DM binding and create a new link.";
+    // A code minted by the signed-in web UI: it carries the user's email, and
+    // this /start proves control of the Telegram chat — tie them together.
+    const entry = await cacheManager.getAndDelete<{ email?: string }>(
+      `${CacheKey.TelegramLinkCode}-${payload}`,
+    );
+    if (!entry?.email) {
+      return "That linking code is invalid or expired. Send /start without a code to get a sign-in link.";
     }
 
-    await ChatOpsChannelBindingModel.fulfillDmBinding(binding.id, chatId, null);
-    logger.info(
-      { bindingId: binding.id },
-      "[TelegramProvider] Linked Telegram account via /start deep link",
+    const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+      this.providerId,
+      entry.email,
     );
-    return `✅ Linked as ${binding.dmOwnerEmail}. Just send me a message to start!`;
+    if (existingDm) {
+      await ChatOpsChannelBindingModel.fulfillDmBinding(
+        existingDm.id,
+        chatId,
+        null,
+      );
+    } else {
+      const org = await OrganizationModel.getFirst();
+      if (!org)
+        return "No organization is set up yet — contact your administrator.";
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: this.providerId,
+        channelId: chatId,
+        isDm: true,
+        dmOwnerEmail: entry.email,
+        channelName: `Direct Message - ${entry.email}`,
+        agentId: null,
+      });
+    }
+    logger.info(
+      "[TelegramProvider] Linked Telegram account via t.me deep link",
+    );
+    return `✅ Linked as ${entry.email}. Just send me a message to start!`;
   }
 
   private async handleSelectAgentCommand(
@@ -1062,8 +1083,6 @@ const POLL_ERROR_BACKOFF_MS = 5_000;
 const POLL_CONFLICT_BACKOFF_MS = 30_000;
 /** How long approval buttons stay clickable. */
 const APPROVAL_CALLBACK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-/** How long a /start sign-in link stays valid. */
-const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 const AGENT_SELECT_PREFIX = "agent_select";
 const MAX_SELECTION_AGENTS = 25;
 const UUID_RE =

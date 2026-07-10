@@ -6,6 +6,12 @@ export interface ProviderConfig {
   providerIcon: string;
   /** Absent for providers with no inbound webhook (e.g. Telegram, which is polled). */
   webhookPath?: string;
+  /**
+   * Hide the placeholder DM row shown before a DM binding exists. Telegram
+   * turns it off — its DM binding is created by the account-linking flow,
+   * not by assigning an agent first.
+   */
+  showVirtualDmRow?: boolean;
   docsUrl: string | null;
   slashCommand: string;
   /** Web link to open a channel, or null when the provider has none (e.g. Telegram groups). */

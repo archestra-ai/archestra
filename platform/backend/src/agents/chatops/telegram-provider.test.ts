@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import { ChatOpsChannelBindingModel } from "@/models";
@@ -399,7 +400,48 @@ describe("sendReply", () => {
 });
 
 describe("account linking via /start", () => {
-  test("fulfills a pending DM binding and resolves the email afterwards", async ({
+  test("/start with a web-minted code links the chat to the code's email", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
+    const code = randomUUID();
+    await cacheManager.set(
+      `${CacheKey.TelegramLinkCode}-${code}`,
+      { email: "alice@example.com" },
+      60_000,
+    );
+
+    const handler = makeEventHandler();
+    const provider = makeProvider(handler);
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    stubTelegramApi({ sendMessage });
+
+    await dispatchUpdate(provider, dmUpdate({ text: `/start ${code}` }));
+
+    expect(String(sendMessage.mock.calls[0][0].text)).toContain(
+      "alice@example.com",
+    );
+    // Linking is handled by the provider, not forwarded to the agent
+    expect(handler.handleIncomingMessage).not.toHaveBeenCalled();
+    // The binding now authorizes this Telegram user
+    expect(await provider.getUserEmail("555")).toBe("alice@example.com");
+
+    // The code is one-shot: a second /start with it fails (other chat id)
+    const secondChat = dmUpdate({
+      text: `/start ${code}`,
+      chat: { id: 666, type: "private" },
+      from: { id: 666, is_bot: false, first_name: "Eve" },
+    });
+    await dispatchUpdate(provider, secondChat);
+    expect(String(sendMessage.mock.calls.at(-1)?.[0].text)).toContain(
+      "invalid or expired",
+    );
+  });
+
+  test("fulfills an existing pending DM binding instead of creating a duplicate", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -412,41 +454,12 @@ describe("account linking via /start", () => {
       channelName: "Direct Message - alice@example.com",
       agentId: null,
     });
-
-    const handler = makeEventHandler();
-    const provider = makeProvider(handler);
-    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
-      ok: true,
-      result: { message_id: 1 },
-    }));
-    stubTelegramApi({ sendMessage });
-
-    await dispatchUpdate(provider, dmUpdate({ text: `/start ${pending.id}` }));
-
-    const fulfilled = await ChatOpsChannelBindingModel.findById(pending.id);
-    expect(fulfilled?.channelId).toBe("555");
-    expect(String(sendMessage.mock.calls[0][0].text)).toContain(
-      "alice@example.com",
+    const code = randomUUID();
+    await cacheManager.set(
+      `${CacheKey.TelegramLinkCode}-${code}`,
+      { email: "alice@example.com" },
+      60_000,
     );
-    // Linking is handled by the provider, not forwarded to the agent
-    expect(handler.handleIncomingMessage).not.toHaveBeenCalled();
-    // The fulfilled binding now authorizes this Telegram user
-    expect(await provider.getUserEmail("555")).toBe("alice@example.com");
-  });
-
-  test("rejects a linking code that was already used by another account", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const used = await ChatOpsChannelBindingModel.create({
-      organizationId: org.id,
-      provider: "telegram",
-      channelId: "777", // already fulfilled by a different Telegram account
-      isDm: true,
-      dmOwnerEmail: "bob@example.com",
-      channelName: "Direct Message - bob@example.com",
-      agentId: null,
-    });
 
     const provider = makeProvider(makeEventHandler());
     const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
@@ -455,12 +468,32 @@ describe("account linking via /start", () => {
     }));
     stubTelegramApi({ sendMessage });
 
-    await dispatchUpdate(provider, dmUpdate({ text: `/start ${used.id}` }));
+    await dispatchUpdate(provider, dmUpdate({ text: `/start ${code}` }));
 
-    expect(
-      (await ChatOpsChannelBindingModel.findById(used.id))?.channelId,
-    ).toBe("777");
-    expect(String(sendMessage.mock.calls[0][0].text)).toContain("already used");
+    const fulfilled = await ChatOpsChannelBindingModel.findById(pending.id);
+    expect(fulfilled?.channelId).toBe("555");
+  });
+
+  test("a code carrying only a chat id (bot-minted, for the web) is not redeemable in Telegram", async () => {
+    const code = randomUUID();
+    await cacheManager.set(
+      `${CacheKey.TelegramLinkCode}-${code}`,
+      { chatId: "999" },
+      60_000,
+    );
+
+    const provider = makeProvider(makeEventHandler());
+    const sendMessage = vi.fn((_params: Record<string, unknown>) => ({
+      ok: true,
+      result: { message_id: 1 },
+    }));
+    stubTelegramApi({ sendMessage });
+
+    await dispatchUpdate(provider, dmUpdate({ text: `/start ${code}` }));
+
+    expect(String(sendMessage.mock.calls[0][0].text)).toContain(
+      "invalid or expired",
+    );
     expect(await provider.getUserEmail("555")).toBeNull();
   });
 

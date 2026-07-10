@@ -21,6 +21,7 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
     getSlackProvider: vi.fn(() => null),
     getTelegramProvider: vi.fn(() => ({
       sendDirectMessage: sendDirectMessageMock,
+      getBotUsername: () => "archestra_bot",
     })),
     processMessage: vi.fn(),
     getAccessibleChatopsAgents: vi.fn(),
@@ -158,6 +159,44 @@ describe("POST /api/chatops/telegram/link", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("expired");
+
+    await app.close();
+  });
+
+  test("rejects a web-minted code (email payload) — those are redeemed by the bot", async () => {
+    const app = await makeApp();
+    const code = randomUUID();
+    await cacheManager.set(
+      `${CacheKey.TelegramLinkCode}-${code}`,
+      { email: userEmail },
+      60_000,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chatops/telegram/link",
+      payload: { code },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  test("mints a one-shot code bound to the signed-in user for the t.me deep link", async () => {
+    const app = await makeApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chatops/telegram/link-code",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { code, botUsername } = response.json();
+    expect(botUsername).toBe("archestra_bot");
+    await expect(
+      cacheManager.get(`${CacheKey.TelegramLinkCode}-${code}`),
+    ).resolves.toEqual({ email: userEmail });
 
     await app.close();
   });

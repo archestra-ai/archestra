@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTO_PROVISIONED_INVITATION_STATUS,
   createPaginatedResponseSchema,
@@ -28,6 +29,7 @@ import {
   CHATOPS_COMMANDS,
   CHATOPS_RATE_LIMIT,
   SLACK_DEFAULT_CONNECTION_MODE,
+  TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
@@ -1569,6 +1571,50 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Mint a one-shot Telegram linking code for the signed-in user.
+   * The code rides a t.me/<bot>?start=<code> deep link; when the user taps
+   * Start, the bot redeems it and ties that Telegram chat to this user's
+   * email. Open to any authenticated user (self-service).
+   */
+  fastify.post(
+    "/api/chatops/telegram/link-code",
+    {
+      schema: {
+        operationId: RouteId.GenerateTelegramLinkCode,
+        description:
+          "Generate a one-shot code that links the current user's Telegram account via a t.me deep link",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ code: z.string(), botUsername: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (!config.chatops.telegramEnabled) {
+        throw new ApiError(
+          400,
+          "The Telegram integration is not enabled on this deployment.",
+        );
+      }
+      const botUsername = chatOpsManager
+        .getTelegramProvider()
+        ?.getBotUsername();
+      if (!botUsername) {
+        throw new ApiError(400, "Telegram is not configured yet.");
+      }
+
+      const code = randomUUID();
+      await cacheManager.set(
+        `${CacheKey.TelegramLinkCode}-${code}`,
+        { email: request.user.email },
+        TELEGRAM_LINK_CODE_TTL_MS,
+      );
+
+      return reply.send({ code, botUsername });
+    },
+  );
+
+  /**
    * Link the signed-in user's Telegram account.
    * The code comes from the bot's /start reply and proves control of the
    * Telegram chat; the email comes from the web session — so neither side
@@ -1594,10 +1640,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const payload = await cacheManager.getAndDelete<{ chatId: string }>(
+      const payload = await cacheManager.getAndDelete<{ chatId?: string }>(
         `${CacheKey.TelegramLinkCode}-${request.body.code}`,
       );
-      if (!payload) {
+      // Codes minted by the web UI carry an email instead of a chatId and are
+      // only redeemable from the bot side — reject them here.
+      if (!payload?.chatId) {
         throw new ApiError(
           400,
           "This linking code is invalid or expired. Send /start to the bot again to get a fresh link.",

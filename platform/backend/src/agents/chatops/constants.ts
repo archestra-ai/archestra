@@ -133,6 +133,14 @@ export const CHATOPS_COMMANDS = {
 export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
   "socket" as const;
 
+/**
+ * How long a Telegram account-linking code stays valid. Codes are one-shot
+ * and minted in both directions: by the web UI (carried to the bot via a
+ * t.me ?start= deep link) and by the bot (carried to the web via a sign-in
+ * link in its /start reply).
+ */
+export const TELEGRAM_LINK_CODE_TTL_MS = 15 * 60 * 1000;
+
 /** @public — re-exported for testability */
 export { SLACK_SLASH_COMMANDS } from "@archestra/shared";
 

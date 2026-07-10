@@ -145,6 +145,19 @@ export function useUpdateTelegramChatOpsConfig() {
   });
 }
 
+export function useGenerateTelegramLinkCode() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.generateTelegramLinkCode();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+  });
+}
+
 export function useLinkTelegramAccount() {
   const queryClient = useQueryClient();
 

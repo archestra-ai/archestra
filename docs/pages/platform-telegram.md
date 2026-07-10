@@ -21,12 +21,12 @@ Archestra validates the token and starts polling immediately.
 
 ## Linking Telegram Accounts
 
-Telegram does not expose email addresses, so the bot cannot match users to their accounts automatically like Slack and MS Teams do. Each user links their Telegram account once:
+Telegram does not expose email addresses, so the bot cannot match users to their accounts automatically like Slack and MS Teams do. Each user links their Telegram account once, from either side:
 
-1. Send `/start` to the bot in a direct message.
-2. The bot replies with a sign-in link — open it and click **Link Telegram account**.
+- From the Telegram channel page: click **Link Telegram account**, then tap **Start** in the Telegram chat that opens.
+- From Telegram: send `/start` to the bot and open the sign-in link it replies with.
 
-The signed-in web session provides the identity, and the one-time code in the link proves control of the Telegram chat, so neither side can be spoofed. The link expires after 15 minutes; `/start` always issues a fresh one.
+Both paths use a one-shot code, valid for 15 minutes. The signed-in web session provides the identity and the Telegram chat proves ownership, so neither side can be spoofed.
 
 Group members link the same way before the bot answers them — an unlinked user gets a short reply telling them to send `/start`. Access control matches the other channels: users only reach agents their teams have access to.
 

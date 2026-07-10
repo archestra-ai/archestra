@@ -1533,7 +1533,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!config.chatops.telegramEnabled) {
         throw new ApiError(
           400,
-          "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true and restart.",
+          "The Telegram integration is not enabled on this deployment. Set ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true (or ARCHESTRA_BETA=true) and restart.",
         );
       }
       const { enabled, botToken } = request.body;

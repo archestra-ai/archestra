@@ -58,7 +58,11 @@ export default function TelegramPage() {
           <code className="bg-muted px-1 py-0.5 rounded text-xs">
             ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true
           </code>{" "}
-          and restart to use it.
+          (or the beta master switch{" "}
+          <code className="bg-muted px-1 py-0.5 rounded text-xs">
+            ARCHESTRA_BETA=true
+          </code>
+          ) and restart to use it.
         </span>
       </div>
     );

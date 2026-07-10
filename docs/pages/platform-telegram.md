@@ -12,7 +12,7 @@ Telegram uses long polling: Archestra makes outbound requests to the Telegram AP
 
 ## Setup
 
-The integration is off by default. Set `ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true` on the deployment to make the Telegram channel available — without it the channel is hidden.
+The integration is off by default and hidden. Set `ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true` on the deployment to make the Telegram channel available — beta deployments (`ARCHESTRA_BETA=true`) get it automatically.
 
 1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and pick a display name and username. BotFather replies with a bot token.
 2. Paste the token into the Telegram setup on the Messaging Channels page (or set it via environment variables, see [Deployment](/docs/platform-deployment#telegram)).

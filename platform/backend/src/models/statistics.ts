@@ -1003,9 +1003,10 @@ class StatisticsModel {
 // ─── Billing-mode-aware cost aggregates ─────────────────────────────────────
 // An interaction's `cost` is the list-price estimate. "Billed spend" is that
 // cost only for `metered` rows; `subscription` rows incur no per-token charge
-// and contribute 0. Expressing the split as SQL aggregate FILTERs keeps these
-// analytics as a single index-only scan (billing_mode is in the statistics
-// covering index).
+// and contribute 0. The split is expressed as SQL aggregate FILTERs on
+// billing_mode. billing_mode is intentionally not in the statistics covering
+// index (adding it would require a write-blocking rebuild on a huge table — see
+// the interactions schema), so the FILTER reads it from the heap.
 
 /** SUM of an interaction cost column restricted to metered rows (billed spend). */
 function billedSum(

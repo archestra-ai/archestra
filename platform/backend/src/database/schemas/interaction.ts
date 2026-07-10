@@ -215,10 +215,17 @@ const interactionsTable = pgTable(
     // Covering index for the cost-statistics aggregations (StatisticsModel):
     // they filter on created_at and only read these numeric/model columns, so
     // an index-only scan avoids fetching scattered heap pages of a table whose
-    // rows are dominated by large TOASTed JSONB payloads. `billingMode` is
-    // included because the aggregations now split billed vs subscription cost
-    // with a conditional (FILTER) SUM on it — keeping it in the index preserves
-    // the index-only scan.
+    // rows are dominated by large TOASTed JSONB payloads.
+    //
+    // NOTE: `billingMode` is intentionally NOT in this index. The aggregations
+    // split billed vs subscription cost with a conditional (FILTER) SUM on it,
+    // so including it would make the split index-only — but adding a column to
+    // this index means a non-concurrent DROP/CREATE rebuild, which takes a
+    // write-blocking lock on a very large `interactions` table. The rebuild risk
+    // outweighs the index-only win for an analytics query, so the FILTER reads
+    // billing_mode from the heap instead. If that ever becomes a bottleneck, add
+    // the column with a separate `CREATE INDEX CONCURRENTLY` ops step (see the
+    // interactions-table migration skill), never a transactional migration.
     statisticsCoveringIdx: index("interactions_statistics_covering_idx").on(
       table.createdAt,
       table.profileId,
@@ -230,7 +237,6 @@ const interactionsTable = pgTable(
       table.baselineCost,
       table.toonCostSavings,
       table.cacheSavings,
-      table.billingMode,
     ),
     profileCreatedAtIdx: index("interactions_profile_created_at_idx").on(
       table.profileId,

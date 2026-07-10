@@ -25153,7 +25153,7 @@ export type UpdateChatMessageResponse = UpdateChatMessageResponses[keyof UpdateC
 export type SetChatMessageFeedbackData = {
     body: {
         conversationId: string;
-        feedback: 'up' | 'down';
+        feedback: 'up' | 'down' | null;
     };
     path: {
         id: string;
@@ -25233,7 +25233,7 @@ export type SetChatMessageFeedbackResponses = {
      */
     200: {
         id: string;
-        feedback: 'up' | 'down';
+        feedback: 'up' | 'down' | null;
     };
 };
 

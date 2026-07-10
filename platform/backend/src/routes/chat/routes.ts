@@ -2850,12 +2850,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.string() }),
         body: z.object({
           conversationId: z.string().uuid(),
-          feedback: ChatMessageFeedbackSchema.nullable(),
+          // union (not .nullable()): the OpenAPI 3.0 `nullable: true` + `enum`
+          // combination loses `null` in the generated hey-api client type
+          feedback: z.union([ChatMessageFeedbackSchema, z.null()]),
         }),
         response: constructResponseSchema(
           z.object({
             id: z.string().uuid(),
-            feedback: ChatMessageFeedbackSchema.nullable(),
+            feedback: z.union([ChatMessageFeedbackSchema, z.null()]),
           }),
         ),
       },

@@ -425,6 +425,7 @@ const LINEAGE_HMAC_KEY = randomBytes(32);
 // proxy hot path. HMAC with a per-process key (rather than bare SHA-256)
 // means an observer of a heap dump can't confirm a guessed token offline.
 function hashToken(token: string): string {
+  // codeql[js/insufficient-password-hash] HMACs a high-entropy OAuth refresh token for ephemeral lineage tracking, not password verification.
   return createHmac("sha256", LINEAGE_HMAC_KEY).update(token).digest("hex");
 }
 

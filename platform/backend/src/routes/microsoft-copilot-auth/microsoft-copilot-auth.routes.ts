@@ -11,6 +11,16 @@ import {
 } from "@/services/microsoft-copilot-token";
 import { ApiError, constructResponseSchema } from "@/types";
 
+const DEVICE_AUTH_START_RATE_LIMIT = {
+  windowMs: 10 * 60_000,
+  maxRequests: 10,
+};
+
+const DEVICE_AUTH_POLL_RATE_LIMIT = {
+  windowMs: 60_000,
+  maxRequests: 30,
+};
+
 /**
  * Entra ID OAuth device flow for Microsoft Copilot (RFC 8628), proxied
  * through the backend because Entra's device endpoints do not allow browser
@@ -51,7 +61,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         await isRateLimited(
           `${CacheKey.MicrosoftCopilotDeviceAuthRateLimit}-start-${user.id}`,
-          { windowMs: 10 * 60_000, maxRequests: 10 },
+          DEVICE_AUTH_START_RATE_LIMIT,
         )
       ) {
         throw new ApiError(
@@ -127,7 +137,7 @@ const microsoftCopilotAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         await isRateLimited(
           `${CacheKey.MicrosoftCopilotDeviceAuthRateLimit}-poll-${user.id}`,
-          { windowMs: 60_000, maxRequests: 30 },
+          DEVICE_AUTH_POLL_RATE_LIMIT,
         )
       ) {
         throw new ApiError(

@@ -306,8 +306,8 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
     expect(contentDeltas).toEqual(["Hel", "café"]);
   });
 
-  test("falls back to the sync endpoint when the stream response is not SSE", async () => {
-    stubGraphFetch({
+  test("fabricates chunks from a non-SSE Graph answer without a second conversation", async () => {
+    const { calls } = stubGraphFetch({
       chatOverStream: () => graphChatAnswer("non-streamed answer"),
     });
 
@@ -323,13 +323,22 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
       .filter((content): content is string => Boolean(content));
     expect(contentDeltas).toEqual(["non-streamed answer"]);
     expect(chunks.at(-1)?.choices[0].finish_reason).toBe("stop");
+    expect(
+      calls.filter(({ url }) => url.endsWith(CONVERSATIONS_URL_MARKER)),
+    ).toHaveLength(1);
+    expect(calls.some(({ url }) => url.endsWith("/chat"))).toBe(false);
   });
 
   test("falls back to the sync endpoint when SSE yields no recognizable text", async () => {
+    let conversationCount = 0;
     const { calls } = stubGraphFetch({
       chatOverStream: () =>
         sseResponse([JSON.stringify({ unrecognized: "event-shape" })]),
       chat: () => graphChatAnswer("salvaged answer"),
+      createConversation: () => {
+        conversationCount += 1;
+        return graphConversation(`conv-${conversationCount}`);
+      },
     });
 
     const chunks = await collectChunks(
@@ -344,7 +353,74 @@ describe("microsoftCopilotAdapterFactory executeStream", () => {
       .filter((content): content is string => Boolean(content));
     expect(contentDeltas).toEqual(["salvaged answer"]);
     // The fallback runs on a fresh conversation via the sync endpoint.
-    expect(calls.some(({ url }) => url.endsWith("/chat"))).toBe(true);
+    expect(
+      calls.filter(({ url }) => url.endsWith(CONVERSATIONS_URL_MARKER)),
+    ).toHaveLength(2);
+    expect(
+      calls.find(({ url }) => url.endsWith("/chatOverStream"))?.url,
+    ).toContain("/conv-1/chatOverStream");
+    expect(calls.find(({ url }) => url.endsWith("/chat"))?.url).toContain(
+      "/conv-2/chat",
+    );
+  });
+
+  test("cancels an open SSE body after the done event", async () => {
+    const cancel = vi.fn();
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ text: "complete" })}\n\ndata: [DONE]\n\n`,
+          ),
+        );
+      },
+      cancel,
+    });
+    stubGraphFetch({
+      chatOverStream: () =>
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    });
+
+    const chunks = await collectChunks(
+      await microsoftCopilotAdapterFactory.executeStream(
+        createClient(),
+        makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
+      ),
+    );
+
+    const contentDeltas = chunks
+      .map((chunk) => chunk.choices[0]?.delta?.content)
+      .filter((content): content is string => Boolean(content));
+    expect(contentDeltas).toEqual(["complete"]);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  test("cancels an open SSE body when the consumer stops after the role chunk", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    stubGraphFetch({
+      chatOverStream: () =>
+        new Response(body, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    });
+
+    const iterable = await microsoftCopilotAdapterFactory.executeStream(
+      createClient(),
+      makeRequest({ stream: true } as Partial<ChatCompletionsRequest>),
+    );
+    const iterator = iterable[Symbol.asyncIterator]();
+
+    const first = await iterator.next();
+    expect(first.value?.choices[0].delta).toMatchObject({ role: "assistant" });
+    await iterator.return?.();
+
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   test("surfaces a Graph error on the stream request as a clean error before any chunk", async () => {

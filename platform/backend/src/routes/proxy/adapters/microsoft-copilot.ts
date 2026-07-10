@@ -14,9 +14,8 @@
  *   message as the prompt with prior turns as additional context;
  * - non-streaming: `POST …/chat`, mapped to an OpenAI `chat.completion`;
  * - streaming: `POST …/chatOverStream` (SSE) parsed defensively into OpenAI
- *   chunks — the event payload shape is not publicly documented, so if the
- *   response is not SSE or yields no recognizable text, the client falls back
- *   to the sync endpoint and fabricates the chunk sequence;
+ *   chunks — a non-SSE Graph answer is converted directly, while an SSE stream
+ *   with no recognizable text is retried through the sync endpoint;
  * - auth: the incoming "API key" is the user's long-lived Entra ID refresh
  *   token, swapped per request for a short-lived Graph access token inside a
  *   fetch wrapper (see services/microsoft-copilot-token), because
@@ -132,8 +131,9 @@ class MicrosoftCopilotGraphClient {
   /**
    * Opens the chatOverStream request eagerly (so auth/Graph errors surface as
    * clean HTTP errors before any chunk is emitted), then returns the chunk
-   * iterator. Falls back to the sync endpoint — on a fresh conversation —
-   * when the response is not SSE or the stream yields no recognizable text.
+   * iterator. Converts a non-SSE Graph answer directly, or falls back to the
+   * sync endpoint — on a fresh conversation — when an SSE stream yields no
+   * recognizable text.
    */
   private async streamCompletion(
     params: ChatCompletionsRequest,
@@ -169,11 +169,21 @@ class MicrosoftCopilotGraphClient {
 
     return {
       [Symbol.asyncIterator]: async function* () {
-        yield makeRoleChunk({
-          model: params.model,
-          completionId,
-          createdUnixSeconds,
-        });
+        let eventParsingStarted = false;
+        try {
+          yield makeRoleChunk({
+            model: params.model,
+            completionId,
+            createdUnixSeconds,
+          });
+          eventParsingStarted = true;
+        } finally {
+          // If the downstream consumer stops at the role chunk, the SSE parser
+          // never acquires a reader and therefore cannot cancel the body.
+          if (!eventParsingStarted) {
+            await response.body?.cancel();
+          }
+        }
 
         let emittedText = "";
         for await (const eventData of parseSseEvents(response)) {
@@ -261,6 +271,9 @@ class MicrosoftCopilotGraphClient {
   }
 
   private async createConversation(): Promise<string> {
+    // Microsoft Graph currently documents no delete operation for Copilot
+    // conversations. If the following chat request fails, this conversation
+    // cannot be cleaned up and may remain visible in the user's activity.
     const response = await this.fetch(this.conversationsUrl(), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -366,6 +379,7 @@ function graphShapeError(message: string): Error {
  */
 async function* parseSseEvents(response: Response): AsyncGenerator<string> {
   if (!response.body) return;
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let dataLines: string[] = [];
@@ -377,20 +391,36 @@ async function* parseSseEvents(response: Response): AsyncGenerator<string> {
     return data;
   };
 
-  for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let newlineIndex = buffer.indexOf("\n");
-    while (newlineIndex !== -1) {
-      const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
-      buffer = buffer.slice(newlineIndex + 1);
-      if (line === "") {
-        const data = flush();
-        if (data !== undefined) yield data;
-      } else if (line.startsWith("data:")) {
-        dataLines.push(line.slice(5).replace(/^ /, ""));
+  let reachedEnd = false;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        reachedEnd = true;
+        break;
       }
-      // Other fields (event:, id:, retry:, comments) carry no payload we use.
-      newlineIndex = buffer.indexOf("\n");
+      buffer += decoder.decode(value, { stream: true });
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex !== -1) {
+        const line = buffer.slice(0, newlineIndex).replace(/\r$/, "");
+        buffer = buffer.slice(newlineIndex + 1);
+        if (line === "") {
+          const data = flush();
+          if (data !== undefined) yield data;
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).replace(/^ /, ""));
+        }
+        // Other fields (event:, id:, retry:, comments) carry no payload we use.
+        newlineIndex = buffer.indexOf("\n");
+      }
+    }
+  } finally {
+    try {
+      if (!reachedEnd) {
+        await reader.cancel();
+      }
+    } finally {
+      reader.releaseLock();
     }
   }
   // End of stream: flush a multi-byte character split across the last chunk,

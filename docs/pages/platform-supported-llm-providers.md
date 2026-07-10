@@ -128,27 +128,27 @@ For GKE deployments, we recommend using [Workload Identity](https://cloud.google
 
 1. **Create a GCP service account** with Vertex AI permissions:
 
-```bash
-gcloud iam service-accounts create archestra-vertex-ai \
-  --display-name="Archestra Vertex AI"
+    ```bash
+    gcloud iam service-accounts create archestra-vertex-ai \
+      --display-name="Archestra Vertex AI"
 
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/aiplatform.user"
-```
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+      --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
+      --role="roles/aiplatform.user"
+    ```
 
-1. **Bind the GCP service account to the Kubernetes service account**:
+2. **Bind the GCP service account to the Kubernetes service account**:
 
-```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
-```
+    ```bash
+    gcloud iam service-accounts add-iam-policy-binding \
+      archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
+      --role="roles/iam.workloadIdentityUser" \
+      --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
+    ```
 
-Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
+    Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
 
-1. **Configure Helm values** to annotate the service account:
+3. **Configure Helm values** to annotate the service account:
 
 ```yaml
 archestra:
@@ -613,7 +613,8 @@ To connect, use the **Sign in with Microsoft** button when adding a Microsoft Co
 - **Text-only, no tools**: the Chat API returns text answers only. It cannot run tools or Copilot actions such as creating files, sending emails, or scheduling meetings. In Archestra chat, an agent with tools runs without them on this model — a notice above the composer says so. Proxy requests that declare tools are rejected with a clear error.
 - **Conversational answers only**: prompts that trigger long-running work can hit Microsoft's gateway timeout. Keep requests to questions and answers.
 - **Estimated usage**: the Chat API reports no token counts, so usage and cost figures are tokenizer estimates.
-- **Stateless mapping**: each request creates a fresh Copilot conversation; prior turns ride along as context.
+- **Stateless mapping**: each request creates a fresh Copilot conversation; prior turns ride along as context. If a streaming response has no recognizable text, Archestra retries through the synchronous endpoint in a second conversation, so one request can appear as two conversations in Microsoft 365 activity.
+- **Conversation cleanup**: the [Copilot conversation API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/resources/copilotconversation) currently documents no delete operation. If a chat request fails after its conversation is created, the abandoned conversation may remain visible in Microsoft 365 activity.
 
 ## Amazon Bedrock
 

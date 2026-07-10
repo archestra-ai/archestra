@@ -4083,6 +4083,56 @@ describe("ChatOpsManager attachment passthrough", () => {
     );
   });
 
+  test("a deliberately silent turn is not persisted to the conversation", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockImplementation(async () => {
+      const id = crypto.randomUUID();
+      return {
+        text: "this is addressed to someone else [NO_REPLY]",
+        messageId: id,
+        finishReason: "stop",
+        responseUiMessage: {
+          id,
+          role: "assistant",
+          parts: [
+            {
+              type: "text",
+              text: "this is addressed to someone else [NO_REPLY]",
+            },
+          ],
+        },
+      };
+    });
+    const fx = await setupThreadFixture({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    });
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => fx.email,
+    });
+    await managerWith(mockProvider).processMessage({
+      message: createMockMessage({
+        messageId: "turn-1",
+        threadId: "thread-silent",
+        text: "chatter not for the bot",
+      }),
+      provider: mockProvider,
+    });
+
+    const mapping = await threadConversation(fx.binding.id, "thread-silent");
+    const rows = await MessageModel.findByConversation(mapping.conversationId);
+    // the user turn persists; the silent narration must not
+    expect(rows.map((r) => r.role)).toEqual(["user"]);
+  });
+
   test("a failed turn records a chat error and releases the run lock", async ({
     makeUser,
     makeOrganization,

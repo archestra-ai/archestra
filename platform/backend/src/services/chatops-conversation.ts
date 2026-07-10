@@ -189,7 +189,7 @@ export async function ingestProviderDelta(params: {
   }
 
   const sorted = [...entries].sort((a, b) =>
-    a.providerTs.localeCompare(b.providerTs),
+    compareProviderTs(a.providerTs, b.providerTs),
   );
   const fresh = sorted.filter(
     (entry) =>
@@ -229,9 +229,9 @@ export async function ingestProviderDelta(params: {
       newTs: newestTs,
     });
   if (!advanced) {
-    // A stale cursor never double-ingests (providerMessageId dedupes above);
-    // it only means the next turn re-scans older entries. Log it so a
-    // persistently failing CAS is visible.
+    // Correctness rests on the providerMessageId dedupe above; the cursor is
+    // an advisory high-water mark (not yet used to pre-filter). Log a lost
+    // CAS so a persistently failing update is visible.
     logger.warn(
       { mappingId: mapping.id, newestTs },
       "[ChatOpsConversation] provider cursor CAS lost; relying on providerMessageId dedupe",
@@ -399,6 +399,21 @@ function readChatOpsMetadata(
     return (metadata as { chatops: ChatOpsMessageMetadata }).chatops;
   }
   return null;
+}
+
+// Provider ordering tokens are numeric-ish (Slack "1700.201", Teams/Telegram
+// integer ids); plain localeCompare would order "10" before "9".
+function compareProviderTs(a: string, b: string): number {
+  const numericA = Number(a);
+  const numericB = Number(b);
+  if (
+    Number.isFinite(numericA) &&
+    Number.isFinite(numericB) &&
+    numericA !== numericB
+  ) {
+    return numericA - numericB;
+  }
+  return a.localeCompare(b);
 }
 
 function buildSeedTitle(text: string): string {

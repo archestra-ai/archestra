@@ -885,6 +885,10 @@ export class ChatOpsManager {
     // Execute the A2A message using the agent
     return this.executeAndReply({
       agent: agentToUse,
+      // The persistent thread agent (override ?? binding default) seeds the
+      // conversation; an inline "AgentName >" route is one-shot and must not
+      // become the web continuation's agent.
+      threadAgentId: resolvedAgent.id,
       binding,
       message: {
         ...message,
@@ -1167,10 +1171,10 @@ export class ChatOpsManager {
   ): Promise<{
     historyAttachments: A2AAttachment[];
     /**
-     * Provider entries with ingestion-ready text: bot footers stripped,
-     * file-only turns rendered as attachment lines, and skipped-attachment
-     * notes appended to the turn they belong to — so the persisted
-     * conversation carries the same per-turn context the prose replay did.
+     * Provider entries with ingestion-ready text: file-only turns rendered
+     * as attachment lines and skipped-attachment notes appended to the turn
+     * they belong to. Only non-bot entries are ingested — the agent's own
+     * turns are persisted directly from execution results.
      */
     rawHistory: ChatThreadMessage[];
   }> {
@@ -1593,6 +1597,8 @@ export class ChatOpsManager {
 
   private async executeAndReply(params: {
     agent: { id: string; name: string };
+    /** The thread's persistent agent (override ?? binding default). */
+    threadAgentId: string;
     binding: {
       id: string;
       organizationId: string;
@@ -1611,6 +1617,7 @@ export class ChatOpsManager {
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
+      threadAgentId,
       binding,
       message,
       provider,
@@ -1642,6 +1649,10 @@ export class ChatOpsManager {
     }
 
     let conversationIdForError: string | undefined;
+    // Once the assistant turn is handled, a later failure is delivery-only
+    // (e.g. the provider reply call) — the web transcript already shows the
+    // successful answer, so no error card is recorded for it.
+    let assistantTurnHandled = false;
     try {
       // The thread's persisted conversation is the canonical history for this
       // turn and the lock scope for concurrency with web runs.
@@ -1653,12 +1664,11 @@ export class ChatOpsManager {
         effectiveThreadId,
         provider: provider.providerId,
         senderUserId: userId,
-        agentId: agent.id,
+        agentId: threadAgentId,
         seedTitle: cleanedMessageText,
       });
       const conversationId = turn.conversation.id;
       conversationIdForError = conversationId;
-      const fullHistoryScope = turn.senderIsOwner || binding.isDm === true;
 
       const runLock = await ActiveChatRunModel.create({
         conversationId,
@@ -1677,7 +1687,16 @@ export class ChatOpsManager {
         return { success: false, error: "conversation run already active" };
       }
 
+      // Known limitations (deliberate): acquisition goes through the model,
+      // not ActiveChatRunService, so a crashed ChatOps run is reclaimed by the
+      // stale-run reaper rather than inline recovery; and the web Stop button
+      // is not observed mid-run.
       let runStatus: "completed" | "failed" = "failed";
+      // Heartbeat so the stale-run reaper doesn't reclaim a long tool-looping
+      // turn mid-execution (ChatOps has no event stream touching the row).
+      const heartbeat = setInterval(() => {
+        void ActiveChatRunModel.touch(runLock.id).catch(() => {});
+      }, CHATOPS_RUN_HEARTBEAT_MS);
       try {
         // Ingest provider-side turns this conversation hasn't seen (chatter
         // between invocations; a pre-persistence thread's prior human turns)
@@ -1711,6 +1730,20 @@ export class ChatOpsManager {
           senderIsOwner: turn.senderIsOwner,
           isDm: binding.isDm === true,
         });
+        // Tag the produced assistant turn by what this run actually saw, not
+        // by who invoked it: an owner turn over a thread with no web-side
+        // rows is provider-scoped, so teammates in the channel keep seeing
+        // the bot's own publicly posted answers in their context.
+        const providerScopedCount = filterHistoryForChatOpsContext({
+          messages: contents,
+          provider: provider.providerId,
+          senderIsOwner: false,
+          isDm: false,
+        }).length;
+        const contextScope: "provider" | "full" =
+          conversationHistory.length > providerScopedCount
+            ? "full"
+            : "provider";
 
         // Persist the invoking turn before execution, with the same message
         // id the A2A layer will use — transcript and generation share one
@@ -1765,14 +1798,27 @@ export class ChatOpsManager {
 
         // Persist the full assistant turn (tool parts included), tagged with
         // the history scope that produced it (the channel-leak guard input).
-        if (result.responseUiMessage) {
+        // A deliberately silent turn (NO_REPLY sentinel) posts nothing and is
+        // not persisted — its narration must not pollute the web transcript.
+        const responseText = (result.responseUiMessage?.parts ?? [])
+          .filter(
+            (part): part is { type: "text"; text: string } =>
+              part.type === "text",
+          )
+          .map((part) => part.text)
+          .join("\n");
+        if (
+          result.responseUiMessage &&
+          !responseText.includes(CHATOPS_NO_REPLY_SENTINEL)
+        ) {
           await persistChatOpsAssistantTurn({
             conversationId,
             assistantMessage: result.responseUiMessage,
             provider: provider.providerId,
-            contextScope: fullHistoryScope ? "full" : "provider",
+            contextScope,
           });
         }
+        assistantTurnHandled = true;
 
         runStatus = "completed";
         return await this.replyByMessageExecutionResult({
@@ -1784,6 +1830,7 @@ export class ChatOpsManager {
           conversationId,
         });
       } finally {
+        clearInterval(heartbeat);
         await ActiveChatRunModel.markTerminal({
           runId: runLock.id,
           status: runStatus,
@@ -1797,7 +1844,7 @@ export class ChatOpsManager {
 
       // Surface the failure on the conversation so the web view renders the
       // same inline error card interactive chat shows.
-      if (conversationIdForError) {
+      if (conversationIdForError && !assistantTurnHandled) {
         const chatError: ChatErrorResponse = (
           error as { chatErrorResponse?: ChatErrorResponse }
         ).chatErrorResponse ?? {
@@ -2446,20 +2493,12 @@ export class ChatOpsManager {
           .catch(() => {});
       }
 
-      if (updateApprovalRequestCallback) {
-        await updateApprovalRequestCallback();
-      } else {
-        await provider.updateApprovalRequest({
-          channelId: decision.channelId,
-          messageKey: decision.messageTs,
-          toolName: decision.toolName,
-          approved: decision.approved,
-        });
-      }
-
       // Approval continuation runs against the thread's persisted
       // conversation like any other turn: same lock, same conversation-backed
       // execution scope, and the approval-request row updated in place.
+      // The approval card is only mutated AFTER the lock is held — on
+      // contention the buttons must stay actionable so the decision can be
+      // retried.
       const effectiveThreadId =
         originalMessage.threadId ??
         originalMessage.channelId ??
@@ -2496,7 +2535,23 @@ export class ChatOpsManager {
       }
 
       let runStatus: "completed" | "failed" = "failed";
+      const heartbeat = runLock
+        ? setInterval(() => {
+            void ActiveChatRunModel.touch(runLock.id).catch(() => {});
+          }, CHATOPS_RUN_HEARTBEAT_MS)
+        : null;
       try {
+        if (updateApprovalRequestCallback) {
+          await updateApprovalRequestCallback();
+        } else {
+          await provider.updateApprovalRequest({
+            channelId: decision.channelId,
+            messageKey: decision.messageTs,
+            toolName: decision.toolName,
+            approved: decision.approved,
+          });
+        }
+
         const result = await this.a2aManager.sendMessage({
           actor: {
             kind: "user" as const,
@@ -2553,6 +2608,9 @@ export class ChatOpsManager {
           conversationId: conversation?.id,
         });
       } finally {
+        if (heartbeat) {
+          clearInterval(heartbeat);
+        }
         if (runLock) {
           await ActiveChatRunModel.markTerminal({
             runId: runLock.id,
@@ -2608,6 +2666,9 @@ const CHATOPS_PROVIDER_LABELS: Record<ChatOpsProviderType, string> = {
 };
 
 /** Interaction-log `source` value per provider. */
+// Under the stale-run reaper's 10-minute threshold with margin.
+const CHATOPS_RUN_HEARTBEAT_MS = 4 * 60 * 1000;
+
 const CHATOPS_PROVIDER_SOURCES: Record<ChatOpsProviderType, InteractionSource> =
   {
     slack: "chatops:slack",

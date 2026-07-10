@@ -41,7 +41,8 @@ class ChatOpsThreadConversationModel {
       );
     if (!existing) {
       // The conflicting row vanished between insert and select (deleted
-      // concurrently). Surface it; the caller retries the whole resolve.
+      // concurrently). Surface it — the caller cleans up its orphan
+      // conversation and the turn fails visibly.
       throw new Error(
         "chatops thread conversation mapping disappeared during CAS create",
       );

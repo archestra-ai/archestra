@@ -227,6 +227,23 @@ class ActiveChatRunModel {
   // Only a 'running' row transitions to terminal. Guarding on status makes
   // terminal->terminal a no-op, so a late-finishing drain cannot overwrite a
   // status the stale reaper or shutdown cleanup already set.
+  /**
+   * Heartbeat a running run so the stale-run reaper doesn't reclaim a
+   * long-lived non-streaming execution (ChatOps turns have no event stream
+   * to touch the row through appendEvents).
+   */
+  static async touch(runId: string): Promise<void> {
+    await db
+      .update(schema.chatActiveRunsTable)
+      .set({ updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.chatActiveRunsTable.id, runId),
+          eq(schema.chatActiveRunsTable.status, "running"),
+        ),
+      );
+  }
+
   static async markTerminal(params: {
     runId: string;
     status: Exclude<ChatActiveRunStatus, "running">;

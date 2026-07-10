@@ -478,8 +478,13 @@ async function readWithIdleTimeout(
     ]);
   } catch (error) {
     // The losing read settles later (when the caller's cleanup cancels the
-    // reader); swallow it so it can't surface as an unhandled rejection.
-    read.catch(() => {});
+    // reader); observe it so it can't surface as an unhandled rejection.
+    read.catch((readError) => {
+      logger.debug(
+        { readError },
+        "[Microsoft365Copilot] late stream read failure after the idle timeout fired",
+      );
+    });
     throw error;
   } finally {
     clearTimeout(timer);

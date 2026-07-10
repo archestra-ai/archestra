@@ -62,6 +62,17 @@ export const MICROSOFT_365_COPILOT_OAUTH_SCOPES = [
   "https://graph.microsoft.com/ExternalItem.Read.All",
 ].join(" ");
 
+/**
+ * Tenant-scoped Entra OAuth base (`{authBaseUrl}/{tenantId}`), with any
+ * trailing slash on the configured base URL stripped so path concatenation
+ * never produces a double slash. Shared with the device-flow auth routes so
+ * the two token-endpoint constructions can never drift.
+ */
+export function microsoft365CopilotOauthBaseUrl(): string {
+  const { authBaseUrl, tenantId } = config.llm["microsoft-365-copilot"];
+  return `${authBaseUrl.replace(/\/+$/, "")}/${tenantId}`;
+}
+
 // Not in the internal-helpers section: consts are not hoisted, and this one is
 // read by a field initializer when the singleton is constructed at module eval.
 const MAX_CACHED_TOKENS = 1000;
@@ -236,7 +247,18 @@ class Microsoft365CopilotTokenManager {
     const storedValue = await getSecretValueForLlmProviderApiKey(
       keyRow.secretId,
     );
-    if (storedValue !== undefined && isVaultReference(storedValue)) {
+    if (storedValue === undefined) {
+      // Unreadable stored value (e.g. the secret vanished between the key
+      // lookup and here): the vault-reference check below can't run, so skip
+      // rather than overwrite an unknown target. Costs only longevity — the
+      // in-memory latestRefreshToken keeps serving this process.
+      logger.warn(
+        { providerApiKeyId },
+        "[Microsoft365Copilot] skipping rotated refresh token persistence: stored secret value is unreadable",
+      );
+      return;
+    }
+    if (isVaultReference(storedValue)) {
       // BYOS vault reference: the actual token lives in an external read-only
       // vault we must not (and cannot) overwrite.
       logger.warn(
@@ -463,19 +485,21 @@ async function redeemWithEntra(refreshToken: string): Promise<{
   expiresAtMs: number;
   rotatedRefreshToken?: string;
 }> {
-  const { authBaseUrl, tenantId, clientId } =
-    config.llm["microsoft-365-copilot"];
+  const { clientId } = config.llm["microsoft-365-copilot"];
 
-  const response = await fetch(`${authBaseUrl}/${tenantId}/oauth2/v2.0/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      scope: MICROSOFT_365_COPILOT_OAUTH_SCOPES,
-    }),
-  });
+  const response = await fetch(
+    `${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        scope: MICROSOFT_365_COPILOT_OAUTH_SCOPES,
+      }),
+    },
+  );
 
   if (!response.ok) {
     const body = await response.text();

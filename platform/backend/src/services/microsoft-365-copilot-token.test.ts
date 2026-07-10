@@ -15,6 +15,18 @@ vi.mock("@/models/llm-provider-api-key", () => ({
   default: { findById: vi.fn() },
 }));
 
+vi.mock("@/config", async () =>
+  (await import("@/test/mocks/config")).configModuleMock({
+    llm: {
+      "microsoft-365-copilot": {
+        // Trailing slash on purpose: URL construction must normalize it.
+        authBaseUrl: "https://login.microsoftonline.example/",
+        tenantId: "test-tenant",
+      },
+    },
+  }),
+);
+
 vi.mock("@/secrets-manager", () => ({
   secretManager: vi.fn(),
   getSecretValueForLlmProviderApiKey: vi.fn(),
@@ -77,7 +89,10 @@ describe("microsoft365CopilotTokenManager.getAccessToken", () => {
     expect(accessToken).toBe("graph-access-token");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/oauth2/v2.0/token");
+    // Exact URL: the configured base's trailing slash must not double up.
+    expect(String(url)).toBe(
+      "https://login.microsoftonline.example/test-tenant/oauth2/v2.0/token",
+    );
     expect(init.headers["content-type"]).toBe(
       "application/x-www-form-urlencoded",
     );
@@ -264,6 +279,34 @@ describe("microsoft365CopilotTokenManager.getAccessToken", () => {
       ReturnType<typeof LlmProviderApiKeyModel.findById>
     >);
     getSecretValueMock.mockResolvedValue("secret/data/team#apiKey");
+    const updateSecret = vi.fn();
+    secretManagerMock.mockReturnValue({ updateSecret } as unknown as ReturnType<
+      typeof secretManager
+    >);
+
+    await microsoft365CopilotTokenManager.getAccessToken({
+      refreshToken,
+      providerApiKeyId: uniqueKeyId(),
+    });
+
+    await vi.waitFor(() => {
+      expect(getSecretValueMock).toHaveBeenCalled();
+    });
+    expect(updateSecret).not.toHaveBeenCalled();
+  });
+
+  test("skips persistence when the stored secret value is unreadable", async () => {
+    const refreshToken = uniqueRefreshToken();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(redemptionResponse({ refreshToken: "rotated-rt" })),
+    );
+    findByIdMock.mockResolvedValue({ secretId: "secret-1" } as Awaited<
+      ReturnType<typeof LlmProviderApiKeyModel.findById>
+    >);
+    getSecretValueMock.mockResolvedValue(undefined);
     const updateSecret = vi.fn();
     secretManagerMock.mockReturnValue({ updateSecret } as unknown as ReturnType<
       typeof secretManager

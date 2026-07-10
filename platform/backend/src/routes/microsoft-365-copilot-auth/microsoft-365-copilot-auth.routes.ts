@@ -8,6 +8,7 @@ import logger from "@/logging";
 import {
   entraErrorLogFields,
   MICROSOFT_365_COPILOT_OAUTH_SCOPES,
+  microsoft365CopilotOauthBaseUrl,
 } from "@/services/microsoft-365-copilot-token";
 import { ApiError, constructResponseSchema } from "@/types";
 
@@ -72,7 +73,7 @@ const microsoft365CopilotAuthRoutes: FastifyPluginAsyncZod = async (
         );
       }
 
-      const response = await fetch(`${oauthBaseUrl()}/oauth2/v2.0/devicecode`, {
+      const response = await fetch(`${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/devicecode`, {
         method: "POST",
         headers: {
           accept: "application/json",
@@ -148,7 +149,7 @@ const microsoft365CopilotAuthRoutes: FastifyPluginAsyncZod = async (
         );
       }
 
-      const response = await fetch(`${oauthBaseUrl()}/oauth2/v2.0/token`, {
+      const response = await fetch(`${microsoft365CopilotOauthBaseUrl()}/oauth2/v2.0/token`, {
         method: "POST",
         headers: {
           accept: "application/json",
@@ -278,9 +279,4 @@ function assertClientIdConfigured(): void {
       "Microsoft 365 Copilot sign-in is not configured — set ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID to the Application (client) ID of an Entra app registration with public client flows enabled",
     );
   }
-}
-
-function oauthBaseUrl(): string {
-  const { authBaseUrl, tenantId } = config.llm["microsoft-365-copilot"];
-  return `${authBaseUrl.replace(/\/+$/, "")}/${tenantId}`;
 }

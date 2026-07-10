@@ -556,3 +556,77 @@ describe("Bedrock reasoningContent message blocks (issue #3406)", () => {
     expect(commandInput.messages?.[1]?.content?.[0]).toEqual(reasoningBlock);
   });
 });
+
+describe("Bedrock sampling-param fallback", () => {
+  function makeDeprecatedTemperatureError(): Error {
+    const message = JSON.stringify({
+      message:
+        "The model returned the following errors: `temperature` is deprecated for this model.",
+    });
+    const error = new Error(message) as Error & {
+      statusCode: number;
+      responseBody: string;
+    };
+    error.statusCode = 400;
+    error.responseBody = message;
+    return error;
+  }
+
+  const okResponse = {
+    $metadata: { requestId: "req_1" },
+    output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+    stopReason: "end_turn",
+    usage: { inputTokens: 1, outputTokens: 1 },
+  };
+
+  test("retries without temperature when the model rejects it, keeping other params", async () => {
+    const request = createConverseRequest({
+      inferenceConfig: { temperature: 0.7, topP: 0.9, maxTokens: 100 },
+    });
+    const seenInferenceConfigs: Array<unknown> = [];
+    const client = {
+      converse: async (_modelId: string, input: Record<string, unknown>) => {
+        seenInferenceConfigs.push(input.inferenceConfig);
+        if (seenInferenceConfigs.length === 1) {
+          throw makeDeprecatedTemperatureError();
+        }
+        return okResponse;
+      },
+    };
+
+    const response = await bedrockAdapterFactory.execute(client, request);
+
+    // Retried exactly once; the first attempt sent temperature, the retry
+    // dropped only temperature and preserved topP + maxTokens.
+    expect(seenInferenceConfigs).toHaveLength(2);
+    expect(seenInferenceConfigs[0]).toEqual({
+      temperature: 0.7,
+      topP: 0.9,
+      maxTokens: 100,
+    });
+    expect(seenInferenceConfigs[1]).toEqual({ topP: 0.9, maxTokens: 100 });
+    expect(response.output?.message?.content?.[0]).toEqual({ text: "ok" });
+  });
+
+  test("does not retry on unrelated validation errors", async () => {
+    const request = createConverseRequest({
+      inferenceConfig: { temperature: 0.7 },
+    });
+    let calls = 0;
+    const client = {
+      converse: async () => {
+        calls++;
+        const error = new Error(
+          "Input is too long for requested model.",
+        ) as Error & { statusCode: number };
+        error.statusCode = 400;
+        throw error;
+      },
+    };
+
+    await expect(
+      bedrockAdapterFactory.execute(client, request),
+    ).rejects.toThrow("Input is too long for requested model.");
+    expect(calls).toBe(1);
+  });
+});

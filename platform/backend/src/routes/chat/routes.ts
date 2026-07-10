@@ -93,6 +93,7 @@ import {
   ScheduleTriggerRunModel,
   TeamModel,
 } from "@/models";
+import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { startActiveChatSpan } from "@/observability/tracing";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -2918,6 +2919,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updatedMessage) {
         throw new ApiError(404, "Message not found");
       }
+
+      reportChatMessageFeedback(updatedMessage.feedback ?? null);
 
       return reply.send({
         id: updatedMessage.id,

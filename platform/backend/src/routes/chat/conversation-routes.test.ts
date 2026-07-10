@@ -903,6 +903,46 @@ describe("chat conversation and message routes", () => {
       ).toBeUndefined();
     });
 
+    test("the feedback column overrides stale metadata baked into content JSON", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "personal",
+      });
+      const conversation = await ConversationModel.create({
+        userId: currentUser.id,
+        organizationId,
+        agentId: agent.id,
+      });
+      // Simulates a forked message whose copied content JSON carries the
+      // source owner's verdict while this row's column is NULL
+      const message = await MessageModel.create({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: {
+          id: "temp-assistant-stale-feedback",
+          role: "assistant",
+          metadata: { feedback: "down" },
+          parts: [{ type: "text", text: "Copied reply" }],
+        },
+      });
+
+      const staleRead = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversation.id}`,
+      });
+      expect(staleRead.json().messages[0].metadata.feedback).toBeUndefined();
+
+      await setFeedback(message.id, conversation.id, "up");
+      const freshRead = await app.inject({
+        method: "GET",
+        url: `/api/chat/conversations/${conversation.id}`,
+      });
+      expect(freshRead.json().messages[0].metadata.feedback).toBe("up");
+    });
+
     test("resolves the AI SDK content id scoped to the conversation", async ({
       makeAgent,
     }) => {

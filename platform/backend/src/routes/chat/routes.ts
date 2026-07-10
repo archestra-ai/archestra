@@ -2871,14 +2871,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
       reply,
     ) => {
-      // Verify the user owns the conversation before resolving the message
-      const conversation = await ConversationModel.findById({
+      // Verify the user owns the conversation before resolving the message.
+      // isOwnedBy, not findById: this endpoint only needs the ownership check,
+      // and findById drags every message body along with it.
+      const isOwner = await ConversationModel.isOwnedBy({
         id: conversationId,
         userId: user.id,
         organizationId: organizationId,
       });
 
-      if (!conversation) {
+      if (!isOwner) {
         throw new ApiError(404, "Message not found or access denied");
       }
 
@@ -3890,7 +3892,7 @@ async function forkConversation(params: {
       forkedMessages.map((message) => ({
         conversationId: newConversation.id,
         role: message.role,
-        content: message,
+        content: stripFeedbackMetadata(message),
       })),
     );
   }
@@ -3906,6 +3908,20 @@ async function forkConversation(params: {
   }
 
   return result;
+}
+
+/**
+ * A fork starts unrated: the source read projection embeds the owner's
+ * feedback in message metadata, and persisting that copy verbatim would bake
+ * a stale verdict into the fork's content JSON (its feedback column is NULL).
+ */
+function stripFeedbackMetadata(message: ChatMessage): ChatMessage {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== "object" || !("feedback" in metadata)) {
+    return message;
+  }
+  const { feedback: _feedback, ...rest } = metadata as Record<string, unknown>;
+  return { ...message, metadata: rest } as ChatMessage;
 }
 
 /**

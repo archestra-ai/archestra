@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { ApiError, type InsertMessage, type Message } from "@/types";
 import { isUuid, uuidv7 } from "@/utils/uuid";
@@ -165,6 +165,9 @@ class MessageModel {
       if (byDbId) return byDbId;
     }
 
+    // Content IDs carry no uniqueness guarantee even within one conversation
+    // (client-supplied), so pick the newest match deterministically instead of
+    // whatever row the planner returns first.
     const [byContentId] = await db
       .select()
       .from(schema.messagesTable)
@@ -173,7 +176,12 @@ class MessageModel {
           sql`${schema.messagesTable.content}->>'id' = ${id}`,
           eq(schema.messagesTable.conversationId, conversationId),
         ),
-      );
+      )
+      .orderBy(
+        desc(schema.messagesTable.createdAt),
+        desc(schema.messagesTable.id),
+      )
+      .limit(1);
 
     return byContentId || null;
   }

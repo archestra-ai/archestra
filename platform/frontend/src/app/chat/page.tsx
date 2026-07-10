@@ -994,7 +994,11 @@ export function ChatPageContent({
   // Thumbs feedback on assistant messages: optimistic apply + rollback against
   // the originating session's setter, captured here so a conversation switch
   // mid-request cannot retarget the rollback (or the invalidation, which the
-  // mutation keys off its per-call variables).
+  // mutation keys off its per-call variables). The rollback rides this
+  // closure's own promise chain, NOT a mutation callback: switching
+  // conversations remounts the page and unmounts the mutation observer, which
+  // makes TanStack skip per-call callbacks — while the originating session
+  // (and this closure's setter into it) lives on in the global chat context.
   const setChatMessageFeedback = useSetChatMessageFeedback();
   const handleMessageFeedback = useCallback(
     (messageId: string, feedback: ChatMessageFeedback | null) => {
@@ -1008,20 +1012,18 @@ export function ChatPageContent({
       applyMessages((current) =>
         applyFeedbackToMessages({ messages: current, messageId, feedback }),
       );
-      setChatMessageFeedback.mutate(
-        { messageId, conversationId, feedback },
-        {
-          onError: () => {
-            applyMessages((current) =>
-              applyFeedbackToMessages({
-                messages: current,
-                messageId,
-                feedback: previousFeedback,
-              }),
-            );
-          },
-        },
-      );
+      setChatMessageFeedback
+        .mutateAsync({ messageId, conversationId, feedback })
+        .catch(() => {
+          // Error toast already handled inside the mutation; only roll back.
+          applyMessages((current) =>
+            applyFeedbackToMessages({
+              messages: current,
+              messageId,
+              feedback: previousFeedback,
+            }),
+          );
+        });
     },
     [setMessages, conversationId, messages, setChatMessageFeedback],
   );
@@ -2462,7 +2464,9 @@ export function ChatPageContent({
                         isLoadingConversation={isLoadingConversation}
                         onMessagesUpdate={setMessages}
                         onMessageFeedback={
-                          conversationId ? handleMessageFeedback : undefined
+                          // No thumbs until the live session's setter exists —
+                          // a click before then could not apply or roll back.
+                          setMessages ? handleMessageFeedback : undefined
                         }
                         feedbackDisabled={setChatMessageFeedback.isPending}
                         agentName={

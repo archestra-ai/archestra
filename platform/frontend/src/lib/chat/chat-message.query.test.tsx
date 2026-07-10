@@ -132,7 +132,7 @@ describe("useSetChatMessageFeedback", () => {
   it("rejects on API error so callers can roll back optimistic state", async () => {
     vi.mocked(archestraApiSdk.setChatMessageFeedback).mockResolvedValue({
       data: undefined,
-      error: { error: { message: "boom", type: "api_error" } },
+      error: { error: { message: "boom", type: "api_internal_server_error" } },
       response: { status: 500 },
     } as unknown as Awaited<
       ReturnType<typeof archestraApiSdk.setChatMessageFeedback>

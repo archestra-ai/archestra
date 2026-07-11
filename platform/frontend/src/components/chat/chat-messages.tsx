@@ -111,6 +111,7 @@ import {
   hasTextPart,
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
+  isBlankReasoningPart,
   resolveRunToolTargetName,
   type SubagentChildEntry,
 } from "./chat-messages.utils";
@@ -999,13 +1000,28 @@ export function ChatMessages({
                         );
                       }
 
-                      case "reasoning":
+                      case "reasoning": {
+                        // Redacted/signature-only thinking blocks arrive as
+                        // empty reasoning parts (kept for provider replay); they
+                        // must not render as empty "Thinking…" accordions.
+                        if (isBlankReasoningPart(part)) {
+                          return null;
+                        }
+                        const isStreamingThisReasoning =
+                          status === "streaming" &&
+                          idx === messages.length - 1 &&
+                          i === message.parts.length - 1;
                         return (
-                          <Reasoning key={partKey} className="w-full">
+                          <Reasoning
+                            key={partKey}
+                            className="w-full"
+                            isStreaming={isStreamingThisReasoning}
+                          >
                             <ReasoningTrigger />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
                         );
+                      }
 
                       case "file": {
                         // User file attachments are normally rendered inside EditableUserMessage

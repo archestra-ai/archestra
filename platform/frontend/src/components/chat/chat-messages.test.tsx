@@ -32,7 +32,7 @@ vi.mock("@/components/ai-elements/message", () => ({
 
 vi.mock("@/components/ai-elements/reasoning", () => ({
   Reasoning: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+    <div data-testid="reasoning">{children}</div>
   ),
   ReasoningContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -283,6 +283,55 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
+  });
+
+  it("does not render an accordion for an empty reasoning part", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "" },
+          { type: "reasoning", text: "   " },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.queryByTestId("reasoning")).not.toBeInTheDocument();
+    expect(screen.getByText("the answer")).toBeInTheDocument();
+  });
+
+  it("renders an accordion only for reasoning parts with real text", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "" },
+          { type: "reasoning", text: "weighing the options" },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByTestId("reasoning")).toHaveLength(1);
+    expect(screen.getByText("weighing the options")).toBeInTheDocument();
   });
 
   it("keeps the loading logo visible for the whole streaming response", () => {

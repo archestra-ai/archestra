@@ -398,46 +398,20 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     const catalogName = `jwks-local-k8s-test-${Date.now()}`;
 
     try {
-      // STEP 3: Create an MCP Gateway profile linked to the IdP
-      const agentResponse = await createAgent(
-        request,
-        `JWT Local K8s E2E ${Date.now()}`,
-        "personal",
-      );
-      const agent = await agentResponse.json();
-      profileId = agent.id;
-      const pid = profileId as string;
-
-      // Update to MCP Gateway type and link the IdP
-      await makeApiRequest({
-        request,
-        method: "put",
-        urlSuffix: `/api/agents/${pid}`,
-        data: {
-          agentType: "mcp_gateway",
-          identityProviderId,
-        },
-      });
-      await waitForGatewayIdentityProviderReady({
-        request,
-        profileId: pid,
-        identityProviderId,
-        agentType: "mcp_gateway",
-      });
-
-      // STEP 4a: Create a restricted environment that lets this server's pod
-      // reach the in-cluster Keycloak. The always-on egress floor (for the
-      // unrestricted/built-in default) blocks the reserved/private ranges for SSRF
-      // protection. This server validates the propagated JWT by fetching JWKS from
-      // the in-cluster IdP, so it needs an explicit `restricted` allowlist for the
-      // cluster's internal ranges — the product's intended mechanism for a private
-      // IdP. (In production the IdP is external/public, which the floor allows.)
-      //
-      // The allowlist is the kind CI cluster's default Pod + Service CIDRs: the
-      // pod connects to Keycloak's Service ClusterIP, which kube-proxy DNATs to the
-      // backing pod IP before the NetworkPolicy egress check (see
-      // ssrf-protection.spec), so the Pod CIDR (10.244.0.0/16) is the one that
-      // actually has to match; the Service CIDR is included for robustness.
+      // STEP 3: Create a restricted environment and place BOTH the gateway and
+      // the server in it. Two constraints intersect:
+      //  - Egress: the always-on floor (unrestricted/built-in default) blocks the
+      //    reserved/private ranges for SSRF, so a server that must reach a private
+      //    in-cluster IdP needs an explicit `restricted` allowlist (the product's
+      //    intended mechanism; in production the IdP is external and the floor
+      //    allows it). The allowlist is the kind CI cluster's default Pod + Service
+      //    CIDRs — the pod hits Keycloak's Service ClusterIP, which kube-proxy
+      //    DNATs to the backing pod IP before the NetworkPolicy egress check (see
+      //    ssrf-protection.spec), so the Pod CIDR (10.244.0.0/16) is what actually
+      //    has to match; the Service CIDR is included for robustness.
+      //  - Environment isolation: a gateway only sees tools whose server shares its
+      //    environment, so the gateway must join this env too — otherwise its JWT
+      //    tool list is empty and the propagation call finds no tool.
       const environmentResponse = await createEnvironment(request, {
         name: `jwt-prop-egress-${Date.now()}`,
         networkPolicy: {
@@ -448,6 +422,34 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         },
       });
       environmentId = (await environmentResponse.json()).id;
+
+      // STEP 4: Create an MCP Gateway profile in that environment, linked to the IdP.
+      const agentResponse = await createAgent(
+        request,
+        `JWT Local K8s E2E ${Date.now()}`,
+        "personal",
+      );
+      const agent = await agentResponse.json();
+      profileId = agent.id;
+      const pid = profileId as string;
+
+      // Update to MCP Gateway type, link the IdP, and join the server's environment.
+      await makeApiRequest({
+        request,
+        method: "put",
+        urlSuffix: `/api/agents/${pid}`,
+        data: {
+          agentType: "mcp_gateway",
+          identityProviderId,
+          environmentId,
+        },
+      });
+      await waitForGatewayIdentityProviderReady({
+        request,
+        profileId: pid,
+        identityProviderId,
+        agentType: "mcp_gateway",
+      });
 
       // STEP 4b: Register the JWKS MCP server as a LOCAL catalog item, bound to
       // the environment above so its pod inherits the Keycloak allowlist.

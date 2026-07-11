@@ -8,7 +8,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { AppModel } from "@/models";
+import { AppModel, ConversationModel } from "@/models";
 import {
   buildConnectorResourceUri,
   connectorWwwAuthenticate,
@@ -53,6 +53,11 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["mcp-proxy"],
         description: "Proxy an MCP App's runtime requests with session auth",
         params: z.object({ appId: UuidIdSchema }),
+        // The embedding chat, set only by Archestra's own trusted host layer
+        // when the app renders inside a conversation (it rides outside the
+        // app-controlled JSON-RPC body, so the sandboxed iframe can never
+        // choose it). Session-auth only; validated below.
+        querystring: z.object({ conversationId: UuidIdSchema.optional() }),
         body: z.record(z.string(), z.unknown()),
       },
     },
@@ -63,6 +68,9 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { appId } = request.params as { appId: string };
+      const { conversationId } = request.query as {
+        conversationId?: string;
+      };
       const body = request.body as Record<string, unknown>;
 
       // An external client presents a Bearer token — a personal token or the
@@ -79,6 +87,16 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let useServerCache: boolean;
       let bypassAccessCache: boolean;
       if (bearer) {
+        // Conversation context is what the trusted frontend host layer passes
+        // for a chat-embedded render; an external Bearer client is not that
+        // host, so the param is refused rather than silently ignored —
+        // fail-closed and honest about why the file tools would see nothing.
+        if (conversationId) {
+          throw new ApiError(
+            400,
+            "conversationId is only accepted with session authentication",
+          );
+        }
         const auth = await resolveBearerAuth(request, appId, bearer);
         if (!auth.ok) {
           if (auth.kind === "challenge") {
@@ -139,6 +157,22 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Forbidden");
       }
 
+      // A chat-embedded render carries its conversation so the assigned file
+      // built-ins resolve the chat's file scope. The viewer must be able to
+      // open that chat (owner or shared access — the same rule as the chat
+      // surface); anything else is a host bug or a forged request and is
+      // refused outright, never silently degraded to a no-conversation call.
+      if (
+        conversationId &&
+        !(await ConversationModel.isAccessibleBy({
+          id: conversationId,
+          userId,
+          organizationId,
+        }))
+      ) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
       // Gate tools/call on the per-app allowlist + the tool's app visibility.
       // Archestra tools (the App Data Store) are exempt — they are dispatched
       // in-process and authorized by RBAC inside executeArchestraTool.
@@ -156,17 +190,26 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let hijacked = false;
       let server: McpServer | undefined;
       let serverHealthy = false;
+      // The server closure captures the conversation context, so the cache key
+      // must carry it (and the org): a server built for one chat must never
+      // serve another chat's — or a standalone — request within the TTL.
+      const serverCacheKey = `${appId}:${userId}:${organizationId}:${conversationId ?? "none"}`;
       try {
         server =
           (useServerCache
-            ? appServerCache.acquire(appId, userId)
-            : undefined) ?? (await createAppServer(appId, tokenAuth)).server;
+            ? appServerCache.acquire(serverCacheKey)
+            : undefined) ??
+          (await createAppServer(appId, tokenAuth, conversationId)).server;
 
         const transport = createStatelessTransport(appId);
         try {
           await server.connect(transport);
         } catch {
-          ({ server } = await createAppServer(appId, tokenAuth));
+          ({ server } = await createAppServer(
+            appId,
+            tokenAuth,
+            conversationId,
+          ));
           await server.connect(transport);
         }
         serverHealthy = true;
@@ -202,7 +245,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } finally {
         if (server && useServerCache)
-          appServerCache.release(appId, userId, server, serverHealthy);
+          appServerCache.release(serverCacheKey, server, serverHealthy);
       }
     },
   );
@@ -401,28 +444,26 @@ const appAccessCache = new QuickLRU<string, App>({
 
 type AppServerCacheEntry = { server: McpServer; inUse: boolean };
 
-// Per-(app,user) MCP server cache — reuses McpServer instances across sequential
-// requests from the same app session; each request still gets a fresh transport.
+// Per-(app,user,org,conversation) MCP server cache — reuses McpServer instances
+// across sequential requests from the same app session; each request still gets
+// a fresh transport. The key is built by the route and includes the validated
+// conversation context (or a "none" sentinel) because the server closure
+// captures it — a cached server must only ever serve requests with the exact
+// same scope.
 class AppServerCache {
   private readonly lru = new QuickLRU<string, AppServerCacheEntry>({
     maxSize: 200,
     maxAge: CACHE_TTL_MS,
   });
 
-  acquire(appId: string, userId: string): McpServer | undefined {
-    const entry = this.lru.get(`${appId}:${userId}`);
+  acquire(key: string): McpServer | undefined {
+    const entry = this.lru.get(key);
     if (!entry || entry.inUse) return undefined;
     entry.inUse = true;
     return entry.server;
   }
 
-  release(
-    appId: string,
-    userId: string,
-    server: McpServer,
-    healthy: boolean,
-  ): void {
-    const key = `${appId}:${userId}`;
+  release(key: string, server: McpServer, healthy: boolean): void {
     const entry = this.lru.get(key);
     if (entry && entry.server === server) {
       if (healthy) {

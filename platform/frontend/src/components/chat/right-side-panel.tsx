@@ -191,7 +191,10 @@ export function RightSidePanel({
                     </p>
                   </div>
                 ) : (
-                  <PanelAppHost agentId={agentId} />
+                  <PanelAppHost
+                    agentId={agentId}
+                    conversationId={conversationId}
+                  />
                 )}
               </div>
             </div>
@@ -209,7 +212,13 @@ export function RightSidePanel({
  * the list entry, so owned apps need no extra data and external apps use the
  * conversation's agent (or their pinned install).
  */
-function PanelAppHost({ agentId }: { agentId?: string }) {
+function PanelAppHost({
+  agentId,
+  conversationId,
+}: {
+  agentId?: string;
+  conversationId?: string;
+}) {
   const { apps, openToolCallId } = useApps();
   const app = apps.find((a) => a.toolCallId === openToolCallId);
   if (!app) {
@@ -222,6 +231,7 @@ function PanelAppHost({ agentId }: { agentId?: string }) {
       uiResourceUri={app.uiResourceUri}
       agentId={agentId ?? ""}
       appId={app.appId ?? undefined}
+      conversationId={conversationId}
       mcpServerId={app.mcpServerId}
       appName={app.label}
       appVersion={app.version}

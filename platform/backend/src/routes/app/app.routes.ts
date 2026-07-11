@@ -22,6 +22,7 @@ import {
   AppToolModel,
   AppVersionModel,
   McpServerModel,
+  ToolModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -42,6 +43,7 @@ import {
   deleteAppBacking,
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
+import { getAppAssignableBuiltinFullNames } from "@/services/apps/app-tool-runtime-gate";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
@@ -634,6 +636,31 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { appId }, user, organizationId }, reply) => {
       await loadViewableApp({ appId, userId: user.id, organizationId });
       return reply.send(await AppToolModel.getToolsForApp(appId));
+    },
+  );
+
+  fastify.get(
+    "/api/apps/assignable-builtin-tools",
+    {
+      schema: {
+        operationId: RouteId.GetAppAssignableBuiltinTools,
+        description:
+          "List the built-in Archestra tools that can be assigned to apps (the read-only file tools). Empty when the governing feature flags are off.",
+        tags: ["Apps"],
+        response: constructResponseSchema(z.array(SelectToolSchema)),
+      },
+    },
+    async (_request, reply) => {
+      // The canonical availability predicate is the single filter: the tools
+      // editor renders exactly what this returns, so the frontend never
+      // duplicates the allowlist or the feature-flag logic.
+      const names = getAppAssignableBuiltinFullNames();
+      if (names.length === 0) {
+        return reply.send([]);
+      }
+      return reply.send(
+        await ToolModel.findArchestraCatalogToolsByNames(names),
+      );
     },
   );
 

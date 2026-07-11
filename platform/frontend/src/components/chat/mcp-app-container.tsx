@@ -116,6 +116,7 @@ export function McpAppSection({
   uiResourceUri,
   agentId,
   appId,
+  conversationId,
   mcpServerId,
   appName,
   appVersion,
@@ -130,6 +131,12 @@ export function McpAppSection({
 }: {
   uiResourceUri: string;
   agentId: string;
+  /**
+   * The chat this render is embedded in. Forwarded (owned apps only) to the
+   * app-bound endpoint so assigned built-in file tools resolve this chat's
+   * file scope; the backend validates the viewer can access the chat.
+   */
+  conversationId?: string;
   /**
    * Where this render lives. "inline" (default) is the chat-stream render: a pill
    * plus the app under it when open. "panel" is the right-panel host: the fill
@@ -303,7 +310,7 @@ export function McpAppSection({
       toolResourceUri={uiResourceUri}
       endpoint={
         appId
-          ? { kind: "app", appId }
+          ? { kind: "app", appId, conversationId }
           : mcpServerId
             ? { kind: "server", mcpServerId }
             : {

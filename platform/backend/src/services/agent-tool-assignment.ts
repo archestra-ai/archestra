@@ -11,6 +11,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { isAppAssignableArchestraTool } from "@/services/apps/app-tool-runtime-gate";
 import type {
   AgentScope,
   CredentialResolutionMode,
@@ -188,20 +189,34 @@ export async function resolveAppToolsByName(params: {
 > {
   const requested = [...new Set(params.toolNames)];
 
+  // Built-ins are unassignable — except the app-assignable file tools (behind
+  // the canonical availability predicate), which are the whole point of the
+  // per-app grant. They live in the fixed built-in catalog, outside the
+  // org/environment-scoped query below, so they resolve separately.
   const builtIns = requested.filter((name) =>
     archestraMcpBranding.isToolName(name),
   );
-  if (builtIns.length > 0) {
+  const assignableBuiltIns = builtIns.filter((name) => {
+    const shortName = archestraMcpBranding.getToolShortName(name);
+    return shortName !== null && isAppAssignableArchestraTool(shortName);
+  });
+  const rejectedBuiltIns = builtIns.filter(
+    (name) => !assignableBuiltIns.includes(name),
+  );
+  if (rejectedBuiltIns.length > 0) {
     return appToolsValidationError(
-      `Built-in tools cannot be assigned to apps (app HTML reaches the data store via archestra.storage automatically): ${builtIns.join(", ")}`,
+      `Built-in tools cannot be assigned to apps (app HTML reaches the data store via archestra.storage automatically): ${rejectedBuiltIns.join(", ")}`,
     );
   }
 
-  const rows = await ToolModel.findAppAssignableToolsByNames(
-    params.organizationId,
-    requested,
-    params.environmentId,
-  );
+  const rows = [
+    ...(await ToolModel.findAppAssignableToolsByNames(
+      params.organizationId,
+      requested,
+      params.environmentId,
+    )),
+    ...(await ToolModel.findArchestraCatalogToolsByNames(assignableBuiltIns)),
+  ];
   const byName = new Map<string, typeof rows>();
   for (const row of rows) {
     byName.set(row.name, [...(byName.get(row.name) ?? []), row]);
@@ -290,11 +305,23 @@ export async function assignToolToApp(params: {
   }
 
   // Org-scoped: a tool from another organization is indistinguishable from a
-  // nonexistent one, so this raw-id endpoint cannot attach or probe foreign tools.
-  const tool = await ToolModel.findAppAssignableToolById(
+  // nonexistent one, so this raw-id endpoint cannot attach or probe foreign
+  // tools. The app-assignable built-ins live in the fixed Archestra catalog
+  // (global, excluded by the org-scoped query), so they resolve separately —
+  // and only through the canonical availability allowlist.
+  let tool = await ToolModel.findAppAssignableToolById(
     params.organizationId,
     params.toolId,
   );
+  if (!tool) {
+    const builtin = await ToolModel.findArchestraCatalogToolById(params.toolId);
+    const shortName = builtin
+      ? archestraMcpBranding.getToolShortName(builtin.name)
+      : null;
+    if (builtin && shortName && isAppAssignableArchestraTool(shortName)) {
+      tool = builtin;
+    }
+  }
   if (!tool) {
     return {
       code: "not_found",

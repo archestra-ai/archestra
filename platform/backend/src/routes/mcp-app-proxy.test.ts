@@ -1,15 +1,18 @@
 import { createHash } from "node:crypto";
 import { prepareAppEnvelope } from "@archestra/app-runtime-rs";
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   getArchestraAppResourceUri,
   getArchestraToolFullName,
   MCP_APPS_EXTENSION_ID,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
 } from "@archestra/shared";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -22,7 +25,9 @@ import db, { schema } from "@/database";
 import {
   AppDataModel,
   AppModel,
+  AppToolModel,
   TeamTokenModel,
+  ToolModel,
   UserTokenModel,
 } from "@/models";
 import {
@@ -30,6 +35,7 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
+import { fileStore } from "@/skills-sandbox/file-store";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
@@ -1119,5 +1125,416 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(response.statusCode).toBe(200);
     const meta = response.json().result.contents[0]._meta;
     expect(meta.ui.permissions).toEqual({ clipboardWrite: {}, camera: {} });
+  });
+
+  // ---- Conversation-scoped file built-ins (?conversationId) ----
+
+  describe("conversation-scoped file built-ins", () => {
+    const SEARCH_FILES_NAME = getArchestraToolFullName(
+      TOOL_SEARCH_FILES_SHORT_NAME,
+    );
+    const READ_FILE_NAME = getArchestraToolFullName(TOOL_READ_FILE_SHORT_NAME);
+
+    // The file tools are registered (and seedable) only under
+    // projects + skillsSandbox; apps.enabled is already on file-wide.
+    const originalProjects = config.projects.enabled;
+    const originalSandbox = config.skillsSandbox.enabled;
+    beforeAll(() => {
+      (config.projects as { enabled: boolean }).enabled = true;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    });
+    afterAll(() => {
+      (config.projects as { enabled: boolean }).enabled = originalProjects;
+      (config.skillsSandbox as { enabled: boolean }).enabled = originalSandbox;
+    });
+
+    /** Seeds the Archestra tool rows and grants the two file tools to the app. */
+    async function assignFileTools(appId: string) {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const rows = await db
+        .select({ id: schema.toolsTable.id })
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            inArray(schema.toolsTable.name, [
+              SEARCH_FILES_NAME,
+              READ_FILE_NAME,
+            ]),
+          ),
+        );
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        await AppToolModel.create(appId, row.id, {});
+      }
+    }
+
+    /** Persists a file into a conversation's personal scope (DB provider). */
+    async function putConversationFile(params: {
+      organizationId: string;
+      userId: string;
+      conversationId: string;
+      filename: string;
+      content: string;
+    }) {
+      await fileStore.put({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        projectId: null,
+        conversationId: params.conversationId,
+        filename: params.filename,
+        mimeType: "text/plain",
+        sizeBytes: Buffer.byteLength(params.content),
+        data: Buffer.from(params.content),
+      });
+    }
+
+    const rpcCall = (appId: string, payload: object, conversationId?: string) =>
+      app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${appId}${
+          conversationId ? `?conversationId=${conversationId}` : ""
+        }`,
+        headers: JSON_RPC_HEADERS,
+        payload,
+      });
+
+    const searchFilesPayload = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { name: SEARCH_FILES_NAME, arguments: {} },
+      id: 1,
+    };
+
+    const filenamesOf = (body: {
+      result?: { structuredContent?: { files?: Array<{ filename: string }> } };
+    }) => (body.result?.structuredContent?.files ?? []).map((f) => f.filename);
+
+    test("a Bearer request with ?conversationId is refused with 400", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "member" });
+      const { value } = await UserTokenModel.create(
+        user.id,
+        created.organizationId,
+      );
+      app = await buildBearerApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}?conversationId=${crypto.randomUUID()}`,
+        headers: bearer(value),
+        payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error?.message).toContain(
+        "session authentication",
+      );
+    });
+
+    test("a session request with another user's conversation is refused with 404", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const viewer = await makeUser();
+      await makeMember(viewer.id, created.organizationId, { role: "member" });
+      const stranger = await makeUser();
+      await makeMember(stranger.id, created.organizationId, {
+        role: "member",
+      });
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: stranger.id,
+        organizationId: created.organizationId,
+      });
+      app = await buildApp(viewer.id, created.organizationId);
+
+      const response = await rpcCall(
+        created.id,
+        { jsonrpc: "2.0", method: "tools/list", id: 1 },
+        conversation.id,
+      );
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error?.message).toContain(
+        "Conversation not found",
+      );
+    });
+
+    test("an assigned search_files call scoped to the chat lists its files", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      await putConversationFile({
+        organizationId: created.organizationId,
+        userId: user.id,
+        conversationId: conversation.id,
+        filename: "q2-report.txt",
+        content: "quarterly numbers",
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      const response = await rpcCall(
+        created.id,
+        searchFilesPayload,
+        conversation.id,
+      );
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.error).toBeUndefined();
+      expect(body.result?.isError ?? false).toBe(false);
+      expect(filenamesOf(body)).toEqual(["q2-report.txt"]);
+    });
+
+    test("the same call without ?conversationId succeeds with an empty listing", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      await putConversationFile({
+        organizationId: created.organizationId,
+        userId: user.id,
+        conversationId: conversation.id,
+        filename: "invisible.txt",
+        content: "hidden without a conversation",
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      const response = await rpcCall(created.id, searchFilesPayload);
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.error).toBeUndefined();
+      expect(body.result?.isError ?? false).toBe(false);
+      expect(filenamesOf(body)).toEqual([]);
+    });
+
+    test("an unassigned search_files call is refused as not assigned", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      // Tools exist in the registry (flags on) but hold no app_tools grant.
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      app = await buildApp(user.id, created.organizationId);
+
+      const response = await rpcCall(created.id, searchFilesPayload);
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.error?.code).toBe(-32601);
+      expect(body.error?.message).toContain("not assigned to this app");
+    });
+
+    test("tools/list advertises the file tools only when assigned", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await makeApp();
+      const other = await makeApp({ organizationId: created.organizationId });
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      app = await buildApp(user.id, created.organizationId);
+
+      const listNames = async (appId: string) => {
+        const response = await rpcCall(appId, {
+          jsonrpc: "2.0",
+          method: "tools/list",
+          id: 1,
+        });
+        expect(response.statusCode).toBe(200);
+        return response
+          .json()
+          .result.tools.map((t: { name: string }) => t.name);
+      };
+
+      const assignedNames = await listNames(created.id);
+      expect(assignedNames).toContain(SEARCH_FILES_NAME);
+      expect(assignedNames).toContain(READ_FILE_NAME);
+
+      // Control: the sibling app holds no grant, so the descriptors are absent.
+      const unassignedNames = await listNames(other.id);
+      expect(unassignedNames).not.toContain(SEARCH_FILES_NAME);
+      expect(unassignedNames).not.toContain(READ_FILE_NAME);
+    });
+
+    test("read_file returns the file text but its audit row is redacted", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      const secret = "pineapple-42 confidential body";
+      await putConversationFile({
+        organizationId: created.organizationId,
+        userId: user.id,
+        conversationId: conversation.id,
+        filename: "notes.txt",
+        content: secret,
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      const response = await rpcCall(
+        created.id,
+        {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: READ_FILE_NAME,
+            arguments: { filename: "notes.txt" },
+          },
+          id: 1,
+        },
+        conversation.id,
+      );
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.result?.isError ?? false).toBe(false);
+      // The caller gets the real file contents...
+      expect(JSON.stringify(body.result.content)).toContain("pineapple-42");
+
+      // ...while the persisted audit row carries only a placeholder plus the
+      // structured metadata.
+      const rows = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(
+          and(
+            eq(schema.mcpToolCallsTable.ownerType, "app"),
+            eq(schema.mcpToolCallsTable.appId, created.id),
+            eq(schema.mcpToolCallsTable.method, "tools/call"),
+          ),
+        );
+      const auditRow = rows.find(
+        (row) =>
+          (row.toolCall as { name?: string } | null)?.name === READ_FILE_NAME,
+      );
+      expect(auditRow).toBeDefined();
+      const storedResult = auditRow?.toolResult as {
+        content: unknown;
+        structuredContent?: { filename?: string };
+      };
+      expect(JSON.stringify(storedResult.content)).not.toContain(
+        "pineapple-42",
+      );
+      expect(JSON.stringify(storedResult.content)).toContain("not persisted");
+      expect(storedResult.structuredContent?.filename).toBe("notes.txt");
+    });
+
+    test("sequential calls for different conversations never share a scope", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversationA = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      const conversationB = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      await putConversationFile({
+        organizationId: created.organizationId,
+        userId: user.id,
+        conversationId: conversationA.id,
+        filename: "alpha-only.txt",
+        content: "a",
+      });
+      await putConversationFile({
+        organizationId: created.organizationId,
+        userId: user.id,
+        conversationId: conversationB.id,
+        filename: "beta-only.txt",
+        content: "b",
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      const filesA = filenamesOf(
+        (
+          await rpcCall(created.id, searchFilesPayload, conversationA.id)
+        ).json(),
+      );
+      expect(filesA).toEqual(["alpha-only.txt"]);
+
+      // Pins the cache-key fix: a server built for A's scope must not serve B.
+      const filesB = filenamesOf(
+        (
+          await rpcCall(created.id, searchFilesPayload, conversationB.id)
+        ).json(),
+      );
+      expect(filesB).toEqual(["beta-only.txt"]);
+
+      const filesNone = filenamesOf(
+        (await rpcCall(created.id, searchFilesPayload)).json(),
+      );
+      expect(filesNone).toEqual([]);
+    });
   });
 });

@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   useApp,
+  useAppAssignableBuiltinTools,
   useAppTools,
   useAssignToolToApp,
   useUnassignToolFromApp,
@@ -87,6 +88,7 @@ export function AppToolsEditor({
   const { data: app } = useApp(appId);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
+  const { data: assignableBuiltins = [] } = useAppAssignableBuiltinTools();
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
@@ -164,7 +166,8 @@ export function AppToolsEditor({
   // Candidate servers: every one in the app's environment (Playwright is
   // environment-agnostic like a builtin), plus any server a current assignment
   // already references so it can be cleaned up. The Archestra builtin catalog is
-  // never assignable.
+  // never offered through the generic list — its app-assignable subset comes
+  // from the dedicated server-filtered endpoint and renders as its own group.
   const candidates = useMemo(
     () =>
       catalogs.filter((c) => {
@@ -176,6 +179,47 @@ export function AppToolsEditor({
       }),
     [catalogs, appEnvironmentId, assignedIdsByCatalog],
   );
+
+  // The built-in group: the server-filtered assignable file tools, plus any
+  // already-assigned built-in row (so a grant left stale by a feature flag
+  // going dark stays visible and removable). Mapped to the checklist's catalog
+  // tool shape — the count fields are not read by the checklist.
+  const builtinCatalog = catalogs.find(
+    (c) => c.id === ARCHESTRA_MCP_CATALOG_ID,
+  );
+  const builtinTools = useMemo(() => {
+    const byId = new Map<string, CatalogTool>();
+    const toChecklistShape = (tool: {
+      id: string;
+      name: string;
+      description: string | null;
+      parameters?: unknown;
+      createdAt: AssignedTool["createdAt"];
+    }): CatalogTool => ({
+      id: tool.id,
+      name: tool.name,
+      description: tool.description,
+      parameters: (tool.parameters ?? {}) as CatalogTool["parameters"],
+      createdAt: tool.createdAt,
+      assignedAgentCount: 0,
+      assignedAgents: [],
+    });
+    for (const tool of assignableBuiltins) {
+      byId.set(tool.id, toChecklistShape(tool));
+    }
+    for (const tool of assigned ?? []) {
+      if (tool.catalogId === ARCHESTRA_MCP_CATALOG_ID && !byId.has(tool.id)) {
+        byId.set(tool.id, toChecklistShape(tool));
+      }
+    }
+    return [...byId.values()];
+  }, [assignableBuiltins, assigned]);
+  const builtinSelected = useMemo(
+    () =>
+      new Set(builtinTools.filter((t) => selection.has(t.id)).map((t) => t.id)),
+    [builtinTools, selection],
+  );
+  const builtinSelectedCount = builtinSelected.size;
 
   // Editors get the interactive checklist, so load each candidate's tools to
   // group, count, and render them. Viewers only see assigned tools (below) and
@@ -211,10 +255,14 @@ export function AppToolsEditor({
   }, [candidates, toolsByCatalog, assignedIdsByCatalog]);
 
   const defaultOpen = useMemo(
-    () =>
-      visibleCatalogs
+    () => [
+      ...(assignedIdsByCatalog.has(ARCHESTRA_MCP_CATALOG_ID)
+        ? [ARCHESTRA_MCP_CATALOG_ID]
+        : []),
+      ...visibleCatalogs
         .filter((c) => assignedIdsByCatalog.has(c.id))
         .map((c) => c.id),
+    ],
     [visibleCatalogs, assignedIdsByCatalog],
   );
 
@@ -250,7 +298,9 @@ export function AppToolsEditor({
   return (
     <div className="flex max-w-2xl flex-col gap-4">
       <LoadingWrapper isPending={isPending && !assigned}>
-        {visibleCatalogs.length === 0 && orphanedVisible.length === 0 ? (
+        {visibleCatalogs.length === 0 &&
+        orphanedVisible.length === 0 &&
+        builtinTools.length === 0 ? (
           candidates.length > 0 && toolsLoading ? (
             <p className="text-sm text-muted-foreground">Loading tools…</p>
           ) : (
@@ -261,8 +311,51 @@ export function AppToolsEditor({
           )
         ) : (
           <>
-            {visibleCatalogs.length > 0 ? (
+            {visibleCatalogs.length > 0 || builtinTools.length > 0 ? (
               <Accordion type="multiple" defaultValue={defaultOpen}>
+                {builtinTools.length > 0 ? (
+                  <AccordionItem value={ARCHESTRA_MCP_CATALOG_ID}>
+                    <AccordionTrigger>
+                      <div className="flex w-full items-center gap-2 pr-2">
+                        <McpCatalogIcon
+                          icon={builtinCatalog?.icon ?? null}
+                          catalogId={ARCHESTRA_MCP_CATALOG_ID}
+                          size={20}
+                        />
+                        <span className="truncate font-medium">
+                          {builtinCatalog?.name ?? "Built-in tools"}
+                        </span>
+                        {builtinSelectedCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto">
+                            {builtinSelectedCount} selected
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        Built-in file tools. When the app runs inside a chat,
+                        they let it list and read that conversation's files — or
+                        the project's files for a project chat — as the person
+                        viewing the app. Outside a chat the app sees no files.
+                      </p>
+                      <div
+                        className={cn(
+                          "flex flex-col rounded-md border",
+                          !unbounded && "max-h-96",
+                        )}
+                      >
+                        <AppCatalogToolList
+                          tools={builtinTools}
+                          selectedToolIds={builtinSelected}
+                          onSelectionChange={(next) =>
+                            changeCatalogSelection(builtinTools, next)
+                          }
+                        />
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ) : null}
                 {visibleCatalogs.map((catalog) => {
                   const catalogTools =
                     toolsByCatalog.get(catalog.id) ?? EMPTY_TOOLS;

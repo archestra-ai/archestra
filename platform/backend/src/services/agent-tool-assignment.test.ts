@@ -1,14 +1,22 @@
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  TOOL_SAVE_FILE_FULL_NAME,
+  TOOL_SEARCH_FILES_FULL_NAME,
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import MemberModel from "@/models/member";
 import TeamModel from "@/models/team";
+import ToolModel from "@/models/tool";
 import { describe, expect, test } from "@/test";
 import {
   assignToolToAgent,
   assignToolToApp,
   filterMcpServersAssignableToTarget,
   isMcpServerAssignableToTarget,
+  resolveAppToolsByName,
   validateAssignment,
 } from "./agent-tool-assignment";
 
@@ -667,6 +675,75 @@ describe("assignToolToApp", () => {
       mcpServerId: foreignServer.id,
     });
     expect(result).toMatchObject({ code: "not_found" });
+  });
+});
+
+describe("resolveAppToolsByName", () => {
+  // The file tools are registered (and so seedable) only with the flags on;
+  // config is restored pristine before every test, so flags are set per test.
+  const enableFileToolFlags = () => {
+    (config.apps as { enabled: boolean }).enabled = true;
+    (config.projects as { enabled: boolean }).enabled = true;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+  };
+
+  test("resolves the app-assignable file tools when the flags are on", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    enableFileToolFlags();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const result = await resolveAppToolsByName({
+      organizationId: organization.id,
+      toolNames: [TOOL_SEARCH_FILES_FULL_NAME],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({
+      tools: [{ name: TOOL_SEARCH_FILES_FULL_NAME }],
+    });
+  });
+
+  test("rejects other built-ins as unassignable to apps", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    enableFileToolFlags();
+
+    const result = await resolveAppToolsByName({
+      organizationId: organization.id,
+      toolNames: [TOOL_SAVE_FILE_FULL_NAME],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({ code: "validation_error" });
+    if ("error" in result) {
+      expect(result.error.message).toContain(
+        "Built-in tools cannot be assigned",
+      );
+    }
+  });
+
+  test("rejects the file tools when the projects flag is off", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    enableFileToolFlags();
+    (config.projects as { enabled: boolean }).enabled = false;
+
+    const result = await resolveAppToolsByName({
+      organizationId: organization.id,
+      toolNames: [TOOL_SEARCH_FILES_FULL_NAME],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({ code: "validation_error" });
+    if ("error" in result) {
+      expect(result.error.message).toContain(
+        "Built-in tools cannot be assigned",
+      );
+    }
   });
 });
 

@@ -1138,6 +1138,7 @@ export function ChatMessages({
                               toolResultPart={toolResultPart}
                               toolName={toolName}
                               agentId={agentId}
+                              conversationId={conversationId}
                               isDebugging={isDebugging}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
@@ -1241,6 +1242,7 @@ export function ChatMessages({
                                 toolResultPart={outputPart}
                                 toolName={toolName}
                                 agentId={agentId}
+                                conversationId={conversationId}
                                 isDebugging={isDebugging}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
@@ -1322,6 +1324,7 @@ export function ChatMessages({
                                 toolResultPart={toolResultPart}
                                 toolName={toolName}
                                 agentId={agentId}
+                                conversationId={conversationId}
                                 isDebugging={isDebugging}
                                 canExpandToolCalls={canExpandToolCalls}
                                 onToolApprovalResponse={onToolApprovalResponse}
@@ -1413,6 +1416,7 @@ export function ChatMessages({
               toolResultPart={null}
               toolName={toolCall.toolName}
               agentId={agentId}
+              conversationId={conversationId}
               isDebugging={isDebugging}
               canExpandToolCalls={canExpandToolCalls}
               onToolApprovalResponse={onToolApprovalResponse}
@@ -1563,6 +1567,7 @@ const MessageTool = memo(
     toolResultPart,
     toolName,
     agentId,
+    conversationId,
     isDebugging,
     canExpandToolCalls = true,
     onToolApprovalResponse,
@@ -1579,6 +1584,9 @@ const MessageTool = memo(
     toolResultPart: ToolUIPart | DynamicToolUIPart | null;
     toolName: string;
     agentId?: string;
+    /** The chat being rendered — forwarded to owned-app renders so their file
+     * tools resolve this conversation's scope. */
+    conversationId?: string;
     isDebugging?: boolean;
     canExpandToolCalls?: boolean;
     onToolApprovalResponse?: (params: {
@@ -1906,6 +1914,7 @@ const MessageTool = memo(
                   uiResourceUri={uiResourceUri}
                   mcpServerId={uiMcpServerId}
                   agentId={agentId}
+                  conversationId={conversationId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}
                   toolInput={mcpAppToolInput}
@@ -1926,6 +1935,7 @@ const MessageTool = memo(
                 <McpAppSection
                   uiResourceUri={getArchestraAppResourceUri(ownedApp.appId)}
                   appId={ownedApp.appId}
+                  conversationId={conversationId}
                   appName={ownedApp.appName}
                   appVersion={ownedApp.latestVersion}
                   agentId={agentId}
@@ -2015,6 +2025,7 @@ const MessageTool = memo(
                 uiResourceUri={uiResourceUri}
                 mcpServerId={uiMcpServerId}
                 agentId={agentId}
+                conversationId={conversationId}
                 toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}
                 toolInput={mcpAppToolInput}

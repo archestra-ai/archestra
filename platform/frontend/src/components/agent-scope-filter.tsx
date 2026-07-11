@@ -60,12 +60,12 @@ export function AgentScopeFilter({
   const { data: labelKeys } = useLabelKeys();
   const { data: isAdmin } = useHasPermissions(adminPermission);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  // Admins browsing without the admin view only see resources of teams they
-  // belong to, so scope the picker to membership; the admin view (and the
-  // unchanged non-admin path, where `mine` has no effect) lists all teams.
+  // The member view only lists resources of teams the caller belongs to, so
+  // scope the picker to membership for everyone; only the admin view lists
+  // all teams.
   const { data: teams } = useTeams({
     enabled: !!canReadTeams,
-    mine: !!isAdmin && !adminView,
+    mine: !(adminView && !!isAdmin),
   });
 
   const showMembersMultiSelect = adminView && !!isAdmin;

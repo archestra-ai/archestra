@@ -416,7 +416,6 @@ export async function handleGetResource<
           visibilityMode: "member",
         },
         context.userId,
-        isAdmin,
       );
 
       if (results.data.length > 0) {

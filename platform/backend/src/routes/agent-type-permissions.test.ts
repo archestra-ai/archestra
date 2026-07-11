@@ -379,6 +379,61 @@ describe("agent type permission isolation (routes)", () => {
         await memberApp.close();
       }
     });
+
+    test("deleted-view visibility is scoped to the administered types in a mixed-type query", async ({
+      makeCustomRole,
+      makeMember,
+    }) => {
+      // The caller's own deleted agent and deleted llm_proxy.
+      const ownAgent = await AgentModel.create(
+        {
+          name: "own-deleted-agent",
+          organizationId,
+          teams: [],
+          scope: "personal",
+        },
+        memberUser.id,
+      );
+      const ownProxy = await AgentModel.create(
+        {
+          name: "own-deleted-proxy",
+          organizationId,
+          agentType: "llm_proxy",
+          teams: [],
+          scope: "personal",
+        },
+        memberUser.id,
+      );
+      await AgentModel.delete(ownAgent.id);
+      await AgentModel.delete(ownProxy.id);
+
+      // llmProxy admin with agent delete-but-not-admin: the deleted view must
+      // stay empty for agent rows even in a mixed query.
+      await makeCustomRole(organizationId, {
+        role: "proxy_admin_agent_deleter",
+        permission: {
+          llmProxy: ["read", "create", "update", "delete", "admin"],
+          agent: ["read", "delete"],
+        },
+      });
+      await makeMember(memberUser.id, organizationId, {
+        role: "proxy_admin_agent_deleter",
+      });
+      const memberApp = await createAppForUser(memberUser);
+
+      try {
+        const response = await memberApp.inject({
+          method: "GET",
+          url: "/api/agents?agentTypes=agent,llm_proxy&status=deleted&limit=100",
+        });
+        expect(response.statusCode).toBe(200);
+        const ids = response.json().data.map((a: { id: string }) => a.id);
+        expect(ids).toContain(ownProxy.id);
+        expect(ids).not.toContain(ownAgent.id);
+      } finally {
+        await memberApp.close();
+      }
+    });
   });
 
   describe("individual agent CRUD isolation", () => {

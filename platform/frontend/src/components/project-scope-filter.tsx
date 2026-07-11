@@ -49,9 +49,10 @@ export function ProjectScopeFilter() {
   // Admins browsing without the admin view only see resources of teams they
   // belong to, so scope the picker to membership; the admin view (and the
   // unchanged non-admin path, where `mine` has no effect) lists all teams.
+  // Member view: membership-scoped picker for everyone; admin view: all teams.
   const { data: teams } = useTeams({
     enabled: !!canReadTeams,
-    mine: !!isProjectAdmin && !adminView,
+    mine: !(adminView && !!isProjectAdmin),
   });
 
   const showMembersMultiSelect = adminView && !!isProjectAdmin;

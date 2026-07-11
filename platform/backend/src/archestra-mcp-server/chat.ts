@@ -8,7 +8,6 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -316,15 +315,6 @@ async function handleSwapAgent(params: {
     }
 
     // Look up agent by name
-    const isAdmin =
-      context.userId && context.organizationId
-        ? await isAgentTypeAdmin({
-            userId: context.userId,
-            organizationId: context.organizationId,
-            agentType: "agent",
-          })
-        : false;
-
     const results = await AgentModel.findAllPaginated(
       { limit: 5, offset: 0 },
       undefined,
@@ -339,7 +329,6 @@ async function handleSwapAgent(params: {
         visibilityMode: "member",
       },
       context.userId,
-      isAdmin,
     );
 
     if (results.data.length === 0) {

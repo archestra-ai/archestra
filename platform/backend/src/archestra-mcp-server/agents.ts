@@ -7,7 +7,6 @@ import {
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -250,15 +249,6 @@ const registry = defineArchestraTools([
       try {
         const limit = Math.min(args.limit ?? 20, 100);
 
-        const isAdmin =
-          context.userId && context.organizationId
-            ? await isAgentTypeAdmin({
-                userId: context.userId,
-                organizationId: context.organizationId,
-                agentType: "agent",
-              })
-            : false;
-
         const results = await AgentModel.findAllPaginated(
           { limit, offset: 0 },
           undefined,
@@ -273,7 +263,6 @@ const registry = defineArchestraTools([
             visibilityMode: "member",
           },
           context.userId,
-          isAdmin,
         );
 
         const allKbIds = [

@@ -368,7 +368,6 @@ describe("AgentModel", () => {
         undefined,
         { scope: undefined },
         admin.id,
-        true,
       );
       expect(all.data.map((a) => a.name).sort()).toEqual([
         "Mine Team Agent",
@@ -382,7 +381,6 @@ describe("AgentModel", () => {
         undefined,
         { scope: "team", teamIds: [foreignTeam.id] },
         admin.id,
-        true,
       );
       expect(memberTeamView.data).toEqual([]);
 
@@ -397,7 +395,6 @@ describe("AgentModel", () => {
           administrableAgentTypes: [...AgentTypeSchema.options],
         },
         admin.id,
-        true,
       );
       expect(fullTeamView.data.map((a) => a.name)).toEqual([
         "Foreign Team Agent",
@@ -412,7 +409,6 @@ describe("AgentModel", () => {
           administrableAgentTypes: [...AgentTypeSchema.options],
         },
         admin.id,
-        true,
       );
       expect(fullAll.data.map((a) => a.name).sort()).toEqual([
         "Foreign Team Agent",
@@ -438,27 +434,45 @@ describe("AgentModel", () => {
       await AgentModel.delete(ownDeleted.id);
       await AgentModel.delete(foreignDeleted.id);
 
-      // Member visibility, admin: the deleted counterpart of their accessible
-      // set — their own deleted agent, not the other user's.
+      // Member visibility, admin of the queried types: the deleted counterpart
+      // of their accessible set — their own deleted agent, not the other
+      // user's.
       const adminMember = await AgentModel.findAllPaginated(
         { limit: 50, offset: 0 },
         undefined,
-        { status: "deleted" },
+        {
+          status: "deleted",
+          administrableAgentTypes: [...AgentTypeSchema.options],
+        },
         admin.id,
-        true,
       );
       expect(adminMember.data.map((a) => a.name)).toEqual(["Own Deleted"]);
 
-      // Member visibility, non-admin (e.g. delete-but-not-admin permission):
-      // the accessible set stays active-only, so the deleted view is empty.
+      // Member visibility without administrable types (e.g. delete-but-not-
+      // admin permission): the accessible set stays active-only, so the
+      // deleted view is empty.
       const nonAdminMember = await AgentModel.findAllPaginated(
         { limit: 50, offset: 0 },
         undefined,
         { status: "deleted" },
         admin.id,
-        false,
       );
       expect(nonAdminMember.data).toEqual([]);
+
+      // Mixed-type query where only another type is administrable: deleted
+      // agent-type rows stay hidden even though the caller administers
+      // llm_proxy.
+      const partialAdminMember = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        {
+          agentTypes: ["agent", "llm_proxy"],
+          status: "deleted",
+          administrableAgentTypes: ["llm_proxy"],
+        },
+        admin.id,
+      );
+      expect(partialAdminMember.data).toEqual([]);
 
       // Full visibility: every deleted agent.
       const full = await AgentModel.findAllPaginated(
@@ -470,7 +484,6 @@ describe("AgentModel", () => {
           administrableAgentTypes: [...AgentTypeSchema.options],
         },
         admin.id,
-        true,
       );
       expect(full.data.map((a) => a.name).sort()).toEqual([
         "Foreign Deleted",
@@ -1081,7 +1094,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         user.id,
-        false, // not admin
       );
 
       // User sees Agent 1 (via team) + 3 org-wide agents
@@ -1118,7 +1130,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         admin.id,
-        true, // is admin
       );
 
       expect(result.data.length).toBe(result.pagination.total);
@@ -1197,7 +1208,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
 
       expect(result.data).toHaveLength(5);
@@ -1252,7 +1262,6 @@ describe("AgentModel", () => {
         { sortBy: "name", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
 
       expect(result.data).toHaveLength(2);
@@ -1328,7 +1337,6 @@ describe("AgentModel", () => {
         { sortBy: "name", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
       expect(resultByName.data).toHaveLength(4);
       expect(resultByName.data[0].name).toBe("Alpha");
@@ -1339,7 +1347,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
       expect(resultByDate.data).toHaveLength(4);
 
@@ -1349,7 +1356,6 @@ describe("AgentModel", () => {
         { sortBy: "toolsCount", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
       expect(resultByToolsCount.data).toHaveLength(4);
       // Agent with most tools should be first
@@ -1361,7 +1367,6 @@ describe("AgentModel", () => {
         { sortBy: "team", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
       expect(resultByTeam.data).toHaveLength(4);
     });
@@ -1424,7 +1429,6 @@ describe("AgentModel", () => {
         { sortBy: "knowledgeSourcesCount", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
       expect(resultDesc.data).toHaveLength(3);
       expect(resultDesc.data[0].name).toBe("Many Sources");
@@ -1437,7 +1441,6 @@ describe("AgentModel", () => {
         { sortBy: "knowledgeSourcesCount", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
       expect(resultAsc.data).toHaveLength(3);
       expect(resultAsc.data[0].name).toBe("No Sources");
@@ -1479,7 +1482,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
 
       expect(page1.data).toHaveLength(2);
@@ -1491,7 +1493,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
 
       expect(page2.data).toHaveLength(2);
@@ -1531,7 +1532,6 @@ describe("AgentModel", () => {
         { sortBy: "name", sortDirection: "asc" },
         {},
         admin.id,
-        true,
       );
 
       expect(result.data).toHaveLength(2);
@@ -1581,7 +1581,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
 
       // Find our test agent
@@ -1663,7 +1662,6 @@ describe("AgentModel", () => {
         { sortBy: "toolsCount", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
 
       // Find our test agents
@@ -1723,7 +1721,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
 
       // Find our test agent
@@ -1785,7 +1782,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
 
       // Find our test agent
@@ -1857,7 +1853,6 @@ describe("AgentModel", () => {
         { sortBy: "toolsCount", sortDirection: "desc" },
         {},
         admin.id,
-        true,
       );
 
       const agent1Result = result.data.find(
@@ -2361,7 +2356,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         { agentType: "agent" },
         admin.id,
-        true,
       );
       expect(adminResults.data).toHaveLength(1);
       expect(adminResults.data[0].name).toBe("Regular Agent");
@@ -2376,7 +2370,6 @@ describe("AgentModel", () => {
           administrableAgentTypes: ["agent"],
         },
         admin.id,
-        true,
       );
       expect(builtInResults.data).toHaveLength(1);
       expect(builtInResults.data[0].name).toBe(
@@ -2389,7 +2382,6 @@ describe("AgentModel", () => {
         { sortBy: "createdAt", sortDirection: "desc" },
         { agentType: "agent" },
         admin.id,
-        false,
       );
       expect(nonAdminResults.data).toHaveLength(1);
       expect(nonAdminResults.data[0].name).toBe("Regular Agent");

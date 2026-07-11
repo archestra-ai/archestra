@@ -195,7 +195,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             status,
           },
           user.id,
-          isAdmin,
         ),
       );
     },

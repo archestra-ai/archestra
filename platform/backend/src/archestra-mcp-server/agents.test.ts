@@ -401,12 +401,15 @@ describe("agent tool execution", () => {
     makeAgentTool,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
-    makeOrganization,
   }) => {
-    const org = await makeOrganization();
+    // The caller only sees agents of their own organization.
+    const organizationId = mockContext.organizationId;
+    if (!organizationId) {
+      throw new Error("Expected organizationId in test context");
+    }
     const agent = await makeAgent({
       name: "Agent With Resources",
-      organizationId: org.id,
+      organizationId,
       agentType: "agent",
     });
 
@@ -418,11 +421,11 @@ describe("agent tool execution", () => {
     await makeAgentTool(agent.id, tool.id);
 
     // Create and assign a knowledge base
-    const kb = await makeKnowledgeBase(org.id, {
+    const kb = await makeKnowledgeBase(organizationId, {
       name: "Product Docs",
     });
     await AgentKnowledgeBaseModel.assign(agent.id, kb.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id, {
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
       name: "Jira Connector",
     });
     await AgentModel.update(agent.id, {

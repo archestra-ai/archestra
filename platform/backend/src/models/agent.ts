@@ -809,7 +809,6 @@ class AgentModel {
       administrableAgentTypes?: AgentType[];
     },
     userId?: string,
-    isAgentAdmin?: boolean,
   ): Promise<PaginatedResult<Agent>> {
     // Determine the ORDER BY clause based on sorting params
     const orderByClause = AgentModel.getOrderByClause(sorting);
@@ -937,22 +936,29 @@ class AgentModel {
 
     // Access-control filtering by visibility mode. "member" (default) restricts
     // the list to the caller's accessible set: own personal + org + agents of
-    // teams they belong to. Admins get the deleted counterpart of that set in
-    // the deleted view; everyone else keeps the active-only set, so a caller
-    // with delete-but-not-admin permission still sees an empty deleted list.
-    // Built-in rows of administrable types bypass the accessible-set check —
-    // their visibility is governed by the built-in condition above. "full"
-    // lifts the restriction for the administrable types (admin oversight);
-    // rows of other queried types stay member-restricted.
+    // teams they belong to. In the deleted view the accessible set's deleted
+    // counterpart applies, and only for administrable types — so a caller with
+    // delete-but-not-admin permission on a type still sees an empty deleted
+    // list for it, even in a mixed-type query where they administer another
+    // type. Built-in rows of administrable types bypass the accessible-set
+    // check — their visibility is governed by the built-in condition above.
+    // "full" lifts the restriction for the administrable types (admin
+    // oversight); rows of other queried types stay member-restricted.
     const fullVisibilityTypes =
       filters?.visibilityMode === "full" ? administrableTypes : [];
     const memberRestrictedTypes = queriedTypes.filter(
       (type) => !fullVisibilityTypes.includes(type),
     );
     if (userId && memberRestrictedTypes.length > 0) {
+      const isDeletedView = (filters?.status ?? "active") === "deleted";
       const accessibleAgentIds = await AgentModel.findAccessibleIdsForUser(
         userId,
-        { status: isAgentAdmin ? (filters?.status ?? "active") : "active" },
+        {
+          status:
+            isDeletedView && administrableTypes.length > 0
+              ? "deleted"
+              : "active",
+        },
       );
 
       const builtInVisible = administrableTypes.length
@@ -966,9 +972,17 @@ class AgentModel {
         visibleConditions.push(builtInVisible);
       }
       if (accessibleAgentIds.length) {
-        visibleConditions.push(
-          inArray(schema.agentsTable.id, accessibleAgentIds),
-        );
+        const accessible = inArray(schema.agentsTable.id, accessibleAgentIds);
+        const deletedAccessible =
+          isDeletedView && administrableTypes.length
+            ? and(
+                accessible,
+                inArray(schema.agentsTable.agentType, administrableTypes),
+              )
+            : accessible;
+        if (deletedAccessible) {
+          visibleConditions.push(deletedAccessible);
+        }
       }
       if (fullVisibilityTypes.length) {
         visibleConditions.push(

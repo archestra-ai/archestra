@@ -33,6 +33,11 @@ import type {
   UnsafeContextBoundary,
   UsageView,
 } from "@/types";
+import {
+  collectErrorCodes,
+  isConnectionErrno,
+  isTimeoutErrno,
+} from "@/utils/network-errors";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -421,32 +426,6 @@ export function handleError(
 }
 
 /**
- * Network errno codes (libuv + undici) for a connection to the upstream provider
- * that failed or was dropped before an HTTP response arrived.
- */
-const UPSTREAM_CONNECTION_ERRNOS = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "ECONNABORTED",
-  "ENOTFOUND",
-  "EAI_AGAIN",
-  "EHOSTUNREACH",
-  "ENETUNREACH",
-  "ENETDOWN",
-  "EPIPE",
-  "UND_ERR_SOCKET",
-]);
-
-/** Network errno codes for a connection that specifically *timed out*. */
-const UPSTREAM_TIMEOUT_ERRNOS = new Set([
-  "ETIMEDOUT",
-  "ESOCKETTIMEDOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-  "UND_ERR_BODY_TIMEOUT",
-]);
-
-/**
  * When an LLM SDK call fails to reach the upstream provider — a dropped/refused
  * connection or a timeout, both with no HTTP status — classify it as an upstream
  * gateway failure: 504 for a timeout, 502 for any other connection failure.
@@ -455,7 +434,8 @@ const UPSTREAM_TIMEOUT_ERRNOS = new Set([
  *
  * Matches the OpenAI/Anthropic SDK `APIConnectionError` ("Connection error.") and
  * `APIConnectionTimeoutError` ("Request timed out."), plus the underlying Node
- * `fetch`/libuv/undici errno codes those wrap, across providers.
+ * `fetch`/libuv/undici errno codes those wrap (via the shared network-error
+ * vocabulary), across providers.
  */
 function classifyTransientUpstreamError(error: unknown): 502 | 504 | undefined {
   if (!(error instanceof Error)) return undefined;
@@ -466,7 +446,7 @@ function classifyTransientUpstreamError(error: unknown): 502 | 504 | undefined {
   const isTimeout =
     name === "APIConnectionTimeoutError" ||
     /timed out|timeout/i.test(message) ||
-    codes.some((code) => UPSTREAM_TIMEOUT_ERRNOS.has(code));
+    codes.some(isTimeoutErrno);
   if (isTimeout) return 504;
 
   const isConnectionFailure =
@@ -475,25 +455,10 @@ function classifyTransientUpstreamError(error: unknown): 502 | 504 | undefined {
     /fetch failed|socket hang up|network error|connection (?:reset|refused|closed|aborted)|terminated/i.test(
       message,
     ) ||
-    codes.some((code) => UPSTREAM_CONNECTION_ERRNOS.has(code));
+    codes.some(isConnectionErrno);
   if (isConnectionFailure) return 502;
 
   return undefined;
-}
-
-/**
- * Gather candidate errno strings from an error and its `cause` chain — Node's
- * `fetch` wraps the real libuv error as `cause`, sometimes a level or two deep.
- */
-function collectErrorCodes(error: Error): string[] {
-  const codes: string[] = [];
-  let current: unknown = error;
-  for (let depth = 0; depth < 3 && current instanceof Error; depth++) {
-    const code = (current as Error & { code?: unknown }).code;
-    if (typeof code === "string") codes.push(code);
-    current = (current as Error & { cause?: unknown }).cause;
-  }
-  return codes;
 }
 
 /**

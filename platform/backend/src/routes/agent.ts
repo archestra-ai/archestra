@@ -39,6 +39,7 @@ import {
   DeleteObjectResponseSchema,
   ImportAgentResponseSchema,
   InsertAgentSchema,
+  QueryBooleanSchema,
   SelectAgentSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
@@ -91,16 +92,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional()
               .describe(
-                "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
-              ),
-            excludeAuthorIds: z
-              .preprocess(
-                (val) => (typeof val === "string" ? val.split(",") : val),
-                z.array(z.string()),
-              )
-              .optional()
-              .describe(
-                "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
+                "Filter by author user IDs (comma-separated). Only honored when adminView=true.",
               ),
             labels: z
               .string()
@@ -108,15 +100,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
               ),
-            excludeOtherPersonalAgents: z
-              .preprocess(
-                (val) => (typeof val === "string" ? val === "true" : val),
-                z.boolean(),
-              )
-              .optional()
-              .describe(
-                "Hide personal agents owned by other users. Admin-only; no-op for non-admins.",
-              ),
+            adminView: QueryBooleanSchema.optional().describe(
+              "Admin visibility toggle. When true, lifts the member-visibility restriction for the queried agent types the caller administers (shows other users' personal agents and all teams' agents). Default false: the list is limited to the caller's accessible set. No-op for non-admins.",
+            ),
             status: z
               .enum(["active", "deleted"])
               .optional()
@@ -149,9 +135,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           scope,
           teamIds,
           authorIds,
-          excludeAuthorIds,
           labels,
-          excludeOtherPersonalAgents,
+          adminView,
           status,
           limit,
           offset,
@@ -179,12 +164,16 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         status,
       });
 
-      // Check admin for the specific type(s) being queried, or any type if unfiltered
-      const isAdmin = effectiveTypes
-        ? effectiveTypes.length === 1
-          ? checker.isAdmin(effectiveTypes[0])
-          : checker.hasAnyAdminPermission()
-        : checker.hasAnyAdminPermission();
+      // Admin standing is scoped to the queried types: a caller administering
+      // only llm_proxy gets no oversight over profile rows in a mixed query.
+      const queriedTypes = effectiveTypes ?? permittedTypes ?? [];
+      const administrableTypes = queriedTypes.filter((type) =>
+        checker.isAdmin(type),
+      );
+      const isAdmin = administrableTypes.length > 0;
+      // adminView=true lifts member visibility, but only for the types the
+      // caller administers. Default (member) shows the caller's accessible set.
+      const fullVisibility = adminView === true && isAdmin;
 
       return reply.send(
         await AgentModel.findAllPaginated(
@@ -197,11 +186,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             agentTypes: permittedTypes ?? agentTypes,
             scope,
             teamIds,
-            // authorIds and excludeAuthorIds are admin-only
-            authorIds: isAdmin ? authorIds : undefined,
-            excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
-            excludeOtherPersonalAgents: isAdmin
-              ? excludeOtherPersonalAgents
+            // Owner narrowing only exists in the admin oversight view.
+            authorIds: fullVisibility ? authorIds : undefined,
+            visibilityMode: fullVisibility ? "full" : "member",
+            fullVisibilityAgentTypes: fullVisibility
+              ? administrableTypes
               : undefined,
             labels: parseLabelsParam(labels),
             status,

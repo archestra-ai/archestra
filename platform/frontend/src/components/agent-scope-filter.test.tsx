@@ -1,12 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// Radix Select relies on pointer-capture / scrollIntoView, which jsdom omits.
-Element.prototype.scrollIntoView = vi.fn();
-Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
-Element.prototype.setPointerCapture = vi.fn();
-Element.prototype.releasePointerCapture = vi.fn();
 
 vi.mock("@/lib/auth/auth.query");
 
@@ -21,8 +14,8 @@ vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/teams/team.query");
 
-// Stub the sibling controls so the only `combobox` roles in the tree are the
-// scope select and the (conditional) owner select under test.
+// Stub the sibling controls; the user multi-select stub renders a marker so
+// its gating can be asserted without pulling in the real component.
 vi.mock("@/components/label-select", () => ({
   LabelSelect: () => null,
   LabelFilterBadges: () => null,
@@ -32,7 +25,7 @@ vi.mock("@/components/label-select", () => ({
 }));
 vi.mock("@/components/ui/multi-select", () => ({ MultiSelect: () => null }));
 vi.mock("@/components/user-searchable-multi-select", () => ({
-  UserSearchableMultiSelect: () => null,
+  UserSearchableMultiSelect: () => <div data-testid="user-multi-select" />,
 }));
 vi.mock("@/components/permission-requirement-hint", () => ({
   PermissionRequirementHint: () => null,
@@ -44,14 +37,25 @@ import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { AgentScopeFilter } from "./agent-scope-filter";
 
-describe("AgentScopeFilter owner selector gating", () => {
+function mockIsAdmin(isAdmin: boolean) {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions: Record<string, unknown>) => {
+      // Has member:read and team:read; agent:admin per the flag.
+      if ("agent" in permissions)
+        return { data: isAdmin } as ReturnType<typeof useHasPermissions>;
+      return { data: true } as ReturnType<typeof useHasPermissions>;
+    },
+  );
+}
+
+describe("AgentScopeFilter user multi-select gating", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as ReturnType<typeof useSession>);
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("scope=personal") as ReturnType<
+      new URLSearchParams("adminView=true") as ReturnType<
         typeof useSearchParams
       >,
     );
@@ -67,37 +71,32 @@ describe("AgentScopeFilter owner selector gating", () => {
     } as unknown as ReturnType<typeof useTeams>);
   });
 
-  it("hides the owner selector for a non-admin even if they have member:read", async () => {
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions: Record<string, unknown>) => {
-        // Has member:read and team:read, but NOT agent:admin.
-        if ("agent" in permissions)
-          return { data: false } as ReturnType<typeof useHasPermissions>;
-        return { data: true } as ReturnType<typeof useHasPermissions>;
-      },
-    );
+  it("hides the user multi-select for a non-admin even with adminView=true", () => {
+    mockIsAdmin(false);
 
     render(<AgentScopeFilter adminPermission={{ agent: ["admin"] }} />);
 
-    expect(screen.getAllByRole("combobox")).toHaveLength(1);
-    expect(screen.queryByText("Other users")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("user-multi-select")).not.toBeInTheDocument();
   });
 
-  it("shows the owner selector for a resource admin", async () => {
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions: Record<string, unknown>) => {
-        if ("agent" in permissions)
-          return { data: true } as ReturnType<typeof useHasPermissions>;
-        return { data: true } as ReturnType<typeof useHasPermissions>;
-      },
+  it("shows the user multi-select for a resource admin with adminView=true", () => {
+    mockIsAdmin(true);
+
+    render(<AgentScopeFilter adminPermission={{ agent: ["admin"] }} />);
+
+    expect(screen.getByTestId("user-multi-select")).toBeInTheDocument();
+  });
+
+  it("hides the user multi-select for an admin without adminView", () => {
+    mockIsAdmin(true);
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("scope=personal") as ReturnType<
+        typeof useSearchParams
+      >,
     );
 
     render(<AgentScopeFilter adminPermission={{ agent: ["admin"] }} />);
 
-    const comboboxes = screen.getAllByRole("combobox");
-    expect(comboboxes).toHaveLength(2);
-
-    await userEvent.click(comboboxes[1]);
-    expect(await screen.findByText("Other users")).toBeInTheDocument();
+    expect(screen.queryByTestId("user-multi-select")).not.toBeInTheDocument();
   });
 });

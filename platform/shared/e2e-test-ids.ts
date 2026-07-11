@@ -137,6 +137,8 @@ export const E2eTestId = {
   ImpersonationBanner: "impersonation-banner",
   ImpersonationStopButton: "impersonation-stop-button",
   ImpersonationViewAsButton: "impersonation-view-as-button",
+  // Admin visibility toggle on list pages
+  AdminViewToggle: "admin-view-toggle",
 } as const;
 
 export type E2eTestId = (typeof E2eTestId)[keyof typeof E2eTestId];

@@ -57,7 +57,7 @@ describe("GET /api/internal_mcp_catalog", () => {
     await app.close();
   });
 
-  test("an admin sees another member's personal catalog item", async ({
+  test("an admin sees another member's personal catalog item only with adminView=true", async ({
     makeUser,
     makeMember,
   }) => {
@@ -73,14 +73,36 @@ describe("GET /api/internal_mcp_catalog", () => {
       { organizationId, authorId: author.id },
     );
 
-    const response = await app.inject({
+    // Default (member visibility): another member's personal item stays
+    // hidden, admin permission or not.
+    const memberView = await app.inject({
       method: "GET",
       url: "/api/internal_mcp_catalog",
     });
+    expect(memberView.statusCode).toBe(200);
+    expect(
+      memberView.json().map((item: { id: string }) => item.id),
+    ).not.toContain(personal.id);
 
-    expect(response.statusCode).toBe(200);
-    const ids = response.json().map((item: { id: string }) => item.id);
-    expect(ids).toContain(personal.id);
+    // adminView=true (admin oversight): every catalog entry is listed. The
+    // literal string "false" must NOT enable it.
+    const explicitOff = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?adminView=false",
+    });
+    expect(explicitOff.statusCode).toBe(200);
+    expect(
+      explicitOff.json().map((item: { id: string }) => item.id),
+    ).not.toContain(personal.id);
+
+    const adminView = await app.inject({
+      method: "GET",
+      url: "/api/internal_mcp_catalog?adminView=true",
+    });
+    expect(adminView.statusCode).toBe(200);
+    expect(adminView.json().map((item: { id: string }) => item.id)).toContain(
+      personal.id,
+    );
   });
 
   test("a non-admin does not see another member's personal catalog item", async ({

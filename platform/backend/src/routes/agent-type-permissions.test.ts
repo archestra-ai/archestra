@@ -266,6 +266,56 @@ describe("agent type permission isolation (routes)", () => {
         await memberApp.close();
       }
     });
+
+    test("adminView oversight is scoped to the administered types in a mixed-type query", async ({
+      makeCustomRole,
+      makeMember,
+      makeAgent,
+    }) => {
+      // Another user's personal llm_proxy and personal profile.
+      const foreignProxy = await makeAgent({
+        name: "foreign-personal-proxy",
+        organizationId,
+        agentType: "llm_proxy",
+        scope: "personal",
+        authorId: adminUser.id,
+      });
+      const foreignProfile = await makeAgent({
+        name: "foreign-personal-profile",
+        organizationId,
+        agentType: "profile",
+        scope: "personal",
+        authorId: adminUser.id,
+      });
+
+      // llmProxy admin, but only a reader of profiles (the `agent` resource).
+      await makeCustomRole(organizationId, {
+        role: "proxy_admin_profile_reader",
+        permission: {
+          llmProxy: ["read", "create", "update", "delete", "admin"],
+          agent: ["read"],
+        },
+      });
+      await makeMember(memberUser.id, organizationId, {
+        role: "proxy_admin_profile_reader",
+      });
+      const memberApp = await createAppForUser(memberUser);
+
+      try {
+        const response = await memberApp.inject({
+          method: "GET",
+          url: "/api/agents?agentTypes=llm_proxy,profile&adminView=true&limit=100",
+        });
+        expect(response.statusCode).toBe(200);
+        const ids = response.json().data.map((a: { id: string }) => a.id);
+        // Full visibility applies to the administered llm_proxy rows…
+        expect(ids).toContain(foreignProxy.id);
+        // …but profile rows stay member-restricted.
+        expect(ids).not.toContain(foreignProfile.id);
+      } finally {
+        await memberApp.close();
+      }
+    });
   });
 
   describe("individual agent CRUD isolation", () => {

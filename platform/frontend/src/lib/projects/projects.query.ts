@@ -50,7 +50,7 @@ export function useProjects(
   const search = options?.search?.trim() || undefined;
   const teamIds = options?.teamIds;
   const authorIds = options?.authorIds;
-  const excludeAuthorIds = options?.excludeAuthorIds;
+  const adminView = options?.adminView;
   const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: [
@@ -61,13 +61,13 @@ export function useProjects(
         search: search ?? null,
         teamIds: teamIds ?? null,
         authorIds: authorIds ?? null,
-        excludeAuthorIds: excludeAuthorIds ?? null,
+        adminView: adminView ?? null,
       },
     ],
     enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { data, error } = await getProjects({
-        query: { scope, search, teamIds, authorIds, excludeAuthorIds },
+        query: { scope, search, teamIds, authorIds, adminView },
       });
       throwOnApiError(error, { toastOnError });
       return data;

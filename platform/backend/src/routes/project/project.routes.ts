@@ -17,6 +17,7 @@ import {
   ProjectListItemSchema,
   ProjectListScopeSchema,
   ProjectShareVisibilitySchema,
+  QueryBooleanSchema,
   SandboxFileListItemSchema,
 } from "@/types";
 
@@ -145,10 +146,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List projects the caller can see. `scope` is the project's share " +
           "visibility: `personal` (private), `team` (shared with teams — narrow " +
-          "with `teamIds`), or `org` (org-wide); omitted = all visible. Admins " +
-          "additionally filter `personal` by owner via `authorIds` / " +
-          "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
-          "description.",
+          "with `teamIds`), or `org` (org-wide); omitted = all visible. " +
+          "`adminView=true` (requires project:admin, no-op otherwise) lists ALL " +
+          "org projects instead of only the caller's accessible ones and honors " +
+          "`authorIds` owner narrowing. `search` matches name + description.",
         tags: ["Projects"],
         querystring: z.object({
           scope: ProjectListScopeSchema.optional(),
@@ -157,31 +158,27 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Team IDs (comma-separated); only used when scope=team.",
           ),
           authorIds: CommaSeparatedIds.optional().describe(
-            "Owner user IDs (comma-separated). Admin-only; used with scope=personal.",
+            "Owner user IDs (comma-separated). Only honored when adminView=true.",
           ),
-          excludeAuthorIds: CommaSeparatedIds.optional().describe(
-            "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.",
+          adminView: QueryBooleanSchema.optional().describe(
+            "Admin visibility toggle. When true, lists every org project (admin oversight). Default false: only the caller's accessible projects. No-op without project:admin.",
           ),
         }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
       },
     },
     async ({ query, organizationId, user }) => {
-      const isProjectAdmin = await userHasPermission(
-        user.id,
-        organizationId,
-        "project",
-        "admin",
-      );
+      const adminView =
+        query.adminView === true &&
+        (await userHasPermission(user.id, organizationId, "project", "admin"));
       return projectService.list({
         organizationId,
         userId: user.id,
-        isProjectAdmin,
+        adminView,
         scope: query.scope,
         teamIds: query.teamIds,
-        // The owner sub-filter is admin-only; ignore it for everyone else.
-        authorIds: isProjectAdmin ? query.authorIds : undefined,
-        excludeAuthorIds: isProjectAdmin ? query.excludeAuthorIds : undefined,
+        // Owner narrowing only exists in the admin oversight view.
+        authorIds: adminView ? query.authorIds : undefined,
         search: query.search,
       });
     },

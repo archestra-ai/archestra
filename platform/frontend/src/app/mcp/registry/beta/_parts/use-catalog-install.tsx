@@ -105,7 +105,8 @@ export function useCatalogInstall(opts?: {
   const router = useRouter();
   const pathname = usePathname();
 
-  const { data: catalogItems } = useInternalMcpCatalog({});
+  // adminView so deep-linked installs can resolve a foreign catalog entry.
+  const { data: catalogItems } = useInternalMcpCatalog({ adminView: true });
   const { data: installedServers } = useMcpServers();
   const installMutation = useInstallMcpServer();
   const initiateOAuthMutation = useInitiateOAuth();

@@ -4,6 +4,7 @@ import type { Permissions } from "@archestra/shared";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { isAdminViewEnabled } from "@/components/admin-view-toggle";
 import {
   LabelFilterBadges,
   LabelKeyRowBase,
@@ -29,16 +30,13 @@ import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue = "personal" | "team" | "org" | "built_in";
-type OwnerValue = "mine" | "others";
 type StatusValue = "active" | "deleted";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
-  ownerLabelPlural = "agents",
   adminPermission,
 }: {
   showBuiltIn?: boolean;
-  ownerLabelPlural?: string;
   adminPermission: Permissions;
 }) {
   const searchParams = useSearchParams();
@@ -48,7 +46,7 @@ export function AgentScopeFilter({
   const scope = (searchParams.get("scope") as ScopeValue | null) ?? undefined;
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const adminView = isAdminViewEnabled(searchParams);
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -65,21 +63,15 @@ export function AgentScopeFilter({
   const { data: labelKeys } = useLabelKeys();
   const { data: isAdmin } = useHasPermissions(adminPermission);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: teams } = useTeams({ enabled: !!canReadTeams });
+  // Admins browsing without the admin view only see resources of teams they
+  // belong to, so scope the picker to membership; the admin view (and the
+  // unchanged non-admin path, where `mine` has no effect) lists all teams.
+  const { data: teams } = useTeams({
+    enabled: !!canReadTeams,
+    mine: !!isAdmin && !adminView,
+  });
 
-  const ownerFilter: OwnerValue = useMemo(() => {
-    if (scope !== "personal" || !isAdmin) return "mine";
-    if (excludeAuthorIdsParam) return "others";
-    if (!authorIdsParam) return "mine";
-    if (currentUserId) {
-      const ids = authorIdsParam.split(",");
-      if (ids.length === 1 && ids[0] === currentUserId) return "mine";
-    }
-    return "others";
-  }, [scope, isAdmin, authorIdsParam, excludeAuthorIdsParam, currentUserId]);
-
-  const showOwnerSelect = scope === "personal" && !!isAdmin;
-  const showMembersMultiSelect = showOwnerSelect && ownerFilter === "others";
+  const showMembersMultiSelect = adminView && !!isAdmin;
 
   const { data: members } = useOrganizationMembers(showMembersMultiSelect);
 
@@ -101,40 +93,14 @@ export function AgentScopeFilter({
 
   const handleScopeChange = useCallback(
     (value: string) => {
-      if (value === "personal") {
-        updateUrlParams({
-          scope: "personal",
-          teamIds: null,
-          authorIds: currentUserId ?? null,
-          excludeAuthorIds: null,
-        });
-      } else {
-        updateUrlParams({
-          scope: value === "all" ? null : value,
-          teamIds: null,
-          authorIds: null,
-          excludeAuthorIds: null,
-        });
-      }
+      updateUrlParams({
+        scope: value === "all" ? null : value,
+        teamIds: null,
+        authorIds: null,
+        excludeAuthorIds: null,
+      });
     },
-    [updateUrlParams, currentUserId],
-  );
-
-  const handleOwnerChange = useCallback(
-    (value: string) => {
-      if (value === "mine") {
-        updateUrlParams({
-          authorIds: currentUserId ?? null,
-          excludeAuthorIds: null,
-        });
-      } else {
-        updateUrlParams({
-          authorIds: null,
-          excludeAuthorIds: currentUserId ?? null,
-        });
-      }
-    },
-    [updateUrlParams, currentUserId],
+    [updateUrlParams],
   );
 
   const handleTeamIdsChange = useCallback(
@@ -150,10 +116,9 @@ export function AgentScopeFilter({
     (values: string[]) => {
       updateUrlParams({
         authorIds: values.length > 0 ? values.join(",") : null,
-        excludeAuthorIds: values.length > 0 ? null : (currentUserId ?? null),
       });
     },
-    [updateUrlParams, currentUserId],
+    [updateUrlParams],
   );
 
   const teamItems = useMemo(
@@ -194,17 +159,6 @@ export function AgentScopeFilter({
           )}
         </SelectContent>
       </Select>
-      {showOwnerSelect && (
-        <Select value={ownerFilter} onValueChange={handleOwnerChange}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent position="popper" side="bottom" align="start">
-            <SelectItem value="mine">My {ownerLabelPlural}</SelectItem>
-            <SelectItem value="others">Other users</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
       {scope === "team" && canReadTeams && teamItems.length > 0 && (
         <MultiSelect
           value={selectedTeamIds}
@@ -295,26 +249,13 @@ export function ActiveFilterBadges({
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
   const labelsParam = searchParams.get("labels");
-  const scopeParam = searchParams.get("scope");
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
+  const adminView = isAdminViewEnabled(searchParams);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams({ enabled: !!canReadTeams });
   const { data: isAdmin } = useHasPermissions(adminPermission);
 
-  // Users badge only shows when the author filter names specific other users,
-  // not when it's just the implicit "mine" selection.
-  const showsSpecificOtherUsers = useMemo(() => {
-    if (scopeParam !== "personal") return false;
-    if (!authorIdsParam) return false;
-    if (!currentUserId) return authorIdsParam.length > 0;
-    const ids = authorIdsParam.split(",");
-    if (ids.length === 1 && ids[0] === currentUserId) return false;
-    return true;
-  }, [scopeParam, authorIdsParam, currentUserId]);
-
   const { data: members } = useOrganizationMembers(
-    !!isAdmin && showsSpecificOtherUsers,
+    !!isAdmin && adminView && !!authorIdsParam,
   );
 
   const selectedTeams = useMemo(() => {
@@ -357,17 +298,13 @@ export function ActiveFilterBadges({
       const params = new URLSearchParams(searchParams.toString());
       if (ids.length > 0) {
         params.set("authorIds", ids.join(","));
-        params.delete("excludeAuthorIds");
       } else {
         params.delete("authorIds");
-        if (currentUserId) {
-          params.set("excludeAuthorIds", currentUserId);
-        }
       }
       params.set("page", "1");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [authorIdsParam, searchParams, router, pathname, currentUserId],
+    [authorIdsParam, searchParams, router, pathname],
   );
 
   const handleRemoveLabel = useCallback(
@@ -393,7 +330,7 @@ export function ActiveFilterBadges({
 
   const hasTeams = selectedTeams.length > 0;
   const hasUnavailableTeamsFilter = !!teamIdsParam && !canReadTeams;
-  const hasUsers = showsSpecificOtherUsers && selectedUsers.length > 0;
+  const hasUsers = adminView && selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
 
   if (!hasTeams && !hasUsers && !hasLabels && !hasUnavailableTeamsFilter)

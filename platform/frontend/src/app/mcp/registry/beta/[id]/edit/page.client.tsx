@@ -27,7 +27,10 @@ import { EditCatalogContent } from "../../_parts/edit-catalog-dialog";
 import type { CatalogItem } from "../../_parts/mcp-server-card";
 
 export function McpCatalogItemEditPage({ id }: { id: string }) {
-  const { data: catalogItems, isPending } = useInternalMcpCatalog({});
+  // adminView so an admin can edit a deep-linked foreign item; no-op otherwise.
+  const { data: catalogItems, isPending } = useInternalMcpCatalog({
+    adminView: true,
+  });
   const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
 
   return (

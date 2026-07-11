@@ -54,7 +54,9 @@ export function ToolDetailsDialog({
   open,
   onOpenChange,
 }: ToolDetailsDialogProps) {
-  const { data: internalMcpCatalogItems } = useInternalMcpCatalog();
+  const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
+    adminView: true,
+  });
   const [assignmentsOpen, setAssignmentsOpen] = useState(true);
 
   if (!tool) return null;

@@ -10820,21 +10820,17 @@ export type GetAgentsData = {
          */
         teamIds?: Array<string>;
         /**
-         * Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal.
+         * Filter by author user IDs (comma-separated). Only honored when adminView=true.
          */
         authorIds?: Array<string>;
-        /**
-         * Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.
-         */
-        excludeAuthorIds?: Array<string>;
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
         /**
-         * Hide personal agents owned by other users. Admin-only; no-op for non-admins.
+         * Admin visibility toggle. When true, lifts the member-visibility restriction for the queried agent types the caller administers (shows other users' personal agents and all teams' agents). Default false: the list is limited to the caller's accessible set. No-op for non-admins.
          */
-        excludeOtherPersonalAgents?: boolean;
+        adminView?: boolean;
         /**
          * Filter by lifecycle status. Deleted rows require delete permission.
          */
@@ -37983,6 +37979,10 @@ export type GetInternalMcpCatalogData = {
     path?: never;
     query?: {
         includeApps?: boolean;
+        /**
+         * Admin visibility toggle. When true, lists every catalog entry (admin oversight). Default false: only entries the caller can access (own personal + org + their teams'). No-op without mcpServerInstallation:admin.
+         */
+        adminView?: boolean;
     };
     url: '/api/internal_mcp_catalog';
 };
@@ -56060,13 +56060,13 @@ export type GetProjectsData = {
          */
         teamIds?: Array<string>;
         /**
-         * Owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         * Owner user IDs (comma-separated). Only honored when adminView=true.
          */
         authorIds?: Array<string>;
         /**
-         * Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.
+         * Admin visibility toggle. When true, lists every org project (admin oversight). Default false: only the caller's accessible projects. No-op without project:admin.
          */
-        excludeAuthorIds?: Array<string>;
+        adminView?: boolean;
     };
     url: '/api/projects';
 };

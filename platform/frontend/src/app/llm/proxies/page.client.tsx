@@ -7,6 +7,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  AdminViewToggle,
+  isAdminViewEnabled,
+} from "@/components/admin-view-toggle";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -116,7 +120,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     | null;
   const teamIdsFromUrl = searchParams.get("teamIds");
   const authorIdsFromUrl = searchParams.get("authorIds");
-  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const adminViewFromUrl = isAdminViewEnabled(searchParams);
   const labelsFromUrl = searchParams.get("labels");
   const statusFromUrl = searchParams.get("status") as
     | "active"
@@ -143,15 +147,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
-    excludeAuthorIds: excludeAuthorIdsFromUrl
-      ? excludeAuthorIdsFromUrl.split(",")
-      : undefined,
-    excludeOtherPersonalAgents:
-      scopeFromUrl !== "personal" &&
-      !authorIdsFromUrl &&
-      !excludeAuthorIdsFromUrl
-        ? true
-        : undefined,
+    // Absent means member visibility server-side, so only send `true` — that
+    // also keeps the SSR initialData (fetched without adminView) usable.
+    adminView: adminViewFromUrl || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   });
@@ -395,13 +393,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter
-                  ownerLabelPlural="LLM proxies"
-                  adminPermission={{ llmProxy: ["admin"] }}
-                />
+                <AgentScopeFilter adminPermission={{ llmProxy: ["admin"] }} />
                 <AgentDeletedStatusFilter
                   deletePermission={{ llmProxy: ["delete"] }}
                 />
+                <AdminViewToggle adminPermission={{ llmProxy: ["admin"] }} />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -431,7 +427,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                     scopeFromUrl ||
                     teamIdsFromUrl ||
                     authorIdsFromUrl ||
-                    excludeAuthorIdsFromUrl ||
+                    adminViewFromUrl ||
                     labelsFromUrl ||
                     isDeletedView,
                 )}
@@ -441,7 +437,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                     scope: null,
                     teamIds: null,
                     authorIds: null,
-                    excludeAuthorIds: null,
+                    adminView: null,
                     labels: null,
                     status: null,
                     page: "1",

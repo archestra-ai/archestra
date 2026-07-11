@@ -12,8 +12,10 @@ function names(json: string): string[] {
 
 /**
  * GET /api/projects scope + search, mirroring the Agents filter: scope is the
- * project's share visibility (personal/team/org), with an admin-only owner
- * sub-filter (authorIds / excludeAuthorIds) under personal.
+ * project's share visibility (personal/team/org). By default everyone —
+ * admins included — sees only their accessible projects; `adminView=true`
+ * (project:admin only) lists every org project and honors `authorIds` owner
+ * narrowing.
  */
 describe("GET /api/projects (scope + search)", () => {
   let app: FastifyInstanceWithZod;
@@ -116,7 +118,7 @@ describe("GET /api/projects (scope + search)", () => {
     );
   });
 
-  test("admin Personal: My (authorIds) vs Other users (excludeAuthorIds); viewerRole reflects access", async ({
+  test("admin Personal: member default vs adminView oversight; viewerRole reflects access", async ({
     makeUser,
     makeMember,
   }) => {
@@ -128,11 +130,16 @@ describe("GET /api/projects (scope + search)", () => {
     await create(other, "other-private");
     actingUser = admin;
 
-    // personal with no owner filter → every private project, tagged by access.
-    const all = JSON.parse((await list("?scope=personal")).body) as Array<{
-      name: string;
-      viewerRole: string;
-    }>;
+    // Personal without adminView → member visibility: only the admin's own
+    // private project, even though they hold project:admin.
+    expect(names((await list("?scope=personal")).body)).toEqual([
+      "admin-private",
+    ]);
+
+    // adminView=true → every private project, tagged by real access.
+    const all = JSON.parse(
+      (await list("?scope=personal&adminView=true")).body,
+    ) as Array<{ name: string; viewerRole: string }>;
     expect(all.map((p) => p.name).sort()).toEqual([
       "admin-private",
       "other-private",
@@ -144,15 +151,17 @@ describe("GET /api/projects (scope + search)", () => {
       "admin",
     );
 
+    // Owner narrowing exists only in the admin view…
     expect(
-      names((await list(`?scope=personal&authorIds=${admin.id}`)).body),
-    ).toEqual(["admin-private"]); // "My"
-    expect(
-      names((await list(`?scope=personal&excludeAuthorIds=${admin.id}`)).body),
-    ).toEqual(["other-private"]); // "Other users"
+      names(
+        (await list(`?scope=personal&adminView=true&authorIds=${other.id}`))
+          .body,
+      ),
+    ).toEqual(["other-private"]);
+    // …and is ignored without it.
     expect(
       names((await list(`?scope=personal&authorIds=${other.id}`)).body),
-    ).toEqual(["other-private"]); // a specific other user
+    ).toEqual(["admin-private"]);
   });
 
   test("admin default 'All' shows only accessible projects, hiding all oversight", async ({
@@ -183,20 +192,35 @@ describe("GET /api/projects (scope + search)", () => {
     await share(other, oversight.id, "team", [foreignTeam.id]);
     actingUser = admin;
 
-    // "All" shows only what the admin can actually access: their own projects,
-    // org-shared ones, and team-shared ones for a team they belong to. Every
-    // oversight row — other members' PRIVATE projects AND team-shared projects
-    // for teams the admin isn't in — is dropped. Those stay reachable via
-    // Personal → Other users and Team → pick that team.
+    // Default "All" shows only what the admin can actually access: their own
+    // projects, org-shared ones, and team-shared ones for a team they belong
+    // to. Every oversight row — other members' PRIVATE projects AND team-shared
+    // projects for teams the admin isn't in — is dropped.
     expect(names((await list()).body).sort()).toEqual([
       "admin-private",
       "other-org",
       "other-team-mine",
     ]);
 
-    // The team-oversight project is still reachable by explicitly picking its team.
+    // Member visibility applies in explicit scopes too: the foreign team's
+    // project stays hidden even when its team is picked directly.
     expect(
       names((await list(`?scope=team&teamIds=${foreignTeam.id}`)).body),
+    ).toEqual([]);
+
+    // adminView=true lifts the restriction everywhere, "All" included.
+    expect(names((await list("?adminView=true")).body).sort()).toEqual([
+      "admin-private",
+      "other-org",
+      "other-private",
+      "other-team-foreign",
+      "other-team-mine",
+    ]);
+    expect(
+      names(
+        (await list(`?scope=team&adminView=true&teamIds=${foreignTeam.id}`))
+          .body,
+      ),
     ).toEqual(["other-team-foreign"]);
   });
 
@@ -214,9 +238,12 @@ describe("GET /api/projects (scope + search)", () => {
     await share(other, p.id, "team", [team.id]);
     actingUser = admin;
 
-    // The admin isn't a Finance member, so they reach the project via oversight
-    // (viewerRole "admin") — and still get the team name(s) for the pill tooltip.
-    const items = JSON.parse((await list("?scope=team")).body) as Array<{
+    // The admin isn't a Finance member, so they reach the project only through
+    // the admin view (viewerRole "admin") — and still get the team name(s) for
+    // the pill tooltip.
+    const items = JSON.parse(
+      (await list("?scope=team&adminView=true")).body,
+    ) as Array<{
       name: string;
       viewerRole: string;
       shareTeamNames: string[] | null;
@@ -226,7 +253,7 @@ describe("GET /api/projects (scope + search)", () => {
     expect(item?.shareTeamNames).toEqual(["Finance"]);
   });
 
-  test("the owner sub-filter is ignored for non-admins", async ({
+  test("adminView and owner narrowing are no-ops for non-admins", async ({
     makeUser,
     makeMember,
   }) => {
@@ -235,14 +262,17 @@ describe("GET /api/projects (scope + search)", () => {
     await create(viewer, "viewer-private");
     await create(other, "other-private");
 
-    // The owner sub-filter is admin-only, so both params are ignored: a non-admin
-    // just sees their OWN private project, never another member's — regardless of
-    // what authorIds/excludeAuthorIds they pass.
+    // Both params require project:admin: a non-admin just sees their OWN
+    // private project, never another member's — regardless of what
+    // adminView/authorIds they pass.
+    expect(names((await list("?scope=personal&adminView=true")).body)).toEqual([
+      "viewer-private",
+    ]);
     expect(
-      names((await list(`?scope=personal&excludeAuthorIds=${viewer.id}`)).body),
-    ).toEqual(["viewer-private"]);
-    expect(
-      names((await list(`?scope=personal&authorIds=${other.id}`)).body),
+      names(
+        (await list(`?scope=personal&adminView=true&authorIds=${other.id}`))
+          .body,
+      ),
     ).toEqual(["viewer-private"]);
   });
 

@@ -60,6 +60,7 @@ import {
   ListInternalMcpCatalogSchema,
   type LocalConfig,
   PartialUpdateInternalMcpCatalogSchema,
+  QueryBooleanSchema,
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
@@ -92,6 +93,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Apps are hidden from the registry but assignable to a gateway, so the
           // capabilities picker opts in to their backing catalogs here.
           includeApps: z.coerce.boolean().optional(),
+          adminView: QueryBooleanSchema.optional().describe(
+            "Admin visibility toggle. When true, lists every catalog entry (admin oversight). Default false: only entries the caller can access (own personal + org + their teams'). No-op without mcpServerInstallation:admin.",
+          ),
         }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
@@ -99,10 +103,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const isAdmin =
+        request.query.adminView === true &&
+        (
+          await hasPermission(
+            { mcpServerInstallation: ["admin"] },
+            request.headers,
+          )
+        ).success;
       // Don't expand secrets for list view
       const opts = {
         expandSecrets: false,

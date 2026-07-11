@@ -157,15 +157,16 @@ export function useProfilesPaginated(
     scope,
     teamIds,
     authorIds,
-    excludeAuthorIds,
-    excludeOtherPersonalAgents,
+    adminView,
     labels,
     status,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
   // Only use it for the first page (offset 0), default sorting, no search filter,
-  // no scope filter, AND matching default table page size
+  // no scope filter, no admin view, AND matching default table page size. The
+  // server fetches without adminView (member visibility), so an admin-view
+  // query must never be seeded with member-mode rows.
   // Note: agentTypes is allowed since the server fetches with the page-specific agentTypes
   const useInitialData =
     offset === 0 &&
@@ -175,8 +176,7 @@ export function useProfilesPaginated(
     scope === undefined &&
     teamIds === undefined &&
     authorIds === undefined &&
-    excludeAuthorIds === undefined &&
-    excludeOtherPersonalAgents === undefined &&
+    adminView === undefined &&
     labels === undefined &&
     status === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
@@ -194,8 +194,7 @@ export function useProfilesPaginated(
         scope,
         teamIds,
         authorIds,
-        excludeAuthorIds,
-        excludeOtherPersonalAgents,
+        adminView,
         labels,
         status,
       },
@@ -212,8 +211,7 @@ export function useProfilesPaginated(
           scope,
           teamIds,
           authorIds,
-          excludeAuthorIds,
-          excludeOtherPersonalAgents,
+          adminView,
           labels,
           status,
         },

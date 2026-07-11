@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
+import { isAdminViewEnabled } from "@/components/admin-view-toggle";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
   Select,
@@ -16,13 +17,13 @@ import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue = "personal" | "team" | "org";
-type OwnerValue = "mine" | "others";
 
 /**
  * Projects-list scope filter, mirroring the Agents page. Scope is the project's
  * share visibility — Personal (private) / Team (shared with teams) / Org
- * (org-wide). A `project:admin` additionally gets a "My / Other users"
- * sub-filter under Personal and can narrow to specific owners.
+ * (org-wide). When the "View as admin" toggle is on (`adminView=true` in the
+ * URL), a `project:admin` additionally gets a user multi-select to narrow to
+ * specific owners.
  */
 export function ProjectScopeFilter() {
   const searchParams = useSearchParams();
@@ -32,7 +33,7 @@ export function ProjectScopeFilter() {
   const scope = (searchParams.get("scope") as ScopeValue | null) ?? undefined;
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const adminView = isAdminViewEnabled(searchParams);
 
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -48,27 +49,15 @@ export function ProjectScopeFilter() {
 
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: teams } = useTeams({ enabled: !!canReadTeams });
+  // Admins browsing without the admin view only see resources of teams they
+  // belong to, so scope the picker to membership; the admin view (and the
+  // unchanged non-admin path, where `mine` has no effect) lists all teams.
+  const { data: teams } = useTeams({
+    enabled: !!canReadTeams,
+    mine: !!isProjectAdmin && !adminView,
+  });
 
-  const ownerFilter: OwnerValue = useMemo(() => {
-    if (scope !== "personal" || !isProjectAdmin) return "mine";
-    if (excludeAuthorIdsParam) return "others";
-    if (!authorIdsParam) return "mine";
-    if (currentUserId) {
-      const ids = authorIdsParam.split(",");
-      if (ids.length === 1 && ids[0] === currentUserId) return "mine";
-    }
-    return "others";
-  }, [
-    scope,
-    isProjectAdmin,
-    authorIdsParam,
-    excludeAuthorIdsParam,
-    currentUserId,
-  ]);
-
-  const showOwnerSelect = scope === "personal" && !!isProjectAdmin;
-  const showMembersMultiSelect = showOwnerSelect && ownerFilter === "others";
+  const showMembersMultiSelect = adminView && !!isProjectAdmin;
   const { data: members } = useOrganizationMembers(showMembersMultiSelect);
 
   const updateUrlParams = useCallback(
@@ -85,41 +74,14 @@ export function ProjectScopeFilter() {
 
   const handleScopeChange = useCallback(
     (value: string) => {
-      if (value === "personal") {
-        // Default the owner sub-filter to "My projects".
-        updateUrlParams({
-          scope: "personal",
-          teamIds: null,
-          authorIds: currentUserId ?? null,
-          excludeAuthorIds: null,
-        });
-      } else {
-        updateUrlParams({
-          scope: value === "all" ? null : value,
-          teamIds: null,
-          authorIds: null,
-          excludeAuthorIds: null,
-        });
-      }
+      updateUrlParams({
+        scope: value === "all" ? null : value,
+        teamIds: null,
+        authorIds: null,
+        excludeAuthorIds: null,
+      });
     },
-    [updateUrlParams, currentUserId],
-  );
-
-  const handleOwnerChange = useCallback(
-    (value: string) => {
-      if (value === "mine") {
-        updateUrlParams({
-          authorIds: currentUserId ?? null,
-          excludeAuthorIds: null,
-        });
-      } else {
-        updateUrlParams({
-          authorIds: null,
-          excludeAuthorIds: currentUserId ?? null,
-        });
-      }
-    },
-    [updateUrlParams, currentUserId],
+    [updateUrlParams],
   );
 
   const handleTeamIdsChange = useCallback(
@@ -133,10 +95,9 @@ export function ProjectScopeFilter() {
     (values: string[]) => {
       updateUrlParams({
         authorIds: values.length > 0 ? values.join(",") : null,
-        excludeAuthorIds: values.length > 0 ? null : (currentUserId ?? null),
       });
     },
-    [updateUrlParams, currentUserId],
+    [updateUrlParams],
   );
 
   const teamItems = useMemo(
@@ -166,17 +127,6 @@ export function ProjectScopeFilter() {
           <SelectItem value="org">Organization</SelectItem>
         </SelectContent>
       </Select>
-      {showOwnerSelect && (
-        <Select value={ownerFilter} onValueChange={handleOwnerChange}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent position="popper" side="bottom" align="start">
-            <SelectItem value="mine">My projects</SelectItem>
-            <SelectItem value="others">Other users</SelectItem>
-          </SelectContent>
-        </Select>
-      )}
       {scope === "team" && canReadTeams && teamItems.length > 0 && (
         <MultiSelect
           value={selectedTeamIds}

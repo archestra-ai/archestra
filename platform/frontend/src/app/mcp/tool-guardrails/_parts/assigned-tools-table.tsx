@@ -133,8 +133,11 @@ export function AssignedToolsTable({
   const { data: resultPolicies } = useToolResultPolicies(
     initialData?.toolResultPolicies,
   );
+  // adminView matches the tools query, which is already admin-unrestricted —
+  // the SSR fetch in page.tsx uses the same mode so initialData stays valid.
   const { data: internalMcpCatalogItems } = useInternalMcpCatalog({
     initialData: initialData?.internalMcpCatalog,
+    adminView: true,
   });
 
   const {

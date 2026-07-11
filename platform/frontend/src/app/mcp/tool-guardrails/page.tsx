@@ -53,7 +53,12 @@ export default async function ToolGuardrailsPage() {
           includeKnowledgeSourcesTool: true,
         },
       }),
-      archestraApiSdk.getInternalMcpCatalog({ headers }),
+      // adminView matches the client's catalog query (see assigned-tools-table)
+      // so this initialData seeds the right cache entry.
+      archestraApiSdk.getInternalMcpCatalog({
+        headers,
+        query: { adminView: true },
+      }),
       archestraApiSdk.getToolInvocationPolicies({ headers }),
       archestraApiSdk.getTrustedDataPolicies({ headers }),
     ]);

@@ -5245,7 +5245,7 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
 });
 
 /**
- * List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.
+ * List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. `adminView=true` (requires project:admin, no-op otherwise) lists ALL org projects instead of only the caller's accessible ones and honors `authorIds` owner narrowing. `search` matches name + description.
  *
  * Authentication:
  *

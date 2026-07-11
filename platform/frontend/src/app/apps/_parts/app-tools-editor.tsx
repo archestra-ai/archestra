@@ -86,7 +86,7 @@ export function AppToolsEditor({
 }) {
   const { data: app } = useApp(appId);
   const { data: assigned, isPending } = useAppTools(appId);
-  const { data: catalogs = [] } = useInternalMcpCatalog();
+  const { data: catalogs = [] } = useInternalMcpCatalog({ adminView: true });
   const { data: canEdit } = useHasPermissions({ app: ["update"] });
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();

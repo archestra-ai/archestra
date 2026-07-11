@@ -32,7 +32,8 @@ export default function NewMcpCatalogItemPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const createMutation = useCreateInternalMcpCatalogItem();
-  const { data: catalogItems } = useInternalMcpCatalog();
+  // adminView so an admin can clone a foreign item; no-op otherwise.
+  const { data: catalogItems } = useInternalMcpCatalog({ adminView: true });
 
   // ?clone=<catalogId> seeds the form from an existing item (used by the
   // Clone action on the item detail page) and skips the source step.

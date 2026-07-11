@@ -111,7 +111,10 @@ const LOGS_TAB_BY_ID: Record<string, McpLogsTab> = {
 const TOOLS_PREVIEW_LIMIT = 6;
 
 export function McpCatalogItemPage({ id }: { id: string }) {
-  const { data: catalogItems, isPending } = useInternalMcpCatalog({});
+  // adminView so an admin can open a deep-linked foreign item; no-op otherwise.
+  const { data: catalogItems, isPending } = useInternalMcpCatalog({
+    adminView: true,
+  });
   const item = catalogItems?.find((catalogItem) => catalogItem.id === id);
 
   return (

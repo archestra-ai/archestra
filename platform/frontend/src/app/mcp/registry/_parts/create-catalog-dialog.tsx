@@ -46,7 +46,9 @@ export function CreateCatalogDialog({
     McpCatalogFormValues | undefined
   >(undefined);
   const createMutation = useCreateInternalMcpCatalogItem();
-  const { data: catalogItems } = useInternalMcpCatalog();
+  // adminView so an admin can clone a foreign item; no-op otherwise. Keep the
+  // mode in sync with ArchestraCatalogTab, which is seeded from this data.
+  const { data: catalogItems } = useInternalMcpCatalog({ adminView: true });
 
   // Seed the form when opened for a clone. cloneValues is a new object per
   // clone action; the parent clears it on close so reopening via "Add Server"

@@ -137,34 +137,34 @@ class ProjectService {
    * Projects for the list view, scoped + searched, mirroring the Agents filter.
    * `scope` is the project's share visibility (mutually exclusive): `personal`
    * (private), `team` (shared with teams — narrow with `teamIds`), or `org`
-   * (org-wide); omitted = everything the caller can see. Admins draw from ALL
-   * org projects and can filter `personal` by owner via `authorIds` /
-   * `excludeAuthorIds` (the "My / Other users" sub-filter); everyone else is
-   * limited to their accessible set. `viewerRole` is the caller's real
-   * relationship to each project (owner / shared / admin-oversight).
+   * (org-wide); omitted = everything visible. By default everyone — admins
+   * included — is limited to their accessible set (own ∪ org/team-shared to
+   * them). `adminView` (route-gated to `project:admin`) draws from ALL org
+   * projects instead and allows narrowing by owner via `authorIds` (the
+   * "View as admin" toggle). `viewerRole` is the caller's real relationship
+   * to each project (owner / shared / admin-oversight).
    */
   async list(params: {
     organizationId: string;
     userId: string;
-    isProjectAdmin?: boolean;
+    adminView?: boolean;
     scope?: ProjectListScope;
     teamIds?: string[];
     authorIds?: string[];
-    excludeAuthorIds?: string[];
     search?: string;
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
 
     // What the caller can actually reach (owner ∪ org/team-shared-to-them): the
-    // non-admin base, and how admins tell "shared" from "oversight" access.
+    // member base, and how admin view tells "shared" from "oversight" access.
     const accessible = await ProjectShareModel.listAccessibleProjects({
       userId,
       organizationId,
     });
     const accessibleIds = new Set(accessible.map((p) => p.id));
 
-    // A project:admin oversees every project; everyone else sees only theirs.
-    const base = params.isProjectAdmin
+    // Admin view oversees every org project; everyone else sees only theirs.
+    const base = params.adminView
       ? await ProjectShareModel.listAllOrgProjects({ organizationId })
       : accessible;
 
@@ -186,24 +186,12 @@ class ProjectService {
       candidates = candidates.filter(
         (c) => c.project.visibility === "organization",
       );
-    } else {
-      // "All": show only what the caller can actually access — own, org-shared,
-      // and team-shared to a team they belong to. For an admin that drops every
-      // oversight row (other members' private projects AND team-shared projects
-      // for teams they aren't in); those stay reachable via Personal → Other
-      // users and Team → pick that team. Non-admins have no oversight candidates
-      // to begin with, so this is a no-op for them.
-      candidates = candidates.filter((c) => c.viewerRole !== "admin");
     }
 
-    // admin "My / Other users" owner sub-filter (honored upstream for admins only).
+    // Admin-view owner narrowing (honored upstream only when adminView is on).
     if (params.authorIds?.length) {
       const include = new Set(params.authorIds);
       candidates = candidates.filter((c) => include.has(c.project.userId));
-    }
-    if (params.excludeAuthorIds?.length) {
-      const exclude = new Set(params.excludeAuthorIds);
-      candidates = candidates.filter((c) => !exclude.has(c.project.userId));
     }
 
     // Team memberships for team-shared projects — backs both the `teamIds`

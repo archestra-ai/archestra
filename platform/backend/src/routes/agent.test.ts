@@ -916,7 +916,7 @@ describe("agent routes", () => {
       expect(result.data[0].name).toContain("Zulu Personal");
     });
 
-    test("excludeOtherPersonalAgents hides other users' personal agents for admin", async ({
+    test("admin sees other users' personal agents only with adminView=true", async ({
       makeAgent,
       makeUser,
       makeMember,
@@ -944,16 +944,95 @@ describe("agent routes", () => {
         authorId: otherUser.id,
       });
 
-      const response = await app.inject({
+      const query = `limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}`;
+
+      // Default (member visibility) hides other users' personal agents even
+      // for an admin — in the unscoped view and in scope=personal alike.
+      for (const url of [
+        `/api/agents?${query}`,
+        `/api/agents?${query}&adminView=false`,
+        `/api/agents?${query}&scope=personal`,
+      ]) {
+        const response = await app.inject({ method: "GET", url });
+        expect(response.statusCode).toBe(200);
+        const names = response.json().data.map((a: { name: string }) => a.name);
+        expect(names).toContain(`Own Personal ${suffix}`);
+        expect(names).not.toContain(`Other Personal ${suffix}`);
+      }
+
+      // adminView=true (admin oversight) shows everything.
+      const adminViewResponse = await app.inject({
         method: "GET",
-        url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&excludeOtherPersonalAgents=true`,
+        url: `/api/agents?${query}&adminView=true`,
+      });
+      expect(adminViewResponse.statusCode).toBe(200);
+      const adminViewNames = adminViewResponse
+        .json()
+        .data.map((a: { name: string }) => a.name);
+      expect(adminViewNames).toContain(`Own Personal ${suffix}`);
+      expect(adminViewNames).toContain(`Other Personal ${suffix}`);
+      expect(adminViewNames).toContain(`Org Agent ${suffix}`);
+
+      // Owner narrowing (authorIds) is honored only in the admin view…
+      const narrowed = await app.inject({
+        method: "GET",
+        url: `/api/agents?${query}&adminView=true&authorIds=${otherUser.id}`,
+      });
+      expect(
+        narrowed
+          .json()
+          .data.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual([`Org Agent ${suffix}`, `Other Personal ${suffix}`]);
+
+      // …and ignored without it.
+      const ignoredNarrowing = await app.inject({
+        method: "GET",
+        url: `/api/agents?${query}&authorIds=${otherUser.id}`,
+      });
+      const ignoredNames = ignoredNarrowing
+        .json()
+        .data.map((a: { name: string }) => a.name);
+      expect(ignoredNames).toContain(`Own Personal ${suffix}`);
+      expect(ignoredNames).not.toContain(`Other Personal ${suffix}`);
+    });
+
+    test("adminView is a no-op for a non-admin member", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+
+      await makeAgent({
+        name: `Admin Personal ${suffix}`,
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Member Personal ${suffix}`,
+        organizationId,
+        scope: "personal",
+        authorId: member.id,
       });
 
-      expect(response.statusCode).toBe(200);
-      const names = response.json().data.map((a: { name: string }) => a.name);
-      expect(names).toContain(`Own Personal ${suffix}`);
-      expect(names).toContain(`Org Agent ${suffix}`);
-      expect(names).not.toContain(`Other Personal ${suffix}`);
+      const actingBefore = user;
+      user = member;
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&adminView=true`,
+        });
+        expect(response.statusCode).toBe(200);
+        const names = response.json().data.map((a: { name: string }) => a.name);
+        expect(names).toContain(`Member Personal ${suffix}`);
+        expect(names).not.toContain(`Admin Personal ${suffix}`);
+      } finally {
+        user = actingBefore;
+      }
     });
 
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({

@@ -20,7 +20,6 @@ import {
   isNull,
   min,
   ne,
-  notInArray,
   or,
   type SQL,
   sql,
@@ -35,14 +34,15 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
-import type {
-  Agent,
-  AgentScope,
-  AgentScopeFilter,
-  AgentType,
-  InsertAgent,
-  SortingQuery,
-  UpdateAgent,
+import {
+  type Agent,
+  type AgentScope,
+  type AgentScopeFilter,
+  type AgentType,
+  AgentTypeSchema,
+  type InsertAgent,
+  type SortingQuery,
+  type UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
@@ -793,10 +793,17 @@ class AgentModel {
       scope?: AgentScopeFilter;
       teamIds?: string[];
       authorIds?: string[];
-      excludeAuthorIds?: string[];
-      excludeOtherPersonalAgents?: boolean;
       labels?: Record<string, string[]>;
       status?: AgentRecordStatus;
+      /**
+       * Access-control mode. "member" (the fail-closed default) restricts the
+       * list to the caller's accessible set: own personal + org + agents of
+       * teams they belong to (built-ins keep their own gating). "full" lifts
+       * that restriction for the agent types in `fullVisibilityAgentTypes`
+       * (admin oversight); rows of other queried types stay member-restricted.
+       */
+      visibilityMode?: "member" | "full";
+      fullVisibilityAgentTypes?: AgentType[];
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -871,28 +878,6 @@ class AgentModel {
       );
     }
 
-    // Exclude specific authors if provided
-    if (filters?.excludeAuthorIds && filters.excludeAuthorIds.length > 0) {
-      const condition = or(
-        isNull(schema.agentsTable.authorId),
-        notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
-      );
-      if (condition) {
-        whereConditions.push(condition);
-      }
-    }
-
-    // Exclude other users' personal agents (show non-personal + own personal)
-    if (filters?.excludeOtherPersonalAgents && userId) {
-      const condition = or(
-        ne(schema.agentsTable.scope, "personal"),
-        eq(schema.agentsTable.authorId, userId),
-      );
-      if (condition) {
-        whereConditions.push(condition);
-      }
-    }
-
     // Add label filters if provided (AND across keys, OR within values)
     if (filters?.labels) {
       for (const [key, values] of Object.entries(filters.labels)) {
@@ -922,30 +907,47 @@ class AgentModel {
       }
     }
 
-    // Access-control filtering. Non-admins are always restricted to the agents
-    // they can access (own personal + org + teams they belong to). An admin is
-    // restricted the same way ONLY in the default active "All" view (no explicit
-    // scope), so it shows just what they can access rather than the whole org —
-    // oversight (other users' personal agents and team agents for teams they
-    // aren't in) is dropped there. Explicit scopes keep the admin's full
-    // org-wide base (oversight stays reachable via Team → pick that team and
-    // Personal → Other users), and so does the admin-only deleted view, whose
-    // whole purpose is reviewing every removed agent.
-    const isDefaultActiveAllView =
-      filters?.scope === undefined &&
-      (filters?.status ?? "active") !== "deleted";
-    const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
-    if (userId && restrictToAccessible) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+    // Access-control filtering by visibility mode. "member" (default) restricts
+    // the list to the caller's accessible set: own personal + org + agents of
+    // teams they belong to. Admins get the deleted counterpart of that set in
+    // the deleted view; everyone else keeps the active-only set, so a caller
+    // with delete-but-not-admin permission still sees an empty deleted list.
+    // Built-in rows bypass the accessible-set check — their visibility is
+    // governed by the built-in conditions above. "full" lifts the restriction
+    // for the agent types in fullVisibilityAgentTypes (admin oversight); rows
+    // of other queried types stay member-restricted.
+    const fullVisibilityTypes =
+      filters?.visibilityMode === "full"
+        ? (filters?.fullVisibilityAgentTypes ?? [])
+        : [];
+    const queriedTypes =
+      filters?.agentTypes ??
+      (filters?.agentType ? [filters.agentType] : AgentTypeSchema.options);
+    const memberRestrictedTypes = queriedTypes.filter(
+      (type) => !fullVisibilityTypes.includes(type),
+    );
+    if (userId && memberRestrictedTypes.length > 0) {
+      const accessibleAgentIds = await AgentModel.findAccessibleIdsForUser(
         userId,
-        false,
+        { status: isAgentAdmin ? (filters?.status ?? "active") : "active" },
       );
 
-      if (accessibleAgentIds.length === 0) {
-        return createPaginatedResult([], 0, pagination);
+      const memberVisible = accessibleAgentIds.length
+        ? or(
+            eq(schema.agentsTable.builtIn, true),
+            inArray(schema.agentsTable.id, accessibleAgentIds),
+          )
+        : eq(schema.agentsTable.builtIn, true);
+      const condition =
+        fullVisibilityTypes.length > 0
+          ? or(
+              inArray(schema.agentsTable.agentType, fullVisibilityTypes),
+              memberVisible,
+            )
+          : memberVisible;
+      if (condition) {
+        whereConditions.push(condition);
       }
-
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
     }
 
     const whereClause =
@@ -1312,7 +1314,10 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
-  static async findAccessibleIdsForUser(userId: string): Promise<string[]> {
+  static async findAccessibleIdsForUser(
+    userId: string,
+    options?: { status?: AgentRecordStatus },
+  ): Promise<string[]> {
     const rows = await db
       .selectDistinct({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
@@ -1329,7 +1334,7 @@ class AgentModel {
       )
       .where(
         and(
-          notDeleted(schema.agentsTable),
+          getAgentStatusCondition(options?.status ?? "active"),
           or(
             eq(schema.agentsTable.scope, "org"),
             and(

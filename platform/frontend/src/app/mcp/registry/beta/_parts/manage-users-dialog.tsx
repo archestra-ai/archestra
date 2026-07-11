@@ -153,7 +153,8 @@ export function ManageUsersContent({
   // servers (no catalogId filter) and keep those installed from this catalog.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
     useMcpServers();
-  const { data: catalogItems } = useInternalMcpCatalog({});
+  // adminView so an admin can manage connections of a foreign catalog entry.
+  const { data: catalogItems } = useInternalMcpCatalog({ adminView: true });
 
   const allServers = allServersUnfiltered.filter(
     (s) => s.catalogId === catalogId,

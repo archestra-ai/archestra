@@ -11,6 +11,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  AdminViewToggle,
+  isAdminViewEnabled,
+} from "@/components/admin-view-toggle";
+import {
   LabelFilterBadges,
   LabelKeyRowBase,
   LabelSelect,
@@ -95,8 +99,12 @@ export function InternalMCPCatalog({
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
 
+  const adminView = isAdminViewEnabled(searchParams);
   const { data: catalogItems } = useInternalMcpCatalog({
-    initialData,
+    // The server component fetches without adminView (member visibility), so
+    // its data must not seed the admin-view query.
+    initialData: adminView ? undefined : initialData,
+    adminView,
   });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
@@ -901,6 +909,9 @@ export function InternalMCPCatalog({
           />
         )}
         <RegistrySortMenu value={sort} onChange={setSort} />
+        <AdminViewToggle
+          adminPermission={{ mcpServerInstallation: ["admin"] }}
+        />
       </div>
       {hasLabelFilters && (
         <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />

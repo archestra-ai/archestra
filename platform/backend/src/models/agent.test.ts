@@ -8,6 +8,7 @@ import {
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { AgentTypeSchema } from "@/types";
 import AgentModel from "./agent";
 import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import MemberModel from "./member";
@@ -334,7 +335,7 @@ describe("AgentModel", () => {
       expect(agents).toHaveLength(3);
     });
 
-    test("admin 'All' view (no scope) hides team-oversight agents", async ({
+    test("member visibility hides team-oversight agents; full visibility shows them", async ({
       makeUser,
       makeOrganization,
       makeTeam,
@@ -360,8 +361,8 @@ describe("AgentModel", () => {
         scope: "team",
       });
 
-      // The unscoped "All" view shows an admin only the agents they can access:
-      // the team-shared agent for a team they aren't in is dropped (oversight).
+      // Member visibility (the default) shows an admin only the agents they
+      // can access: the team-shared agent for a team they aren't in is dropped.
       const all = await AgentModel.findAllPaginated(
         { limit: 50, offset: 0 },
         undefined,
@@ -374,15 +375,111 @@ describe("AgentModel", () => {
         "Org Agent",
       ]);
 
-      // Oversight stays reachable by explicitly picking that team under Team scope.
-      const teamView = await AgentModel.findAllPaginated(
+      // Member visibility applies in explicit scopes too: picking the foreign
+      // team directly still shows nothing without full visibility.
+      const memberTeamView = await AgentModel.findAllPaginated(
         { limit: 50, offset: 0 },
         undefined,
         { scope: "team", teamIds: [foreignTeam.id] },
         admin.id,
         true,
       );
-      expect(teamView.data.map((a) => a.name)).toEqual(["Foreign Team Agent"]);
+      expect(memberTeamView.data).toEqual([]);
+
+      // Full visibility (admin oversight) lifts the restriction.
+      const fullTeamView = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        {
+          scope: "team",
+          teamIds: [foreignTeam.id],
+          visibilityMode: "full",
+          fullVisibilityAgentTypes: [...AgentTypeSchema.options],
+        },
+        admin.id,
+        true,
+      );
+      expect(fullTeamView.data.map((a) => a.name)).toEqual([
+        "Foreign Team Agent",
+      ]);
+
+      // Full visibility also lifts the unscoped-"All" restriction.
+      const fullAll = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        {
+          visibilityMode: "full",
+          fullVisibilityAgentTypes: [...AgentTypeSchema.options],
+        },
+        admin.id,
+        true,
+      );
+      expect(fullAll.data.map((a) => a.name).sort()).toEqual([
+        "Foreign Team Agent",
+        "Mine Team Agent",
+        "Org Agent",
+      ]);
+    });
+
+    test("member visibility in the deleted view: admins see their own deleted agents, non-admins none", async ({
+      makeUser,
+    }) => {
+      const admin = await makeUser();
+      const other = await makeUser();
+
+      const ownDeleted = await AgentModel.create({
+        name: "Own Deleted",
+        teams: [],
+        scope: "personal",
+        authorId: admin.id,
+      });
+      const foreignDeleted = await AgentModel.create({
+        name: "Foreign Deleted",
+        teams: [],
+        scope: "personal",
+        authorId: other.id,
+      });
+      await AgentModel.delete(ownDeleted.id);
+      await AgentModel.delete(foreignDeleted.id);
+
+      // Member visibility, admin: the deleted counterpart of their accessible
+      // set — their own deleted agent, not the other user's.
+      const adminMember = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        { status: "deleted" },
+        admin.id,
+        true,
+      );
+      expect(adminMember.data.map((a) => a.name)).toEqual(["Own Deleted"]);
+
+      // Member visibility, non-admin (e.g. delete-but-not-admin permission):
+      // the accessible set stays active-only, so the deleted view is empty.
+      const nonAdminMember = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        { status: "deleted" },
+        admin.id,
+        false,
+      );
+      expect(nonAdminMember.data).toEqual([]);
+
+      // Full visibility: every deleted agent.
+      const full = await AgentModel.findAllPaginated(
+        { limit: 50, offset: 0 },
+        undefined,
+        {
+          status: "deleted",
+          visibilityMode: "full",
+          fullVisibilityAgentTypes: [...AgentTypeSchema.options],
+        },
+        admin.id,
+        true,
+      );
+      expect(full.data.map((a) => a.name).sort()).toEqual([
+        "Foreign Deleted",
+        "Own Deleted",
+      ]);
     });
 
     test("member only sees agents in their teams", async ({

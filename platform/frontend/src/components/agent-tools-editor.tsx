@@ -194,9 +194,11 @@ const AgentToolsEditorContent = forwardRef<
   const unassignTool = useUnassignTool();
 
   // Fetch catalog items (MCP servers in registry; the gateway dialog also opts
-  // in to assignable App backings via includeAppCatalogs).
+  // in to assignable App backings via includeAppCatalogs). adminView keeps
+  // foreign catalog metadata visible when an admin edits an oversight agent.
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog({
     includeApps: includeAppCatalogs,
+    adminView: true,
   });
 
   // Fetch all credentials grouped by catalog (for default credential on toggle)

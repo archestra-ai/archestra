@@ -56,9 +56,11 @@ export function ArchestraCatalogTab({
     category: "all",
   });
 
-  // Get catalog items for filtering (with live updates)
+  // Get catalog items for filtering (with live updates). adminView matches the
+  // parent's fetch (create dialog / clone page), keeping initialData's mode.
   const { data: catalogItems } = useInternalMcpCatalog({
     initialData: initialCatalogItems,
+    adminView: true,
   });
 
   // Fetch available categories

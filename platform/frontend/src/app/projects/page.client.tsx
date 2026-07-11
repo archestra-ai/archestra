@@ -19,6 +19,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  AdminViewToggle,
+  isAdminViewEnabled,
+} from "@/components/admin-view-toggle";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -81,7 +85,7 @@ function ProjectsList() {
   };
   const teamIds = csvParam("teamIds");
   const authorIds = csvParam("authorIds");
-  const excludeAuthorIds = csvParam("excludeAuthorIds");
+  const adminView = isAdminViewEnabled(searchParams);
   const {
     data,
     isPending,
@@ -92,7 +96,8 @@ function ProjectsList() {
     search,
     teamIds,
     authorIds,
-    excludeAuthorIds,
+    // Absent means member visibility server-side, so only send `true`.
+    adminView: adminView || undefined,
     toastOnError: false,
   });
   const {
@@ -117,11 +122,7 @@ function ProjectsList() {
   const togglePin = (project: ProjectListItem) =>
     pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
   const hasActiveFilter =
-    scope !== "all" ||
-    !!search ||
-    !!teamIds ||
-    !!authorIds ||
-    !!excludeAuthorIds;
+    scope !== "all" || !!search || !!teamIds || !!authorIds || adminView;
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
@@ -201,6 +202,7 @@ function ProjectsList() {
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder="Search projects" paramName="search" />
           <ProjectScopeFilter />
+          <AdminViewToggle adminPermission={{ project: ["admin"] }} />
         </div>
         {projects.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">

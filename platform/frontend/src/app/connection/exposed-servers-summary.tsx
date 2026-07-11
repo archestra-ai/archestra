@@ -34,7 +34,8 @@ export function ExposedServersSummary({
   className,
 }: ExposedServersSummaryProps) {
   const { data: gateway } = useProfile(gatewayId);
-  const { data: catalog } = useInternalMcpCatalog();
+  // adminView so the summary resolves servers of a foreign gateway's catalogs.
+  const { data: catalog } = useInternalMcpCatalog({ adminView: true });
 
   const servers = useMemo<ExposedServer[]>(() => {
     const tools = gateway?.tools ?? [];

@@ -64,16 +64,30 @@ function catalogMutationError(body: {
  * the gateway capabilities picker) to the result. Apps stay out of the registry,
  * so registry surfaces omit it. The backend only honors it for callers with
  * `app:read`, so a caller without that permission silently gets the app-free list.
+ *
+ * `adminView: true` (mcpServerInstallation:admin oversight, no-op for everyone
+ * else) lists every catalog entry instead of only the caller's accessible ones —
+ * pass it from admin machinery that resolves or edits possibly-foreign entries,
+ * and from the registry's "View as admin" toggle. `initialData` must have been
+ * fetched with the same `adminView` value: it seeds this mode's cache entry.
  */
 export function useInternalMcpCatalog(
-  params?: InternalMcpCatalogParams & { includeApps?: boolean },
+  params?: InternalMcpCatalogParams & {
+    includeApps?: boolean;
+    adminView?: boolean;
+  },
 ) {
   const includeApps = params?.includeApps ?? false;
+  const adminView = params?.adminView ?? false;
   return useQuery({
-    queryKey: includeApps ? ["mcp-catalog", "with-apps"] : ["mcp-catalog"],
+    queryKey: ["mcp-catalog", { includeApps, adminView }],
     queryFn: async () => {
+      const query = {
+        ...(includeApps ? { includeApps } : {}),
+        ...(adminView ? { adminView } : {}),
+      };
       const { data, error } = await getInternalMcpCatalog(
-        includeApps ? { query: { includeApps } } : {},
+        Object.keys(query).length > 0 ? { query } : {},
       );
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

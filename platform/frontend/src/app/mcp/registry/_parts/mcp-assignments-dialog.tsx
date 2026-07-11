@@ -70,7 +70,9 @@ export function McpAssignmentsDialog({
   // Fetch all tools for this MCP server
   const { data: allTools = [], isLoading: isLoadingTools } =
     useCatalogTools(catalogId);
-  const { data: catalogItems = [] } = useInternalMcpCatalog();
+  const { data: catalogItems = [] } = useInternalMcpCatalog({
+    adminView: true,
+  });
   const catalogItem = useMemo(
     () => catalogItems.find((item) => item.id === catalogId) ?? null,
     [catalogId, catalogItems],

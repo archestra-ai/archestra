@@ -35867,19 +35867,7 @@
             "in": "query",
             "name": "authorIds",
             "required": false,
-            "description": "Filter by author user IDs (comma-separated). Admin-only, only used when scope=personal."
-          },
-          {
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "in": "query",
-            "name": "excludeAuthorIds",
-            "required": false,
-            "description": "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal."
+            "description": "Filter by author user IDs (comma-separated). Only honored when adminView=true."
           },
           {
             "schema": {
@@ -35895,9 +35883,9 @@
               "type": "boolean"
             },
             "in": "query",
-            "name": "excludeOtherPersonalAgents",
+            "name": "adminView",
             "required": false,
-            "description": "Hide personal agents owned by other users. Admin-only; no-op for non-admins."
+            "description": "Admin visibility toggle. When true, lifts the member-visibility restriction for the queried agent types the caller administers (shows other users' personal agents and all teams' agents). Default false: the list is limited to the caller's accessible set. No-op for non-admins."
           },
           {
             "schema": {
@@ -145317,6 +145305,15 @@
             "in": "query",
             "name": "includeApps",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "adminView",
+            "required": false,
+            "description": "Admin visibility toggle. When true, lists every catalog entry (admin oversight). Default false: only entries the caller can access (own personal + org + their teams'). No-op without mcpServerInstallation:admin."
           }
         ],
         "responses": {
@@ -216058,7 +216055,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. `adminView=true` (requires project:admin, no-op otherwise) lists ALL org projects instead of only the caller's accessible ones and honors `authorIds` owner narrowing. `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and the chats inside them",
         "parameters": [
           {
             "schema": {
@@ -216103,19 +216100,16 @@
             "in": "query",
             "name": "authorIds",
             "required": false,
-            "description": "Owner user IDs (comma-separated). Admin-only; used with scope=personal."
+            "description": "Owner user IDs (comma-separated). Only honored when adminView=true."
           },
           {
             "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+              "type": "boolean"
             },
             "in": "query",
-            "name": "excludeAuthorIds",
+            "name": "adminView",
             "required": false,
-            "description": "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal."
+            "description": "Admin visibility toggle. When true, lists every org project (admin oversight). Default false: only the caller's accessible projects. No-op without project:admin."
           }
         ],
         "responses": {

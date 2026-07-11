@@ -12,6 +12,10 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2AConnectionInstructions } from "@/components/a2a-connection-instructions";
+import {
+  AdminViewToggle,
+  isAdminViewEnabled,
+} from "@/components/admin-view-toggle";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -125,7 +129,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | null;
   const teamIdsFromUrl = searchParams.get("teamIds");
   const authorIdsFromUrl = searchParams.get("authorIds");
-  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const adminViewFromUrl = isAdminViewEnabled(searchParams);
   const labelsFromUrl = searchParams.get("labels");
   const statusFromUrl = searchParams.get("status") as
     | "active"
@@ -152,15 +156,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     scope: scopeFromUrl || undefined,
     teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
     authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
-    excludeAuthorIds: excludeAuthorIdsFromUrl
-      ? excludeAuthorIdsFromUrl.split(",")
-      : undefined,
-    excludeOtherPersonalAgents:
-      scopeFromUrl !== "personal" &&
-      !authorIdsFromUrl &&
-      !excludeAuthorIdsFromUrl
-        ? true
-        : undefined,
+    // Absent means member visibility server-side, so only send `true` — that
+    // also keeps the SSR initialData (fetched without adminView) usable.
+    adminView: adminViewFromUrl || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   });
@@ -322,7 +320,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       scope: null,
       teamIds: null,
       authorIds: null,
-      excludeAuthorIds: null,
+      adminView: null,
       labels: null,
       status: null,
     });
@@ -513,12 +511,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 />
                 <AgentScopeFilter
                   showBuiltIn
-                  ownerLabelPlural="agents"
                   adminPermission={{ agent: ["admin"] }}
                 />
                 <AgentDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
+                <AdminViewToggle adminPermission={{ agent: ["admin"] }} />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint

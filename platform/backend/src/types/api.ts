@@ -7,6 +7,16 @@ export const UuidIdSchema = z.uuidv4();
 
 export const UuidOrSlugSchema = z.string().min(1);
 
+/**
+ * Boolean query-string flag: only the literal string "true" is true; "false",
+ * absence, or anything else is false. Never use `z.coerce.boolean()` for query
+ * params — it coerces every non-empty string, including "false", to true.
+ */
+export const QueryBooleanSchema = z.preprocess(
+  (val) => (typeof val === "string" ? val === "true" : val),
+  z.boolean(),
+);
+
 export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
   {
     error: {

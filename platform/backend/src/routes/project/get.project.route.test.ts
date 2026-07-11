@@ -95,11 +95,11 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     actingUser = admin;
 
-    // The other member's PRIVATE project surfaces for the admin under
-    // scope=personal, tagged as oversight ("admin") with the owner's name.
+    // The other member's PRIVATE project surfaces for the admin only in the
+    // admin view, tagged as oversight ("admin") with the owner's name.
     const personal = await app.inject({
       method: "GET",
-      url: "/api/projects?scope=personal",
+      url: "/api/projects?scope=personal&adminView=true",
     });
     const items =
       personal.json<

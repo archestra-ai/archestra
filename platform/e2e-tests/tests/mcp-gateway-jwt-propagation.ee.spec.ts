@@ -428,18 +428,23 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       // STEP 4a: Create a restricted environment that lets this server's pod
       // reach the in-cluster Keycloak. The always-on egress floor (for the
       // unrestricted/built-in default) blocks the reserved/private ranges for SSRF
-      // protection — which includes Keycloak's ClusterIP in kind's Service CIDR
-      // (10.96.0.0/12). This server validates the propagated JWT by fetching JWKS
-      // from that in-cluster IdP, so it needs an explicit `restricted` allowlist
-      // for that range — the product's intended mechanism for a private IdP. (In
-      // production the IdP is external/public, which the floor already allows.)
+      // protection. This server validates the propagated JWT by fetching JWKS from
+      // the in-cluster IdP, so it needs an explicit `restricted` allowlist for the
+      // cluster's internal ranges — the product's intended mechanism for a private
+      // IdP. (In production the IdP is external/public, which the floor allows.)
+      //
+      // The allowlist is the kind CI cluster's default Pod + Service CIDRs: the
+      // pod connects to Keycloak's Service ClusterIP, which kube-proxy DNATs to the
+      // backing pod IP before the NetworkPolicy egress check (see
+      // ssrf-protection.spec), so the Pod CIDR (10.244.0.0/16) is the one that
+      // actually has to match; the Service CIDR is included for robustness.
       const environmentResponse = await createEnvironment(request, {
         name: `jwt-prop-egress-${Date.now()}`,
         networkPolicy: {
           egressMode: "restricted",
           domainPreset: "none",
           allowedDomains: [],
-          allowedCidrs: ["10.96.0.0/12"],
+          allowedCidrs: ["10.244.0.0/16", "10.96.0.0/16"],
         },
       });
       environmentId = (await environmentResponse.json()).id;

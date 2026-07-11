@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
@@ -34,9 +34,6 @@ export function ProjectScopeFilter() {
   const teamIdsParam = searchParams.get("teamIds");
   const authorIdsParam = searchParams.get("authorIds");
   const adminView = isAdminViewEnabled(searchParams);
-
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
 
   const selectedTeamIds = useMemo(
     () => (teamIdsParam ? teamIdsParam.split(",") : []),
@@ -78,7 +75,6 @@ export function ProjectScopeFilter() {
         scope: value === "all" ? null : value,
         teamIds: null,
         authorIds: null,
-        excludeAuthorIds: null,
       });
     },
     [updateUrlParams],
@@ -106,10 +102,12 @@ export function ProjectScopeFilter() {
   );
   const userOptions = useMemo(
     () =>
-      (members ?? [])
-        .filter((m) => m.id !== currentUserId)
-        .map((m) => ({ userId: m.id, name: m.name, email: m.email })),
-    [members, currentUserId],
+      (members ?? []).map((m) => ({
+        userId: m.id,
+        name: m.name,
+        email: m.email,
+      })),
+    [members],
   );
 
   return (

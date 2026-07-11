@@ -309,6 +309,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFromUrl ||
+    teamIdsFromUrl ||
+    authorIdsFromUrl ||
+    adminViewFromUrl ||
     labelsFromUrl ||
     isDeletedView
   );

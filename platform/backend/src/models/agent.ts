@@ -920,9 +920,13 @@ class AgentModel {
       filters?.visibilityMode === "full"
         ? (filters?.fullVisibilityAgentTypes ?? [])
         : [];
-    const queriedTypes =
-      filters?.agentTypes ??
-      (filters?.agentType ? [filters.agentType] : AgentTypeSchema.options);
+    // An empty agentTypes array must not be mistaken for "no type filter":
+    // it would yield zero member-restricted types and skip access control.
+    const queriedTypes = filters?.agentTypes?.length
+      ? filters.agentTypes
+      : filters?.agentType
+        ? [filters.agentType]
+        : AgentTypeSchema.options;
     const memberRestrictedTypes = queriedTypes.filter(
       (type) => !fullVisibilityTypes.includes(type),
     );

@@ -17,9 +17,10 @@ export function isAdminViewEnabled(searchParams: URLSearchParams): boolean {
 
 /**
  * Builds the URL params for toggling the admin view. ON sets
- * `adminView=true`; OFF removes it along with the narrowing filters the
- * non-admin view can't display (`authorIds`, `excludeAuthorIds`,
- * `teamIds`). Both directions reset pagination. Does not mutate `current`.
+ * `adminView=true`; OFF removes it along with the narrowing filters that were
+ * picked under it and may reference users or teams the member view can't
+ * display (`authorIds`, `excludeAuthorIds`, `teamIds`). Both directions reset
+ * pagination. Does not mutate `current`.
  */
 export function buildAdminViewToggleParams(
   current: URLSearchParams,

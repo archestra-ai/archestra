@@ -427,18 +427,14 @@ describe("AgentModel", () => {
       const admin = await makeUser();
       const other = await makeUser();
 
-      const ownDeleted = await AgentModel.create({
-        name: "Own Deleted",
-        teams: [],
-        scope: "personal",
-        authorId: admin.id,
-      });
-      const foreignDeleted = await AgentModel.create({
-        name: "Foreign Deleted",
-        teams: [],
-        scope: "personal",
-        authorId: other.id,
-      });
+      const ownDeleted = await AgentModel.create(
+        { name: "Own Deleted", teams: [], scope: "personal" },
+        admin.id,
+      );
+      const foreignDeleted = await AgentModel.create(
+        { name: "Foreign Deleted", teams: [], scope: "personal" },
+        other.id,
+      );
       await AgentModel.delete(ownDeleted.id);
       await AgentModel.delete(foreignDeleted.id);
 

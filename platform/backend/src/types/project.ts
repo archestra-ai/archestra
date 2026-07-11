@@ -25,8 +25,8 @@ export type ProjectViewerRole = z.infer<typeof ProjectViewerRoleSchema>;
  * - `personal` — private (no share),
  * - `team`     — shared with teams (`visibility=team`; narrow with `teamIds`),
  * - `org`      — shared org-wide (`visibility=organization`).
- * Omitted = all the caller can see. Admins additionally filter `personal` by
- * owner via `authorIds` / `excludeAuthorIds` (the "My / Other users" sub-filter).
+ * Omitted = all the caller can see. `adminView=true` (project:admin) lists
+ * every org project and honors `authorIds` owner narrowing.
  */
 export const ProjectListScopeSchema = z.enum(["personal", "team", "org"]);
 export type ProjectListScope = z.infer<typeof ProjectListScopeSchema>;

@@ -370,6 +370,8 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     deleteIdentityProvider,
     createMcpCatalogItem,
     deleteMcpCatalogItem,
+    createEnvironment,
+    deleteEnvironment,
     installMcpServer,
     uninstallMcpServer,
     waitForAgentTool,
@@ -392,6 +394,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
     let profileId: string | undefined;
     let catalogId: string | undefined;
     let serverId: string | undefined;
+    let environmentId: string | undefined;
     const catalogName = `jwks-local-k8s-test-${Date.now()}`;
 
     try {
@@ -422,7 +425,27 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         agentType: "mcp_gateway",
       });
 
-      // STEP 4: Register the JWKS MCP server as a LOCAL catalog item
+      // STEP 4a: Create a restricted environment that lets this server's pod
+      // reach the in-cluster Keycloak. The always-on egress floor (for the
+      // unrestricted/built-in default) blocks the reserved/private ranges for SSRF
+      // protection — which includes Keycloak's ClusterIP in kind's Service CIDR
+      // (10.96.0.0/12). This server validates the propagated JWT by fetching JWKS
+      // from that in-cluster IdP, so it needs an explicit `restricted` allowlist
+      // for that range — the product's intended mechanism for a private IdP. (In
+      // production the IdP is external/public, which the floor already allows.)
+      const environmentResponse = await createEnvironment(request, {
+        name: `jwt-prop-egress-${Date.now()}`,
+        networkPolicy: {
+          egressMode: "restricted",
+          domainPreset: "none",
+          allowedDomains: [],
+          allowedCidrs: ["10.96.0.0/12"],
+        },
+      });
+      environmentId = (await environmentResponse.json()).id;
+
+      // STEP 4b: Register the JWKS MCP server as a LOCAL catalog item, bound to
+      // the environment above so its pod inherits the Keycloak allowlist.
       // Uses the same Docker image as the Helm-deployed instance but runs
       // as a K8s-orchestrated server via streamable-http transport.
       const catalogResponse = await createMcpCatalogItem(request, {
@@ -430,6 +453,7 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
         description:
           "E2E test: Local K8s JWKS MCP server for JWT propagation testing",
         serverType: "local",
+        environmentId,
         localConfig: {
           dockerImage: MCP_SERVER_JWKS_DOCKER_IMAGE,
           transportType: "streamable-http",
@@ -564,6 +588,10 @@ test.describe("MCP Gateway - JWT Propagation to Upstream MCP Server", () => {
       }
       if (catalogId) {
         await deleteMcpCatalogItem(request, catalogId);
+      }
+      // Delete the environment after the catalog item that references it.
+      if (environmentId) {
+        await deleteEnvironment(request, environmentId);
       }
       await deleteIdentityProvider(request, identityProviderId);
     }

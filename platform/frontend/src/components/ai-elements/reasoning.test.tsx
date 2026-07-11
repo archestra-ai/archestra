@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { Reasoning, ReasoningTrigger } from "./reasoning";
 
 describe("Reasoning trigger label", () => {
@@ -22,5 +22,30 @@ describe("Reasoning trigger label", () => {
     );
 
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
+  });
+
+  it("switches to the measured duration once streaming ends", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(
+        <Reasoning isStreaming>
+          <ReasoningTrigger />
+        </Reasoning>,
+      );
+      expect(screen.getByText("Thinking...")).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      rerender(
+        <Reasoning isStreaming={false}>
+          <ReasoningTrigger />
+        </Reasoning>,
+      );
+
+      expect(screen.getByText(/Thought for 3 seconds/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

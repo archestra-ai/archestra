@@ -29,7 +29,7 @@ vi.mock("@/components/ai-elements/message", () => ({
 
 vi.mock("@/components/ai-elements/reasoning", () => ({
   Reasoning: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+    <div data-testid="reasoning">{children}</div>
   ),
   ReasoningContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -148,6 +148,27 @@ describe("MessageThread", () => {
 
     expect(screen.getAllByTestId("message-bubble")).toHaveLength(1);
     expect(screen.getByText("All done.")).toBeInTheDocument();
+  });
+
+  it("does not render an accordion for empty reasoning parts", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "" },
+          { type: "reasoning", text: "  " },
+          { type: "reasoning", text: "actual reasoning" },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    expect(screen.getAllByTestId("reasoning")).toHaveLength(1);
+    expect(screen.getByText("actual reasoning")).toBeInTheDocument();
+    expect(screen.getByText("the answer")).toBeInTheDocument();
   });
 
   it("renders persisted chat errors between messages by timestamp", () => {

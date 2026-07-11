@@ -46,9 +46,6 @@ export function ProjectScopeFilter() {
 
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  // Admins browsing without the admin view only see resources of teams they
-  // belong to, so scope the picker to membership; the admin view (and the
-  // unchanged non-admin path, where `mine` has no effect) lists all teams.
   // Member view: membership-scoped picker for everyone; admin view: all teams.
   const { data: teams } = useTeams({
     enabled: !!canReadTeams,

@@ -349,6 +349,7 @@ export function handleError(
   // Extract status code from error, checking multiple common property names
   // and ensuring the value is a valid number (not undefined/null)
   let statusCode: number = 500;
+  let hasExplicitStatus = false;
   if (error instanceof Error) {
     const errorObj = error as Error & {
       status?: number;
@@ -356,8 +357,24 @@ export function handleError(
     };
     if (typeof errorObj.status === "number") {
       statusCode = errorObj.status;
+      hasExplicitStatus = true;
     } else if (typeof errorObj.statusCode === "number") {
       statusCode = errorObj.statusCode;
+      hasExplicitStatus = true;
+    }
+  }
+
+  // A connection failure or timeout reaching the upstream provider carries no
+  // HTTP status (the request never got a response), so it would otherwise fall
+  // through as a generic 500 and be captured as a server exception. That's the
+  // upstream's/network's failure, not ours — reclassify it as a gateway error
+  // (504 timeout, 502 connection) so the central error handler logs it but keeps
+  // it out of error tracking (it already excludes 502/504), while the client
+  // still sees a retryable 5xx.
+  if (!hasExplicitStatus) {
+    const upstreamStatus = classifyTransientUpstreamError(error);
+    if (upstreamStatus !== undefined) {
+      statusCode = upstreamStatus;
     }
   }
 
@@ -401,6 +418,82 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   throw new ApiError(statusCode, errorMessage, internalCode);
+}
+
+/**
+ * Network errno codes (libuv + undici) for a connection to the upstream provider
+ * that failed or was dropped before an HTTP response arrived.
+ */
+const UPSTREAM_CONNECTION_ERRNOS = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ECONNABORTED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+]);
+
+/** Network errno codes for a connection that specifically *timed out*. */
+const UPSTREAM_TIMEOUT_ERRNOS = new Set([
+  "ETIMEDOUT",
+  "ESOCKETTIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+/**
+ * When an LLM SDK call fails to reach the upstream provider — a dropped/refused
+ * connection or a timeout, both with no HTTP status — classify it as an upstream
+ * gateway failure: 504 for a timeout, 502 for any other connection failure.
+ * Returns undefined for anything that isn't a recognizable connection failure so
+ * genuine 500s (our own bugs) are left alone.
+ *
+ * Matches the OpenAI/Anthropic SDK `APIConnectionError` ("Connection error.") and
+ * `APIConnectionTimeoutError` ("Request timed out."), plus the underlying Node
+ * `fetch`/libuv/undici errno codes those wrap, across providers.
+ */
+function classifyTransientUpstreamError(error: unknown): 502 | 504 | undefined {
+  if (!(error instanceof Error)) return undefined;
+
+  const { name, message } = error;
+  const codes = collectErrorCodes(error);
+
+  const isTimeout =
+    name === "APIConnectionTimeoutError" ||
+    /timed out|timeout/i.test(message) ||
+    codes.some((code) => UPSTREAM_TIMEOUT_ERRNOS.has(code));
+  if (isTimeout) return 504;
+
+  const isConnectionFailure =
+    name === "APIConnectionError" ||
+    /^connection error\.?$/i.test(message) ||
+    /fetch failed|socket hang up|network error|connection (?:reset|refused|closed|aborted)|terminated/i.test(
+      message,
+    ) ||
+    codes.some((code) => UPSTREAM_CONNECTION_ERRNOS.has(code));
+  if (isConnectionFailure) return 502;
+
+  return undefined;
+}
+
+/**
+ * Gather candidate errno strings from an error and its `cause` chain — Node's
+ * `fetch` wraps the real libuv error as `cause`, sometimes a level or two deep.
+ */
+function collectErrorCodes(error: Error): string[] {
+  const codes: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth++) {
+    const code = (current as Error & { code?: unknown }).code;
+    if (typeof code === "string") codes.push(code);
+    current = (current as Error & { cause?: unknown }).cause;
+  }
+  return codes;
 }
 
 /**

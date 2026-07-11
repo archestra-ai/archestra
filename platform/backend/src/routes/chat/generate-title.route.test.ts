@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import ModelModel from "@/models/model";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -182,6 +183,53 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().title).toBe("Friendly greeting");
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+  });
+
+  test("returns 200 (not 500) when the conversation is deleted mid-generation", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Title generation is a slow async LLM call; the user can delete the
+    // conversation before the generated title is written back. That benign race
+    // used to raise a 500 ("Failed to update conversation with title") which was
+    // captured as a server exception — it must now fall through gracefully.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeConversationWithExchange(agent.id);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+
+    // Delete the conversation from inside the mocked generation, reproducing a
+    // concurrent delete landing while the title LLM call is in flight — right
+    // before the route writes the title back.
+    mockGenerateText.mockImplementation(async () => {
+      await ConversationModel.delete(
+        conversation.id,
+        currentUser.id,
+        organizationId,
+      );
+      return { text: "A title" } as Awaited<ReturnType<typeof generateText>>;
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
   });
 });

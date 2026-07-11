@@ -2781,7 +2781,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!updatedConversation) {
-        throw new ApiError(500, "Failed to update conversation with title");
+        // No row matched id + user + org, even though findById succeeded at the
+        // start of this handler — the conversation was deleted during the async
+        // title generation (a slow LLM call). That's a benign race, not a server
+        // fault: title generation is best-effort, so fall through gracefully like
+        // the other skip branches above instead of raising a 500.
+        logger.info(
+          { conversationId: id },
+          "Skipping title update - conversation no longer exists (deleted during generation)",
+        );
+        return reply.send(conversation);
       }
 
       return reply.send(updatedConversation);

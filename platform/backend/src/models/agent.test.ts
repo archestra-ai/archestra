@@ -394,7 +394,7 @@ describe("AgentModel", () => {
           scope: "team",
           teamIds: [foreignTeam.id],
           visibilityMode: "full",
-          fullVisibilityAgentTypes: [...AgentTypeSchema.options],
+          administrableAgentTypes: [...AgentTypeSchema.options],
         },
         admin.id,
         true,
@@ -409,7 +409,7 @@ describe("AgentModel", () => {
         undefined,
         {
           visibilityMode: "full",
-          fullVisibilityAgentTypes: [...AgentTypeSchema.options],
+          administrableAgentTypes: [...AgentTypeSchema.options],
         },
         admin.id,
         true,
@@ -467,7 +467,7 @@ describe("AgentModel", () => {
         {
           status: "deleted",
           visibilityMode: "full",
-          fullVisibilityAgentTypes: [...AgentTypeSchema.options],
+          administrableAgentTypes: [...AgentTypeSchema.options],
         },
         admin.id,
         true,
@@ -2370,7 +2370,11 @@ describe("AgentModel", () => {
       const builtInResults = await AgentModel.findAllPaginated(
         { limit: 20, offset: 0 },
         { sortBy: "createdAt", sortDirection: "desc" },
-        { agentType: "agent", scope: "built_in" },
+        {
+          agentType: "agent",
+          scope: "built_in",
+          administrableAgentTypes: ["agent"],
+        },
         admin.id,
         true,
       );

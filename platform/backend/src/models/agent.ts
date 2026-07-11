@@ -795,15 +795,18 @@ class AgentModel {
       authorIds?: string[];
       labels?: Record<string, string[]>;
       status?: AgentRecordStatus;
+      /** Restrict to one organization's agents. Pass on every tenant-scoped call. */
+      organizationId?: string;
       /**
        * Access-control mode. "member" (the fail-closed default) restricts the
        * list to the caller's accessible set: own personal + org + agents of
-       * teams they belong to (built-ins keep their own gating). "full" lifts
-       * that restriction for the agent types in `fullVisibilityAgentTypes`
-       * (admin oversight); rows of other queried types stay member-restricted.
+       * teams they belong to. "full" lifts that restriction for the agent
+       * types in `administrableAgentTypes` (admin oversight); rows of other
+       * queried types stay member-restricted. Built-in rows are visible only
+       * for administrable types, in either mode.
        */
       visibilityMode?: "member" | "full";
-      fullVisibilityAgentTypes?: AgentType[];
+      administrableAgentTypes?: AgentType[];
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -817,6 +820,12 @@ class AgentModel {
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
     ];
+
+    if (filters?.organizationId) {
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, filters.organizationId),
+      );
+    }
 
     // Add name filter if provided
     if (filters?.name) {
@@ -852,9 +861,28 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
 
-    // Hide built-in agents from non-admin users
-    if (!isAgentAdmin) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+    // An empty agentTypes array must not be mistaken for "no type filter":
+    // it would yield zero member-restricted types and skip access control.
+    const queriedTypes = filters?.agentTypes?.length
+      ? filters.agentTypes
+      : filters?.agentType
+        ? [filters.agentType]
+        : AgentTypeSchema.options;
+    const administrableTypes = filters?.administrableAgentTypes ?? [];
+
+    // Built-in rows are visible only for agent types the caller administers —
+    // per type, so a mixed-type query grants no built-in visibility for a type
+    // the caller merely reads.
+    if (!queriedTypes.every((type) => administrableTypes.includes(type))) {
+      const builtInCondition = administrableTypes.length
+        ? or(
+            eq(schema.agentsTable.builtIn, false),
+            inArray(schema.agentsTable.agentType, administrableTypes),
+          )
+        : eq(schema.agentsTable.builtIn, false);
+      if (builtInCondition) {
+        whereConditions.push(builtInCondition);
+      }
     }
 
     // Add teamIds filter if provided (filter team-scoped agents by specific teams)
@@ -912,21 +940,12 @@ class AgentModel {
     // teams they belong to. Admins get the deleted counterpart of that set in
     // the deleted view; everyone else keeps the active-only set, so a caller
     // with delete-but-not-admin permission still sees an empty deleted list.
-    // Built-in rows bypass the accessible-set check — their visibility is
-    // governed by the built-in conditions above. "full" lifts the restriction
-    // for the agent types in fullVisibilityAgentTypes (admin oversight); rows
-    // of other queried types stay member-restricted.
+    // Built-in rows of administrable types bypass the accessible-set check —
+    // their visibility is governed by the built-in condition above. "full"
+    // lifts the restriction for the administrable types (admin oversight);
+    // rows of other queried types stay member-restricted.
     const fullVisibilityTypes =
-      filters?.visibilityMode === "full"
-        ? (filters?.fullVisibilityAgentTypes ?? [])
-        : [];
-    // An empty agentTypes array must not be mistaken for "no type filter":
-    // it would yield zero member-restricted types and skip access control.
-    const queriedTypes = filters?.agentTypes?.length
-      ? filters.agentTypes
-      : filters?.agentType
-        ? [filters.agentType]
-        : AgentTypeSchema.options;
+      filters?.visibilityMode === "full" ? administrableTypes : [];
     const memberRestrictedTypes = queriedTypes.filter(
       (type) => !fullVisibilityTypes.includes(type),
     );
@@ -936,19 +955,34 @@ class AgentModel {
         { status: isAgentAdmin ? (filters?.status ?? "active") : "active" },
       );
 
-      const memberVisible = accessibleAgentIds.length
-        ? or(
+      const builtInVisible = administrableTypes.length
+        ? and(
             eq(schema.agentsTable.builtIn, true),
-            inArray(schema.agentsTable.id, accessibleAgentIds),
+            inArray(schema.agentsTable.agentType, administrableTypes),
           )
-        : eq(schema.agentsTable.builtIn, true);
+        : undefined;
+      const visibleConditions: SQL[] = [];
+      if (builtInVisible) {
+        visibleConditions.push(builtInVisible);
+      }
+      if (accessibleAgentIds.length) {
+        visibleConditions.push(
+          inArray(schema.agentsTable.id, accessibleAgentIds),
+        );
+      }
+      if (fullVisibilityTypes.length) {
+        visibleConditions.push(
+          inArray(schema.agentsTable.agentType, fullVisibilityTypes),
+        );
+      }
+      // No visible condition at all means the caller can access nothing.
+      if (visibleConditions.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
       const condition =
-        fullVisibilityTypes.length > 0
-          ? or(
-              inArray(schema.agentsTable.agentType, fullVisibilityTypes),
-              memberVisible,
-            )
-          : memberVisible;
+        visibleConditions.length === 1
+          ? visibleConditions[0]
+          : or(...visibleConditions);
       if (condition) {
         whereConditions.push(condition);
       }

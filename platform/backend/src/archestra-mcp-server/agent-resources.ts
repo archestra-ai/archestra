@@ -408,6 +408,7 @@ export async function handleGetResource<
         {
           name: args.name,
           agentType: expectedType,
+          organizationId: context.organizationId,
           // Member visibility: only the caller's accessible agents. swap_agent
           // is the primary Archestra MCP use-case and requires only the
           // caller's own personal agents to be visible, even though admins can

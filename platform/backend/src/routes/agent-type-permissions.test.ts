@@ -1,5 +1,10 @@
-import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+} from "@archestra/shared";
 import { vi } from "vitest";
+import { AgentModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -312,6 +317,64 @@ describe("agent type permission isolation (routes)", () => {
         expect(ids).toContain(foreignProxy.id);
         // …but profile rows stay member-restricted.
         expect(ids).not.toContain(foreignProfile.id);
+      } finally {
+        await memberApp.close();
+      }
+    });
+
+    test("built-in visibility is scoped to the administered types in a mixed-type query", async ({
+      makeCustomRole,
+      makeMember,
+    }) => {
+      const builtIn = await AgentModel.create({
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        organizationId,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: "You are a policy configuration subagent.",
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+        teams: [],
+        labels: [],
+        knowledgeBaseIds: [],
+        connectorIds: [],
+      });
+
+      // llmProxy admin, but only a reader of the `agent` resource: querying
+      // both types with scope=built_in must not surface built-in agents.
+      await makeCustomRole(organizationId, {
+        role: "proxy_admin_agent_reader",
+        permission: {
+          llmProxy: ["read", "create", "update", "delete", "admin"],
+          agent: ["read"],
+        },
+      });
+      await makeMember(memberUser.id, organizationId, {
+        role: "proxy_admin_agent_reader",
+      });
+      const memberApp = await createAppForUser(memberUser);
+
+      try {
+        const partialAdmin = await memberApp.inject({
+          method: "GET",
+          url: "/api/agents?agentTypes=agent,llm_proxy&scope=built_in&limit=100",
+        });
+        expect(partialAdmin.statusCode).toBe(200);
+        expect(
+          partialAdmin.json().data.map((a: { id: string }) => a.id),
+        ).not.toContain(builtIn.id);
+
+        // A real agent admin keeps built-in visibility.
+        const adminResponse = await app.inject({
+          method: "GET",
+          url: "/api/agents?agentTypes=agent,llm_proxy&scope=built_in&limit=100",
+        });
+        expect(adminResponse.statusCode).toBe(200);
+        expect(
+          adminResponse.json().data.map((a: { id: string }) => a.id),
+        ).toContain(builtIn.id);
       } finally {
         await memberApp.close();
       }

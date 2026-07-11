@@ -264,6 +264,7 @@ const registry = defineArchestraTools([
           undefined,
           {
             agentType: "agent",
+            organizationId: context.organizationId,
             ...(args.name ? { name: args.name } : {}),
             // Member visibility: only the caller's accessible agents.
             // swap_agent is the primary Archestra MCP use-case and requires

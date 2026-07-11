@@ -997,6 +997,47 @@ describe("agent routes", () => {
       expect(ignoredNames).not.toContain(`Other Personal ${suffix}`);
     });
 
+    test("agents from another organization are never listed", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherOrg = await makeOrganization();
+      await makeAgent({
+        name: `Foreign Org Agent ${suffix}`,
+        organizationId: otherOrg.id,
+        scope: "org",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Own Org Agent ${suffix}`,
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+
+      const query = `limit=50&offset=0&name=${suffix}`;
+      for (const url of [
+        `/api/agents?${query}`,
+        `/api/agents?${query}&adminView=true`,
+        `/api/agents?${query}&adminView=true&scope=org`,
+      ]) {
+        const response = await app.inject({ method: "GET", url });
+        expect(response.statusCode).toBe(200);
+        const names = response.json().data.map((a: { name: string }) => a.name);
+        expect(names).toContain(`Own Org Agent ${suffix}`);
+        expect(names).not.toContain(`Foreign Org Agent ${suffix}`);
+      }
+    });
+
+    test("adminView rejects values other than true/false", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/agents?limit=10&offset=0&adminView=garbage",
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
     test("adminView is a no-op for a non-admin member", async ({
       makeAgent,
       makeUser,

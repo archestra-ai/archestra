@@ -188,10 +188,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             teamIds,
             // Owner narrowing only exists in the admin oversight view.
             authorIds: fullVisibility ? authorIds : undefined,
+            organizationId,
             visibilityMode: fullVisibility ? "full" : "member",
-            fullVisibilityAgentTypes: fullVisibility
-              ? administrableTypes
-              : undefined,
+            administrableAgentTypes: administrableTypes,
             labels: parseLabelsParam(labels),
             status,
           },

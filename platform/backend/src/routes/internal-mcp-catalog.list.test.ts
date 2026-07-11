@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import {
+  hasZodFastifySchemaValidationErrors,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -33,6 +34,12 @@ describe("GET /api/internal_mcp_catalog", () => {
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
     app.setErrorHandler((error, _request, reply) => {
+      // Mirror the real server's 400 for schema validation failures.
+      if (hasZodFastifySchemaValidationErrors(error)) {
+        return reply.status(400).send({
+          error: { message: error.message, type: "api_validation_error" },
+        });
+      }
       if (error instanceof ApiError) {
         return reply.status(error.statusCode).send({
           error: { message: error.message, type: error.type },
@@ -122,20 +129,30 @@ describe("GET /api/internal_mcp_catalog", () => {
     );
 
     // Act as a different non-admin member: hasPermission resolves the admin
-    // probe to false, so findAll is scoped to the caller's accessible items.
+    // probe to false, so findAll is scoped to the caller's accessible items —
+    // with or without adminView=true, which is a no-op without the permission.
     const member = await makeUser();
     await makeMember(member.id, organizationId, { role: "member" });
     user = member;
     mockHasPermission.mockResolvedValue({ success: false, error: null });
 
+    for (const url of [
+      "/api/internal_mcp_catalog",
+      "/api/internal_mcp_catalog?adminView=true",
+    ]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      const ids = response.json().map((item: { id: string }) => item.id);
+      expect(ids).not.toContain(personal.id);
+    }
+  });
+
+  test("adminView rejects values other than true/false", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/internal_mcp_catalog",
+      url: "/api/internal_mcp_catalog?adminView=garbage",
     });
-
-    expect(response.statusCode).toBe(200);
-    const ids = response.json().map((item: { id: string }) => item.id);
-    expect(ids).not.toContain(personal.id);
+    expect(response.statusCode).toBe(400);
   });
 
   test("app backing catalogs are excluded by default but returned with includeApps", async () => {

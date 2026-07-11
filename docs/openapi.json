@@ -59013,7 +59013,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Assign an upstream tool to an app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "description": "Assign a tool to an app: an upstream MCP-server tool, or one of the app-assignable built-in file tools.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
         "requestBody": {
           "required": true,
           "content": {

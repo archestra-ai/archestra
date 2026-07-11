@@ -77,26 +77,27 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // native OAuth flow's audience-bound token — validated here; Archestra's
       // own frontend uses the browser session (request.user, populated by the
       // auth middleware, which stands down only for the Bearer path). A Bearer
-      // connection builds a fresh server per request (AppServerCache is keyed by
-      // (app, user), so reuse across tokens would leak context); the session
+      // connection builds a fresh server per request (the server cache is
+      // session-only, so reuse across tokens can't leak context); the session
       // path keeps the cache.
       const bearer = extractBearerToken(request);
+      // The auth middleware stands down for ANY `Bearer `-prefixed header —
+      // including one with nothing after the scheme, which extractBearerToken
+      // (rightly) rejects. Such a request is neither session-authenticated nor
+      // token-bearing: challenge it rather than falling through to the session
+      // branch, where request.user does not exist.
+      if (!bearer && /^Bearer\s+/i.test(request.headers.authorization ?? "")) {
+        setConnectorChallenge(request, reply, appId);
+        return reply.status(401).send({
+          error: { message: "Unauthorized", type: "unauthorized" },
+        });
+      }
       let userId: string;
       let organizationId: string;
       let tokenAuth: TokenAuthContext;
       let useServerCache: boolean;
       let bypassAccessCache: boolean;
       if (bearer) {
-        // Conversation context is what the trusted frontend host layer passes
-        // for a chat-embedded render; an external Bearer client is not that
-        // host, so the param is refused rather than silently ignored —
-        // fail-closed and honest about why the file tools would see nothing.
-        if (conversationId) {
-          throw new ApiError(
-            400,
-            "conversationId is only accepted with session authentication",
-          );
-        }
         const auth = await resolveBearerAuth(request, appId, bearer);
         if (!auth.ok) {
           if (auth.kind === "challenge") {
@@ -108,6 +109,18 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
           }
           throw new ApiError(403, auth.message);
+        }
+        // Conversation context is what the trusted frontend host layer passes
+        // for a chat-embedded render; an external Bearer client is not that
+        // host, so the param is refused rather than silently ignored —
+        // fail-closed and honest about why the file tools would see nothing.
+        // Checked after token validation so an unauthenticated client still
+        // gets the challenge, not a param error.
+        if (conversationId) {
+          throw new ApiError(
+            400,
+            "conversationId is only accepted with session authentication",
+          );
         }
         userId = auth.userId;
         organizationId = auth.organizationId;
@@ -199,17 +212,17 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           (useServerCache
             ? appServerCache.acquire(serverCacheKey)
             : undefined) ??
-          (await createAppServer(appId, tokenAuth, conversationId)).server;
+          (await createAppServer({ appId, tokenAuth, conversationId })).server;
 
         const transport = createStatelessTransport(appId);
         try {
           await server.connect(transport);
         } catch {
-          ({ server } = await createAppServer(
+          ({ server } = await createAppServer({
             appId,
             tokenAuth,
             conversationId,
-          ));
+          }));
           await server.connect(transport);
         }
         serverHealthy = true;

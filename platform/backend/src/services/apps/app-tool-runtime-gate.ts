@@ -86,9 +86,14 @@ export async function getAssignedAppBuiltin(
 ): Promise<string | null> {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   if (!shortName || !isAppAssignableArchestraTool(shortName)) return null;
-  const [tool] = await ToolModel.getMcpToolsAssignedToApp([toolName], appId);
-  if (!tool || tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID) return null;
-  return tool.toolName;
+  // Filter (not first-row) by catalog: a same-named upstream tool assigned via
+  // the raw-id endpoint could otherwise shadow the built-in grant depending on
+  // row ordering.
+  const assigned = await ToolModel.getMcpToolsAssignedToApp([toolName], appId);
+  const builtin = assigned.find(
+    (tool) => tool.catalogId === ARCHESTRA_MCP_CATALOG_ID,
+  );
+  return builtin?.toolName ?? null;
 }
 
 /**
@@ -106,6 +111,9 @@ export function redactAppBuiltinAuditResult(
 ): CallToolResult {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   if (shortName !== TOOL_READ_FILE_SHORT_NAME) return response;
+  // Error results carry diagnostics (not-found, size caps), never file bytes —
+  // keep them intact for the audit trail.
+  if (response.isError) return response;
   return {
     ...response,
     content: [

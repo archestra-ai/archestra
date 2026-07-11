@@ -772,7 +772,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.AssignToolToApp,
-        description: "Assign an upstream tool to an app.",
+        description:
+          "Assign a tool to an app: an upstream MCP-server tool, or one of the app-assignable built-in file tools.",
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema, toolId: UuidIdSchema }),
         body: z

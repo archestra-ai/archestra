@@ -67,9 +67,9 @@ type McpListTool = ListToolsResult["tools"][number];
  * app owner — which fail-closes to the per-app allowlist and records the call
  * against the app on the audit row).
  */
-export async function createAppServer(
-  appId: string,
-  tokenAuth: TokenAuthContext,
+export async function createAppServer(params: {
+  appId: string;
+  tokenAuth: TokenAuthContext;
   /**
    * The chat conversation the app is rendered in, already validated as
    * accessible to the viewer by the proxy route (session-auth requests only).
@@ -77,8 +77,9 @@ export async function createAppServer(
    * resolve the embedding chat's file scope; absent for standalone/external
    * renders, where those tools see no files (their existing headless behavior).
    */
-  conversationId?: string,
-): Promise<{ server: McpServer; app: App }> {
+  conversationId?: string;
+}): Promise<{ server: McpServer; app: App }> {
+  const { appId, tokenAuth, conversationId } = params;
   const mcpServer = new McpServer(
     {
       name: `archestra-app-${appId}`,

@@ -838,7 +838,7 @@ export const postAppRenderScreenshot = <ThrowOnError extends boolean = false>(op
 export const unassignToolFromApp = <ThrowOnError extends boolean = false>(options: Options<UnassignToolFromAppData, ThrowOnError>) => (options.client ?? client).delete<UnassignToolFromAppResponses, UnassignToolFromAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/tools/{toolId}', ...options });
 
 /**
- * Assign an upstream tool to an app.
+ * Assign a tool to an app: an upstream MCP-server tool, or one of the app-assignable built-in file tools.
  *
  * Authentication:
  *

@@ -1643,18 +1643,28 @@ function formatPreviewResult(
   toolName: string,
   result: CommonToolResult,
 ): ReturnType<typeof structuredSuccessResult> {
-  const textParts = Array.isArray(result.content)
-    ? result.content
-        .filter(
-          (part): part is { type: "text"; text: string } =>
-            !!part &&
-            (part as { type?: unknown }).type === "text" &&
-            typeof (part as { text?: unknown }).text === "string",
-        )
-        .map((part) => part.text)
-    : [];
+  const contentParts = Array.isArray(result.content) ? result.content : [];
+  const textParts = contentParts
+    .filter(
+      (part): part is { type: "text"; text: string } =>
+        !!part &&
+        (part as { type?: unknown }).type === "text" &&
+        typeof (part as { text?: unknown }).text === "string",
+    )
+    .map((part) => part.text);
+  // Non-text blocks (e.g. read_file's inline image) are not previewable as
+  // text, but the model still needs to know the app-visible result carries
+  // them — name their types instead of dropping them silently.
+  const nonTextTypes = contentParts
+    .map((part) => (part as { type?: unknown } | null)?.type)
+    .filter(
+      (type): type is string => typeof type === "string" && type !== "text",
+    );
   const body = [
     ...textParts,
+    nonTextTypes.length > 0
+      ? `[+${nonTextTypes.length} non-text content block(s): ${nonTextTypes.join(", ")} — delivered to the app at call time, not previewable here]`
+      : null,
     result.structuredContent !== undefined
       ? `structuredContent: ${JSON.stringify(result.structuredContent)}`
       : null,

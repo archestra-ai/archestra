@@ -26,6 +26,8 @@ import {
   AppDataModel,
   AppModel,
   AppToolModel,
+  ConversationModel,
+  ProjectModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -1535,6 +1537,243 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
         (await rpcCall(created.id, searchFilesPayload)).json(),
       );
       expect(filesNone).toEqual([]);
+    });
+
+    // The auth middleware stands down for ANY `Bearer `-prefixed header, so a
+    // scheme-only header reaches the route unauthenticated; it must be
+    // challenged, never treated as a session request.
+    test("a scheme-only Bearer header is challenged with 401", async ({
+      makeApp,
+    }) => {
+      const created = await makeApp();
+      app = await buildBearerApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}`,
+        headers: { ...JSON_RPC_HEADERS, authorization: "Bearer " },
+        payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        "resource_metadata",
+      );
+    });
+
+    // The conversationId param check runs after token validation, so an
+    // unauthenticated client still gets the challenge, not a param error.
+    test("an invalid Bearer token with ?conversationId gets the 401 challenge, not 400", async ({
+      makeApp,
+    }) => {
+      const created = await makeApp();
+      app = await buildBearerApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}?conversationId=${crypto.randomUUID()}`,
+        headers: bearer("archestra_not_a_real_token"),
+        payload: { jsonrpc: "2.0", method: "tools/list", id: 1 },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["www-authenticate"]).toContain(
+        "resource_metadata",
+      );
+    });
+
+    test("read_file returns an inline image whose audit row stores no image bytes", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      // PNG magic bytes are enough for the byte-sniffer to classify the file
+      // as an inline-safe image (mirrors the sandbox read_file image test).
+      const pngBytes = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01,
+      ]);
+      await fileStore.put({
+        organizationId: created.organizationId,
+        userId: user.id,
+        projectId: null,
+        conversationId: conversation.id,
+        filename: "pic.png",
+        mimeType: "image/png",
+        sizeBytes: pngBytes.byteLength,
+        data: pngBytes,
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      const response = await rpcCall(
+        created.id,
+        {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { name: READ_FILE_NAME, arguments: { filename: "pic.png" } },
+          id: 1,
+        },
+        conversation.id,
+      );
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.result?.isError ?? false).toBe(false);
+      // The caller gets a real image content block...
+      const image = (
+        body.result.content as Array<{ type: string; data?: string }>
+      ).find((c) => c.type === "image");
+      expect(image).toBeDefined();
+      expect(image?.data).toBe(pngBytes.toString("base64"));
+
+      // ...while the audit row keeps only the placeholder plus metadata.
+      const rows = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(
+          and(
+            eq(schema.mcpToolCallsTable.ownerType, "app"),
+            eq(schema.mcpToolCallsTable.appId, created.id),
+            eq(schema.mcpToolCallsTable.method, "tools/call"),
+          ),
+        );
+      const auditRow = rows.find(
+        (row) =>
+          (row.toolCall as { name?: string } | null)?.name === READ_FILE_NAME,
+      );
+      expect(auditRow).toBeDefined();
+      const storedResult = auditRow?.toolResult as {
+        content: Array<{ type: string }>;
+        structuredContent?: { kind?: string };
+      };
+      expect(JSON.stringify(storedResult.content)).not.toContain(
+        pngBytes.toString("base64"),
+      );
+      expect(storedResult.content.some((c) => c.type === "image")).toBe(false);
+      expect(JSON.stringify(storedResult.content)).toContain("not persisted");
+      expect(storedResult.structuredContent?.kind).toBe("image");
+    });
+
+    test("a project chat's search_files lists the project's files", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeAgent,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      await makeMember(user.id, created.organizationId, { role: "admin" });
+      await assignFileTools(created.id);
+      const project = await ProjectModel.create({
+        organizationId: created.organizationId,
+        userId: user.id,
+        name: "app-proxy-proj",
+        description: null,
+      });
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: created.organizationId,
+        agentId: agent.id,
+        projectId: project.id,
+        title: "in project",
+      });
+      await fileStore.put({
+        organizationId: created.organizationId,
+        userId: user.id,
+        projectId: project.id,
+        conversationId: null,
+        filename: "project-doc.txt",
+        mimeType: "text/plain",
+        sizeBytes: 4,
+        data: Buffer.from("docs"),
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      const response = await rpcCall(
+        created.id,
+        searchFilesPayload,
+        conversation.id,
+      );
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.result?.isError ?? false).toBe(false);
+      expect(filenamesOf(body)).toContain("project-doc.txt");
+    });
+
+    // Assignment grants the tool to the APP; RBAC still gates the VIEWER
+    // (sandbox:execute), both in tools/list and at execution.
+    test("a viewer without sandbox:execute neither sees nor runs the file tools", async ({
+      makeApp,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+      makeAgent,
+      makeConversation,
+    }) => {
+      const created = await makeApp();
+      const user = await makeUser();
+      // Default custom-role permission is { agent: ["read"] } — no sandbox.
+      const role = await makeCustomRole(created.organizationId);
+      await makeMember(user.id, created.organizationId, { role: role.role });
+      await assignFileTools(created.id);
+      const agent = await makeAgent({
+        organizationId: created.organizationId,
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: created.organizationId,
+      });
+      await putConversationFile({
+        organizationId: created.organizationId,
+        userId: user.id,
+        conversationId: conversation.id,
+        filename: "rbac-hidden.txt",
+        content: "should never surface",
+      });
+      app = await buildApp(user.id, created.organizationId);
+
+      // (a) tools/list filters the descriptors by the viewer's permissions.
+      const list = await rpcCall(created.id, {
+        jsonrpc: "2.0",
+        method: "tools/list",
+        id: 1,
+      });
+      expect(list.statusCode).toBe(200);
+      const names = list
+        .json()
+        .result.tools.map((t: { name: string }) => t.name);
+      expect(names).not.toContain(SEARCH_FILES_NAME);
+      expect(names).not.toContain(READ_FILE_NAME);
+
+      // (b) a direct call is refused by RBAC and leaks no file data.
+      const call = await rpcCall(
+        created.id,
+        searchFilesPayload,
+        conversation.id,
+      );
+      expect(call.statusCode).toBe(200);
+      const body = call.json();
+      expect(body.result?.isError).toBe(true);
+      expect(JSON.stringify(body.result?.content)).toContain(
+        "do not have permission",
+      );
+      expect(JSON.stringify(body)).not.toContain("rbac-hidden.txt");
     });
   });
 });

@@ -1767,6 +1767,10 @@ export const bedrockAdapterFactory: LLMProvider<
 > = {
   provider: "bedrock",
   interactionType: "bedrock:converse",
+  // Bedrock's custom SigV4 client (BedrockClient) can't self-instrument the
+  // request-duration metric the way fetch/Gemini transports do, so the LLM
+  // proxy handler records `llm_request_duration_seconds` on its behalf.
+  recordRequestDurationInHandler: true,
 
   createRequestAdapter(
     request: BedrockRequest,

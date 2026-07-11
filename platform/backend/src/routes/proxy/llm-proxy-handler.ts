@@ -1115,6 +1115,10 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  // Providers whose transport can't self-instrument duration (Bedrock) rely on
+  // us to record llm_request_duration_seconds. Guard against a second (error-path)
+  // observation once the stream has been established.
+  let requestDurationRecorded = false;
   const streamedEventIndices = new Set<number>();
   // Once a blocking tool is encountered, buffer all subsequent tool call chunks
   // to prevent streaming data for tools that appear after a blocked tool.
@@ -1150,6 +1154,22 @@ async function handleStreaming<
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
         const stream = await provider.executeStream(client, request);
+
+        // Record request duration at stream establishment for providers whose
+        // transport can't self-instrument it (Bedrock). This mirrors
+        // getObservableFetch/getObservableGenAI, which observe duration when the
+        // response/stream is established rather than when it finishes streaming.
+        if (provider.recordRequestDurationInHandler) {
+          metrics.llm.reportRequestDuration(
+            providerName,
+            agent,
+            actualModel,
+            (Date.now() - streamStartTime) / 1000,
+            "200",
+            source,
+          );
+          requestDurationRecorded = true;
+        }
 
         // Process chunks
         // Per-tool buffer/stream decisions: only "Allow always" tools stream immediately.
@@ -1414,6 +1434,22 @@ async function handleStreaming<
     streamCompleted = true;
     return reply;
   } catch (error) {
+    // If the stream never established (e.g. a provider 400 rejecting the
+    // request), record the duration here for providers we instrument in the
+    // handler. A mid-stream error is not double-recorded: establishment already
+    // set the flag, matching the "duration = time to establishment" semantics.
+    if (provider.recordRequestDurationInHandler && !requestDurationRecorded) {
+      metrics.llm.reportRequestDuration(
+        providerName,
+        agent,
+        actualModel,
+        (Date.now() - streamStartTime) / 1000,
+        extractDurationStatusCode(error),
+        source,
+      );
+      requestDurationRecorded = true;
+    }
+
     // The finally-block persist below is gated on usage, so a stream that
     // fails before any usage arrives (e.g. a provider 400 rejecting the
     // request) would otherwise leave no trace in LLM logs / session history.
@@ -1609,6 +1645,7 @@ async function handleNonStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  const requestStartTime = Date.now();
 
   logger.debug(
     { model: actualModel },
@@ -1637,7 +1674,35 @@ async function handleNonStreaming<
     parentContext,
     user: toSpanUserInfo(resolvedUser),
     callback: async (llmSpan) => {
-      const result = await provider.execute(client, request);
+      // Record request duration for providers we instrument in the handler
+      // (Bedrock). getObservableFetch covers the fetch-based providers, so those
+      // must not double-report here — the flag gates that.
+      let result: TResponse;
+      try {
+        result = await provider.execute(client, request);
+      } catch (error) {
+        if (provider.recordRequestDurationInHandler) {
+          metrics.llm.reportRequestDuration(
+            providerName,
+            agent,
+            actualModel,
+            (Date.now() - requestStartTime) / 1000,
+            extractDurationStatusCode(error),
+            source,
+          );
+        }
+        throw error;
+      }
+      if (provider.recordRequestDurationInHandler) {
+        metrics.llm.reportRequestDuration(
+          providerName,
+          agent,
+          actualModel,
+          (Date.now() - requestStartTime) / 1000,
+          "200",
+          source,
+        );
+      }
       const adapter = provider.createResponseAdapter(result);
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
@@ -2002,4 +2067,15 @@ function headerNamePeek(
     result[k] = typeof v === "string" && v.length > 0 ? v[0] : "";
   }
   return result;
+}
+
+/**
+ * Derive a status_code label for the request-duration metric from a thrown
+ * provider error. Bedrock's client attaches `statusCode` to its errors; when
+ * absent (network failure before a response) we fall back to "0", matching how
+ * getObservableFetch labels network errors.
+ */
+function extractDurationStatusCode(error: unknown): string {
+  const statusCode = (error as { statusCode?: number } | null)?.statusCode;
+  return typeof statusCode === "number" ? String(statusCode) : "0";
 }

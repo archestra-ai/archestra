@@ -527,6 +527,48 @@ export function reportTokensPerSecond(
 }
 
 /**
+ * Records the `llm_request_duration_seconds` histogram for a single request.
+ *
+ * Most providers instrument duration inside their transport wrapper
+ * (fetch-based providers via getObservableFetch, Gemini via getObservableGenAI),
+ * so they must NOT call this or the observation would be double-counted. It
+ * exists for providers whose transport can't self-instrument — notably Bedrock,
+ * which uses a custom SigV4 client that has no access to the profile/source
+ * needed for metric labels. For those, the LLM proxy handler records duration
+ * on the provider's behalf (gated by `LLMProvider.recordRequestDurationInHandler`).
+ * @param provider The LLM provider
+ * @param profile The Archestra profile
+ * @param model The model name
+ * @param durationSeconds Request duration in seconds
+ * @param statusCode HTTP-like status code label ("200" on success, upstream
+ *   status or "0" on error) — mirrors getObservableFetch's status labeling
+ * @param source Interaction source (e.g. "api", "chat", "knowledge:embedding")
+ */
+export function reportRequestDuration(
+  provider: SupportedProvider,
+  profile: Agent,
+  model: string,
+  durationSeconds: number,
+  statusCode: string,
+  source: InteractionSource,
+): void {
+  if (!llmRequestDuration) {
+    logger.warn("LLM metrics not initialized, skipping duration reporting");
+    return;
+  }
+  llmRequestDuration.observe({
+    labels: buildMetricLabels(
+      profile,
+      { provider, status_code: statusCode },
+      model,
+      source,
+    ),
+    value: durationSeconds,
+    exemplarLabels: getExemplarLabels(),
+  });
+}
+
+/**
  * Returns a fetch wrapped in observability. Use it as OpenAI or Anthropic provider custom fetch implementation.
  * @param provider The LLM provider
  * @param profile The Archestra profile

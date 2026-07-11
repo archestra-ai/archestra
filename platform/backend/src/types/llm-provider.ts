@@ -367,6 +367,16 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   /** Interaction type for database storage */
   readonly interactionType: SupportedProviderDiscriminator;
 
+  /**
+   * When true, the LLM proxy handler records the `llm_request_duration_seconds`
+   * metric for this provider. Leave unset for providers whose transport already
+   * self-instruments duration (fetch-based providers via getObservableFetch,
+   * Gemini via getObservableGenAI) to avoid double-counting. Bedrock sets this
+   * because its custom SigV4 client has no access to the profile/source labels
+   * the metric needs, so the handler records duration on its behalf.
+   */
+  readonly recordRequestDurationInHandler?: boolean;
+
   // ---------------------------------------------------------------------------
   // Adapter Creation
   // ---------------------------------------------------------------------------

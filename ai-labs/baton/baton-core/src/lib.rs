@@ -43,6 +43,7 @@ pub mod engine;
 pub mod preset;
 pub mod request;
 pub mod revision;
+pub mod transition;
 pub mod turn;
 pub mod value;
 
@@ -86,5 +87,9 @@ pub use request::{
     render,
 };
 pub use revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
+pub use transition::{
+    ActionTransition, Adjudicator, DuplicateRegistration, LabelPredicate, RegisteredTransformer, TransformerDescriptor,
+    TransformerError, TransformerFn, WaiverDelta,
+};
 pub use turn::{Actor, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};
 pub use value::{OpaqueValue, Provenance, StoredValue, TransformerRef, UnknownValue, ValueLabel, ValueStore};

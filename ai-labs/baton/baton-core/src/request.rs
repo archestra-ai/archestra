@@ -151,6 +151,7 @@ pub struct FlowLabels {
 impl FlowLabels {
     /// `L_flow = combine(L_args, L_control)` — what audience and trust
     /// requirements are checked against.
+    #[must_use]
     pub fn flow(&self) -> ValueLabel {
         self.args.clone().combine(self.control.clone())
     }

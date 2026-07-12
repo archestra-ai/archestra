@@ -26,7 +26,9 @@ impl Revision {
 
     #[must_use]
     pub fn next(self) -> Self {
-        Self(self.0 + 1)
+        // Loud exhaustion beats a silent wrap that would let an ancient
+        // capability alias a fresh revision.
+        Self(self.0.checked_add(1).expect("revision space exhausted"))
     }
 }
 

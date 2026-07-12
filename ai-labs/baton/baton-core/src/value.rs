@@ -82,6 +82,7 @@ impl ValueLabel {
         }
     }
 
+    #[must_use]
     pub fn fold(labels: impl IntoIterator<Item = Self>) -> Self {
         labels.into_iter().fold(Self::identity(), Self::combine)
     }
@@ -202,7 +203,7 @@ impl ValueStore {
     /// Admit a value at the explicit trust boundary. The label is trusted
     /// input from the embedding harness — this is the only caller-labeled
     /// admission path.
-    pub fn admit_ingress(&mut self, turn: TurnId, label: ValueLabel, body: OpaqueValue) -> ValueId {
+    pub(crate) fn admit_ingress(&mut self, turn: TurnId, label: ValueLabel, body: OpaqueValue) -> ValueId {
         self.push(body, label, Provenance::Ingress { turn })
     }
 
@@ -210,7 +211,7 @@ impl ValueStore {
     /// declared read and control dependency — the caller supplies the
     /// dependency sets (mandatory; completeness is the harness's mediation
     /// obligation), never the label.
-    pub fn admit_model_output(
+    pub(crate) fn admit_model_output(
         &mut self,
         body: OpaqueValue,
         reads: BTreeSet<ValueId>,
@@ -224,7 +225,7 @@ impl ValueStore {
     /// `combine(intrinsic, fold(arguments), fold(control))`. The intrinsic
     /// label is the tool contract's declared per-result provenance; it can
     /// only worsen the fold, never override the dependencies.
-    pub fn admit_tool_output(
+    pub(crate) fn admit_tool_output(
         &mut self,
         action: ActionId,
         intrinsic: ValueLabel,
@@ -248,7 +249,8 @@ impl ValueStore {
     /// the only admission below the conservative fold. The caller (the engine's
     /// transition machinery) has already validated the registered transition;
     /// the source keeps its own label untouched.
-    pub fn admit_transformed(
+    #[cfg_attr(not(test), expect(dead_code, reason = "consumed by the plan-application stage (S9)"))]
+    pub(crate) fn admit_transformed(
         &mut self,
         source: ValueId,
         transition: TransitionId,
@@ -345,6 +347,29 @@ mod tests {
                 BTreeSet::from([clean]),
                 BTreeSet::new(),
                 OpaqueValue::new("page"),
+            )
+            .unwrap();
+        assert_eq!(store.get(out).unwrap().label().trust, Trust::SUSPICIOUS);
+    }
+
+    #[test]
+    fn identity_intrinsic_cannot_improve_tainted_dependencies() {
+        let mut store = ValueStore::default();
+        let tainted = store.admit_ingress(
+            TurnId::new(0),
+            ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::SUSPICIOUS,
+            },
+            OpaqueValue::new("raw"),
+        );
+        let out = store
+            .admit_tool_output(
+                ActionId::new(0),
+                ValueLabel::identity(),
+                BTreeSet::from([tainted]),
+                BTreeSet::new(),
+                OpaqueValue::new("processed"),
             )
             .unwrap();
         assert_eq!(store.get(out).unwrap().label().trust, Trust::SUSPICIOUS);

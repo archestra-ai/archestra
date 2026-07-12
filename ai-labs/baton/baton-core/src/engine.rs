@@ -25,6 +25,7 @@ use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::Effects;
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, Revision, ValueId};
+use crate::transition::{ActionTransition, DuplicateRegistration, RegisteredTransformer};
 use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::ValueLabel;
 
@@ -308,9 +309,13 @@ pub struct ResponsePolicy {
     pub readers: BTreeSet<crate::dimension::UserId>,
 }
 
-/// Holds the tool contracts, the response policy, and the unknown policy.
+/// Holds the tool contracts, the transition registries, the response policy,
+/// and the unknown policy. Registries are populated at construction time and
+/// never mutated mid-run.
 pub struct PolicyEngine {
     contracts: BTreeMap<ToolName, ToolContract>,
+    transformers: Vec<RegisteredTransformer>,
+    action_transitions: Vec<ActionTransition>,
     response_policy: Option<ResponsePolicy>,
     unknown_policy: UnknownPolicy,
 }
@@ -319,9 +324,38 @@ impl PolicyEngine {
     pub fn new(unknown_policy: UnknownPolicy) -> Self {
         Self {
             contracts: BTreeMap::new(),
+            transformers: Vec::new(),
+            action_transitions: Vec::new(),
             response_policy: None,
             unknown_policy,
         }
+    }
+
+    /// Register a value transformer. Fails on a duplicate identity+version;
+    /// registration order is the deterministic candidate order for planning.
+    pub fn register_transformer(&mut self, transformer: RegisteredTransformer) -> Result<(), DuplicateRegistration> {
+        let id = &transformer.descriptor.transformer;
+        if self.transformers.iter().any(|t| t.descriptor.transformer == *id) {
+            debug!(transformer = %id, "register_transformer: duplicate refused");
+            return Err(DuplicateRegistration { id: id.to_string() });
+        }
+        debug!(transformer = %id, "register_transformer: registered");
+        self.transformers.push(transformer);
+        Ok(())
+    }
+
+    /// Register an action transition (an explicit tool-identity mapping with
+    /// declared replacement effects). Fails on a duplicate identity+version.
+    pub fn register_action_transition(&mut self, transition: ActionTransition) -> Result<(), DuplicateRegistration> {
+        if self.action_transitions.iter().any(|t| t.id == transition.id) {
+            debug!(transition = %transition.id, "register_action_transition: duplicate refused");
+            return Err(DuplicateRegistration {
+                id: transition.id.to_string(),
+            });
+        }
+        debug!(transition = %transition.id, "register_action_transition: registered");
+        self.action_transitions.push(transition);
+        Ok(())
     }
 
     /// Set the final-response sink policy. Without one, emitting a response
@@ -1206,5 +1240,78 @@ mod tests {
             panic!("expected block");
         };
         assert_eq!(block.reason, BlockReason::UnknownDenied);
+    }
+
+    #[test]
+    fn duplicate_reentry_token_cannot_release_twice() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let request = email_request(&mut trajectory, body, "bob");
+
+        let Decision::Permitted(first) = engine.evaluate(&mut trajectory, request.clone()) else {
+            panic!("expected permit");
+        };
+        let Decision::Permitted(second) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected permit on re-entry");
+        };
+
+        // Releasing one consumes the dispatch slot at that revision; the
+        // duplicate can never begin a second dispatch.
+        let (_, receipt) = trajectory.release(first).unwrap();
+        let err = trajectory.release(second).unwrap_err();
+        assert!(matches!(err, RejectedToken::Stale { .. }));
+        trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+    }
+
+    #[test]
+    fn unknown_control_dependency_blocks_loudly() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let ghost = ValueId::new(1000);
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Value(body),
+            BTreeSet::from([ghost]),
+        );
+
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected terminal block");
+        };
+        assert_eq!(block.reason, BlockReason::UnknownValueReferenced { value: ghost });
+    }
+
+    #[test]
+    fn duplicate_transformer_and_transition_registration_refused() {
+        fn passthrough(v: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+            Ok(v.clone())
+        }
+        let entry = || RegisteredTransformer {
+            descriptor: crate::transition::TransformerDescriptor {
+                transformer: crate::value::TransformerRef {
+                    id: "pii.redact".into(),
+                    version: 1,
+                },
+                precondition: crate::transition::LabelPredicate::any(),
+                output: ValueLabel::identity(),
+            },
+            run: passthrough,
+        };
+        let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
+        engine.register_transformer(entry()).unwrap();
+        assert!(engine.register_transformer(entry()).is_err());
+
+        let transition = || ActionTransition {
+            id: crate::value::TransformerRef {
+                id: "sandbox".into(),
+                version: 1,
+            },
+            from_tool: ToolName::new("shell.run"),
+            to_tool: ToolName::new("shell.run.sandboxed"),
+            effects: Effects::none(),
+        };
+        engine.register_action_transition(transition()).unwrap();
+        assert!(engine.register_action_transition(transition()).is_err());
     }
 }

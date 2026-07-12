@@ -213,6 +213,16 @@ impl Effects {
     pub(crate) fn avoids(&self, forbidden: &BTreeSet<Effect>) -> Adequacy<BTreeSet<Effect>> {
         self.0.avoids(forbidden)
     }
+
+    /// The declared effect set, or `None` for `Unknown`. Used by the
+    /// structural narrowing relation, which must distinguish "provably these
+    /// effects" from "anything may happen".
+    pub(crate) fn declared_set(&self) -> Option<BTreeSet<Effect>> {
+        match &self.0 {
+            JoinSet::Has(set) => Some(set.clone()),
+            JoinSet::Unknown => None,
+        }
+    }
 }
 
 impl fmt::Display for Effects {

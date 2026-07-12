@@ -25,8 +25,9 @@ use crate::ToolName;
 use crate::audit::{AuditEvent, TrajectoryState};
 use crate::dimension::UserId;
 use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptParts, RejectedToken};
+use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionSpec};
 use crate::request::{ActionState, PendingAction, ToolRequest};
-use crate::revision::{ActionId, Revision, TurnId, ValueId};
+use crate::revision::{ActionId, PlanId, Revision, TurnId, ValueId};
 use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
 
 /// A user's contribution to a turn: who spoke, and whether they explicitly
@@ -109,6 +110,10 @@ pub struct Trajectory {
     revision: Revision,
     pending: Option<PendingAction>,
     next_action: u64,
+    /// The remedy plans minted for the current blocked flow, if any. Bound to
+    /// the revision they were computed against; any state change stales them.
+    plans: Vec<RemedyPlan>,
+    next_plan: u64,
     /// The confirming turn most recently spent by an action release. A
     /// receipt-declared failure closes the action without appending a turn,
     /// so without this marker the confirming turn would become the newest
@@ -132,6 +137,8 @@ impl Trajectory {
             revision: Revision::INITIAL,
             pending: None,
             next_action: 0,
+            plans: Vec::new(),
+            next_plan: 0,
             spent_confirmation: None,
         }
     }
@@ -159,6 +166,12 @@ impl Trajectory {
 
     pub fn pending_action(&self) -> Option<&PendingAction> {
         self.pending.as_ref()
+    }
+
+    /// The remedy plans of the most recent remediable block. Only plans
+    /// whose `basis` equals the current revision are applicable.
+    pub fn plans(&self) -> &[RemedyPlan] {
+        &self.plans
     }
 
     /// Convenience lookup in the value store.
@@ -397,6 +410,32 @@ impl Trajectory {
         if self.pending.take().is_some() {
             self.advance();
         }
+    }
+
+    /// Replace the stored remedy plans with freshly enumerated drafts,
+    /// assigning ids and stamping the post-advance revision as their basis.
+    pub(crate) fn store_plans(
+        &mut self,
+        action: ActionId,
+        drafts: Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
+    ) -> Vec<RemedyPlan> {
+        self.advance();
+        let basis = self.revision;
+        self.plans = drafts
+            .into_iter()
+            .map(|(steps, final_postcondition)| {
+                let id = PlanId::new(self.next_plan);
+                self.next_plan += 1;
+                RemedyPlan {
+                    id,
+                    action,
+                    steps,
+                    final_postcondition,
+                    basis,
+                }
+            })
+            .collect();
+        self.plans.clone()
     }
 
     pub(crate) fn record_event(&mut self, event: AuditEvent) {

@@ -23,11 +23,12 @@ use crate::ToolName;
 use crate::audit::AuditEvent;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::Effects;
+use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, Revision, ValueId};
-use crate::transition::{ActionTransition, DuplicateRegistration, RegisteredTransformer};
+use crate::transition::{ActionTransition, Adjudicator, DuplicateRegistration, RegisteredTransformer, WaiverDelta};
 use crate::turn::{Trajectory, TrajectoryId};
-use crate::value::ValueLabel;
+use crate::value::{UnknownValue, ValueLabel};
 
 /// The reserved sink name the final assistant response is checked under.
 pub const RESPONSE_SINK: &str = "assistant.response";
@@ -271,10 +272,15 @@ impl fmt::Display for BlockReason {
 }
 
 /// A blocked flow. `Terminal` is an explicit type, not an empty plan list:
-/// there is nothing any transition or waiver could change.
+/// there is nothing any transition or waiver could change. `Remediable`
+/// carries at least one predicted route to a permit.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub enum Blocked {
     Terminal(TerminalBlock),
+    Remediable {
+        violations: Vec<Violation>,
+        plans: NonEmptyVec<RemedyPlan>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -316,6 +322,7 @@ pub struct PolicyEngine {
     contracts: BTreeMap<ToolName, ToolContract>,
     transformers: Vec<RegisteredTransformer>,
     action_transitions: Vec<ActionTransition>,
+    adjudicators: Vec<Adjudicator>,
     response_policy: Option<ResponsePolicy>,
     unknown_policy: UnknownPolicy,
 }
@@ -326,9 +333,25 @@ impl PolicyEngine {
             contracts: BTreeMap::new(),
             transformers: Vec::new(),
             action_transitions: Vec::new(),
+            adjudicators: Vec::new(),
             response_policy: None,
             unknown_policy,
         }
+    }
+
+    /// Register an external adjudicator (metadata only — never invoked by
+    /// `evaluate`). Fails on a duplicate name; registration order is the
+    /// deterministic routing order.
+    pub fn register_adjudicator(&mut self, adjudicator: Adjudicator) -> Result<(), DuplicateRegistration> {
+        if self.adjudicators.iter().any(|a| a.name == adjudicator.name) {
+            debug!(adjudicator = %adjudicator.name, "register_adjudicator: duplicate refused");
+            return Err(DuplicateRegistration {
+                id: adjudicator.name.to_string(),
+            });
+        }
+        debug!(adjudicator = %adjudicator.name, "register_adjudicator: registered");
+        self.adjudicators.push(adjudicator);
+        Ok(())
     }
 
     /// Register a value transformer. Fails on a duplicate identity+version;
@@ -530,11 +553,32 @@ impl PolicyEngine {
             );
         }
 
-        // Remedy machinery (transitions, plans, waivers) lands in later
-        // stages; until then every escalation is terminal.
-        debug!("blocked (no remedy)");
-        escalating.extend(audited_unknowns);
-        self.terminal(trajectory, escalating, BlockReason::NoRemedy)
+        // Enumerate remedy plans for the escalation. The pending action is
+        // the plans' shared target, so it must exist before planning.
+        let action = match existing_action {
+            Some(action) => action,
+            None => trajectory.set_pending(request, proposed_effects),
+        };
+        let drafts = self.enumerate_plans(
+            trajectory,
+            &checked_request,
+            contract,
+            trajectory.pending_action().expect("pending action set above"),
+        );
+        match NonEmptyVec::from_vec(trajectory.store_plans(action, drafts)) {
+            Some(plans) => {
+                debug!(count = plans.len(), "blocked (remediable)");
+                Decision::Blocked(Blocked::Remediable {
+                    violations: escalating,
+                    plans,
+                })
+            }
+            None => {
+                debug!("blocked (no remedy)");
+                escalating.extend(audited_unknowns);
+                self.terminal(trajectory, escalating, BlockReason::NoRemedy)
+            }
+        }
     }
 
     /// The completely mediated response sink: check the response's explicit
@@ -624,6 +668,184 @@ impl PolicyEngine {
         ResponseDecision::Emitted { value, rendered }
     }
 
+    /// Deterministic bounded plan enumeration: candidate step sequences in
+    /// the canonical order Transform? -> Constrain? -> Waiver?, each subset
+    /// instantiated from the registries in registration order, kept iff the
+    /// predicted final posture is clean, capped at [`MAX_PLANS`].
+    fn enumerate_plans(
+        &self,
+        trajectory: &Trajectory,
+        checked: &ToolRequest,
+        contract: Option<&ToolContract>,
+        pending: &crate::request::PendingAction,
+    ) -> Vec<(NonEmptyVec<TransitionSpec>, Posture)> {
+        let base = match SimFlow::of(trajectory, checked, contract) {
+            Ok(base) => base,
+            // A dependency vanished mid-evaluation cannot happen (the store
+            // is append-only and we validated already), but fail closed.
+            Err(_) => return Vec::new(),
+        };
+
+        // Candidate transform steps: non-recipient argument leaves x
+        // registered transformers whose precondition matches, in (leaf,
+        // registration) order.
+        let recipient_leaves: BTreeSet<ValueId> = contract
+            .and_then(|c| {
+                c.arguments
+                    .recipients
+                    .as_ref()
+                    .and_then(|role| checked.arguments.top_level(role))
+            })
+            .map(|subtree| subtree.leaves())
+            .unwrap_or_default();
+        let mut transforms: Vec<(ValueId, &RegisteredTransformer)> = Vec::new();
+        for leaf in checked.arguments.leaves() {
+            if recipient_leaves.contains(&leaf) {
+                continue;
+            }
+            let label = &base.leaf_labels[&leaf];
+            for transformer in &self.transformers {
+                if transformer.descriptor.precondition.matches(label) && transformer.descriptor.output != *label {
+                    transforms.push((leaf, transformer));
+                }
+            }
+        }
+
+        // Candidate constrain steps: registered action transitions from this
+        // tool whose structural narrowing holds and whose target tool has a
+        // contract.
+        let constrains: Vec<&ActionTransition> = self
+            .action_transitions
+            .iter()
+            .filter(|t| t.narrows(pending).is_ok() && self.contracts.contains_key(&t.to_tool))
+            .collect();
+
+        let mut plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
+        let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
+            std::iter::once(None).chain(transforms.iter().map(Some)).collect();
+        let constrain_options: Vec<Option<&&ActionTransition>> =
+            std::iter::once(None).chain(constrains.iter().map(Some)).collect();
+
+        'outer: for transform in &transform_options {
+            for constrain in &constrain_options {
+                if plans.len() >= MAX_PLANS {
+                    break 'outer;
+                }
+                let mut sim = base.clone();
+                let mut steps: Vec<TransitionSpec> = Vec::new();
+
+                if let Some((leaf, transformer)) = transform {
+                    let precondition = Posture {
+                        remaining: sim.violations(None),
+                    };
+                    sim.leaf_labels.insert(*leaf, transformer.descriptor.output.clone());
+                    steps.push(TransitionSpec {
+                        precondition,
+                        postcondition: Posture {
+                            remaining: sim.violations(None),
+                        },
+                        kind: TransitionKind::TransformValue {
+                            source: *leaf,
+                            transformer: transformer.descriptor.transformer.clone(),
+                        },
+                    });
+                }
+                if let Some(transition) = constrain {
+                    let target = self
+                        .contracts
+                        .get(&transition.to_tool)
+                        .expect("filtered on contract presence");
+                    let recipients = match target
+                        .arguments
+                        .resolve_recipients(&checked.arguments, trajectory.store())
+                    {
+                        Ok(recipients) => recipients,
+                        Err(_) => continue,
+                    };
+                    let precondition = Posture {
+                        remaining: sim.violations(None),
+                    };
+                    sim.tool = transition.to_tool.clone();
+                    sim.requires = target.requires.clone();
+                    sim.recipients = recipients;
+                    steps.push(TransitionSpec {
+                        precondition,
+                        postcondition: Posture {
+                            remaining: sim.violations(None),
+                        },
+                        kind: TransitionKind::ConstrainAction {
+                            transition: transition.id.clone(),
+                        },
+                    });
+                }
+
+                let remaining = sim.violations(None);
+                if remaining.is_empty() {
+                    if let Some(steps) = NonEmptyVec::from_vec(steps) {
+                        push_plan(&mut plans, steps, Posture::clean());
+                    }
+                    continue;
+                }
+
+                // A final waiver for whatever remains. Prefer the narrower
+                // control-release variant when the taint is control-borne.
+                let precondition = Posture {
+                    remaining: remaining.clone(),
+                };
+                for delta in self.waiver_candidates(&sim, &remaining) {
+                    if !sim.violations(Some(&delta)).is_empty() {
+                        continue;
+                    }
+                    let Some(authority) = self.route_waiver(&delta) else {
+                        continue;
+                    };
+                    let mut waiver_steps = steps.clone();
+                    waiver_steps.push(TransitionSpec {
+                        precondition: precondition.clone(),
+                        postcondition: Posture::clean(),
+                        kind: TransitionKind::ApplyWaiver { delta, authority },
+                    });
+                    let steps = NonEmptyVec::from_vec(waiver_steps).expect("waiver step just pushed");
+                    push_plan(&mut plans, steps, Posture::clean());
+                    break;
+                }
+            }
+        }
+        plans
+    }
+
+    /// Deterministic waiver candidates for a remaining violation set: the
+    /// control-release variant first when releasing control alone shrinks
+    /// the need, then the plain full-attestation delta.
+    fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<WaiverDelta> {
+        let plain = needed_delta(remaining, &sim.recipients, &sim.requires);
+        let after_control_release = sim.violations(Some(&WaiverDelta {
+            control_release: true,
+            ..WaiverDelta::empty()
+        }));
+        let mut candidates = Vec::new();
+        if after_control_release.len() < remaining.len() {
+            let with_release = WaiverDelta {
+                control_release: true,
+                ..needed_delta(&after_control_release, &sim.recipients, &sim.requires)
+            };
+            candidates.push(with_release);
+        }
+        if !candidates.contains(&plain) {
+            candidates.push(plain);
+        }
+        candidates
+    }
+
+    /// Route a waiver delta to the first registered adjudicator whose
+    /// mandate covers it.
+    fn route_waiver(&self, delta: &WaiverDelta) -> Option<WaiverAuthority> {
+        self.adjudicators
+            .iter()
+            .find(|a| a.mandate.covers(delta))
+            .map(|a| WaiverAuthority::External(a.name.clone()))
+    }
+
     /// Mint the execution token, storing the pending action first if this is
     /// a fresh proposal. Minting happens after every mutation, so the token
     /// is bound to the trajectory's final revision.
@@ -658,6 +880,160 @@ impl PolicyEngine {
         trajectory.clear_pending();
         Decision::Blocked(Blocked::Terminal(TerminalBlock { violations, reason }))
     }
+}
+
+/// Bound on enumerated plans per blocked flow.
+const MAX_PLANS: usize = 8;
+
+fn push_plan(
+    plans: &mut Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
+    steps: NonEmptyVec<TransitionSpec>,
+    final_postcondition: Posture,
+) {
+    if plans.iter().all(|(existing, _)| *existing != steps) {
+        plans.push((steps, final_postcondition));
+    }
+}
+
+/// The pure simulation state of one flow's check: per-leaf argument labels
+/// (so a transform can be predicted by swapping one), the control fold, and
+/// the sink parameters. Prediction (planning) and validation (application)
+/// share this so a plan's postconditions mean exactly what the recheck
+/// computes.
+#[derive(Debug, Clone)]
+pub(crate) struct SimFlow {
+    pub(crate) leaf_labels: BTreeMap<ValueId, ValueLabel>,
+    pub(crate) control: ValueLabel,
+    pub(crate) tool: ToolName,
+    pub(crate) requires: Requirements,
+    pub(crate) recipients: BTreeSet<crate::dimension::UserId>,
+    pub(crate) past_effects: Effects,
+    pub(crate) confirmed: Option<ToolName>,
+    /// Violations independent of the check (a missing contract).
+    pub(crate) extra: Vec<Violation>,
+}
+
+impl SimFlow {
+    pub(crate) fn of(
+        trajectory: &Trajectory,
+        checked: &ToolRequest,
+        contract: Option<&ToolContract>,
+    ) -> Result<Self, UnknownValue> {
+        let store = trajectory.store();
+        let mut leaf_labels = BTreeMap::new();
+        for leaf in checked.arguments.leaves() {
+            leaf_labels.insert(leaf, store.get(leaf)?.label().clone());
+        }
+        let control = store.fold_labels(checked.control.iter())?;
+        let (requires, recipients, extra) = match contract {
+            Some(c) => (
+                c.requires.clone(),
+                c.arguments.resolve_recipients(&checked.arguments, store)?,
+                Vec::new(),
+            ),
+            None => (
+                Requirements::default(),
+                BTreeSet::new(),
+                vec![Violation::Unprovable(Unprovable::NoContract {
+                    tool: checked.tool.clone(),
+                })],
+            ),
+        };
+        Ok(Self {
+            leaf_labels,
+            control,
+            tool: checked.tool.clone(),
+            requires,
+            recipients,
+            past_effects: trajectory.state().past_effects().clone(),
+            confirmed: trajectory.pending_confirmation().cloned(),
+            extra,
+        })
+    }
+
+    /// The violations this flow would report, optionally under a
+    /// check-transient waiver. A waiver lifts exactly its declared
+    /// dimensions and acknowledges acknowledge-only facts on the record.
+    pub(crate) fn violations(&self, waiver: Option<&WaiverDelta>) -> Vec<Violation> {
+        let control = match waiver {
+            Some(w) if w.control_release => ValueLabel::identity(),
+            _ => self.control.clone(),
+        };
+        let mut flow = ValueLabel::fold(self.leaf_labels.values().cloned()).combine(control);
+        let mut past = self.past_effects.clone();
+        let mut confirmed = self.confirmed.clone();
+        if let Some(w) = waiver {
+            if let Some(attested) = w.trust {
+                flow.trust = flow.trust.raised_to(attested);
+            }
+            if let Some(vouched) = &w.audience {
+                flow.audience = flow.audience.admitting(vouched);
+            }
+            if let Some(waived) = &w.effects {
+                past = past.waiving(waived);
+            }
+            if w.confirms {
+                confirmed = Some(self.tool.clone());
+            }
+        }
+        let mut remaining = self.extra.clone();
+        match self
+            .requires
+            .check_flow(&flow, &past, confirmed.as_ref(), &self.tool, &self.recipients)
+        {
+            Verdict::Allow => {}
+            Verdict::Escalate(violations) => remaining.extend(violations),
+        }
+        if waiver.is_some() {
+            remaining.retain(|v| v.fixability() != Fixability::AcknowledgeOnly);
+        }
+        remaining
+    }
+}
+
+/// The delta that would cover the grant-fixable gaps in `violations` —
+/// acknowledge-only and structural members contribute nothing.
+fn needed_delta(
+    violations: &[Violation],
+    recipients: &BTreeSet<crate::dimension::UserId>,
+    requires: &Requirements,
+) -> WaiverDelta {
+    use crate::contract::Breach;
+    let mut delta = WaiverDelta::empty();
+    for violation in violations {
+        match violation {
+            Violation::Breach(Breach::TrustBelow { required, .. }) => {
+                delta.trust = Some(*required);
+            }
+            Violation::Unprovable(Unprovable::TrustUnknown) => {
+                delta.trust = requires.trust;
+            }
+            Violation::Breach(Breach::AudienceExceeds { outside }) => {
+                delta
+                    .audience
+                    .get_or_insert_with(BTreeSet::new)
+                    .extend(outside.iter().cloned());
+            }
+            Violation::Unprovable(Unprovable::AudienceUnknown) => {
+                delta
+                    .audience
+                    .get_or_insert_with(BTreeSet::new)
+                    .extend(recipients.iter().cloned());
+            }
+            Violation::Breach(Breach::ForbiddenPriorEffects { effects }) => {
+                delta
+                    .effects
+                    .get_or_insert_with(BTreeSet::new)
+                    .extend(effects.iter().copied());
+            }
+            Violation::Breach(Breach::ConfirmationMissing { .. } | Breach::ConfirmationForOtherTool { .. }) => {
+                delta.confirms = true;
+            }
+            Violation::Breach(Breach::UndeclaredRecipients)
+            | Violation::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => {}
+        }
+    }
+    delta
 }
 
 #[cfg(test)]
@@ -1313,5 +1689,205 @@ mod tests {
         };
         engine.register_action_transition(transition()).unwrap();
         assert!(engine.register_action_transition(transition()).is_err());
+    }
+
+    fn redact_transformer() -> RegisteredTransformer {
+        fn redact(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+            Ok(OpaqueValue::new("[redacted]"))
+        }
+        RegisteredTransformer {
+            descriptor: crate::transition::TransformerDescriptor {
+                transformer: crate::value::TransformerRef {
+                    id: "pii.redact".into(),
+                    version: 1,
+                },
+                precondition: crate::transition::LabelPredicate {
+                    trust: Some(Trust::SUSPICIOUS),
+                    audience: None,
+                },
+                output: ValueLabel::identity(),
+            },
+            run: redact,
+        }
+    }
+
+    fn human() -> crate::transition::Adjudicator {
+        crate::transition::Adjudicator {
+            name: crate::audit::AdjudicatorName::new("human"),
+            mandate: crate::transition::WaiverDelta {
+                trust: Some(crate::dimension::KnownTrust::Trusted),
+                audience: Some(BTreeSet::from([user("alice"), user("bob"), user("charlie")])),
+                effects: Some(BTreeSet::from([Effect::Mutation, Effect::Egress])),
+                confirms: true,
+                control_release: true,
+            },
+        }
+    }
+
+    /// A suspicious payload with a registered redactor yields a single-step
+    /// transform plan predicting a clean flow.
+    #[test]
+    fn tainted_payload_plans_a_transform() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_transformer(redact_transformer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
+        let request = email_request(&mut trajectory, raw, "bob");
+
+        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
+        else {
+            panic!("expected remediable block");
+        };
+        assert!(matches!(
+            violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::TrustBelow { .. })]
+        ));
+        let transform_plan = plans
+            .iter()
+            .find(|p| p.steps.len() == 1)
+            .expect("single-step transform plan");
+        assert!(matches!(
+            &transform_plan.steps.first().kind,
+            TransitionKind::TransformValue { source, .. } if *source == raw
+        ));
+        assert!(transform_plan.final_postcondition.is_clean());
+        // Plans are stored on the trajectory, bound to its current revision,
+        // and the pending action they target stays open.
+        assert_eq!(trajectory.plans().len(), plans.len());
+        assert_eq!(trajectory.plans()[0].basis, trajectory.revision());
+        assert!(trajectory.pending_action().is_some());
+    }
+
+    /// An audience breach with a competent adjudicator yields a waiver plan
+    /// routed to it.
+    #[test]
+    fn audience_breach_plans_a_waiver() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_adjudicator(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        // Only alice may read the doc; sending to charlie exceeds it.
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let waiver = plans.first();
+        assert_eq!(waiver.steps.len(), 1);
+        assert!(matches!(
+            &waiver.steps.first().kind,
+            TransitionKind::ApplyWaiver {
+                delta: crate::transition::WaiverDelta { audience: Some(vouched), .. },
+                authority: crate::plan::WaiverAuthority::External(name),
+            } if vouched.contains(&user("charlie")) && name.as_str() == "human"
+        ));
+    }
+
+    /// Control-borne taint prefers the narrower control-release waiver over
+    /// attesting the data itself.
+    #[test]
+    fn control_taint_plans_control_release_first() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_adjudicator(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
+        let clean = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
+        let to = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to)),
+                (ArgumentName::new("body"), ArgumentTree::Value(clean)),
+            ])),
+            BTreeSet::from([secret]),
+        );
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        assert!(matches!(
+            &plans.first().steps.first().kind,
+            TransitionKind::ApplyWaiver {
+                delta: crate::transition::WaiverDelta {
+                    control_release: true,
+                    audience: None,
+                    ..
+                },
+                ..
+            }
+        ));
+    }
+
+    /// A registered tool-identity mapping to a weaker-contract tool yields a
+    /// constrain plan.
+    #[test]
+    fn constrain_plan_maps_to_narrower_tool() {
+        let fetch = ToolContract {
+            name: ToolName::new("web.fetch"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                ..Requirements::default()
+            },
+            output_label: ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::SUSPICIOUS,
+            },
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let cached = ToolContract {
+            name: ToolName::new("web.fetch.cached"),
+            requires: Requirements::default(),
+            output_label: ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::SUSPICIOUS,
+            },
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let mut engine = engine_with([fetch, cached], UnknownPolicy::Escalate);
+        engine
+            .register_action_transition(ActionTransition {
+                id: crate::value::TransformerRef {
+                    id: "cache-only".into(),
+                    version: 1,
+                },
+                from_tool: ToolName::new("web.fetch"),
+                to_tool: ToolName::new("web.fetch.cached"),
+                effects: Effects::none(),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
+        let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let constrain = plans
+            .iter()
+            .find(|p| matches!(&p.steps.first().kind, TransitionKind::ConstrainAction { .. }))
+            .expect("constrain plan");
+        assert!(constrain.final_postcondition.is_clean());
+    }
+
+    /// With no registered remedy that predicts a clean flow, the block stays
+    /// terminal.
+    #[test]
+    fn no_applicable_remedy_is_terminal() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw");
+        let request = email_request(&mut trajectory, raw, "bob");
+
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected terminal block");
+        };
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+        assert!(trajectory.pending_action().is_none());
     }
 }

@@ -128,6 +128,9 @@ fn main() {
                 println!("      - {violation}");
             }
         }
+        Decision::Blocked(Blocked::Remediable { .. }) => {
+            unreachable!("no transformers or adjudicators are registered in this demo yet")
+        }
         Decision::Permitted(_) => unreachable!("expected block"),
     }
 

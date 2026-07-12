@@ -40,6 +40,7 @@ pub mod audit;
 pub mod contract;
 pub mod dimension;
 pub mod engine;
+pub mod plan;
 pub mod preset;
 pub mod request;
 pub mod revision;
@@ -82,6 +83,7 @@ pub use engine::{
     BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
     RejectedToken, TerminalBlock, ToolContract, UnknownPolicy,
 };
+pub use plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
 pub use request::{
     ActionState, ArgumentName, ArgumentSchema, ArgumentTree, FlowLabels, PendingAction, ResponseRequest, ToolRequest,
     render,

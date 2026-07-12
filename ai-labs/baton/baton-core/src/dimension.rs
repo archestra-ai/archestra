@@ -77,6 +77,17 @@ impl Audience {
     pub(crate) fn covers(&self, recipients: &BTreeSet<UserId>) -> Adequacy<BTreeSet<UserId>> {
         self.0.covers(recipients)
     }
+
+    /// Waiver application (check-transient): admit `vouched` into the
+    /// readers. `Public` stays public; `Unknown` becomes exactly the vouched
+    /// readers. Monotone in the adequacy order.
+    pub(crate) fn admitting(&self, vouched: &BTreeSet<UserId>) -> Self {
+        match &self.0 {
+            MeetSet::All => Self(MeetSet::All),
+            MeetSet::Only(s) => Self(MeetSet::Only(s.union(vouched).cloned().collect())),
+            MeetSet::Unknown => Self(MeetSet::Only(vouched.clone())),
+        }
+    }
 }
 
 impl fmt::Display for Audience {
@@ -154,6 +165,17 @@ impl Trust {
     pub(crate) fn at_least(&self, floor: KnownTrust) -> Adequacy<KnownTrust> {
         self.0.at_least(floor)
     }
+
+    /// Waiver application (check-transient): raise trust to at least
+    /// `attested`. A join (`max`), never a demotion — a `Trusted` flow is
+    /// never lowered by a weaker attestation, and an `Unknown` one becomes
+    /// the attested judgement.
+    pub(crate) fn raised_to(&self, attested: KnownTrust) -> Self {
+        match self.0 {
+            MinLevel::Known(actual) => Self(MinLevel::Known(actual.max(attested))),
+            MinLevel::Unknown => Self(MinLevel::Known(attested)),
+        }
+    }
 }
 
 impl fmt::Display for Trust {
@@ -221,6 +243,16 @@ impl Effects {
         match &self.0 {
             JoinSet::Has(set) => Some(set.clone()),
             JoinSet::Unknown => None,
+        }
+    }
+
+    /// Waiver application (check-transient): waive `waived` from the present
+    /// effects. `Unknown` stays `Unknown` — one cannot attest a negative over
+    /// it, which is why unprovable effects are acknowledge-only.
+    pub(crate) fn waiving(&self, waived: &BTreeSet<Effect>) -> Self {
+        match &self.0 {
+            JoinSet::Has(present) => Self(JoinSet::Has(present.difference(waived).copied().collect())),
+            JoinSet::Unknown => Self(JoinSet::Unknown),
         }
     }
 }

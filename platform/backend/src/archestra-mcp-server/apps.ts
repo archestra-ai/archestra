@@ -141,8 +141,9 @@ const EditAppSchema = z.strictObject({
     .number()
     .int()
     .positive()
+    .optional()
     .describe(
-      "The version the edits are based on (from read_app). The edit is rejected if the app's head has moved past it.",
+      "Optional optimistic-concurrency guard: the version (from read_app) the edits are based on. Defaults to the current head, so a single editor never has to echo it back. When supplied, the edit is rejected if the app's head has moved past it.",
     ),
   edits: z
     .array(
@@ -772,7 +773,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules); baseVersion is optional and defaults to the current head. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -800,16 +801,21 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
+      // baseVersion is an optional concurrency guard; default to the current
+      // head so a single-editor turn never has to read a version and echo it
+      // back. An explicit stale base still fails the CAS below and writes nothing.
+      const baseVersion = args.baseVersion ?? app.latestVersion;
+
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
       // a base that has been superseded fails the CAS and writes nothing.
       const base = await AppVersionModel.findByAppAndVersion(
         app.id,
-        args.baseVersion,
+        baseVersion,
       );
       if (!base) {
         return errorResult(
-          `App ${args.appId} has no version ${args.baseVersion}. Call read_app for the current head version.`,
+          `App ${args.appId} has no version ${baseVersion}. Call read_app for the current head version.`,
         );
       }
 
@@ -868,7 +874,7 @@ const registry = defineArchestraTools([
         updated = await AppModel.update({
           id: args.appId,
           version,
-          expectedLatestVersion: args.baseVersion,
+          expectedLatestVersion: baseVersion,
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -889,7 +895,7 @@ const registry = defineArchestraTools([
       // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
       // equal); when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
-      const forked = updated.latestVersion !== args.baseVersion;
+      const forked = updated.latestVersion !== baseVersion;
       const summary = forked
         ? `Applied ${editLabel} to app "${updated.name}" (now at version ${updated.latestVersion}).`
         : mode.kind === "edits" && appliedEditCount === 0
@@ -1387,11 +1393,11 @@ async function safeAppName(name: string): Promise<string> {
 
 /**
  * Next-edit rider on scaffold_app/edit_app success texts: names the head
- * version the next edit_app call must pass as baseVersion, so the model never
- * has to guess (or re-read) it.
+ * version so the model knows edit_app defaults to it and that baseVersion is
+ * only needed to guard against a concurrent edit.
  */
 function nextEditBaseVersionHint(latestVersion: number): string {
-  return ` Use baseVersion=${latestVersion} for the next edit_app call.`;
+  return ` edit_app now defaults to this head (version ${latestVersion}); pass baseVersion only to guard against a concurrent edit.`;
 }
 
 // The soft save-time validation-warnings note appended to a mutation's result

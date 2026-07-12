@@ -929,9 +929,10 @@ describe("read_app / edit_app", () => {
     expect(Object.keys(schema.properties)).toEqual(
       expect.arrayContaining(["edits", "replacementHtml"]),
     );
-    expect(schema.required).toEqual(
-      expect.arrayContaining(["appId", "baseVersion"]),
-    );
+    expect(schema.required).toContain("appId");
+    // baseVersion defaults to the head, so it is an optional concurrency guard,
+    // not a required field; the two edit modes are runtime-exclusive optionals.
+    expect(schema.required).not.toContain("baseVersion");
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
 
@@ -1067,6 +1068,26 @@ describe("read_app / edit_app", () => {
     );
     expect(stale.isError).toBe(true);
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
+  });
+
+  test("edit_app without baseVersion applies to the current head", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    // Advance the head so a default-to-head edit must target v2, not the v1 the
+    // scaffold produced — proving the default resolves the live head, not 1.
+    await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
+    const head = version + 1;
+
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, replacementHtml: "<h1>v3</h1>" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(head + 1);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, head + 1))?.html,
+    ).toBe("<h1>v3</h1>");
   });
 
   test("success text excerpts each applied edit from the final document", async () => {

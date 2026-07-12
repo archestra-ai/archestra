@@ -23,10 +23,13 @@ use crate::ToolName;
 use crate::audit::AuditEvent;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::Effects;
-use crate::request::{ArgumentSchema, ToolRequest};
+use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, Revision, ValueId};
 use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::ValueLabel;
+
+/// The reserved sink name the final assistant response is checked under.
+pub const RESPONSE_SINK: &str = "assistant.response";
 
 /// What an unprovable (`Unknown`-caused) violation means at a sink.
 ///
@@ -237,6 +240,9 @@ pub enum BlockReason {
     /// The request referenced a value this trajectory never admitted — a
     /// caller bug, failed closed and loudly.
     UnknownValueReferenced { value: ValueId },
+    /// The response was composed against a revision the trajectory has moved
+    /// past; recompose against the real state.
+    StaleResponse { composed_at: Revision, current: Revision },
 }
 
 impl fmt::Display for BlockReason {
@@ -252,6 +258,12 @@ impl fmt::Display for BlockReason {
             }
             Self::UnknownValueReferenced { value } => {
                 write!(f, "request references {value}, which this trajectory never admitted")
+            }
+            Self::StaleResponse { composed_at, current } => {
+                write!(
+                    f,
+                    "response composed at {composed_at}, but the trajectory is now at {current}"
+                )
             }
         }
     }
@@ -277,9 +289,29 @@ pub enum Decision {
     Blocked(Blocked),
 }
 
-/// Holds the tool contracts and the unknown policy.
+/// Outcome of the completely mediated response sink. On `Emitted`, the
+/// harness sends `rendered` — bytes produced from the exact checked tree —
+/// and nothing else; there is no separate raw model string that may be
+/// returned after the check.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[must_use = "a dropped ResponseDecision means the response was neither emitted nor blocked"]
+pub enum ResponseDecision {
+    Emitted { value: ValueId, rendered: String },
+    Blocked(Blocked),
+}
+
+/// Policy for the final-response sink: what the response flow must satisfy,
+/// and who reads the conversation (the sink's recipients).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ResponsePolicy {
+    pub requires: Requirements,
+    pub readers: BTreeSet<crate::dimension::UserId>,
+}
+
+/// Holds the tool contracts, the response policy, and the unknown policy.
 pub struct PolicyEngine {
     contracts: BTreeMap<ToolName, ToolContract>,
+    response_policy: Option<ResponsePolicy>,
     unknown_policy: UnknownPolicy,
 }
 
@@ -287,8 +319,18 @@ impl PolicyEngine {
     pub fn new(unknown_policy: UnknownPolicy) -> Self {
         Self {
             contracts: BTreeMap::new(),
+            response_policy: None,
             unknown_policy,
         }
+    }
+
+    /// Set the final-response sink policy. Without one, emitting a response
+    /// is unprovable (like calling a tool with no contract) and is disposed
+    /// of by the [`UnknownPolicy`].
+    #[must_use]
+    pub fn with_response_policy(mut self, policy: ResponsePolicy) -> Self {
+        self.response_policy = Some(policy);
+        self
     }
 
     /// Register a tool's contract. Fails if one is already registered for that
@@ -459,6 +501,93 @@ impl PolicyEngine {
         debug!("blocked (no remedy)");
         escalating.extend(audited_unknowns);
         self.terminal(trajectory, escalating, BlockReason::NoRemedy)
+    }
+
+    /// The completely mediated response sink: check the response's explicit
+    /// and control flow against the [`ResponsePolicy`], and on success admit
+    /// the rendered response (an assistant turn) and return the exact bytes
+    /// to emit. Revision-bound via `request.basis`; blocked responses touch
+    /// nothing (in particular, they never clear a pending tool action).
+    ///
+    /// Without a registered response policy the emission is unprovable, like
+    /// a tool with no contract, and the [`UnknownPolicy`] disposes of it.
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub fn evaluate_response(&self, trajectory: &mut Trajectory, request: ResponseRequest) -> ResponseDecision {
+        let blocked =
+            |violations, reason| ResponseDecision::Blocked(Blocked::Terminal(TerminalBlock { violations, reason }));
+
+        if request.basis != trajectory.revision() {
+            debug!(composed_at = %request.basis, current = %trajectory.revision(), "response blocked (stale basis)");
+            return blocked(
+                Vec::new(),
+                BlockReason::StaleResponse {
+                    composed_at: request.basis,
+                    current: trajectory.revision(),
+                },
+            );
+        }
+        let flow = match request.flow_labels(trajectory.store()) {
+            Ok(labels) => labels,
+            Err(unknown) => {
+                return blocked(Vec::new(), BlockReason::UnknownValueReferenced { value: unknown.id });
+            }
+        };
+
+        let sink = ToolName::new(RESPONSE_SINK);
+        let verdict = match &self.response_policy {
+            Some(policy) => policy.requires.check_flow(
+                &flow.flow(),
+                trajectory.state().past_effects(),
+                None,
+                &sink,
+                &policy.readers,
+            ),
+            None => Verdict::Escalate(vec![Violation::Unprovable(Unprovable::NoContract {
+                tool: sink.clone(),
+            })]),
+        };
+        let violations = match verdict {
+            Verdict::Allow => Vec::new(),
+            Verdict::Escalate(violations) => violations,
+        };
+
+        if violations.iter().any(|v| v.fixability() == Fixability::Structural) {
+            debug!("response blocked (structural fix required)");
+            return blocked(violations, BlockReason::RequiresStructuralFix);
+        }
+        let (unprovable, breaches): (Vec<Violation>, Vec<Violation>) = violations
+            .into_iter()
+            .partition(|v| matches!(v, Violation::Unprovable(_)));
+        let mut escalating = breaches;
+        let mut audited_unknowns = Vec::new();
+        match self.unknown_policy {
+            UnknownPolicy::Escalate => escalating.extend(unprovable),
+            UnknownPolicy::Deny => {
+                if !unprovable.is_empty() {
+                    escalating.extend(unprovable);
+                    debug!("response blocked (unknown-policy deny)");
+                    return blocked(escalating, BlockReason::UnknownDenied);
+                }
+            }
+            UnknownPolicy::AllowWithAudit => audited_unknowns = unprovable,
+        }
+        if !escalating.is_empty() {
+            debug!("response blocked (no remedy)");
+            escalating.extend(audited_unknowns);
+            return blocked(escalating, BlockReason::NoRemedy);
+        }
+
+        if !audited_unknowns.is_empty() {
+            trajectory.record_event(AuditEvent::UnknownAudited {
+                tool: sink,
+                facts: audited_unknowns,
+            });
+        }
+        let (value, rendered) = trajectory
+            .emit_response(&request.body, request.control)
+            .expect("response dependencies were validated by flow_labels above");
+        debug!(%value, "response emitted");
+        ResponseDecision::Emitted { value, rendered }
     }
 
     /// Mint the execution token, storing the pending action first if this is
@@ -944,5 +1073,138 @@ mod tests {
             block.violations.as_slice(),
             [Violation::Breach(crate::contract::Breach::ConfirmationMissing { .. })]
         ));
+    }
+
+    fn response_engine(readers: &[&str]) -> PolicyEngine {
+        PolicyEngine::new(UnknownPolicy::Escalate).with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::RecipientsWithinContext,
+                ..Requirements::default()
+            },
+            readers: readers.iter().map(|r| user(r)).collect(),
+        })
+    }
+
+    #[test]
+    fn clean_response_is_emitted_from_the_exact_checked_tree() {
+        let engine = response_engine(&["alice"]);
+        let mut trajectory = Trajectory::new();
+        let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "all done");
+        let request = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+
+        let ResponseDecision::Emitted { value, rendered } = engine.evaluate_response(&mut trajectory, request) else {
+            panic!("expected emission");
+        };
+        assert_eq!(rendered, "\"all done\"");
+        // The emitted value is the rendered bytes, derived from the tree.
+        assert_eq!(trajectory.value(value).unwrap().body().as_str(), rendered);
+        assert!(matches!(
+            trajectory.turns().last(),
+            Some(crate::turn::Turn {
+                actor: crate::turn::Actor::Assistant,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn response_leaking_outside_readers_is_blocked() {
+        // The conversation reader is charlie, but the response depends on a
+        // value only alice may read.
+        let engine = response_engine(&["charlie"]);
+        let mut trajectory = Trajectory::new();
+        let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
+        let summary = trajectory
+            .admit_model_output(
+                OpaqueValue::new("about the secret"),
+                BTreeSet::from([secret]),
+                BTreeSet::new(),
+            )
+            .unwrap();
+        let request = ResponseRequest {
+            body: ArgumentTree::Value(summary),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+
+        let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request)
+        else {
+            panic!("expected block");
+        };
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })]
+        ));
+    }
+
+    #[test]
+    fn response_control_dependence_is_checked() {
+        let engine = response_engine(&["charlie"]);
+        let mut trajectory = Trajectory::new();
+        let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
+        let bland = ingress(&mut trajectory, &["alice", "charlie"], Trust::TRUSTED, "ok");
+        // The response text is clean, but WHETHER to say it was decided after
+        // reading the secret.
+        let request = ResponseRequest {
+            body: ArgumentTree::Value(bland),
+            control: BTreeSet::from([secret]),
+            basis: trajectory.revision(),
+        };
+
+        let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request)
+        else {
+            panic!("expected block");
+        };
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })]
+        ));
+    }
+
+    #[test]
+    fn stale_response_basis_is_blocked_and_touches_nothing() {
+        let engine = response_engine(&["alice"]);
+        let mut trajectory = Trajectory::new();
+        let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "done");
+        let stale_basis = trajectory.revision();
+        // The trajectory moves on before emission.
+        trajectory
+            .admit_model_output(OpaqueValue::new("more"), BTreeSet::from([note]), BTreeSet::new())
+            .unwrap();
+        let turns_before = trajectory.turns().len();
+
+        let request = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: stale_basis,
+        };
+        let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request)
+        else {
+            panic!("expected block");
+        };
+        assert!(matches!(block.reason, BlockReason::StaleResponse { .. }));
+        assert_eq!(trajectory.turns().len(), turns_before);
+    }
+
+    #[test]
+    fn response_without_policy_is_unprovable() {
+        let engine = engine_with([], UnknownPolicy::Deny);
+        let mut trajectory = Trajectory::new();
+        let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "hi");
+        let request = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+
+        let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request)
+        else {
+            panic!("expected block");
+        };
+        assert_eq!(block.reason, BlockReason::UnknownDenied);
     }
 }

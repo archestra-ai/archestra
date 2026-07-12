@@ -324,6 +324,27 @@ impl Trajectory {
         }
     }
 
+    /// Admit and emit a checked response: the rendered bytes become a value
+    /// derived from the body tree's leaves and the control dependencies, and
+    /// an assistant turn references it. Only the engine's response sink calls
+    /// this, after the flow check passed.
+    pub(crate) fn emit_response(
+        &mut self,
+        body: &crate::request::ArgumentTree<ValueId>,
+        control: BTreeSet<ValueId>,
+    ) -> Result<(ValueId, String), UnknownValue> {
+        let rendered = crate::request::render(body, &self.store)?;
+        let value = self
+            .store
+            .admit_model_output(OpaqueValue::new(rendered.clone()), body.leaves(), control)?;
+        self.turns.push(Turn {
+            actor: Actor::Assistant,
+            value,
+        });
+        self.advance();
+        Ok((value, rendered))
+    }
+
     /// Explicitly abandon the pending action (e.g. the harness dropped its
     /// token). Clears the slot and advances the revision, so the dropped
     /// token can never be spent.

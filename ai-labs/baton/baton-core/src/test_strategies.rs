@@ -13,6 +13,7 @@ use proptest::prelude::*;
 use crate::ToolName;
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 use crate::label::{AuditEntry, Grant, Label};
+use crate::value::ValueLabel;
 
 const USERS: &[&str] = &["alice", "bob", "charlie", "dave"];
 const TOOLS: &[&str] = &["a.tool", "b.tool"];
@@ -92,6 +93,10 @@ pub(crate) fn arb_label_no_audit() -> impl Strategy<Value = Label> {
         effects,
         audit: Vec::new(),
     })
+}
+
+pub(crate) fn arb_value_label() -> impl Strategy<Value = ValueLabel> {
+    (arb_audience(), arb_trust()).prop_map(|(audience, trust)| ValueLabel { audience, trust })
 }
 
 pub(crate) fn arb_grant() -> impl Strategy<Value = Grant> {

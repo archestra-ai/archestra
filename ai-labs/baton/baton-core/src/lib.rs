@@ -34,13 +34,16 @@
 //! **intersection** (most-restrictive readers), not union — see
 //! [`dimension::Audience`] for why union would make the sink check vacuous.
 
+pub mod audit;
 pub mod authority;
 pub mod contract;
 pub mod dimension;
 pub mod engine;
 pub mod label;
 pub mod preset;
+pub mod revision;
 pub mod turn;
+pub mod value;
 
 #[cfg(test)]
 mod test_strategies;
@@ -70,6 +73,7 @@ impl fmt::Display for ToolName {
     }
 }
 
+pub use audit::{AdjudicatorName, AuditEvent, TrajectoryState, TransitionFailure, TransitionOutcome, WaiverKind};
 pub use authority::{Authority, AuthorityName, Ruling};
 pub use contract::{
     AttentionRule, AudienceRule, Breach, Requirements, ToolContract, ToolRequest, Unprovable, Verdict, Violation,
@@ -79,4 +83,6 @@ pub use engine::{
     BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
 };
 pub use label::{AuditEntry, Grant, Label};
+pub use revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
 pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};
+pub use value::{OpaqueValue, Provenance, StoredValue, TransformerRef, UnknownValue, ValueLabel, ValueStore};

@@ -27,6 +27,7 @@ use serde::Serialize;
 
 use crate::audit::AdjudicatorName;
 use crate::contract::Violation;
+use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::WaiverDelta;
 use crate::turn::TrajectoryId;
@@ -71,6 +72,7 @@ pub struct PendingApproval {
     basis_values: BTreeSet<ValueId>,
     trajectory: TrajectoryId,
     revision: Revision,
+    engine: EngineId,
 }
 
 /// The consumed contents of a [`PendingApproval`]. The plan id stays behind
@@ -83,6 +85,7 @@ pub(crate) struct ApprovalParts {
     pub(crate) resolved: Vec<Violation>,
     pub(crate) trajectory: TrajectoryId,
     pub(crate) revision: Revision,
+    pub(crate) engine: EngineId,
 }
 
 impl PendingApproval {
@@ -99,6 +102,7 @@ impl PendingApproval {
         basis_values: BTreeSet<ValueId>,
         trajectory: TrajectoryId,
         revision: Revision,
+        engine: EngineId,
     ) -> Self {
         Self {
             plan,
@@ -109,6 +113,7 @@ impl PendingApproval {
             basis_values,
             trajectory,
             revision,
+            engine,
         }
     }
 
@@ -135,6 +140,7 @@ impl PendingApproval {
             resolved: self.resolved,
             trajectory: self.trajectory,
             revision: self.revision,
+            engine: self.engine,
         }
     }
 }

@@ -145,10 +145,11 @@ fn main() {
         .unwrap();
     match decision {
         Decision::Permitted(token) => {
+            let (canonical, receipt) = trajectory.release(token).unwrap();
+            println!("   -> approved; dispatching exactly: {}", canonical.rendered);
             trajectory
-                .record_result(token, OpaqueValue::new("message-id: 2"))
+                .record_output(receipt, OpaqueValue::new("message-id: 2"))
                 .unwrap();
-            println!("   -> approved, sent, and audited.");
         }
         other => unreachable!("expected permit after approval, got {other:?}"),
     }

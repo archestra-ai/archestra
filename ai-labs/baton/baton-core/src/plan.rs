@@ -13,6 +13,7 @@ use serde::Serialize;
 
 use crate::audit::AdjudicatorName;
 use crate::contract::Violation;
+use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::WaiverDelta;
 use crate::value::TransformerRef;
@@ -144,6 +145,11 @@ pub struct RemedyPlan {
     /// The trajectory revision the prediction was computed against. Any
     /// state change invalidates the plan.
     pub basis: Revision,
+    /// The engine (registry configuration) that computed the prediction.
+    /// Steps resolve transformers, transitions, rules, and adjudicators from
+    /// their registries, so a plan is applicable only on the engine that
+    /// minted it.
+    pub engine: EngineId,
 }
 
 #[cfg(test)]

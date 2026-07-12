@@ -49,7 +49,7 @@ pub enum Actor {
 }
 
 /// Who may author an ingress turn. Tool results are deliberately absent:
-/// they enter a trajectory only through [`Trajectory::record_result`].
+/// they enter a trajectory only through [`Trajectory::record_output`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Speaker {
     User(UserTurn),
@@ -305,15 +305,6 @@ impl Trajectory {
         Ok(())
     }
 
-    /// One-call convenience for harnesses that dispatch synchronously:
-    /// [`release`](Trajectory::release) followed by
-    /// [`record_output`](Trajectory::record_output), discarding the canonical
-    /// request.
-    pub fn record_result(&mut self, token: ExecutionToken, body: OpaqueValue) -> Result<ValueId, RejectedToken> {
-        let (_, receipt) = self.release(token)?;
-        self.record_output(receipt, body)
-    }
-
     fn validate_receipt(&self, receipt: DispatchReceipt) -> Result<ReceiptParts, RejectedToken> {
         let parts = receipt.into_parts();
         if parts.trajectory != self.id {
@@ -419,6 +410,7 @@ impl Trajectory {
     pub(crate) fn store_plans(
         &mut self,
         action: ActionId,
+        engine: crate::engine::EngineId,
         drafts: Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
     ) -> Vec<RemedyPlan> {
         self.advance();
@@ -434,6 +426,7 @@ impl Trajectory {
                     steps,
                     final_postcondition,
                     basis,
+                    engine,
                 }
             })
             .collect();

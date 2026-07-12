@@ -53,13 +53,18 @@ observable; preserve it (there is a typed-order test).
 - Capabilities — `ExecutionToken`, `DispatchReceipt`, `StepCapability`,
   `PendingApproval` — are **non-`Clone`, `Serialize`-only, no public
   constructor**, bound to trajectory + revision (+ action/plan/step), spent on
-  use. Never add `Deserialize`: deserializing one forges the linearity.
-  `Trajectory` itself is not serde at all.
+  use. Plans, step capabilities, and pending approvals additionally bind the
+  `EngineId` whose registries produced them — a capability never resolves
+  against another engine's registries. Never add `Deserialize`: deserializing
+  one forges the linearity. `Trajectory` itself is not serde at all.
 - Two-phase dispatch: `release` commits may-effects, spends any pending
   confirmation, renders the **one** canonical request from the exact checked
   tree, and mints the receipt; `record_output`/`record_failure` consume the
-  receipt and close the action. Binding failures (stale/foreign) refuse
-  *without* touching state; the capability is consumed either way.
+  receipt and close the action. There is deliberately no one-call shortcut
+  that skips the canonical request — do not add one. Binding failures
+  (stale/foreign) refuse *without* touching state; the capability is consumed
+  either way. The pending action's (possibly constrained) proposed effects
+  are the single source of truth for what release commits.
 - Confirmation stays structural on user turns; it survives remedy steps on
   the confirmed action and is spent atomically at release (the
   spent-confirmation marker exists so a receipt-declared failure cannot
@@ -79,7 +84,11 @@ observable; preserve it (there is a typed-order test).
 - The closed `TransitionKind` variants enforce conservation laws: transforms
   cannot touch actions or past effects; constraints go only through
   registered tool-identity mappings verified never wider
-  (`ActionTransition::narrows` — subset or unknown-confinement); waivers
+  (`ActionTransition::narrows` — subset or unknown-confinement; the target
+  contract must declare exactly the transition's effects and must not widen
+  the resolved recipient set — the PoC's structural relation covers tool
+  identity, effects, and recipient roles; egress-destination and
+  runtime-capability sets are not modeled); waivers
   change no stored state — check-transient lifts (`raised_to`, `admitting`,
   `waiving`) plus an audit record. `WaiverDelta` is proposal data, not a
   capability; authority comes from competence routing + the fail-closed

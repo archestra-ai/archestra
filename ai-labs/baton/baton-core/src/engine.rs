@@ -35,6 +35,28 @@ use crate::value::{UnknownValue, ValueLabel};
 /// The reserved sink name the final assistant response is checked under.
 pub const RESPONSE_SINK: &str = "assistant.response";
 
+/// Identity of one engine configuration, unique within the process. Plans,
+/// step capabilities, and pending approvals bind to it: registries are the
+/// semantic trust decision, so a capability minted under one engine's
+/// registries must never resolve against another's — even if both registered
+/// a transformer under the same public name and version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct EngineId(u64);
+
+impl EngineId {
+    fn next() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        Self(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    }
+}
+
+impl fmt::Display for EngineId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "engine#{}", self.0)
+    }
+}
+
 /// What an unprovable (`Unknown`-caused) violation means at a sink.
 ///
 /// This is the gradual-adoption knob: annotate a handful of high-risk tools,
@@ -80,9 +102,9 @@ pub struct ToolContract {
 /// use:
 ///
 /// ```compile_fail
-/// fn spend_twice(mut trajectory: baton_core::Trajectory, token: baton_core::ExecutionToken) {
-///     let _ = trajectory.record_result(token, baton_core::OpaqueValue::new("first"));
-///     let _ = trajectory.record_result(token, baton_core::OpaqueValue::new("second"));
+/// fn release_twice(mut trajectory: baton_core::Trajectory, token: baton_core::ExecutionToken) {
+///     let _ = trajectory.release(token);
+///     let _ = trajectory.release(token);
 /// }
 /// ```
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -231,6 +253,7 @@ pub struct StepCapability {
     action: ActionId,
     trajectory: TrajectoryId,
     revision: Revision,
+    engine: EngineId,
 }
 
 /// A step or approval interaction was refused without touching state: the
@@ -248,6 +271,8 @@ pub enum StepRefused {
         minted_for: TrajectoryId,
         this: TrajectoryId,
     },
+    #[error("capability was minted under {minted_by}, not {this}")]
+    ForeignEngine { minted_by: EngineId, this: EngineId },
     #[error("action {action} is not pending on this trajectory")]
     ActionNotPending { action: ActionId },
 }
@@ -382,6 +407,7 @@ pub struct ResponsePolicy {
 /// and the unknown policy. Registries are populated at construction time and
 /// never mutated mid-run.
 pub struct PolicyEngine {
+    id: EngineId,
     contracts: BTreeMap<ToolName, ToolContract>,
     transformers: Vec<RegisteredTransformer>,
     action_transitions: Vec<ActionTransition>,
@@ -394,6 +420,7 @@ pub struct PolicyEngine {
 impl PolicyEngine {
     pub fn new(unknown_policy: UnknownPolicy) -> Self {
         Self {
+            id: EngineId::next(),
             contracts: BTreeMap::new(),
             transformers: Vec::new(),
             action_transitions: Vec::new(),
@@ -569,6 +596,19 @@ impl PolicyEngine {
         };
         debug!(has_contract = contract.is_some(), flow = %flow.flow(), "contract lookup");
 
+        // The constrained pending action's proposed effects are the single
+        // source of truth on re-entry: a ConstrainAction narrowed them, and
+        // the target contract's declaration must not overwrite the narrowing
+        // baton validated.
+        let proposed_effects = match existing_action {
+            Some(_) => trajectory
+                .pending_action()
+                .expect("re-entry implies a pending action")
+                .proposed_effects()
+                .clone(),
+            None => proposed_effects,
+        };
+
         let violations = match verdict {
             Verdict::Allow => Vec::new(),
             Verdict::Escalate(violations) => violations,
@@ -650,7 +690,7 @@ impl PolicyEngine {
             contract,
             trajectory.pending_action().expect("pending action set above"),
         );
-        match NonEmptyVec::from_vec(trajectory.store_plans(action, drafts)) {
+        match NonEmptyVec::from_vec(trajectory.store_plans(action, self.id, drafts)) {
             Some(plans) => {
                 debug!(count = plans.len(), "blocked (remediable)");
                 Decision::Blocked(Blocked::Remediable {
@@ -768,6 +808,12 @@ impl PolicyEngine {
                 current: trajectory.revision(),
             });
         }
+        if stored.engine != self.id {
+            return Err(StepRefused::ForeignEngine {
+                minted_by: stored.engine,
+                this: self.id,
+            });
+        }
         stored.steps.get(step).ok_or(StepRefused::NoSuchStep { plan, step })?;
         match trajectory.pending_action() {
             Some(pending) if pending.id() == stored.action => {}
@@ -779,6 +825,7 @@ impl PolicyEngine {
             action: stored.action,
             trajectory: trajectory.id(),
             revision: trajectory.revision(),
+            engine: self.id,
         })
     }
 
@@ -794,6 +841,12 @@ impl PolicyEngine {
         trajectory: &mut Trajectory,
         capability: StepCapability,
     ) -> Result<StepOutcome, StepRefused> {
+        if capability.engine != self.id {
+            return Err(StepRefused::ForeignEngine {
+                minted_by: capability.engine,
+                this: self.id,
+            });
+        }
         if capability.trajectory != trajectory.id() {
             return Err(StepRefused::ForeignTrajectory {
                 minted_for: capability.trajectory,
@@ -866,6 +919,22 @@ impl PolicyEngine {
                     );
                     return Ok(StepOutcome::Failed(failure));
                 }
+                // Validate the declared postcondition BEFORE mutating:
+                // labels are deterministic, so simulating the swap is exactly
+                // the state the transform would produce. A failed transition
+                // must create no value and no substitution.
+                let mut after = sim.clone();
+                after.leaf_labels.insert(source, registered.descriptor.output.clone());
+                if after.violations(None) != spec.postcondition.remaining {
+                    let failure = crate::audit::TransitionFailure::PostconditionMismatch;
+                    trajectory.fail_transform(
+                        source,
+                        registered.descriptor.transformer.clone(),
+                        registered.descriptor.output.clone(),
+                        failure.clone(),
+                    );
+                    return Ok(StepOutcome::Failed(failure));
+                }
                 let body = match (registered.run)(source_value.body()) {
                     Ok(body) => body,
                     Err(error) => {
@@ -885,7 +954,7 @@ impl PolicyEngine {
                     registered.descriptor.output.clone(),
                     body,
                 );
-                self.step_epilogue(trajectory, spec, original)
+                Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
             }
             TransitionKind::ConstrainAction { transition } => {
                 let registered = self
@@ -894,16 +963,46 @@ impl PolicyEngine {
                     .find(|t| t.id == transition)
                     .expect("plans reference only registered action transitions");
                 let pending = trajectory.pending_action().expect("validated above");
-                if let Err(failure) = registered.narrows(pending) {
+                let fail = |trajectory: &mut Trajectory, failure: crate::audit::TransitionFailure| {
                     trajectory.record_event(AuditEvent::StepFailed {
                         plan: capability.plan,
                         step: capability.step as u64,
                         failure: failure.clone(),
                     });
-                    return Ok(StepOutcome::Failed(failure));
+                    Ok(StepOutcome::Failed(failure))
+                };
+                if let Err(failure) = registered.narrows(pending) {
+                    return fail(trajectory, failure);
+                }
+                // The target contract must exist, declare exactly the
+                // effects the transition was validated against, and must not
+                // widen the resolved recipient set under its schema.
+                let Some(target) = self.contracts.get(&registered.to_tool) else {
+                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
+                };
+                if target.effects != registered.effects {
+                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
+                }
+                let Ok(recipients) = target
+                    .arguments
+                    .resolve_recipients(&checked.arguments, trajectory.store())
+                else {
+                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
+                };
+                if !recipients.is_subset(&sim.recipients) {
+                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
+                }
+                // Pre-mutation postcondition validation, mirroring the
+                // planner's simulation exactly.
+                let mut after = sim.clone();
+                after.tool = registered.to_tool.clone();
+                after.requires = target.requires.clone();
+                after.recipients = recipients;
+                if after.violations(None) != spec.postcondition.remaining {
+                    return fail(trajectory, crate::audit::TransitionFailure::PostconditionMismatch);
                 }
                 trajectory.apply_constraint(registered.to_tool.clone(), registered.effects.clone());
-                self.step_epilogue(trajectory, spec, original)
+                Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
             }
             TransitionKind::ApplyWaiver { delta, authority } => match authority {
                 WaiverAuthority::Rule(name) => {
@@ -955,6 +1054,7 @@ impl PolicyEngine {
                         basis_values,
                         trajectory.id(),
                         trajectory.revision(),
+                        self.id,
                     )))
                 }
             },
@@ -972,6 +1072,12 @@ impl PolicyEngine {
         ruling: Ruling,
     ) -> Result<Decision, StepRefused> {
         let parts = pending.into_parts();
+        if parts.engine != self.id {
+            return Err(StepRefused::ForeignEngine {
+                minted_by: parts.engine,
+                this: self.id,
+            });
+        }
         if parts.trajectory != trajectory.id() {
             return Err(StepRefused::ForeignTrajectory {
                 minted_for: parts.trajectory,
@@ -1007,27 +1113,6 @@ impl PolicyEngine {
                 ))
             }
         }
-    }
-
-    /// Post-step: validate the declared postcondition against the real state
-    /// and re-evaluate the original flow.
-    fn step_epilogue(
-        &self,
-        trajectory: &mut Trajectory,
-        spec: TransitionSpec,
-        original: ToolRequest,
-    ) -> Result<StepOutcome, StepRefused> {
-        let pending = trajectory.pending_action().expect("step application keeps the action");
-        let checked = pending.current().clone();
-        let contract = self.contracts.get(&checked.tool);
-        let sim = SimFlow::of(trajectory, &checked, contract).expect("pending action dependencies stay admitted");
-        if sim.violations(None) != spec.postcondition.remaining {
-            debug!("step applied but predicted postcondition does not hold");
-            return Ok(StepOutcome::Failed(
-                crate::audit::TransitionFailure::PostconditionMismatch,
-            ));
-        }
-        Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
     }
 
     /// A granted waiver: recheck the flow fail-closed under the delta, audit
@@ -1112,10 +1197,23 @@ impl PolicyEngine {
         // Candidate constrain steps: registered action transitions from this
         // tool whose structural narrowing holds and whose target tool has a
         // contract.
+        // A constrain candidate needs a registered target contract whose
+        // declared effects agree with the transition's (the narrowing baton
+        // validates must be what the target actually does) and whose argument
+        // schema does not widen the resolved recipient set.
         let constrains: Vec<&ActionTransition> = self
             .action_transitions
             .iter()
-            .filter(|t| t.narrows(pending).is_ok() && self.contracts.contains_key(&t.to_tool))
+            .filter(|t| {
+                t.narrows(pending).is_ok()
+                    && self.contracts.get(&t.to_tool).is_some_and(|target| {
+                        target.effects == t.effects
+                            && target
+                                .arguments
+                                .resolve_recipients(&checked.arguments, trajectory.store())
+                                .is_ok_and(|recipients| recipients.is_subset(&base.recipients))
+                    })
+            })
             .collect();
 
         let mut plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
@@ -1487,6 +1585,12 @@ mod tests {
         )
     }
 
+    /// Test shorthand for the full dispatch boundary: release, then record.
+    fn dispatch(trajectory: &mut Trajectory, token: ExecutionToken, body: &str) -> Result<ValueId, RejectedToken> {
+        let (_, receipt) = trajectory.release(token)?;
+        trajectory.record_output(receipt, OpaqueValue::new(body))
+    }
+
     fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) -> ToolRequest {
         let to = trajectory.ingress(
             Speaker::user(user("alice")),
@@ -1515,7 +1619,7 @@ mod tests {
         };
         assert!(trajectory.pending_action().is_some());
 
-        let result = trajectory.record_result(token, OpaqueValue::new("sent")).unwrap();
+        let result = dispatch(&mut trajectory, token, "sent").unwrap();
         assert!(trajectory.pending_action().is_none());
         // Output label folds intrinsic (identity) with the argument labels.
         assert_eq!(
@@ -1613,7 +1717,7 @@ mod tests {
             [AuditEvent::UnknownAudited { .. }]
         ));
 
-        let result = trajectory.record_result(token, OpaqueValue::new("???")).unwrap();
+        let result = dispatch(&mut trajectory, token, "???").unwrap();
         // Intrinsic unknown poisons the output despite trusted inputs...
         assert_eq!(trajectory.value(result).unwrap().label(), &ValueLabel::unknown());
         // ...and unknown effects absorb the past.
@@ -1656,7 +1760,7 @@ mod tests {
             .admit_model_output(OpaqueValue::new("thinking"), BTreeSet::from([body]), BTreeSet::new())
             .unwrap();
 
-        let err = trajectory.record_result(token, OpaqueValue::new("sent")).unwrap_err();
+        let err = dispatch(&mut trajectory, token, "sent").unwrap_err();
         assert!(matches!(err, RejectedToken::Stale { .. }));
     }
 
@@ -1671,7 +1775,7 @@ mod tests {
         };
 
         let mut other = Trajectory::new();
-        let err = other.record_result(token, OpaqueValue::new("sent")).unwrap_err();
+        let err = dispatch(&mut other, token, "sent").unwrap_err();
         assert!(matches!(err, RejectedToken::ForeignTrajectory { .. }));
     }
 
@@ -1716,8 +1820,8 @@ mod tests {
 
         // Both tokens are bound to the same revision; spending one consumes
         // the action and invalidates the other.
-        trajectory.record_result(second, OpaqueValue::new("sent")).unwrap();
-        let err = trajectory.record_result(first, OpaqueValue::new("again")).unwrap_err();
+        dispatch(&mut trajectory, second, "sent").unwrap();
+        let err = dispatch(&mut trajectory, first, "again").unwrap_err();
         assert!(matches!(err, RejectedToken::Stale { .. }));
     }
 
@@ -1740,7 +1844,7 @@ mod tests {
         let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
             panic!("expected permit");
         };
-        trajectory.record_result(token, OpaqueValue::new("sent")).unwrap();
+        dispatch(&mut trajectory, token, "sent").unwrap();
 
         let report_request = ToolRequest::new(
             ToolName::new("report.generate"),
@@ -2721,5 +2825,177 @@ mod tests {
                 })
                 .is_err()
         );
+    }
+
+    /// A capability minted under one engine's registries never resolves
+    /// against another's — even one configured identically.
+    #[test]
+    fn capabilities_are_bound_to_their_engine() {
+        let mut engine_a = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine_a.register_adjudicator(human()).unwrap();
+        // Engine B registers the same names — a different trust domain.
+        let mut engine_b = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine_b.register_adjudicator(human()).unwrap();
+
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine_a.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+
+        // B can neither mint nor apply against A's stored plan.
+        assert!(matches!(
+            engine_b.mint_step(&trajectory, plans.first().id, 0),
+            Err(StepRefused::ForeignEngine { .. })
+        ));
+        let capability = engine_a.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        assert!(matches!(
+            engine_b.apply_step(&mut trajectory, capability),
+            Err(StepRefused::ForeignEngine { .. })
+        ));
+
+        // Nor can B consume A's pending approval.
+        let capability = engine_a.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine_a.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        assert!(matches!(
+            engine_b.apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "cross-domain".to_owned()
+                }
+            ),
+            Err(StepRefused::ForeignEngine { .. })
+        ));
+    }
+
+    /// An action transition whose declared effects disagree with the target
+    /// contract is never planned: the narrowing baton validates must be what
+    /// the target actually does.
+    #[test]
+    fn constrain_with_mismatched_target_effects_is_not_planned() {
+        let fetch = ToolContract {
+            name: ToolName::new("web.fetch"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        // The target contract says it mutates; the transition claims no
+        // effects. The narrowing claim and reality disagree.
+        let cached = ToolContract {
+            name: ToolName::new("web.fetch.cached"),
+            requires: Requirements::default(),
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Mutation]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let mut engine = engine_with([fetch, cached], UnknownPolicy::Escalate);
+        engine
+            .register_action_transition(ActionTransition {
+                id: crate::value::TransformerRef {
+                    id: "cache-only".into(),
+                    version: 1,
+                },
+                from_tool: ToolName::new("web.fetch"),
+                to_tool: ToolName::new("web.fetch.cached"),
+                effects: Effects::none(),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
+        let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
+
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected terminal block — the inconsistent mapping must not be planned");
+        };
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+    }
+
+    /// A constrained action's narrowed effects are what release commits, and
+    /// a later effect-sensitive sink sees exactly them.
+    #[test]
+    fn constrained_effects_survive_to_release_and_later_sinks() {
+        let fetch = ToolContract {
+            name: ToolName::new("web.fetch"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let cached = ToolContract {
+            name: ToolName::new("web.fetch.cached"),
+            requires: Requirements::default(),
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let report = ToolContract {
+            name: ToolName::new("report.generate"),
+            requires: Requirements {
+                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let mut engine = engine_with([fetch, cached, report], UnknownPolicy::Escalate);
+        engine
+            .register_action_transition(ActionTransition {
+                id: crate::value::TransformerRef {
+                    id: "cache-only".into(),
+                    version: 1,
+                },
+                from_tool: ToolName::new("web.fetch"),
+                to_tool: ToolName::new("web.fetch.cached"),
+                effects: Effects::none(),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
+        let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let constrain = plans
+            .iter()
+            .find(|p| matches!(&p.steps.first().kind, TransitionKind::ConstrainAction { .. }))
+            .expect("constrain plan");
+        let capability = engine.mint_step(&trajectory, constrain.id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected the constraint to clear the flow");
+        };
+        let (canonical, receipt) = trajectory.release(token).unwrap();
+        assert_eq!(canonical.tool, ToolName::new("web.fetch.cached"));
+        // The narrowed (empty) effects were committed, not the original
+        // tool's egress.
+        assert_eq!(trajectory.state().past_effects(), &Effects::none());
+        trajectory
+            .record_output(receipt, OpaqueValue::new("cached page"))
+            .unwrap();
+
+        // An egress-forbidding sink is satisfied: no egress ever happened.
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "notes");
+        let report_request = ToolRequest::new(
+            ToolName::new("report.generate"),
+            ArgumentTree::Value(doc),
+            BTreeSet::new(),
+        );
+        assert!(matches!(
+            engine.evaluate(&mut trajectory, report_request),
+            Decision::Permitted(_)
+        ));
     }
 }

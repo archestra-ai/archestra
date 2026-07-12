@@ -82,9 +82,9 @@ pub use audit::{AdjudicatorName, AuditEvent, TrajectoryState, TransitionFailure,
 pub use contract::{AttentionRule, AudienceRule, Breach, Requirements, Unprovable, Verdict, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
-    RESPONSE_SINK, RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused,
-    TerminalBlock, ToolContract, UnknownPolicy,
+    BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, EngineId, ExecutionToken,
+    PolicyEngine, RESPONSE_SINK, RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome,
+    StepRefused, TerminalBlock, ToolContract, UnknownPolicy,
 };
 pub use plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
 pub use request::{

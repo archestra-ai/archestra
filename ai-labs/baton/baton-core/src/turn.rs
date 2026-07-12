@@ -240,12 +240,17 @@ impl Trajectory {
             });
         }
         let rendered = match &self.pending {
-            Some(pending) if pending.id() == parts.action => {
+            // Only a not-yet-released action may be released: a `Released`
+            // action already has a dispatch in flight, so a second release
+            // would render and commit twice. (The token's revision binding
+            // normally prevents a second token, but `release` itself advances
+            // the revision, so this state guard is the actual defense.)
+            Some(pending) if pending.id() == parts.action && pending.state() != ActionState::Released => {
                 crate::request::render(&pending.current().arguments, &self.store)
                     .expect("pending action dependencies were validated at evaluate time")
             }
             _ => {
-                debug!(action = %parts.action, "release: rejected (action not pending)");
+                debug!(action = %parts.action, "release: rejected (action not pending or already released)");
                 return Err(RejectedToken::ActionNotPending { action: parts.action });
             }
         };

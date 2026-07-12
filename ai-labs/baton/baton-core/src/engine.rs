@@ -532,6 +532,20 @@ impl PolicyEngine {
         // Pending-slot discipline: at most one action, idempotent re-entry
         // against the immutable original, everything else refused.
         let (checked_request, existing_action) = match trajectory.pending_action() {
+            // A released action has a dispatch in flight (its execution token
+            // was consumed by `release`, and a receipt is outstanding).
+            // Re-permitting it would mint a second token at the same revision
+            // and enable a double dispatch — refuse until the receipt closes
+            // the action via record_output/record_failure.
+            Some(pending)
+                if *pending.original() == request && pending.state() == crate::request::ActionState::Released =>
+            {
+                debug!(action = %pending.id(), "blocked (action already released, dispatch in flight)");
+                return Decision::Blocked(Blocked::Terminal(TerminalBlock {
+                    violations: Vec::new(),
+                    reason: BlockReason::ActionAlreadyPending { pending: pending.id() },
+                }));
+            }
             Some(pending) if *pending.original() == request => {
                 debug!(action = %pending.id(), "re-entry: reusing pending action");
                 (pending.current().clone(), Some(pending.id()))
@@ -660,7 +674,10 @@ impl PolicyEngine {
         }
 
         if escalating.is_empty() {
-            if !audited_unknowns.is_empty() {
+            // Idempotent re-entry: a re-evaluation of the same original
+            // request must not append a second UnknownAudited event (the
+            // first evaluation already recorded it).
+            if !audited_unknowns.is_empty() && existing_action.is_none() {
                 debug!(count = audited_unknowns.len(), "recording policy-audited unknowns");
                 trajectory.record_event(AuditEvent::UnknownAudited {
                     tool: checked_request.tool.clone(),
@@ -1137,10 +1154,19 @@ impl PolicyEngine {
             debug!("waiver did not clear its targeted checks, failing closed");
             return self.terminal(trajectory, remaining, BlockReason::PostconditionFailed);
         }
+        // If the delta also cleared acknowledge-only facts (unprovable
+        // effects, a missing contract) that were in the residual, the audit
+        // `changes` must show the acknowledgment alongside the loosened
+        // dimensions — an auditor reading `changes` should not have to infer
+        // it from `resolved`.
+        let mut changes = delta.kinds();
+        if resolved.iter().any(|v| v.fixability() == Fixability::AcknowledgeOnly) {
+            changes.insert(crate::audit::WaiverKind::Acknowledgment);
+        }
         let transition = trajectory.mint_transition();
         trajectory.record_event(AuditEvent::WaiverApplied {
             transition,
-            changes: delta.kinds(),
+            changes,
             authority,
             resolved,
         });
@@ -2997,5 +3023,71 @@ mod tests {
             engine.evaluate(&mut trajectory, report_request),
             Decision::Permitted(_)
         ));
+    }
+
+    /// After release, a dispatch is in flight: re-evaluating the same request
+    /// must NOT re-permit the action, and a second release is refused. This
+    /// closes the double-dispatch hole (release advances the revision, so a
+    /// naive re-entry would mint a fresh valid token).
+    #[test]
+    fn released_action_cannot_be_re_permitted_or_re_released() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let request = email_request(&mut trajectory, doc, "bob");
+
+        let Decision::Permitted(token1) = engine.evaluate(&mut trajectory, request.clone()) else {
+            panic!("expected permit");
+        };
+        let (_, receipt) = trajectory.release(token1).unwrap();
+
+        // Re-entry while the dispatch is in flight is refused, not re-permitted.
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected the released action to block re-entry");
+        };
+        assert!(matches!(block.reason, BlockReason::ActionAlreadyPending { .. }));
+
+        // Even if a second token could be obtained, release refuses a
+        // released action.
+        let receipt = receipt;
+        trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+        assert!(trajectory.pending_action().is_none());
+    }
+
+    /// AllowWithAudit re-entry is idempotent: it does not append a second
+    /// UnknownAudited event.
+    #[test]
+    fn allow_with_audit_re_entry_is_idempotent() {
+        let engine = engine_with([], UnknownPolicy::AllowWithAudit);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
+        let request = ToolRequest::new(
+            ToolName::new("mystery.tool"),
+            ArgumentTree::Value(body),
+            BTreeSet::new(),
+        );
+
+        let Decision::Permitted(_) = engine.evaluate(&mut trajectory, request.clone()) else {
+            panic!("expected permit");
+        };
+        let audited = trajectory
+            .state()
+            .audit()
+            .iter()
+            .filter(|e| matches!(e, AuditEvent::UnknownAudited { .. }))
+            .count();
+        // Re-evaluate the same original request.
+        let Decision::Permitted(_) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected permit on re-entry");
+        };
+        assert_eq!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .filter(|e| matches!(e, AuditEvent::UnknownAudited { .. }))
+                .count(),
+            audited
+        );
     }
 }

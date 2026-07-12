@@ -706,3 +706,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @amirhosseinkia
 - @Krishnakhandelwal123
 - @skyhub32
+- @zeronautt

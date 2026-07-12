@@ -249,7 +249,6 @@ impl ValueStore {
     /// the only admission below the conservative fold. The caller (the engine's
     /// transition machinery) has already validated the registered transition;
     /// the source keeps its own label untouched.
-    #[cfg_attr(not(test), expect(dead_code, reason = "consumed by the plan-application stage (S9)"))]
     pub(crate) fn admit_transformed(
         &mut self,
         source: ValueId,

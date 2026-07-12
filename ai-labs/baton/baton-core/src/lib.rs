@@ -36,6 +36,7 @@
 //! **intersection** (most-restrictive readers), not union — see
 //! [`dimension::Audience`] for why union would make the sink check vacuous.
 
+pub mod approval;
 pub mod audit;
 pub mod contract;
 pub mod dimension;
@@ -76,12 +77,14 @@ impl fmt::Display for ToolName {
     }
 }
 
+pub use approval::{PendingApproval, PolicyRule, PolicyRuleFn, Ruling};
 pub use audit::{AdjudicatorName, AuditEvent, TrajectoryState, TransitionFailure, TransitionOutcome, WaiverKind};
 pub use contract::{AttentionRule, AudienceRule, Breach, Requirements, Unprovable, Verdict, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
     BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
-    RejectedToken, TerminalBlock, ToolContract, UnknownPolicy,
+    RESPONSE_SINK, RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused,
+    TerminalBlock, ToolContract, UnknownPolicy,
 };
 pub use plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
 pub use request::{

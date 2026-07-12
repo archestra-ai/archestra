@@ -92,6 +92,32 @@ impl<T: Copy + Ord> ArgumentTree<T> {
             Self::Value(_) | Self::List(_) => None,
         }
     }
+
+    /// Replace every leaf equal to `from` with `to` — how a transformed
+    /// value takes its source's argument slot. Unchanged leaves keep their
+    /// identity.
+    pub(crate) fn substitute(&mut self, from: T, to: T)
+    where
+        T: PartialEq,
+    {
+        match self {
+            Self::Value(v) => {
+                if *v == from {
+                    *v = to;
+                }
+            }
+            Self::List(items) => {
+                for item in items {
+                    item.substitute(from, to);
+                }
+            }
+            Self::Object(fields) => {
+                for field in fields.values_mut() {
+                    field.substitute(from, to);
+                }
+            }
+        }
+    }
 }
 
 /// Where a contract finds typed meaning in an argument tree. The engine never
@@ -265,6 +291,21 @@ impl PendingAction {
 
     pub(crate) fn mark_released(&mut self) {
         self.state = ActionState::Released;
+    }
+
+    /// A `TransformValue` step replaced `from` with the derived `to` in the
+    /// current argument tree. The original proposal is untouched — it is the
+    /// identity basis, never dispatched.
+    pub(crate) fn substitute_argument(&mut self, from: ValueId, to: ValueId) {
+        self.current.arguments.substitute(from, to);
+    }
+
+    /// A `ConstrainAction` step narrowed this action through a registered
+    /// tool-identity mapping.
+    pub(crate) fn constrain(&mut self, to_tool: ToolName, effects: Effects) {
+        self.current.tool = to_tool;
+        self.proposed_effects = effects;
+        self.state = ActionState::Constrained;
     }
 }
 

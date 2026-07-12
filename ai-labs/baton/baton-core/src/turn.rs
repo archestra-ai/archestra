@@ -27,7 +27,7 @@ use crate::dimension::UserId;
 use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptParts, RejectedToken};
 use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionSpec};
 use crate::request::{ActionState, PendingAction, ToolRequest};
-use crate::revision::{ActionId, PlanId, Revision, TurnId, ValueId};
+use crate::revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
 use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
 
 /// A user's contribution to a turn: who spoke, and whether they explicitly
@@ -110,6 +110,7 @@ pub struct Trajectory {
     revision: Revision,
     pending: Option<PendingAction>,
     next_action: u64,
+    next_transition: u64,
     /// The remedy plans minted for the current blocked flow, if any. Bound to
     /// the revision they were computed against; any state change stales them.
     plans: Vec<RemedyPlan>,
@@ -137,6 +138,7 @@ impl Trajectory {
             revision: Revision::INITIAL,
             pending: None,
             next_action: 0,
+            next_transition: 0,
             plans: Vec::new(),
             next_plan: 0,
             spent_confirmation: None,
@@ -441,6 +443,94 @@ impl Trajectory {
     pub(crate) fn record_event(&mut self, event: AuditEvent) {
         self.state.record(event);
         self.advance();
+    }
+
+    /// Apply a validated `TransformValue` step as one transaction: admit the
+    /// derived value under the declared output label, substitute it into the
+    /// pending action's current argument tree, and audit the transition. The
+    /// source keeps its own label and its slot in the immutable original
+    /// proposal.
+    pub(crate) fn apply_transform(
+        &mut self,
+        source: ValueId,
+        transformer: crate::value::TransformerRef,
+        declared_output: ValueLabel,
+        body: OpaqueValue,
+    ) -> ValueId {
+        let transition = self.mint_transition();
+        let input = self
+            .store
+            .get(source)
+            .expect("transform source validated by the engine")
+            .label()
+            .clone();
+        let derived = self
+            .store
+            .admit_transformed(source, transition, transformer.clone(), declared_output.clone(), body)
+            .expect("transform source validated by the engine");
+        self.pending
+            .as_mut()
+            .expect("pending action validated by the engine")
+            .substitute_argument(source, derived);
+        self.state.record(AuditEvent::ValueTransition {
+            transition,
+            transformer,
+            source,
+            derived: Some(derived),
+            input,
+            declared_output,
+            outcome: crate::audit::TransitionOutcome::Applied,
+        });
+        self.advance();
+        derived
+    }
+
+    /// Audit a failed `TransformValue` step: an event, no derived value, and
+    /// a revision advance that stales every sibling capability and plan.
+    pub(crate) fn fail_transform(
+        &mut self,
+        source: ValueId,
+        transformer: crate::value::TransformerRef,
+        declared_output: ValueLabel,
+        failure: crate::audit::TransitionFailure,
+    ) {
+        let transition = self.mint_transition();
+        let input = self
+            .store
+            .get(source)
+            .expect("transform source validated by the engine")
+            .label()
+            .clone();
+        self.state.record(AuditEvent::ValueTransition {
+            transition,
+            transformer,
+            source,
+            derived: None,
+            input,
+            declared_output,
+            outcome: crate::audit::TransitionOutcome::Failed(failure),
+        });
+        self.advance();
+    }
+
+    /// Apply a validated `ConstrainAction` step as one transaction.
+    pub(crate) fn apply_constraint(&mut self, to_tool: ToolName, effects: crate::dimension::Effects) {
+        let transition = self.mint_transition();
+        let pending = self.pending.as_mut().expect("pending action validated by the engine");
+        let action = pending.id();
+        pending.constrain(to_tool, effects);
+        self.state.record(AuditEvent::ActionConstrained {
+            transition,
+            action,
+            outcome: crate::audit::TransitionOutcome::Applied,
+        });
+        self.advance();
+    }
+
+    pub(crate) fn mint_transition(&mut self) -> TransitionId {
+        let id = TransitionId::new(self.next_transition);
+        self.next_transition += 1;
+        id
     }
 
     /// Every public mutation advances the revision exactly once, as one

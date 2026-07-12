@@ -20,12 +20,14 @@ use serde::Serialize;
 use tracing::debug;
 
 use crate::ToolName;
+use crate::approval::{PendingApproval, PolicyRule, Ruling};
+use crate::audit::AdjudicatorName;
 use crate::audit::AuditEvent;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::Effects;
 use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
-use crate::revision::{ActionId, Revision, ValueId};
+use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::{ActionTransition, Adjudicator, DuplicateRegistration, RegisteredTransformer, WaiverDelta};
 use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::{UnknownValue, ValueLabel};
@@ -218,6 +220,55 @@ pub enum RejectedToken {
     ActionNotPending { action: ActionId },
 }
 
+/// The linear capability to apply one plan step. Bound to the trajectory,
+/// its exact revision, and the exact plan and step; minted by
+/// [`PolicyEngine::mint_step`] and consumed — success or failure — by
+/// [`PolicyEngine::apply_step`].
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub struct StepCapability {
+    plan: PlanId,
+    step: usize,
+    action: ActionId,
+    trajectory: TrajectoryId,
+    revision: Revision,
+}
+
+/// A step or approval interaction was refused without touching state: the
+/// capability never described this trajectory's current state.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum StepRefused {
+    #[error("no stored plan {plan}")]
+    UnknownPlan { plan: PlanId },
+    #[error("plan minted at {basis}, but the trajectory is now at {current}")]
+    StalePlan { basis: Revision, current: Revision },
+    #[error("{plan} has no step {step}")]
+    NoSuchStep { plan: PlanId, step: usize },
+    #[error("capability was minted for {minted_for}, not {this}")]
+    ForeignTrajectory {
+        minted_for: TrajectoryId,
+        this: TrajectoryId,
+    },
+    #[error("action {action} is not pending on this trajectory")]
+    ActionNotPending { action: ActionId },
+}
+
+/// The outcome of applying one plan step.
+#[derive(Debug, Serialize)]
+#[must_use = "a dropped StepOutcome loses the flow's continuation"]
+pub enum StepOutcome {
+    /// The step applied; the original flow was re-evaluated against the new
+    /// state (permitting, re-planning, or blocking terminally).
+    Advanced(Decision),
+    /// The step names an external adjudicator: its ruling re-enters through
+    /// [`PolicyEngine::apply_approval`].
+    NeedsApproval(PendingApproval),
+    /// The step's precondition no longer held or its transformer failed. The
+    /// failure is audited, the revision advanced (staling every sibling
+    /// capability and plan), and no value or action was changed beyond the
+    /// audit record. Re-evaluate to replan.
+    Failed(crate::audit::TransitionFailure),
+}
+
 /// [`PolicyEngine::register`] refused a contract: a contract for that tool is
 /// already registered. Contracts are the policy boundary, so a silent replace
 /// could weaken policy unnoticed — registration fails loudly instead.
@@ -245,6 +296,12 @@ pub enum BlockReason {
     /// The response was composed against a revision the trajectory has moved
     /// past; recompose against the real state.
     StaleResponse { composed_at: Revision, current: Revision },
+    /// An adjudicator or policy rule denied the waiver this flow needed.
+    DeniedByAdjudicator { authority: AdjudicatorName, reason: String },
+    /// An approved or applied remedy did not clear the checks it targeted on
+    /// the fail-closed recheck — a bug in prediction or registration; the
+    /// engine blocks rather than permit an under-covered flow.
+    PostconditionFailed,
 }
 
 impl fmt::Display for BlockReason {
@@ -266,6 +323,12 @@ impl fmt::Display for BlockReason {
                     f,
                     "response composed at {composed_at}, but the trajectory is now at {current}"
                 )
+            }
+            Self::DeniedByAdjudicator { authority, reason } => {
+                write!(f, "denied by {authority}: {reason}")
+            }
+            Self::PostconditionFailed => {
+                write!(f, "an applied remedy did not clear the checks it targeted")
             }
         }
     }
@@ -322,6 +385,7 @@ pub struct PolicyEngine {
     contracts: BTreeMap<ToolName, ToolContract>,
     transformers: Vec<RegisteredTransformer>,
     action_transitions: Vec<ActionTransition>,
+    policy_rules: Vec<PolicyRule>,
     adjudicators: Vec<Adjudicator>,
     response_policy: Option<ResponsePolicy>,
     unknown_policy: UnknownPolicy,
@@ -333,17 +397,38 @@ impl PolicyEngine {
             contracts: BTreeMap::new(),
             transformers: Vec::new(),
             action_transitions: Vec::new(),
+            policy_rules: Vec::new(),
             adjudicators: Vec::new(),
             response_policy: None,
             unknown_policy,
         }
     }
 
+    /// Register an inline policy rule. Rules and adjudicators share one name
+    /// space (routing attributes a waiver to exactly one of them); duplicates
+    /// across either registry are refused. Rules are routed before
+    /// adjudicators, each registry in registration order.
+    pub fn register_policy_rule(&mut self, rule: PolicyRule) -> Result<(), DuplicateRegistration> {
+        if self.policy_rules.iter().any(|r| r.name == rule.name)
+            || self.adjudicators.iter().any(|a| a.name == rule.name)
+        {
+            debug!(rule = %rule.name, "register_policy_rule: duplicate refused");
+            return Err(DuplicateRegistration {
+                id: rule.name.to_string(),
+            });
+        }
+        debug!(rule = %rule.name, "register_policy_rule: registered");
+        self.policy_rules.push(rule);
+        Ok(())
+    }
+
     /// Register an external adjudicator (metadata only — never invoked by
     /// `evaluate`). Fails on a duplicate name; registration order is the
     /// deterministic routing order.
     pub fn register_adjudicator(&mut self, adjudicator: Adjudicator) -> Result<(), DuplicateRegistration> {
-        if self.adjudicators.iter().any(|a| a.name == adjudicator.name) {
+        if self.adjudicators.iter().any(|a| a.name == adjudicator.name)
+            || self.policy_rules.iter().any(|r| r.name == adjudicator.name)
+        {
             debug!(adjudicator = %adjudicator.name, "register_adjudicator: duplicate refused");
             return Err(DuplicateRegistration {
                 id: adjudicator.name.to_string(),
@@ -668,6 +753,319 @@ impl PolicyEngine {
         ResponseDecision::Emitted { value, rendered }
     }
 
+    /// Mint the linear capability for one stored plan step. Pure — binding
+    /// happens against the current revision; any later state change stales
+    /// the capability.
+    pub fn mint_step(&self, trajectory: &Trajectory, plan: PlanId, step: usize) -> Result<StepCapability, StepRefused> {
+        let stored = trajectory
+            .plans()
+            .iter()
+            .find(|p| p.id == plan)
+            .ok_or(StepRefused::UnknownPlan { plan })?;
+        if stored.basis != trajectory.revision() {
+            return Err(StepRefused::StalePlan {
+                basis: stored.basis,
+                current: trajectory.revision(),
+            });
+        }
+        stored.steps.get(step).ok_or(StepRefused::NoSuchStep { plan, step })?;
+        match trajectory.pending_action() {
+            Some(pending) if pending.id() == stored.action => {}
+            _ => return Err(StepRefused::ActionNotPending { action: stored.action }),
+        }
+        Ok(StepCapability {
+            plan,
+            step,
+            action: stored.action,
+            trajectory: trajectory.id(),
+            revision: trajectory.revision(),
+        })
+    }
+
+    /// Consume a step capability and apply its transition. Binding failures
+    /// (foreign trajectory, stale revision) refuse without touching state;
+    /// transition failures are audited and advance the revision, staling
+    /// every sibling capability and plan. On success the original flow is
+    /// re-evaluated — permitting, re-planning with fresh predictions, or
+    /// blocking terminally.
+    #[tracing::instrument(level = "debug", skip_all, fields(plan = %capability.plan, step = capability.step))]
+    pub fn apply_step(
+        &self,
+        trajectory: &mut Trajectory,
+        capability: StepCapability,
+    ) -> Result<StepOutcome, StepRefused> {
+        if capability.trajectory != trajectory.id() {
+            return Err(StepRefused::ForeignTrajectory {
+                minted_for: capability.trajectory,
+                this: trajectory.id(),
+            });
+        }
+        if capability.revision != trajectory.revision() {
+            return Err(StepRefused::StalePlan {
+                basis: capability.revision,
+                current: trajectory.revision(),
+            });
+        }
+        let stored = trajectory
+            .plans()
+            .iter()
+            .find(|p| p.id == capability.plan)
+            .ok_or(StepRefused::UnknownPlan { plan: capability.plan })?;
+        let spec = stored
+            .steps
+            .get(capability.step)
+            .ok_or(StepRefused::NoSuchStep {
+                plan: capability.plan,
+                step: capability.step,
+            })?
+            .clone();
+        let pending = match trajectory.pending_action() {
+            Some(pending) if pending.id() == capability.action => pending,
+            _ => {
+                return Err(StepRefused::ActionNotPending {
+                    action: capability.action,
+                });
+            }
+        };
+        let checked = pending.current().clone();
+        let original = pending.original().clone();
+        let contract = self.contracts.get(&checked.tool);
+        let sim = SimFlow::of(trajectory, &checked, contract).expect("pending action dependencies stay admitted");
+
+        // The step's declared precondition must be exactly what the flow
+        // reports now.
+        if sim.violations(None) != spec.precondition.remaining {
+            debug!("step refused (precondition posture no longer holds)");
+            trajectory.record_event(AuditEvent::StepFailed {
+                plan: capability.plan,
+                step: capability.step as u64,
+                failure: crate::audit::TransitionFailure::PreconditionMismatch,
+            });
+            return Ok(StepOutcome::Failed(
+                crate::audit::TransitionFailure::PreconditionMismatch,
+            ));
+        }
+
+        match spec.kind.clone() {
+            TransitionKind::TransformValue { source, transformer } => {
+                let registered = self
+                    .transformers
+                    .iter()
+                    .find(|t| t.descriptor.transformer == transformer)
+                    .expect("plans reference only registered transformers");
+                let source_value = trajectory
+                    .store()
+                    .get(source)
+                    .expect("plans reference only admitted values");
+                if let Err(failure) = registered.accepts(source_value) {
+                    trajectory.fail_transform(
+                        source,
+                        registered.descriptor.transformer.clone(),
+                        registered.descriptor.output.clone(),
+                        failure.clone(),
+                    );
+                    return Ok(StepOutcome::Failed(failure));
+                }
+                let body = match (registered.run)(source_value.body()) {
+                    Ok(body) => body,
+                    Err(error) => {
+                        let failure = crate::audit::TransitionFailure::TransformerError { message: error.message };
+                        trajectory.fail_transform(
+                            source,
+                            registered.descriptor.transformer.clone(),
+                            registered.descriptor.output.clone(),
+                            failure.clone(),
+                        );
+                        return Ok(StepOutcome::Failed(failure));
+                    }
+                };
+                trajectory.apply_transform(
+                    source,
+                    registered.descriptor.transformer.clone(),
+                    registered.descriptor.output.clone(),
+                    body,
+                );
+                self.step_epilogue(trajectory, spec, original)
+            }
+            TransitionKind::ConstrainAction { transition } => {
+                let registered = self
+                    .action_transitions
+                    .iter()
+                    .find(|t| t.id == transition)
+                    .expect("plans reference only registered action transitions");
+                let pending = trajectory.pending_action().expect("validated above");
+                if let Err(failure) = registered.narrows(pending) {
+                    trajectory.record_event(AuditEvent::StepFailed {
+                        plan: capability.plan,
+                        step: capability.step as u64,
+                        failure: failure.clone(),
+                    });
+                    return Ok(StepOutcome::Failed(failure));
+                }
+                trajectory.apply_constraint(registered.to_tool.clone(), registered.effects.clone());
+                self.step_epilogue(trajectory, spec, original)
+            }
+            TransitionKind::ApplyWaiver { delta, authority } => match authority {
+                WaiverAuthority::Rule(name) => {
+                    let rule = self
+                        .policy_rules
+                        .iter()
+                        .find(|r| r.name == name)
+                        .expect("plans reference only registered rules");
+                    let ruling = (rule.decide)(&delta, &spec.precondition.remaining).unwrap_or(Ruling::Deny {
+                        reason: "rule abstained".to_owned(),
+                    });
+                    match ruling {
+                        Ruling::Approve { .. } => Ok(StepOutcome::Advanced(self.waiver_permit(
+                            trajectory,
+                            capability.action,
+                            delta,
+                            name,
+                            spec.precondition.remaining,
+                        ))),
+                        Ruling::Deny { reason } => {
+                            trajectory.record_event(AuditEvent::WaiverDenied {
+                                authority: name.clone(),
+                                reason: reason.clone(),
+                            });
+                            Ok(StepOutcome::Advanced(self.terminal(
+                                trajectory,
+                                spec.precondition.remaining,
+                                BlockReason::DeniedByAdjudicator {
+                                    authority: name,
+                                    reason,
+                                },
+                            )))
+                        }
+                    }
+                }
+                WaiverAuthority::External(name) => {
+                    trajectory.record_event(AuditEvent::ApprovalRequested {
+                        plan: capability.plan,
+                        authority: name.clone(),
+                        resolved: spec.precondition.remaining.clone(),
+                    });
+                    let basis_values = checked.arguments.leaves().into_iter().chain(checked.control).collect();
+                    Ok(StepOutcome::NeedsApproval(PendingApproval::new(
+                        capability.plan,
+                        capability.action,
+                        delta,
+                        name,
+                        spec.precondition.remaining,
+                        basis_values,
+                        trajectory.id(),
+                        trajectory.revision(),
+                    )))
+                }
+            },
+        }
+    }
+
+    /// Consume a pending approval with the adjudicator's ruling. Binding
+    /// failures refuse without touching state. A denial is audited and
+    /// blocks terminally; an approval rechecks the flow fail-closed under
+    /// the waiver and mints the execution token.
+    pub fn apply_approval(
+        &self,
+        trajectory: &mut Trajectory,
+        pending: PendingApproval,
+        ruling: Ruling,
+    ) -> Result<Decision, StepRefused> {
+        let parts = pending.into_parts();
+        if parts.trajectory != trajectory.id() {
+            return Err(StepRefused::ForeignTrajectory {
+                minted_for: parts.trajectory,
+                this: trajectory.id(),
+            });
+        }
+        if parts.revision != trajectory.revision() {
+            return Err(StepRefused::StalePlan {
+                basis: parts.revision,
+                current: trajectory.revision(),
+            });
+        }
+        match trajectory.pending_action() {
+            Some(action) if action.id() == parts.action => {}
+            _ => return Err(StepRefused::ActionNotPending { action: parts.action }),
+        }
+        match ruling {
+            Ruling::Approve { .. } => {
+                Ok(self.waiver_permit(trajectory, parts.action, parts.delta, parts.adjudicator, parts.resolved))
+            }
+            Ruling::Deny { reason } => {
+                trajectory.record_event(AuditEvent::WaiverDenied {
+                    authority: parts.adjudicator.clone(),
+                    reason: reason.clone(),
+                });
+                Ok(self.terminal(
+                    trajectory,
+                    parts.resolved,
+                    BlockReason::DeniedByAdjudicator {
+                        authority: parts.adjudicator,
+                        reason,
+                    },
+                ))
+            }
+        }
+    }
+
+    /// Post-step: validate the declared postcondition against the real state
+    /// and re-evaluate the original flow.
+    fn step_epilogue(
+        &self,
+        trajectory: &mut Trajectory,
+        spec: TransitionSpec,
+        original: ToolRequest,
+    ) -> Result<StepOutcome, StepRefused> {
+        let pending = trajectory.pending_action().expect("step application keeps the action");
+        let checked = pending.current().clone();
+        let contract = self.contracts.get(&checked.tool);
+        let sim = SimFlow::of(trajectory, &checked, contract).expect("pending action dependencies stay admitted");
+        if sim.violations(None) != spec.postcondition.remaining {
+            debug!("step applied but predicted postcondition does not hold");
+            return Ok(StepOutcome::Failed(
+                crate::audit::TransitionFailure::PostconditionMismatch,
+            ));
+        }
+        Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
+    }
+
+    /// A granted waiver: recheck the flow fail-closed under the delta, audit
+    /// the application, and mint the execution token.
+    fn waiver_permit(
+        &self,
+        trajectory: &mut Trajectory,
+        action: ActionId,
+        delta: WaiverDelta,
+        authority: AdjudicatorName,
+        resolved: Vec<Violation>,
+    ) -> Decision {
+        let pending = trajectory
+            .pending_action()
+            .expect("caller validated the pending action");
+        let checked = pending.current().clone();
+        let original = pending.original().clone();
+        let contract = self.contracts.get(&checked.tool);
+        let sim = SimFlow::of(trajectory, &checked, contract).expect("pending action dependencies stay admitted");
+        let remaining = sim.violations(Some(&delta));
+        if !remaining.is_empty() {
+            debug!("waiver did not clear its targeted checks, failing closed");
+            return self.terminal(trajectory, remaining, BlockReason::PostconditionFailed);
+        }
+        let transition = trajectory.mint_transition();
+        trajectory.record_event(AuditEvent::WaiverApplied {
+            transition,
+            changes: delta.kinds(),
+            authority,
+            resolved,
+        });
+        let (intrinsic, proposed_effects) = match contract {
+            Some(c) => (c.output_label.clone(), c.effects.clone()),
+            None => (ValueLabel::unknown(), Effects::UNKNOWN),
+        };
+        self.permit(trajectory, Some(action), original, checked, intrinsic, proposed_effects)
+    }
+
     /// Deterministic bounded plan enumeration: candidate step sequences in
     /// the canonical order Transform? -> Constrain? -> Waiver?, each subset
     /// instantiated from the registries in registration order, kept iff the
@@ -837,13 +1235,20 @@ impl PolicyEngine {
         candidates
     }
 
-    /// Route a waiver delta to the first registered adjudicator whose
-    /// mandate covers it.
+    /// Route a waiver delta to the first competent authority: inline policy
+    /// rules first (a deterministic answer beats a round-trip to a human),
+    /// then external adjudicators, each in registration order.
     fn route_waiver(&self, delta: &WaiverDelta) -> Option<WaiverAuthority> {
-        self.adjudicators
+        self.policy_rules
             .iter()
-            .find(|a| a.mandate.covers(delta))
-            .map(|a| WaiverAuthority::External(a.name.clone()))
+            .find(|r| r.mandate.covers(delta))
+            .map(|r| WaiverAuthority::Rule(r.name.clone()))
+            .or_else(|| {
+                self.adjudicators
+                    .iter()
+                    .find(|a| a.mandate.covers(delta))
+                    .map(|a| WaiverAuthority::External(a.name.clone()))
+            })
     }
 
     /// Mint the execution token, storing the pending action first if this is
@@ -1889,5 +2294,397 @@ mod tests {
         };
         assert_eq!(block.reason, BlockReason::NoRemedy);
         assert!(trajectory.pending_action().is_none());
+    }
+
+    /// A transform plan applied end-to-end: the derived value takes the
+    /// tainted slot, the flow permits, and the canonical rendering carries
+    /// the redacted bytes.
+    #[test]
+    fn transform_step_applies_and_flow_permits() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_transformer(redact_transformer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw secrets");
+        let request = email_request(&mut trajectory, raw, "bob");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let plan = plans
+            .iter()
+            .find(|p| p.steps.len() == 1 && matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
+            .expect("transform plan");
+
+        let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
+        let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = outcome else {
+            panic!("expected the transform to advance to a permit, got {outcome:?}");
+        };
+        // The raw value keeps its label; the derived value took its slot.
+        assert_eq!(trajectory.value(raw).unwrap().label().trust, Trust::SUSPICIOUS);
+        assert!(matches!(
+            trajectory.state().audit(),
+            [AuditEvent::ValueTransition {
+                outcome: crate::audit::TransitionOutcome::Applied,
+                ..
+            }]
+        ));
+
+        let (canonical, receipt) = trajectory.release(token).unwrap();
+        assert!(canonical.rendered.contains("[redacted]"));
+        assert!(!canonical.rendered.contains("raw secrets"));
+        trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+    }
+
+    /// A rule-approved waiver permits inline, with the application audited.
+    #[test]
+    fn rule_approved_waiver_permits_inline() {
+        fn approve(_: &crate::transition::WaiverDelta, _: &[Violation]) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "within policy".to_owned(),
+            })
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine
+            .register_policy_rule(crate::approval::PolicyRule {
+                name: crate::audit::AdjudicatorName::new("auto-approve"),
+                mandate: human().mandate,
+                decide: approve,
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        assert!(matches!(
+            &plans.first().steps.first().kind,
+            TransitionKind::ApplyWaiver {
+                authority: crate::plan::WaiverAuthority::Rule(_),
+                ..
+            }
+        ));
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(_token)) = outcome else {
+            panic!("expected inline waiver permit, got {outcome:?}");
+        };
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::WaiverApplied { .. }))
+        );
+    }
+
+    /// An external waiver round-trips through PendingApproval; approval
+    /// permits, and the whole loop is audited.
+    #[test]
+    fn external_waiver_approval_roundtrip() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_adjudicator(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        assert_eq!(pending.adjudicator().as_str(), "human");
+
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "reviewed".to_owned(),
+                },
+            )
+            .unwrap();
+        assert!(matches!(decision, Decision::Permitted(_)));
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::ApprovalRequested { .. }))
+        );
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::WaiverApplied { .. }))
+        );
+    }
+
+    /// A denial blocks terminally and is audited; the identical later flow
+    /// escalates afresh (nothing was stored loosened).
+    #[test]
+    fn external_waiver_denial_blocks_terminally() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_adjudicator(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request.clone())
+        else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Deny {
+                    reason: "not comfortable".to_owned(),
+                },
+            )
+            .unwrap();
+        let Decision::Blocked(Blocked::Terminal(block)) = decision else {
+            panic!("expected terminal block");
+        };
+        assert!(matches!(block.reason, BlockReason::DeniedByAdjudicator { .. }));
+        assert!(trajectory.pending_action().is_none());
+
+        // The same flow escalates again from scratch: the denial loosened
+        // and stored nothing.
+        assert!(matches!(
+            engine.evaluate(&mut trajectory, request),
+            Decision::Blocked(Blocked::Remediable { .. })
+        ));
+    }
+
+    /// Stale and foreign step capabilities and approvals are refused without
+    /// touching state.
+    #[test]
+    fn stale_and_foreign_step_capabilities_are_refused() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_adjudicator(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let plan = plans.first().id;
+        let capability = engine.mint_step(&trajectory, plan, 0).unwrap();
+
+        // Any state change stales the capability (and the plan itself).
+        trajectory
+            .admit_model_output(OpaqueValue::new("thinking"), BTreeSet::from([doc]), BTreeSet::new())
+            .unwrap();
+        let revision_before = trajectory.revision();
+        assert!(matches!(
+            engine.apply_step(&mut trajectory, capability),
+            Err(StepRefused::StalePlan { .. })
+        ));
+        assert!(matches!(
+            engine.mint_step(&trajectory, plan, 0),
+            Err(StepRefused::StalePlan { .. })
+        ));
+        // Refusal touched nothing.
+        assert_eq!(trajectory.revision(), revision_before);
+
+        // A stale approval is likewise refused.
+        trajectory.abandon_pending();
+        let retry = email_request(&mut trajectory, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, retry) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        trajectory
+            .admit_model_output(OpaqueValue::new("more"), BTreeSet::from([doc]), BTreeSet::new())
+            .unwrap();
+        assert!(matches!(
+            engine.apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "late".to_owned()
+                }
+            ),
+            Err(StepRefused::StalePlan { .. })
+        ));
+    }
+
+    /// A transformer error fails the step, audits the failure with no
+    /// derived value, and advances the revision (staling siblings).
+    #[test]
+    fn transformer_error_fails_the_step_and_audits() {
+        fn broken(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+            Err(crate::transition::TransformerError {
+                message: "redactor crashed".to_owned(),
+            })
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut transformer = redact_transformer();
+        transformer.run = broken;
+        engine.register_transformer(transformer).unwrap();
+        let mut trajectory = Trajectory::new();
+        let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw");
+        let request = email_request(&mut trajectory, raw, "bob");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let values_before = trajectory.store().len();
+        let revision_before = trajectory.revision();
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
+        assert!(matches!(
+            outcome,
+            StepOutcome::Failed(crate::audit::TransitionFailure::TransformerError { .. })
+        ));
+        assert_eq!(trajectory.store().len(), values_before);
+        assert!(trajectory.revision() > revision_before);
+        assert!(matches!(
+            trajectory.state().audit(),
+            [AuditEvent::ValueTransition {
+                derived: None,
+                outcome: crate::audit::TransitionOutcome::Failed(_),
+                ..
+            }]
+        ));
+    }
+
+    /// The design's canonical composition across re-planning rounds:
+    /// Transform -> (replan) -> Waiver -> recheck -> Permit.
+    #[test]
+    fn multi_step_composition_transform_then_waiver() {
+        // This redactor establishes trust but cannot widen the audience:
+        // its output stays readable by alice only.
+        fn redact(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+            Ok(OpaqueValue::new("[redacted]"))
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine
+            .register_transformer(RegisteredTransformer {
+                descriptor: crate::transition::TransformerDescriptor {
+                    transformer: crate::value::TransformerRef {
+                        id: "pii.redact.private".into(),
+                        version: 1,
+                    },
+                    precondition: crate::transition::LabelPredicate {
+                        trust: Some(Trust::SUSPICIOUS),
+                        audience: None,
+                    },
+                    output: ValueLabel {
+                        audience: Audience::readers([user("alice")]),
+                        trust: Trust::TRUSTED,
+                    },
+                },
+                run: redact,
+            })
+            .unwrap();
+        engine.register_adjudicator(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        // Suspicious AND readable only by alice, sent to charlie: needs both
+        // a transform (trust) and a waiver (audience).
+        let raw = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
+        let request = email_request(&mut trajectory, raw, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        // A two-step plan predicting the full route exists...
+        assert!(plans.iter().any(|p| p.steps.len() == 2));
+        // ...and application goes step by step, re-planning in between.
+        let transform_plan = plans
+            .iter()
+            .find(|p| matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
+            .expect("plan starting with a transform");
+        let capability = engine.mint_step(&trajectory, transform_plan.id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans, violations })) =
+            engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected the transform to advance to a re-planned block");
+        };
+        // Only the audience breach remains.
+        assert!(matches!(
+            violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })]
+        ));
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "redacted version may go out".to_owned(),
+                },
+            )
+            .unwrap();
+        let Decision::Permitted(token) = decision else {
+            panic!("expected permit after the full composition");
+        };
+        let (canonical, receipt) = trajectory.release(token).unwrap();
+        assert!(canonical.rendered.contains("[redacted]"));
+        trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+    }
+
+    /// A confirmation survives remedy steps on the confirmed action and is
+    /// spent only at release (decision 12).
+    #[test]
+    fn confirmation_survives_remedy_steps() {
+        let drop_contract = ToolContract {
+            name: ToolName::new("db.drop"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                attention: crate::contract::AttentionRule::ExplicitConfirmation,
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Mutation]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let mut engine = engine_with([drop_contract], UnknownPolicy::Escalate);
+        engine.register_transformer(redact_transformer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let table = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "users_table");
+        trajectory.ingress(
+            crate::turn::Speaker::confirming(user("alice"), ToolName::new("db.drop")),
+            ValueLabel::identity(),
+            OpaqueValue::new("yes, drop it"),
+        );
+        let request = ToolRequest::new(ToolName::new("db.drop"), ArgumentTree::Value(table), BTreeSet::new());
+
+        // Blocked on trust only — the confirmation holds.
+        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
+        else {
+            panic!("expected remediable block");
+        };
+        assert!(matches!(
+            violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::TrustBelow { .. })]
+        ));
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected permit — the confirmation must survive the transform");
+        };
+        assert!(trajectory.pending_confirmation().is_some());
+        let (_, receipt) = trajectory.release(token).unwrap();
+        // Release spends it.
+        assert_eq!(trajectory.pending_confirmation(), None);
+        trajectory.record_output(receipt, OpaqueValue::new("dropped")).unwrap();
     }
 }

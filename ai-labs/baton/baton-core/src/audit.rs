@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::ToolName;
 use crate::contract::Violation;
 use crate::dimension::Effects;
-use crate::revision::{ActionId, TransitionId, ValueId};
+use crate::revision::{ActionId, PlanId, TransitionId, ValueId};
 use crate::value::{TransformerRef, ValueLabel};
 
 /// Name of a registered policy rule or external adjudicator.
@@ -136,6 +136,22 @@ pub enum AuditEvent {
     /// release stay: after dispatch starts, a timeout or crash cannot prove
     /// an effect did not happen.
     DispatchFailed { action: ActionId },
+    /// A plan step's application was refused (its precondition posture no
+    /// longer held). The remaining plan is discarded.
+    StepFailed {
+        plan: PlanId,
+        step: u64,
+        failure: TransitionFailure,
+    },
+    /// An `ApplyWaiver` step reached an external adjudicator: the ruling is
+    /// pending re-entry.
+    ApprovalRequested {
+        plan: PlanId,
+        authority: AdjudicatorName,
+        resolved: Vec<Violation>,
+    },
+    /// An adjudicator or policy rule denied a waiver.
+    WaiverDenied { authority: AdjudicatorName, reason: String },
 }
 
 impl fmt::Display for AuditEvent {
@@ -181,6 +197,15 @@ impl fmt::Display for AuditEvent {
             }
             Self::DispatchFailed { action } => {
                 write!(f, "{action} dispatch failed; committed effects stay")
+            }
+            Self::StepFailed { plan, step, failure } => {
+                write!(f, "{plan} step {step} refused: {failure}")
+            }
+            Self::ApprovalRequested { plan, authority, .. } => {
+                write!(f, "{plan}: approval requested from {authority}")
+            }
+            Self::WaiverDenied { authority, reason } => {
+                write!(f, "waiver denied by {authority}: {reason}")
             }
         }
     }

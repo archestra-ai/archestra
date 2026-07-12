@@ -193,6 +193,24 @@ describe("parseMcpJsonInput", () => {
     });
   });
 
+  test("skips docker flags that take a separate value (e.g. --env-file)", () => {
+    const raw = JSON.stringify({
+      command: "docker",
+      args: [
+        "run",
+        "--env-file",
+        ".env",
+        "--cidfile",
+        "/tmp/cid",
+        "mcp/server:latest",
+      ],
+    });
+    expect(parseMcpJsonInput(raw)).toEqual({
+      serverType: "local",
+      dockerImage: "mcp/server:latest",
+    });
+  });
+
   test("returns null for empty object / unrelated JSON", () => {
     expect(parseMcpJsonInput("{}")).toBeNull();
     expect(parseMcpJsonInput('{"foo":"bar"}')).toBeNull();

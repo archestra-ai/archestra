@@ -779,10 +779,19 @@ export function McpCatalogForm({
    * Apply a paste of multi-format MCP JSON config (VS Code / Claude Desktop /
    * raw command+args+env / docker run / remote http). Non-JSON pastes are
    * ignored so the textarea keeps normal "one arg per line" behavior.
+   *
+   * When the local/K8s runtime feature is disabled, local configs are not
+   * applied (return false) so the paste falls through as plain text and the
+   * Self-hosted UI gate is respected.
    */
   const applyMcpJsonPaste = (raw: string): boolean => {
     const parsed = parseMcpJsonInput(raw);
     if (!parsed) return false;
+
+    if (parsed.serverType === "local" && !isLocalMcpEnabled) {
+      // Do not bypass the disabled Self-hosted control.
+      return false;
+    }
 
     form.setValue("serverType", parsed.serverType, { shouldDirty: true });
 
@@ -810,20 +819,17 @@ export function McpCatalogForm({
       return true;
     }
 
-    // local
-    // Always write command/args so docker-run expansion can clear the
-    // leftover `docker` CLI command when it becomes a dockerImage.
+    // local — always write command/args/dockerImage so a non-docker paste
+    // clears a previously-set dockerImage (and vice versa for command).
     form.setValue("localConfig.command", parsed.command ?? "", {
       shouldDirty: true,
     });
     form.setValue("localConfig.arguments", parsed.arguments ?? "", {
       shouldDirty: true,
     });
-    if (parsed.dockerImage !== undefined) {
-      form.setValue("localConfig.dockerImage", parsed.dockerImage, {
-        shouldDirty: true,
-      });
-    }
+    form.setValue("localConfig.dockerImage", parsed.dockerImage ?? "", {
+      shouldDirty: true,
+    });
     if (parsed.transportType) {
       form.setValue("localConfig.transportType", parsed.transportType, {
         shouldDirty: true,

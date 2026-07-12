@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import { type archestraApiTypes, DocsPage, parseMcpJsonInput } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertTriangle,
@@ -739,7 +739,7 @@ export function McpCatalogForm({
   const showByosOption = useFeature("byosEnabled");
 
   // Use field array for environment variables
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
   });
@@ -769,10 +769,90 @@ export function McpCatalogForm({
     fields: additionalHeaderFields,
     append: appendAdditionalHeader,
     remove: removeAdditionalHeader,
+    replace: replaceAdditionalHeaders,
   } = useFieldArray({
     control: form.control,
     name: "additionalHeaders",
   });
+
+  /**
+   * Apply a paste of multi-format MCP JSON config (VS Code / Claude Desktop /
+   * raw command+args+env / docker run / remote http). Non-JSON pastes are
+   * ignored so the textarea keeps normal "one arg per line" behavior.
+   */
+  const applyMcpJsonPaste = (raw: string): boolean => {
+    const parsed = parseMcpJsonInput(raw);
+    if (!parsed) return false;
+
+    form.setValue("serverType", parsed.serverType, { shouldDirty: true });
+
+    if (parsed.name && !form.getValues("name")) {
+      form.setValue("name", parsed.name, { shouldDirty: true });
+    }
+
+    if (parsed.serverType === "remote") {
+      if (parsed.serverUrl) {
+        form.setValue("serverUrl", parsed.serverUrl, { shouldDirty: true });
+      }
+      if (parsed.headers?.length) {
+        replaceAdditionalHeaders(
+          parsed.headers.map((h) => ({
+            headerName: h.headerName,
+            value: h.value,
+            promptOnInstallation: h.promptOnInstallation,
+            required: h.required,
+            sensitive: h.sensitive,
+            includeBearerPrefix: h.includeBearerPrefix,
+            description: h.description,
+          })),
+        );
+      }
+      return true;
+    }
+
+    // local
+    // Always write command/args so docker-run expansion can clear the
+    // leftover `docker` CLI command when it becomes a dockerImage.
+    form.setValue("localConfig.command", parsed.command ?? "", {
+      shouldDirty: true,
+    });
+    form.setValue("localConfig.arguments", parsed.arguments ?? "", {
+      shouldDirty: true,
+    });
+    if (parsed.dockerImage !== undefined) {
+      form.setValue("localConfig.dockerImage", parsed.dockerImage, {
+        shouldDirty: true,
+      });
+    }
+    if (parsed.transportType) {
+      form.setValue("localConfig.transportType", parsed.transportType, {
+        shouldDirty: true,
+      });
+    }
+    if (parsed.httpPort !== undefined) {
+      form.setValue("localConfig.httpPort", parsed.httpPort, {
+        shouldDirty: true,
+      });
+    }
+    if (parsed.httpPath !== undefined) {
+      form.setValue("localConfig.httpPath", parsed.httpPath, {
+        shouldDirty: true,
+      });
+    }
+    if (parsed.environment) {
+      replace(
+        parsed.environment.map((env) => ({
+          key: env.key,
+          type: env.type,
+          value: env.value,
+          promptOnInstallation: env.promptOnInstallation,
+          required: env.required,
+          description: env.description,
+        })),
+      );
+    }
+    return true;
+  };
 
   const [headerDialog, setHeaderDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
@@ -1372,8 +1452,20 @@ export function McpCatalogForm({
                           className="font-mono"
                           autoComplete={MCP_CONFIG_AUTOCOMPLETE}
                           {...field}
+                          onPaste={(e) => {
+                            const pasted = e.clipboardData.getData("text");
+                            if (!pasted) return;
+                            if (applyMcpJsonPaste(pasted)) {
+                              e.preventDefault();
+                            }
+                          }}
                         />
                       </FormControl>
+                      <FormDescription>
+                        Paste a remote MCP JSON config (e.g. VS Code{" "}
+                        <code>type: &quot;http&quot;</code>) to auto-fill URL
+                        and headers.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1423,8 +1515,24 @@ export function McpCatalogForm({
                             placeholder={`/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
                             {...field}
+                            onPaste={(e) => {
+                              const pasted = e.clipboardData.getData("text");
+                              if (!pasted) return;
+                              // Only intercept when the clipboard looks like
+                              // JSON MCP config; plain args paste normally.
+                              if (applyMcpJsonPaste(pasted)) {
+                                e.preventDefault();
+                              }
+                            }}
                           />
                         </FormControl>
+                        <FormDescription>
+                          One argument per line, or paste a full MCP server
+                          JSON config (VS Code / Claude Desktop /{" "}
+                          <code>command</code>+<code>args</code>+
+                          <code>env</code>) to auto-fill Command, Arguments,
+                          Envs, Transport, and Docker Image.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

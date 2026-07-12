@@ -22,6 +22,7 @@ export * from "./knowledge-base";
 export * from "./labels";
 export * from "./linked-idp-auth";
 export * from "./mcp-extensions";
+export * from "./mcp-json-config-parser";
 export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";
 export * from "./mcp-tool-error";

@@ -1,4 +1,17 @@
-//! Turns, labeled turns, and the trajectory that only accepts the latter.
+//! Turns, the trajectory, and its engine-owned admission paths.
+//!
+//! A trajectory owns all per-conversation state: the immutable value store,
+//! the turn sequence (which references values, never free strings), the
+//! monotone control-plane state (past effects + audit), the pending action
+//! slot, and the [`Revision`] that advances on every mutation. Capabilities
+//! bind to the revision, so *any* state change — a new value, a constrained
+//! action, an audit event, a turn — invalidates everything minted before it.
+//!
+//! Admission is engine-owned: [`Trajectory::ingress`] is the only
+//! caller-labeled path (the explicit trust boundary); a model output's label
+//! is computed from its mandatory dependency sets; a tool result enters only
+//! by consuming the [`ExecutionToken`](crate::engine::ExecutionToken) the
+//! policy minted for it.
 
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -6,30 +19,35 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde::Serialize;
 use tracing::debug;
 
+use std::collections::BTreeSet;
+
 use crate::ToolName;
+use crate::audit::{AuditEvent, TrajectoryState};
 use crate::dimension::UserId;
-use crate::engine::{Permit, RejectedPermit};
-use crate::label::Label;
+use crate::engine::{ExecutionToken, RejectedToken};
+use crate::request::{PendingAction, ToolRequest};
+use crate::revision::{ActionId, Revision, TurnId, ValueId};
+use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
 
 /// A user's contribution to a turn: who spoke, and whether they explicitly
 /// confirmed one named tool. The `confirms` field is structural, not a label:
 /// only user turns carry it, so "only the user confirms" holds by construction
 /// rather than by a runtime check — an assistant or tool actor has no such
 /// field to forge.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserTurn {
     pub id: UserId,
     pub confirms: Option<ToolName>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Actor {
     User(UserTurn),
     Assistant,
     Tool(ToolName),
 }
 
-/// Who may author a message turn. Tool results are deliberately absent:
+/// Who may author an ingress turn. Tool results are deliberately absent:
 /// they enter a trajectory only through [`Trajectory::record_result`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Speaker {
@@ -43,7 +61,8 @@ impl Speaker {
     }
 
     /// A user message that explicitly confirms one named tool. The
-    /// confirmation is valid only while this is the newest turn — see
+    /// confirmation is valid only while this is the newest turn and it has
+    /// not been spent by an action release — see
     /// [`Trajectory::pending_confirmation`].
     pub fn confirming(id: UserId, tool: ToolName) -> Self {
         Self::User(UserTurn {
@@ -53,21 +72,16 @@ impl Speaker {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One turn: who acted, and the stored value they contributed. The label
+/// lives on the value, not the turn.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Turn {
     pub actor: Actor,
-    pub content: String,
+    pub value: ValueId,
 }
 
-/// Turns never walk alone.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LabeledTurn {
-    pub label: Label,
-    pub turn: Turn,
-}
-
-/// Identity of one trajectory instance, unique within the process; permits
-/// are bound to it so an authorization cannot cross trajectories.
+/// Identity of one trajectory instance, unique within the process; every
+/// capability is bound to it so an authorization cannot cross trajectories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct TrajectoryId(u64);
@@ -85,15 +99,21 @@ impl fmt::Display for TrajectoryId {
     }
 }
 
-/// An append-only sequence of labeled turns. There is no way to append a bare
-/// [`Turn`], and a tool-result turn requires consuming a [`Permit`] minted for
-/// this trajectory's current head, so a result cannot enter wearing a label
-/// the policy did not produce, be recorded twice, or be recorded into a
-/// context the policy never evaluated.
+/// All state of one agent conversation, mediated by the engine.
 #[derive(Debug)]
 pub struct Trajectory {
     id: TrajectoryId,
-    turns: Vec<LabeledTurn>,
+    turns: Vec<Turn>,
+    store: ValueStore,
+    state: TrajectoryState,
+    revision: Revision,
+    pending: Option<PendingAction>,
+    next_action: u64,
+    /// The confirming turn most recently spent by an action release. A
+    /// receipt-declared failure closes the action without appending a turn,
+    /// so without this marker the confirming turn would become the newest
+    /// turn again and its confirmation would resurrect.
+    spent_confirmation: Option<TurnId>,
 }
 
 impl Default for Trajectory {
@@ -107,6 +127,12 @@ impl Trajectory {
         Self {
             id: TrajectoryId::next(),
             turns: Vec::new(),
+            store: ValueStore::default(),
+            state: TrajectoryState::default(),
+            revision: Revision::INITIAL,
+            pending: None,
+            next_action: 0,
+            spent_confirmation: None,
         }
     }
 
@@ -114,147 +140,262 @@ impl Trajectory {
         self.id
     }
 
-    /// Append a user or assistant message under its label. Labels are
-    /// trusted input from the embedding harness.
-    pub fn push_message(&mut self, label: Label, speaker: Speaker, content: impl Into<String>) {
+    pub fn revision(&self) -> Revision {
+        self.revision
+    }
+
+    pub fn turns(&self) -> &[Turn] {
+        &self.turns
+    }
+
+    pub fn store(&self) -> &ValueStore {
+        &self.store
+    }
+
+    /// The monotone control-plane state: past effects and the audit log.
+    pub fn state(&self) -> &TrajectoryState {
+        &self.state
+    }
+
+    pub fn pending_action(&self) -> Option<&PendingAction> {
+        self.pending.as_ref()
+    }
+
+    /// Convenience lookup in the value store.
+    pub fn value(&self, id: ValueId) -> Result<&StoredValue, UnknownValue> {
+        self.store.get(id)
+    }
+
+    /// Admit a message at the explicit trust boundary and append its turn.
+    /// The label is trusted input from the embedding harness — this is the
+    /// only caller-labeled admission path.
+    pub fn ingress(&mut self, speaker: Speaker, label: ValueLabel, body: OpaqueValue) -> ValueId {
+        let turn_id = TurnId::new(self.turns.len() as u64);
+        let value = self.store.admit_ingress(turn_id, label, body);
         let actor = match speaker {
             Speaker::User(user) => Actor::User(user),
             Speaker::Assistant => Actor::Assistant,
         };
-        self.turns.push(LabeledTurn {
-            label,
-            turn: Turn {
-                actor,
-                content: content.into(),
-            },
-        });
+        self.turns.push(Turn { actor, value });
+        self.advance();
+        value
     }
 
-    /// Append a tool result under the label the engine granted for it. The
-    /// permit is consumed either way; if it was minted for another trajectory
-    /// or the trajectory moved past the head it was minted for, the result is
-    /// rejected and the flow must be re-evaluated against the real context.
-    pub fn record_result(&mut self, permit: Permit, content: impl Into<String>) -> Result<(), RejectedPermit> {
-        let (request, label, trajectory, basis) = permit.into_parts();
-        if trajectory != self.id {
-            debug!(minted_for = %trajectory, this = %self.id, "record_result: rejected (foreign trajectory)");
-            return Err(RejectedPermit::ForeignTrajectory {
-                minted_for: trajectory,
+    /// Admit a model output as a value (no turn: a model step becomes part of
+    /// the conversation only when a checked response emits it, and reaches a
+    /// tool only through a checked request). Its label is the conservative
+    /// fold of the mandatory read and control dependency sets.
+    pub fn admit_model_output(
+        &mut self,
+        body: OpaqueValue,
+        reads: BTreeSet<ValueId>,
+        control: BTreeSet<ValueId>,
+    ) -> Result<ValueId, UnknownValue> {
+        let value = self.store.admit_model_output(body, reads, control)?;
+        self.advance();
+        Ok(value)
+    }
+
+    /// Record a dispatched tool's result by consuming the token the engine
+    /// minted for it. The token is consumed either way; a token minted for
+    /// another trajectory, for a revision the trajectory has moved past, or
+    /// for an action that is no longer pending is rejected, and the flow must
+    /// be re-evaluated against the real state.
+    ///
+    /// On success this commits the action's proposed effects to the monotone
+    /// past (a may-effect record: failure later cannot remove them), admits
+    /// the output value under
+    /// `combine(intrinsic, fold(arguments), fold(control))`, appends the tool
+    /// turn, spends any pending confirmation, and closes the action.
+    pub fn record_result(&mut self, token: ExecutionToken, body: OpaqueValue) -> Result<ValueId, RejectedToken> {
+        let parts = token.into_parts();
+        if parts.trajectory != self.id {
+            debug!(minted_for = %parts.trajectory, this = %self.id, "record_result: rejected (foreign trajectory)");
+            return Err(RejectedToken::ForeignTrajectory {
+                minted_for: parts.trajectory,
                 this: self.id,
             });
         }
-        if basis != self.turns.len() {
+        if parts.revision != self.revision {
             debug!(
-                granted_at = basis,
-                current_len = self.turns.len(),
-                "record_result: rejected (stale permit)"
+                minted_at = %parts.revision,
+                current = %self.revision,
+                "record_result: rejected (stale token)"
             );
-            return Err(RejectedPermit::Stale {
-                granted_at: basis,
-                current_len: self.turns.len(),
+            return Err(RejectedToken::Stale {
+                minted_at: parts.revision,
+                current: self.revision,
             });
         }
-        debug!(tool = %request.tool, basis, "record_result: recorded tool result");
-        self.turns.push(LabeledTurn {
-            label,
-            turn: Turn {
-                actor: Actor::Tool(request.tool),
-                content: content.into(),
-            },
+        match &self.pending {
+            Some(pending) if pending.id() == parts.action => {}
+            _ => {
+                debug!(action = %parts.action, "record_result: rejected (action not pending)");
+                return Err(RejectedToken::ActionNotPending { action: parts.action });
+            }
+        }
+
+        // Dispatch boundary: commit may-effects before anything else.
+        self.state.commit_effects(parts.proposed_effects.clone());
+        self.state.record(AuditEvent::EffectsCommitted {
+            action: parts.action,
+            effects: parts.proposed_effects,
         });
-        Ok(())
+        self.spend_confirmation();
+
+        let value = self
+            .store
+            .admit_tool_output(parts.action, parts.intrinsic, parts.arguments, parts.control, body)
+            .expect("token dependencies were validated at evaluate time");
+        self.turns.push(Turn {
+            actor: Actor::Tool(parts.tool),
+            value,
+        });
+        self.pending = None;
+        self.advance();
+        debug!(action = %parts.action, %value, "record_result: recorded tool result");
+        Ok(value)
     }
 
-    pub fn turns(&self) -> &[LabeledTurn] {
-        &self.turns
+    /// Explicitly abandon the pending action (e.g. the harness dropped its
+    /// token). Clears the slot and advances the revision, so the dropped
+    /// token can never be spent.
+    pub fn abandon_pending(&mut self) {
+        if self.pending.take().is_some() {
+            self.advance();
+        }
     }
 
     /// The user confirmation currently in force, if any: the newest turn's,
-    /// and only if that turn is a user turn. "A confirmation authorizes the
-    /// immediately following action, never a later one" is structural — any
-    /// appended turn ends it.
+    /// only if that turn is a user turn, and only if an action release has
+    /// not already spent it. "A confirmation authorizes the immediately
+    /// following action, never a later one."
     pub fn pending_confirmation(&self) -> Option<&ToolName> {
+        let newest = TurnId::new(self.turns.len().checked_sub(1)? as u64);
+        if self.spent_confirmation == Some(newest) {
+            return None;
+        }
         match self.turns.last() {
-            Some(LabeledTurn {
-                turn:
-                    Turn {
-                        actor:
-                            Actor::User(UserTurn {
-                                confirms: Some(tool), ..
-                            }),
-                        ..
-                    },
+            Some(Turn {
+                actor: Actor::User(UserTurn {
+                    confirms: Some(tool), ..
+                }),
                 ..
             }) => Some(tool),
             _ => None,
         }
     }
 
-    /// The folded label of everything currently in context.
-    pub fn context_label(&self) -> Label {
-        Label::fold(self.turns.iter().map(|t| t.label.clone()))
+    pub(crate) fn spend_confirmation(&mut self) {
+        if self.pending_confirmation().is_some() {
+            let newest = TurnId::new((self.turns.len() - 1) as u64);
+            self.spent_confirmation = Some(newest);
+        }
+    }
+
+    pub(crate) fn set_pending(
+        &mut self,
+        request: ToolRequest,
+        proposed_effects: crate::dimension::Effects,
+    ) -> ActionId {
+        let id = ActionId::new(self.next_action);
+        self.next_action += 1;
+        self.pending = Some(PendingAction::proposed(id, request, proposed_effects));
+        self.advance();
+        id
+    }
+
+    pub(crate) fn clear_pending(&mut self) {
+        if self.pending.take().is_some() {
+            self.advance();
+        }
+    }
+
+    pub(crate) fn record_event(&mut self, event: AuditEvent) {
+        self.state.record(event);
+        self.advance();
+    }
+
+    /// Every public mutation advances the revision exactly once, as one
+    /// transaction.
+    fn advance(&mut self) {
+        self.revision = self.revision.next();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dimension::{Audience, Effect, Effects, Trust};
+    use crate::dimension::Trust;
 
     #[test]
-    fn context_label_folds_all_turns() {
+    fn ingress_appends_turn_and_advances_revision() {
         let mut trajectory = Trajectory::new();
-        trajectory.push_message(
-            Label {
-                audience: Audience::readers([UserId::new("alice"), UserId::new("bob")]),
-                trust: Trust::TRUSTED,
-                ..Label::identity()
-            },
+        let before = trajectory.revision();
+        let value = trajectory.ingress(
             Speaker::user(UserId::new("alice")),
-            "summarize the doc",
+            ValueLabel::identity(),
+            OpaqueValue::new("hello"),
         );
-        trajectory.push_message(
-            Label {
-                audience: Audience::PUBLIC,
-                trust: Trust::SUSPICIOUS,
-                effects: Effects::declared([Effect::Egress]),
-                ..Label::identity()
-            },
-            Speaker::Assistant,
-            "pasting what the page says: ...",
-        );
-
-        let context = trajectory.context_label();
-        assert_eq!(
-            context.audience,
-            Audience::readers([UserId::new("alice"), UserId::new("bob")])
-        );
-        assert_eq!(context.trust, Trust::SUSPICIOUS);
-        assert_eq!(context.effects, Effects::declared([Effect::Egress]));
+        assert_eq!(trajectory.turns().len(), 1);
+        assert_eq!(trajectory.turns()[0].value, value);
+        assert!(trajectory.revision() > before);
     }
 
     #[test]
-    fn empty_trajectory_context_is_identity() {
-        assert_eq!(Trajectory::new().context_label(), Label::identity());
-    }
-
-    #[test]
-    fn a_confirmation_lasts_exactly_one_turn() {
+    fn model_output_admits_value_without_a_turn() {
         let mut trajectory = Trajectory::new();
-        assert_eq!(trajectory.pending_confirmation(), None);
+        let raw = trajectory.ingress(
+            Speaker::user(UserId::new("alice")),
+            ValueLabel {
+                trust: Trust::SUSPICIOUS,
+                ..ValueLabel::identity()
+            },
+            OpaqueValue::new("web page"),
+        );
+        let before = trajectory.revision();
+        let derived = trajectory
+            .admit_model_output(OpaqueValue::new("summary"), BTreeSet::from([raw]), BTreeSet::new())
+            .unwrap();
+        assert_eq!(trajectory.turns().len(), 1);
+        assert!(trajectory.revision() > before);
+        assert_eq!(trajectory.value(derived).unwrap().label().trust, Trust::SUSPICIOUS);
+    }
 
-        trajectory.push_message(
-            Label::identity(),
+    #[test]
+    fn confirmation_lasts_exactly_one_turn() {
+        let mut trajectory = Trajectory::new();
+        trajectory.ingress(
             Speaker::confirming(UserId::new("alice"), ToolName::new("db.drop")),
-            "yes, drop it",
+            ValueLabel::identity(),
+            OpaqueValue::new("yes, drop it"),
         );
         assert_eq!(trajectory.pending_confirmation(), Some(&ToolName::new("db.drop")));
 
-        trajectory.push_message(
-            Label::identity(),
+        trajectory.ingress(
             Speaker::user(UserId::new("alice")),
-            "unrelated chatter",
+            ValueLabel::identity(),
+            OpaqueValue::new("unrelated"),
         );
+        assert_eq!(trajectory.pending_confirmation(), None);
+    }
+
+    #[test]
+    fn confirmation_survives_value_admission_but_not_spending() {
+        let mut trajectory = Trajectory::new();
+        let raw = trajectory.ingress(
+            Speaker::confirming(UserId::new("alice"), ToolName::new("db.drop")),
+            ValueLabel::identity(),
+            OpaqueValue::new("yes"),
+        );
+        // A remedy-style value admission advances revision but appends no turn.
+        trajectory
+            .admit_model_output(OpaqueValue::new("derived"), BTreeSet::from([raw]), BTreeSet::new())
+            .unwrap();
+        assert_eq!(trajectory.pending_confirmation(), Some(&ToolName::new("db.drop")));
+
+        // A release spends it without appending a turn; it must not resurrect.
+        trajectory.spend_confirmation();
         assert_eq!(trajectory.pending_confirmation(), None);
     }
 }

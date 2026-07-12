@@ -25,8 +25,8 @@ use std::fmt;
 use serde::Serialize;
 
 use crate::ToolName;
-use crate::dimension::UserId;
-use crate::revision::{Revision, ValueId};
+use crate::dimension::{Effects, UserId};
+use crate::revision::{ActionId, Revision, ValueId};
 use crate::value::{UnknownValue, ValueLabel, ValueStore};
 
 /// Name of one argument in an [`ArgumentTree::Object`].
@@ -206,6 +206,60 @@ impl ResponseRequest {
             args: store.fold_labels(leaves.iter())?,
             control: store.fold_labels(self.control.iter())?,
         })
+    }
+}
+
+/// Lifecycle of the (at most one) pending action.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum ActionState {
+    Proposed,
+    Constrained,
+    Released,
+}
+
+/// The stored pending action. It retains BOTH the immutable original
+/// proposal (the identity basis for idempotent re-entry) and the current,
+/// possibly constrained form (what actually gets checked and dispatched) —
+/// `ActionId` alone cannot distinguish re-entry of the original from an
+/// independent proposal that merely equals the constrained form.
+#[derive(Debug, Serialize)]
+pub struct PendingAction {
+    id: ActionId,
+    original: ToolRequest,
+    current: ToolRequest,
+    proposed_effects: Effects,
+    state: ActionState,
+}
+
+impl PendingAction {
+    pub(crate) fn proposed(id: ActionId, request: ToolRequest, proposed_effects: Effects) -> Self {
+        Self {
+            id,
+            original: request.clone(),
+            current: request,
+            proposed_effects,
+            state: ActionState::Proposed,
+        }
+    }
+
+    pub fn id(&self) -> ActionId {
+        self.id
+    }
+
+    pub fn original(&self) -> &ToolRequest {
+        &self.original
+    }
+
+    pub fn current(&self) -> &ToolRequest {
+        &self.current
+    }
+
+    pub fn proposed_effects(&self) -> &Effects {
+        &self.proposed_effects
+    }
+
+    pub fn state(&self) -> ActionState {
+        self.state
     }
 }
 

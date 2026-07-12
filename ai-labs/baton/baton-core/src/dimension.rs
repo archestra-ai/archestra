@@ -77,29 +77,6 @@ impl Audience {
     pub(crate) fn covers(&self, recipients: &BTreeSet<UserId>) -> Adequacy<BTreeSet<UserId>> {
         self.0.covers(recipients)
     }
-
-    /// Grant application ([`Label::lift`](crate::label::Label::lift)): admit
-    /// `vouched` into the readers. `Public` stays public; `Unknown` becomes
-    /// exactly the vouched readers. Monotone in the adequacy order.
-    pub(crate) fn admitting(&self, vouched: &BTreeSet<UserId>) -> Self {
-        match &self.0 {
-            MeetSet::All => Self(MeetSet::All),
-            MeetSet::Only(s) => Self(MeetSet::Only(s.union(vouched).cloned().collect())),
-            MeetSet::Unknown => Self(MeetSet::Only(vouched.clone())),
-        }
-    }
-
-    /// `self ⊑ other` in the adequacy (permissiveness) order: `Unknown` bottom,
-    /// `Public` top, `Readers` by inclusion.
-    #[cfg(test)]
-    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (MeetSet::Unknown, _) => true,
-            (_, MeetSet::All) => true,
-            (MeetSet::Only(a), MeetSet::Only(b)) => a.is_subset(b),
-            _ => false,
-        }
-    }
 }
 
 impl fmt::Display for Audience {
@@ -177,31 +154,6 @@ impl Trust {
     pub(crate) fn at_least(&self, floor: KnownTrust) -> Adequacy<KnownTrust> {
         self.0.at_least(floor)
     }
-
-    /// Grant application ([`Label::lift`](crate::label::Label::lift)): raise
-    /// trust to at least `attested`. A join (`max`), never a demotion — a
-    /// `Trusted` context is never lowered by a weaker attestation, and an
-    /// `Unknown` one becomes the attested judgement.
-    pub(crate) fn raised_to(&self, attested: KnownTrust) -> Self {
-        match self.0 {
-            MinLevel::Known(actual) => Self(MinLevel::Known(actual.max(attested))),
-            MinLevel::Unknown => Self(MinLevel::Known(attested)),
-        }
-    }
-
-    /// `self ⊑ other` in the adequacy order: `Unknown` bottom, then
-    /// `Suspicious`, then `Trusted`.
-    #[cfg(test)]
-    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
-        fn rank(t: &MinLevel<KnownTrust>) -> u8 {
-            match t {
-                MinLevel::Unknown => 0,
-                MinLevel::Known(KnownTrust::Suspicious) => 1,
-                MinLevel::Known(KnownTrust::Trusted) => 2,
-            }
-        }
-        rank(&self.0) <= rank(&other.0)
-    }
 }
 
 impl fmt::Display for Trust {
@@ -260,28 +212,6 @@ impl Effects {
     /// present. See `JoinSet::avoids`.
     pub(crate) fn avoids(&self, forbidden: &BTreeSet<Effect>) -> Adequacy<BTreeSet<Effect>> {
         self.0.avoids(forbidden)
-    }
-
-    /// Grant application ([`Label::lift`](crate::label::Label::lift)): waive
-    /// `waived` from the present effects. `Unknown` stays `Unknown` — one
-    /// cannot attest a negative over it, which is why unprovable effects are
-    /// acknowledge-only, never grant-fixable.
-    pub(crate) fn waiving(&self, waived: &BTreeSet<Effect>) -> Self {
-        match &self.0 {
-            JoinSet::Has(present) => Self(JoinSet::Has(present.difference(waived).copied().collect())),
-            JoinSet::Unknown => Self(JoinSet::Unknown),
-        }
-    }
-
-    /// `self ⊑ other` in the adequacy order: `Unknown` bottom, `none()` top,
-    /// fewer present effects is more adequate.
-    #[cfg(test)]
-    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (JoinSet::Unknown, _) => true,
-            (JoinSet::Has(a), JoinSet::Has(b)) => b.is_subset(a),
-            (JoinSet::Has(_), JoinSet::Unknown) => false,
-        }
     }
 }
 

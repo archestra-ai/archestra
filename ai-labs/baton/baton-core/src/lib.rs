@@ -7,39 +7,39 @@
 //!
 //! The moving parts:
 //!
-//! - Every turn in a [`turn::Trajectory`] carries a [`label::Label`] — a
-//!   product of independent dimensions ([`dimension`]), each with its own
-//!   combine algebra. Turns never walk alone: there is no API to append an
-//!   unlabeled turn, and a tool result only enters by consuming the
-//!   [`engine::Permit`] the policy minted for it.
-//! - The context label is the fold of all turn labels
-//!   ([`turn::Trajectory::context_label`]). Taint propagates through the fold,
-//!   not through per-call bookkeeping.
-//! - Tools declare a [`contract::ToolContract`]: [`contract::Requirements`]
-//!   over the context label, plus an output label their results wear. The
-//!   sink check is the design notes' `(Requirements − Label)`: an empty diff
-//!   permits, a non-empty one escalates as typed [`contract::Violation`]s.
-//! - An [`authority::Authority`] (human in the loop, judge model, webhook...)
-//!   adjudicates escalations. An approval waives violations *for that flow
-//!   only* and every waiver is recorded as an audited declassification; the
-//!   context itself is never loosened.
+//! - A [`turn::Trajectory`] owns an immutable, append-only store of labeled
+//!   [`value::StoredValue`]s with full [`value::Provenance`]. Admission is
+//!   engine-owned: ingress is the only caller-labeled path (the explicit
+//!   trust boundary); every other value's label is computed inside the crate
+//!   as the conservative fold of its mandatory dependency sets.
+//! - A [`request::ToolRequest`] carries the executable
+//!   [`request::ArgumentTree`] — recipients, paths, and payloads are values
+//!   in this tree, and the canonical rendering handed out for dispatch comes
+//!   from the exact tree the engine checked — plus the *control*
+//!   dependencies of whatever selected the invocation. Requirements are
+//!   checked against `L_flow = combine(L_args, L_control)`
+//!   ([`contract::Requirements::check_flow`]), so a sanitized payload cannot
+//!   launder a secret-dependent tool or recipient choice.
+//! - Effects are monotone trajectory state
+//!   ([`audit::TrajectoryState::past_effects`]), committed when dispatch
+//!   begins (a may-effect record: a later failure removes nothing). Audit is
+//!   control-plane history ([`audit::AuditEvent`]), not a label field.
+//! - Every mutation advances the trajectory's [`revision::Revision`];
+//!   capabilities (the [`engine::ExecutionToken`]) are linear, bound to
+//!   trajectory + revision + pending action, and spent on use.
 //! - `Unknown` is a first-class value of audience, trust, and effects, and an
-//!   unregistered tool is evaluable (all-`Unknown` output). What `Unknown`
-//!   means at a sink is an explicit policy choice
-//!   ([`engine::UnknownPolicy`]), so a deployment can annotate five
-//!   high-risk tools, leave the rest unknown, and still catch the obvious
-//!   flows — gradual typing for agent stacks.
+//!   unregistered tool is evaluable (all-`Unknown` output, `Unknown`
+//!   effects). What `Unknown` means at a sink is an explicit policy choice
+//!   ([`engine::UnknownPolicy`]) — gradual typing for agent stacks.
 //!
 //! One deliberate deviation from the original notes: the audience fold is
 //! **intersection** (most-restrictive readers), not union — see
 //! [`dimension::Audience`] for why union would make the sink check vacuous.
 
 pub mod audit;
-pub mod authority;
 pub mod contract;
 pub mod dimension;
 pub mod engine;
-pub mod label;
 pub mod preset;
 pub mod request;
 pub mod revision;
@@ -75,16 +75,16 @@ impl fmt::Display for ToolName {
 }
 
 pub use audit::{AdjudicatorName, AuditEvent, TrajectoryState, TransitionFailure, TransitionOutcome, WaiverKind};
-pub use authority::{Authority, AuthorityName, Ruling};
-pub use contract::{
-    AttentionRule, AudienceRule, Breach, Requirements, ToolContract, ToolRequest, Unprovable, Verdict, Violation,
-};
+pub use contract::{AttentionRule, AudienceRule, Breach, Requirements, Unprovable, Verdict, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
+    BlockReason, Blocked, Decision, DuplicateContract, ExecutionToken, PolicyEngine, RejectedToken, TerminalBlock,
+    ToolContract, UnknownPolicy,
 };
-pub use label::{AuditEntry, Grant, Label};
-pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, FlowLabels, ResponseRequest, render};
+pub use request::{
+    ActionState, ArgumentName, ArgumentSchema, ArgumentTree, FlowLabels, PendingAction, ResponseRequest, ToolRequest,
+    render,
+};
 pub use revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
-pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};
+pub use turn::{Actor, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};
 pub use value::{OpaqueValue, Provenance, StoredValue, TransformerRef, UnknownValue, ValueLabel, ValueStore};

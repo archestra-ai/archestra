@@ -24,8 +24,8 @@ use std::collections::BTreeSet;
 use crate::ToolName;
 use crate::audit::{AuditEvent, TrajectoryState};
 use crate::dimension::UserId;
-use crate::engine::{ExecutionToken, RejectedToken};
-use crate::request::{PendingAction, ToolRequest};
+use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptParts, RejectedToken};
+use crate::request::{ActionState, PendingAction, ToolRequest};
 use crate::revision::{ActionId, Revision, TurnId, ValueId};
 use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
 
@@ -196,65 +196,132 @@ impl Trajectory {
         Ok(value)
     }
 
-    /// Record a dispatched tool's result by consuming the token the engine
-    /// minted for it. The token is consumed either way; a token minted for
-    /// another trajectory, for a revision the trajectory has moved past, or
-    /// for an action that is no longer pending is rejected, and the flow must
-    /// be re-evaluated against the real state.
+    /// Begin dispatch by consuming the execution token: the two-phase
+    /// boundary. Commits the action's proposed effects to the monotone past
+    /// *before* anything runs (a may-effect record: a later timeout or crash
+    /// cannot prove an effect did not happen), spends any pending
+    /// confirmation, marks the action released, and hands back the owned
+    /// [`CanonicalRequest`] — rendered from the exact checked tree — together
+    /// with the linear [`DispatchReceipt`] that must close the action.
     ///
-    /// On success this commits the action's proposed effects to the monotone
-    /// past (a may-effect record: failure later cannot remove them), admits
-    /// the output value under
-    /// `combine(intrinsic, fold(arguments), fold(control))`, appends the tool
-    /// turn, spends any pending confirmation, and closes the action.
-    pub fn record_result(&mut self, token: ExecutionToken, body: OpaqueValue) -> Result<ValueId, RejectedToken> {
+    /// The token is consumed either way; a token minted for another
+    /// trajectory, for a revision the trajectory has moved past, or for an
+    /// action that is no longer pending is rejected, and the flow must be
+    /// re-evaluated against the real state.
+    pub fn release(&mut self, token: ExecutionToken) -> Result<(CanonicalRequest, DispatchReceipt), RejectedToken> {
         let parts = token.into_parts();
         if parts.trajectory != self.id {
-            debug!(minted_for = %parts.trajectory, this = %self.id, "record_result: rejected (foreign trajectory)");
+            debug!(minted_for = %parts.trajectory, this = %self.id, "release: rejected (foreign trajectory)");
             return Err(RejectedToken::ForeignTrajectory {
                 minted_for: parts.trajectory,
                 this: self.id,
             });
         }
         if parts.revision != self.revision {
-            debug!(
-                minted_at = %parts.revision,
-                current = %self.revision,
-                "record_result: rejected (stale token)"
-            );
+            debug!(minted_at = %parts.revision, current = %self.revision, "release: rejected (stale token)");
             return Err(RejectedToken::Stale {
                 minted_at: parts.revision,
                 current: self.revision,
             });
         }
-        match &self.pending {
-            Some(pending) if pending.id() == parts.action => {}
+        let rendered = match &self.pending {
+            Some(pending) if pending.id() == parts.action => {
+                crate::request::render(&pending.current().arguments, &self.store)
+                    .expect("pending action dependencies were validated at evaluate time")
+            }
             _ => {
-                debug!(action = %parts.action, "record_result: rejected (action not pending)");
+                debug!(action = %parts.action, "release: rejected (action not pending)");
                 return Err(RejectedToken::ActionNotPending { action: parts.action });
             }
-        }
+        };
 
-        // Dispatch boundary: commit may-effects before anything else.
+        // Dispatch boundary: commit may-effects before release.
         self.state.commit_effects(parts.proposed_effects.clone());
         self.state.record(AuditEvent::EffectsCommitted {
             action: parts.action,
-            effects: parts.proposed_effects,
+            effects: parts.proposed_effects.clone(),
         });
         self.spend_confirmation();
+        self.pending
+            .as_mut()
+            .expect("pending action validated above")
+            .mark_released();
+        self.advance();
+        debug!(action = %parts.action, "release: effects committed, action released");
 
+        let canonical = CanonicalRequest {
+            action: parts.action,
+            tool: parts.tool.clone(),
+            rendered,
+        };
+        let receipt = DispatchReceipt::from_token_parts(parts, self.revision);
+        Ok((canonical, receipt))
+    }
+
+    /// Admit the dispatched tool's output by consuming the receipt: the value
+    /// enters under `combine(intrinsic, fold(arguments), fold(control))`, the
+    /// tool turn is appended, and the action closes.
+    pub fn record_output(&mut self, receipt: DispatchReceipt, body: OpaqueValue) -> Result<ValueId, RejectedToken> {
+        let parts = self.validate_receipt(receipt)?;
         let value = self
             .store
             .admit_tool_output(parts.action, parts.intrinsic, parts.arguments, parts.control, body)
-            .expect("token dependencies were validated at evaluate time");
+            .expect("receipt dependencies were validated at evaluate time");
         self.turns.push(Turn {
             actor: Actor::Tool(parts.tool),
             value,
         });
         self.pending = None;
         self.advance();
-        debug!(action = %parts.action, %value, "record_result: recorded tool result");
+        debug!(action = %parts.action, %value, "record_output: recorded tool result");
         Ok(value)
+    }
+
+    /// Declare the dispatch failed and close the action. The effects
+    /// committed at release stay — failure never removes them — and a
+    /// confirmation spent at release stays spent, so the confirming turn
+    /// cannot authorize a second attempt.
+    pub fn record_failure(&mut self, receipt: DispatchReceipt) -> Result<(), RejectedToken> {
+        let parts = self.validate_receipt(receipt)?;
+        self.state.record(AuditEvent::DispatchFailed { action: parts.action });
+        self.pending = None;
+        self.advance();
+        debug!(action = %parts.action, "record_failure: dispatch failed, action closed");
+        Ok(())
+    }
+
+    /// One-call convenience for harnesses that dispatch synchronously:
+    /// [`release`](Trajectory::release) followed by
+    /// [`record_output`](Trajectory::record_output), discarding the canonical
+    /// request.
+    pub fn record_result(&mut self, token: ExecutionToken, body: OpaqueValue) -> Result<ValueId, RejectedToken> {
+        let (_, receipt) = self.release(token)?;
+        self.record_output(receipt, body)
+    }
+
+    fn validate_receipt(&self, receipt: DispatchReceipt) -> Result<ReceiptParts, RejectedToken> {
+        let parts = receipt.into_parts();
+        if parts.trajectory != self.id {
+            debug!(minted_for = %parts.trajectory, this = %self.id, "receipt rejected (foreign trajectory)");
+            return Err(RejectedToken::ForeignTrajectory {
+                minted_for: parts.trajectory,
+                this: self.id,
+            });
+        }
+        if parts.revision != self.revision {
+            debug!(minted_at = %parts.revision, current = %self.revision, "receipt rejected (stale)");
+            return Err(RejectedToken::Stale {
+                minted_at: parts.revision,
+                current: self.revision,
+            });
+        }
+        match &self.pending {
+            Some(pending) if pending.id() == parts.action && pending.state() == ActionState::Released => Ok(parts),
+            _ => {
+                debug!(action = %parts.action, "receipt rejected (action not pending/released)");
+                Err(RejectedToken::ActionNotPending { action: parts.action })
+            }
+        }
     }
 
     /// Explicitly abandon the pending action (e.g. the harness dropped its

@@ -261,6 +261,10 @@ impl PendingAction {
     pub fn state(&self) -> ActionState {
         self.state
     }
+
+    pub(crate) fn mark_released(&mut self) {
+        self.state = ActionState::Released;
+    }
 }
 
 /// Deterministic canonical rendering of an argument tree: leaves inline their

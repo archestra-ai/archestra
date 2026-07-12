@@ -132,6 +132,10 @@ pub enum AuditEvent {
     /// Dispatch began: the action's proposed effects were committed to the
     /// monotone past-effects state *before* release.
     EffectsCommitted { action: ActionId, effects: Effects },
+    /// The harness declared the dispatch failed. The effects committed at
+    /// release stay: after dispatch starts, a timeout or crash cannot prove
+    /// an effect did not happen.
+    DispatchFailed { action: ActionId },
 }
 
 impl fmt::Display for AuditEvent {
@@ -174,6 +178,9 @@ impl fmt::Display for AuditEvent {
             }
             Self::EffectsCommitted { action, effects } => {
                 write!(f, "{action} dispatching, effects committed: {effects}")
+            }
+            Self::DispatchFailed { action } => {
+                write!(f, "{action} dispatch failed; committed effects stay")
             }
         }
     }

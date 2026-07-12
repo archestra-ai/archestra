@@ -126,8 +126,77 @@ impl ExecutionToken {
     }
 }
 
-/// [`Trajectory::record_result`] refused a token: it no longer (or never did)
-/// describe that trajectory's state, so the flow must be re-evaluated.
+/// The owned, canonically rendered request handed to the adapter at release
+/// time. Produced from the exact argument tree the engine checked; adapters
+/// execute this and never re-render.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CanonicalRequest {
+    pub action: ActionId,
+    pub tool: ToolName,
+    /// Deterministic rendering of the checked argument tree
+    /// (see [`crate::request::render`]).
+    pub rendered: String,
+}
+
+/// The linear receipt minted at release: the only way to admit the dispatched
+/// tool's output — or declare its failure — and close the action. Bound to
+/// the trajectory, the action, and the post-release revision; one receipt
+/// closes one action exactly once.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub struct DispatchReceipt {
+    action: ActionId,
+    tool: ToolName,
+    intrinsic: ValueLabel,
+    arguments: BTreeSet<ValueId>,
+    control: BTreeSet<ValueId>,
+    trajectory: TrajectoryId,
+    revision: Revision,
+}
+
+/// The consumed contents of a [`DispatchReceipt`].
+pub(crate) struct ReceiptParts {
+    pub(crate) action: ActionId,
+    pub(crate) tool: ToolName,
+    pub(crate) intrinsic: ValueLabel,
+    pub(crate) arguments: BTreeSet<ValueId>,
+    pub(crate) control: BTreeSet<ValueId>,
+    pub(crate) trajectory: TrajectoryId,
+    pub(crate) revision: Revision,
+}
+
+impl DispatchReceipt {
+    pub fn action(&self) -> ActionId {
+        self.action
+    }
+
+    pub(crate) fn from_token_parts(parts: TokenParts, revision: Revision) -> Self {
+        Self {
+            action: parts.action,
+            tool: parts.tool,
+            intrinsic: parts.intrinsic,
+            arguments: parts.arguments,
+            control: parts.control,
+            trajectory: parts.trajectory,
+            revision,
+        }
+    }
+
+    pub(crate) fn into_parts(self) -> ReceiptParts {
+        ReceiptParts {
+            action: self.action,
+            tool: self.tool,
+            intrinsic: self.intrinsic,
+            arguments: self.arguments,
+            control: self.control,
+            trajectory: self.trajectory,
+            revision: self.revision,
+        }
+    }
+}
+
+/// A linear capability ([`ExecutionToken`] or [`DispatchReceipt`]) was
+/// refused: it no longer (or never did) describe that trajectory's state, so
+/// the flow must be re-evaluated. The capability is consumed either way.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RejectedToken {
     /// The token was minted for a different trajectory.
@@ -766,5 +835,114 @@ mod tests {
             panic!("expected terminal block");
         };
         assert_eq!(block.reason, BlockReason::UnknownValueReferenced { value: ghost });
+    }
+
+    #[test]
+    fn effects_survive_a_declared_dispatch_failure() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let request = email_request(&mut trajectory, body, "bob");
+
+        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected permit");
+        };
+        let (canonical, receipt) = trajectory.release(token).unwrap();
+        assert_eq!(canonical.tool, ToolName::new("email.send"));
+        // Effects are committed at release, before any result exists.
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+
+        trajectory.record_failure(receipt).unwrap();
+        assert!(trajectory.pending_action().is_none());
+        // Failure removes nothing.
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    }
+
+    #[test]
+    fn canonical_request_renders_the_checked_tree() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
+        let request = email_request(&mut trajectory, body, "bob");
+
+        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected permit");
+        };
+        let (canonical, receipt) = trajectory.release(token).unwrap();
+        assert_eq!(canonical.rendered, r#"{"body":"the doc","to":"bob"}"#);
+        trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+    }
+
+    #[test]
+    fn stale_receipt_is_rejected_after_any_mutation() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let request = email_request(&mut trajectory, body, "bob");
+
+        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected permit");
+        };
+        let (_, receipt) = trajectory.release(token).unwrap();
+        trajectory
+            .admit_model_output(OpaqueValue::new("meanwhile"), BTreeSet::from([body]), BTreeSet::new())
+            .unwrap();
+        let err = trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap_err();
+        assert!(matches!(err, RejectedToken::Stale { .. }));
+    }
+
+    #[test]
+    fn foreign_receipt_is_rejected() {
+        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let request = email_request(&mut trajectory, body, "bob");
+        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected permit");
+        };
+        let (_, receipt) = trajectory.release(token).unwrap();
+
+        let mut other = Trajectory::new();
+        let err = other.record_output(receipt, OpaqueValue::new("sent")).unwrap_err();
+        assert!(matches!(err, RejectedToken::ForeignTrajectory { .. }));
+    }
+
+    #[test]
+    fn spent_confirmation_cannot_authorize_a_second_attempt() {
+        let drop_contract = ToolContract {
+            name: ToolName::new("db.drop"),
+            requires: Requirements {
+                attention: crate::contract::AttentionRule::ExplicitConfirmation,
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Mutation]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let engine = engine_with([drop_contract], UnknownPolicy::Escalate);
+        let mut trajectory = Trajectory::new();
+        let go = trajectory.ingress(
+            crate::turn::Speaker::confirming(user("alice"), ToolName::new("db.drop")),
+            ValueLabel::identity(),
+            OpaqueValue::new("yes, drop it"),
+        );
+        let request = ToolRequest::new(ToolName::new("db.drop"), ArgumentTree::Value(go), BTreeSet::new());
+
+        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request.clone()) else {
+            panic!("expected permit with confirmation in force");
+        };
+        let (_, receipt) = trajectory.release(token).unwrap();
+        // The dispatch fails without appending a turn: the confirming turn is
+        // the newest turn again, but its confirmation was spent at release.
+        trajectory.record_failure(receipt).unwrap();
+        assert_eq!(trajectory.pending_confirmation(), None);
+
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected block without a live confirmation");
+        };
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::ConfirmationMissing { .. })]
+        ));
     }
 }

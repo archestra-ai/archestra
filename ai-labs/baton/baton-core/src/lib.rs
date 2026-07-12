@@ -78,8 +78,8 @@ pub use audit::{AdjudicatorName, AuditEvent, TrajectoryState, TransitionFailure,
 pub use contract::{AttentionRule, AudienceRule, Breach, Requirements, Unprovable, Verdict, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    BlockReason, Blocked, Decision, DuplicateContract, ExecutionToken, PolicyEngine, RejectedToken, TerminalBlock,
-    ToolContract, UnknownPolicy,
+    BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
+    RejectedToken, TerminalBlock, ToolContract, UnknownPolicy,
 };
 pub use request::{
     ActionState, ArgumentName, ArgumentSchema, ArgumentTree, FlowLabels, PendingAction, ResponseRequest, ToolRequest,

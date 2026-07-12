@@ -242,6 +242,88 @@ pub struct ToolContract {
 }
 
 impl Requirements {
+    /// The value-granular check: audience and trust against the flow label
+    /// (`L_flow = combine(L_args, L_control)` — see [`crate::request`]),
+    /// effects against the trajectory's monotone past effects, attention
+    /// against the structural pending confirmation. Same typed violations and
+    /// the same observable emission order (trust, audience, attention,
+    /// effects) as [`check`](Requirements::check).
+    pub fn check_flow(
+        &self,
+        flow: &crate::value::ValueLabel,
+        past_effects: &crate::dimension::Effects,
+        confirmation: Option<&ToolName>,
+        tool: &ToolName,
+        recipients: &BTreeSet<UserId>,
+    ) -> Verdict {
+        let mut violations = Vec::new();
+
+        if let Some(required) = self.trust {
+            match flow.trust.at_least(required) {
+                Adequacy::Holds => {}
+                Adequacy::Unprovable => {
+                    violations.push(Violation::Unprovable(Unprovable::TrustUnknown));
+                }
+                Adequacy::Fails(actual) => {
+                    violations.push(Violation::Breach(Breach::TrustBelow { required, actual }));
+                }
+            }
+        }
+
+        match self.audience {
+            AudienceRule::Unrestricted => {}
+            AudienceRule::RecipientsWithinContext => {
+                if recipients.is_empty() {
+                    violations.push(Violation::Breach(Breach::UndeclaredRecipients));
+                } else {
+                    match flow.audience.covers(recipients) {
+                        Adequacy::Holds => {}
+                        Adequacy::Unprovable => {
+                            violations.push(Violation::Unprovable(Unprovable::AudienceUnknown));
+                        }
+                        Adequacy::Fails(outside) => {
+                            violations.push(Violation::Breach(Breach::AudienceExceeds { outside }));
+                        }
+                    }
+                }
+            }
+        }
+
+        match (self.attention, confirmation) {
+            (AttentionRule::NotRequired, _) => {}
+            (AttentionRule::ExplicitConfirmation, Some(confirmed)) if confirmed == tool => {}
+            (AttentionRule::ExplicitConfirmation, Some(confirmed)) => {
+                violations.push(Violation::Breach(Breach::ConfirmationForOtherTool {
+                    confirmed: confirmed.clone(),
+                    requested: tool.clone(),
+                }));
+            }
+            (AttentionRule::ExplicitConfirmation, None) => {
+                violations.push(Violation::Breach(Breach::ConfirmationMissing { tool: tool.clone() }));
+            }
+        }
+
+        if !self.forbid_prior_effects.is_empty() {
+            match past_effects.avoids(&self.forbid_prior_effects) {
+                Adequacy::Holds => {}
+                Adequacy::Unprovable => {
+                    violations.push(Violation::Unprovable(Unprovable::EffectsUnknown));
+                }
+                Adequacy::Fails(effects) => {
+                    violations.push(Violation::Breach(Breach::ForbiddenPriorEffects { effects }));
+                }
+            }
+        }
+
+        if violations.is_empty() {
+            trace!(%tool, "check_flow: allow");
+            Verdict::Allow
+        } else {
+            trace!(%tool, violations = ?violations, "check_flow: escalate");
+            Verdict::Escalate(violations)
+        }
+    }
+
     /// `confirmation` is the trajectory's pending user confirmation
     /// ([`crate::turn::Trajectory::pending_confirmation`]) — structural
     /// context alongside the folded label.
@@ -325,10 +407,92 @@ impl Requirements {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dimension::{Audience, Effects, Trust};
+    use crate::dimension::{Audience, Effect, Effects, Trust};
+    use crate::value::ValueLabel;
 
     fn user(id: &str) -> UserId {
         UserId::new(id)
+    }
+
+    /// The emission order (trust, audience, attention, effects) is an
+    /// observable part of the contract — asserted on the typed vector, never
+    /// on wording.
+    #[test]
+    fn check_flow_emits_violations_in_contract_order() {
+        let requirements = Requirements {
+            trust: Some(KnownTrust::Trusted),
+            audience: AudienceRule::RecipientsWithinContext,
+            attention: AttentionRule::ExplicitConfirmation,
+            forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+        };
+        let flow = ValueLabel {
+            audience: Audience::readers([user("alice")]),
+            trust: Trust::SUSPICIOUS,
+        };
+        let tool = ToolName::new("db.drop");
+        let recipients = BTreeSet::from([user("bob")]);
+
+        let verdict = requirements.check_flow(&flow, &Effects::declared([Effect::Egress]), None, &tool, &recipients);
+        assert_eq!(
+            verdict,
+            Verdict::Escalate(vec![
+                Violation::Breach(Breach::TrustBelow {
+                    required: KnownTrust::Trusted,
+                    actual: KnownTrust::Suspicious,
+                }),
+                Violation::Breach(Breach::AudienceExceeds {
+                    outside: BTreeSet::from([user("bob")]),
+                }),
+                Violation::Breach(Breach::ConfirmationMissing { tool: tool.clone() }),
+                Violation::Breach(Breach::ForbiddenPriorEffects {
+                    effects: BTreeSet::from([Effect::Egress]),
+                }),
+            ])
+        );
+    }
+
+    #[test]
+    fn check_flow_allows_adequate_flow() {
+        let requirements = Requirements {
+            trust: Some(KnownTrust::Trusted),
+            audience: AudienceRule::RecipientsWithinContext,
+            ..Requirements::default()
+        };
+        let flow = ValueLabel {
+            audience: Audience::readers([user("alice"), user("bob")]),
+            trust: Trust::TRUSTED,
+        };
+        let verdict = requirements.check_flow(
+            &flow,
+            &Effects::none(),
+            None,
+            &ToolName::new("email.send"),
+            &BTreeSet::from([user("bob")]),
+        );
+        assert_eq!(verdict, Verdict::Allow);
+    }
+
+    #[test]
+    fn check_flow_unknown_flow_is_unprovable_not_breach() {
+        let requirements = Requirements {
+            trust: Some(KnownTrust::Suspicious),
+            audience: AudienceRule::RecipientsWithinContext,
+            ..Requirements::default()
+        };
+        let verdict = requirements.check_flow(
+            &ValueLabel::unknown(),
+            &Effects::none(),
+            None,
+            &ToolName::new("email.send"),
+            &BTreeSet::from([user("bob")]),
+        );
+        assert_eq!(
+            verdict,
+            Verdict::Escalate(vec![
+                Violation::Unprovable(Unprovable::TrustUnknown),
+                Violation::Unprovable(Unprovable::AudienceUnknown),
+            ])
+        );
     }
 
     fn email_requirements() -> Requirements {

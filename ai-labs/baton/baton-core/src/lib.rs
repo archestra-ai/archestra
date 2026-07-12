@@ -41,6 +41,7 @@ pub mod dimension;
 pub mod engine;
 pub mod label;
 pub mod preset;
+pub mod request;
 pub mod revision;
 pub mod turn;
 pub mod value;
@@ -83,6 +84,7 @@ pub use engine::{
     BlockReason, Decision, DuplicateContract, Permit, PolicyEngine, RejectedPermit, TaintPolicy, UnknownPolicy,
 };
 pub use label::{AuditEntry, Grant, Label};
+pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, FlowLabels, ResponseRequest, render};
 pub use revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
 pub use turn::{Actor, LabeledTurn, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};
 pub use value::{OpaqueValue, Provenance, StoredValue, TransformerRef, UnknownValue, ValueLabel, ValueStore};

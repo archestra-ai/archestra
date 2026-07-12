@@ -46,10 +46,8 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import {
-  evaluateSingleMcpToolInvocationPolicy,
-  policyBlockToToolError,
-} from "@/guardrails/tool-invocation";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -542,11 +540,15 @@ export async function createAgentServer(
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose
           // (in _meta + structuredContent) so MCP clients render the block
-          // structurally instead of scraping the refusal text.
-          const blockedResult = structuredToolErrorResult({
-            error: policyBlockToToolError(policyBlock),
-            text: policyBlock.refusalMessage,
+          // structurally instead of scraping the refusal text. When the caller
+          // can edit guardrails, both gain a deep link to this tool's policy
+          // editor so the external client can offer to review/modify it.
+          const { error, text } = await buildPolicyBlockedToolResult({
+            policyBlock,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
           });
+          const blockedResult = structuredToolErrorResult({ error, text });
 
           // Blocked calls are still tool calls: report metrics and persist them
           // (isError) so they show up in the MCP gateway logs and dashboards

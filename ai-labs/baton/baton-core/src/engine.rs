@@ -2687,4 +2687,39 @@ mod tests {
         assert_eq!(trajectory.pending_confirmation(), None);
         trajectory.record_output(receipt, OpaqueValue::new("dropped")).unwrap();
     }
+
+    #[test]
+    fn rules_and_adjudicators_share_one_name_space() {
+        fn approve(_: &crate::transition::WaiverDelta, _: &[Violation]) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "ok".to_owned(),
+            })
+        }
+        let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
+        engine
+            .register_policy_rule(crate::approval::PolicyRule {
+                name: crate::audit::AdjudicatorName::new("gate"),
+                mandate: crate::transition::WaiverDelta::empty(),
+                decide: approve,
+            })
+            .unwrap();
+        // The same name is refused for another rule AND for an adjudicator.
+        assert!(
+            engine
+                .register_policy_rule(crate::approval::PolicyRule {
+                    name: crate::audit::AdjudicatorName::new("gate"),
+                    mandate: crate::transition::WaiverDelta::empty(),
+                    decide: approve,
+                })
+                .is_err()
+        );
+        assert!(
+            engine
+                .register_adjudicator(crate::transition::Adjudicator {
+                    name: crate::audit::AdjudicatorName::new("gate"),
+                    mandate: crate::transition::WaiverDelta::empty(),
+                })
+                .is_err()
+        );
+    }
 }

@@ -3047,9 +3047,7 @@ mod tests {
         };
         assert!(matches!(block.reason, BlockReason::ActionAlreadyPending { .. }));
 
-        // Even if a second token could be obtained, release refuses a
-        // released action.
-        let receipt = receipt;
+        // The outstanding receipt still closes the action normally.
         trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
         assert!(trajectory.pending_action().is_none());
     }

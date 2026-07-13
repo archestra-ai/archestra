@@ -1309,15 +1309,6 @@ impl PolicyEngine {
                 }
             }
         }
-        // Bound the candidate lists so the enumeration cartesian — and thus the
-        // work per blocked flow — stays bounded even for a request with many
-        // argument leaves (an unbounded runtime input). Capping the lists (not
-        // the plan pool) keeps at least one representative of each remedy
-        // category, so `select_fair` still sees every applicable ExitKind.
-        if transforms.len() > MAX_PLANS {
-            debug!(dropped = transforms.len() - MAX_PLANS, "bounding transform candidates");
-            transforms.truncate(MAX_PLANS);
-        }
 
         // Candidate constrain steps: registered action transitions from this
         // tool whose structural narrowing holds and whose target tool has a
@@ -1326,7 +1317,7 @@ impl PolicyEngine {
         // declared effects agree with the transition's (the narrowing baton
         // validates must be what the target actually does) and whose argument
         // schema does not widen the resolved recipient set.
-        let mut constrains: Vec<&ActionTransition> = self
+        let constrains: Vec<&ActionTransition> = self
             .action_transitions
             .iter()
             .filter(|t| {
@@ -1340,10 +1331,6 @@ impl PolicyEngine {
                     })
             })
             .collect();
-        if constrains.len() > MAX_PLANS {
-            debug!(dropped = constrains.len() - MAX_PLANS, "bounding constrain candidates");
-            constrains.truncate(MAX_PLANS);
-        }
 
         let mut plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
         let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
@@ -1351,11 +1338,13 @@ impl PolicyEngine {
         let constrain_options: Vec<Option<&&ActionTransition>> =
             std::iter::once(None).chain(constrains.iter().map(Some)).collect();
 
-        // Generate the full cartesian of the (bounded) candidate lists so
-        // `select_fair` sees every applicable category before trimming to
-        // MAX_PLANS — a mid-loop plan cap could starve a category the fairness
-        // pass never gets to see, while the candidate-list bounds keep the work
-        // finite regardless of request size.
+        // Generate the full candidate cartesian so `select_fair` sees every
+        // applicable category before trimming to MAX_PLANS — any pre-trim cap
+        // (on the plan pool or the candidate lists) can drop the sole clearing
+        // route of a category and starve it, and confirming a category has no
+        // clearing route requires trying all its candidates. The cartesian is
+        // bounded by the construction-time registries times the request's leaf
+        // count; the latter's quadratic scaling is a documented follow-up.
         for transform in &transform_options {
             for constrain in &constrain_options {
                 let mut sim = base.clone();
@@ -1490,16 +1479,13 @@ impl PolicyEngine {
         candidates
     }
 
-    /// The least-privilege control-release waiver: the inclusion-minimal set of
+    /// The least-privilege control-release waiver: an inclusion-minimal set of
     /// control deps whose release shrinks the residual as far as releasing every
     /// control dep would. `None` when releasing control changes nothing (the
-    /// taint is arg-borne, not control-borne). Releasing control can only remove
-    /// taint, so `needed_delta` is monotone non-increasing as the released set
-    /// grows: we take the best achievable reduction (release everything), then
-    /// greedily drop each dep whose removal still reaches it. By monotonicity a
-    /// dropped dep is redundant, so the result is inclusion-minimal — an
-    /// unrelated or non-load-bearing control dep is never released (D4) — in a
-    /// linear number of probes, with no bound on the control-set size.
+    /// taint is arg-borne, not control-borne). We take the best achievable
+    /// reduction (release everything), then remove redundant deps to a fixpoint
+    /// (below), so an unrelated or non-load-bearing control dep is never released
+    /// (D4). At most O(control²) probes; no bound on the control-set size.
     fn minimal_control_release(&self, sim: &SimFlow, plain: &TransientWaiver) -> Option<TransientWaiver> {
         let ids: Vec<ValueId> = sim.control_labels.keys().copied().collect();
         if ids.is_empty() {
@@ -1519,11 +1505,13 @@ impl PolicyEngine {
         }
         // Iterate removal passes to a fixpoint. A single pass is not enough: a
         // dep can become redundant only after a *later* dep is dropped (one
-        // control masking another's contribution to the fold), and a single pass
+        // control masking another's contribution to the fold — e.g. a Suspicious
+        // control masking an Unknown one in the trust fold), and a single pass
         // never revisits the earlier decision. Repeat until a whole pass removes
-        // nothing; at that fixpoint no single dep is removable, which by
-        // monotonicity (releasing more can only remove taint) means no proper
-        // subset reaches `full` — the set is inclusion-minimal (D4).
+        // nothing. At that fixpoint no single dep is removable while still
+        // reaching `full`, so the set is inclusion-minimal for the current fold
+        // dimensions (the only masking case, Suspicious over Unknown, always
+        // leaves the masker itself removable, so no proper subset is missed).
         loop {
             let mut progressed = false;
             for id in &ids {

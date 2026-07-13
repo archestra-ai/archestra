@@ -35,15 +35,16 @@ Every request carries a bearer token in the `Authorization` header:
 Authorization: Bearer <token>
 ```
 
-A2A authenticates with a static Archestra platform token. The caller's [role and team access](/docs/platform-access-control) gates which agents they can reach.
+A2A validates the token the same way the [MCP gateway](/docs/mcp-authentication) does, so it accepts the methods below. Whichever you use, the caller's [role and team access](/docs/platform-access-control) gates which agents they can reach.
 
-| Token | From | Identifies a user |
-| --- | --- | --- |
-| Personal | **Settings > Your Account** | Yes |
-| Team | **Settings > Teams** | No |
-| Organization | **Settings > Organization** | No |
+| Method | Best for | Acting user | Notes |
+| --- | --- | --- | --- |
+| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token from **Settings > Your Account** (personal), **Settings > Teams** (team), or **Settings > Organization** (org). Team and org tokens don't identify a single user. |
+| External IdP JWT (JWKS) | Callers signed in through a corporate identity provider | Yes | Bind the agent to an [identity provider](/docs/platform-identity-providers) in its settings; the caller then presents their IdP's JWT directly and Archestra resolves the user — no Archestra token to hand out. |
+| OAuth client credentials | Backend services and machine-to-machine callers | No | Register an [OAuth client](/docs/mcp-authentication) and add the agent to its allowed list. |
+| OAuth authorization code | An app acting for whoever is signed in | Yes | A confidential OAuth client that resolves the individual user. |
 
-The OAuth and external-IdP (JWKS) methods available for the [MCP gateway](/docs/mcp-authentication) and [LLM proxy](/docs/platform-llm-proxy-authentication) don't apply to A2A agents. To give each of your users their own identity, issue them personal tokens and call A2A from your backend with the caller's token — keep tokens out of the browser.
+To give each of your users their own identity without handing out tokens, bind the agent to your identity provider and forward each user's JWT from your backend — the External IdP JWT method. For a browser app in front of a long-running agent, keep the token in your backend and call A2A server-to-server.
 
 ## SendMessage
 

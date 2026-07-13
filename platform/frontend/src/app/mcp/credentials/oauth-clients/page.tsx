@@ -96,8 +96,10 @@ export default function OAuthClientsPage() {
   } = useMcpOauthClients({
     search: search || undefined,
   });
+  // MCP gateways and A2A agents are both reached by id through the same token
+  // validation, so an OAuth client can be scoped to either.
   const { data: gateways = [] } = useProfiles({
-    filters: { agentTypes: ["mcp_gateway"] },
+    filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
   const createMutation = useCreateMcpOauthClient();
   const updateMutation = useUpdateMcpOauthClient();
@@ -446,16 +448,16 @@ function CreateOAuthClientDialog({
             </>
           ) : (
             <div className="space-y-2">
-              <Label>Allowed gateways</Label>
+              <Label>Allowed gateways &amp; agents</Label>
               <AgentSelector
                 mode="multiple"
                 flat
                 agents={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
-                placeholder="Select gateways"
-                searchPlaceholder="Search gateways"
-                emptyMessage="No gateways found"
+                placeholder="Select gateways or agents"
+                searchPlaceholder="Search gateways and agents"
+                emptyMessage="No gateways or agents found"
               />
             </div>
           )}
@@ -577,16 +579,16 @@ function EditOAuthClientDialog({
             </>
           ) : (
             <div className="space-y-2">
-              <Label>Allowed gateways</Label>
+              <Label>Allowed gateways &amp; agents</Label>
               <AgentSelector
                 mode="multiple"
                 flat
                 agents={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
-                placeholder="Select gateways"
-                searchPlaceholder="Search gateways"
-                emptyMessage="No gateways found"
+                placeholder="Select gateways or agents"
+                searchPlaceholder="Search gateways and agents"
+                emptyMessage="No gateways or agents found"
               />
             </div>
           )}

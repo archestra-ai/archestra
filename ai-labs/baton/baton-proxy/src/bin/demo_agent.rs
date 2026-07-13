@@ -38,11 +38,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 const DEFAULT_TASK: &str = "Summarize this quarter's invoices and email the summary to our external \
      auditor at alex@finance-audit.com.";
 
-const PREAMBLE: &str = "You are a finance assistant with tools to read invoices and send email. \
-     When you send email, some recipients may be outside the data's audience; if so, a tool result \
-     will come back from `baton__request_approval`. If that result begins with GRANTED, immediately \
-     retry the send you intended, unchanged. If it begins with DENIED, do not send — explain why to \
-     the user. Complete the user's request in as few steps as possible.";
+const PREAMBLE: &str = "You are a finance assistant with tools to read invoices and send email. Use \
+     your tools to complete the user's request directly, in as few steps as possible. If a tool \
+     result says a previous action was GRANTED and asks you to retry it, retry that action \
+     unchanged. If a result says DENIED, do not retry — explain to the user why it could not be \
+     done.";
 
 #[derive(Parser)]
 #[command(about = "Demo agent that drives baton-proxy + baton-approver through the approval flow")]

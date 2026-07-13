@@ -35,8 +35,9 @@ pub enum AttentionRule {
 pub struct Requirements {
     /// Minimum *known* trust of the flow. `Trust::UNKNOWN` never satisfies
     /// any bar — deliberately over [`KnownTrust`], so "unknown suffices"
-    /// cannot even be expressed; unpacking `Unknown` is always an explicit
-    /// [`crate::approval::Authority`] acknowledgment.
+    /// cannot even be expressed; an unknown-trust flow routes through the
+    /// authority chain (an [`crate::approval::Authority`] attests the trust as
+    /// a waiver), never an implicit pass.
     /// `Some(KnownTrust::Suspicious)` means "provenance must merely be
     /// established".
     pub trust: Option<KnownTrust>,

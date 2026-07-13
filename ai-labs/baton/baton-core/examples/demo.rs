@@ -249,7 +249,6 @@ fn build_engine() -> PolicyEngine {
                     UserId::new("bob"),
                     UserId::new("charlie"),
                 ])),
-                acquire_effects: false,
                 waive_prior_effects: false,
                 confirms: true,
                 acknowledge_unknown: true,

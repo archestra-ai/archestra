@@ -90,9 +90,12 @@ observable; preserve it (there is a typed-order test).
   identity, effects, and recipient roles; egress-destination and
   runtime-capability sets are not modeled); waivers
   change no stored state — check-transient lifts (`raised_to`, `admitting`,
-  `waiving`) plus an audit record. `WaiverDelta` is proposal data, not a
-  capability; authority comes from competence routing + the fail-closed
-  recheck (`PostconditionFailed` blocks rather than permitting an
+  `waiving`) plus an audit record. A `TransientWaiver` is proposal data, not a
+  capability; the `ProposedGrant` an authority rules on carries both the lift
+  and any acknowledge-only facts it clears, so `AuthorityMandate::covers`
+  requires `acknowledge_unknown` to clear an unknown even when the lift
+  dimensions alone are covered. Authority comes from competence routing + the
+  fail-closed recheck (`PostconditionFailed` blocks rather than permitting an
   under-covered flow).
 - Registration is an operator trust decision, not content correctness: audit
   wording says "admitted under the transition declared by registered

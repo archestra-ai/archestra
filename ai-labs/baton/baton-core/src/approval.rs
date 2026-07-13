@@ -80,8 +80,13 @@ pub struct ValueView {
 
 /// An owned, serializable snapshot of the values relevant to a grant, embedded
 /// in a [`PendingApproval`] so an out-of-process authority can judge without a
-/// live trajectory — a borrow cannot cross the approval boundary. Scoped to
-/// the operation's values, never the whole trajectory, and never bytes.
+/// live trajectory — a borrow cannot cross the approval boundary. Never bytes.
+///
+/// Scoped to the operation's *direct* values (the argument leaves and control
+/// dependencies), not the transitive provenance closure: a snapshotted value's
+/// `Provenance` may name ancestors this snapshot does not carry. Walking that
+/// closure so an authority can inspect suspicious ancestry is a later pass
+/// (design §5, D3); today the snapshot is the immediate operation scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AncestrySnapshot {
     values: BTreeMap<ValueId, ValueView>,

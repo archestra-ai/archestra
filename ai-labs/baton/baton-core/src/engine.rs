@@ -1288,12 +1288,17 @@ impl PolicyEngine {
     /// the need, then the plain full-attestation delta.
     fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
         let plain = needed_delta(remaining, &sim.recipients, &sim.requires);
+        // Compare against the empty-waiver baseline (which already drops
+        // acknowledge-only facts) so a control-release candidate is offered
+        // only when releasing control shrinks the *breach* set — not merely
+        // because acknowledging the unknowns happened under any waiver.
+        let baseline = sim.violations(Some(&TransientWaiver::empty()));
         let after_control_release = sim.violations(Some(&TransientWaiver {
             control_release: true,
             ..TransientWaiver::empty()
         }));
         let mut candidates = Vec::new();
-        if after_control_release.len() < remaining.len() {
+        if after_control_release.len() < baseline.len() {
             let with_release = TransientWaiver {
                 control_release: true,
                 ..needed_delta(&after_control_release, &sim.recipients, &sim.requires)
@@ -1479,17 +1484,25 @@ impl SimFlow {
 /// residual is a [`ProposedGrant::Acknowledge`], which routes on the explicit
 /// `acknowledge_unknown` capability rather than being covered by every mandate.
 fn grant_for(delta: &TransientWaiver, resolved: &[Violation]) -> ProposedGrant {
+    // Acknowledge-only facts (unknown effects, a missing contract) are cleared
+    // by the presence of *any* waiver on the recheck, so a non-empty lift that
+    // rides alongside them must still carry them — otherwise a lift-only
+    // mandate would launder an unknown it has no competence to acknowledge.
+    let acknowledged: Vec<Unprovable> = resolved
+        .iter()
+        .filter(|violation| violation.fixability() == Fixability::AcknowledgeOnly)
+        .filter_map(|violation| match violation {
+            Violation::Unprovable(fact) => Some(fact.clone()),
+            Violation::Breach(_) => None,
+        })
+        .collect();
     if delta == &TransientWaiver::empty() {
-        let facts = resolved
-            .iter()
-            .filter_map(|violation| match violation {
-                Violation::Unprovable(fact) => Some(fact.clone()),
-                Violation::Breach(_) => None,
-            })
-            .collect();
-        ProposedGrant::Acknowledge { facts }
+        ProposedGrant::Acknowledge { facts: acknowledged }
     } else {
-        ProposedGrant::Waive(delta.clone())
+        ProposedGrant::Waive {
+            waiver: delta.clone(),
+            acknowledged,
+        }
     }
 }
 
@@ -2283,7 +2296,6 @@ mod tests {
             mandate: crate::transition::AuthorityMandate {
                 trust: Some(crate::dimension::KnownTrust::Trusted),
                 audience: Some(BTreeSet::from([user("alice"), user("bob"), user("charlie")])),
-                acquire_effects: false,
                 waive_prior_effects: true,
                 confirms: true,
                 acknowledge_unknown: true,
@@ -2675,6 +2687,171 @@ mod tests {
         assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
     }
 
+    /// An inline denial is decisive: it terminates the walk and does not fall
+    /// through to a later would-approve authority.
+    #[test]
+    fn inline_denial_is_decisive_and_does_not_fall_through() {
+        fn deny(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Deny {
+                reason: "denied".to_owned(),
+            })
+        }
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "would approve".to_owned(),
+            })
+        }
+        let mut engine = engine_with([email_contract()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("denier"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(deny),
+            })
+            .unwrap();
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("approver"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
+            engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("a denial must terminate, not fall through to the approver");
+        };
+        assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
+    }
+
+    /// An authority that may only release control cannot acknowledge an
+    /// unknown: the `acknowledge_unknown` gate is not satisfiable by a lift
+    /// dimension. (Regression: the acknowledge bypass.)
+    #[test]
+    fn control_release_only_authority_cannot_acknowledge_an_unknown() {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "release".to_owned(),
+            })
+        }
+        let mut engine = engine_with([]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("control-only"),
+                mandate: crate::transition::AuthorityMandate {
+                    may_release_control: true,
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
+        let request = ToolRequest::new(
+            ToolName::new("mystery.tool"),
+            ArgumentTree::Value(body),
+            BTreeSet::new(),
+        );
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("a control-release-only authority must not clear an unknown");
+        };
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+    }
+
+    /// A mixed residual (a grant-fixable breach *and* an acknowledge-only
+    /// unknown) needs a single authority competent for both — a lift-only
+    /// mandate must not launder the unknown. (Regression: the mixed-residual
+    /// acknowledge bypass.)
+    #[test]
+    fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
+        fn attest(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "trust attested".to_owned(),
+            })
+        }
+        let mut engine = engine_with([]);
+        // A tool with unknown effects; dispatching it makes past-effects UNKNOWN.
+        engine
+            .register(ToolContract {
+                name: ToolName::new("fetch"),
+                requires: Requirements::default(),
+                output_label: ValueLabel::unknown(),
+                effects: Effects::UNKNOWN,
+                arguments: ArgumentSchema::opaque(),
+            })
+            .unwrap();
+        // A sink that both demands Trusted and forbids a prior Egress.
+        engine
+            .register(ToolContract {
+                name: ToolName::new("email.send"),
+                requires: Requirements {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: crate::contract::AudienceRule::RecipientsWithinContext,
+                    forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                    ..Requirements::default()
+                },
+                output_label: ValueLabel::identity(),
+                effects: Effects::declared([Effect::Egress]),
+                arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
+            })
+            .unwrap();
+        // Trust-competent, but NOT competent to acknowledge unknowns.
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("trust-only"),
+                mandate: crate::transition::AuthorityMandate {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: Some(BTreeSet::from([user("alice"), user("bob")])),
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(attest),
+            })
+            .unwrap();
+
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "doc");
+        // Dispatch fetch to drive past-effects to UNKNOWN.
+        let Decision::Permitted(token) = engine.evaluate(
+            &mut trajectory,
+            ToolRequest::new(ToolName::new("fetch"), ArgumentTree::Value(doc), BTreeSet::new()),
+        ) else {
+            panic!("fetch should permit");
+        };
+        dispatch(&mut trajectory, token, "page").unwrap();
+
+        // Emailing the doc now breaches trust (unknown) AND cannot prove it
+        // avoids the prior Egress (unknown past): [TrustUnknown, EffectsUnknown].
+        let request = email_request(&mut trajectory, doc, "bob");
+        let decision = engine.evaluate(&mut trajectory, request);
+        let Decision::Blocked(Blocked::Terminal(block)) = decision else {
+            panic!("trust-only must not clear the unknown effect, got {decision:?}");
+        };
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+    }
+
     /// An external waiver round-trips through PendingApproval; approval
     /// permits, and the whole loop is audited.
     #[test]
@@ -2737,7 +2914,7 @@ mod tests {
             let source_trusted = view
                 .label(crate::revision::ValueId::new(0))
                 .is_some_and(|label| label.trust == Trust::TRUSTED);
-            if audience_breach && source_trusted && matches!(grant, crate::transition::ProposedGrant::Waive(_)) {
+            if audience_breach && source_trusted && matches!(grant, crate::transition::ProposedGrant::Waive { .. }) {
                 Some(crate::approval::Ruling::Approve {
                     reason: "source document is trusted".to_owned(),
                 })

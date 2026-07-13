@@ -151,10 +151,7 @@ pub struct AuthorityMandate {
     pub trust: Option<KnownTrust>,
     /// Vouch (at most) these readers into a flow audience.
     pub audience: Option<BTreeSet<UserId>>,
-    /// Competent to authorize acquiring a new effect (Accept).
-    pub acquire_effects: bool,
-    /// Competent to waive an already-committed prior effect for one check —
-    /// distinct from acquiring a new one.
+    /// Competent to waive an already-committed prior effect for one check.
     pub waive_prior_effects: bool,
     /// Competent to stand in for a user confirmation.
     pub confirms: bool,
@@ -177,7 +174,7 @@ impl AuthorityMandate {
     #[must_use]
     pub fn covers(&self, grant: &ProposedGrant) -> bool {
         match grant {
-            ProposedGrant::Waive(waiver) => {
+            ProposedGrant::Waive { waiver, acknowledged } => {
                 let trust_ok = match waiver.trust {
                     None => true,
                     Some(need) => matches!(self.trust, Some(ceiling) if ceiling >= need),
@@ -186,13 +183,14 @@ impl AuthorityMandate {
                     None => true,
                     Some(need) => matches!(&self.audience, Some(vouchable) if need.is_subset(vouchable)),
                 };
-                let effects_ok = match &waiver.prior_effects {
-                    None => true,
-                    Some(effects) => effects.is_empty() || self.waive_prior_effects,
-                };
+                let effects_ok = waiver.prior_effects.is_none() || self.waive_prior_effects;
                 let confirms_ok = !waiver.confirms || self.confirms;
                 let control_ok = !waiver.control_release || self.may_release_control;
-                trust_ok && audience_ok && effects_ok && confirms_ok && control_ok
+                // A lift that also clears acknowledge-only facts needs the
+                // explicit acknowledge capability — the lift dims alone must
+                // not let an authority acknowledge an unknown it cannot vouch.
+                let acknowledge_ok = acknowledged.is_empty() || self.acknowledge_unknown;
+                trust_ok && audience_ok && effects_ok && confirms_ok && control_ok && acknowledge_ok
             }
             ProposedGrant::Acknowledge { .. } => self.acknowledge_unknown,
         }
@@ -224,8 +222,9 @@ pub struct TransientWaiver {
 }
 
 impl TransientWaiver {
-    /// The identity waiver: loosens nothing. Covered by every mandate, so an
-    /// acknowledgment-only waiver is competently handled by any authority.
+    /// The identity waiver: loosens nothing. Its lift dimensions are covered by
+    /// every mandate; acknowledging any facts it clears still requires the
+    /// authority's explicit `acknowledge_unknown` competence.
     pub fn empty() -> Self {
         Self::default()
     }
@@ -275,8 +274,14 @@ impl fmt::Display for TransientWaiver {
 /// acknowledgment of unprovable facts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ProposedGrant {
-    /// Grant a check-transient loosening.
-    Waive(TransientWaiver),
+    /// Grant a check-transient loosening, plus any acknowledge-only facts the
+    /// lift also clears on the recheck. Those facts need `acknowledge_unknown`
+    /// competence: a lift dimension must not launder an unknown the authority
+    /// cannot vouch for.
+    Waive {
+        waiver: TransientWaiver,
+        acknowledged: Vec<Unprovable>,
+    },
     /// Acknowledge unprovable facts. Routes on the explicit
     /// `acknowledge_unknown` capability, not on covering an empty ask.
     Acknowledge { facts: Vec<Unprovable> },
@@ -412,7 +417,11 @@ mod tests {
             may_release_control: true,
             ..AuthorityMandate::none()
         };
-        let big_ask = ProposedGrant::Waive(TransientWaiver {
+        let waive = |waiver| ProposedGrant::Waive {
+            waiver,
+            acknowledged: Vec::new(),
+        };
+        let big_ask = waive(TransientWaiver {
             trust: Some(KnownTrust::Trusted),
             audience: Some(std::collections::BTreeSet::from([
                 UserId::new("bob"),
@@ -422,7 +431,7 @@ mod tests {
             control_release: true,
             ..TransientWaiver::empty()
         });
-        let small_ask = ProposedGrant::Waive(TransientWaiver {
+        let small_ask = waive(TransientWaiver {
             audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
             control_release: true,
             ..TransientWaiver::empty()
@@ -432,18 +441,34 @@ mod tests {
         assert!(!narrow.covers(&big_ask));
         assert!(broad.covers(&small_ask));
         assert!(narrow.covers(&small_ask));
-        // Every mandate covers the empty waive (acknowledgment-only).
-        assert!(narrow.covers(&ProposedGrant::Waive(TransientWaiver::empty())));
-        assert!(AuthorityMandate::none().covers(&ProposedGrant::Waive(TransientWaiver::empty())));
+        // Every mandate covers the empty waive's lift dimensions.
+        assert!(narrow.covers(&waive(TransientWaiver::empty())));
+        assert!(AuthorityMandate::none().covers(&waive(TransientWaiver::empty())));
         // Acknowledging unprovable facts routes on the explicit capability.
         let ack = ProposedGrant::Acknowledge { facts: Vec::new() };
         assert!(!broad.covers(&ack));
+        let acknowledger = AuthorityMandate {
+            acknowledge_unknown: true,
+            ..AuthorityMandate::none()
+        };
+        assert!(acknowledger.covers(&ack));
+        // A lift that also clears an acknowledge-only fact needs the acknowledge
+        // capability, even when its lift dimensions alone are covered.
+        let waive_and_ack = ProposedGrant::Waive {
+            waiver: TransientWaiver {
+                control_release: true,
+                ..TransientWaiver::empty()
+            },
+            acknowledged: vec![Unprovable::EffectsUnknown],
+        };
+        assert!(!broad.covers(&waive_and_ack));
         assert!(
             AuthorityMandate {
                 acknowledge_unknown: true,
+                may_release_control: true,
                 ..AuthorityMandate::none()
             }
-            .covers(&ack)
+            .covers(&waive_and_ack)
         );
     }
 

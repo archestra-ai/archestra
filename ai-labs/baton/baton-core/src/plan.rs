@@ -12,6 +12,7 @@
 use serde::Serialize;
 
 use crate::contract::Violation;
+use crate::dimension::Effects;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::TransientWaiver;
@@ -82,6 +83,13 @@ pub enum TransitionKind {
     },
     ApplyWaiver {
         delta: TransientWaiver,
+    },
+    /// An authority acquires the surface growth `effects` on the pending action
+    /// (criterion (1)). Like a waiver it changes no stored value; unlike one it
+    /// records an authorized-growth marker the recheck consults, and the effect
+    /// still commits at release.
+    AcceptGrowth {
+        effects: Effects,
     },
 }
 

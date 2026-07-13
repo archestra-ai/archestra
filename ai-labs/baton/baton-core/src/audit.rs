@@ -148,6 +148,17 @@ pub enum AuditEvent {
     },
     /// An authority denied a waiver.
     WaiverDenied { authority: AuthorityName, reason: String },
+    /// An authority acquired a criterion-(1) surface growth for an action. The
+    /// effect is authorized here but still commits at release, never early.
+    AcceptApplied {
+        transition: TransitionId,
+        action: ActionId,
+        effects: Effects,
+        authority: AuthorityName,
+        resolved: Vec<Violation>,
+    },
+    /// An authority denied acquiring a surface growth.
+    AcceptDenied { authority: AuthorityName, reason: String },
 }
 
 impl fmt::Display for AuditEvent {
@@ -195,6 +206,17 @@ impl fmt::Display for AuditEvent {
             }
             Self::WaiverDenied { authority, reason } => {
                 write!(f, "waiver denied by {authority}: {reason}")
+            }
+            Self::AcceptApplied {
+                action,
+                effects,
+                authority,
+                ..
+            } => {
+                write!(f, "{action}: growth {effects} acquired by {authority}")
+            }
+            Self::AcceptDenied { authority, reason } => {
+                write!(f, "accept denied by {authority}: {reason}")
             }
         }
     }

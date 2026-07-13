@@ -254,6 +254,26 @@ impl Effects {
             JoinSet::Unknown => Self(JoinSet::Unknown),
         }
     }
+
+    /// The effects `self` (a call's proposed effects) would *add* to the
+    /// already-committed `past` surface: `None` when the flow is downhill on
+    /// effects (`past.combine(self) == past`), else `Some(growth)` — the
+    /// minimal effects whose commit equals committing `self`. Growth to
+    /// `Unknown` (an unannotated tool over a knowable past) is a real,
+    /// representable growth, distinct from any declared set.
+    pub(crate) fn growth_over(&self, past: &Effects) -> Option<Effects> {
+        if past.clone().combine(self.clone()) == *past {
+            return None;
+        }
+        match (past.declared_set(), self.declared_set()) {
+            (Some(committed), Some(proposed)) => Some(Self::declared(proposed.difference(&committed).copied())),
+            // An `Unknown` proposal over a knowable past grows the surface to
+            // `Unknown`; a declared proposal over an `Unknown` past is absorbed
+            // above (that branch returns `None`).
+            (_, None) => Some(Self::UNKNOWN),
+            (None, Some(_)) => Some(self.clone()),
+        }
+    }
 }
 
 impl fmt::Display for Effects {

@@ -72,6 +72,12 @@ pub enum Breach {
     ForbiddenPriorEffects {
         effects: BTreeSet<Effect>,
     },
+    /// The call's proposed effects would grow the committed effect surface by
+    /// `growth` (criterion (1)): the flow is not downhill on effects. Cleared
+    /// only by an `Accept` authority acquiring the growth, never by a waiver.
+    SurfaceGrowth {
+        growth: Effects,
+    },
 }
 
 impl fmt::Display for Breach {
@@ -102,6 +108,9 @@ impl fmt::Display for Breach {
                     write!(f, " {e}")?;
                 }
                 Ok(())
+            }
+            Self::SurfaceGrowth { growth } => {
+                write!(f, "proposed effects grow the committed surface by {growth}")
             }
         }
     }
@@ -159,6 +168,9 @@ pub(crate) enum Fixability {
     /// nor conjure a missing contract. A waiver may only accept the fact on
     /// the record.
     AcknowledgeOnly,
+    /// A surface growth (criterion (1)) that only an `Accept` authority may
+    /// acquire on the pending action; a waiver cannot address it.
+    AcceptFixable,
     /// An integration bug (the caller definitionally holds the data); nothing
     /// may override it.
     Structural,
@@ -176,6 +188,7 @@ impl Violation {
                 | Breach::ConfirmationForOtherTool { .. },
             )
             | Self::Unprovable(Unprovable::TrustUnknown | Unprovable::AudienceUnknown) => Fixability::GrantFixable,
+            Self::Breach(Breach::SurfaceGrowth { .. }) => Fixability::AcceptFixable,
             Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => Fixability::AcknowledgeOnly,
         }
     }

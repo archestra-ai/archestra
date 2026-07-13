@@ -160,6 +160,10 @@ pub struct AuthorityMandate {
     pub acknowledge_unknown: bool,
     /// Competent to release a control dependency for one flow.
     pub may_release_control: bool,
+    /// Competent to acquire a new effect for one action — authorize a
+    /// criterion-(1) surface growth. Distinct from waiving an *already-committed*
+    /// prior effect (`waive_prior_effects`).
+    pub acquire_effects: bool,
 }
 
 impl AuthorityMandate {
@@ -193,6 +197,7 @@ impl AuthorityMandate {
                 let acknowledge_ok = acknowledged.is_empty() || self.acknowledge_unknown;
                 trust_ok && audience_ok && effects_ok && confirms_ok && control_ok && acknowledge_ok
             }
+            ProposedGrant::Accept { .. } => self.acquire_effects,
             ProposedGrant::Acknowledge { .. } => self.acknowledge_unknown,
         }
     }
@@ -285,9 +290,23 @@ pub enum ProposedGrant {
         waiver: TransientWaiver,
         acknowledged: Vec<Unprovable>,
     },
+    /// Acquire a criterion-(1) surface growth on the pending action. Routes on
+    /// the explicit `acquire_effects` capability. Authorizes the growth; the
+    /// effect still commits to the monotone past at release, never early.
+    Accept { effects: Effects },
     /// Acknowledge unprovable facts. Routes on the explicit
     /// `acknowledge_unknown` capability, not on covering an empty ask.
     Acknowledge { facts: Vec<Unprovable> },
+}
+
+impl fmt::Display for ProposedGrant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Waive { waiver, .. } => write!(f, "waive {waiver}"),
+            Self::Accept { effects } => write!(f, "accept {effects}"),
+            Self::Acknowledge { .. } => write!(f, "acknowledgment"),
+        }
+    }
 }
 
 /// Registration was refused: an entry with that identity already exists.

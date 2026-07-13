@@ -28,7 +28,7 @@ use crate::audit::AuthorityName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
-use crate::transition::{AuthorityMandate, ProposedGrant, TransientWaiver};
+use crate::transition::{AuthorityMandate, ProposedGrant};
 use crate::turn::TrajectoryId;
 use crate::value::{Provenance, ValueLabel, ValueStore};
 
@@ -148,16 +148,17 @@ pub enum AuthorityMode {
     External,
 }
 
-/// A waiver step awaiting an external authority's ruling. Issued by the
-/// engine when an `ApplyWaiver` step names an external authority; consumed
-/// by [`crate::engine::PolicyEngine::apply_approval`].
+/// A grant step awaiting an external authority's ruling. Issued by the engine
+/// when an `ApplyWaiver` or `AcceptGrowth` step names an external authority;
+/// consumed by [`crate::engine::PolicyEngine::apply_approval`], which dispatches
+/// on the grant variant.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PendingApproval {
     plan: PlanId,
     action: ActionId,
-    delta: TransientWaiver,
+    grant: ProposedGrant,
     authority: AuthorityName,
-    /// The violations this waiver targets, as predicted at issuance.
+    /// The violations this grant targets, as predicted at issuance.
     resolved: Vec<Violation>,
     /// An owned snapshot of the values the grant is judged over — labels and
     /// provenance, never bytes — so the out-of-process authority has context.
@@ -172,7 +173,7 @@ pub struct PendingApproval {
 /// and the pending action.
 pub(crate) struct ApprovalParts {
     pub(crate) action: ActionId,
-    pub(crate) delta: TransientWaiver,
+    pub(crate) grant: ProposedGrant,
     pub(crate) authority: AuthorityName,
     pub(crate) resolved: Vec<Violation>,
     pub(crate) trajectory: TrajectoryId,
@@ -188,7 +189,7 @@ impl PendingApproval {
     pub(crate) fn new(
         plan: PlanId,
         action: ActionId,
-        delta: TransientWaiver,
+        grant: ProposedGrant,
         authority: AuthorityName,
         resolved: Vec<Violation>,
         ancestry: AncestrySnapshot,
@@ -199,7 +200,7 @@ impl PendingApproval {
         Self {
             plan,
             action,
-            delta,
+            grant,
             authority,
             resolved,
             ancestry,
@@ -219,12 +220,13 @@ impl PendingApproval {
         &self.ancestry
     }
 
-    /// The transient waiver the ruling would grant.
-    pub fn delta(&self) -> &TransientWaiver {
-        &self.delta
+    /// The grant the ruling would authorize (a waiver, an acknowledgment, or an
+    /// effect acquisition).
+    pub fn grant(&self) -> &ProposedGrant {
+        &self.grant
     }
 
-    /// The violations the waiver targets.
+    /// The violations the grant targets.
     pub fn resolves(&self) -> &[Violation] {
         &self.resolved
     }
@@ -232,7 +234,7 @@ impl PendingApproval {
     pub(crate) fn into_parts(self) -> ApprovalParts {
         ApprovalParts {
             action: self.action,
-            delta: self.delta,
+            grant: self.grant,
             authority: self.authority,
             resolved: self.resolved,
             trajectory: self.trajectory,
@@ -247,7 +249,7 @@ impl fmt::Display for PendingApproval {
         write!(
             f,
             "approval of {} by {} pending on {} at {}",
-            self.delta, self.authority, self.trajectory, self.revision
+            self.grant, self.authority, self.trajectory, self.revision
         )
     }
 }

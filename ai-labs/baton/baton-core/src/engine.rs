@@ -605,10 +605,26 @@ impl PolicyEngine {
             None => proposed_effects,
         };
 
-        let violations = match verdict {
+        let mut violations = match verdict {
             Verdict::Allow => Vec::new(),
             Verdict::Escalate(violations) => violations,
         };
+
+        // Criterion (1): the initial decision must see surface growth too — the
+        // sink `check_flow` above does not. Consult the same growth check the
+        // planner and apply-time rechecks use, so a clean-but-growing first call
+        // soft-bans instead of permitting.
+        let accepted = match existing_action {
+            Some(_) => trajectory
+                .pending_action()
+                .map(|pending| pending.accepted_effects().clone())
+                .unwrap_or_else(Effects::none),
+            None => Effects::none(),
+        };
+        let effective_past = trajectory.state().past_effects().clone().combine(accepted);
+        if let Some(growth) = proposed_effects.growth_over(&effective_past) {
+            violations.push(Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }));
+        }
 
         if violations.is_empty() {
             debug!("permitted (no violations)");
@@ -933,6 +949,10 @@ impl PolicyEngine {
                 after.tool = registered.to_tool.clone();
                 after.requires = target.requires.clone();
                 after.recipients = recipients;
+                // Mirror the planner: the constrain narrows the proposed effects,
+                // so the postcondition recheck must see the reduced surface too
+                // (else a surface-growth soft-ban would spuriously persist).
+                after.proposed_effects = registered.effects.clone();
                 if after.violations(None) != spec.postcondition.remaining {
                     return fail(trajectory, crate::audit::TransitionFailure::PostconditionMismatch);
                 }
@@ -980,7 +1000,61 @@ impl PolicyEngine {
                         Ok(StepOutcome::NeedsApproval(PendingApproval::new(
                             capability.plan,
                             capability.action,
-                            delta,
+                            grant,
+                            authority,
+                            spec.precondition.remaining,
+                            ancestry,
+                            trajectory.id(),
+                            trajectory.revision(),
+                            self.id,
+                        )))
+                    }
+                    RoutedRuling::NoRuling => Ok(StepOutcome::Advanced(self.terminal(
+                        trajectory,
+                        spec.precondition.remaining,
+                        BlockReason::NoAuthorityRuled,
+                    ))),
+                }
+            }
+            TransitionKind::AcceptGrowth { effects } => {
+                let grant = ProposedGrant::Accept {
+                    effects: effects.clone(),
+                };
+                let routed = {
+                    let view = TrajectoryView::new(trajectory.store());
+                    self.route_grant(&grant, &spec.precondition.remaining, &view)
+                };
+                match routed {
+                    RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(self.accept_permit(
+                        trajectory,
+                        effects,
+                        authority,
+                        spec.precondition.remaining,
+                        original,
+                    ))),
+                    RoutedRuling::Denied { authority, reason } => {
+                        trajectory.record_event(AuditEvent::AcceptDenied {
+                            authority: authority.clone(),
+                            reason: reason.clone(),
+                        });
+                        Ok(StepOutcome::Advanced(self.terminal(
+                            trajectory,
+                            spec.precondition.remaining,
+                            BlockReason::DeniedByAuthority { authority, reason },
+                        )))
+                    }
+                    RoutedRuling::External(authority) => {
+                        trajectory.record_event(AuditEvent::ApprovalRequested {
+                            plan: capability.plan,
+                            authority: authority.clone(),
+                            resolved: spec.precondition.remaining.clone(),
+                        });
+                        let basis = checked.arguments.leaves().into_iter().chain(checked.control);
+                        let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
+                        Ok(StepOutcome::NeedsApproval(PendingApproval::new(
+                            capability.plan,
+                            capability.action,
+                            grant,
                             authority,
                             spec.precondition.remaining,
                             ancestry,
@@ -1058,14 +1132,40 @@ impl PolicyEngine {
             _ => return Err(StepRefused::ActionNotPending { action: parts.action }),
         }
         match ruling {
-            Ruling::Approve { .. } => {
-                Ok(self.waiver_permit(trajectory, parts.action, parts.delta, parts.authority, parts.resolved))
-            }
+            // Dispatch on the grant: a waiver (or acknowledgment) rechecks and
+            // permits; an accept records the growth marker and re-evaluates.
+            Ruling::Approve { .. } => match parts.grant {
+                ProposedGrant::Waive { waiver, .. } => {
+                    Ok(self.waiver_permit(trajectory, parts.action, waiver, parts.authority, parts.resolved))
+                }
+                ProposedGrant::Acknowledge { .. } => Ok(self.waiver_permit(
+                    trajectory,
+                    parts.action,
+                    TransientWaiver::empty(),
+                    parts.authority,
+                    parts.resolved,
+                )),
+                ProposedGrant::Accept { effects } => {
+                    let original = trajectory
+                        .pending_action()
+                        .expect("validated pending above")
+                        .original()
+                        .clone();
+                    Ok(self.accept_permit(trajectory, effects, parts.authority, parts.resolved, original))
+                }
+            },
             Ruling::Deny { reason } => {
-                trajectory.record_event(AuditEvent::WaiverDenied {
-                    authority: parts.authority.clone(),
-                    reason: reason.clone(),
-                });
+                let event = match parts.grant {
+                    ProposedGrant::Accept { .. } => AuditEvent::AcceptDenied {
+                        authority: parts.authority.clone(),
+                        reason: reason.clone(),
+                    },
+                    _ => AuditEvent::WaiverDenied {
+                        authority: parts.authority.clone(),
+                        reason: reason.clone(),
+                    },
+                };
+                trajectory.record_event(event);
                 Ok(self.terminal(
                     trajectory,
                     parts.resolved,
@@ -1093,6 +1193,10 @@ impl PolicyEngine {
             .expect("caller validated the pending action");
         let checked = pending.current().clone();
         let original = pending.original().clone();
+        // The pending action's proposed effects are the single source of truth
+        // for what release commits — never re-derive them from the contract
+        // (a constrain or an Accept→Waive sequence would be silently undone).
+        let proposed_effects = pending.proposed_effects().clone();
         let contract = self.contracts.get(&checked.tool);
         let sim = SimFlow::of(trajectory, &checked, contract).expect("pending action dependencies stay admitted");
         let remaining = sim.violations(Some(&delta));
@@ -1116,11 +1220,44 @@ impl PolicyEngine {
             authority,
             resolved,
         });
-        let (intrinsic, proposed_effects) = match contract {
-            Some(c) => (c.output_label.clone(), c.effects.clone()),
-            None => (ValueLabel::unknown(), Effects::UNKNOWN),
+        let intrinsic = match contract {
+            Some(c) => c.output_label.clone(),
+            None => ValueLabel::unknown(),
         };
         self.permit(trajectory, Some(action), original, checked, intrinsic, proposed_effects)
+    }
+
+    /// A granted acceptance: record the authorized growth on the pending action
+    /// (auditing the authority) as one transaction, then re-evaluate. The
+    /// marker suppresses the surface-growth soft-ban on the recheck; the effect
+    /// still commits at release, never here. Fails closed if the acceptance does
+    /// not clear the growth it targeted; any unrelated residual is left for the
+    /// re-evaluation to route (an Accept→Waive composite becomes two steps).
+    fn accept_permit(
+        &self,
+        trajectory: &mut Trajectory,
+        effects: Effects,
+        authority: AuthorityName,
+        resolved: Vec<Violation>,
+        original: ToolRequest,
+    ) -> Decision {
+        let pending = trajectory
+            .pending_action()
+            .expect("caller validated the pending action");
+        let checked = pending.current().clone();
+        let contract = self.contracts.get(&checked.tool);
+        let mut after = SimFlow::of(trajectory, &checked, contract).expect("pending action dependencies stay admitted");
+        after.accepted_effects = after.accepted_effects.clone().combine(effects.clone());
+        if after
+            .violations(None)
+            .iter()
+            .any(|v| matches!(v, Violation::Breach(crate::contract::Breach::SurfaceGrowth { .. })))
+        {
+            debug!("acceptance did not clear the surface growth, failing closed");
+            return self.terminal(trajectory, after.violations(None), BlockReason::PostconditionFailed);
+        }
+        trajectory.accept_growth(effects, authority, resolved);
+        self.evaluate(trajectory, original)
     }
 
     /// Deterministic bounded plan enumeration: candidate step sequences in
@@ -1236,6 +1373,11 @@ impl PolicyEngine {
                     sim.tool = transition.to_tool.clone();
                     sim.requires = target.requires.clone();
                     sim.recipients = recipients;
+                    // The constrain narrows the proposed effects, so any surface
+                    // growth is recomputed against the reduced set — an Accept
+                    // then authorizes only the residual growth (a full constrain
+                    // to no-egress leaves none).
+                    sim.proposed_effects = transition.effects.clone();
                     steps.push(TransitionSpec {
                         precondition,
                         postcondition: Posture {
@@ -1247,7 +1389,35 @@ impl PolicyEngine {
                     });
                 }
 
-                let remaining = sim.violations(None);
+                let mut remaining = sim.violations(None);
+
+                // Criterion (1): peel any surface growth into an Accept step
+                // before a waiver handles the confidentiality residual. Accept
+                // composes additively with a waiver — they are separate steps to
+                // separate competences (acquire_effects vs the lift dims).
+                if let Some(growth) = surface_growth_of(&remaining) {
+                    let grant = ProposedGrant::Accept {
+                        effects: growth.clone(),
+                    };
+                    if !self.can_authorize(&grant) {
+                        // No authority can acquire this effect: this branch
+                        // cannot reach a clean posture, so it yields no plan.
+                        continue;
+                    }
+                    let precondition = Posture {
+                        remaining: remaining.clone(),
+                    };
+                    sim.accepted_effects = sim.accepted_effects.clone().combine(growth.clone());
+                    remaining = sim.violations(None);
+                    steps.push(TransitionSpec {
+                        precondition,
+                        postcondition: Posture {
+                            remaining: remaining.clone(),
+                        },
+                        kind: TransitionKind::AcceptGrowth { effects: growth },
+                    });
+                }
+
                 if remaining.is_empty() {
                     if let Some(steps) = NonEmptyVec::from_vec(steps) {
                         push_plan(&mut plans, steps, Posture::clean());
@@ -1265,7 +1435,7 @@ impl PolicyEngine {
                         continue;
                     }
                     let grant = grant_for(&delta, &remaining);
-                    if !self.route_waiver(&grant) {
+                    if !self.can_authorize(&grant) {
                         continue;
                     }
                     let mut waiver_steps = steps.clone();
@@ -1355,10 +1525,11 @@ impl PolicyEngine {
         inline.chain(external)
     }
 
-    /// Is any authority competent for `grant`? A waiver plan is enumerated only
-    /// when one exists; the actual ruling — which an inline authority may
-    /// abstain from, falling through to the next — happens at application.
-    fn route_waiver(&self, grant: &ProposedGrant) -> bool {
+    /// Is any authority competent for `grant`? A grant step (waiver, accept, or
+    /// acknowledgment) is enumerated only when one exists; the actual ruling —
+    /// which an inline authority may abstain from, falling through to the next —
+    /// happens at application.
+    fn can_authorize(&self, grant: &ProposedGrant) -> bool {
         self.competent_authorities(grant).next().is_some()
     }
 
@@ -1432,6 +1603,13 @@ pub(crate) struct SimFlow {
     pub(crate) requires: Requirements,
     pub(crate) recipients: BTreeSet<crate::dimension::UserId>,
     pub(crate) past_effects: Effects,
+    /// The effects this call proposes (the contract's, or the pending action's
+    /// possibly-constrained effects on re-entry). Criterion (1) checks whether
+    /// committing them would grow the past surface.
+    pub(crate) proposed_effects: Effects,
+    /// Surface growth already acquired for the pending action; suppresses the
+    /// growth soft-ban for the effects it covers.
+    pub(crate) accepted_effects: Effects,
     pub(crate) confirmed: Option<ToolName>,
     /// Violations independent of the check (a missing contract).
     pub(crate) extra: Vec<Violation>,
@@ -1466,6 +1644,16 @@ impl SimFlow {
                 })],
             ),
         };
+        // Proposed and accepted effects come from the pending action when one
+        // exists (its proposed_effects reflect any constrain narrowing; its
+        // accepted_effects any prior Accept), else the contract's declaration.
+        let (proposed_effects, accepted_effects) = match trajectory.pending_action() {
+            Some(pending) => (pending.proposed_effects().clone(), pending.accepted_effects().clone()),
+            None => (
+                contract.map(|c| c.effects.clone()).unwrap_or(Effects::UNKNOWN),
+                Effects::none(),
+            ),
+        };
         Ok(Self {
             leaf_labels,
             control_labels,
@@ -1473,6 +1661,8 @@ impl SimFlow {
             requires,
             recipients,
             past_effects: trajectory.state().past_effects().clone(),
+            proposed_effects,
+            accepted_effects,
             confirmed: trajectory.pending_confirmation().cloned(),
             extra,
         })
@@ -1515,6 +1705,14 @@ impl SimFlow {
             Verdict::Allow => {}
             Verdict::Escalate(violations) => remaining.extend(violations),
         }
+        // Criterion (1): the growth check is over the *committed* surface, not
+        // the waiver-adjusted `past` — a waiver lifts a prior-effect sink check,
+        // not what the call would commit. An Accept marker (accepted_effects)
+        // suppresses growth it already acquired.
+        let effective_past = self.past_effects.clone().combine(self.accepted_effects.clone());
+        if let Some(growth) = self.proposed_effects.growth_over(&effective_past) {
+            remaining.push(Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }));
+        }
         if waiver.is_some() {
             remaining.retain(|v| v.fixability() != Fixability::AcknowledgeOnly);
         }
@@ -1547,6 +1745,16 @@ fn grant_for(delta: &TransientWaiver, resolved: &[Violation]) -> ProposedGrant {
             acknowledged,
         }
     }
+}
+
+/// The surface growth in a violation set, if any — the effects an Accept step
+/// must acquire. There is at most one (the growth check pushes a single
+/// `SurfaceGrowth`).
+fn surface_growth_of(violations: &[Violation]) -> Option<Effects> {
+    violations.iter().find_map(|violation| match violation {
+        Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }) => Some(growth.clone()),
+        _ => None,
+    })
 }
 
 /// The delta that would cover the grant-fixable gaps in `violations` —
@@ -1587,7 +1795,9 @@ fn needed_delta(
             Violation::Breach(Breach::ConfirmationMissing { .. } | Breach::ConfirmationForOtherTool { .. }) => {
                 delta.confirms = true;
             }
-            Violation::Breach(Breach::UndeclaredRecipients)
+            // Surface growth is not waiver-fixable — it routes to an Accept
+            // step, not into this delta.
+            Violation::Breach(Breach::UndeclaredRecipients | Breach::SurfaceGrowth { .. })
             | Violation::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => {}
         }
     }
@@ -1666,6 +1876,7 @@ mod tests {
     fn clean_flow_is_permitted_and_result_admitted_with_folded_label() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -1689,6 +1900,7 @@ mod tests {
     fn explicit_flow_taint_blocks_the_sink() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -1707,6 +1919,7 @@ mod tests {
     fn control_dependence_taints_a_clean_payload() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
         let clean_body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
         let to = trajectory.ingress(
@@ -1778,6 +1991,7 @@ mod tests {
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::UNKNOWN);
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
         let request = ToolRequest::new(
             ToolName::new("mystery.tool"),
@@ -1859,6 +2073,7 @@ mod tests {
     fn stale_token_is_rejected_after_any_mutation() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -1879,6 +2094,7 @@ mod tests {
     fn foreign_trajectory_token_is_rejected() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
         let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
@@ -1894,6 +2110,7 @@ mod tests {
     fn second_distinct_proposal_is_refused_until_abandoned() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let first = email_request(&mut trajectory, body, "bob");
         let second = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::Value(body), BTreeSet::new());
@@ -1918,6 +2135,7 @@ mod tests {
     fn re_entry_reuses_the_pending_action() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -1949,6 +2167,7 @@ mod tests {
 
         let engine = engine_with([email_contract(), report]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -2000,6 +2219,7 @@ mod tests {
     fn effects_survive_a_declared_dispatch_failure() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -2021,6 +2241,7 @@ mod tests {
     fn canonical_request_renders_the_checked_tree() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -2036,6 +2257,7 @@ mod tests {
     fn stale_receipt_is_rejected_after_any_mutation() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -2054,6 +2276,7 @@ mod tests {
     fn foreign_receipt_is_rejected() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
         let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
@@ -2080,6 +2303,7 @@ mod tests {
         };
         let engine = engine_with([drop_contract]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Mutation]));
         let go = trajectory.ingress(
             crate::turn::Speaker::confirming(user("alice"), ToolName::new("db.drop")),
             ValueLabel::identity(),
@@ -2244,6 +2468,7 @@ mod tests {
     fn duplicate_reentry_token_cannot_release_twice() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
@@ -2343,6 +2568,7 @@ mod tests {
                 confirms: true,
                 acknowledge_unknown: true,
                 may_release_control: true,
+                acquire_effects: true,
             },
             mode: crate::approval::AuthorityMode::External,
         }
@@ -2355,6 +2581,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_transformer(redact_transformer()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
         let request = email_request(&mut trajectory, raw, "bob");
 
@@ -2389,6 +2616,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         // Only alice may read the doc; sending to charlie exceeds it.
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
         let request = email_request(&mut trajectory, doc, "charlie");
@@ -2421,6 +2649,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
         let clean = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
         let to = trajectory.ingress(
@@ -2461,6 +2690,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         // The body admits alice and bob; a control selector restricts to alice.
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let control = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "selector");
@@ -2523,6 +2753,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         // Body admits alice and bob; the recipient is bob.
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "body");
         // Two controls each restrict the audience to alice (joint carriers).
@@ -2641,6 +2872,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_transformer(redact_transformer()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw secrets");
         let request = email_request(&mut trajectory, raw, "bob");
 
@@ -2694,6 +2926,7 @@ mod tests {
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
 
@@ -2754,6 +2987,7 @@ mod tests {
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
@@ -2795,6 +3029,7 @@ mod tests {
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
@@ -2987,6 +3222,7 @@ mod tests {
             .unwrap();
 
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::UNKNOWN);
         let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "doc");
         // Dispatch fetch to drive past-effects to UNKNOWN.
         let Decision::Permitted(token) = engine.evaluate(
@@ -3007,6 +3243,336 @@ mod tests {
         assert_eq!(block.reason, BlockReason::NoRemedy);
     }
 
+    // ---- S6: criterion (1) + Accept ----
+
+    /// A tool that egresses but requires nothing of the flow, so the only
+    /// possible violation is surface growth.
+    fn egress_tool() -> ToolContract {
+        ToolContract {
+            name: ToolName::new("net.ping"),
+            requires: Requirements::default(),
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
+        }
+    }
+
+    fn ping_request(body: ValueId) -> ToolRequest {
+        ToolRequest::new(ToolName::new("net.ping"), ArgumentTree::Value(body), BTreeSet::new())
+    }
+
+    /// An inline authority competent to acquire effects, always approving.
+    fn inline_acquirer() -> crate::approval::Authority {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "first egress this turn".to_owned(),
+            })
+        }
+        crate::approval::Authority {
+            name: crate::audit::AuthorityName::new("acquirer"),
+            mandate: crate::transition::AuthorityMandate {
+                acquire_effects: true,
+                ..crate::transition::AuthorityMandate::none()
+            },
+            mode: crate::approval::AuthorityMode::Inline(approve),
+        }
+    }
+
+    /// The first egress grows the committed surface; with no `acquire_effects`
+    /// authority it has no remedy and blocks (fail-closed, no implicit accept).
+    #[test]
+    fn surface_growth_blocks_without_an_acquire_authority() {
+        let engine = engine_with([egress_tool()]);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, ping_request(body)) else {
+            panic!("a growing effect with no acquirer must block terminally");
+        };
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth })]
+                if *growth == Effects::declared([Effect::Egress])
+        ));
+        assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    }
+
+    /// With an acquirer, the growth routes to an `AcceptGrowth` step; applying
+    /// it clears the flow and permits. The effect commits at release, not early.
+    #[test]
+    fn accept_authority_acquires_the_growth_and_permits() {
+        let mut engine = engine_with([egress_tool()]);
+        engine.register_authority(inline_acquirer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
+        else {
+            panic!("expected a remediable block");
+        };
+        assert!(matches!(
+            &plans.first().steps.first().kind,
+            TransitionKind::AcceptGrowth { effects } if *effects == Effects::declared([Effect::Egress])
+        ));
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("the acceptance should clear the flow and permit");
+        };
+        // No early commit.
+        assert_eq!(trajectory.state().past_effects(), &Effects::none());
+        dispatch(&mut trajectory, token, "pong").unwrap();
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+        assert!(trajectory.state().audit().iter().any(|e| matches!(
+            e,
+            AuditEvent::AcceptApplied { effects, .. } if *effects == Effects::declared([Effect::Egress])
+        )));
+    }
+
+    /// A no-contract call is both `NoContract` (acknowledge-only) and a growth
+    /// to `Unknown` (accept). An acknowledge-only authority cannot launder the
+    /// growth; only an authority competent for *both* clears it (blocker-2).
+    #[test]
+    fn no_contract_growth_needs_both_acknowledge_and_acquire() {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "ok".to_owned(),
+            })
+        }
+        let mystery = |trajectory: &mut Trajectory| {
+            let body = ingress(trajectory, &["alice"], Trust::TRUSTED, "x");
+            ToolRequest::new(
+                ToolName::new("mystery.tool"),
+                ArgumentTree::Value(body),
+                BTreeSet::new(),
+            )
+        };
+
+        // Acknowledge-only: cannot acquire the unknown growth → terminal.
+        let mut engine = engine_with([]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("ack-only"),
+                mandate: crate::transition::AuthorityMandate {
+                    acknowledge_unknown: true,
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let request = mystery(&mut trajectory);
+        let Decision::Blocked(Blocked::Terminal(_)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("an acknowledge-only authority must not clear the unknown growth");
+        };
+
+        // Both competences: walk the plan (accept the growth, acknowledge the
+        // missing contract) to a permit; dispatch drives past-effects to Unknown.
+        let mut engine = engine_with([]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("both"),
+                mandate: crate::transition::AuthorityMandate {
+                    acknowledge_unknown: true,
+                    acquire_effects: true,
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let request = mystery(&mut trajectory);
+        let mut decision = engine.evaluate(&mut trajectory, request.clone());
+        let token = loop {
+            match decision {
+                Decision::Permitted(token) => break token,
+                Decision::Blocked(Blocked::Remediable { plans, .. }) => {
+                    let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+                    decision = match engine.apply_step(&mut trajectory, capability).unwrap() {
+                        StepOutcome::Advanced(decision) => decision,
+                        other => panic!("unexpected step outcome: {other:?}"),
+                    };
+                }
+                other => panic!("both competences should reach a permit, got {other:?}"),
+            }
+        };
+        dispatch(&mut trajectory, token, "???").unwrap();
+        assert_eq!(trajectory.state().past_effects(), &Effects::UNKNOWN);
+    }
+
+    /// An external acquirer defers to an out-of-process ruling carrying the
+    /// `Accept` grant; the approval re-enters and permits.
+    #[test]
+    fn external_accept_roundtrip() {
+        let mut engine = engine_with([egress_tool()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("effect-approver"),
+                mandate: crate::transition::AuthorityMandate {
+                    acquire_effects: true,
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::External,
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
+        else {
+            panic!("expected a remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("the external acquirer should defer to an out-of-process ruling");
+        };
+        assert!(matches!(
+            pending.grant(),
+            crate::transition::ProposedGrant::Accept { effects } if *effects == Effects::declared([Effect::Egress])
+        ));
+        let Decision::Permitted(token) = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "acquired".to_owned(),
+                },
+            )
+            .unwrap()
+        else {
+            panic!("the approval should permit");
+        };
+        dispatch(&mut trajectory, token, "pong").unwrap();
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    }
+
+    /// Acquisition authorizes the growth on the pending action but commits
+    /// nothing: abandoning the token (never releasing) leaves the surface empty.
+    #[test]
+    fn accepted_growth_then_abandon_commits_nothing() {
+        let mut engine = engine_with([egress_tool()]);
+        engine.register_authority(inline_acquirer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
+        else {
+            panic!("expected a remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected a permit after acceptance");
+        };
+        drop(token);
+        assert_eq!(trajectory.state().past_effects(), &Effects::none());
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::AcceptApplied { .. }))
+        );
+        assert!(
+            !trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::EffectsCommitted { .. }))
+        );
+    }
+
+    /// Once the first egress is committed, a second egress is downhill on the
+    /// effect surface and permits directly, with no further acquisition.
+    #[test]
+    fn second_egress_is_downhill_after_the_first() {
+        let mut engine = engine_with([egress_tool()]);
+        engine.register_authority(inline_acquirer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
+        else {
+            panic!("expected a remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected a permit after acceptance");
+        };
+        dispatch(&mut trajectory, token, "pong").unwrap();
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+
+        let body2 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping-again");
+        let Decision::Permitted(_) = engine.evaluate(&mut trajectory, ping_request(body2)) else {
+            panic!("a second egress is downhill and permits without another acceptance");
+        };
+    }
+
+    /// An authority competent for every lift *except* `acquire_effects` gets no
+    /// Accept route: the growth blocks terminally.
+    #[test]
+    fn acquire_incompetent_authority_gets_no_accept_route() {
+        let mut engine = engine_with([egress_tool()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("no-acquire"),
+                mandate: crate::transition::AuthorityMandate {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: Some(BTreeSet::from([user("alice")])),
+                    waive_prior_effects: true,
+                    confirms: true,
+                    acknowledge_unknown: true,
+                    may_release_control: true,
+                    acquire_effects: false,
+                },
+                mode: crate::approval::AuthorityMode::External,
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, ping_request(body)) else {
+            panic!("without acquire_effects the growth cannot be routed");
+        };
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+    }
+
+    /// Acceptance is idempotent: after the marker is recorded, re-entry with the
+    /// same original permits without a second acquisition or audit event.
+    #[test]
+    fn accept_re_entry_writes_no_duplicate_audit() {
+        let mut engine = engine_with([egress_tool()]);
+        engine.register_authority(inline_acquirer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let request = ping_request(body);
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request.clone())
+        else {
+            panic!("expected a remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected a permit after acceptance");
+        };
+        let accepts = |t: &Trajectory| {
+            t.state()
+                .audit()
+                .iter()
+                .filter(|e| matches!(e, AuditEvent::AcceptApplied { .. }))
+                .count()
+        };
+        assert_eq!(accepts(&trajectory), 1);
+        let Decision::Permitted(_) = engine.evaluate(&mut trajectory, request) else {
+            panic!("re-entry after acceptance should permit idempotently");
+        };
+        assert_eq!(accepts(&trajectory), 1);
+    }
+
     /// An external waiver round-trips through PendingApproval; approval
     /// permits, and the whole loop is audited.
     #[test]
@@ -3014,6 +3580,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
 
@@ -3088,6 +3655,7 @@ mod tests {
 
         // Trusted source (value#0): the view read passes, the authority approves.
         let mut trusted = Trajectory::new();
+        trusted.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trusted, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trusted, doc, "charlie");
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trusted, request) else {
@@ -3101,6 +3669,7 @@ mod tests {
         // Suspicious source: same audience breach, but the view read fails the
         // trust check, so the authority abstains and no ruling is produced.
         let mut suspicious = Trajectory::new();
+        suspicious.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut suspicious, &["alice"], Trust::SUSPICIOUS, "private");
         let request = email_request(&mut suspicious, doc, "charlie");
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut suspicious, request) else {
@@ -3123,6 +3692,7 @@ mod tests {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
 
@@ -3262,6 +3832,7 @@ mod tests {
         transformer.run = broken;
         engine.register_transformer(transformer).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw");
         let request = email_request(&mut trajectory, raw, "bob");
 
@@ -3319,6 +3890,7 @@ mod tests {
             .unwrap();
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         // Suspicious AND readable only by alice, sent to charlie: needs both
         // a transform (trust) and a waiver (audience).
         let raw = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
@@ -3384,6 +3956,7 @@ mod tests {
         let mut engine = engine_with([drop_contract]);
         engine.register_transformer(redact_transformer()).unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Mutation]));
         let table = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "users_table");
         trajectory.ingress(
             crate::turn::Speaker::confirming(user("alice"), ToolName::new("db.drop")),
@@ -3626,6 +4199,7 @@ mod tests {
     fn released_action_cannot_be_re_permitted_or_re_released() {
         let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, doc, "bob");
 
@@ -3671,6 +4245,7 @@ mod tests {
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::UNKNOWN);
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
         let request = ToolRequest::new(
             ToolName::new("mystery.tool"),

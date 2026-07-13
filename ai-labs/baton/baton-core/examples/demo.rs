@@ -108,14 +108,36 @@ fn main() {
         .find(|p| matches!(&p.steps.first().kind, baton_core::TransitionKind::TransformValue { .. }))
         .expect("a transform plan was enumerated");
     let capability = engine.mint_step(&trajectory, transform_plan.id, 0).unwrap();
-    let token = match engine.apply_step(&mut trajectory, capability).unwrap() {
-        StepOutcome::Advanced(Decision::Permitted(token)) => token,
-        other => unreachable!("expected the transform to clear the flow, got {other:?}"),
+    // The transform clears the trust breach, but the send still grows the
+    // committed effect surface (criterion (1): the first egress). The engine
+    // re-plans, now asking an authority to *accept* the growth.
+    let accept_plans = match engine.apply_step(&mut trajectory, capability).unwrap() {
+        StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans, .. })) => plans,
+        other => unreachable!("expected a replan for the surface growth, got {other:?}"),
     };
     println!(
-        "   -> raw summary still wears {}; the flow now permits",
+        "   -> raw summary still wears {}; the send now needs its egress accepted",
         trajectory.value(summary).unwrap().label()
     );
+    let capability = engine.mint_step(&trajectory, accept_plans.first().id, 0).unwrap();
+    let pending = match engine.apply_step(&mut trajectory, capability).unwrap() {
+        StepOutcome::NeedsApproval(pending) => pending,
+        other => unreachable!("expected the egress acquisition to need approval, got {other:?}"),
+    };
+    println!("   -> {pending}");
+    let token = match engine
+        .apply_approval(
+            &mut trajectory,
+            pending,
+            Ruling::Approve {
+                reason: "first egress this turn, acquired".to_owned(),
+            },
+        )
+        .unwrap()
+    {
+        Decision::Permitted(token) => token,
+        other => unreachable!("expected permit after the egress was accepted, got {other:?}"),
+    };
     let (canonical, receipt) = trajectory.release(token).unwrap();
     println!("   -> dispatching exactly: {}", canonical.rendered);
     trajectory
@@ -253,6 +275,7 @@ fn build_engine() -> PolicyEngine {
                 confirms: true,
                 acknowledge_unknown: true,
                 may_release_control: true,
+                acquire_effects: true,
             },
             mode: AuthorityMode::External,
         })

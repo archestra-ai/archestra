@@ -525,10 +525,42 @@ impl Trajectory {
         self.advance();
     }
 
+    /// Apply a granted `AcceptGrowth` step as one transaction: record the
+    /// authorized surface growth on the pending action and audit the authority.
+    /// The effect still commits at release like any other proposed effect.
+    pub(crate) fn accept_growth(
+        &mut self,
+        effects: crate::dimension::Effects,
+        authority: crate::audit::AuthorityName,
+        resolved: Vec<crate::contract::Violation>,
+    ) {
+        let transition = self.mint_transition();
+        let pending = self.pending.as_mut().expect("pending action validated by the engine");
+        let action = pending.id();
+        pending.accept_growth(effects.clone());
+        self.state.record(AuditEvent::AcceptApplied {
+            transition,
+            action,
+            effects,
+            authority,
+            resolved,
+        });
+        self.advance();
+    }
+
     pub(crate) fn mint_transition(&mut self) -> TransitionId {
         let id = TransitionId::new(self.next_transition);
         self.next_transition += 1;
         id
+    }
+
+    /// Test setup: establish that `effects` were already committed in this
+    /// trajectory's past, as a prior dispatch would have. Lets a test whose
+    /// subject is the confidentiality axis exercise an egress-bearing sink
+    /// without criterion (1) (surface growth) firing on the first egress.
+    #[cfg(test)]
+    pub(crate) fn seed_committed_effects(&mut self, effects: crate::dimension::Effects) {
+        self.state.commit_effects(effects);
     }
 
     /// Every public mutation advances the revision exactly once, as one

@@ -257,6 +257,10 @@ pub struct PendingAction {
     original: ToolRequest,
     current: ToolRequest,
     proposed_effects: Effects,
+    /// Surface growth an `Accept` authority acquired for this action (criterion
+    /// (1)). Suppresses the surface-growth soft-ban on the recheck; the effect
+    /// still commits at release. Grows monotonically like the past it feeds.
+    accepted_effects: Effects,
     state: ActionState,
 }
 
@@ -267,6 +271,7 @@ impl PendingAction {
             original: request.clone(),
             current: request,
             proposed_effects,
+            accepted_effects: Effects::none(),
             state: ActionState::Proposed,
         }
     }
@@ -285,6 +290,11 @@ impl PendingAction {
 
     pub fn proposed_effects(&self) -> &Effects {
         &self.proposed_effects
+    }
+
+    /// The surface growth acquired for this action so far.
+    pub fn accepted_effects(&self) -> &Effects {
+        &self.accepted_effects
     }
 
     pub fn state(&self) -> ActionState {
@@ -308,6 +318,12 @@ impl PendingAction {
         self.current.tool = to_tool;
         self.proposed_effects = effects;
         self.state = ActionState::Constrained;
+    }
+
+    /// An `AcceptGrowth` step acquired `effects` for this action. Monotone: an
+    /// acceptance only adds to the acquired surface.
+    pub(crate) fn accept_growth(&mut self, effects: Effects) {
+        self.accepted_effects = self.accepted_effects.clone().combine(effects);
     }
 }
 

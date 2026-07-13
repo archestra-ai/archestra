@@ -888,3 +888,62 @@ describe("anthropicAdapterFactory balance-too-low message", () => {
     );
   });
 });
+
+describe("anthropicAdapterFactory.execute - long request streaming fallback", () => {
+  const messages = [
+    { role: "user", content: "hi" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  // The SDK throws this client-side (before any network call) when a
+  // non-streaming request's max_tokens implies a >10-minute completion.
+  const longRequestError = new Error(
+    "Streaming is required for operations that may take longer than 10 minutes. See https://github.com/anthropics/anthropic-sdk-typescript#long-requests for more details",
+  );
+
+  test("returns the non-streaming response when create() succeeds", async () => {
+    const response = createMockResponse([{ type: "text", text: "ok" }]);
+    const create = vi.fn().mockResolvedValue(response);
+    const stream = vi.fn();
+    const client = { messages: { create, stream } };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages),
+    );
+
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(1);
+    // The happy path must not touch the streaming helper.
+    expect(stream).not.toHaveBeenCalled();
+  });
+
+  test("falls back to the streaming API when the SDK rejects the request as too long", async () => {
+    const response = createMockResponse([{ type: "text", text: "done" }]);
+    const create = vi.fn().mockRejectedValue(longRequestError);
+    const finalMessage = vi.fn().mockResolvedValue(response);
+    const stream = vi.fn().mockReturnValue({ finalMessage });
+    const client = { messages: { create, stream } };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { max_tokens: 64000 }),
+    );
+
+    // Same shape a non-streaming create() would have returned.
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(finalMessage).toHaveBeenCalledTimes(1);
+  });
+
+  test("rethrows unrelated errors without falling back to streaming", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("overloaded_error"));
+    const stream = vi.fn();
+    const client = { messages: { create, stream } };
+
+    await expect(
+      anthropicAdapterFactory.execute(client, createMockRequest(messages)),
+    ).rejects.toThrow("overloaded_error");
+    expect(stream).not.toHaveBeenCalled();
+  });
+});

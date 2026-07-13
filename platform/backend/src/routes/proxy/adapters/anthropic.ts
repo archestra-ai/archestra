@@ -1283,10 +1283,28 @@ export const anthropicAdapterFactory: LLMProvider<
     request: AnthropicRequest,
   ): Promise<AnthropicResponse> {
     const anthropicClient = client as AnthropicProvider;
-    return anthropicClient.messages.create({
+    const params = {
       ...request,
       stream: false,
-    } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming);
+    } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming;
+    try {
+      return await anthropicClient.messages.create(params);
+    } catch (error) {
+      if (!isNonStreamingTooLongError(error)) throw error;
+      // The SDK refuses a non-streaming request whose `max_tokens` implies a
+      // completion that could exceed 10 minutes, because a single long-lived
+      // response can be dropped by networks that close idle connections. To
+      // still return a non-streaming *result*, Anthropic's recommended pattern
+      // is to consume the streaming Messages API and hand back the accumulated
+      // final Message — identical in shape to a non-streaming response, but over
+      // a connection that keeps producing events. See "Long requests":
+      // https://github.com/anthropics/anthropic-sdk-typescript#long-requests
+      return anthropicClient.messages
+        .stream(
+          params as unknown as AnthropicProvider.Messages.MessageStreamParams,
+        )
+        .finalMessage();
+    }
   },
 
   async executeStream(
@@ -1336,6 +1354,22 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/**
+ * The Anthropic SDK throws this client-side (before any request is sent) when a
+ * non-streaming call's `max_tokens` implies a completion that could exceed 10
+ * minutes. Matched by message so `execute` can transparently retry the request
+ * over the streaming API and return the accumulated final Message. See:
+ * https://github.com/anthropics/anthropic-sdk-typescript#long-requests
+ */
+function isNonStreamingTooLongError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes(
+      "Streaming is required for operations that may take longer than 10 minutes",
+    )
+  );
+}
 
 /** The SDK nests the provider body as `error.error.{type,message}`. */
 function isAnthropicBalanceTooLow(error: unknown): boolean {

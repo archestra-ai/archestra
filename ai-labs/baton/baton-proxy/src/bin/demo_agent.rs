@@ -42,9 +42,10 @@ struct Args {
     /// OpenRouter model id.
     #[arg(long, env = "BATON_DEMO_MODEL", default_value = "openai/gpt-4o-mini")]
     model: String,
-    /// OpenRouter API key (or set OPENROUTER_API_KEY).
+    /// OpenRouter API key. Falls back to $OPENROUTER_API_KEY, then to
+    /// `ai-labs/.env`.
     #[arg(long, env = "OPENROUTER_API_KEY")]
-    api_key: String,
+    api_key: Option<String>,
     /// The task to give the agent.
     #[arg(long, default_value = DEFAULT_TASK)]
     task: String,
@@ -54,8 +55,15 @@ struct Args {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    let api_key = args
+        .api_key
+        .map(|k| clean_key(&k))
+        .filter(|k| !k.is_empty())
+        .or_else(key_from_env_file)
+        .ok_or("no OpenRouter API key: pass --api-key, set OPENROUTER_API_KEY, or add it to ai-labs/.env")?;
+
     let client = openai::CompletionsClient::builder()
-        .api_key(args.api_key)
+        .api_key(api_key)
         .base_url(&args.proxy_url)
         .build()?;
     let agent = client
@@ -70,6 +78,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let answer = agent.prompt(args.task.as_str()).max_turns(12).await?;
     println!("\nagent: {answer}");
     Ok(())
+}
+
+/// Strip surrounding whitespace and a single pair of matching quotes — the shape
+/// a value takes in a `.env` file (`KEY="sk-…"`).
+fn clean_key(raw: &str) -> String {
+    let t = raw.trim();
+    let t = t.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(t);
+    let t = t.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(t);
+    t.to_string()
+}
+
+/// Read `OPENROUTER_API_KEY` from `ai-labs/.env` (two levels up from this crate),
+/// the same file the AgentDojo harness uses. Returns `None` if absent.
+fn key_from_env_file() -> Option<String> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.env");
+    let text = std::fs::read_to_string(path).ok()?;
+    for line in text.lines() {
+        let line = line.trim().strip_prefix("export ").unwrap_or(line.trim());
+        if let Some(value) = line.strip_prefix("OPENROUTER_API_KEY=") {
+            let key = clean_key(value);
+            if !key.is_empty() {
+                return Some(key);
+            }
+        }
+    }
+    None
 }
 
 #[derive(Deserialize)]

@@ -17,8 +17,8 @@
 //!   in this tree, and the canonical rendering handed out for dispatch comes
 //!   from the exact tree the engine checked — plus the *control*
 //!   dependencies of whatever selected the invocation. Requirements are
-//!   checked against `L_flow = combine(L_args, L_control)`
-//!   ([`contract::Requirements::check_flow`]), so a sanitized payload cannot
+//!   checked against `L_flow = combine(L_args, L_control)` (the sink check
+//!   behind [`contract::Requirements`]), so a sanitized payload cannot
 //!   launder a secret-dependent tool or recipient choice.
 //! - Effects are monotone trajectory state
 //!   ([`audit::TrajectoryState::past_effects`]), committed when dispatch

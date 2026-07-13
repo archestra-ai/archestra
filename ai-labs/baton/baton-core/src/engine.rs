@@ -162,8 +162,8 @@ impl ExecutionToken {
 pub struct CanonicalRequest {
     pub action: ActionId,
     pub tool: ToolName,
-    /// Deterministic rendering of the checked argument tree
-    /// (see [`crate::request::render`]).
+    /// Deterministic rendering of the checked argument tree: the engine
+    /// renders once at release and adapters execute this verbatim.
     pub rendered: String,
 }
 

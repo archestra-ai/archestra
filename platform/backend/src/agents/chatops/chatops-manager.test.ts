@@ -4,6 +4,10 @@ import { vi } from "vitest";
 // distributed cache, which isn't started in this suite). The `mock`-prefixed
 // name is referenced lazily inside the factory so it survives vi.mock hoisting.
 const mockClaimThreadMuteHint = vi.fn();
+// Drives the "was the thread muted mid-run?" check without a live distributed
+// cache: defaults to null (no mute) so unrelated tests reply normally; the mute
+// tests override it to simulate a marker moving while a run is in flight.
+const mockGetThreadMuteMarker = vi.fn().mockResolvedValue(null);
 vi.mock("./channel-activation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./channel-activation")>();
   return {
@@ -11,6 +15,9 @@ vi.mock("./channel-activation", async (importOriginal) => {
     claimThreadMuteHint: (
       ...args: Parameters<typeof actual.claimThreadMuteHint>
     ) => mockClaimThreadMuteHint(...args),
+    getThreadMuteMarker: (
+      ...args: Parameters<typeof actual.getThreadMuteMarker>
+    ) => mockGetThreadMuteMarker(...args),
   };
 });
 
@@ -43,6 +50,7 @@ import {
   ChatOpsManager,
   matchesAgentName,
 } from "./chatops-manager";
+import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_NO_REPLY_SENTINEL,
@@ -583,6 +591,221 @@ describe("ChatOpsManager security validation", () => {
         expect.objectContaining({
           text: expect.stringContaining("Sorry, I encountered an error"),
         }),
+      );
+    });
+  });
+
+  // ===========================================================================
+  // Muting a thread cancels its in-flight runs: a message already being
+  // processed when the user mutes must NOT post its (now-unwanted) answer.
+  // ===========================================================================
+
+  describe("mute cancels an in-flight run", () => {
+    beforeEach(() => {
+      // Default: no mute during the run. Individual tests override per call.
+      mockGetThreadMuteMarker.mockReset().mockResolvedValue(null);
+    });
+
+    const agentResult = () => ({
+      text: "Agent response",
+      messageId: "test-message-id",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "test-message-id",
+        role: "assistant" as const,
+        parts: [{ type: "text" as const, text: "Agent response" }],
+      },
+    });
+
+    async function setupBoundAgent(fx: {
+      makeUser: (overrides?: { email: string }) => Promise<{ id: string }>;
+      makeOrganization: () => Promise<{ id: string }>;
+      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+      makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+      makeInternalAgent: (overrides: {
+        organizationId: string;
+        teams: string[];
+      }) => Promise<{ id: string; name: string }>;
+    }) {
+      const user = await fx.makeUser({ email: "mute@example.com" });
+      const org = await fx.makeOrganization();
+      const team = await fx.makeTeam(org.id, user.id);
+      await fx.makeTeamMember(team.id, user.id);
+      const agent = await fx.makeInternalAgent({
+        organizationId: org.id,
+        teams: [team.id],
+      });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+
+      const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "mute@example.com",
+        sendReply: sendReplySpy,
+      });
+      return {
+        manager: makeManagerWith(mockProvider),
+        mockProvider,
+        sendReplySpy,
+      };
+    }
+
+    // createMockMessage has no threadId, so the run is keyed on the channel id.
+    const threadKey = {
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      threadId: "test-channel-id",
+    } as const;
+
+    test("drops the reply when the thread is muted while the run is in flight (cross-pod marker moved)", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue(
+        agentResult(),
+      );
+      // The run starts with no mute marker, but by the time it goes to reply the
+      // marker has moved — a mute landed mid-run (here, on another pod).
+      mockGetThreadMuteMarker
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce("muted-token");
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      // Reported as a deliberate no-reply, and nothing was posted to the thread.
+      expect(result.success).toBe(true);
+      expect(result.agentResponse).toBe("");
+      expect(sendReplySpy).not.toHaveBeenCalled();
+    });
+
+    test("aborts the run and stays silent when the thread is muted on this pod", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      // Simulate the mute landing on this pod mid-run: abort the registered run
+      // (as muteChannelThread → chatOpsRunRegistry.cancelThread would) while the
+      // model call is "executing", then let it resolve.
+      const executeSpy = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockImplementation(async () => {
+          chatOpsRunRegistry.cancelThread(threadKey);
+          return agentResult();
+        });
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.agentResponse).toBe("");
+      // Neither the answer nor an "aborted" error reaches the muted thread.
+      expect(sendReplySpy).not.toHaveBeenCalled();
+    });
+
+    test("stays silent when the mute aborts the run during the auto-retry leg", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      // First attempt fails transiently (triggering the one auto-retry); the
+      // mute then lands during the retry and aborts it. The abort must not be
+      // posted as an error reply.
+      const executeSpy = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockRejectedValueOnce(
+          new ProviderError({
+            code: ChatErrorCode.EmptyResponse,
+            message: ChatErrorMessages[ChatErrorCode.EmptyResponse],
+            isRetryable: true,
+          }),
+        )
+        .mockImplementationOnce(async () => {
+          chatOpsRunRegistry.cancelThread(threadKey);
+          throw new Error("aborted");
+        });
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(executeSpy).toHaveBeenCalledTimes(2);
+      expect(result.success).toBe(true);
+      expect(result.agentResponse).toBe("");
+      expect(sendReplySpy).not.toHaveBeenCalled();
+    });
+
+    test("replies normally when no mute occurs during the run", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue(
+        agentResult(),
+      );
+
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.agentResponse).toBe("Agent response");
+      expect(sendReplySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "Agent response" }),
       );
     });
   });

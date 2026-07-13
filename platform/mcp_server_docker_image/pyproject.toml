@@ -22,4 +22,6 @@ dependencies = [
   "pyjwt>=2.13.0",
   # cryptography < 48.0.1: GHSA-537c-gmf6-5ccf (out-of-bounds read)
   "cryptography>=48.0.1",
+  # click < 8.3.3: CVE-2026-7246 (pulled in via typer and uvicorn)
+  "click>=8.3.3",
 ]

@@ -46,12 +46,12 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
-  clearChannelThreadActive,
   isChannelThreadActive,
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
   mightBeAddressedMuteCommand,
+  muteChannelThread,
   resolveChannelGateAction,
 } from "./channel-activation";
 import {
@@ -1460,7 +1460,7 @@ class SlackProvider implements ChatOpsProvider {
     channelId: string,
     threadTs: string,
   ): Promise<void> {
-    const wasActive = await clearChannelThreadActive({
+    const wasActive = await muteChannelThread({
       provider: this.providerId,
       channelId,
       threadId: threadTs,

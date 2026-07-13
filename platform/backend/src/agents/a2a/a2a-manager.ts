@@ -94,9 +94,15 @@ export class A2AManager {
       chatOpsBindingId?: string;
       chatOpsThreadId?: string;
     };
+    /**
+     * Cancellation signal forwarded into the agent run. Used by chatops so a
+     * muted thread aborts its in-flight model requests instead of letting them
+     * finish and post a now-unwanted reply.
+     */
+    abortSignal?: AbortSignal;
   }): Promise<A2AProtocolSendMessageResponse> {
     try {
-      const { actor, agentId, request, systemParams } = params;
+      const { actor, agentId, request, systemParams, abortSignal } = params;
 
       const [a2aUser, agent] = await Promise.all([
         actor.kind === "user" && actor.id !== "system"
@@ -278,6 +284,7 @@ export class A2AManager {
             originalUiMessages: contextUiMessages,
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
+            abortSignal,
           });
         },
       });

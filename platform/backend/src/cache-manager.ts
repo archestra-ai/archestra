@@ -59,6 +59,10 @@ export const CacheKey = {
   TeamsThreadMuteHint: "teams-thread-mute-hint",
   /** Slack channel threads that already got the one-time "you can mute me" hint */
   SlackThreadMuteHint: "slack-thread-mute-hint",
+  /** Latest mute token per MS Teams channel thread (cross-pod in-flight reply suppression) */
+  TeamsThreadMuteMarker: "teams-thread-mute-marker",
+  /** Latest mute token per Slack channel thread (cross-pod in-flight reply suppression) */
+  SlackThreadMuteMarker: "slack-thread-mute-marker",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */

@@ -88,15 +88,21 @@ observable; preserve it (there is a typed-order test).
   contract must declare exactly the transition's effects and must not widen
   the resolved recipient set — the PoC's structural relation covers tool
   identity, effects, and recipient roles; egress-destination and
-  runtime-capability sets are not modeled); waivers
-  change no stored state — check-transient lifts (`raised_to`, `admitting`,
-  `waiving`) plus an audit record. A `TransientWaiver` is proposal data, not a
-  capability; the `ProposedGrant` an authority rules on carries both the lift
-  and any acknowledge-only facts it clears, so `AuthorityMandate::covers`
-  requires `acknowledge_unknown` to clear an unknown even when the lift
-  dimensions alone are covered. Authority comes from competence routing + the
-  fail-closed recheck (`PostconditionFailed` blocks rather than permitting an
-  under-covered flow).
+  runtime-capability sets are not modeled); a **transient waiver** changes no
+  stored state — a check-transient lift (`waiving` a prior effect, standing in
+  for a confirmation, excluding a control dep) plus an audit record. A
+  **fiat relabel** (`EndorseValue`), by contrast, mints a *durable* value like a
+  transform: an authority raises `source`'s label with the lift helpers
+  (`raised_to`/`admitting`, never `combine`), and a new value carries the raised
+  label under `Provenance::Endorsed` — the source is untouched. So raising trust
+  or audience is a relabel, not a waiver; a waiver never raises trust or
+  audience. A `TransientWaiver` is proposal data, not a capability; the
+  `ProposedGrant` an authority rules on carries both the lift and any
+  acknowledge-only facts it clears, so `AuthorityMandate::covers` requires
+  `acknowledge_unknown` to clear an unknown even when the lift dimensions alone
+  are covered. Authority comes from competence routing + the fail-closed recheck
+  (`PostconditionFailed`, or a re-evaluation that re-routes the residual, blocks
+  rather than permitting an under-covered flow).
 - Registration is an operator trust decision, not content correctness: audit
   wording says "admitted under the transition declared by registered
   transformer X", never "verified as clean". Registries are populated at

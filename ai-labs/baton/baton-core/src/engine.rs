@@ -4507,6 +4507,161 @@ mod tests {
         assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
     }
 
+    /// The discriminant of a step's kind, for asserting the order steps ran.
+    fn step_label(kind: &TransitionKind) -> &'static str {
+        match kind {
+            TransitionKind::TransformValue { .. } => "sanitize",
+            TransitionKind::ConstrainAction { .. } => "constrain",
+            TransitionKind::EndorseValue { .. } => "endorse",
+            TransitionKind::AcceptGrowth { .. } => "accept",
+            TransitionKind::ApplyWaiver { .. } => "waiver",
+        }
+    }
+
+    /// The full composition across both axes: a flow too suspicious (Sanitize),
+    /// too narrow (Endorse), too broad in effect (Constrain), and still
+    /// surface-growing (Accept). Each reduction shrinks what the next authority
+    /// signs off — Endorse vouches only the audience Sanitize left, Accept
+    /// acquires only the growth Constrain left — and all four run at runtime.
+    #[test]
+    fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
+        fn launder(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+            Ok(OpaqueValue::new("[laundered]"))
+        }
+        fn endorse_audience(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "vouched".to_owned(),
+            })
+        }
+        let dispatch_tool = ToolContract {
+            name: ToolName::new("dispatch"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                audience: crate::contract::AudienceRule::RecipientsWithinContext,
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress, Effect::Mutation]),
+            arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
+        };
+        // The constrained target: email.send drops Mutation (effects {Egress})
+        // but keeps the trusted-and-in-context requirement.
+        let mut engine = engine_with([dispatch_tool, email_contract()]);
+        // Sanitize fixes only trust (SUSPICIOUS -> TRUSTED), leaving the narrow
+        // audience for Endorse.
+        engine
+            .register_transformer(RegisteredTransformer {
+                descriptor: crate::transition::TransformerDescriptor {
+                    transformer: crate::value::TransformerRef {
+                        id: "detox".to_owned(),
+                        version: 1,
+                    },
+                    precondition: crate::transition::LabelPredicate {
+                        trust: Some(Trust::SUSPICIOUS),
+                        audience: None,
+                    },
+                    output: ValueLabel {
+                        audience: Audience::readers([user("alice")]),
+                        trust: Trust::TRUSTED,
+                    },
+                },
+                run: launder,
+            })
+            .unwrap();
+        engine
+            .register_action_transition(ActionTransition {
+                id: tref("egress-only"),
+                from_tool: ToolName::new("dispatch"),
+                to_tool: ToolName::new("email.send"),
+                effects: Effects::declared([Effect::Egress]),
+            })
+            .unwrap();
+        // The voucher may raise audience but not trust, so Sanitize is the only
+        // way to clear the trust breach; the acquirer takes the residual growth.
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("voucher"),
+                mandate: crate::transition::AuthorityMandate {
+                    audience: Some(BTreeSet::from([user("alice"), user("charlie")])),
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(endorse_audience),
+            })
+            .unwrap();
+        engine.register_authority(inline_acquirer()).unwrap();
+
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
+        let to = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("charlie"),
+        );
+        let request = ToolRequest::new(
+            ToolName::new("dispatch"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to)),
+                (ArgumentName::new("body"), ArgumentTree::Value(body)),
+            ])),
+            BTreeSet::new(),
+        );
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+
+        // The composite route is all four steps in canonical order, each
+        // authority signing off only the reduced residual.
+        let composite = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
+        let kinds: Vec<&str> = composite.steps.iter().map(|s| step_label(&s.kind)).collect();
+        assert_eq!(kinds, ["sanitize", "constrain", "endorse", "accept"]);
+        assert_eq!(composite.exit_kind(), ExitKind::Endorse);
+        // Endorse signs off only the audience — trust was reduced by Sanitize.
+        let endorse = composite
+            .steps
+            .iter()
+            .find_map(|s| match &s.kind {
+                TransitionKind::EndorseValue { delta, .. } => Some(delta),
+                _ => None,
+            })
+            .expect("an endorse step");
+        assert_eq!(endorse.trust, None);
+        assert_eq!(endorse.audience.as_ref().unwrap(), &BTreeSet::from([user("charlie")]));
+        // Accept acquires only {Egress} — Mutation was reduced by Constrain.
+        let accept = composite
+            .steps
+            .iter()
+            .find_map(|s| match &s.kind {
+                TransitionKind::AcceptGrowth { effects } => Some(effects),
+                _ => None,
+            })
+            .expect("an accept step");
+        assert_eq!(accept, &Effects::declared([Effect::Egress]));
+
+        // Walk the most-composed route to a permit; all four steps run.
+        let mut applied: Vec<&str> = Vec::new();
+        let mut plans = plans;
+        let token = loop {
+            let plan = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
+            applied.push(step_label(&plan.steps.first().kind));
+            let id = plan.id;
+            let capability = engine.mint_step(&trajectory, id, 0).unwrap();
+            match engine.apply_step(&mut trajectory, capability).unwrap() {
+                StepOutcome::Advanced(Decision::Permitted(token)) => break token,
+                StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans: next, .. })) => plans = next,
+                other => panic!("unexpected outcome: {other:?}"),
+            }
+        };
+        assert_eq!(applied, ["sanitize", "constrain", "endorse", "accept"]);
+        // Only the reduced effect commits.
+        dispatch(&mut trajectory, token, "sent").unwrap();
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    }
+
     /// A pool already within the cap is returned unchanged (order preserved).
     #[test]
     fn cap_fairness_is_a_noop_within_the_cap() {

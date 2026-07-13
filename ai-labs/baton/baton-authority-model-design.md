@@ -300,7 +300,7 @@ Built as slices S5–S8 on this branch; 126 lib tests; external (Codex) + intern
   (the Build-1 item; Accept→Acknowledge makes it more reachable but S6 did not regress
   it) and the enumeration-perf scaling above.
 
-### Build 3 — Endorse as relabel + robustness visibility (D3)
+### Build 3 — Endorse as relabel + robustness visibility (D3, done)
 Converted to §4-style slices S9–S12 on this branch. Ratified encoding choices:
 **OQ1** resolves to a *sibling* `TransitionKind::EndorseValue { source, delta }`
 beside the shipped `TransformValue` (merging both into one `Relabel { via }` is a
@@ -317,7 +317,7 @@ only; a confidentiality breach carried by a **control dependency** clears via
 §3's arg-vs-control attribution split (a control-borne breach now needs
 `may_release_control`, not endorse competence).
 
-- [ ] **S9 — Endorse relabel family (additive).** `EndorseDelta { trust, audience }`
+- [x] **S9 — Endorse relabel family (additive).** `EndorseDelta { trust, audience }`
   + `covered_by(&AuthorityMandate)`; `ProposedGrant::Endorse { source, delta }`;
   `Provenance::Endorsed { source, authority, delta }`; `ValueStore::admit_endorsed`
   + `Trajectory::endorse_value` (no-op body, label raised via `raised_to`/`admitting`
@@ -330,7 +330,7 @@ only; a confidentiality breach carried by a **control dependency** clears via
   build + clippy + unit tests (durable relabel + provenance + audit + downhill
   recheck; uncovered delta → no route; external round-trip). Every exhaustive match
   the new variants touch gains its arm this slice (Rust forces it).
-- [ ] **S10 — Relocate endorsement into enumeration; retire the transient lift.**
+- [x] **S10 — Relocate endorsement into enumeration; retire the transient lift.**
   `enumerate_plans` peels a sink-breach residual into `EndorseValue` step(s) — one
   per *arg leaf* failing the sink's trust/audience requirement in the current
   (post-reduction) `SimFlow`, each raising exactly that leaf (multi-source: N failing
@@ -344,7 +344,7 @@ only; a confidentiality breach carried by a **control dependency** clears via
   endorse, residual recomputed). *Validation:* migrated endorse tests drive the
   Endorse route; a two-leaf aggregate audience breach enumerates two `EndorseValue`
   steps and clears only after both; control-borne breach still yields control release.
-- [ ] **S11 — D3: transitive ancestry in the ruling context.** A visited-set BFS
+- [x] **S11 — D3: transitive ancestry in the ruling context.** A visited-set BFS
   provenance closure over `ValueStore`, done *inside* `AncestrySnapshot::of` so all
   three grant sites (Waive/Accept/Endorse) carry the closure; `TrajectoryView::ancestry`
   accessor for inline authorities; drop the "direct scope only / D3 later" caveat.
@@ -353,14 +353,23 @@ only; a confidentiality breach carried by a **control dependency** clears via
   dependency is ≥2 provenance edges back (exercises the transitive walk). *Invariant:*
   exposure only, no hard guard (D3); the walk terminates (values form a DAG — provenance
   names only lower-id admitted values).
-- [ ] **S12 — Full-composition test + crate `CLAUDE.md`.** One flow: a registered
+- [x] **S12 — Full-composition test + crate `CLAUDE.md`.** One flow: a registered
   sanitizer shrinks (not erases) the data taint, a registered constraint shrinks (not
   erases) the effects, leaving a residual sink breach → Endorse and residual surface
   growth → Accept. Assert all four steps ran in canonical order on the *reduced*
-  residual (authority signs off only on the irreducible remainder); the scenario makes
-  every un-reduced route nonviable so `walk_to_permit`'s first-plan choice must run all
-  four. Refine `CLAUDE.md`: transient waivers change no stored state; a fiat-relabel
-  (Endorse) mints a value like a transform (durable, provenance-attributed).
+  residual (authority signs off only on the irreducible remainder). Refine `CLAUDE.md`:
+  transient waivers change no stored state; a fiat-relabel (Endorse) mints a value like a
+  transform (durable, provenance-attributed).
+- **As built (deviations, maintainer-noted):** (a) *all four steps mandatory in one walk
+  is not constructible* — the effect axis's `acquire_effects` is a boolean, so an
+  available Accept always makes Constrain optional; the test instead drives the
+  most-composed route (a guided walk over `plans`, forcing Sanitize via a
+  trust-incompetent endorse authority) and asserts the four-step plan carries the reduced
+  residuals (Endorse vouches only the post-Sanitize audience, Accept acquires only the
+  post-Constrain growth). Constrain↔Accept alone stays covered by S8. (b) *D3 refusal is
+  demonstrated by the `endorse_authority_refuses_a_suspicious_transitive_ancestry` test*
+  (acceptance criterion reads "demo/test"); the narrative `demo` keeps the Endorse
+  happy-path, since a visible refusal there would need its own single-authority engine.
 - **Deferred to the follow-up ledger (unchanged):** approval/acknowledgment re-entry
   idempotence and the enumeration O(leaves²) perf.
 

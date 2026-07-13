@@ -1213,22 +1213,28 @@ export function ChatPageContent({
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
-      if (!chatSession?.messages || !setMessages) {
+      if (!setMessages) {
         return;
       }
 
-      const mergedMessages = mergePersistedMessageMetadata({
-        liveMessages: chatSession.messages,
-        persistedMessages,
-      });
-
-      if (mergedMessages === chatSession.messages) {
-        return;
-      }
-
-      setMessages(mergedMessages);
+      // Merge against the SDK's CURRENT thread via the functional updater — NOT
+      // the `chatSession.messages` session snapshot, which trails the live SDK
+      // thread by a render (it is published through a post-render sync effect;
+      // see ChatSessionHook). During rapid queue drain that snapshot can be
+      // missing the just-sent user message; folding a stale, shorter snapshot
+      // and writing it back here would shrink the SDK thread and drop that
+      // in-flight user message, while the ongoing stream only re-adds the
+      // assistant reply — the user bubble then vanishes until a reload (the
+      // backend persisted it fine). mergePersistedMessageMetadata returns the
+      // same array reference when nothing changed, so React bails out.
+      setMessages((current) =>
+        mergePersistedMessageMetadata({
+          liveMessages: current,
+          persistedMessages,
+        }),
+      );
     },
-    [chatSession?.messages, setMessages],
+    [setMessages],
   );
 
   useEffect(() => {

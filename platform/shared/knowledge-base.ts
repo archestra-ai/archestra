@@ -6,6 +6,46 @@ export type EmbeddingModel = string;
 /** Maximum number of chunks to embed per embedding API call */
 export const EMBEDDING_BATCH_SIZE = 100;
 
+/**
+ * Default cadence of the scheduled permission-sync pass for
+ * `auto-sync-permissions` connectors: the next pass is due this many seconds
+ * after the last one (manual, content-ingest-triggered, or scheduled) started.
+ */
+export const DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS = 30 * 60;
+
+/**
+ * Floor for the per-connector permission-sync interval. Also bounds how long
+ * per-user group-membership lookups may be served from cache: a cached ACL
+ * check is never staler than the shortest interval a connector can sync at.
+ */
+export const MIN_PERMISSION_SYNC_INTERVAL_SECONDS = 15 * 60;
+
+/**
+ * Ceiling for the per-connector permission-sync interval. Anything slower is
+ * better expressed as follow-documents mode; without a ceiling, an
+ * effectively-infinite interval would silently disable the scheduled pass
+ * while looking configured.
+ */
+export const MAX_PERMISSION_SYNC_INTERVAL_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Sentinel `permissionSyncIntervalSeconds` value: no interval-scheduled
+ * passes — permissions follow the documents sync schedule instead. A pass
+ * runs after every completed documents sync (permissions can change upstream
+ * without any document changing) and on manual trigger. Stored as 0 so the
+ * column stays NOT NULL.
+ */
+export const PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE = 0;
+
+/**
+ * Cadence of the FULL permission reconcile (the correctness backstop that
+ * fail-closes vanished documents and containers). The user-facing frequency
+ * setting drives cheap probe-driven DELTA passes; a pass is promoted to full
+ * when the last full reconcile is older than this. Internal constant, not an
+ * operator knob.
+ */
+export const PERMISSION_SYNC_FULL_RECONCILE_INTERVAL_SECONDS = 24 * 60 * 60;
+
 export const SUPPORTED_EMBEDDING_DIMENSIONS = [
   3072, 1536, 1024, 768, 384,
 ] as const;

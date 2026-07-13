@@ -9,7 +9,7 @@ import { ApiError } from "@/types";
  * stays free of app- or skill-specific terminology.
  */
 
-type StrReplaceEdit = { old_str: string; new_str: string };
+export type StrReplaceEdit = { old_str: string; new_str: string };
 
 export type AppliedEditSpan = {
   start: number;

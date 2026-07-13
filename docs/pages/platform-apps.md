@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,8 +17,8 @@ Archestra already hosts and renders MCP Apps served by external MCP servers. Thi
 Authoring is a staged flow — each tool's result points at the next step:
 
 - `refine_app` clarifies what to build. It asks the user up to three questions and records a spec, grounded in the MCP tools that user can assign.
-- `scaffold_app` seeds the app from one opinionated starter template.
-- `edit_app` builds up the HTML with targeted string replacements.
+- `scaffold_app` seeds the app as a managed-sections document from one opinionated starter template.
+- `edit_app` builds up the app by section — title, css, body, and javascript — edited by value, not by matching HTML. A raw mode edits the whole document for a custom app.
 - `validate_app` checks the result — static structure plus the diagnostics from a live render.
 - `publish_app` promotes a personal app to a team or the organization.
 
@@ -71,7 +71,7 @@ As a render settles, the host page also posts a snapshot (the captured entries, 
 
 ## Authoring loop
 
-The app tools form an autonomous build→render→fix loop, so an agent rarely needs the human in the middle of a build: `scaffold_app` → `edit_app` to build up the HTML → the app renders inline → `get_app_diagnostics` to see what broke → `edit_app` to fix. `read_app` returns the current stored HTML when it is not in context, and `edit_app` applies small `str_replace` edits instead of re-streaming the whole document. When app code must parse a tool's output, `preview_app_tool` runs one of the app's assigned tools server-side (as the viewer, with their credentials) and returns its real shape — but it requires human approval each call, since the tool was granted to the app, not the agent (so it is blocked outright in autonomous A2A/Slack contexts).
+The app tools form an autonomous build→render→fix loop, so an agent rarely needs the human in the middle of a build: `scaffold_app` → `edit_app` to build up the app → the app renders inline → `get_app_diagnostics` to see what broke → `edit_app` to fix. `edit_app` changes one section at a time — a whole section by value, or a small patch within it — so the agent never re-streams the platform boilerplate. `read_app` returns a section's current source, or the whole document, when it is not in context. When app code must parse a tool's output, `preview_app_tool` runs one of the app's assigned tools server-side (as the viewer, with their credentials) and returns its real shape — but it requires human approval each call, since the tool was granted to the app, not the agent (so it is blocked outright in autonomous A2A/Slack contexts).
 
 ## App Data Store
 
@@ -97,4 +97,4 @@ A shared (team or org) app is author-written HTML executing in a viewer's browse
 
 ## Templates
 
-A single `default` starter seeds a new app's HTML when no explicit HTML is given on create: a themed empty state that centers the app's name, a prompt-only call to action, and a short list of what an app can build on (assigned MCP tools, the per-user and shared data store, built-in AI). It leans on the injected baseline stylesheet, so it looks themed with no full theme of its own. Resolution is server-side — `POST /api/apps` (with an optional `templateId`) or `scaffold_app` seeds the starter's HTML as version 1, substituting the app's name (the id is kept as provenance). Explicit HTML always wins over the template.
+A single `default` starter seeds a new app when no explicit HTML is given on create: a minimal managed-sections document that centers the app's name and a prompt to build. It leans on the injected baseline stylesheet, so it looks themed with no full theme of its own. Resolution is server-side — `POST /api/apps` (with an optional `templateId`) or `scaffold_app` seeds the starter as version 1, substituting the app's name (the id is kept as provenance). Explicit HTML always wins over the template.

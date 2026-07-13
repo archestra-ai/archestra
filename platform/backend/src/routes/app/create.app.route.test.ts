@@ -3,6 +3,10 @@ import { AppVersionModel } from "@/models";
 import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import {
+  isManagedDocument,
+  parseManagedSections,
+} from "@/services/apps/app-managed-sections";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -70,7 +74,9 @@ describe("POST /api/apps", () => {
       url: `/api/apps/${created.json().id}/versions`,
     });
     const { html } = versions.json()[0];
-    expect(html).toContain("<title>Seeded</title>");
+    // Newly created apps (REST and scaffold_app alike) seed the managed shell.
+    expect(isManagedDocument(html)).toBe(true);
+    expect(parseManagedSections(html)?.title).toBe("Seeded");
     expect(html).toContain("<h1>Seeded</h1>");
     expect(html).not.toContain("{{APP_NAME}}");
   });

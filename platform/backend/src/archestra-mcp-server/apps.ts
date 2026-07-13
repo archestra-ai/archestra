@@ -46,6 +46,14 @@ import {
   formatDiagnosticEntryLines,
 } from "@/services/apps/app-diagnostics";
 import {
+  applySectionMutations,
+  isManagedDocument,
+  MANAGED_SECTION_KEYS,
+  parseManagedSections,
+  type SectionKey,
+  type SectionMutations,
+} from "@/services/apps/app-managed-sections";
+import {
   createAppBacking,
   deleteAppBacking,
   syncAppBacking,
@@ -109,31 +117,107 @@ const GetAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id."),
 });
 
-const ReadAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
-  version: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe("Specific version to read; defaults to the current head."),
-  offset: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
+const ReadAppSchema = z
+  .strictObject({
+    appId: z.string().uuid().describe("The app id."),
+    format: z
+      .enum(["html", "sections"])
+      .optional()
+      .describe(
+        'How to read the app. "html" (default) returns the full stored document, windowable with offset/limit. "sections" returns a managed-sections app\'s authored title/css/body/javascript values (all four, or a single windowed section); it errors on a non-managed document.',
+      ),
+    section: z
+      .enum(["title", "css", "body", "javascript"])
+      .optional()
+      .describe(
+        'With format "sections": return only this one section (and window it with offset/limit). Omit to return all four section values whole.',
+      ),
+    version: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe("Specific version to read; defaults to the current head."),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "Start of the read window as a 0-based character offset (a JavaScript string index / UTF-16 code unit). For format html it windows the whole document; with format sections it windows the selected section (requires section). Character-based, not line-based, since minified HTML can be one enormous line. Defaults to 0. An offset past the end returns an empty window, not an error. A window never splits a character in half: its edges shift by one unit when they would.",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "Maximum number of characters to return, starting at offset. Omitted reads to the end; 0 returns no content, just the size metadata.",
+      ),
+  })
+  .refine((args) => args.section === undefined || args.format === "sections", {
+    message: 'section is only valid with format "sections".',
+  })
+  .refine(
+    (args) =>
+      (args.offset === undefined && args.limit === undefined) ||
+      args.format !== "sections" ||
+      args.section !== undefined,
+    {
+      message:
+        'With format "sections", offset/limit window a single section — pass a section too.',
+    },
+  );
+
+// A managed section is written either wholesale (a plain string replaces it) or
+// patched in place with str_replace edits — the same engine edit_app's raw
+// `edits` use, scoped to one section's source.
+const SectionPatchSchema = z.strictObject({
+  edits: z
+    .array(
+      z.strictObject({
+        old_str: z
+          .string()
+          .min(1)
+          .describe(
+            "Exact text to replace within this section's current source; must occur exactly once (add surrounding context to disambiguate).",
+          ),
+        new_str: z
+          .string()
+          .describe("Replacement text (may be empty to delete)."),
+      }),
+    )
+    .min(1)
     .describe(
-      "Start of the read window as a 0-based character offset (a JavaScript string index / UTF-16 code unit) into the stored HTML — character-based, not line-based, since minified HTML can be one enormous line. Defaults to 0. An offset past the end returns an empty window, not an error. A window never splits a character in half: its edges shift by one unit when they would.",
-    ),
-  limit: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .describe(
-      "Maximum number of characters to return, starting at offset. Omitted reads to the end of the document; 0 returns no content, just the size metadata.",
+      "str_replace edits applied in order to this section's source; the whole set is atomic.",
     ),
 });
+
+const SectionValueSchema = z.union([z.string(), SectionPatchSchema]);
+
+const AppSectionsSchema = z
+  .strictObject({
+    title: z
+      .string()
+      .optional()
+      .describe(
+        "The document title as plain text (replacement only, not HTML).",
+      ),
+    css: SectionValueSchema.optional().describe(
+      "The app's CSS: a string to replace the whole section, or { edits } to str_replace-patch it.",
+    ),
+    body: SectionValueSchema.optional().describe(
+      'The app\'s body HTML (inside <main id="app">): a string to replace the whole section, or { edits } to patch it.',
+    ),
+    javascript: SectionValueSchema.optional().describe(
+      "The app's JavaScript: a string to replace the whole section, or { edits } to patch it.",
+    ),
+  })
+  .refine((sections) => Object.keys(sections).length > 0, {
+    message: "Provide at least one section: title, css, body, or javascript.",
+  });
+
+type AppSections = z.infer<typeof AppSectionsSchema>;
 
 const EditAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id."),
@@ -144,6 +228,9 @@ const EditAppSchema = z.strictObject({
     .describe(
       "The version the edits are based on (from read_app). The edit is rejected if the app's head has moved past it.",
     ),
+  sections: AppSectionsSchema.optional().describe(
+    "The default path for a managed-sections app: edit its title/css/body/javascript by value, no HTML boilerplate. Each supplied section replaces (string) or patches ({ edits }) only that section; omitted sections are unchanged. Pass exactly one of sections, edits, or replacementHtml.",
+  ),
   edits: z
     .array(
       z.strictObject({
@@ -161,14 +248,14 @@ const EditAppSchema = z.strictObject({
     .min(1)
     .optional()
     .describe(
-      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass either edits or replacementHtml, never both.",
+      "Raw str_replace edits applied in order to the whole HTML document; the whole edit is atomic (any failure leaves the app unchanged). The escape hatch for a managed app (prefer sections) and the path for a raw/custom document. Pass exactly one of sections, edits, or replacementHtml.",
     ),
   replacementHtml: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "The complete new document, replacing the current HTML outright with no old_str matching — use this for a full rewrite instead of reproducing the whole document as an edit. Pass either edits or replacementHtml, never both.",
+      "The complete new document, replacing the current HTML outright with no old_str matching — for a full custom-document rewrite. On a managed app prefer sections; a replacement must keep the four platform-owned nodes. Pass exactly one of sections, edits, or replacementHtml.",
     ),
 });
 
@@ -226,6 +313,12 @@ const AppSummaryOutputSchema = z.object({
   description: z.string().nullable(),
   scope: AppScopeSchema,
   latestVersion: z.number(),
+  changedSections: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Which managed sections a sections-mode edit_app actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements.",
+    ),
   warnings: z
     .array(z.string())
     .optional()
@@ -234,11 +327,21 @@ const AppSummaryOutputSchema = z.object({
     ),
 });
 
-const ReadAppOutputSchema = z.object({
+// Whether an app is a managed-sections document (editable by section) or a raw
+// custom document, so a resumed session picks the right edit_app mode up front.
+const AppEditorSchema = z
+  .enum(["managed_sections", "raw"])
+  .describe(
+    'The app\'s editor mode: "managed_sections" (edit by title/css/body/javascript) or "raw" (edit_app with edits/replacementHtml).',
+  );
+
+const ReadAppHtmlOutputSchema = z.object({
+  format: z.literal("html"),
   id: z.string(),
   name: z.string(),
   scope: AppScopeSchema,
   version: z.number(),
+  editor: AppEditorSchema,
   byteSize: z
     .number()
     .describe("UTF-8 byte size of the full stored HTML (never the window's)."),
@@ -259,6 +362,40 @@ const ReadAppOutputSchema = z.object({
       "The stored HTML, pre-injection (no SDK/base CSS) — the requested character window when offset/limit was passed.",
     ),
 });
+
+const ReadAppSectionsOutputSchema = z.object({
+  format: z.literal("sections"),
+  id: z.string(),
+  name: z.string(),
+  scope: AppScopeSchema,
+  version: z.number(),
+  editor: z.literal("managed_sections"),
+  sections: z
+    .object({
+      title: z.string(),
+      css: z.string(),
+      body: z.string(),
+      javascript: z.string(),
+    })
+    .partial()
+    .describe(
+      "The authored section values: all four when no single section was selected, otherwise just the selected (possibly windowed) one.",
+    ),
+  window: z
+    .object({
+      section: z.enum(["title", "css", "body", "javascript"]),
+      totalChars: z.number(),
+      offset: z.number(),
+      hasMore: z.boolean(),
+    })
+    .optional()
+    .describe("Window metadata, present only when a single section was read."),
+});
+
+const ReadAppOutputSchema = z.union([
+  ReadAppHtmlOutputSchema,
+  ReadAppSectionsOutputSchema,
+]);
 
 const ValidateAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id to validate."),
@@ -309,6 +446,16 @@ const ValidateAppOutputSchema = z.object({
 
 // scaffold_app additionally echoes the assignment set when `tools` was given
 const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
+  editor: z
+    .literal("managed_sections")
+    .optional()
+    .describe(
+      "Present for a scaffolded app: it is a managed-sections document — edit it with edit_app's sections argument (title/css/body/javascript) rather than raw HTML.",
+    ),
+  sections: z
+    .array(z.string())
+    .optional()
+    .describe("The editable section names, when editor is managed_sections."),
   tools: z
     .array(z.string())
     .optional()
@@ -367,7 +514,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SCAFFOLD_APP_SHORT_NAME,
     title: "Scaffold App",
-    description: `Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. The result returns the seeded HTML plus the condensed window.archestra SDK surface; build it up with edit_app. ${BUILD_APP_SKILL_POINTER}`,
+    description: `Create a new interactive app (dashboard, form, tracker, game, or any custom UI). Use this whenever the user asks to make, build, or create an app or interactive UI — never paste app code into the chat reply or write it as an artifact. It creates a managed-sections app: the result returns the app id, the editable section names, and the condensed window.archestra SDK surface (not HTML) — build it up with edit_app's sections argument (title, css, body, javascript). ${BUILD_APP_SKILL_POINTER}`,
     schema: ScaffoldAppToolSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -493,13 +640,14 @@ const registry = defineArchestraTools([
             { err: error, appId: app.id },
             "scaffold_app: tool assignment failed after creation",
           );
-          return scaffoldPartialToolFailureResult(app, payload.html);
+          return scaffoldPartialToolFailureResult(app);
         }
       }
 
-      // Return the seeded html so the model can build it up with edit_app
-      // without a read-back round-trip.
-      const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${payload.html}`;
+      // A scaffolded app is a managed-sections document. Don't echo the seeded
+      // HTML — the model builds it up by section with edit_app and never needs
+      // the platform boilerplate; it reads section values back with read_app
+      // (format: "sections") only when it needs them.
       const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
@@ -509,10 +657,12 @@ const registry = defineArchestraTools([
           description: app.description,
           scope: app.scope,
           latestVersion: app.latestVersion,
+          editor: "managed_sections" as const,
+          sections: [...MANAGED_SECTION_KEYS],
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${app.name}" (${app.id}) at version ${app.latestVersion} — a managed-sections app. Build it up with edit_app's sections argument (title, css, body, javascript); no need to send or match HTML boilerplate.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -706,7 +856,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_APP_SHORT_NAME,
     title: "Read App",
     description:
-      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. A successful edit_app already confirms its changes with context excerpts, so re-reading right after one is wasted work — read again only when the next edit needs source outside those excerpts. Defaults to the head version; pass version to read an older one. For a large document, pass offset and/or limit (character-based, 0-based offset) to read a window of the source instead of the whole thing; the result reports totalChars and hasMore so you can page through. (render_app displays the app to a viewer; this returns the raw saved source.)",
+      'Return an app\'s stored source before edit_app whenever it is not already in context. format "html" (default) returns the full pre-injection document (exactly what was saved, no SDK/base stylesheet) plus version, byte size, name, scope, and its editor mode; window a large document with offset/limit (character-based, 0-based) and page via totalChars/hasMore. format "sections" returns a managed-sections app\'s authored title/css/body/javascript values (pass a section to read and window just one) — the direct way to see a section before editing it; it errors on a raw document. A successful edit_app already confirms its changes with excerpts, so re-reading right after one is wasted work. Defaults to the head version; pass version for an older one. (render_app displays the app to a viewer; this returns the raw saved source.)',
     schema: ReadAppSchema,
     outputSchema: ReadAppOutputSchema,
     async handler({ args, context }) {
@@ -720,49 +870,88 @@ const registry = defineArchestraTools([
       if (!row) {
         return errorResult(`App ${args.appId} has no version ${version}.`);
       }
+
+      if (args.format === "sections") {
+        const parsed = parseManagedSections(row.html);
+        if (!parsed) {
+          return errorResult(
+            `App ${args.appId} version ${version} is not a managed-sections document, so it has no sections to read. Read it with format "html" and edit it with edits or replacementHtml.`,
+          );
+        }
+        if (args.section !== undefined) {
+          const value = parsed[args.section];
+          const win = sliceCharWindow(value, args.offset, args.limit);
+          const windowNote = win.windowed
+            ? `, window ${win.offset}–${win.offset + win.content.length} of ${value.length} characters${win.hasMore ? ` (more follows — continue from offset ${win.offset + win.content.length})` : ""}`
+            : "";
+          return structuredSuccessResult(
+            {
+              format: "sections" as const,
+              id: app.id,
+              name: app.name,
+              scope: app.scope,
+              version: row.version,
+              editor: "managed_sections" as const,
+              sections: { [args.section]: win.content },
+              window: {
+                section: args.section,
+                totalChars: value.length,
+                offset: win.offset,
+                hasMore: win.hasMore,
+              },
+            },
+            `App "${app.name}" (${app.id}) version ${row.version}, section ${args.section}${windowNote}:\n\n${win.content}`,
+          );
+        }
+        const sectionsText = MANAGED_SECTION_KEYS.map(
+          (key) => `[${key}]\n${parsed[key]}`,
+        ).join("\n\n");
+        return structuredSuccessResult(
+          {
+            format: "sections" as const,
+            id: app.id,
+            name: app.name,
+            scope: app.scope,
+            version: row.version,
+            editor: "managed_sections" as const,
+            sections: parsed,
+          },
+          `App "${app.name}" (${app.id}) version ${row.version}, managed sections:\n\n${sectionsText}`,
+        );
+      }
+
       const byteSize = Buffer.byteLength(row.html, "utf8");
       const totalChars = row.html.length;
       // Character-based window (not line-based: minified HTML can be a single
       // enormous line). Out-of-range values clamp instead of erroring. Indices
-      // are UTF-16 code units; edges snap so a surrogate pair is never split —
-      // a start on a pair's second half advances by one, an end that would
-      // strand a pair's first half extends by one — keeping `offset +
-      // html.length` a valid next offset for lossless paging.
-      const windowed = args.offset !== undefined || args.limit !== undefined;
-      let offset = Math.min(args.offset ?? 0, totalChars);
-      if (windowed && isInsideSurrogatePair(row.html, offset)) {
-        offset += 1;
-      }
-      let end =
-        args.limit !== undefined
-          ? Math.min(offset + args.limit, totalChars)
-          : totalChars;
-      if (windowed && end > offset && isInsideSurrogatePair(row.html, end)) {
-        end += 1;
-      }
-      const html = windowed ? row.html.slice(offset, end) : row.html;
-      const hasMore = offset + html.length < totalChars;
+      // are UTF-16 code units; edges snap so a surrogate pair is never split.
+      const win = sliceCharWindow(row.html, args.offset, args.limit);
+      const html = win.content;
       // The continuation hint only makes sense for a progressing window; a
       // limit-0 probe would otherwise be told to continue from where it is.
       const continuation =
-        hasMore && html.length > 0
-          ? ` (more follows — continue from offset ${offset + html.length})`
-          : hasMore
+        win.hasMore && html.length > 0
+          ? ` (more follows — continue from offset ${win.offset + html.length})`
+          : win.hasMore
             ? " (pass a limit to read content)"
             : "";
-      const windowNote = windowed
-        ? `, window ${offset}–${offset + html.length} of ${totalChars} characters${continuation}`
+      const windowNote = win.windowed
+        ? `, window ${win.offset}–${win.offset + html.length} of ${totalChars} characters${continuation}`
         : "";
       return structuredSuccessResult(
         {
+          format: "html" as const,
           id: app.id,
           name: app.name,
           scope: app.scope,
           version: row.version,
+          editor: isManagedDocument(row.html)
+            ? ("managed_sections" as const)
+            : ("raw" as const),
           byteSize,
           totalChars,
-          offset,
-          hasMore,
+          offset: win.offset,
+          hasMore: win.hasMore,
           html,
         },
         `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes${windowNote}:\n\n${html}`,
@@ -772,7 +961,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `Change an app's HTML. Pass exactly one of: sections (the default for a scaffolded app — edit its title/css/body/javascript by value, no HTML boilerplate to send or match), edits (raw str_replace over the whole document, for a custom app or a surgical raw change), or replacementHtml (a complete new document). Pass baseVersion from your last read_app/scaffold_app (see the schema for section, str_replace, and atomicity rules). A successful change forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -780,20 +969,27 @@ const registry = defineArchestraTools([
       if ("error" in auth) return auth.error;
       // Exactly one edit mode, checked before any loading so a malformed call
       // fails fast with the fix spelled out.
-      if (args.edits !== undefined && args.replacementHtml !== undefined) {
+      const modesProvided = [
+        args.sections !== undefined,
+        args.edits !== undefined,
+        args.replacementHtml !== undefined,
+      ].filter(Boolean).length;
+      if (modesProvided > 1) {
         return errorResult(
-          "Pass either edits or replacementHtml, not both: edits applies str_replace changes to the current HTML; replacementHtml swaps in the complete new document.",
+          "Pass exactly one of sections, edits, or replacementHtml: sections edits the managed title/css/body/javascript by value; edits applies str_replace changes to the raw HTML; replacementHtml swaps in a complete new document.",
         );
       }
       const mode =
-        args.replacementHtml !== undefined
-          ? ({ kind: "replacement", html: args.replacementHtml } as const)
-          : args.edits !== undefined
-            ? ({ kind: "edits", edits: args.edits } as const)
-            : null;
+        args.sections !== undefined
+          ? ({ kind: "sections", sections: args.sections } as const)
+          : args.replacementHtml !== undefined
+            ? ({ kind: "replacement", html: args.replacementHtml } as const)
+            : args.edits !== undefined
+              ? ({ kind: "edits", edits: args.edits } as const)
+              : null;
       if (!mode) {
         return errorResult(
-          "Pass either edits (str_replace changes to the current HTML) or replacementHtml (the complete new document); neither was provided.",
+          "Pass one of sections (edit the managed sections), edits (str_replace on the raw HTML), or replacementHtml (a complete new document); none was provided.",
         );
       }
       const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
@@ -813,42 +1009,66 @@ const registry = defineArchestraTools([
         );
       }
 
+      // Whether the base is a managed-sections document decides which edits are
+      // allowed (sections mode requires it; a raw edit must not strip it) and
+      // whether a wholesale replacement earns the efficiency nudge. Computed once.
+      const baseManaged = isManagedDocument(base.html);
+
       let version: VersionPayload;
       let warnings: string[];
       let editedHtml: string;
       let editSpans: AppliedEditSpan[] = [];
       let skippedEdits: SkippedEdit[] = [];
+      let changedSections: SectionKey[] = [];
       try {
-        if (mode.kind === "replacement") {
-          editedHtml = mode.html;
-        } else {
-          const applied = applyStrReplaceEdits(base.html, mode.edits, {
-            sourceNoun: "HTML",
-            rereadHint: "Call read_app for the current source.",
-          });
-          editedHtml = applied.content;
-          editSpans = applied.spans;
-          skippedEdits = applied.skipped;
-        }
-        // A *partial* edit that strips the document root the base still had
-        // (e.g. deletes part of the doc) would otherwise save with only a soft
-        // warning and leave the model building on broken HTML — reject it
-        // atomically. A deliberate whole-document replacement (replacementHtml,
-        // or the legacy one-edit-replacing-the-whole-document form) is allowed
-        // to produce whatever the author intends, and an app that was already
-        // a fragment (no root in the base) is unaffected.
-        const isWholeDocumentRewrite =
-          mode.kind === "replacement" ||
-          (mode.edits.length === 1 && mode.edits[0].old_str === base.html);
-        if (
-          !isWholeDocumentRewrite &&
-          htmlHasDocumentRoot(base.html) &&
-          !htmlHasDocumentRoot(editedHtml)
-        ) {
-          throw new ApiError(
-            400,
-            "The edit would leave the app without a document root (no <head> or <html> element), which breaks it. Keep the full HTML document intact; re-read with read_app if you need the current source. Nothing was saved.",
+        if (mode.kind === "sections") {
+          if (!baseManaged) {
+            throw new ApiError(
+              400,
+              'This app has no managed sections (it was not scaffolded as a managed-sections app, or was later replaced with a custom document). Edit it with edits or replacementHtml, and read it with read_app (format: "html").',
+            );
+          }
+          const result = applySectionMutations(
+            base.html,
+            buildSectionMutations(mode.sections),
           );
+          editedHtml = result.html;
+          changedSections = result.changed;
+        } else {
+          if (mode.kind === "replacement") {
+            editedHtml = mode.html;
+          } else {
+            const applied = applyStrReplaceEdits(base.html, mode.edits, {
+              sourceNoun: "HTML",
+              rereadHint: "Call read_app for the current source.",
+            });
+            editedHtml = applied.content;
+            editSpans = applied.spans;
+            skippedEdits = applied.skipped;
+          }
+          // A *partial* edit that strips the document root the base still had
+          // (e.g. deletes part of the doc) would otherwise save with only a soft
+          // warning and leave the model building on broken HTML — reject it
+          // atomically. A deliberate whole-document replacement (replacementHtml,
+          // or the legacy one-edit-replacing-the-whole-document form) is allowed
+          // to produce whatever the author intends, and an app that was already
+          // a fragment (no root in the base) is unaffected.
+          const isWholeDocumentRewrite =
+            mode.kind === "replacement" ||
+            (mode.edits.length === 1 && mode.edits[0].old_str === base.html);
+          if (
+            !isWholeDocumentRewrite &&
+            htmlHasDocumentRoot(base.html) &&
+            !htmlHasDocumentRoot(editedHtml)
+          ) {
+            throw new ApiError(
+              400,
+              "The edit would leave the app without a document root (no <head> or <html> element), which breaks it. Keep the full HTML document intact; re-read with read_app if you need the current source. Nothing was saved.",
+            );
+          }
+          // A raw edit/replacement may drop a managed app's owned sections; that
+          // is allowed (it converts the app to a raw custom document) and is
+          // surfaced in the result note rather than blocked.
         }
         // Permissions ride the version envelope; an HTML-only edit inherits the
         // base version's permissions rather than dropping them.
@@ -883,17 +1103,24 @@ const registry = defineArchestraTools([
       const appliedEditCount =
         mode.kind === "edits" ? mode.edits.length - skippedEdits.length : 0;
       const editLabel =
-        mode.kind === "replacement"
-          ? "a full-document replacement"
-          : `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`;
+        mode.kind === "sections"
+          ? changedSections.length > 0
+            ? `an edit to section${changedSections.length === 1 ? "" : "s"} ${changedSections.join(", ")}`
+            : "no section changes"
+          : mode.kind === "replacement"
+            ? "a full-document replacement"
+            : `${appliedEditCount} edit${appliedEditCount === 1 ? "" : "s"}`;
       // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
       // equal); when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
       const forked = updated.latestVersion !== args.baseVersion;
+      const noOp =
+        (mode.kind === "edits" && appliedEditCount === 0) ||
+        (mode.kind === "sections" && changedSections.length === 0);
       const summary = forked
         ? `Applied ${editLabel} to app "${updated.name}" (now at version ${updated.latestVersion}).`
-        : mode.kind === "edits" && appliedEditCount === 0
-          ? `No edits were applied to app "${updated.name}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
+        : noOp
+          ? `No change was applied to app "${updated.name}"; it stays at version ${updated.latestVersion} and no new version was created.`
           : `Applied ${editLabel} to app "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
       const warningsNote = formatWarningsNote(warnings);
       const skippedNote = formatSkippedEditsNote(skippedEdits);
@@ -908,6 +1135,17 @@ const registry = defineArchestraTools([
         mode.kind === "replacement" && forked
           ? "\nThe saved document is exactly the HTML just sent — no need to call read_app to verify it."
           : "";
+      // For a raw edit/replacement on a managed app: warn that a wholesale
+      // replacement resends the whole document (sections would change only what
+      // moved), or note when the change dropped the sections and left it raw.
+      const managedNote =
+        mode.kind === "sections"
+          ? ""
+          : baseManaged && !isManagedDocument(editedHtml)
+            ? "\nThis change removed the managed sections, so the app is now a raw custom document — edit it with edits/replacementHtml from here (section editing no longer applies)."
+            : mode.kind === "replacement" && baseManaged
+              ? "\nThis is a managed-sections app: prefer edit_app with `sections` (title/css/body/javascript) over replacementHtml to change only what moved instead of resending the whole document."
+              : "";
       return structuredSuccessResult(
         {
           id: updated.id,
@@ -915,9 +1153,10 @@ const registry = defineArchestraTools([
           description: updated.description,
           scope: updated.scope,
           latestVersion: updated.latestVersion,
+          ...(mode.kind === "sections" ? { changedSections } : {}),
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
+        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(updated.id)}${replacementNote}${managedNote}${skippedNote}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -1693,6 +1932,31 @@ function isInsideSurrogatePair(html: string, index: number): boolean {
   return unit >= 0xdc00 && unit <= 0xdfff && prev >= 0xd800 && prev <= 0xdbff;
 }
 
+/**
+ * Surrogate-safe character window over `text`, shared by read_app's html and
+ * single-section reads. Out-of-range values clamp; edges snap by one unit so a
+ * surrogate pair is never split, keeping `offset + content.length` a valid next
+ * offset for lossless paging. `windowed` is false when neither bound was passed.
+ */
+function sliceCharWindow(
+  text: string,
+  argOffset: number | undefined,
+  argLimit: number | undefined,
+): { content: string; offset: number; hasMore: boolean; windowed: boolean } {
+  const totalChars = text.length;
+  const windowed = argOffset !== undefined || argLimit !== undefined;
+  let offset = Math.min(argOffset ?? 0, totalChars);
+  if (windowed && isInsideSurrogatePair(text, offset)) offset += 1;
+  let end =
+    argLimit !== undefined
+      ? Math.min(offset + argLimit, totalChars)
+      : totalChars;
+  if (windowed && end > offset && isInsideSurrogatePair(text, end)) end += 1;
+  const content = windowed ? text.slice(offset, end) : text;
+  const hasMore = offset + content.length < totalChars;
+  return { content, offset, hasMore, windowed };
+}
+
 function truncateUtf8(
   text: string,
   maxBytes: number,
@@ -1703,6 +1967,19 @@ function truncateUtf8(
   // back off out of any continuation-byte run so we cut on a char boundary
   while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
   return { text: buf.subarray(0, end).toString("utf8"), truncated: true };
+}
+
+/** Map the validated `sections` argument to the module's mutation shape. */
+function buildSectionMutations(sections: AppSections): SectionMutations {
+  const mutations: SectionMutations = {};
+  if (sections.title !== undefined) mutations.title = sections.title;
+  for (const key of ["css", "body", "javascript"] as const) {
+    const value = sections[key];
+    if (value === undefined) continue;
+    mutations[key] =
+      typeof value === "string" ? { replace: value } : { patch: value.edits };
+  }
+  return mutations;
 }
 
 type ResolvedTools = Array<{ id: string; name: string }>;
@@ -1739,16 +2016,15 @@ async function resolveToolsParam(params: {
  * scaffold_app result for the partial case: the app was created but assigning
  * its tools failed. A partial success, not an error — the model gets the app id
  * and a `partial` status so it repairs the tools with set_app_tools instead of
- * assuming the app was never created (an errorResult here loses both). Carries
- * the same seeded HTML + SDK summary the success path returns, so the model can
- * keep building (after repairing tools) without a read_app round-trip.
+ * assuming the app was never created (an errorResult here loses both). Like the
+ * success path, it returns the managed-sections editor descriptor and the SDK
+ * summary — not the seeded HTML — so the model builds it up by section.
  *
  * @public — exercised by apps.test.ts to pin the partial-success result
  * contract; the handler above is its only production caller.
  */
 export function scaffoldPartialToolFailureResult(
   app: App,
-  seededHtml: string,
 ): ReturnType<typeof structuredSuccessResult> {
   return structuredSuccessResult(
     {
@@ -1757,9 +2033,11 @@ export function scaffoldPartialToolFailureResult(
       description: app.description,
       scope: app.scope,
       latestVersion: app.latestVersion,
+      editor: "managed_sections" as const,
+      sections: [...MANAGED_SECTION_KEYS],
       status: "partial" as const,
     },
-    `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+    `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app's sections argument (title, css, body, javascript).${nextEditBaseVersionHint(app.latestVersion)}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
 }
 

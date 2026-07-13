@@ -267,7 +267,7 @@ describe("app tool execution", () => {
     expect(head?.uiPermissions).toEqual({ camera: {} });
   });
 
-  test("scaffold seeds the default template with the app name and returns its HTML", async () => {
+  test("scaffold seeds a managed document with the app name and returns a compact result", async () => {
     const created = await scaffold({ name: "From Template" });
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
@@ -275,11 +275,17 @@ describe("app tool execution", () => {
     const head = await AppVersionModel.findByAppAndVersion(appId, 1);
     expect(head?.html).toContain("<h1>From Template</h1>");
     expect(head?.html).not.toContain("{{APP_NAME}}");
-    // Scaffold-then-edit: the seeded html rides the result text so the model
-    // can edit_app without a read-back.
-    expect((created.content[0] as any).text).toContain(
-      "<h1>From Template</h1>",
-    );
+    // The result is a compact managed-sections descriptor, not the seeded HTML:
+    // the model builds it up by section without retaining platform boilerplate.
+    expect(structured(created).editor).toBe("managed_sections");
+    expect(structured(created).sections).toEqual([
+      "title",
+      "css",
+      "body",
+      "javascript",
+    ]);
+    expect((created.content[0] as any).text).not.toContain("<h1>");
+    expect((created.content[0] as any).text).not.toContain("<!doctype");
   });
 
   test("scaffold result carries the condensed window.archestra SDK surface", async () => {
@@ -993,11 +999,11 @@ describe("read_app / edit_app", () => {
       context,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("not both");
+    expect((result.content[0] as any).text).toContain("exactly one");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
-  test("passing neither edits nor replacementHtml is rejected", async () => {
+  test("passing no edit mode is rejected", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     const result = await executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
@@ -1005,7 +1011,7 @@ describe("read_app / edit_app", () => {
       context,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("neither");
+    expect((result.content[0] as any).text).toContain("none was provided");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
@@ -1261,6 +1267,214 @@ describe("read_app / edit_app", () => {
     expect(
       await AppVersionModel.findByAppAndVersion(appId, version + 2),
     ).toBeNull();
+  });
+});
+
+describe("edit_app sections mode", () => {
+  let context: ArchestraContext;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Sections Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+  });
+
+  const call = (
+    shortName: Parameters<typeof getArchestraToolFullName>[0],
+    args: Record<string, unknown>,
+  ) => executeArchestraTool(getArchestraToolFullName(shortName), args, context);
+
+  async function scaffoldManaged(
+    args: Record<string, unknown> = {},
+  ): Promise<string> {
+    const created = await call(TOOL_SCAFFOLD_APP_SHORT_NAME, {
+      name: `App ${crypto.randomUUID().slice(0, 8)}`,
+      ...args,
+    });
+    expect(created.isError).toBe(false);
+    return structured(created).id as string;
+  }
+
+  const editSections = (
+    appId: string,
+    baseVersion: number,
+    sections: Record<string, unknown>,
+  ) => call(TOOL_EDIT_APP_SHORT_NAME, { appId, baseVersion, sections });
+
+  const readSections = (appId: string, extra: Record<string, unknown> = {}) =>
+    call(TOOL_READ_APP_SHORT_NAME, { appId, format: "sections", ...extra });
+
+  test("edits the body section by value and reports it changed", async () => {
+    const appId = await scaffoldManaged();
+    const result = await editSections(appId, 1, {
+      body: "<h1>Counter</h1><output id='c'>0</output>",
+    });
+    expect(result.isError).toBe(false);
+    expect(structured(result).changedSections).toEqual(["body"]);
+    expect(structured(result).latestVersion).toBe(2);
+    const read = await readSections(appId);
+    expect(structured(read).sections.body).toBe(
+      "<h1>Counter</h1><output id='c'>0</output>",
+    );
+  });
+
+  test("applies a within-section javascript patch without resending it", async () => {
+    const appId = await scaffoldManaged();
+    await editSections(appId, 1, {
+      javascript: "await archestra.ready;\nconst limit = 30;",
+    });
+    const patched = await editSections(appId, 2, {
+      javascript: { edits: [{ old_str: "30", new_str: "60" }] },
+    });
+    expect(patched.isError).toBe(false);
+    const read = await readSections(appId);
+    expect(structured(read).sections.javascript).toBe(
+      "await archestra.ready;\nconst limit = 60;",
+    );
+  });
+
+  test("leaves omitted sections unchanged", async () => {
+    const appId = await scaffoldManaged();
+    const before = structured(await readSections(appId)).sections;
+    await editSections(appId, 1, { css: ".x { color: red; }" });
+    const after = structured(await readSections(appId)).sections;
+    expect(after.css).toBe(".x { color: red; }");
+    expect(after.body).toBe(before.body);
+    expect(after.title).toBe(before.title);
+    expect(after.javascript).toBe(before.javascript);
+  });
+
+  test("a net-no-op section edit creates no new version", async () => {
+    const appId = await scaffoldManaged();
+    const current = structured(await readSections(appId)).sections;
+    const result = await editSections(appId, 1, { body: current.body });
+    expect(result.isError).toBe(false);
+    expect(structured(result).changedSections).toEqual([]);
+    expect(structured(result).latestVersion).toBe(1);
+  });
+
+  test("inherits uiPermissions from the base version across a section edit", async () => {
+    const appId = await scaffoldManaged({ uiPermissions: { camera: {} } });
+    const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+    expect(seeded?.uiPermissions?.camera).toBeDefined();
+    const result = await editSections(appId, 1, { css: ".x{}" });
+    expect(result.isError).toBe(false);
+    const head = await AppVersionModel.findByAppAndVersion(
+      appId,
+      structured(result).latestVersion as number,
+    );
+    expect(head?.uiPermissions?.camera).toBeDefined();
+  });
+
+  test("a stale baseVersion is rejected without a new version", async () => {
+    const appId = await scaffoldManaged();
+    await editSections(appId, 1, { body: "<h1>one</h1>" });
+    const stale = await editSections(appId, 1, { body: "<h1>two</h1>" });
+    expect(stale.isError).toBe(true);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(2);
+  });
+
+  test("rejects a section that breaks out of its owned node", async () => {
+    const appId = await scaffoldManaged();
+    const result = await editSections(appId, 1, {
+      javascript: 'const s = "</script><script>evil()</script>";',
+    });
+    expect(result.isError).toBe(true);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+  });
+
+  test("rejects sections mode on a raw (non-managed) app", async () => {
+    const appId = await scaffoldManaged();
+    // Replace the managed document with a raw one; the app becomes raw.
+    const raw = await call(TOOL_EDIT_APP_SHORT_NAME, {
+      appId,
+      baseVersion: 1,
+      replacementHtml: "<!doctype html><html><body><p>raw</p></body></html>",
+    });
+    expect(raw.isError).toBe(false);
+    const result = await editSections(appId, 2, { body: "x" });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("no managed sections");
+  });
+
+  test("rejects passing sections together with edits", async () => {
+    const appId = await scaffoldManaged();
+    const result = await call(TOOL_EDIT_APP_SHORT_NAME, {
+      appId,
+      baseVersion: 1,
+      sections: { body: "x" },
+      edits: [{ old_str: "a", new_str: "b" }],
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("exactly one");
+  });
+
+  test("a replacementHtml that drops the owned nodes turns the app raw", async () => {
+    const appId = await scaffoldManaged();
+    const replaced = await call(TOOL_EDIT_APP_SHORT_NAME, {
+      appId,
+      baseVersion: 1,
+      replacementHtml: "<!doctype html><html><body><p>custom</p></body></html>",
+    });
+    expect(replaced.isError).toBe(false);
+    const read = await call(TOOL_READ_APP_SHORT_NAME, { appId });
+    expect(structured(read).editor).toBe("raw");
+  });
+
+  test("read_app format sections errors on a raw app", async () => {
+    const appId = await scaffoldManaged();
+    await call(TOOL_EDIT_APP_SHORT_NAME, {
+      appId,
+      baseVersion: 1,
+      replacementHtml: "<!doctype html><html><body><p>raw</p></body></html>",
+    });
+    const read = await readSections(appId);
+    expect(read.isError).toBe(true);
+  });
+
+  test("read_app windows a single section", async () => {
+    const appId = await scaffoldManaged();
+    await editSections(appId, 1, { javascript: "0123456789" });
+    const read = await readSections(appId, {
+      section: "javascript",
+      offset: 2,
+      limit: 3,
+    });
+    expect(read.isError).toBe(false);
+    expect(structured(read).sections.javascript).toBe("234");
+    expect(structured(read).window).toMatchObject({
+      section: "javascript",
+      totalChars: 10,
+      offset: 2,
+      hasMore: true,
+    });
+  });
+
+  test("read_app html mode reports the managed editor for a scaffolded app", async () => {
+    const appId = await scaffoldManaged();
+    const read = await call(TOOL_READ_APP_SHORT_NAME, { appId });
+    expect(structured(read).format).toBe("html");
+    expect(structured(read).editor).toBe("managed_sections");
+  });
+
+  test("scripted dummy-model sequence: scaffold, edit sections, validate, read sections", async () => {
+    const appId = await scaffoldManaged();
+    const edited = await editSections(appId, 1, {
+      body: '<h1>Counter</h1><button id="inc">Add</button><output id="c">0</output>',
+      javascript:
+        "await archestra.ready; let n = 0; document.querySelector('#inc').onclick = () => { document.querySelector('#c').textContent = String(++n); };",
+    });
+    expect(edited.isError).toBe(false);
+    const validated = await call(TOOL_VALIDATE_APP_SHORT_NAME, { appId });
+    expect(validated.isError).toBe(false);
+    expect(structured(validated).ok).toBe(true);
+    const read = await readSections(appId);
+    expect(structured(read).sections.body).toContain("Counter");
   });
 });
 
@@ -2913,16 +3127,16 @@ describe("scaffoldPartialToolFailureResult", () => {
     makeApp,
   }) => {
     const app = await makeApp({ name: "Partial App" });
-    const result = scaffoldPartialToolFailureResult(
-      app,
-      "<html><body>seed</body></html>",
-    );
+    const result = scaffoldPartialToolFailureResult(app);
     // The app was created, so the model must NOT read this as a failure: it is a
     // non-error result carrying the app id and a partial status so it can repair
     // the tools with set_app_tools rather than assume nothing was created.
     expect(result.isError).toBe(false);
     expect(structured(result).id).toBe(app.id);
     expect(structured(result).status).toBe("partial");
+    // It is a managed-sections app but the seeded HTML is not echoed.
+    expect(structured(result).editor).toBe("managed_sections");
+    expect((result.content[0] as { text: string }).text).not.toContain("<html");
   });
 });
 
@@ -2966,7 +3180,9 @@ describe("pre-load guard precedence", () => {
     );
     expect(res.isError).toBe(true);
     const text = (res.content[0] as any).text as string;
-    expect(text).toContain("either edits or replacementHtml");
+    expect(text).toContain(
+      "exactly one of sections, edits, or replacementHtml",
+    );
     expect(text).not.toContain("No app found");
   });
 

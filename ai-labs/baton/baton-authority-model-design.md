@@ -300,20 +300,69 @@ Built as slices S5–S8 on this branch; 126 lib tests; external (Codex) + intern
   (the Build-1 item; Accept→Acknowledge makes it more reachable but S6 did not regress
   it) and the enumeration-perf scaling above.
 
-### Build 3 — Endorse as relabel + robustness visibility
-- [ ] Move trust/audience endorsement out of `TransientWaiver` into the relabel
-  family (OQ1); mint `X'` via the value-admission path (label raised via
-  `raised_to`/`admitting`, not `combine`); substitute + fail-closed recheck;
-  `Provenance::Endorsed { source, authority, delta }` + audit attribution.
-- [ ] Multi-source relabel enumeration (endorse >1 leaf for an aggregate breach).
-- [ ] D3: populate the ruling context with provenance/control ancestry; demo an
-  authority refusing to endorse a value with suspicious ancestry.
-- [ ] Refine crate `CLAUDE.md`: transient waivers change no stored state; a
-  fiat-relabel mints a value like a transform.
-- [ ] **Full-composition test.** One flow needing Sanitize + Constrain (cheap
-  reductions) then Endorse + Accept (authority residual, across both axes),
-  proving the residual is recomputed after each reduction and the authority signs
-  off only on the irreducible remainder.
+### Build 3 — Endorse as relabel + robustness visibility (D3)
+Converted to §4-style slices S9–S12 on this branch. Ratified encoding choices:
+**OQ1** resolves to a *sibling* `TransitionKind::EndorseValue { source, delta }`
+beside the shipped `TransformValue` (merging both into one `Relabel { via }` is a
+behavior-preserving churn across the plan/apply/enumeration/tests for no semantic
+gain; shared minting lives in `turn.rs`/`value.rs` regardless). **`ExitKind`
+ordering:** Endorse is the top/max variant (`Sanitize < Constrain < Accept <
+WaiverOrAcknowledge < Endorse`) — taint erasure is the priciest elevation, so a
+composite route's decisive category is its Endorse step. **Canonical remedy
+order** (enumeration, tests, docs alike): Sanitize → Constrain (reductions) →
+Endorse (confidentiality) → Accept (effect) → residual Waiver/Acknowledge.
+**M1 (maintainer-ratified):** Endorse durably relabels *argument-tree* values
+only; a confidentiality breach carried by a **control dependency** clears via
+`control_release`, not by raising trust/audience — the intended tightening of
+§3's arg-vs-control attribution split (a control-borne breach now needs
+`may_release_control`, not endorse competence).
+
+- [ ] **S9 — Endorse relabel family (additive).** `EndorseDelta { trust, audience }`
+  + `covered_by(&AuthorityMandate)`; `ProposedGrant::Endorse { source, delta }`;
+  `Provenance::Endorsed { source, authority, delta }`; `ValueStore::admit_endorsed`
+  + `Trajectory::endorse_value` (no-op body, label raised via `raised_to`/`admitting`
+  never `combine`, `substitute_argument`, audit, advance); `AuditEvent::EndorseApplied`;
+  `TransitionKind::EndorseValue` + `ExitKind::Endorse`; `apply_step`/`apply_approval`/
+  `endorse_permit` arms with the pre-mutation fail-closed recheck; external Endorse
+  snapshot site. `TransientWaiver::{trust,audience}` stay (removed in S10) so the
+  slice is additive and the 126 tests stay green. *Invariant:* new value carries
+  `Provenance::Endorsed`, source label unchanged, label only rises. *Validation:*
+  build + clippy + unit tests (durable relabel + provenance + audit + downhill
+  recheck; uncovered delta → no route; external round-trip). Every exhaustive match
+  the new variants touch gains its arm this slice (Rust forces it).
+- [ ] **S10 — Relocate endorsement into enumeration; retire the transient lift.**
+  `enumerate_plans` peels a sink-breach residual into `EndorseValue` step(s) — one
+  per *arg leaf* failing the sink's trust/audience requirement in the current
+  (post-reduction) `SimFlow`, each raising exactly that leaf (multi-source: N failing
+  leaves → N steps); residual recomputed after. Remove `trust`/`audience` from
+  `TransientWaiver`, `SimFlow::violations`' lift, `needed_delta`, `grant_for`;
+  remove `WaiverKind::{Trust, Audience}`. **Control-release preservation (B1):**
+  `minimal_control_release` measures a release's effect on the residual `Vec<Violation>`
+  (which retains `TrustBelow`/`AudienceExceeds`), not the waiver delta, so a
+  control-borne breach still yields release. *Invariant:* endorsement's sole path is
+  the durable relabel; a breach both arg- and control-borne composes (release +
+  endorse, residual recomputed). *Validation:* migrated endorse tests drive the
+  Endorse route; a two-leaf aggregate audience breach enumerates two `EndorseValue`
+  steps and clears only after both; control-borne breach still yields control release.
+- [ ] **S11 — D3: transitive ancestry in the ruling context.** A visited-set BFS
+  provenance closure over `ValueStore`, done *inside* `AncestrySnapshot::of` so all
+  three grant sites (Waive/Accept/Endorse) carry the closure; `TrajectoryView::ancestry`
+  accessor for inline authorities; drop the "direct scope only / D3 later" caveat.
+  Demo + test an inline endorse authority that abstains when an ancestor is
+  `SUSPICIOUS` — the refusal test uses a non-suspicious source whose suspicious
+  dependency is ≥2 provenance edges back (exercises the transitive walk). *Invariant:*
+  exposure only, no hard guard (D3); the walk terminates (values form a DAG — provenance
+  names only lower-id admitted values).
+- [ ] **S12 — Full-composition test + crate `CLAUDE.md`.** One flow: a registered
+  sanitizer shrinks (not erases) the data taint, a registered constraint shrinks (not
+  erases) the effects, leaving a residual sink breach → Endorse and residual surface
+  growth → Accept. Assert all four steps ran in canonical order on the *reduced*
+  residual (authority signs off only on the irreducible remainder); the scenario makes
+  every un-reduced route nonviable so `walk_to_permit`'s first-plan choice must run all
+  four. Refine `CLAUDE.md`: transient waivers change no stored state; a fiat-relabel
+  (Endorse) mints a value like a transform (durable, provenance-attributed).
+- **Deferred to the follow-up ledger (unchanged):** approval/acknowledgment re-entry
+  idempotence and the enumeration O(leaves²) perf.
 
 ## Validation commands (every pass)
 ```

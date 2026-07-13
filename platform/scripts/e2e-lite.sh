@@ -4,9 +4,11 @@
 # MCP-server installs work through the embedded Kind cluster the quickstart
 # entrypoint provisions via the mounted docker socket.
 #
-# Covers the chromium / api / identity-providers / quickstart Playwright
-# projects. The api-k8s and vault-k8s projects need the full Kind+Helm
-# environment (see .github/workflows/platform-e2e-tests.yml).
+# Covers the chromium / api / identity-providers Playwright projects. Not
+# covered: api-k8s and vault-k8s (need the full Kind+Helm environment) and
+# the @quickstart onboarding specs (need a key-less pristine instance; CI
+# runs them in the separate quickstart job). See
+# .github/workflows/platform-e2e-tests.yml.
 #
 # Usage:
 #   scripts/e2e-lite.sh up                     start the stack, wait until healthy
@@ -158,6 +160,13 @@ cmd_up() {
   wait_for frontend "http://127.0.0.1:3000/" 30
   # Keycloak last: its ~40-60s realm import overlaps the platform boot.
   wait_for Keycloak "http://127.0.0.1:30081/realms/archestra/.well-known/openid-configuration" 60
+
+  # Pre-warm the MCP server base image inside the embedded Kind node so the
+  # first MCP-install spec doesn't pay the cold multi-hundred-MB pull (the
+  # kubelet coalesces with an in-flight pull). Backgrounded: it overlaps the
+  # test runner's own startup.
+  docker exec "${EMBEDDED_KIND_CONTAINER}" crictl pull "${MCP_SERVER_BASE_IMAGE}" > /dev/null 2>&1 &
+
   echo "Lite e2e stack is up: frontend http://localhost:3000, backend http://localhost:9000"
 }
 
@@ -170,9 +179,9 @@ cmd_test() {
     pnpm exec playwright test "$@"
     return
   fi
-  # Same sequence as the CI lite job: the @quickstart onboarding specs first,
-  # against an instance no other test has touched yet, then the bulk.
-  pnpm exec playwright test --project=quickstart --grep @quickstart
+  # Same projects as the CI lite job. The @quickstart onboarding specs are
+  # excluded: they need a key-less pristine instance (CI runs them in the
+  # separate quickstart job), while this environment seeds provider keys.
   pnpm exec playwright test \
     --project=chromium --project=api --project=identity-providers \
     --grep-invert @quickstart

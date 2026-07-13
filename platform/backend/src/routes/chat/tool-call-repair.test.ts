@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { repairHarmonyToolName } from "./tool-call-repair";
+import {
+  repairHarmonyToolName,
+  repairMalformedToolInput,
+} from "./tool-call-repair";
 
 const AVAILABLE = [
   "archestra__run_command",
@@ -91,5 +94,51 @@ describe("repairHarmonyToolName", () => {
         AVAILABLE,
       ),
     ).toBe("archestra__run_command");
+  });
+});
+
+describe("repairMalformedToolInput", () => {
+  test("returns valid JSON unchanged", () => {
+    const input = '{"path":"/a","count":2}';
+    expect(repairMalformedToolInput(input)).toBe(input);
+  });
+
+  test("drops a stray trailing brace on a new line", () => {
+    const repaired = repairMalformedToolInput('{"path":"/a"}\n}');
+    expect(repaired).toBe('{"path":"/a"}');
+    expect(JSON.parse(repaired as string)).toEqual({ path: "/a" });
+  });
+
+  test("drops trailing prose after a complete object", () => {
+    expect(repairMalformedToolInput('{"a":1} here you go!')).toBe('{"a":1}');
+  });
+
+  test("recovers an object whose string values contain braces and escaped quotes, then trailing garbage", () => {
+    // Mirrors the real failure: a large text field full of `}` and `\"`, with a
+    // duplicated closing brace appended by the model.
+    const intended = {
+      path: "/home/sandbox/app.html",
+      source: { type: "text", text: 'body { color: red; } and a "quote"' },
+    };
+    const malformed = `${JSON.stringify(intended)}\n}`;
+    const repaired = repairMalformedToolInput(malformed);
+    expect(repaired).not.toBeNull();
+    expect(JSON.parse(repaired as string)).toEqual(intended);
+  });
+
+  test("recovers a top-level array with trailing garbage", () => {
+    expect(repairMalformedToolInput("[1,2,3]]")).toBe("[1,2,3]");
+  });
+
+  test("returns null for an unterminated string (not safely recoverable)", () => {
+    expect(repairMalformedToolInput('{"a":"no close')).toBeNull();
+  });
+
+  test("returns null for a missing closing brace", () => {
+    expect(repairMalformedToolInput('{"a":1')).toBeNull();
+  });
+
+  test("returns null when there is no JSON value at all", () => {
+    expect(repairMalformedToolInput("just some text")).toBeNull();
   });
 });

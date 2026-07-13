@@ -1309,6 +1309,15 @@ impl PolicyEngine {
                 }
             }
         }
+        // Bound the candidate lists so the enumeration cartesian — and thus the
+        // work per blocked flow — stays bounded even for a request with many
+        // argument leaves (an unbounded runtime input). Capping the lists (not
+        // the plan pool) keeps at least one representative of each remedy
+        // category, so `select_fair` still sees every applicable ExitKind.
+        if transforms.len() > MAX_PLANS {
+            debug!(dropped = transforms.len() - MAX_PLANS, "bounding transform candidates");
+            transforms.truncate(MAX_PLANS);
+        }
 
         // Candidate constrain steps: registered action transitions from this
         // tool whose structural narrowing holds and whose target tool has a
@@ -1317,7 +1326,7 @@ impl PolicyEngine {
         // declared effects agree with the transition's (the narrowing baton
         // validates must be what the target actually does) and whose argument
         // schema does not widen the resolved recipient set.
-        let constrains: Vec<&ActionTransition> = self
+        let mut constrains: Vec<&ActionTransition> = self
             .action_transitions
             .iter()
             .filter(|t| {
@@ -1331,6 +1340,10 @@ impl PolicyEngine {
                     })
             })
             .collect();
+        if constrains.len() > MAX_PLANS {
+            debug!(dropped = constrains.len() - MAX_PLANS, "bounding constrain candidates");
+            constrains.truncate(MAX_PLANS);
+        }
 
         let mut plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
         let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
@@ -1338,10 +1351,11 @@ impl PolicyEngine {
         let constrain_options: Vec<Option<&&ActionTransition>> =
             std::iter::once(None).chain(constrains.iter().map(Some)).collect();
 
-        // Generate the full candidate cartesian (bounded by the registries, an
-        // operator trust decision fixed at construction) so `select_fair` sees
-        // every applicable category before trimming to MAX_PLANS — a mid-loop cap
-        // could starve a category the fairness pass never gets to see.
+        // Generate the full cartesian of the (bounded) candidate lists so
+        // `select_fair` sees every applicable category before trimming to
+        // MAX_PLANS — a mid-loop plan cap could starve a category the fairness
+        // pass never gets to see, while the candidate-list bounds keep the work
+        // finite regardless of request size.
         for transform in &transform_options {
             for constrain in &constrain_options {
                 let mut sim = base.clone();
@@ -1503,11 +1517,28 @@ impl PolicyEngine {
         if &full == plain {
             return None;
         }
-        for id in &ids {
-            let mut candidate = minimal.clone();
-            candidate.remove(id);
-            if delta_releasing(&candidate) == full {
-                minimal = candidate;
+        // Iterate removal passes to a fixpoint. A single pass is not enough: a
+        // dep can become redundant only after a *later* dep is dropped (one
+        // control masking another's contribution to the fold), and a single pass
+        // never revisits the earlier decision. Repeat until a whole pass removes
+        // nothing; at that fixpoint no single dep is removable, which by
+        // monotonicity (releasing more can only remove taint) means no proper
+        // subset reaches `full` — the set is inclusion-minimal (D4).
+        loop {
+            let mut progressed = false;
+            for id in &ids {
+                if !minimal.contains(id) {
+                    continue;
+                }
+                let mut candidate = minimal.clone();
+                candidate.remove(id);
+                if delta_releasing(&candidate) == full {
+                    minimal = candidate;
+                    progressed = true;
+                }
+            }
+            if !progressed {
+                break;
             }
         }
         Some(TransientWaiver {
@@ -1953,6 +1984,14 @@ mod tests {
         let token = walk_to_permit(&engine, &mut trajectory, request);
         assert!(trajectory.pending_action().is_some());
         assert_eq!(trajectory.state().past_effects(), &Effects::none());
+        // The permit came through acquisition, not a bypassed growth check.
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::AcceptApplied { .. }))
+        );
 
         let result = dispatch(&mut trajectory, token, "sent").unwrap();
         assert!(trajectory.pending_action().is_none());
@@ -2872,6 +2911,80 @@ mod tests {
             })
         });
         assert!(!over_releases, "the unrelated control must never be released");
+    }
+
+    /// Masking least-privilege: a Suspicious-trust control masks an Unknown-trust
+    /// one in the fold (their combine is Suspicious, which satisfies the sink),
+    /// so once the Suspicious control is left folded the Unknown one is redundant.
+    /// Only the audience control actually carries a breach, so the release set is
+    /// exactly {audience control}. A single greedy pass would over-release the
+    /// masked Unknown control (it is dropped only after the Suspicious one, which
+    /// a single pass never revisits); the fixpoint reaches {audience} alone.
+    #[test]
+    fn control_release_fixpoint_avoids_masked_over_release() {
+        let sink = ToolContract {
+            name: ToolName::new("email.send"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Suspicious),
+                audience: crate::contract::AudienceRule::RecipientsWithinContext,
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
+        };
+        let mut engine = engine_with([sink]);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "body");
+        // The audience-restricting control is the sole carrier; the other two
+        // touch only trust (non-restricting audience), and Suspicious masks
+        // Unknown in the fold.
+        let restrict = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "restrict");
+        let unknown = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::UNKNOWN,
+            },
+            OpaqueValue::new("unk"),
+        );
+        let suspicious = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: Trust::SUSPICIOUS,
+            },
+            OpaqueValue::new("susp"),
+        );
+        let to_bob = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to_bob)),
+                (ArgumentName::new("body"), ArgumentTree::Value(body)),
+            ])),
+            BTreeSet::from([restrict, unknown, suspicious]),
+        );
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected a remediable block");
+        };
+        let released_exactly_restrict = plans.iter().any(|plan| {
+            matches!(
+                &plan.steps.first().kind,
+                TransitionKind::ApplyWaiver {
+                    delta: crate::transition::TransientWaiver { control_release, .. },
+                } if *control_release == BTreeSet::from([restrict])
+            )
+        });
+        assert!(
+            released_exactly_restrict,
+            "release only the audience control, not the masked trust controls"
+        );
     }
 
     /// A registered tool-identity mapping to a weaker-contract tool yields a

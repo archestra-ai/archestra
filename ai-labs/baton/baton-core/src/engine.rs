@@ -3733,6 +3733,126 @@ mod tests {
         );
     }
 
+    // ---- S8: Constrain <-> Accept composition ----
+
+    /// A flow that BOTH breaches a sink (suspicious payload at a Trusted-
+    /// requiring tool) AND grows the surface ({Egress, Mutation}) composes a
+    /// Constrain (fixing the trust breach and dropping Mutation) with an Accept
+    /// of the *residual* growth. Accept is computed on the reduced effects, so
+    /// it acquires only {Egress}; a full constrain to no effects leaves no
+    /// Accept step at all.
+    #[test]
+    fn constrain_then_accept_covers_only_the_residual_growth() {
+        let export = ToolContract {
+            name: ToolName::new("db.export"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress, Effect::Mutation]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let readonly = ToolContract {
+            name: ToolName::new("db.export.readonly"),
+            requires: Requirements::default(),
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let noop = ToolContract {
+            name: ToolName::new("db.export.noop"),
+            requires: Requirements::default(),
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let mut engine = engine_with([export, readonly, noop]);
+        engine
+            .register_action_transition(ActionTransition {
+                id: tref("readonly"),
+                from_tool: ToolName::new("db.export"),
+                to_tool: ToolName::new("db.export.readonly"),
+                effects: Effects::declared([Effect::Egress]),
+            })
+            .unwrap();
+        engine
+            .register_action_transition(ActionTransition {
+                id: tref("noop"),
+                from_tool: ToolName::new("db.export"),
+                to_tool: ToolName::new("db.export.noop"),
+                effects: Effects::none(),
+            })
+            .unwrap();
+        // Only an effect-acquirer is registered — no trust authority — so the
+        // trust breach can be cleared *only* by a constrain, never a waiver.
+        engine.register_authority(inline_acquirer()).unwrap();
+
+        let mut trajectory = Trajectory::new();
+        let payload = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "rows");
+        let request = ToolRequest::new(
+            ToolName::new("db.export"),
+            ArgumentTree::Value(payload),
+            BTreeSet::new(),
+        );
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request.clone())
+        else {
+            panic!("expected a remediable block");
+        };
+
+        // The readonly route constrains first, then accepts *only* {Egress}.
+        let composite = plans
+            .iter()
+            .find(|p| {
+                matches!(
+                    &p.steps.first().kind,
+                    TransitionKind::ConstrainAction { transition } if *transition == tref("readonly")
+                )
+            })
+            .expect("a constrain-to-readonly route");
+        assert_eq!(composite.exit_kind(), ExitKind::Accept);
+        assert_eq!(composite.steps.len(), 2);
+        assert!(matches!(
+            &composite.steps.get(1).unwrap().kind,
+            TransitionKind::AcceptGrowth { effects } if *effects == Effects::declared([Effect::Egress])
+        ));
+
+        // The full constrain to no effects leaves nothing to accept.
+        let full = plans
+            .iter()
+            .find(|p| {
+                matches!(
+                    &p.steps.first().kind,
+                    TransitionKind::ConstrainAction { transition } if *transition == tref("noop")
+                )
+            })
+            .expect("a constrain-to-noop route");
+        assert_eq!(full.exit_kind(), ExitKind::Constrain);
+        assert_eq!(full.steps.len(), 1);
+
+        // Walking the composite commits exactly the reduced effect.
+        let mut decision = engine.evaluate(&mut trajectory, request);
+        let token = loop {
+            match decision {
+                Decision::Permitted(token) => break token,
+                Decision::Blocked(Blocked::Remediable { plans, .. }) => {
+                    let plan = plans
+                        .iter()
+                        .find(|p| !matches!(&p.steps.first().kind, TransitionKind::ConstrainAction { transition } if *transition == tref("noop")))
+                        .expect("the readonly/accept continuation");
+                    let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
+                    decision = match engine.apply_step(&mut trajectory, capability).unwrap() {
+                        StepOutcome::Advanced(decision) => decision,
+                        other => panic!("unexpected step outcome: {other:?}"),
+                    };
+                }
+                other => panic!("expected to reach a permit, got {other:?}"),
+            }
+        };
+        dispatch(&mut trajectory, token, "exported").unwrap();
+        assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    }
+
     /// A pool already within the cap is returned unchanged (order preserved).
     #[test]
     fn cap_fairness_is_a_noop_within_the_cap() {

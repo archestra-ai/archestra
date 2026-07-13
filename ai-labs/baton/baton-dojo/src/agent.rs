@@ -181,6 +181,15 @@ impl<'m> Agent<'m> {
                 })
                 .collect();
 
+            // A tool call with no id cannot be correlated to its result; abort
+            // before any side effect rather than execute an uncorrelatable call
+            // (rig does not validate this).
+            if calls.iter().any(|(id, _, _)| id.trim().is_empty()) {
+                return Err(DojoError::Malformed {
+                    detail: "a tool call has no id".to_owned(),
+                });
+            }
+
             // Replay the assistant turn verbatim next round (rig round-trips its
             // reasoning blocks through this).
             messages.push(Message::from(response.choice));

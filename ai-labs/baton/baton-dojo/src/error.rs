@@ -17,6 +17,11 @@ pub enum DojoError {
     #[error("completion failed: {0}")]
     Completion(#[from] rig_core::completion::CompletionError),
 
+    /// The provider returned a response we cannot act on (e.g. a tool call with no
+    /// id, whose result could not be correlated back to the call).
+    #[error("malformed provider response: {detail}")]
+    Malformed { detail: String },
+
     /// Two tools were declared with the same name.
     #[error("duplicate tool name: {0}")]
     DuplicateTool(String),

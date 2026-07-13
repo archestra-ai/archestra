@@ -196,8 +196,9 @@ async fn prompt_human(tool: &str, recipients: &BTreeSet<UserId>, reason: &str) -
         recipients.join(", "),
     );
     let mut stdout = tokio::io::stdout();
-    let _ = stdout.write_all(card.as_bytes()).await;
-    let _ = stdout.flush().await;
+    if stdout.write_all(card.as_bytes()).await.is_err() || stdout.flush().await.is_err() {
+        return Verdict::Denied;
+    }
 
     let mut line = String::new();
     let mut reader = BufReader::new(tokio::io::stdin());

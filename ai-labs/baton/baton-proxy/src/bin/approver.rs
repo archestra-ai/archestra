@@ -179,9 +179,12 @@ async fn prompt_human(tool: &ToolName, recipients: &BTreeSet<UserId>, reason: &s
          approve? [y/N] ",
         recipients.join(", "),
     );
+    // Fail closed if we cannot actually show the request: an approval must never
+    // stand in for a human who never saw it.
     let mut stdout = tokio::io::stdout();
-    let _ = stdout.write_all(card.as_bytes()).await;
-    let _ = stdout.flush().await;
+    if stdout.write_all(card.as_bytes()).await.is_err() || stdout.flush().await.is_err() {
+        return Verdict::Denied;
+    }
 
     let mut line = String::new();
     let mut reader = BufReader::new(tokio::io::stdin());

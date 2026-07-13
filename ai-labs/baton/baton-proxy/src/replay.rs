@@ -161,18 +161,20 @@ impl<'a> Session<'a> {
     fn classify_block(&self, tool: ToolName, reason: &BlockReason, violations: &[Violation]) -> CallOutcome {
         let why = describe(violations);
         match reason {
-            // No approval record covered the derived grant. If that grant is an
-            // audience declassification, it is exactly what a human can approve.
-            BlockReason::NoCompetentAuthority => match self.observed.borrow().as_ref().and_then(|g| g.audience.clone())
-            {
-                Some(recipients) if !recipients.is_empty() => CallOutcome::NeedsApproval {
+            // No approval record covered the derived grant. A human can only
+            // resolve a pure *audience* declassification: this prototype records
+            // approval as admitted recipients, so a grant that also needs trust,
+            // effects, or confirmation can never be covered — routing it to a
+            // human would just loop. Offer approval only for audience-only grants.
+            BlockReason::NoCompetentAuthority => match self.observed.borrow().as_ref() {
+                Some(grant) if is_audience_only(grant) => CallOutcome::NeedsApproval {
                     tool,
-                    recipients,
+                    recipients: grant.audience.clone().unwrap_or_default(),
                     reason: why,
                 },
                 _ => CallOutcome::Terminal {
                     reason: format!(
-                        "`{tool}` was blocked and this prototype can only seek approval for audience flows: {why}"
+                        "`{tool}` was blocked and this prototype can only seek approval for audience-only flows: {why}"
                     ),
                 },
             },
@@ -208,10 +210,18 @@ impl Authority for ApprovalAuthority {
         // Record the engine-derived grant even when we do not rule, so the proxy
         // can tell the model what to request approval for.
         *self.observed.borrow_mut() = Some(needed.clone());
-        // The empty grant means the escalation is acknowledge-only (e.g. an
-        // unregistered tool): nothing a human grant can lift. Do not rule.
+        // The empty grant means the escalation is acknowledge-only (a taint entry
+        // or unprovable effects — baton's own model has an authority *sign these
+        // off*, not block them). There is nothing for a human to grant, so
+        // acknowledge it automatically; otherwise a degrading-but-permitted flow
+        // (e.g. any egress under `taint_policy=escalate`) would hard-block.
         if *needed == Grant::empty() {
-            return None;
+            return Some((
+                AuthorityName::new("baton-proxy-ack"),
+                Ruling::Approve {
+                    reason: "acknowledged (no human-grantable dimension)".to_string(),
+                },
+            ));
         }
         let records = self.records.borrow();
         let record = records
@@ -229,6 +239,16 @@ impl Authority for ApprovalAuthority {
         };
         Some((name, ruling))
     }
+}
+
+/// Whether a grant asks for an audience declassification and nothing else — the
+/// only shape this prototype can route to a human (approval is recorded as
+/// admitted recipients, so trust/effects/confirmation needs are unresolvable).
+fn is_audience_only(grant: &Grant) -> bool {
+    matches!(&grant.audience, Some(a) if !a.is_empty())
+        && grant.trust.is_none()
+        && grant.effects.is_none()
+        && !grant.confirms
 }
 
 struct MalformedArgs;

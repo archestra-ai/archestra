@@ -7,11 +7,17 @@
 //! which recipients the human saw and admitted (or refused). baton polices
 //! *audience*, so those recipients — not the message body — are what the grant
 //! covers.
+//!
+//! The wire form is a verdict word followed by a JSON object —
+//! `GRANTED {"tool":"send_email","recipients":["a@x.com"]}` — so a recipient or
+//! tool string can never inject a delimiter and shift which field is read (a
+//! space/`=`-delimited form could be laundered by a crafted recipient).
 
 use std::collections::BTreeSet;
 use std::fmt;
 
 use baton_core::{Grant, ToolName, UserId};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
@@ -26,6 +32,14 @@ pub struct ApprovalRecord {
     pub tool: ToolName,
     /// The recipients the human was shown and ruled on.
     pub recipients: BTreeSet<UserId>,
+}
+
+/// The JSON payload carried after the verdict word. Structured so recipient and
+/// tool strings stay quoted values — no delimiter injection.
+#[derive(Serialize, Deserialize)]
+struct Payload {
+    tool: String,
+    recipients: Vec<String>,
 }
 
 impl ApprovalRecord {
@@ -46,32 +60,24 @@ impl ApprovalRecord {
         }
     }
 
-    /// Parse the machine-readable first line of an approval tool result. The
-    /// grammar is `GRANTED tool=<tool> recipients=<id,id,...>` (or `DENIED`);
-    /// any following lines are human prose and ignored. Returns `None` for
-    /// anything that does not match — an unparseable result is treated as no
-    /// approval at all (fail closed).
+    /// Parse the machine-readable first line of an approval tool result:
+    /// `GRANTED <json>` / `DENIED <json>`, where `<json>` is
+    /// `{"tool":…,"recipients":[…]}`. Following lines are human prose and
+    /// ignored. Returns `None` for anything that does not match — an unparseable
+    /// result is treated as no approval at all (fail closed).
     pub fn parse(content: &str) -> Option<Self> {
         let line = content.lines().next()?.trim();
-        let mut tokens = line.split_whitespace();
-        let verdict = match tokens.next()? {
+        let (word, json) = line.split_once(' ')?;
+        let verdict = match word {
             "GRANTED" => Verdict::Granted,
             "DENIED" => Verdict::Denied,
             _ => return None,
         };
-        let mut tool = None;
-        let mut recipients = None;
-        for token in tokens {
-            if let Some(v) = token.strip_prefix("tool=") {
-                tool = Some(ToolName::new(v));
-            } else if let Some(v) = token.strip_prefix("recipients=") {
-                recipients = Some(parse_recipients(v));
-            }
-        }
+        let payload: Payload = serde_json::from_str(json).ok()?;
         Some(Self {
             verdict,
-            tool: tool?,
-            recipients: recipients?,
+            tool: ToolName::new(payload.tool),
+            recipients: payload.recipients.into_iter().map(UserId::new).collect(),
         })
     }
 }
@@ -87,24 +93,12 @@ impl fmt::Display for ApprovalRecord {
                 "Denied. Do not retry this call; choose another approach or stop.",
             ),
         };
-        writeln!(
-            f,
-            "{word} tool={} recipients={}",
-            self.tool,
-            render_recipients(&self.recipients)
-        )?;
+        let payload = Payload {
+            tool: self.tool.as_str().to_string(),
+            recipients: self.recipients.iter().map(|r| r.as_str().to_string()).collect(),
+        };
+        let json = serde_json::to_string(&payload).map_err(|_| fmt::Error)?;
+        writeln!(f, "{word} {json}")?;
         write!(f, "{prose}")
     }
-}
-
-fn render_recipients(recipients: &BTreeSet<UserId>) -> String {
-    recipients.iter().map(UserId::as_str).collect::<Vec<_>>().join(",")
-}
-
-fn parse_recipients(raw: &str) -> BTreeSet<UserId> {
-    raw.split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(UserId::new)
-        .collect()
 }

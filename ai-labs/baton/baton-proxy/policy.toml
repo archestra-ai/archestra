@@ -7,7 +7,10 @@
 upstream_base_url = "https://openrouter.ai/api/v1"
 approval_tool = "baton__request_approval"
 unknown_policy = "escalate"
-taint_policy = "escalate"
+# `allow` keeps the demo focused on the audience decision. `escalate` also works
+# (the proxy auto-acknowledges the resulting taint entries), it just adds an
+# acknowledgment to every degrading flow.
+taint_policy = "allow"
 
 [user]
 id = "alice@archestra.ai"

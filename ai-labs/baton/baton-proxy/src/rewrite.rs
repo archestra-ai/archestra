@@ -21,6 +21,20 @@ pub fn rewrite_response(session: &Session, response: &mut ChatResponse) -> usize
     let approval_tool = session.approval_tool().as_str();
     let mut rewritten = 0;
     for choice in &mut response.choices {
+        // The deprecated `function_call` form is not modeled and thus not
+        // evaluated; rather than let it bypass the policy, block it fail-closed.
+        if choice.message.extra.contains_key("function_call") {
+            replace_with_text(
+                &mut choice.message,
+                "This response used the deprecated `function_call` form, which baton-proxy cannot inspect. \
+                 Use `tools`/`tool_calls` instead."
+                    .to_string(),
+            );
+            choice.finish_reason = Some("stop".to_string());
+            rewritten += 1;
+            continue;
+        }
+
         let Some(calls) = choice.message.tool_calls.clone() else {
             continue;
         };

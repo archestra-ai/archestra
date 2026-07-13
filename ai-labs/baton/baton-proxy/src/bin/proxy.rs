@@ -114,13 +114,21 @@ async fn handler(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -
         }
     };
     let out_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    // Non-2xx or a body that is not a chat completion: pass through verbatim.
+    // A non-2xx upstream error is passed through verbatim — there is no tool call
+    // to gate.
     if !status.is_success() {
         return json_bytes(out_status, bytes.to_vec());
     }
+    // A successful response the proxy cannot parse cannot be inspected — fail
+    // closed rather than pass through possibly-unchecked tool calls.
     let mut response: ChatResponse = match serde_json::from_slice(&bytes) {
         Ok(response) => response,
-        Err(_) => return json_bytes(out_status, bytes.to_vec()),
+        Err(e) => {
+            return error(
+                StatusCode::BAD_GATEWAY,
+                format!("upstream returned a response baton-proxy could not inspect: {e}"),
+            );
+        }
     };
 
     let session = match Session::build(&app.policy, &view.messages) {

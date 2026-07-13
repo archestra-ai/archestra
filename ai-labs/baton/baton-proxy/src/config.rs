@@ -24,6 +24,10 @@ pub enum ConfigError {
     ApprovalToolCollision(String),
     #[error("duplicate contract for tool `{0}`")]
     DuplicateTool(String),
+    #[error(
+        "tool `{0}` requires recipients within context but declares no recipients_args, so every call would be blocked"
+    )]
+    MissingRecipientsArgs(String),
 }
 
 /// The runtime policy the proxy evaluates against. Built once at startup and
@@ -97,6 +101,9 @@ impl RawConfig {
             }
             if !seen.insert(spec.name.clone()) {
                 return Err(ConfigError::DuplicateTool(spec.name));
+            }
+            if spec.requires.guards_recipients() && spec.recipients_args.is_empty() {
+                return Err(ConfigError::MissingRecipientsArgs(spec.name));
             }
             let name = ToolName::new(&spec.name);
             if !spec.recipients_args.is_empty() {
@@ -247,6 +254,12 @@ struct RequiresSpec {
 }
 
 impl RequiresSpec {
+    /// Whether this tool guards its recipients against the context audience — the
+    /// rule that needs `recipients_args` to know who a call exposes to.
+    fn guards_recipients(&self) -> bool {
+        matches!(self.audience, AudienceRuleSpec::RecipientsWithinContext)
+    }
+
     fn build(self) -> Result<Requirements, ConfigError> {
         Ok(Requirements {
             trust: self.trust.map(KnownTrustSpec::into_known_trust),

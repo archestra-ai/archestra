@@ -115,8 +115,27 @@ Deliberate limitations, documented rather than hidden:
 - **Regenerated retries.** Since the blocked call is replaced by the approval
   call, the model reconstructs the original send from context after `GRANTED`
   rather than replaying exact bytes.
+- **Needs the full trajectory.** The proxy re-derives everything from the
+  request `messages` every call, so **context compaction / windowing breaks it**:
+  if a harness trims the tool result that established an audience (or keeps only
+  the model's own summary of it — assistant text carries no label), the replayed
+  context widens and a later send may be permitted that should not be. Give the
+  proxy the untruncated conversation. A poisoned or now-inconsistent history
+  fails closed (409) on every request until corrected.
+- **Same-turn parallel calls.** Calls emitted together in one response are judged
+  against the pre-turn context, so a read and a dependent out-of-audience send in
+  the *same* assistant turn are not serialized (the cross-turn form is caught).
+  Prefer sequential tool calls.
+- **Only audience flows are approvable.** A block that also needs trust, effects,
+  or confirmation is terminal, not routed to a human (approval is recorded as
+  admitted recipients only). Acknowledge-only taint / unknown-effects escalations
+  are auto-acknowledged, matching baton-core's sign-off model.
+- **Only annotated tools are gated.** A tool with no contract passes through
+  regardless of `unknown_policy` (which governs unknown *dimensions* within
+  annotated flows, not unannotated tools).
 - No TLS, no persistence, no multi-approver queue, no execute-once across
-  conversation forks.
+  conversation forks. Upstream response headers (rate-limit, request-id) are not
+  forwarded back.
 
 ## Develop
 

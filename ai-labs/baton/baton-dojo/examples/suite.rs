@@ -1,21 +1,22 @@
-//! Run the baton-dojo case suite and print the utility/security table.
+//! Run the baton-dojo case suite and print the utility/leak table.
 //!
 //! ```text
-//! cargo run -p baton-dojo --example suite                      # all cases, both modes (base → security)
-//! cargo run -p baton-dojo --example suite -- mailbox_exfil     # one case, both modes
-//! cargo run -p baton-dojo --example suite -- all security      # all cases, one mode
-//! cargo run -p baton-dojo --example suite -- mailbox_exfil base
+//! cargo run -p baton-dojo --example suite                       # all cases, both modes
+//! cargo run -p baton-dojo --example suite -- recording_pii_leak # one case, both modes
+//! cargo run -p baton-dojo --example suite -- all security       # all cases, one mode
+//! cargo run -p baton-dojo --example suite -- mailbox_to_boss base
 //! ```
 //!
-//! `base` = undefended (no baton gate); `security` = baton-defended. Needs
-//! `OPENROUTER_API_KEY` (or a line in `ai-labs/.env`); `DOJO_MODEL` picks the model.
+//! `base` = undefended (no baton gate); `security` = baton-defended. `leak` is `—`
+//! for a utility-only case (no attacker). Needs `OPENROUTER_API_KEY` (or a line in
+//! `ai-labs/.env`); `DOJO_MODEL` picks the model.
 
 use std::path::Path;
 
-use baton_dojo::{CaseReport, DojoError, Mode, Model, Scores, model, scenarios, suite};
+use baton_dojo::{DojoError, Mode, Model, Scores, model, scenarios, suite};
 
 /// Every case name the runner knows (kept in sync with the match arms below).
-const CASES: &[&str] = &["mailbox_exfil", "recording_to_public", "invoice_to_auditor"];
+const CASES: &[&str] = &["mailbox_to_boss", "recording_pii_leak", "invoice_to_auditor"];
 
 #[tokio::main]
 async fn main() -> Result<(), DojoError> {
@@ -29,7 +30,7 @@ async fn main() -> Result<(), DojoError> {
     let mode_sel = args.get(1).map(String::as_str);
 
     // Which cases to run.
-    let selected: Vec<&'static str> = if case_sel == "all" {
+    let cases: Vec<&'static str> = if case_sel == "all" {
         CASES.to_vec()
     } else if let Some(&c) = CASES.iter().find(|&&c| c == case_sel) {
         vec![c]
@@ -38,11 +39,11 @@ async fn main() -> Result<(), DojoError> {
         return Ok(());
     };
 
-    // Which mode(s): a named mode, or None = both.
-    let mode = match mode_sel {
-        None => None,
+    // Which modes: a named mode, or both.
+    let modes: Vec<Mode> = match mode_sel {
+        None => vec![Mode::Base, Mode::Security],
         Some(m) => match Mode::parse(m) {
-            Some(mode) => Some(mode),
+            Some(mode) => vec![mode],
             None => {
                 eprintln!("unknown mode `{m}`. use `base` or `security`");
                 return Ok(());
@@ -58,42 +59,21 @@ async fn main() -> Result<(), DojoError> {
     let model = model::with_key(&model_id, &api_key)?;
     println!("model: {model_id}\n");
 
-    match mode {
-        // Both modes: the base → security transition table.
-        None => {
-            let mut reports = Vec::new();
-            for name in selected {
-                reports.push(run_named(&model, name).await?);
-            }
-            print!("{}", suite::report_table(&reports));
-        }
-        // A single mode: one row per case.
-        Some(mode) => {
-            let mut rows = Vec::new();
-            for name in selected {
-                rows.push((name, mode, score_named(&model, name, mode).await?));
-            }
-            print!("{}", suite::mode_table(&rows));
+    let mut rows = Vec::new();
+    for name in cases {
+        for &mode in &modes {
+            rows.push((name, mode, score_named(&model, name, mode).await?));
         }
     }
+    print!("{}", suite::mode_table(&rows));
     Ok(())
-}
-
-/// Score a case (by name) in both modes.
-async fn run_named(model: &Model, name: &str) -> Result<CaseReport, DojoError> {
-    Ok(match name {
-        "mailbox_exfil" => scenarios::mailbox()?.run(model).await?,
-        "recording_to_public" => scenarios::recording()?.run(model).await?,
-        "invoice_to_auditor" => scenarios::auditor()?.run(model).await?,
-        other => unreachable!("case `{other}` is validated against CASES before dispatch"),
-    })
 }
 
 /// Score a case (by name) in one mode.
 async fn score_named(model: &Model, name: &str, mode: Mode) -> Result<Scores, DojoError> {
     Ok(match name {
-        "mailbox_exfil" => scenarios::mailbox()?.score(model, mode).await?,
-        "recording_to_public" => scenarios::recording()?.score(model, mode).await?,
+        "mailbox_to_boss" => scenarios::mailbox()?.score(model, mode).await?,
+        "recording_pii_leak" => scenarios::recording()?.score(model, mode).await?,
         "invoice_to_auditor" => scenarios::auditor()?.score(model, mode).await?,
         other => unreachable!("case `{other}` is validated against CASES before dispatch"),
     })

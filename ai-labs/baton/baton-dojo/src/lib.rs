@@ -63,5 +63,5 @@ pub use scoring::{
     Attack, EmptyCohort, Episode, ImportantInstructions, InjectionVector, Metrics, SecurityCheck, UtilityCheck,
     run_episode,
 };
-pub use suite::{Case, CaseReport, Mode, Scores, mode_table, report_table};
+pub use suite::{Case, Mode, Scores, mode_table};
 pub use tool::{Tool, ToolError, Toolset};

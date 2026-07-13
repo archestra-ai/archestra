@@ -664,6 +664,20 @@ export interface PermissionSyncParams {
    * these top-level containers (the probe's dirty set). Absent on full passes.
    */
   scope?: { containerKeys: string[] };
+  /**
+   * True only on a MANUAL pass ("Sync Permissions Now"): cross-pass identity
+   * caches are bypassed on read and rewritten, so an upstream email/profile
+   * change (e.g. a member making their GitHub email public) is picked up
+   * immediately rather than waiting out the cache TTL.
+   *
+   * Deliberately not every full pass. Resolving an identity is one rate-limited
+   * upstream request per account, and a connector without a delta mode runs
+   * every pass as a full one — so keying this off the mode meant its identity
+   * cache never served a single read, and every pass re-fetched every member's
+   * profile. Scheduled passes read the caches, whose 24h TTL bounds identity
+   * staleness to what a daily full reconcile bounded it to anyway.
+   */
+  refreshIdentities?: boolean;
 }
 
 /**
@@ -749,6 +763,17 @@ export type PermissionSnapshotYield =
       containerKey: string;
       permissions: DocumentPermissions;
       fingerprint?: string | null;
+      /**
+       * The connector could NOT read this container's permissions upstream, so
+       * `permissions` is the fail-closed empty audience rather than an observed
+       * one. Set it whenever the audience is empty because a lookup failed —
+       * never when upstream genuinely grants nobody. An empty audience hides
+       * every document in the container, and the two causes are
+       * indistinguishable from the outside, so the pass counts these into
+       * `containerAudienceFailures` and an admin can tell "nobody has access"
+       * from "we could not find out who has access".
+       */
+      audienceResolutionFailed?: boolean;
       cursor: string;
     }
   | {
@@ -931,6 +956,8 @@ export interface Connector {
     containerKey: string;
     permissions: DocumentPermissions;
     fingerprint?: string | null;
+    /** See `PermissionSnapshotYield` — an empty audience the connector could not read, not one upstream withheld. */
+    audienceResolutionFailed?: boolean;
   }>;
 
   /**

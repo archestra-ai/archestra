@@ -20,6 +20,8 @@ const mockListMembersInOrg = vi.fn();
 const mockGetByUsername = vi.fn();
 const capturedOctokitOptions: Record<string, unknown>[] = [];
 
+vi.mock("@/cache-manager");
+
 vi.mock("@octokit/rest", () => ({
   Octokit: class MockOctokit {
     constructor(options: Record<string, unknown>) {
@@ -1295,6 +1297,7 @@ describe("GithubConnector", () => {
             users: ["alice@example.com"],
             groups: ["test-org/eng"],
           },
+          audienceResolutionFailed: false,
         },
         {
           kind: "document",
@@ -1408,6 +1411,7 @@ describe("GithubConnector", () => {
           containerKey: "repo:test-org/my-repo",
           cursor: "repo:test-org/my-repo",
           permissions: { isPublic: true, users: [], groups: [] },
+          audienceResolutionFailed: false,
         },
         {
           kind: "document",
@@ -1444,6 +1448,10 @@ describe("GithubConnector", () => {
           containerKey: "repo:test-org/my-repo",
           cursor: "repo:test-org/my-repo",
           permissions: { isPublic: false, users: [], groups: [] },
+          // The empty audience here means "we could not read it", not "nobody
+          // has access" — the pass counts it so the repo going dark is
+          // attributable instead of looking like an ordinary empty audience.
+          audienceResolutionFailed: true,
         },
         {
           kind: "document",
@@ -1494,6 +1502,54 @@ describe("GithubConnector", () => {
           cursor: "test-org/eng",
         },
       ]);
+    });
+
+    test("a full pass bypasses the cached negative and sees a newly public email", async () => {
+      mockReposGet.mockResolvedValue({ data: { default_branch: "main" } });
+      mockTeamsList.mockResolvedValue({ data: [{ slug: "eng" }] });
+      mockListMembersInOrg.mockResolvedValue({ data: [{ login: "bob" }] });
+
+      // Pass 1: bob's email is private — the cross-pass cache stores the
+      // negative.
+      mockGetByUsername.mockResolvedValue({ data: { email: null } });
+      await collect(
+        connector.syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+        }) ?? (async function* () {})(),
+      );
+
+      // bob makes the email public upstream.
+      mockGetByUsername.mockResolvedValue({
+        data: { email: "bob@example.com" },
+      });
+
+      // A delta pass serves the cached negative (fresh instance drops the
+      // per-pass cache; the cross-pass one persists).
+      const deltaYields = await collect(
+        new GithubConnector().syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+        }) ?? (async function* () {})(),
+      );
+      expect(deltaYields[0].members[0].email).toBeNull();
+
+      // A full pass must re-resolve live — an admin's manual sync has to
+      // observe the change immediately, not after the cache TTL.
+      const fullYields = await collect(
+        new GithubConnector().syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+          refreshIdentities: true,
+        }) ?? (async function* () {})(),
+      );
+      expect(fullYields[0].members[0].email).toBe("bob@example.com");
     });
   });
 });

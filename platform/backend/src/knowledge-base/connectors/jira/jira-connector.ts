@@ -52,6 +52,20 @@ type ProjectBrowseAudience = {
   base: DocumentPermissions;
   includeReporter: boolean;
   includeAssignee: boolean;
+  /**
+   * The permission scheme could not be READ (the call failed, or it came back
+   * without grants), so `base` is the fail-closed empty audience rather than an
+   * observed one. Distinguishes "nobody may browse this project" from "we never
+   * found out who may" — identical from the outside, and only the second one is
+   * a bug to chase.
+   */
+  resolutionFailed: boolean;
+};
+
+/** A container audience the connector resolved, and whether it could read it at all. */
+type ResolvedAudience = {
+  permissions: DocumentPermissions;
+  resolutionFailed: boolean;
 };
 const SEARCH_FIELDS = [
   "summary",
@@ -87,7 +101,7 @@ export class JiraConnector extends BaseConnector {
     maxSize: PER_PROJECT_CACHE_MAX_SIZE,
     defaultTtl: 0,
   });
-  private securityLevelCache = new LRUCacheManager<DocumentPermissions>({
+  private securityLevelCache = new LRUCacheManager<ResolvedAudience>({
     maxSize: PER_PROJECT_CACHE_MAX_SIZE,
     defaultTtl: 0,
   });
@@ -397,7 +411,11 @@ export class JiraConnector extends BaseConnector {
     const client: any = config.isCloud
       ? createV3Client(config, params.credentials, this.log)
       : createV2Client(config, params.credentials, this.log);
-    this.initAdminEmailResolver(config, params.credentials);
+    this.initAdminEmailResolver(
+      config,
+      params.credentials,
+      params.refreshIdentities,
+    );
 
     this.resolveMappedEmail = params.resolveMappedEmail ?? null;
 
@@ -518,6 +536,9 @@ export class JiraConnector extends BaseConnector {
             users: [],
             groups: [],
           },
+          // An empty-corpus project is NOT a failure — its audience is
+          // deliberately left unresolved because no document references it.
+          audienceResolutionFailed: browse?.resolutionFailed ?? false,
           cursor: projectContainerKey,
         };
         projectContainerEmitted = true;
@@ -530,7 +551,7 @@ export class JiraConnector extends BaseConnector {
           if (!emittedLevelContainers.has(levelContainerKey)) {
             // Fail-soft inside: an unresolvable level yields a fail-closed
             // audience for ITS issues only, never aborting the pass.
-            const permissions = await this.resolveSecurityLevelMembers(
+            const level = await this.resolveSecurityLevelMembers(
               client,
               config,
               projectKey,
@@ -539,7 +560,8 @@ export class JiraConnector extends BaseConnector {
             yield {
               kind: "container",
               containerKey: levelContainerKey,
-              permissions,
+              permissions: level.permissions,
+              audienceResolutionFailed: level.resolutionFailed,
               cursor: projectContainerKey,
             };
             emittedLevelContainers.add(levelContainerKey);
@@ -688,6 +710,7 @@ export class JiraConnector extends BaseConnector {
     containerKey: string;
     permissions: DocumentPermissions;
     fingerprint?: string | null;
+    audienceResolutionFailed?: boolean;
   }> {
     const config = parseJiraConfig(params.config);
     if (!config) {
@@ -705,14 +728,16 @@ export class JiraConnector extends BaseConnector {
       if (!parsed) continue;
       const [, projectKey, levelId] = parsed;
       if (levelId) {
+        const level = await this.resolveSecurityLevelMembers(
+          client,
+          config,
+          projectKey,
+          levelId,
+        );
         yield {
           containerKey,
-          permissions: await this.resolveSecurityLevelMembers(
-            client,
-            config,
-            projectKey,
-            levelId,
-          ),
+          permissions: level.permissions,
+          audienceResolutionFailed: level.resolutionFailed,
         };
       } else {
         const browse = await this.resolveProjectBrowse(
@@ -720,7 +745,11 @@ export class JiraConnector extends BaseConnector {
           config,
           projectKey,
         );
-        yield { containerKey, permissions: browse.base };
+        yield {
+          containerKey,
+          permissions: browse.base,
+          audienceResolutionFailed: browse.resolutionFailed,
+        };
       }
     }
   }
@@ -751,7 +780,11 @@ export class JiraConnector extends BaseConnector {
     const client: any = config.isCloud
       ? createV3Client(config, params.credentials, this.log)
       : createV2Client(config, params.credentials, this.log);
-    this.initAdminEmailResolver(config, params.credentials);
+    this.initAdminEmailResolver(
+      config,
+      params.credentials,
+      params.refreshIdentities,
+    );
 
     let startAt = 0;
     for (;;) {
@@ -803,6 +836,7 @@ export class JiraConnector extends BaseConnector {
       includeReporter: false,
       includeAssignee: false,
     };
+    let resolutionFailed = false;
     try {
       await this.rateLimit();
       const scheme =
@@ -819,14 +853,28 @@ export class JiraConnector extends BaseConnector {
         });
         grants = full?.permissions;
       }
+      if (!grants) {
+        // Neither the assigned scheme nor the by-id fallback produced grants
+        // (an expand the instance ignored, a scheme with no id to fall back on,
+        // a shape we do not understand). Iterating `grants ?? []` over that
+        // yields an empty audience that is indistinguishable from a project
+        // nobody may browse — and hides the project's entire corpus. It is a
+        // failure to READ the permissions, and it is reported as one.
+        resolutionFailed = true;
+        this.log.error(
+          { projectKey, schemeId: scheme?.id ?? null },
+          "Jira returned no BROWSE_PROJECTS grants for this project's permission scheme; every issue in the project is fail-closed for this pass",
+        );
+      }
       for (const grant of grants ?? []) {
         if (grant?.permission !== "BROWSE_PROJECTS") continue;
         await this.applyHolder(client, config, projectKey, grant.holder, acc);
       }
     } catch (error) {
-      this.log.warn(
+      resolutionFailed = true;
+      this.log.error(
         { projectKey, error: extractErrorMessage(error) },
-        "Could not resolve project browse permissions; fail-closed",
+        "Could not read the project's permission scheme; every issue in the project is fail-closed for this pass",
       );
     }
 
@@ -838,6 +886,7 @@ export class JiraConnector extends BaseConnector {
       },
       includeReporter: acc.includeReporter,
       includeAssignee: acc.includeAssignee,
+      resolutionFailed,
     };
     this.projectBrowseCache.set(projectKey, audience);
     return audience;
@@ -849,9 +898,13 @@ export class JiraConnector extends BaseConnector {
     config: JiraConfig,
     projectKey: string,
     levelId: string,
-  ): Promise<DocumentPermissions> {
+  ): Promise<ResolvedAudience> {
     const schemeId = await this.resolveSecuritySchemeId(client, projectKey);
-    if (schemeId === null) return {}; // can't resolve → fail-closed
+    if (schemeId === null) {
+      // The scheme lookup already logged; the level's issues fail-close and the
+      // pass counts it (rather than reading as "this level grants nobody").
+      return { permissions: {}, resolutionFailed: true };
+    }
     const cacheKey = `${schemeId}:${levelId}`;
     const cached = this.securityLevelCache.get(cacheKey);
     if (cached) return cached;
@@ -863,6 +916,7 @@ export class JiraConnector extends BaseConnector {
       includeReporter: false,
       includeAssignee: false,
     };
+    let resolutionFailed = false;
     try {
       let startAt = 0;
       for (;;) {
@@ -891,16 +945,20 @@ export class JiraConnector extends BaseConnector {
           break;
       }
     } catch (error) {
-      this.log.warn(
+      resolutionFailed = true;
+      this.log.error(
         { projectKey, levelId, error: extractErrorMessage(error) },
-        "Could not resolve issue security level members; fail-closed",
+        "Could not read the issue security level's members; every issue at this level is fail-closed for this pass",
       );
     }
 
-    const audience: DocumentPermissions = {
-      isPublic: acc.isPublic,
-      users: acc.users,
-      groups: acc.groups,
+    const audience: ResolvedAudience = {
+      permissions: {
+        isPublic: acc.isPublic,
+        users: acc.users,
+        groups: acc.groups,
+      },
+      resolutionFailed,
     };
     this.securityLevelCache.set(cacheKey, audience);
     return audience;
@@ -922,9 +980,9 @@ export class JiraConnector extends BaseConnector {
         });
       schemeId = typeof scheme?.id === "number" ? scheme.id : null;
     } catch (error) {
-      this.log.warn(
+      this.log.error(
         { projectKey, error: extractErrorMessage(error) },
-        "Could not resolve project issue-security scheme; its levels fail-close",
+        "Could not read the project's issue-security scheme; every issue carrying a security level in it is fail-closed for this pass",
       );
     }
     this.securitySchemeCache.set(projectKey, schemeId);
@@ -1221,6 +1279,7 @@ export class JiraConnector extends BaseConnector {
   private initAdminEmailResolver(
     config: JiraConfig,
     credentials: ConnectorCredentials,
+    refresh?: boolean,
   ): void {
     // The dedicated org-admin API key unlocks the admin APIs; the product
     // apiToken is only a long-shot fallback bearer (the admin APIs reject
@@ -1239,6 +1298,7 @@ export class JiraConnector extends BaseConnector {
       namespace: "jira-email",
       host: config.jiraBaseUrl,
       credentials,
+      refresh,
     });
   }
 }

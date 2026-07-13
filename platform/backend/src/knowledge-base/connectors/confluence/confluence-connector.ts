@@ -57,6 +57,26 @@ const PERMISSION_SEARCH_EXPANDS = [
 /** One corpus page buffered during a space's enumeration phase. */
 type SpacePageEntry = { id: string; ancestorIds: string[] };
 
+/** A container audience the connector resolved, and whether it could read it at all. */
+type ResolvedAudience = {
+  permissions: DocumentPermissions;
+  resolutionFailed: boolean;
+};
+
+/**
+ * Why a page's read restrictions had to come from a per-content API call rather
+ * than the search's inline expansion.
+ * - `truncated` — the embedded subject list is one page with no cursor, and the
+ *   page has more principals than fit.
+ * - `expand_unsupported` — the server ignored or rejected the expand (older DC).
+ * - `ancestor_outside_corpus` — an ancestor the corpus filter never enumerated,
+ *   so its restriction was never inlined anywhere.
+ */
+type RestrictionFallbackReason =
+  | "truncated"
+  | "expand_unsupported"
+  | "ancestor_outside_corpus";
+
 /**
  * Built-in Confluence groups that mean "any logged-in user" (Cloud:
  * `confluence-users` / `_licensed-confluence`; Server/DC: `users`). A read grant
@@ -95,7 +115,7 @@ export class ConfluenceConnector extends BaseConnector {
   // account → email lookups are each resolved once. Size-bounded LRU (no TTL —
   // instances are per-pass) so a pathologically large site cannot grow them
   // without limit; eviction only costs a re-fetch.
-  private spaceAudienceCache = new LRUCacheManager<DocumentPermissions>({
+  private spaceAudienceCache = new LRUCacheManager<ResolvedAudience>({
     maxSize: SPACE_AUDIENCE_CACHE_MAX_SIZE,
     defaultTtl: 0,
   });
@@ -132,6 +152,15 @@ export class ConfluenceConnector extends BaseConnector {
    */
   private persistentEmailCache: ConnectorIdentityCache<string | null> | null =
     null;
+  /**
+   * Per-space tally of pages whose restrictions could NOT be taken from the
+   * inline search expansion, by reason. Inline expansion is the whole reason a
+   * pass costs one request per RESULT PAGE instead of one per document, so a
+   * space quietly falling back to per-page lookups is a request storm that has
+   * to be visible — it is the difference between ~1 and ~200 requests for the
+   * same 200 pages.
+   */
+  private restrictionFallbacks = new Map<RestrictionFallbackReason, number>();
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -400,7 +429,11 @@ export class ConfluenceConnector extends BaseConnector {
       throw new Error("Invalid Confluence configuration for permission sync");
     }
     const client = createConfluenceClient(config, params.credentials, this.log);
-    this.initAdminEmailResolver(config, params.credentials);
+    this.initAdminEmailResolver(
+      config,
+      params.credentials,
+      params.refreshIdentities,
+    );
     this.resolveMappedEmail = params.resolveMappedEmail ?? null;
 
     const scope = params.scope ? new Set(params.scope.containerKeys) : null;
@@ -598,6 +631,7 @@ export class ConfluenceConnector extends BaseConnector {
     containerKey: string;
     permissions: DocumentPermissions;
     fingerprint?: string | null;
+    audienceResolutionFailed?: boolean;
   }> {
     const config = parseConfluenceConfig(params.config);
     if (!config) {
@@ -610,9 +644,11 @@ export class ConfluenceConnector extends BaseConnector {
     for (const containerKey of params.containerKeys) {
       const parsed = containerKey.match(/^space:([^/]+)$/);
       if (!parsed) continue;
+      const audience = await this.resolveSpaceAudience(client, parsed[1]);
       yield {
         containerKey,
-        permissions: await this.resolveSpaceAudience(client, parsed[1]),
+        permissions: audience.permissions,
+        audienceResolutionFailed: audience.resolutionFailed,
       };
     }
   }
@@ -643,7 +679,11 @@ export class ConfluenceConnector extends BaseConnector {
       throw new Error("Invalid Confluence configuration for permission sync");
     }
     const client = createConfluenceClient(config, params.credentials, this.log);
-    this.initAdminEmailResolver(config, params.credentials);
+    this.initAdminEmailResolver(
+      config,
+      params.credentials,
+      params.refreshIdentities,
+    );
 
     // Accumulate every member across all real groups so the synthetic
     // "any logged-in user" group (emitted last) can grant a doc readable by all
@@ -781,7 +821,14 @@ export class ConfluenceConnector extends BaseConnector {
         const inline = readInlineRestriction(page);
         if (inline === undefined) {
           // Expand ignored by the server or the inline list truncated — the
-          // per-content endpoint is authoritative for this page.
+          // per-content endpoint is authoritative for this page. That is one
+          // extra upstream request per page, so which of the two it was gets
+          // counted (see `restrictionFallbacks`).
+          this.countRestrictionFallback(
+            this.inlineRestrictionsUnsupported
+              ? "expand_unsupported"
+              : "truncated",
+          );
           const fetched = await this.getReadRestrictions(client, id);
           if (fetched) restrictedById.set(id, fetched);
         } else if (inline) {
@@ -804,15 +851,20 @@ export class ConfluenceConnector extends BaseConnector {
     const spaceContainerKey = `space:${spaceKey}`;
     // The space container is emitted even when the space has no corpus pages,
     // so the pass fail-closes documents of a space that lost them all; its
-    // audience is only worth resolving when pages exist.
-    const spaceAudience: DocumentPermissions =
+    // audience is only worth resolving when pages exist (an empty space is
+    // deliberately left unresolved, which is not a failure).
+    const spaceAudience: ResolvedAudience =
       pages.length > 0
         ? await this.resolveSpaceAudience(client, spaceKey)
-        : { isPublic: false, users: [], groups: [] };
+        : {
+            permissions: { isPublic: false, users: [], groups: [] },
+            resolutionFailed: false,
+          };
     yield {
       kind: "container",
       containerKey: spaceContainerKey,
-      permissions: spaceAudience,
+      permissions: spaceAudience.permissions,
+      audienceResolutionFailed: spaceAudience.resolutionFailed,
       cursor: spaceContainerKey,
     };
 
@@ -835,24 +887,27 @@ export class ConfluenceConnector extends BaseConnector {
             users: [],
             groups: [],
           };
+          let resolutionFailed = false;
           try {
             permissions = await this.restrictionToAudience(
               client,
               governing.restriction,
             );
           } catch (error) {
-            this.log.warn(
+            resolutionFailed = true;
+            this.log.error(
               {
                 restrictedPageId: governing.ownerId,
                 error: extractErrorMessage(error),
               },
-              "Could not resolve Confluence restriction audience; fail-closing its pages for this pass",
+              "Could not read the page restriction's audience; every page it governs is fail-closed for this pass",
             );
           }
           yield {
             kind: "container",
             containerKey,
             permissions,
+            audienceResolutionFailed: resolutionFailed,
             cursor: spaceContainerKey,
           };
           emittedRestrictionContainers.add(containerKey);
@@ -865,6 +920,10 @@ export class ConfluenceConnector extends BaseConnector {
         cursor: spaceContainerKey,
       };
     }
+
+    // Reported once the space is fully done — Phase B's ancestor lookups are
+    // fallbacks too, so tallying any earlier would undercount them.
+    this.reportRestrictionFallbacks(spaceKey, pages.length);
   }
 
   /**
@@ -941,9 +1000,15 @@ export class ConfluenceConnector extends BaseConnector {
     if (own) return { ownerId: page.id, restriction: own };
 
     for (const ancestorId of [...page.ancestorIds].reverse()) {
-      const restriction = enumerated.has(ancestorId)
-        ? (restrictedById.get(ancestorId) ?? null)
-        : await this.getReadRestrictions(client, ancestorId);
+      if (enumerated.has(ancestorId)) {
+        const restriction = restrictedById.get(ancestorId) ?? null;
+        if (restriction) return { ownerId: ancestorId, restriction };
+        continue;
+      }
+      // Outside the corpus filter, so nothing inlined its restriction — one
+      // per-content request (memoized across the pages that share the ancestor).
+      this.countRestrictionFallback("ancestor_outside_corpus");
+      const restriction = await this.getReadRestrictions(client, ancestorId);
       if (restriction) return { ownerId: ancestorId, restriction };
     }
 
@@ -988,6 +1053,40 @@ export class ConfluenceConnector extends BaseConnector {
     });
   }
 
+  private countRestrictionFallback(reason: RestrictionFallbackReason): void {
+    this.restrictionFallbacks.set(
+      reason,
+      (this.restrictionFallbacks.get(reason) ?? 0) + 1,
+    );
+  }
+
+  /**
+   * Report (and reset) one space's inline-restriction fallbacks. Each fallback
+   * is an extra upstream request the inline expansion was supposed to save, so a
+   * space where they dominate is quietly costing a request per page — visible
+   * here rather than only as unexplained pass duration.
+   */
+  private reportRestrictionFallbacks(spaceKey: string, pages: number): void {
+    if (this.restrictionFallbacks.size === 0) return;
+
+    let total = 0;
+    const byReason: Record<string, number> = {};
+    for (const [reason, count] of this.restrictionFallbacks) {
+      total += count;
+      byReason[reason] = count;
+      metrics.rag.reportPermissionSyncRestrictionFallbacks({
+        connectorType: this.type,
+        reason,
+        count,
+      });
+    }
+    this.restrictionFallbacks.clear();
+    this.log.info(
+      { spaceKey, pages, restrictionFallbacks: total, byReason },
+      "Confluence space needed per-content restriction lookups that the inline search expansion could not supply",
+    );
+  }
+
   private async getReadRestrictions(
     // biome-ignore lint/suspicious/noExplicitAny: SDK client
     client: any,
@@ -1030,14 +1129,16 @@ export class ConfluenceConnector extends BaseConnector {
     // biome-ignore lint/suspicious/noExplicitAny: SDK client
     client: any,
     spaceKey: string | undefined,
-  ): Promise<DocumentPermissions> {
-    if (!spaceKey) return {}; // no space → fail-closed
+  ): Promise<ResolvedAudience> {
+    // No space key at all — nothing to read, and nothing to chase either.
+    if (!spaceKey) return { permissions: {}, resolutionFailed: false };
     const cached = this.spaceAudienceCache.get(spaceKey);
     if (cached) return cached;
 
     // Reading space read-permission subjects requires space-admin scope; when it
     // is unavailable the page is fail-closed (documented limitation).
-    let audience: DocumentPermissions = {};
+    let resolved: DocumentPermissions = {};
+    let resolutionFailed = false;
     try {
       await this.rateLimit();
       const space = await client.sendRequest(
@@ -1070,13 +1171,18 @@ export class ConfluenceConnector extends BaseConnector {
         }
       }
       this.meterDroppedPrincipals(dropped);
-      audience = { isPublic, users, groups };
+      resolved = { isPublic, users, groups };
     } catch (error) {
-      this.log.warn(
+      resolutionFailed = true;
+      this.log.error(
         { spaceKey, error: extractErrorMessage(error) },
-        "Could not read space permissions; the space fail-closes for this pass",
+        "Could not read the space's permissions; every page in the space is fail-closed for this pass (the credential needs space-admin scope)",
       );
     }
+    const audience: ResolvedAudience = {
+      permissions: resolved,
+      resolutionFailed,
+    };
     this.spaceAudienceCache.set(spaceKey, audience);
     return audience;
   }
@@ -1146,6 +1252,7 @@ export class ConfluenceConnector extends BaseConnector {
   private initAdminEmailResolver(
     config: ConfluenceConfig,
     credentials: ConnectorCredentials,
+    refresh?: boolean,
   ): void {
     // The dedicated org-admin API key unlocks the admin APIs; the product
     // apiToken is only a long-shot fallback bearer (the admin APIs reject
@@ -1164,6 +1271,7 @@ export class ConfluenceConnector extends BaseConnector {
       namespace: "confluence-email",
       host: config.confluenceUrl,
       credentials,
+      refresh,
     });
   }
 

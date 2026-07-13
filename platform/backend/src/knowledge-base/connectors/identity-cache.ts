@@ -22,13 +22,21 @@ import type { ConnectorCredentials } from "@/types";
  */
 export class ConnectorIdentityCache<T> {
   private prefix: `${typeof CacheKey.KbConnectorIdentity}-${string}`;
+  private readonly refresh: boolean;
 
   constructor(params: {
     /** Lookup family, e.g. "confluence-email", "github-profile". */
     namespace: string;
     host: string;
     credentials: ConnectorCredentials;
+    /**
+     * Serve no cached reads this pass (entries are still rewritten). Full
+     * reconcile passes set this so identity changes never wait out the TTL —
+     * an admin's manual sync must observe them immediately.
+     */
+    refresh?: boolean;
   }) {
+    this.refresh = params.refresh ?? false;
     // The credential is derived through scrypt, not a fast hash: on
     // Server/DC basic auth the apiToken can be a human-chosen password, and a
     // memory-hard KDF keeps a leaked cache key from being cheaply inverted.
@@ -46,6 +54,7 @@ export class ConnectorIdentityCache<T> {
   }
 
   async get(accountId: string): Promise<T | undefined> {
+    if (this.refresh) return undefined;
     const entry = await cacheManager.get<{ value: T }>(this.key(accountId));
     return entry?.value;
   }

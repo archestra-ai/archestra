@@ -1057,6 +1057,11 @@ describe("JiraConnector", () => {
       gen: AsyncGenerator<PermissionSnapshotYield> | undefined,
     ) {
       const containers = new Map<string, unknown>();
+      /** The whole container yield, for assertions beyond its audience. */
+      const containerYields = new Map<
+        string,
+        Extract<PermissionSnapshotYield, { kind: "container" }>
+      >();
       const documents: Extract<
         PermissionSnapshotYield,
         { kind: "document" }
@@ -1065,11 +1070,12 @@ describe("JiraConnector", () => {
         ((async function* () {})() as AsyncGenerator<PermissionSnapshotYield>)) {
         if (item.kind === "container") {
           containers.set(item.containerKey, item.permissions);
+          containerYields.set(item.containerKey, item);
         } else {
           documents.push(item);
         }
       }
-      return { containers, documents };
+      return { containers, containerYields, documents };
     }
 
     /** The audience of a single-document snapshot's one assignment. */
@@ -1299,6 +1305,91 @@ describe("JiraConnector", () => {
         users: [],
         groups: [],
       });
+    });
+
+    test("a permission scheme that yields no grants reports the container as unreadable, not as empty", async () => {
+      // The scheme call succeeds but carries no `permissions`, and the by-id
+      // fallback comes back empty too. The old code iterated `grants ?? []`,
+      // resolved an empty audience, and said nothing — so every issue in the
+      // project went dark and the run looked completely healthy. The empty
+      // audience is still the right (fail-closed) answer; being silent about it
+      // was not.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-9",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({ id: 10 }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/permissionscheme/10`, () =>
+          HttpResponse.json({ id: 10 }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      const container = snapshot.containerYields.get("project:PROJ");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(container?.audienceResolutionFailed).toBe(true);
+    });
+
+    test("a permission-scheme request that fails reports the container as unreadable", async () => {
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-10",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({ errorMessages: ["boom"] }, { status: 500 }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      const container = snapshot.containerYields.get("project:PROJ");
+      expect(container?.audienceResolutionFailed).toBe(true);
+    });
+
+    test("a resolvable scheme granting nobody is NOT reported as unreadable", async () => {
+      // The counterpart the flag exists to distinguish: we read the scheme fine,
+      // and it genuinely grants browse to nobody. Same empty audience, but
+      // nothing is wrong and nothing should be flagged.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-11",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({ id: 10, permissions: [] }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      const container = snapshot.containerYields.get("project:PROJ");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(container?.audienceResolutionFailed).toBe(false);
     });
 
     test("a Cloud group grant uses the group NAME (parameter), not the UUID (value)", async () => {
@@ -1760,6 +1851,7 @@ describe("JiraConnector", () => {
         {
           containerKey: "project:PROJ",
           permissions: { isPublic: false, users: [], groups: ["jira-users"] },
+          audienceResolutionFailed: false,
         },
       ]);
     });

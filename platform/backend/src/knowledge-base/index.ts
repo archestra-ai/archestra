@@ -5,6 +5,7 @@ export { embeddingService } from "./embedder";
 export { queryService } from "./query";
 export {
   buildUserAccessControlList,
+  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,

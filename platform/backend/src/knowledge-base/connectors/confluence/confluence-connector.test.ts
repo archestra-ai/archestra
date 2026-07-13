@@ -1604,6 +1604,7 @@ describe("ConfluenceConnector permission sync", () => {
           users: ["alice@example.com"],
           groups: ["devs"],
         },
+        audienceResolutionFailed: false,
       },
     ]);
     // No page/content requests were made — audiences only.

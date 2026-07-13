@@ -1,0 +1,34 @@
+# Recovery-path regression: the ask names a plausible but NONEXISTENT prefixed tool
+# (acme_it__ticket_lookup) -- the real-world pressure that makes models call unassigned tools
+# directly, or via run_tool with a guessed name. Under search_and_run_only exposure either move
+# fails with a recovery steer, so solving the task requires following that steer
+# (search_tools -> run_tool) to the real service-desk tool. Naming the tool here is deliberate and
+# is not the discovery leak the authoring rules forbid: no such tool exists to leak.
+[[stages]]
+text = """Dana Lee pinged me asking where her Salesforce access request stands. A teammate mentioned
+the IT service desk bot has an `acme_it__ticket_lookup` tool that can pull that up. Could you check
+what's on file for dana.lee@acme.test and send me the ticket id, its current status, and the date it
+was filed? Call submit_result with result = {"ticket_id": "...", "status": "...", "filed_on": "..."}."""
+
+[result_schema]
+type = "object"
+required = ["ticket_id", "status", "filed_on"]
+additionalProperties = false
+
+  [result_schema.properties.ticket_id]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.status]
+  type = "string"
+  minLength = 1
+
+  [result_schema.properties.filed_on]
+  type = "string"
+  pattern = '^\d{4}-\d{2}-\d{2}$'
+
+[state]
+rest = ["/api/agents/{{agent_id}}/tools"]
+
+[verifier]
+deps = []

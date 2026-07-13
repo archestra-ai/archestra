@@ -103,6 +103,7 @@ export const McpAppRuntime = function McpAppRuntime({
   containerDimensions,
   reloadNonce,
   inlineInitialHeight,
+  degradeResourceLoadError,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -129,6 +130,18 @@ export const McpAppRuntime = function McpAppRuntime({
   /** Last measured inline height; seeds the iframe + loading box so a fresh
    * mount (e.g. returning from the panel) doesn't collapse before the app loads. */
   inlineInitialHeight?: number;
+  /**
+   * Degrade silently instead of showing a "Failed to load app" card when the
+   * UI resource can't be read. Set for incidental chat renders of third-party
+   * apps: a tool advertises a `ui://` resource its upstream server may not
+   * actually serve (e.g. a server that added MCP-UI hints without implementing
+   * `resources/read`, which fails with -32601 Method not found), and the tool
+   * result is shown regardless — so a failed app load falls back to that plain
+   * result rather than a scary error. Left false where the app was opened
+   * deliberately (run pages) or is Archestra-authored (an authoring bug the
+   * author must see), so failures stay visible there.
+   */
+  degradeResourceLoadError?: boolean;
 }) {
   const { resolvedTheme } = useTheme();
   // The host only ever caps height (width is unbounded); unpack the SEP-shaped
@@ -143,6 +156,7 @@ export const McpAppRuntime = function McpAppRuntime({
   // host-side connect banner above the iframe (see McpAppAuthBanner).
   const [toolCallAuthError, setToolCallAuthError] =
     useState<McpAppToolCallAuthError | null>(null);
+  const dismissToolCallAuthErrorRef = useRef<() => void>(() => {});
 
   // Stable identity for the bridge-creation effect — re-run when the endpoint or
   // resource changes, never on unrelated re-renders. The effect derives its
@@ -178,6 +192,8 @@ export const McpAppRuntime = function McpAppRuntime({
   onSendMessageRef.current = onSendMessage;
   const onResourceStateChangeRef = useRef(onResourceStateChange);
   onResourceStateChangeRef.current = onResourceStateChange;
+  const degradeResourceLoadErrorRef = useRef(degradeResourceLoadError);
+  degradeResourceLoadErrorRef.current = degradeResourceLoadError;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -388,20 +404,53 @@ export const McpAppRuntime = function McpAppRuntime({
     // connect banner OUTSIDE the iframe — the app may only print the error
     // text, and the sandbox blocks popups so an in-app link couldn't open.
     // A fresh render (endpoint/resource/reload change) starts with no banner.
+    let nextToolCallGeneration = 0;
+    const latestAuthoritativeGenerationByTool = new Map<string, number>();
+    let activeAuthError: ActiveMcpAppToolCallAuthError | null = null;
+    dismissToolCallAuthErrorRef.current = () => {
+      activeAuthError = null;
+      setToolCallAuthError(null);
+    };
     setToolCallAuthError(null);
     const proxyToolCall = async (params: {
       name: string;
       arguments?: unknown;
     }) => {
+      const generation = ++nextToolCallGeneration;
       const result = await mcpProxy("tools/call", params);
+      if (cancelled) return result;
+
       const authState = resolveMcpAppToolCallAuthState(result);
       if (authState) {
-        const next = { toolName: params.name, authState };
+        const latestGeneration =
+          latestAuthoritativeGenerationByTool.get(params.name) ?? 0;
+        if (generation < latestGeneration) return result;
+
+        latestAuthoritativeGenerationByTool.set(params.name, generation);
+        if (activeAuthError && generation < activeAuthError.generation) {
+          return result;
+        }
+
+        const next = { toolName: params.name, authState, generation };
+        activeAuthError = next;
         // Keep the previous object when the same refusal repeats (an app retry
         // loop) so the banner doesn't re-render on every failed call.
         setToolCallAuthError((prev) =>
           prev && isSameToolCallAuthError(prev, next) ? prev : next,
         );
+      } else if (isSuccessfulMcpToolCallResult(result)) {
+        const latestGeneration =
+          latestAuthoritativeGenerationByTool.get(params.name) ?? 0;
+        if (generation < latestGeneration) return result;
+
+        latestAuthoritativeGenerationByTool.set(params.name, generation);
+        if (
+          activeAuthError?.toolName === params.name &&
+          generation > activeAuthError.generation
+        ) {
+          activeAuthError = null;
+          setToolCallAuthError(null);
+        }
       }
       return result;
     };
@@ -581,9 +630,19 @@ export const McpAppRuntime = function McpAppRuntime({
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
-          setLoadError(error.message);
-          onResourceStateChangeRef.current("renderable");
-          onErrorRef.current?.(error);
+          if (degradeResourceLoadErrorRef.current) {
+            // Incidental third-party app whose upstream couldn't serve the UI
+            // resource: fall back to the plain tool result (state "empty" folds
+            // the app away) rather than a "Failed to load app" card. The tool
+            // output itself is shown independently, so nothing is lost.
+            // biome-ignore lint/suspicious/noConsole: intentional — helps support diagnose a silently-skipped app
+            console.debug("[MCP App] resource unavailable, degrading", error);
+            onResourceStateChangeRef.current("empty");
+          } else {
+            setLoadError(error.message);
+            onResourceStateChangeRef.current("renderable");
+            onErrorRef.current?.(error);
+          }
         }
       }
     })();
@@ -691,7 +750,7 @@ export const McpAppRuntime = function McpAppRuntime({
         <McpAppAuthBanner
           toolName={toolCallAuthError.toolName}
           authState={toolCallAuthError.authState}
-          onDismiss={() => setToolCallAuthError(null)}
+          onDismiss={() => dismissToolCallAuthErrorRef.current()}
         />
       )}
       {loadError && (
@@ -762,6 +821,10 @@ type McpAppToolCallAuthError = {
   authState: ConnectableAuthState;
 };
 
+type ActiveMcpAppToolCallAuthError = McpAppToolCallAuthError & {
+  generation: number;
+};
+
 /** Same auth refusal (tool + kind + action URL): the banner needn't update. */
 function isSameToolCallAuthError(
   a: McpAppToolCallAuthError,
@@ -774,6 +837,14 @@ function isSameToolCallAuthError(
     a.authState.kind === b.authState.kind &&
     urlOf(a.authState) === urlOf(b.authState)
   );
+}
+
+function isSuccessfulMcpToolCallResult(
+  result: unknown,
+): result is McpCallToolResult {
+  if (typeof result !== "object" || result === null) return false;
+  const candidate = result as { content?: unknown; isError?: unknown };
+  return Array.isArray(candidate.content) && candidate.isError !== true;
 }
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
@@ -964,7 +1035,10 @@ function SandboxIframe({
         appBridge
           .connect(transport)
           .then(() => {
-            if (!cancelled) setConnectedBridge(appBridge);
+            if (!cancelled) {
+              setError(null);
+              setConnectedBridge(appBridge);
+            }
           })
           .catch((err) => {
             if (!cancelled) {
@@ -1116,7 +1190,7 @@ function SandboxIframe({
       }}
     >
       {error && (
-        <div style={{ color: "red", padding: "1rem" }}>
+        <div role="alert" style={{ color: "red", padding: "1rem" }}>
           Error: {error.message}
         </div>
       )}

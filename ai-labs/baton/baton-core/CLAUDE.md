@@ -1,9 +1,10 @@
 # baton-core
 
-Prototype IFC policy engine (edition 2024, `publish = false`). The only
-dependency is `tracing` (workspace-standard facade; `tracing-subscriber` is a
-dev-dependency the `demo` example installs). Concepts and semantics live in
-`src/lib.rs`; this file is the invariants an edit must not silently break.
+Prototype IFC policy engine (edition 2024, `publish = false`). Dependencies:
+`tracing` (facade), `serde` (derive), `thiserror` (the two error types).
+Dev-only: `tracing-subscriber`, `criterion`, `proptest`, `clap`. Concepts and
+semantics live in `src/lib.rs`; this file is the invariants an edit must not
+silently break.
 
 ## Two structures — never conflate them
 
@@ -61,16 +62,26 @@ relations — no `match` on label values, no set-difference. The emission order
   `Permit`. Permits are linear (not `Clone`), bound to trajectory id + head;
   `Trajectory::record_result` enforces freshness. Confirmations are structural
   on user turns, never label state.
+- **serde capability line**: pure data (`Label`, `Grant`, `AuditEntry`,
+  contracts, dimensions and their preset algebras, violations) derives
+  `Serialize + Deserialize`; `Decision`/`Permit`/`BlockReason`/`TrajectoryId`
+  are `Serialize`-only. Never add `Deserialize` to `Permit` (or
+  `Decision`/`TrajectoryId`): a permit has no public constructor by design, so
+  deserializing one forges the linear capability, and a deserialized
+  `TrajectoryId` could alias a live trajectory. `Trajectory` itself is not serde
+  at all.
 - `register` fails on a duplicate contract (contracts are the policy boundary);
   never silently overwrite.
 
 ## Conventions
 
-- `tracing` is the only dependency; no `dyn`/`Box`; prefer newtypes over
-  primitives; prefer pattern matching over `if`-chains. Core ops emit `tracing`
-  events (decision path at `debug!`, algebra at `trace!`) — borrow-only, never
-  behavior-changing; `demo -- -v`/`-vv` selects the level.
+- no `dyn`/`Box`; prefer newtypes over primitives; prefer pattern matching over
+  `if`-chains. Core ops emit `tracing` events (decision path at `debug!`,
+  algebra at `trace!`) — borrow-only, never behavior-changing; `demo -- -v`/`-vv`
+  selects the level.
 - Validate every change: `cargo test`, `cargo clippy --all-targets -- -D warnings`,
   `cargo fmt --check`, `cargo run --example demo`.
-- Tests exercise behavior and algebra **laws** (property tests), not wording.
-  Do not assert on `Display` output or doc text.
+- The algebra **laws** are real `proptest` properties (`combine`/`lift`/`covers`
+  over generated inputs, in `src/test_strategies.rs`), not fixture loops.
+  Commutativity/idempotence hold on the data dimensions only — the `audit`
+  Writer log appends. Do not assert on `Display` output or doc text.

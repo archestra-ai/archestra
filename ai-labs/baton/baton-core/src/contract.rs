@@ -4,6 +4,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use tracing::trace;
 
 use crate::ToolName;
@@ -12,7 +13,7 @@ use crate::label::Label;
 use crate::preset::Adequacy;
 
 /// A concrete tool invocation the policy is asked to authorize.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolRequest {
     pub tool: ToolName,
     /// Readers this call would expose context to (e.g. e-mail recipients).
@@ -37,7 +38,7 @@ impl ToolRequest {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AudienceRule {
     #[default]
     Unrestricted,
@@ -46,7 +47,7 @@ pub enum AudienceRule {
     RecipientsWithinContext,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AttentionRule {
     #[default]
     NotRequired,
@@ -55,7 +56,7 @@ pub enum AttentionRule {
 }
 
 /// What a tool demands of the context label before it may run.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Requirements {
     /// Minimum *known* trust. `Trust::UNKNOWN` never satisfies any bar —
     /// deliberately over [`KnownTrust`], so "unknown suffices" cannot even be
@@ -71,7 +72,7 @@ pub struct Requirements {
 }
 
 /// A requirement that is provably not met.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Breach {
     TrustBelow {
         required: KnownTrust,
@@ -134,7 +135,7 @@ impl fmt::Display for Breach {
 /// A requirement that cannot be proven either way because something is
 /// `Unknown`. Kept apart from [`Breach`] so policy can treat missing
 /// knowledge differently from proven violations.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Unprovable {
     TrustUnknown,
     AudienceUnknown,
@@ -158,7 +159,7 @@ impl fmt::Display for Unprovable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Violation {
     Breach(Breach),
     Unprovable(Unprovable),
@@ -218,7 +219,7 @@ impl Violation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[must_use]
 pub enum Verdict {
     Allow,
@@ -233,7 +234,7 @@ pub enum Verdict {
 /// A label cannot express a user confirmation at all (confirmations are
 /// structural on user turns), so a contract cannot re-arm a confirmation
 /// gate from its own output.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolContract {
     pub name: ToolName,
     pub requires: Requirements,

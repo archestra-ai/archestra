@@ -386,3 +386,76 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   transform-origin: 70% 75%;
   animation: feedback-wave 1.8s ease-in-out 0.4s 2;
 }
+
+/* === Chat new-chat → conversation view transition ===
+   Drives the React <ViewTransition> boundaries in app/chat/page.tsx and
+   components/chat/new-chat-composer.tsx. The composer is a shared element
+   (name "chat-composer") that morphs from the centered splash (or a project
+   page) to the conversation's bottom anchor; the splash decoration leaves
+   fast, the message thread eases in slightly later. Timing is asymmetric on
+   purpose: old content leaves quickly, new content arrives gently. */
+
+:root {
+  /* Damped-spring position curve (zeta 0.72), ~4% overshoot then settle —
+     gives the morph a soft physical landing instead of a linear glide. */
+  --chat-transition-spring: linear(
+    0, 0.065, 0.211, 0.387, 0.559, 0.708, 0.827, 0.914, 0.974, 1.011, 1.03,
+    1.038, 1.038, 1.033, 1.027, 1.02, 1.014, 1.008, 1.005, 1.002, 1, 0.999,
+    0.999, 0.999, 1
+  );
+  /* Luxurious decelerating glide (easeOutExpo-ish) for fades. */
+  --chat-transition-glide: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-group(.chat-composer-morph) {
+  animation-duration: 500ms;
+  animation-timing-function: var(--chat-transition-spring);
+}
+::view-transition-image-pair(.chat-composer-morph) {
+  animation-name: chat-composer-blur;
+}
+/* A touch of mid-flight blur hides pixel interpolation artifacts while the
+   composer snapshot is stretched between its two sizes. */
+@keyframes chat-composer-blur {
+  30% {
+    filter: blur(1.5px);
+  }
+}
+
+::view-transition-old(.chat-splash-exit) {
+  animation: 160ms ease-out both chat-transition-fade reverse;
+}
+::view-transition-new(.chat-thread-enter) {
+  animation:
+    300ms var(--chat-transition-glide) 90ms both chat-transition-fade,
+    460ms var(--chat-transition-spring) both chat-transition-rise;
+}
+
+@keyframes chat-transition-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes chat-transition-rise {
+  from {
+    transform: translateY(16px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Motion sensitivity: collapse every view transition to an instant swap (the
+   browser's non-animated default). */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-image-pair(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

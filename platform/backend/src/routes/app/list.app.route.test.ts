@@ -2,7 +2,12 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import type { AppListItem, User } from "@/types";
+
+type AppListResponse = {
+  data: AppListItem[];
+  pagination: { total: number };
+};
 
 describe("GET /api/apps", () => {
   let app: FastifyInstanceWithZod;
@@ -47,6 +52,169 @@ describe("GET /api/apps", () => {
       owned.id,
     );
     expect(response.json().pagination.total).toBeGreaterThanOrEqual(1);
+  });
+
+  test("treats wildcard characters literally in owned app search", async ({
+    makeApp,
+  }) => {
+    const percentName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "100% Ready",
+    });
+    const percentDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Percent Description",
+      description: "Contains a % marker",
+    });
+    const underscoreName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Under_score Name",
+    });
+    const underscoreDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Underscore Description",
+      description: "Contains an _ marker",
+    });
+    const backslashName = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Back\\slash Name",
+    });
+    const backslashDescription = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Backslash Description",
+      description: "Contains a \\ marker",
+    });
+    await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Plain App",
+      description: "Contains no special marker",
+    });
+
+    const searchOwned = async (search: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${encodeURIComponent(search)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json<AppListResponse>();
+      const ids = body.data
+        .filter((item) => item.source === "owned")
+        .map((item) => item.id)
+        .sort();
+      return { ids, total: body.pagination.total };
+    };
+
+    expect(await searchOwned("%")).toEqual({
+      ids: [percentName.id, percentDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("_")).toEqual({
+      ids: [underscoreName.id, underscoreDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("\\")).toEqual({
+      ids: [backslashName.id, backslashDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchOwned("READY")).toEqual({
+      ids: [percentName.id],
+      total: 1,
+    });
+  });
+
+  test("treats wildcard characters literally in external app search", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const makeExternalApp = async (params: {
+      catalogName: string;
+      catalogDescription: string;
+      toolName: string;
+      toolDescription: string;
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        name: params.catalogName,
+        description: params.catalogDescription,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        scope: "org",
+      });
+      await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+      await makeTool({
+        catalogId: catalog.id,
+        name: params.toolName,
+        description: params.toolDescription,
+        meta: {
+          _meta: { ui: { resourceUri: `ui://${catalog.id}/app.html` } },
+        },
+      });
+      return catalog;
+    };
+
+    const percentName = await makeExternalApp({
+      catalogName: "100% External",
+      catalogDescription: "Catalog name marker",
+      toolName: "percentname",
+      toolDescription: "Ordinary description",
+    });
+    const underscoreDescription = await makeExternalApp({
+      catalogName: "Underscore Description",
+      catalogDescription: "Contains an _ marker",
+      toolName: "underscoredescription",
+      toolDescription: "Ordinary description",
+    });
+    const backslashToolName = await makeExternalApp({
+      catalogName: "Backslash Tool Name",
+      catalogDescription: "Tool name marker",
+      toolName: "back\\slash",
+      toolDescription: "Ordinary description",
+    });
+    const percentToolDescription = await makeExternalApp({
+      catalogName: "Tool Description Marker",
+      catalogDescription: "Ordinary catalog description",
+      toolName: "percentdescription",
+      toolDescription: "MiXeD needle with a % marker",
+    });
+
+    const searchExternal = async (search: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${encodeURIComponent(search)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json<AppListResponse>();
+      const catalogIds = body.data
+        .filter((item) => item.source === "external")
+        .map((item) => item.catalogId)
+        .sort();
+      return { catalogIds, total: body.pagination.total };
+    };
+
+    expect(await searchExternal("%")).toEqual({
+      catalogIds: [percentName.id, percentToolDescription.id].sort(),
+      total: 2,
+    });
+    expect(await searchExternal("_")).toEqual({
+      catalogIds: [underscoreDescription.id],
+      total: 1,
+    });
+    expect(await searchExternal("\\")).toEqual({
+      catalogIds: [backslashToolName.id],
+      total: 1,
+    });
+    expect(await searchExternal("mixed NEEDLE")).toEqual({
+      catalogIds: [percentToolDescription.id],
+      total: 1,
+    });
   });
 
   test("includes assigned team names for a team-scoped owned app", async ({

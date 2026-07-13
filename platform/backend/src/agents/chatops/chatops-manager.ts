@@ -54,7 +54,8 @@ import {
   ensureProvisionedUser,
   isSsoConfigured,
 } from "./auto-provision";
-import { claimThreadMuteHint } from "./channel-activation";
+import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
+import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
@@ -65,6 +66,7 @@ import {
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
 import SlackProvider from "./slack-provider";
+import TelegramProvider from "./telegram-provider";
 import {
   buildAgentFooter,
   buildHistorySkippedAttachmentsNote,
@@ -81,6 +83,7 @@ import {
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
 
@@ -98,6 +101,10 @@ export class ChatOpsManager {
     return this.slackProvider;
   }
 
+  getTelegramProvider(): TelegramProvider | null {
+    return this.telegramProvider;
+  }
+
   getChatOpsProvider(
     providerType: ChatOpsProviderType,
   ): ChatOpsProvider | null {
@@ -106,6 +113,8 @@ export class ChatOpsManager {
         return this.getMSTeamsProvider();
       case "slack":
         return this.getSlackProvider();
+      case "telegram":
+        return this.getTelegramProvider();
     }
   }
 
@@ -164,7 +173,8 @@ export class ChatOpsManager {
   isAnyProviderConfigured(): boolean {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
-      (this.slackProvider?.isConfigured() ?? false)
+      (this.slackProvider?.isConfigured() ?? false) ||
+      (this.telegramProvider?.isConfigured() ?? false)
     );
   }
 
@@ -250,7 +260,7 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig] = await Promise.all([
+    const [msTeamsConfig, slackConfig, telegramConfig] = await Promise.all([
       ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
@@ -262,6 +272,13 @@ export class ChatOpsManager {
         logger.error(
           { error: error instanceof Error ? error.message : String(error) },
           "[ChatOps] Failed to load Slack config, skipping",
+        );
+        return null;
+      }),
+      ChatOpsConfigModel.getTelegramConfig().catch((error) => {
+        logger.error(
+          { error: error instanceof Error ? error.message : String(error) },
+          "[ChatOps] Failed to load Telegram config, skipping",
         );
         return null;
       }),
@@ -278,6 +295,14 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
+    // The Telegram integration is feature-flagged: without the master switch
+    // the provider never starts, even if the DB already holds a config.
+    if (telegramConfig && config.chatops.telegramEnabled) {
+      this.telegramProvider = new TelegramProvider(telegramConfig);
+      // Telegram delivers everything over long polling, so all events flow
+      // through the event handler (like Slack socket mode)
+      this.telegramProvider.setEventHandler(this);
+    }
 
     if (!this.isAnyProviderConfigured()) {
       return;
@@ -286,6 +311,7 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      { name: "Telegram", provider: this.telegramProvider },
     ];
 
     for (const { name, provider } of providers) {
@@ -338,6 +364,10 @@ export class ChatOpsManager {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
     }
+    if (this.telegramProvider) {
+      await this.telegramProvider.cleanup();
+      this.telegramProvider = null;
+    }
     this.stopCleanupInterval();
   }
 
@@ -386,7 +416,9 @@ export class ChatOpsManager {
       logger.warn("[ChatOps] Could not resolve user email");
       await provider.sendReply({
         originalMessage: message,
-        text: "Could not verify your identity. Please ensure your profile has an email configured.",
+        text:
+          provider.identityVerificationFailureText?.() ??
+          "Could not verify your identity. Please ensure your profile has an email configured.",
       });
       return;
     }
@@ -568,7 +600,7 @@ export class ChatOpsManager {
     const organizationId = await getDefaultOrganizationId();
 
     // Create or update binding
-    const isDm = isSlackDmChannel(selection.channelId);
+    const isDm = selection.isDm ?? isSlackDmChannel(selection.channelId);
     const channelName = isDm
       ? `Direct Message - ${senderEmail}`
       : await provider.getChannelName(selection.channelId);
@@ -739,12 +771,7 @@ export class ChatOpsManager {
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
-    const providerLabel =
-      provider.providerId === "slack"
-        ? "Slack"
-        : provider.providerId === "ms-teams"
-          ? "MS Teams"
-          : provider.providerId;
+    const providerLabel = CHATOPS_PROVIDER_LABELS[provider.providerId];
     const threadIdForPrefix = message.threadId ?? message.messageId;
     let systemPrefix = `(${providerLabel} conversation, thread id: ${threadIdForPrefix})`;
     if (provider.providerId === "slack") {
@@ -1433,6 +1460,7 @@ export class ChatOpsManager {
   private async seedConfigFromEnvVars(): Promise<void> {
     await this.seedMsTeamsConfigFromEnvVars();
     await this.seedSlackConfigFromEnvVars();
+    await this.seedTelegramConfigFromEnvVars();
   }
 
   private async seedMsTeamsConfigFromEnvVars(): Promise<void> {
@@ -1505,6 +1533,30 @@ export class ChatOpsManager {
     }
   }
 
+  private async seedTelegramConfigFromEnvVars(): Promise<void> {
+    try {
+      // Don't store tokens for a feature-flagged-off integration
+      if (!config.chatops.telegramEnabled) return;
+
+      const existing = await ChatOpsConfigModel.getTelegramConfig();
+      if (existing) return;
+
+      const botToken = process.env.ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN || "";
+      if (!botToken) return;
+
+      await ChatOpsConfigModel.saveTelegramConfig({
+        enabled: true,
+        botToken,
+      });
+      logger.info("[ChatOps] Seeded Telegram config from env vars to DB");
+    } catch (error) {
+      logger.error(
+        { error: errorMessage(error) },
+        "[ChatOps] Failed to seed Telegram config from env vars",
+      );
+    }
+  }
+
   private async executeAndReply(params: {
     agent: { id: string; name: string };
     binding: { id: string; organizationId: string; agentId: string | null };
@@ -1544,6 +1596,21 @@ export class ChatOpsManager {
         .catch(() => {});
     }
 
+    // Register this run so muting the thread can abort it mid-flight, and record
+    // the thread's mute marker now: if it changes before we reply, the thread
+    // was muted while we were working and the reply must be dropped (see
+    // muteChannelThread / getThreadMuteMarker). The abort stops this pod's model
+    // request; the marker is the cross-pod guarantee that no reply is posted
+    // after a mute even when the run executed on a different pod than the mute.
+    const threadKey = {
+      provider: provider.providerId,
+      channelId: message.channelId,
+      threadId: message.threadId ?? message.channelId,
+    };
+    const { signal: abortSignal, unregister } =
+      chatOpsRunRegistry.register(threadKey);
+    const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
+
     try {
       const executeParams = {
         agent,
@@ -1552,11 +1619,22 @@ export class ChatOpsManager {
         provider,
         fullMessage,
         userId,
+        abortSignal,
       };
       let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
       try {
         execution = await this.executeMessage(executeParams);
       } catch (error) {
+        // The thread was muted mid-run: we aborted this run on purpose, so stay
+        // silent rather than posting the abort as an error. The marker check
+        // below also covers a run aborted on another pod (no local signal).
+        if (abortSignal.aborted) {
+          return await this.suppressMutedReply({
+            provider,
+            message,
+            threadKey,
+          });
+        }
         // Web chat surfaces transient provider failures as a retry button;
         // chatops has no interactive affordance, so one automatic retry
         // stands in for it. The retry re-runs the whole agent turn, exactly
@@ -1576,6 +1654,17 @@ export class ChatOpsManager {
       }
       const { result, responseAgent } = execution;
 
+      // Drop the reply if the thread was muted while the run was in flight —
+      // whether we aborted it here (abortSignal) or it ran to completion on
+      // another pod (the marker moved). Muting means "be quiet now", so an
+      // answer that lands after it would defeat the request.
+      if (
+        abortSignal.aborted ||
+        (await this.threadMutedSinceStart(threadKey, muteMarkerAtStart))
+      ) {
+        return await this.suppressMutedReply({ provider, message, threadKey });
+      }
+
       return await this.replyByMessageExecutionResult({
         agent: responseAgent,
         message,
@@ -1584,6 +1673,13 @@ export class ChatOpsManager {
         result,
       });
     } catch (error) {
+      // A mute that aborted the run mid-flight (e.g. during the retry leg above)
+      // surfaces here as a throw — stay silent rather than posting it as an
+      // error, since the user just asked the bot to be quiet.
+      if (abortSignal.aborted) {
+        return await this.suppressMutedReply({ provider, message, threadKey });
+      }
+
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
         "[ChatOps] Failed to execute A2A message",
@@ -1604,7 +1700,59 @@ export class ChatOpsManager {
       }
 
       return { success: false, error: errorMessage(error) };
+    } finally {
+      unregister();
     }
+  }
+
+  /**
+   * Whether the thread was muted after this run started, by comparing the mute
+   * marker captured at the start against the current one. A non-null current
+   * marker that differs from the captured value means a mute landed mid-run; a
+   * null current value (lapsed marker) is never treated as a mute, so it can't
+   * cause a spurious suppression.
+   */
+  private async threadMutedSinceStart(
+    threadKey: {
+      provider: ChatOpsProviderType;
+      channelId: string;
+      threadId: string;
+    },
+    muteMarkerAtStart: string | null,
+  ): Promise<boolean> {
+    const current = await getThreadMuteMarker(threadKey);
+    return current !== null && current !== muteMarkerAtStart;
+  }
+
+  /**
+   * Silently drop the reply for a run whose thread was muted mid-flight: clear
+   * the lingering "typing…" indicator and report success with no response (same
+   * shape as the agent deliberately staying quiet), so nothing is posted to the
+   * now-muted thread.
+   */
+  private async suppressMutedReply(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    threadKey: {
+      provider: ChatOpsProviderType;
+      channelId: string;
+      threadId: string;
+    };
+  }): Promise<ChatOpsProcessingResult> {
+    const { provider, message, threadKey } = params;
+    logger.info(
+      {
+        messageId: message.messageId,
+        provider: threadKey.provider,
+        channelId: threadKey.channelId,
+        threadId: threadKey.threadId,
+      },
+      "[ChatOps] Thread muted during execution — dropping reply",
+    );
+    await provider
+      .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+      ?.catch(() => {});
+    return { success: true, agentResponse: "" };
   }
 
   /**
@@ -1938,11 +2086,21 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     userId: string;
+    /** Aborts the agent run when the thread is muted mid-flight. */
+    abortSignal?: AbortSignal;
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
   }> {
-    const { agent, binding, message, provider, fullMessage, userId } = params;
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      userId,
+      abortSignal,
+    } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
     // so all messages in the same thread are grouped together in logs
@@ -1961,7 +2119,7 @@ export class ChatOpsManager {
       ],
     });
     const source: InteractionSource =
-      provider.providerId === "slack" ? "chatops:slack" : "chatops:ms-teams";
+      CHATOPS_PROVIDER_SOURCES[provider.providerId];
     const systemParams = {
       sessionId,
       source,
@@ -1979,6 +2137,7 @@ export class ChatOpsManager {
       agentId: agent.id,
       request,
       systemParams,
+      abortSignal,
     });
 
     // If swap_agent/swap_to_default_agent created a thread-level override
@@ -2032,6 +2191,7 @@ export class ChatOpsManager {
           agentId: swappedAgent.id,
           request,
           systemParams,
+          abortSignal,
         });
 
         return {
@@ -2153,10 +2313,7 @@ export class ChatOpsManager {
             decision.channelId,
             originalMessage.threadId,
           ),
-          source:
-            provider.providerId === "slack"
-              ? "chatops:slack"
-              : "chatops:ms-teams",
+          source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
         },
       });
 
@@ -2207,6 +2364,21 @@ async function getDefaultOrganizationId(): Promise<string> {
   }
   return org.id;
 }
+
+/** Human-readable provider names for LLM context prefixes. */
+const CHATOPS_PROVIDER_LABELS: Record<ChatOpsProviderType, string> = {
+  slack: "Slack",
+  "ms-teams": "MS Teams",
+  telegram: "Telegram",
+};
+
+/** Interaction-log `source` value per provider. */
+const CHATOPS_PROVIDER_SOURCES: Record<ChatOpsProviderType, InteractionSource> =
+  {
+    slack: "chatops:slack",
+    "ms-teams": "chatops:ms-teams",
+    telegram: "chatops:telegram",
+  };
 
 /**
  * Build a deterministic session ID for chatops messages.

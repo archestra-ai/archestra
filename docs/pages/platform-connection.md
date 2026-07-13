@@ -115,6 +115,7 @@ Claude Desktop is a desktop app, so you apply every change in its UI — there i
 
 - **MCP gateway** — enable Developer Mode, open Developer → Configure Third-Party Inference, add a blank managed MCP server, and paste the gateway URL. Sign in once in your browser.
 - **LLM proxy** — in the same form, paste the gateway base URL and your API key, then add the Archestra attribution headers under Custom headers.
+- **Skills** — the downloaded profile registers your shared skills as a plugin marketplace; browse and install them from the Directory's Organization tab in the app.
 - **Revert** — remove the connector and clear the inference credential in the app.
 
 ### n8n

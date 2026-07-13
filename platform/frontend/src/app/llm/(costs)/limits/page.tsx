@@ -977,6 +977,7 @@ export default function LimitsPage() {
             <div className="space-y-2">
               <Label>Limit value ($)</Label>
               <Input
+                aria-label="Limit value"
                 value={formatNumericInput(formState.limitValue)}
                 onChange={(event) =>
                   setFormState((current) => ({

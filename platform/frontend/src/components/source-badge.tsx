@@ -119,6 +119,15 @@ function getSourceIcon({
         className="shrink-0 rounded-sm"
       />
     ),
+    "chatops:telegram": (
+      <Image
+        src="/icons/telegram.png"
+        alt="Telegram"
+        width={12}
+        height={12}
+        className="shrink-0 rounded-sm"
+      />
+    ),
     email: <Mail className="h-3 w-3 shrink-0" />,
     "schedule-trigger": <CalendarClock className="h-3 w-3 shrink-0" />,
     "knowledge:embedding": <Database className="h-3 w-3 shrink-0" />,

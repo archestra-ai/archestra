@@ -22,6 +22,7 @@ export const SupportedProvidersSchema = z.enum([
   "minimax",
   "azure",
   "github-copilot",
+  "microsoft-365-copilot",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -47,6 +48,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:chatCompletions",
   "azure:responses",
   "github-copilot:chatCompletions",
+  "microsoft-365-copilot:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -84,6 +86,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   minimax: "MiniMax",
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
+  "microsoft-365-copilot": "Microsoft 365 Copilot",
 };
 
 /**
@@ -112,8 +115,10 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
 /**
  * Providers whose credential is an individual user's token rather than a shared
  * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
- * account's Copilot seat). Sharing one token across users is a ToS gray area
- * and breaks per-user attribution, so for these providers:
+ * account's Copilot seat; Microsoft 365 Copilot: a per-user Entra ID refresh token
+ * tied to that account's Microsoft 365 Copilot license — the Graph Chat API
+ * only supports delegated auth). Sharing one token across users is a ToS gray
+ * area and breaks per-user attribution, so for these providers:
  * - keys are personal-scope only (no team/org scope, no virtual-key sharing);
  * - request-time resolution uses ONLY the acting user's personal key — never an
  *   agent's attached key, a conversation key, a team/org key, or the shared env
@@ -121,7 +126,7 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
  * - a missing personal key surfaces a "link your account" prompt, not a fallback.
  */
 export const PROVIDERS_REQUIRING_PER_USER_CREDENTIAL =
-  new Set<SupportedProvider>(["github-copilot"]);
+  new Set<SupportedProvider>(["github-copilot", "microsoft-365-copilot"]);
 
 export function providerRequiresPerUserCredential(
   provider: SupportedProvider,
@@ -194,6 +199,15 @@ export const MINIMAX_MODELS = [
 ] as const;
 
 /**
+ * The single pseudo-model exposed by the Microsoft 365 Copilot provider. The Graph
+ * Chat API has no model selection — requests always run against the user's
+ * Microsoft 365 Copilot — so the provider serves exactly this static model.
+ */
+export const MICROSOFT_365_COPILOT_MODELS = [
+  { id: "microsoft-365-copilot", displayName: "Microsoft 365 Copilot" },
+] as const;
+
+/**
  * Default provider base URLs.
  * Used as placeholder hints in the UI and as fallback values when no per-key base URL is configured.
  */
@@ -216,6 +230,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   minimax: "https://api.minimax.io/v1",
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
+  "microsoft-365-copilot": "https://graph.microsoft.com/beta",
 };
 
 /**
@@ -318,6 +333,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4.1",
     "gpt-4o",
   ],
+  "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
 };
 
 /**
@@ -343,6 +359,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   minimax: "MiniMax-M3",
   azure: "gpt-5.5",
   "github-copilot": "gpt-4o",
+  "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
 };
 
 /**
@@ -412,6 +429,9 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     // GitHub Copilot model availability depends on the user's subscription tier,
     // so models are synced from Copilot's own /models endpoint, not models.dev
     "github-copilot": null,
+    // Microsoft 365 Copilot exposes a single static pseudo-model (the Graph Chat
+    // API has no model selection), so there is nothing to sync from models.dev
+    "microsoft-365-copilot": null,
     perplexity: null,
     nvidia: null,
   };

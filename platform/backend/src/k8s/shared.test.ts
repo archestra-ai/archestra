@@ -163,6 +163,28 @@ describe("shared K8s utilities", () => {
     });
   });
 
+  describe("isK8sConflictError", () => {
+    async function getIsK8sConflictError() {
+      const { isK8sConflictError } = await import("./shared");
+      return isK8sConflictError;
+    }
+
+    test("returns true for statusCode, code, and response.statusCode 409", async () => {
+      const isK8sConflictError = await getIsK8sConflictError();
+      expect(isK8sConflictError({ statusCode: 409 })).toBe(true);
+      expect(isK8sConflictError({ code: 409 })).toBe(true);
+      expect(isK8sConflictError({ response: { statusCode: 409 } })).toBe(true);
+    });
+
+    test("returns false for non-409 errors and nullish input", async () => {
+      const isK8sConflictError = await getIsK8sConflictError();
+      expect(isK8sConflictError({ statusCode: 404 })).toBe(false);
+      expect(isK8sConflictError({ response: { statusCode: 500 } })).toBe(false);
+      expect(isK8sConflictError(null)).toBe(false);
+      expect(isK8sConflictError(undefined)).toBe(false);
+    });
+  });
+
   describe("isK8sConfigured", () => {
     test("returns false when no K8s env vars are set", async () => {
       vi.resetModules();

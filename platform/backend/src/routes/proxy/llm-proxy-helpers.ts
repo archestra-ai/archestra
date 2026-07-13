@@ -33,6 +33,11 @@ import type {
   UnsafeContextBoundary,
   UsageView,
 } from "@/types";
+import {
+  collectErrorCodes,
+  isConnectionErrno,
+  isTimeoutErrno,
+} from "@/utils/network-errors";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -349,6 +354,7 @@ export function handleError(
   // Extract status code from error, checking multiple common property names
   // and ensuring the value is a valid number (not undefined/null)
   let statusCode: number = 500;
+  let hasExplicitStatus = false;
   if (error instanceof Error) {
     const errorObj = error as Error & {
       status?: number;
@@ -356,8 +362,24 @@ export function handleError(
     };
     if (typeof errorObj.status === "number") {
       statusCode = errorObj.status;
+      hasExplicitStatus = true;
     } else if (typeof errorObj.statusCode === "number") {
       statusCode = errorObj.statusCode;
+      hasExplicitStatus = true;
+    }
+  }
+
+  // A connection failure or timeout reaching the upstream provider carries no
+  // HTTP status (the request never got a response), so it would otherwise fall
+  // through as a generic 500 and be captured as a server exception. That's the
+  // upstream's/network's failure, not ours — reclassify it as a gateway error
+  // (504 timeout, 502 connection) so the central error handler logs it but keeps
+  // it out of error tracking (it already excludes 502/504), while the client
+  // still sees a retryable 5xx.
+  if (!hasExplicitStatus) {
+    const upstreamStatus = classifyTransientUpstreamError(error);
+    if (upstreamStatus !== undefined) {
+      statusCode = upstreamStatus;
     }
   }
 
@@ -401,6 +423,42 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   throw new ApiError(statusCode, errorMessage, internalCode);
+}
+
+/**
+ * When an LLM SDK call fails to reach the upstream provider — a dropped/refused
+ * connection or a timeout, both with no HTTP status — classify it as an upstream
+ * gateway failure: 504 for a timeout, 502 for any other connection failure.
+ * Returns undefined for anything that isn't a recognizable connection failure so
+ * genuine 500s (our own bugs) are left alone.
+ *
+ * Matches the OpenAI/Anthropic SDK `APIConnectionError` ("Connection error.") and
+ * `APIConnectionTimeoutError` ("Request timed out."), plus the underlying Node
+ * `fetch`/libuv/undici errno codes those wrap (via the shared network-error
+ * vocabulary), across providers.
+ */
+function classifyTransientUpstreamError(error: unknown): 502 | 504 | undefined {
+  if (!(error instanceof Error)) return undefined;
+
+  const { name, message } = error;
+  const codes = collectErrorCodes(error);
+
+  const isTimeout =
+    name === "APIConnectionTimeoutError" ||
+    /timed out|timeout/i.test(message) ||
+    codes.some(isTimeoutErrno);
+  if (isTimeout) return 504;
+
+  const isConnectionFailure =
+    name === "APIConnectionError" ||
+    /^connection error\.?$/i.test(message) ||
+    /fetch failed|socket hang up|network error|connection (?:reset|refused|closed|aborted)|terminated/i.test(
+      message,
+    ) ||
+    codes.some(isConnectionErrno);
+  if (isConnectionFailure) return 502;
+
+  return undefined;
 }
 
 /**

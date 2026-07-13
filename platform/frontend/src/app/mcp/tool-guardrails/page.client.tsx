@@ -2,8 +2,10 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { EditPolicyDialog } from "@/components/chat/edit-policy-dialog";
 import {
   prefetchOperators,
   prefetchToolInvocationPolicies,
@@ -39,8 +41,16 @@ export function ToolGuardrailsClient({
 
 function ToolsList({ initialData }: { initialData?: ToolsInitialData }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [selectedToolForDialog, setSelectedToolForDialog] =
     useState<ToolWithAssignmentsData | null>(null);
+
+  // Deep link from an external-client guardrail block: `?toolId=<id>` opens
+  // that tool's policy editor directly (name is only for the dialog title).
+  const deepLinkToolId = searchParams.get("toolId");
+  const deepLinkToolName = searchParams.get("toolName") ?? "";
 
   // Sync selected tool with cache updates
   useEffect(() => {
@@ -81,6 +91,18 @@ function ToolsList({ initialData }: { initialData?: ToolsInitialData }) {
         onOpenChange={(open: boolean) =>
           !open && setSelectedToolForDialog(null)
         }
+      />
+
+      <EditPolicyDialog
+        open={!!deepLinkToolId}
+        onOpenChange={(open: boolean) => {
+          // Closing clears the deep-link params so the dialog does not reopen.
+          if (!open) {
+            router.replace(pathname);
+          }
+        }}
+        toolId={deepLinkToolId ?? undefined}
+        toolName={deepLinkToolName}
       />
     </div>
   );

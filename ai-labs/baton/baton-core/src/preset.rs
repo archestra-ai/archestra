@@ -22,6 +22,8 @@
 
 use std::collections::BTreeSet;
 
+use serde::{Deserialize, Serialize};
+
 /// The sink-side proof for one dimension: three-valued, not a lattice
 /// comparison. `Holds` when the context satisfies the requirement,
 /// `Fails(witness)` when it provably does not (the witness is exactly what is
@@ -60,7 +62,7 @@ pub trait HasTop: Ord {
 /// The confidentiality-meet preset (generalizes `Audience`). The fold is the
 /// most-restrictive combine: a value is `All` (top / identity), a concrete
 /// `Only(set)`, or `Unknown` (absorbing). Adequacy is `covers`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MeetSet<T: Ord> {
     All,
     Only(BTreeSet<T>),
@@ -101,7 +103,7 @@ impl<T: Ord + Clone> MeetSet<T> {
 
 /// The accumulating-union preset (generalizes `Effects`). A value is `Has(set)`
 /// (with `Has(∅)` the identity) or `Unknown` (absorbing). Adequacy is `avoids`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JoinSet<T: Ord> {
     Has(BTreeSet<T>),
     Unknown,
@@ -143,7 +145,7 @@ impl<T: Ord + Clone> JoinSet<T> {
 
 /// The trust-like ordered preset (generalizes `Trust`). Worse = lower, fold =
 /// min, `Unknown` just above bottom, adequacy = `at_least(floor)` — "least wins".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MinLevel<T: Ord> {
     Known(T),
     Unknown,
@@ -185,7 +187,7 @@ impl<T: Ord + Clone> MinLevel<T> {
 /// The classification-like ordered preset (the dual of [`MinLevel`], with no
 /// built-in instance yet). Worse = higher, fold = max, `Unknown` just below
 /// top, adequacy = `at_most(ceiling)` — "most sensitive wins".
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MaxLevel<T: Ord> {
     Known(T),
     Unknown,

@@ -410,11 +410,20 @@ export type ChatAppDiagnosticsMetadata = z.infer<
   typeof ChatAppDiagnosticsMetadataSchema
 >;
 
+export const ChatMessageFeedbackSchema = z.enum(["up", "down"]);
+export type ChatMessageFeedback = z.infer<typeof ChatMessageFeedbackSchema>;
+
 /** Chat message metadata. Permissive — only the keys we own are typed. */
 export const ChatMessageMetadataSchema = z
   .object({
     skill: ChatSkillMetadataSchema.optional(),
     appDiagnostics: ChatAppDiagnosticsMetadataSchema.optional(),
+    /**
+     * Owner's thumbs verdict on an assistant message. Projected from the
+     * `messages.feedback` column on read — the column is authoritative, any
+     * value embedded in persisted content JSON is overridden.
+     */
+    feedback: ChatMessageFeedbackSchema.optional(),
     /**
      * Marks a `!`-prefixed user message the composer submitted for direct
      * sandbox execution (no LLM turn). A marker only — the command is always

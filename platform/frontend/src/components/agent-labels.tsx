@@ -191,6 +191,7 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
                   type="button"
                   onClick={() => handleRemoveLabel(label.key)}
                   className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                  aria-label="Remove label"
                 >
                   <X className="h-3 w-3" />
                 </button>

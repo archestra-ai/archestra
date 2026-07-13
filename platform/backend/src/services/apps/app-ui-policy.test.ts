@@ -106,7 +106,7 @@ describe("buildValidatedVersionPayload", () => {
   test("a whitespace-spliced href cannot slip the self-link past", async () => {
     await expect(
       buildValidatedVersionPayload({
-        html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-\n base.css"></head><body/></html>',
+        html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-\n\tbase.css"></head><body/></html>',
       }),
     ).rejects.toThrow(/must not load the platform stylesheet/);
   });

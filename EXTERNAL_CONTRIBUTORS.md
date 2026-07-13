@@ -699,3 +699,14 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @solar-wind
 - @mosharov
 - @xdrdak
+- @shafat730
+- @pavanydg
+- @zeroorigin-dev
+- @blackwell-systems
+- @amirhosseinkia
+- @Krishnakhandelwal123
+- @skyhub32
+- @zeronautt
+- @naninu123
+- @Hronom
+- @eph5xx

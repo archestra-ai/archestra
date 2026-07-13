@@ -2,10 +2,13 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::contract::{ToolRequest, Violation};
 use crate::label::{Grant, Label};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct AuthorityName(String);
 
 impl AuthorityName {
@@ -25,7 +28,7 @@ impl fmt::Display for AuthorityName {
 }
 
 /// The outcome of an escalation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Ruling {
     /// Approve the flow: the engine applies the minted grant, rechecks it
     /// closed, and records the declassification *for this flow only*. The

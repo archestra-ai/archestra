@@ -427,6 +427,7 @@ export function OidcConfigForm({
             <FormLabel>Scopes</FormLabel>
             <div className="flex gap-2">
               <Input
+                aria-label="Add scope"
                 placeholder="Add scope (e.g., profile)"
                 value={newScope}
                 onChange={(e) => setNewScope(e.target.value)}
@@ -439,6 +440,7 @@ export function OidcConfigForm({
               />
               <Button
                 type="button"
+                aria-label="Add scope"
                 onClick={addScope}
                 size="icon"
                 variant="outline"
@@ -457,6 +459,7 @@ export function OidcConfigForm({
                     {scope}
                     <button
                       type="button"
+                      aria-label="Remove scope"
                       onClick={() => removeScope(scope)}
                       className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                     >

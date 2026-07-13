@@ -88,8 +88,18 @@ export function AppCreateDialog({
         <Input
           id="app-name"
           placeholder="e.g. Sales dashboard, Task tracker, Content calendar"
-          {...form.register("name", { required: true, maxLength: 100 })}
+          aria-invalid={!!form.formState.errors.name}
+          {...form.register("name", {
+            required: "Name is required.",
+            maxLength: 100,
+            validate: (value) => value.trim().length > 0 || "Name is required.",
+          })}
         />
+        {form.formState.errors.name?.message ? (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.name.message}
+          </p>
+        ) : null}
       </div>
     </StandardFormDialog>
   );

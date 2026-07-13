@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppFrame } from "@/components/mcp-app/app-frame";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -43,7 +44,10 @@ export default function CatalogAppRunPage({
   const searchParams = useSearchParams();
   const requestedInstall = searchParams.get("install");
   const requestedResource = searchParams.get("resource");
-  const { data, isPending } = useExternalApp(catalogId);
+  const { data, isPending, isLoadingError, refetch } = useExternalApp(
+    catalogId,
+    { toastOnError: false },
+  );
 
   const installs = data?.installs ?? [];
   const activeInstallId =
@@ -75,12 +79,22 @@ export default function CatalogAppRunPage({
     }
   }, [isPending, data, activeInstallId, router]);
 
+  if (isLoadingError) {
+    return (
+      <QueryLoadError
+        title="Couldn't load this app"
+        onRetry={() => refetch()}
+        className="h-screen"
+      />
+    );
+  }
+
   if (!isPending && !data) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center">
-        <p className="text-sm text-muted-foreground">
+        <output className="text-sm text-muted-foreground">
           This app does not exist or you do not have access to it.
-        </p>
+        </output>
         <Button asChild variant="outline" size="sm">
           <Link href="/apps">
             <ArrowLeft className="h-4 w-4" />

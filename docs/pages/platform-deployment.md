@@ -224,9 +224,6 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources for MCP workload management, including pods, services, secrets, deployments, and generated `NetworkPolicy` objects (default: true)
-- `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: false). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
-- `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
-- `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked
 
 Environment network policies require the chart's default MCP manager RBAC so Archestra can create Kubernetes `NetworkPolicy` objects and any detected FQDN policy objects. See [Network Policies](/docs/platform-private-registry#network-policies).
 
@@ -484,84 +481,29 @@ archestra:
 
 #### SSRF Protection for MCP Server Pods
 
-The Helm chart includes an optional Kubernetes `NetworkPolicy` that prevents MCP server pods from performing Server-Side Request Forgery (SSRF) attacks. When enabled, it blocks outbound connections to private/internal IP ranges while allowing DNS resolution and public internet access.
+Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) automatically — there is no Helm toggle to turn on. The backend applies an egress policy to each pod, so a server cannot reach cloud metadata endpoints or private cluster ranges unless its environment network policy explicitly allows it.
 
-This policy is **disabled by default** to avoid breaking MCP servers that connect to internal Kubernetes services (e.g., `grafana.monitoring.svc.cluster.local`). If your MCP servers only need public internet access, enabling this policy is recommended.
+Each pod gets one policy, chosen by its environment's egress mode:
 
-To enable the policy:
+- **Unrestricted** (the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Restricted** — only the CIDRs and domains the environment allow-lists, plus DNS.
+- **Off** — all egress is denied.
 
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        create: true
-```
+A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked IPv4 ranges** (when enabled):
+**Blocked reserved ranges** (the unrestricted floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
+- `168.63.129.16/32` - Azure platform metadata (a public IP outside the private ranges)
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
-- `127.0.0.0/8` - Loopback
-- `0.0.0.0/32` - Treated as localhost by some HTTP libraries
+- `127.0.0.0/8`, `0.0.0.0/8` - Loopback and unspecified addresses
+- `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
+- `64:ff9b::/96` - NAT64 (blocks reaching the IPv4 ranges via IPv6; IPv4-mapped IPv6 is already covered by the IPv4 rules)
 
-**Blocked IPv6 ranges** (for dual-stack clusters):
+**Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-- `::1/128` - IPv6 loopback
-- `fc00::/7` - Unique local addresses (equivalent to RFC 1918)
-- `fe80::/10` - Link-local
-
-**Prerequisite**: Your cluster must use a CNI plugin that enforces `NetworkPolicies` (e.g., Calico, Cilium). The default GKE CNI (kubenet) does **not** enforce `NetworkPolicies` unless Dataplane V2 or Calico is enabled.
-
-MCP servers that need to connect to internal Kubernetes services will be blocked when this policy is enabled because ClusterIPs fall within the denied private ranges. Use `additionalEgressRules` to whitelist specific internal services.
-
-By pod/namespace labels (recommended — survives IP changes):
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalEgressRules:
-          - to:
-              - namespaceSelector:
-                  matchLabels:
-                    kubernetes.io/metadata.name: monitoring
-                podSelector:
-                  matchLabels:
-                    app: grafana
-            ports:
-              - protocol: TCP
-                port: 3000
-```
-
-By IP CIDR:
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalEgressRules:
-          - to:
-              - ipBlock:
-                  cidr: 10.0.50.0/24
-            ports:
-              - protocol: TCP
-                port: 443
-```
-
-To block additional CIDR ranges beyond the defaults:
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalDeniedCidrs:
-          - 198.51.100.0/24
-```
+To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's network policy to `restricted` and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 
@@ -607,7 +549,7 @@ If pgvector is not installed or the database user lacks permissions, the Knowled
 
 #### SSRF Protection
 
-Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from accessing private/internal networks. This is especially important when MCP servers execute untrusted code or connect to external services. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods) for configuration details.
+MCP server pods are protected from SSRF automatically: each pod's egress is confined to DNS and the public internet, with private and cloud-metadata ranges blocked. This matters most when MCP servers run untrusted code. To tighten a server to a specific allow-list — or deny its egress entirely — set its environment's network policy. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods).
 
 ## Infrastructure as Code
 
@@ -659,7 +601,7 @@ Full resource reference: [Terraform provider docs](https://registry.terraform.io
 
 ### Crossplane
 
-Crossplane v1 or v2 must already be installed in the target cluster.
+The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked. Crossplane v1 or v2 must already be installed in the target cluster.
 
 **1. Install the provider.** Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
 
@@ -726,46 +668,7 @@ spec:
     name: default
 ```
 
-Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md).
-
-### Crossplane
-
-The same resources are also available as a Crossplane v1/v2 provider for teams that prefer GitOps-style reconciliation on Kubernetes. The xpkg is [upjet](https://github.com/crossplane/upjet)-generated from the Terraform provider's schema and published from the same release tag, so the two stay version-locked.
-
-**Install the provider**:
-
-```yaml
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-archestra
-spec:
-  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
-```
-
-**Configure credentials** (the API key is the same one used by the Terraform provider — see [API Reference](/docs/platform-api-reference#authentication)):
-
-```bash
-kubectl create secret generic archestra-creds \
-  -n crossplane-system \
-  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
-```
-
-```yaml
-apiVersion: archestra.crossplane.io/v1beta1
-kind: ProviderConfig
-metadata:
-  name: default
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: crossplane-system
-      name: archestra-creds
-      key: credentials
-```
-
-For supported resources, examples, and the contributor flow, see the [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
+Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
 ## Environment Variables
 
@@ -1102,6 +1005,21 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_GITHUB_COPILOT_CLIENT_ID`** - GitHub App client id used for the Copilot device flow.
   - Default: `Iv1.b507a08c87ecfe98` (the community-standard VS Code client id accepted by the Copilot token exchange)
   - Override this if your organization registers its own GitHub App with Copilot API access
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`** - Application (client) ID of your Entra app registration for the Microsoft 365 Copilot device flow.
+  - No default. The "Sign in with Microsoft" flow is unavailable until this is set.
+  - The registration needs public client flows enabled and admin-consented delegated Graph scopes (see [Supported LLM Providers](/docs/platform-supported-llm-providers))
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`** - Entra tenant segment of the OAuth endpoints used for Microsoft 365 Copilot sign-in and token redemption.
+  - Default: `organizations` (any work or school account)
+  - Pin your tenant id to restrict sign-in to one directory
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL`** - Override the Microsoft Graph base URL serving the Microsoft 365 Copilot Chat API.
+  - Default: `https://graph.microsoft.com/beta`
+
+- **`ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL`** - Entra ID host serving the OAuth device-flow and token endpoints.
+  - Default: `https://login.microsoftonline.com`
+  - Microsoft 365 Copilot has no static API keys: provider keys store the user's long-lived Entra refresh token, and the proxy redeems it (with caching) on every request
 
 - **`ARCHESTRA_AZURE_OPENAI_BASE_URL`** - Azure AI Foundry deployment endpoint URL.
   - Deployment URL format: `https://<resource-name>.openai.azure.com/openai/deployments/<deployment-name>`
@@ -1460,6 +1378,19 @@ See [Slack](/docs/platform-slack) for setup instructions.
   - Required for the default socket mode
   - Starts with `xapp-`
   - Generated in: Basic Information page → App-Level Tokens (with `connections:write` scope)
+
+#### Telegram
+
+See [Telegram](/docs/platform-telegram) for setup instructions. Telegram uses long polling — no public URL, webhook, or ngrok needed.
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_ENABLED`** - Feature gate for the Telegram integration.
+  - `true` shows the channel, `false` forces it off
+  - Blank/unset falls back to the `ARCHESTRA_BETA` master switch
+  - When off, the Telegram channel is hidden and the provider never starts
+
+- **`ARCHESTRA_CHATOPS_TELEGRAM_BOT_TOKEN`** - Bot token issued by [@BotFather](https://t.me/BotFather).
+  - Required when: `ARCHESTRA_CHATOPS_TELEGRAM_ENABLED=true`
+  - Format: `123456789:ABC...`
 
 #### Attachment processing
 

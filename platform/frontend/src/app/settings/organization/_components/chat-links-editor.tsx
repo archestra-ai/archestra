@@ -88,6 +88,7 @@ export function ChatLinksEditor({
                 <p className="text-sm font-medium">Link {index + 1}</p>
                 <Button
                   type="button"
+                  aria-label="Remove link"
                   variant="ghost"
                   size="sm"
                   onClick={() => handleRemove(index)}

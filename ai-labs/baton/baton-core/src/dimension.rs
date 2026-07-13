@@ -15,10 +15,13 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 use crate::preset::{Adequacy, HasBottom, JoinSet, MeetSet, MinLevel};
 
 /// A user known to the surrounding system (ACLs, directories, ...).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct UserId(String);
 
 impl UserId {
@@ -50,7 +53,8 @@ impl fmt::Display for UserId {
 ///
 /// [`PUBLIC`]: Audience::PUBLIC
 /// [`UNKNOWN`]: Audience::UNKNOWN
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Audience(MeetSet<UserId>);
 
 impl Audience {
@@ -118,7 +122,7 @@ impl fmt::Display for Audience {
 }
 
 /// A trust judgement that has actually been made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum KnownTrust {
     Suspicious,
     Trusted,
@@ -153,7 +157,8 @@ impl fmt::Display for KnownTrust {
 /// The fold keeps the strongest bad evidence: definite suspicion dominates
 /// missing knowledge, which dominates trust
 /// (`Suspicious ∧ Unknown = Suspicious`, `Trusted ∧ Unknown = Unknown`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Trust(MinLevel<KnownTrust>);
 
 impl Trust {
@@ -209,7 +214,7 @@ impl fmt::Display for Trust {
 }
 
 /// A side effect a tool has on the world outside the trajectory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Effect {
     Mutation,
     Egress,
@@ -230,7 +235,8 @@ impl fmt::Display for Effect {
 /// Union fold; [`none`](Effects::none) (`Has(∅)`) is the identity, and
 /// [`UNKNOWN`](Effects::UNKNOWN) (an unannotated tool ran, so anything may have
 /// happened) is absorbing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Effects(JoinSet<Effect>);
 
 impl Effects {
@@ -299,7 +305,10 @@ impl fmt::Display for Effects {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+    use crate::test_strategies::{arb_audience, arb_effects, arb_trust};
 
     fn user(id: &str) -> UserId {
         UserId::new(id)
@@ -336,22 +345,34 @@ mod tests {
         );
     }
 
-    #[test]
-    fn audience_combine_is_associative() {
-        let samples = [
-            Audience::PUBLIC,
-            Audience::readers([user("alice"), user("bob")]),
-            Audience::readers([user("bob")]),
-            Audience::UNKNOWN,
-        ];
-        for a in &samples {
-            for b in &samples {
-                for c in &samples {
-                    let left = a.clone().combine(b.clone()).combine(c.clone());
-                    let right = a.clone().combine(b.clone().combine(c.clone()));
-                    assert_eq!(left, right, "a={a} b={b} c={c}");
-                }
-            }
+    proptest! {
+        /// Each data dimension's `combine` is a commutative, idempotent
+        /// semilattice — the taint-fold algebra the whole design rests on.
+        #[test]
+        fn audience_combine_is_a_semilattice(a in arb_audience(), b in arb_audience(), c in arb_audience()) {
+            prop_assert_eq!(
+                a.clone().combine(b.clone()).combine(c.clone()),
+                a.clone().combine(b.clone().combine(c.clone()))
+            );
+            prop_assert_eq!(a.clone().combine(b.clone()), b.clone().combine(a.clone()));
+            prop_assert_eq!(a.clone().combine(a.clone()), a);
+        }
+
+        #[test]
+        fn trust_combine_is_a_semilattice(a in arb_trust(), b in arb_trust(), c in arb_trust()) {
+            prop_assert_eq!(a.combine(b).combine(c), a.combine(b.combine(c)));
+            prop_assert_eq!(a.combine(b), b.combine(a));
+            prop_assert_eq!(a.combine(a), a);
+        }
+
+        #[test]
+        fn effects_combine_is_a_semilattice(a in arb_effects(), b in arb_effects(), c in arb_effects()) {
+            prop_assert_eq!(
+                a.clone().combine(b.clone()).combine(c.clone()),
+                a.clone().combine(b.clone().combine(c.clone()))
+            );
+            prop_assert_eq!(a.clone().combine(b.clone()), b.clone().combine(a.clone()));
+            prop_assert_eq!(a.clone().combine(a.clone()), a);
         }
     }
 

@@ -502,6 +502,7 @@ function StepManifestWebhook({
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>App ID</strong>
               <Input
+                aria-label="Slack App ID"
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your App ID"
@@ -620,6 +621,7 @@ function StepManifestSocket({
               From <strong>Basic Information &rarr; App Credentials</strong>,
               copy the <strong>App ID</strong>
               <Input
+                aria-label="Slack App ID"
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your App ID"

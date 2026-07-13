@@ -3,6 +3,7 @@ import {
   APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   type archestraApiTypes,
+  type ChatMessageFeedback,
   ChatMessageMetadataSchema,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
@@ -76,7 +77,10 @@ import {
   getToolHeaderState,
   getToolNameFromPart,
 } from "@/lib/chat/chat-tools-display.utils";
-import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
+import {
+  getMessageFeedback,
+  PERSISTED_MESSAGE_ID_METADATA_KEY,
+} from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
@@ -107,6 +111,7 @@ import {
   hasTextPart,
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
+  isBlankReasoningPart,
   resolveRunToolTargetName,
   type SubagentChildEntry,
 } from "./chat-messages.utils";
@@ -145,6 +150,16 @@ interface ChatMessagesProps {
   }>;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
+  /**
+   * Owner-only affordance: when set, assistant messages render thumbs up/down
+   * in their action bar. Callers that can show conversations the viewer does
+   * not own (e.g. scheduled-run detail) must not pass it.
+   */
+  onMessageFeedback?: (
+    messageId: string,
+    feedback: ChatMessageFeedback | null,
+  ) => void;
+  feedbackDisabled?: boolean;
   onRegenerateUserMessage?: (args: {
     messageId: string;
     partIndex: number;
@@ -218,6 +233,8 @@ export function ChatMessages({
   optimisticToolCalls = [],
   isLoadingConversation = false,
   onMessagesUpdate,
+  onMessageFeedback,
+  feedbackDisabled = false,
   onRegenerateUserMessage,
   onProviderConnected,
   onChatErrorRetry,
@@ -890,6 +907,16 @@ export function ChatMessages({
                                       onStartEdit={handleStartEdit}
                                       onCancelEdit={handleCancelEdit}
                                       onSave={handleSaveAssistantMessage}
+                                      feedback={getMessageFeedback(message)}
+                                      onFeedbackChange={
+                                        onMessageFeedback &&
+                                        ((feedback) =>
+                                          onMessageFeedback(
+                                            message.id,
+                                            feedback,
+                                          ))
+                                      }
+                                      feedbackDisabled={feedbackDisabled}
                                     />
                                   );
                                 })}
@@ -917,6 +944,13 @@ export function ChatMessages({
                                 onStartEdit={handleStartEdit}
                                 onCancelEdit={handleCancelEdit}
                                 onSave={handleSaveAssistantMessage}
+                                feedback={getMessageFeedback(message)}
+                                onFeedbackChange={
+                                  onMessageFeedback &&
+                                  ((feedback) =>
+                                    onMessageFeedback(message.id, feedback))
+                                }
+                                feedbackDisabled={feedbackDisabled}
                               />
                             </Fragment>
                           );
@@ -966,13 +1000,28 @@ export function ChatMessages({
                         );
                       }
 
-                      case "reasoning":
+                      case "reasoning": {
+                        // Redacted/signature-only thinking blocks arrive as
+                        // empty reasoning parts (kept for provider replay); they
+                        // must not render as empty "Thinking…" accordions.
+                        if (isBlankReasoningPart(part)) {
+                          return null;
+                        }
+                        const isStreamingThisReasoning =
+                          status === "streaming" &&
+                          idx === messages.length - 1 &&
+                          i === message.parts.length - 1;
                         return (
-                          <Reasoning key={partKey} className="w-full">
+                          <Reasoning
+                            key={partKey}
+                            className="w-full"
+                            isStreaming={isStreamingThisReasoning}
+                          >
                             <ReasoningTrigger />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
                         );
+                      }
 
                       case "file": {
                         // User file attachments are normally rendered inside EditableUserMessage

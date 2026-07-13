@@ -19,3 +19,7 @@ cd baton-core
 cargo run --example demo
 cargo test
 ```
+
+`agentdojo-harness/` evaluates the engine against the AgentDojo
+prompt-injection benchmark (with `baton-check`, a stateless JSON oracle over
+baton-core); see its README.

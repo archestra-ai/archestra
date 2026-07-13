@@ -256,6 +256,7 @@ function HookCircle({
                 ? "bg-accent border-accent-foreground/20 ring-2 ring-primary/20"
                 : "bg-background",
             )}
+            aria-label="Show hook run details"
           >
             <WebhookIcon className="size-3.5 text-muted-foreground" />
             <span

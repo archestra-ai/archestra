@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/microsoft-login/organizations/oauth2/v2.0/devicecode"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "device_code": "e2e-entra-device-code",
+      "user_code": "E2E-USER-CODE",
+      "verification_uri": "https://microsoft.com/devicelogin",
+      "expires_in": 900,
+      "interval": 5,
+      "message": "To sign in, use a web browser to open https://microsoft.com/devicelogin and enter the code E2E-USER-CODE to authenticate."
+    }
+  }
+}

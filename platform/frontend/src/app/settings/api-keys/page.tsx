@@ -278,6 +278,7 @@ export default function ApiKeysSettingsPage() {
                 <div className="flex gap-2">
                   <Input
                     readOnly
+                    aria-label="API key"
                     value={createdApiKeyValue}
                     className="font-mono text-xs"
                   />

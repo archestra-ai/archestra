@@ -211,6 +211,7 @@ function LogoRow({
       <input
         ref={fileInputRef}
         type="file"
+        aria-label="Upload logo image"
         accept="image/png,image/svg+xml"
         className="hidden"
         onChange={handleFileSelect}

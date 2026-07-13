@@ -46,10 +46,8 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import {
-  evaluateSingleMcpToolInvocationPolicy,
-  policyBlockToToolError,
-} from "@/guardrails/tool-invocation";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -441,19 +439,29 @@ export async function createAgentServer(
         );
         return result;
       } catch (error) {
-        logger.error(
-          {
-            agentId,
-            uri,
-            error: error instanceof Error ? error.message : "Unknown error",
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-          "Resource read failed",
-        );
+        // A third-party tool can advertise a `ui://` UI resource whose upstream
+        // server does not actually implement `resources/read` (returning -32601
+        // Method not found) or has no such resource. That is an expected upstream
+        // limitation, not a platform fault — the client degrades to the plain
+        // tool result — so log it at a lower severity to avoid flooding error
+        // logs. Genuine failures still log at error.
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        const logContext = {
+          agentId,
+          uri,
+          error: message,
+          stack: error instanceof Error ? error.stack : undefined,
+        };
+        if (isUnavailableResourceError(error)) {
+          logger.info(logContext, "Resource read unavailable (upstream)");
+        } else {
+          logger.error(logContext, "Resource read failed");
+        }
         throw {
           code: -32603,
           message: "Resource read failed",
-          data: error instanceof Error ? error.message : "Unknown error",
+          data: message,
         };
       }
     },
@@ -566,11 +574,15 @@ export async function createAgentServer(
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose
           // (in _meta + structuredContent) so MCP clients render the block
-          // structurally instead of scraping the refusal text.
-          const blockedResult = structuredToolErrorResult({
-            error: policyBlockToToolError(policyBlock),
-            text: policyBlock.refusalMessage,
+          // structurally instead of scraping the refusal text. When the caller
+          // can edit guardrails, both gain a deep link to this tool's policy
+          // editor so the external client can offer to review/modify it.
+          const { error, text } = await buildPolicyBlockedToolResult({
+            policyBlock,
+            userId: tokenAuth?.userId,
+            organizationId: tokenAuth?.organizationId,
           });
+          const blockedResult = structuredToolErrorResult({ error, text });
 
           // Blocked calls are still tool calls: report metrics and persist them
           // (isError) so they show up in the MCP gateway logs and dashboards
@@ -2057,4 +2069,26 @@ function providesUiResource(tool: {
   const isUiUri = (value: unknown): boolean =>
     typeof value === "string" && value.startsWith("ui://");
   return isUiUri(meta?.ui?.resourceUri) || isUiUri(meta?.["ui/resourceUri"]);
+}
+
+/**
+ * Whether a resource-read failure is an expected "the upstream server can't
+ * serve this" condition — method not found (-32601) or resource not found
+ * (-32002) — rather than a genuine platform fault. A third-party tool can
+ * advertise a `ui://` UI resource whose server never implemented
+ * `resources/read`; the client degrades to the plain tool result, so the
+ * gateway logs this quietly instead of at error level.
+ */
+function isUnavailableResourceError(error: unknown): boolean {
+  if (
+    error instanceof Error &&
+    /method not found|resource not found/i.test(error.message)
+  ) {
+    return true;
+  }
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return code === -32601 || code === -32002;
+  }
+  return false;
 }

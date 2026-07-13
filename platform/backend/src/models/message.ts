@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import { ApiError, type InsertMessage, type Message } from "@/types";
 import { isUuid, uuidv7 } from "@/utils/uuid";
@@ -141,6 +141,71 @@ class MessageModel {
 
     // Fall back to content ID (AI SDK nanoid)
     return MessageModel.findByContentId(id);
+  }
+
+  /**
+   * Like findByAnyId, but scoped to a single conversation. Content IDs are
+   * client-supplied and carry no uniqueness guarantee across conversations,
+   * so callers that know the conversation must scope the lookup to it.
+   */
+  static async findByAnyIdInConversation(
+    id: string,
+    conversationId: string,
+  ): Promise<Message | null> {
+    if (isUuid(id)) {
+      const [byDbId] = await db
+        .select()
+        .from(schema.messagesTable)
+        .where(
+          and(
+            eq(schema.messagesTable.id, id),
+            eq(schema.messagesTable.conversationId, conversationId),
+          ),
+        );
+      if (byDbId) return byDbId;
+    }
+
+    // Content IDs carry no uniqueness guarantee even within one conversation
+    // (client-supplied), so pick the newest match deterministically instead of
+    // whatever row the planner returns first.
+    const [byContentId] = await db
+      .select()
+      .from(schema.messagesTable)
+      .where(
+        and(
+          sql`${schema.messagesTable.content}->>'id' = ${id}`,
+          eq(schema.messagesTable.conversationId, conversationId),
+        ),
+      )
+      .orderBy(
+        desc(schema.messagesTable.createdAt),
+        desc(schema.messagesTable.id),
+      )
+      .limit(1);
+
+    return byContentId || null;
+  }
+
+  /**
+   * Set or clear the owner's feedback on a message. Deliberately does not
+   * touch the conversation's recency — a rating is not new activity.
+   * Returns null when the row vanished between lookup and update (e.g. a
+   * concurrent regeneration deleted it).
+   */
+  static async updateFeedback(
+    messageId: string,
+    feedback: Message["feedback"],
+  ): Promise<Message | null> {
+    const [updatedMessage] = await db
+      .update(schema.messagesTable)
+      .set({
+        feedback,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.messagesTable.id, messageId))
+      .returning();
+
+    return updatedMessage || null;
   }
 
   static async updateTextPart(

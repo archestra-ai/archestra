@@ -408,7 +408,13 @@ function producesBedrockContentBlock(part: ChatMessagePart): boolean {
       | undefined;
     return Boolean(bedrock?.signature || bedrock?.redactedData);
   }
-  if (part.type.startsWith("tool-")) {
+  // `dynamic-tool` is the shape MCP tools (and the seeded `render_app` app
+  // render) deserialize to; it is a real content-producing tool part, exactly
+  // as the sibling `isToolPart` in normalize-chat-messages.ts treats it. Without
+  // this, an assistant message whose only part is a `dynamic-tool` (e.g. the
+  // owned-app render_app seed) is judged empty and padded with a bogus
+  // "(no content)" text block.
+  if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
     return part.state !== "input-streaming";
   }
   return false;

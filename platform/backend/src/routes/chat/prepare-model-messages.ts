@@ -213,27 +213,33 @@ async function buildModelMessagesForProvider(params: {
   );
 
   return {
-    modelMessages:
-      params.provider === "gemini"
-        ? ensureGeminiLeadingUserTurn(nonEmpty)
-        : nonEmpty,
+    modelMessages: PROVIDERS_REQUIRING_LEADING_USER_TURN.has(params.provider)
+      ? ensureLeadingUserTurn(nonEmpty)
+      : nonEmpty,
     preparedMessages: providerPreparedMessages,
   };
 }
 
 // Owned-app chats are seeded with a synthetic `render_app` assistant tool-call
 // as the conversation's first message (see app-chat-conversation.ts), so their
-// history opens with an assistant turn. Gemini maps that to a `contents[0]` of
-// role `model` carrying a `functionCall`, and rejects it with 400 "function
-// call turn comes immediately after a user turn or after a function response
-// turn" — Gemini requires the first turn to be from the user. Prepend a minimal
-// user turn (after any leading system messages, which Gemini lifts into
-// `systemInstruction`) so the required leading user turn is present without
-// dropping the seed, whose tool result carries the app id the app tools need.
-// Gemini-only: other providers accept a leading assistant/tool turn.
-const GEMINI_LEADING_USER_TURN_TEXT = "Continue.";
+// history opens with an assistant turn. Some providers require the first turn to
+// be from the user and reject that seeded shape:
+// - `gemini` maps it to a `contents[0]` of role `model` carrying a
+//   `functionCall` and 400s with "function call turn comes immediately after a
+//   user turn or after a function response turn".
+// - `bedrock` (Anthropic models via the Converse API) rejects it with
+//   "`tool_use` ids were found without `tool_result` blocks immediately after"
+//   — its Converse→messages mapping requires a leading user turn even though
+//   native Anthropic and OpenAI accept the assistant-first seed unchanged.
+// Prepend a minimal user turn (after any leading system messages, which these
+// providers lift out of the message list) so the required leading user turn is
+// present without dropping the seed, whose tool result carries the app id the
+// app tools need to edit the bound app.
+const PROVIDERS_REQUIRING_LEADING_USER_TURN: ReadonlySet<SupportedProvider> =
+  new Set(["gemini", "bedrock"]);
+const LEADING_USER_TURN_TEXT = "Continue.";
 
-function ensureGeminiLeadingUserTurn(messages: ModelMessage[]): ModelMessage[] {
+function ensureLeadingUserTurn(messages: ModelMessage[]): ModelMessage[] {
   const firstContentIndex = messages.findIndex(
     (message) => message.role !== "system",
   );
@@ -243,7 +249,7 @@ function ensureGeminiLeadingUserTurn(messages: ModelMessage[]): ModelMessage[] {
 
   const leadingUserTurn: ModelMessage = {
     role: "user",
-    content: [{ type: "text", text: GEMINI_LEADING_USER_TURN_TEXT }],
+    content: [{ type: "text", text: LEADING_USER_TURN_TEXT }],
   };
   return [
     ...messages.slice(0, firstContentIndex),

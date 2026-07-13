@@ -52,6 +52,10 @@ pub enum StopReason {
 #[derive(Debug, Clone)]
 pub struct AgentRun {
     pub final_text: String,
+    /// The full message log, for inspection. On a terminal finish
+    /// (`Length`/`ContentFilter`/`ProviderError`) this can end with an assistant
+    /// `tool_calls` turn that has no matching tool results — do not replay it to a
+    /// provider verbatim.
     pub transcript: Vec<ChatMessage>,
     pub tool_calls: Vec<ToolCallRecord>,
     pub stop_reason: StopReason,
@@ -251,7 +255,10 @@ impl<'m> Agent<'m> {
                             let result = tools.dispatch(ws, &call.name, args.clone());
                             let content = result_content(&result);
                             // Fold the tool's contract-fixed output label into the trajectory.
-                            // Done even on error: the tool may have mutated state before failing.
+                            // Done even on error: a handler may mutate state before failing, and
+                            // we can't tell pre- from post-mutation failures, so we taint the
+                            // security-safe direction. Cost: a handler that fails before any side
+                            // effect still taints, which can slightly depress utility downstream.
                             g.commit(&content)?;
                             messages.push(ChatMessage::Tool {
                                 tool_call_id: call.id.clone(),

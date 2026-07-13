@@ -294,6 +294,9 @@ struct WireResponse {
 
 #[derive(Deserialize)]
 struct WireChoice {
+    // Optional so a choice-level error with no assistant `message` still decodes
+    // into the graceful `FinishReason::Error` path instead of failing the whole body.
+    #[serde(default)]
     message: WireMessage,
     #[serde(default)]
     finish_reason: Option<String>,
@@ -301,7 +304,7 @@ struct WireChoice {
     error: Option<WireError>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct WireMessage {
     #[serde(default)]
     content: Option<String>,

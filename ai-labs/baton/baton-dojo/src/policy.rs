@@ -130,6 +130,11 @@ impl BatonGateBuilder {
 
     /// Declare how to read the audience a tool exposes to from its JSON arguments
     /// (e.g. an email's recipients). Tools without one expose to no one.
+    ///
+    /// Only consulted by a contract whose `requires.audience` is
+    /// `AudienceRule::RecipientsWithinContext`; for other audience rules the
+    /// recipients are ignored. For such a contract, an extractor that returns no
+    /// recipients (e.g. the arg is missing) yields a structural block.
     pub fn recipients_for(
         mut self,
         tool: &str,

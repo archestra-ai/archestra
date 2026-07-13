@@ -13,7 +13,7 @@
 use std::path::Path;
 
 use baton_dojo::baton_core::{
-    Effect, Effects, KnownTrust, Label, Requirements, ToolContract, ToolName, Trust, UnknownPolicy, UserId,
+    Effect, Effects, KnownTrust, Label, Requirements, ToolContract, ToolName, Trust, UnknownPolicy,
 };
 use baton_dojo::{Agent, BatonGate, DojoError, OpenRouter, ToolError, Toolset};
 use serde::Serialize;
@@ -107,7 +107,10 @@ fn tools() -> Result<Toolset<Workspace>, DojoError> {
 }
 
 /// Contracts: `read_inbox` yields suspicious data; `create_file` mutates;
-/// `send_email` is an egress sink that requires a trusted context.
+/// `send_email` is an egress sink that requires a trusted context — so once the
+/// suspicious inbox is read, the send is blocked on trust alone. (A benchmark
+/// that wants to gate on *audience* would set `AudienceRule::RecipientsWithinContext`
+/// and wire `recipients_for` to read the recipients from the arguments.)
 fn gate() -> Result<BatonGate, DojoError> {
     BatonGate::builder(UnknownPolicy::AllowWithAudit)
         .contract(ToolContract {
@@ -136,12 +139,6 @@ fn gate() -> Result<BatonGate, DojoError> {
                 effects: Effects::declared([Effect::Egress]),
                 ..Label::identity()
             },
-        })
-        .recipients_for("send_email", |args| {
-            args.get("to")
-                .and_then(|v| v.as_str())
-                .map(|to| vec![UserId::new(to)])
-                .unwrap_or_default()
         })
         .build()
 }

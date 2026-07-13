@@ -88,9 +88,13 @@ describe("buildDaggerEgressPolicies (reuses MCP machinery for the dagger engine)
     expect(json).toContain("10.0.0.0/8");
     expect(json).toContain("fc00::/7");
 
-    // DNS allowed to any resolver: a :53 rule with no destination selector
-    const dns = egress.find((r) => r.ports !== undefined && r.to === undefined);
+    // DNS allowed to the kube-dns pods by selector (DNAT-proof under kube-proxy),
+    // not the resolver ClusterIP, on :53
+    const dns = egress.find((r) => r.ports !== undefined);
     expect(dns).toBeDefined();
+    const dnsJson = JSON.stringify(dns);
+    expect(dnsJson).toContain("k8s-app");
+    expect(dnsJson).toContain("kube-system");
 
     // the public IPv4 rule allows ALL ports (no port cap)
     const publicV4 = egress.find((r) =>

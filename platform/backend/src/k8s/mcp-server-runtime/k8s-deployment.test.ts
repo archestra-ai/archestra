@@ -4699,13 +4699,11 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     message: null,
   };
   const POLICY_NAME = "mcp-egress-mcp-mcp-test-server";
-  const FLOOR_EGRESS = [
-    {
-      ports: [
-        { protocol: "UDP", port: 53 },
-        { protocol: "TCP", port: 53 },
-      ],
-    },
+  const DNS_PORTS = [
+    { protocol: "UDP", port: 53 },
+    { protocol: "TCP", port: 53 },
+  ];
+  const FLOOR_PUBLIC_EGRESS = [
     {
       to: [
         {
@@ -4736,6 +4734,28 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       ],
     },
   ];
+  // Plain NetworkPolicy floor: DNS to the kube-dns pods by label (DNAT-proof),
+  // not the resolver ClusterIP.
+  const PLAIN_FLOOR_EGRESS = [
+    {
+      to: [
+        {
+          namespaceSelector: {
+            matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+          },
+          podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+        },
+      ],
+      ports: DNS_PORTS,
+    },
+    ...FLOOR_PUBLIC_EGRESS,
+  ];
+  // AWS ApplicationNetworkPolicy floor: cannot express selector peers, and with
+  // no resolved ClusterIP the DNS bootstrap allows :53 to any IP.
+  const AWS_FLOOR_EGRESS = [
+    { to: [{ ipBlock: { cidr: "0.0.0.0/0" } }], ports: DNS_PORTS },
+    ...FLOOR_PUBLIC_EGRESS,
+  ];
 
   test("applies the SSRF floor as a plain NetworkPolicy for an unrestricted policy", async () => {
     const { api, policies } = makeStatefulNetworkingApi();
@@ -4747,7 +4767,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
 
     const policy = policies.get(POLICY_NAME);
     expect(policy?.spec?.policyTypes).toEqual(["Egress"]);
-    expect(policy?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(policy?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
   });
 
   test("applies the SSRF floor for a built-in (null) policy — the case the union bug silently opened", async () => {
@@ -4758,7 +4778,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       networkPolicyCapabilities: PLAIN_CAPS,
     }).applyK8sNetworkPolicy();
 
-    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
   });
 
   test("emits the floor as an ApplicationNetworkPolicy on AWS and removes the plain NetworkPolicy", async () => {
@@ -4782,7 +4802,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
 
     const anp = anpPolicies.get(POLICY_NAME);
     expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
-    expect(anp?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(anp?.spec?.egress).toEqual(AWS_FLOOR_EGRESS);
     expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
       name: POLICY_NAME,
       namespace: "default",
@@ -4867,7 +4887,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       networkPolicyCapabilities: CILIUM_CAPS,
     }).applyK8sNetworkPolicy();
 
-    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
     expect(ciliumPolicies.has(POLICY_NAME)).toBe(false);
   });
 
@@ -4891,7 +4911,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
 
     const anp = anpPolicies.get(POLICY_NAME);
     expect((anp as { kind?: string })?.kind).toBe("ApplicationNetworkPolicy");
-    expect(anp?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(anp?.spec?.egress).toEqual(AWS_FLOOR_EGRESS);
   });
 
   test("reconciles in place when relaxing from a restricted policy to the unrestricted floor", async () => {
@@ -4903,7 +4923,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       }),
       networkPolicyCapabilities: PLAIN_CAPS,
     }).applyK8sNetworkPolicy();
-    expect(policies.get(POLICY_NAME)?.spec?.egress).not.toEqual(FLOOR_EGRESS);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).not.toEqual(
+      PLAIN_FLOOR_EGRESS,
+    );
 
     await makeNetworkPolicyDeployment({
       networkingApi: api,
@@ -4912,7 +4934,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     }).applyK8sNetworkPolicy();
 
     expect([...policies.keys()]).toEqual([POLICY_NAME]);
-    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
   });
 
   test("reconciles in place when tightening from the unrestricted floor to off (deny-all)", async () => {
@@ -4922,7 +4944,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
       networkPolicyCapabilities: PLAIN_CAPS,
     }).applyK8sNetworkPolicy();
-    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(FLOOR_EGRESS);
+    expect(policies.get(POLICY_NAME)?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
 
     await makeNetworkPolicyDeployment({
       networkingApi: api,

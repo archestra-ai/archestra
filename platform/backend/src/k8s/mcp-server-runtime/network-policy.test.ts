@@ -515,7 +515,22 @@ describe("MCP egress floor and default-deny baseline builders", () => {
   };
   const podSelectorLabels = { app: "mcp-server", "mcp-server-id": "server-id" };
 
-  test("builds a plain NetworkPolicy floor: DNS + public egress, reserved ranges blocked", () => {
+  const SELECTOR_DNS_RULE = {
+    to: [
+      {
+        namespaceSelector: {
+          matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+        },
+        podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+      },
+    ],
+    ports: [
+      { protocol: "UDP", port: 53 },
+      { protocol: "TCP", port: 53 },
+    ],
+  };
+
+  test("builds a plain NetworkPolicy floor: selector-based DNS + public egress, reserved ranges blocked", () => {
     const manifest = buildUnrestrictedFloorPolicy({
       name: "mcp-egress-test",
       podSelectorLabels,
@@ -533,12 +548,7 @@ describe("MCP egress floor and default-deny baseline builders", () => {
         podSelector: { matchLabels: podSelectorLabels },
         policyTypes: ["Egress"],
         egress: [
-          {
-            ports: [
-              { protocol: "UDP", port: 53 },
-              { protocol: "TCP", port: 53 },
-            ],
-          },
+          SELECTOR_DNS_RULE,
           {
             to: [
               {
@@ -571,24 +581,26 @@ describe("MCP egress floor and default-deny baseline builders", () => {
         ],
       },
     });
-    // Without a resolved cluster DNS IP the DNS rule falls back to :53 to any
-    // resolver (no `to` peer); public rules uncapped.
-    expect(manifest.spec?.egress?.[0]).not.toHaveProperty("to");
+    // DNS targets the kube-dns pods by label, not the resolver ClusterIP:
+    // kube-proxy DNATs the ClusterIP to a pod IP the public rule would block.
+    expect(manifest.spec?.egress?.[0]?.to?.[0]).not.toHaveProperty("ipBlock");
     expect(manifest.spec?.egress?.[1]).not.toHaveProperty("ports");
   });
 
-  test("pins floor DNS to the cluster resolver IPs when provided (AWS ANP needs an explicit `to`)", () => {
+  test("AWS ANP floor pins DNS to the cluster resolver IPs; the plain floor stays selector-based", () => {
     const clusterDnsIps = ["10.100.0.10", "fd00:ec2::10"];
-    const plain = buildUnrestrictedFloorPolicy({
+    const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",
       podSelectorLabels,
       labels: MANAGED_LABELS,
       clusterDnsIps,
     });
+    const anpEgress = (anp.spec as { egress: Array<Record<string, unknown>> })
+      .egress;
 
-    // The first egress rule now targets the resolver IPs explicitly on :53
-    // (family-aware CIDR), instead of the ports-only rule the AWS ANP agent drops.
-    expect(plain.spec?.egress?.[0]).toEqual({
+    // ApplicationNetworkPolicy cannot express a selector peer, so DNS is pinned to
+    // the resolver IPs explicitly on :53 (family-aware CIDR).
+    expect(anpEgress[0]).toEqual({
       to: [
         { ipBlock: { cidr: "10.100.0.10/32" } },
         { ipBlock: { cidr: "fd00:ec2::10/128" } },
@@ -598,23 +610,56 @@ describe("MCP egress floor and default-deny baseline builders", () => {
         { protocol: "TCP", port: 53 },
       ],
     });
-    // The public-egress rules are untouched.
-    expect(plain.spec?.egress?.[1]?.to?.[0]?.ipBlock?.cidr).toBe("0.0.0.0/0");
-    expect(plain.spec?.egress?.[2]?.to?.[0]?.ipBlock?.cidr).toBe("::/0");
 
-    // The AWS ApplicationNetworkPolicy floor threads the identical DNS rule.
-    const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+    // The plain floor ignores resolver IPs entirely and uses selector-based DNS.
+    const plain = buildUnrestrictedFloorPolicy({
       name: "mcp-egress-test",
       podSelectorLabels,
       labels: MANAGED_LABELS,
-      clusterDnsIps,
     });
-    expect((anp.spec as { egress: unknown[] }).egress).toEqual(
-      plain.spec?.egress,
-    );
+    expect(plain.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
+
+    // Both variants share the identical public-egress rules.
+    expect(anpEgress.slice(1)).toEqual(plain.spec?.egress?.slice(1));
   });
 
-  test("builds the AWS ApplicationNetworkPolicy floor with the same egress shape", () => {
+  test("plain floor adds a resolver-IP DNS allow alongside the selector rule (NodeLocal DNSCache / custom DNS)", () => {
+    const plain = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      clusterDnsIps: ["169.254.20.10", "fd00::10"],
+    });
+
+    // Selector rule first (DNAT-proof standard kube-dns path)...
+    expect(plain.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
+    // ...then an explicit :53 allow to the resolved nameserver IPs, so a
+    // link-local/private resolver the public rule would block stays reachable.
+    expect(plain.spec?.egress?.[1]).toEqual({
+      to: [
+        { ipBlock: { cidr: "169.254.20.10/32" } },
+        { ipBlock: { cidr: "fd00::10/128" } },
+      ],
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    });
+    expect(plain.spec?.egress?.[2]?.to?.[0]?.ipBlock?.cidr).toBe("0.0.0.0/0");
+    expect(plain.spec?.egress?.[3]?.to?.[0]?.ipBlock?.cidr).toBe("::/0");
+
+    // With no resolved resolver IP the supplementary rule is omitted; the
+    // selector rule alone covers the standard kube-dns case.
+    const noResolver = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+    });
+    expect(noResolver.spec?.egress).toHaveLength(3);
+    expect(noResolver.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
+  });
+
+  test("AWS ANP floor falls back to any-IP :53 when the resolver is unknown", () => {
     const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",
       podSelectorLabels,
@@ -633,14 +678,17 @@ describe("MCP egress floor and default-deny baseline builders", () => {
         policyTypes: ["Egress"],
       },
     });
-    const plain = buildUnrestrictedFloorPolicy({
-      name: "mcp-egress-test",
-      podSelectorLabels,
-      labels: MANAGED_LABELS,
+    // A ports-only rule is not honored by the ANP agent, so without a resolved
+    // ClusterIP the DNS rule allows :53 to any IP rather than dropping lookups.
+    expect(
+      (anp.spec as { egress: Array<Record<string, unknown>> }).egress[0],
+    ).toEqual({
+      to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
     });
-    expect((anp.spec as { egress: unknown }).egress).toEqual(
-      plain.spec?.egress,
-    );
   });
 
   test("builds a plain default-deny baseline over all app=mcp-server pods", () => {

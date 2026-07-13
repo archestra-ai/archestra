@@ -258,7 +258,22 @@ export function buildUnrestrictedFloorPolicy(params: {
     spec: {
       podSelector: { matchLabels: params.podSelectorLabels },
       policyTypes: ["Egress"],
-      egress: buildFloorEgressRules(params.clusterDnsIps ?? []),
+      egress: [
+        // Selector-based DNS to the kube-dns pods (DNAT-proof): kube-proxy DNATs
+        // the resolver ClusterIP to a CoreDNS pod IP before the egress policy is
+        // evaluated, so an ipBlock allow for the ClusterIP would never match.
+        // Same rule the restricted path emits. The AWS ANP floor keeps the
+        // ClusterIP rule since ApplicationNetworkPolicy cannot express selector
+        // peers and is not subject to kube-proxy DNAT.
+        buildDnsEgressRule(),
+        // Also allow :53 to the resolved nameserver IP(s), for clusters whose
+        // resolver is not a labelled kube-dns pod (NodeLocal DNSCache, custom
+        // DNS) — its resolv.conf nameserver may be a link-local/private IP the
+        // public rule below blocks. Empty when the resolver is unknown; the
+        // selector rule above still covers the standard kube-dns case.
+        ...buildResolverIpDnsEgressRules(params.clusterDnsIps ?? []),
+        ...floorPublicEgressRules(),
+      ],
     },
   };
 }
@@ -279,7 +294,10 @@ export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
     spec: {
       podSelector: { matchLabels: params.podSelectorLabels },
       policyTypes: ["Egress"],
-      egress: buildFloorEgressRules(params.clusterDnsIps ?? []),
+      egress: [
+        buildAwsDnsBootstrapEgressRule(params.clusterDnsIps ?? []),
+        ...floorPublicEgressRules(),
+      ],
     },
   };
 }
@@ -363,33 +381,12 @@ const FLOOR_DENIED_IPV6_CIDRS = [
   "64:ff9b::/96",
 ];
 
-// DNS + all public egress with the reserved ranges above blocked. Shared by the
-// plain NetworkPolicy and AWS ApplicationNetworkPolicy floor variants —
-// ApplicationNetworkPolicy supports all standard NetworkPolicy fields.
-function buildFloorEgressRules(
-  clusterDnsIps: string[],
-): k8s.V1NetworkPolicyEgressRule[] {
-  const dnsPorts = [
-    { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
-    { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
-  ];
-  // Allow port 53 to the cluster resolver explicitly. The resolver ClusterIP
-  // sits inside the reserved ranges the public rule below blocks, and the AWS
-  // ApplicationNetworkPolicy agent does not honor a ports-only rule with no `to`
-  // peer, so an explicit destination is required for DNS to resolve on EKS Auto
-  // Mode — the same rule the restricted path emits. Falls back to port 53 to any
-  // IP when the resolver could not be resolved (degraded, but never breaks DNS).
-  const dnsRule: k8s.V1NetworkPolicyEgressRule =
-    clusterDnsIps.length > 0
-      ? {
-          to: clusterDnsIps.map((ip) => ({
-            ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
-          })),
-          ports: dnsPorts,
-        }
-      : { ports: dnsPorts };
+// Public egress for the unrestricted floor: all IPv4/IPv6 minus the reserved,
+// private, and cloud-metadata ranges above. Each floor variant prepends its own
+// provider-appropriate DNS rule (selector-based for the plain NetworkPolicy, the
+// cluster resolver ipBlock for the AWS ApplicationNetworkPolicy).
+function floorPublicEgressRules(): k8s.V1NetworkPolicyEgressRule[] {
   return [
-    dnsRule,
     {
       to: [{ ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } }],
     },
@@ -516,6 +513,29 @@ function buildCiliumDnsEgressRule(): Record<string, unknown> {
       },
     ],
   };
+}
+
+// Explicit :53 allow to the resolved cluster resolver IP(s), for plain-
+// NetworkPolicy clusters whose resolver is not a labelled kube-dns pod (NodeLocal
+// DNSCache, custom DNS). Empty when the resolver could not be determined — the
+// selector-based rule still covers the standard kube-dns case.
+function buildResolverIpDnsEgressRules(
+  clusterDnsIps: string[],
+): k8s.V1NetworkPolicyEgressRule[] {
+  if (clusterDnsIps.length === 0) {
+    return [];
+  }
+  return [
+    {
+      to: clusterDnsIps.map((ip) => ({
+        ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+      })),
+      ports: [
+        { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
+        { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
+      ],
+    },
+  ];
 }
 
 function buildDnsEgressRule(): k8s.V1NetworkPolicyEgressRule {

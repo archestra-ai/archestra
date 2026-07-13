@@ -103,7 +103,6 @@ export function buildDaggerEgressPolicies(params: {
             "app.kubernetes.io/managed-by": "archestra",
             "archestra.io/resource": "dagger-egress-policy",
           },
-          clusterDnsIps,
         }),
       },
     ];

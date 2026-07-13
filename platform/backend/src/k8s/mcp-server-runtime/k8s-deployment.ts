@@ -529,25 +529,29 @@ export default class K8sDeployment {
         this.effectiveNetworkPolicy?.source ?? "built_in",
     };
 
-    // The resolver ClusterIP is inside the ranges the floor blocks, so DNS needs
-    // an explicit allow to it — the AWS ANP agent does not honor the ports-only
-    // DNS rule with no `to` peer, which would otherwise leave floor pods unable
-    // to resolve names.
+    // Both floor variants take the resolved resolver IP(s): the AWS ANP floor
+    // depends on it entirely (it cannot express a selector peer), while the plain
+    // NetworkPolicy floor uses a selector-based DNS rule and adds these only as a
+    // supplementary allow for non-kube-dns resolvers (NodeLocal DNSCache, custom
+    // DNS). Cached per client, so this lookup is cheap on the common path.
     const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
       this.k8sApi,
     );
-    if (clusterDnsIps.length === 0) {
-      logger.warn(
-        {
-          mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
-          namespace: this.namespace,
-        },
-        "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to any IP",
-      );
-    }
 
     if (isAwsApplicationNetworkPolicyProvider(this.networkPolicyCapabilities)) {
+      if (clusterDnsIps.length === 0) {
+        // Only the AWS ANP floor degrades here — it falls back to allowing :53 to
+        // any IP. The plain floor still resolves via its selector-based rule.
+        logger.warn(
+          {
+            mcpServerId: this.mcpServer.id,
+            networkPolicyName: policyName,
+            namespace: this.namespace,
+          },
+          "Cluster DNS service IP could not be resolved; unrestricted floor will allow DNS egress to any IP",
+        );
+      }
+
       await this.upsertManagedCustomPolicy({
         resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
         policyName,

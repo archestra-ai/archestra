@@ -48,8 +48,9 @@ works with any model id.
 
 ### Running sharded
 
-AgentDojo runs one episode at a time, so a full suite (40 user tasks × 14
-injections = 600 episodes per defense) is slow. But episodes are independent
+AgentDojo runs one episode at a time, so a full suite is slow: the `workspace`
+suite has 40 user tasks and 14 injections, so a full run is 40 clean + 40 × 14
+attacked = 600 episodes per defense. But episodes are independent
 and cached (`force_rerun=False`), so you can split the user tasks across
 several `bench` processes writing to the *same* `--logdir`: each fills
 different cells of the grid, cached cells are skipped, and a killed run just

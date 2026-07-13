@@ -709,10 +709,11 @@ export default class K8sDeployment {
   /**
    * Create or update a managed custom policy object.
    *
-   * Updates use a JSON merge patch instead of a PUT: custom resources reject
-   * a PUT without metadata.resourceVersion (so policies created by older
-   * releases would never be corrected in place), and a merge patch also
-   * preserves controller-owned metadata such as finalizers.
+   * Updates read the live object and PUT a full replace (carrying its
+   * resourceVersion, required by CRDs, and any controller-owned finalizers)
+   * rather than a JSON merge patch: merge patch recurses into nested objects and
+   * cannot delete a key absent from the body, so a stale selector label from an
+   * older release would survive and keep the policy from selecting its pod.
    */
   private async upsertManagedCustomPolicy(params: {
     resource: ManagedCustomPolicyResource;
@@ -744,17 +745,27 @@ export default class K8sDeployment {
           throw createError;
         }
 
-        await k8sCustomObjectsApi.patchNamespacedCustomObject(
-          {
-            group,
-            version,
-            namespace: this.namespace,
-            plural,
-            name: params.policyName,
-            body: params.body,
-          },
-          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
-        );
+        // Full replace, not merge-patch: a JSON Merge Patch recurses into
+        // podSelector.matchLabels and cannot delete a key absent from the body,
+        // so a stale selector label (e.g. a pre-fix mcp-server-name) would survive
+        // and keep the policy from selecting its pod. A blind PUT is rejected
+        // without a resourceVersion, so read the live object and carry its
+        // resourceVersion (and any controller-owned finalizers) into the body.
+        const existing = await k8sCustomObjectsApi.getNamespacedCustomObject({
+          group,
+          version,
+          namespace: this.namespace,
+          plural,
+          name: params.policyName,
+        });
+        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
+          group,
+          version,
+          namespace: this.namespace,
+          plural,
+          name: params.policyName,
+          body: bodyWithPreservedMetadata(params.body, existing),
+        });
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
@@ -3991,6 +4002,35 @@ function listCustomObjectItems(response: unknown): Array<{
       spec?: unknown;
     } => Boolean(item) && typeof item === "object",
   );
+}
+
+/**
+ * Carry the live object's resourceVersion (a CRD replace/PUT is rejected 422
+ * without it) and any controller-owned finalizers into the replacement body, so
+ * a full replace satisfies optimistic concurrency and doesn't strip finalizers.
+ */
+function bodyWithPreservedMetadata(
+  body: Record<string, unknown>,
+  existing: unknown,
+): Record<string, unknown> {
+  const existingMetadata =
+    existing && typeof existing === "object" && "metadata" in existing
+      ? ((existing as { metadata?: unknown }).metadata as
+          | { resourceVersion?: string; finalizers?: string[] }
+          | undefined)
+      : undefined;
+  const bodyMetadata =
+    (body.metadata as Record<string, unknown> | undefined) ?? {};
+  return {
+    ...body,
+    metadata: {
+      ...bodyMetadata,
+      resourceVersion: existingMetadata?.resourceVersion,
+      ...(existingMetadata?.finalizers
+        ? { finalizers: existingMetadata.finalizers }
+        : {}),
+    },
+  };
 }
 
 function policyTargetsPodLabels(

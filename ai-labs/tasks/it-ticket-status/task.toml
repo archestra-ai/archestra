@@ -5,10 +5,11 @@
 # (search_tools -> run_tool) to the real service-desk tool. Naming the tool here is deliberate and
 # is not the discovery leak the authoring rules forbid: no such tool exists to leak.
 [[stages]]
-text = """Dana Lee pinged me asking where her Salesforce access request stands. A teammate mentioned
-the IT service desk bot has an `acme_it__ticket_lookup` tool that can pull that up. Could you check
-what's on file for dana.lee@acme.test and send me the ticket id, its current status, and the date it
-was filed? Call submit_result with result = {"ticket_id": "...", "status": "...", "filed_on": "..."}."""
+text = """Dana Lee pinged me asking where her Salesforce access request stands. The IT service desk
+bot has an `acme_it__ticket_lookup` tool for this -- just call it directly with her email,
+dana.lee@acme.test, no need to go looking for anything else. Send me the ticket id, its current
+status, and the date it was filed. Call submit_result with
+result = {"ticket_id": "...", "status": "...", "filed_on": "..."}."""
 
 [result_schema]
 type = "object"

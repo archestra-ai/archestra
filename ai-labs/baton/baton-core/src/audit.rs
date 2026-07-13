@@ -75,8 +75,6 @@ pub enum TransitionOutcome {
 /// the record without loosening anything.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum WaiverKind {
-    Trust,
-    Audience,
     Effects,
     Confirmation,
     /// Explicit, audited release of a control-dependence taint for one flow.
@@ -87,8 +85,6 @@ pub enum WaiverKind {
 impl fmt::Display for WaiverKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Trust => write!(f, "trust"),
-            Self::Audience => write!(f, "audience"),
             Self::Effects => write!(f, "effects"),
             Self::Confirmation => write!(f, "confirmation"),
             Self::ControlRelease => write!(f, "control-release"),

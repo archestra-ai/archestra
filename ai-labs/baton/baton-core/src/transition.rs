@@ -180,14 +180,6 @@ impl AuthorityMandate {
     pub fn covers(&self, grant: &ProposedGrant) -> bool {
         match grant {
             ProposedGrant::Waive { waiver, acknowledged } => {
-                let trust_ok = match waiver.trust {
-                    None => true,
-                    Some(need) => matches!(self.trust, Some(ceiling) if ceiling >= need),
-                };
-                let audience_ok = match &waiver.audience {
-                    None => true,
-                    Some(need) => matches!(&self.audience, Some(vouchable) if need.is_subset(vouchable)),
-                };
                 let effects_ok = waiver.prior_effects.is_none() || self.waive_prior_effects;
                 let confirms_ok = !waiver.confirms || self.confirms;
                 let control_ok = waiver.control_release.is_empty() || self.may_release_control;
@@ -195,7 +187,7 @@ impl AuthorityMandate {
                 // explicit acknowledge capability — the lift dims alone must
                 // not let an authority acknowledge an unknown it cannot vouch.
                 let acknowledge_ok = acknowledged.is_empty() || self.acknowledge_unknown;
-                trust_ok && audience_ok && effects_ok && confirms_ok && control_ok && acknowledge_ok
+                effects_ok && confirms_ok && control_ok && acknowledge_ok
             }
             ProposedGrant::Endorse { delta, .. } => delta.covered_by(self),
             ProposedGrant::Accept { .. } => self.acquire_effects,
@@ -237,6 +229,23 @@ impl EndorseDelta {
     pub fn is_empty(&self) -> bool {
         self.trust.is_none() && self.audience.is_none()
     }
+
+    /// The label a value gets when this endorse is applied: its trust raised
+    /// and its audience admitted by the vouched readers. Monotone — the lift
+    /// helpers only raise a label, never lower it, so `combine` (the taint
+    /// fold, which cannot improve a label) is deliberately not used.
+    pub(crate) fn raise(&self, label: &ValueLabel) -> ValueLabel {
+        ValueLabel {
+            trust: match self.trust {
+                Some(attested) => label.trust.raised_to(attested),
+                None => label.trust,
+            },
+            audience: match &self.audience {
+                Some(vouched) => label.audience.admitting(vouched),
+                None => label.audience.clone(),
+            },
+        }
+    }
 }
 
 impl fmt::Display for EndorseDelta {
@@ -255,16 +264,12 @@ impl fmt::Display for EndorseDelta {
 /// Proposal data, not a capability — authority comes from routing to a
 /// competent mandate plus the fail-closed recheck.
 ///
-/// Trust and audience live here *for now*: today's endorsement is a transient
-/// whole-flow lift. A later pass relocates them to a durable relabel; the
-/// remaining dimensions (prior effects, confirmation, control release) are
-/// transient by nature.
+/// Trust and audience are *not* here: raising a value's confidentiality label
+/// is a durable relabel ([`ProposedGrant::Endorse`]), not a transient lift.
+/// What remains is transient by nature — a prior-effect waiver, a
+/// confirmation, a control-dependence release.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct TransientWaiver {
-    /// Attest that flow trust is at least this.
-    pub trust: Option<KnownTrust>,
-    /// Vouch exactly these readers into the flow audience.
-    pub audience: Option<BTreeSet<UserId>>,
     /// Treat these already-present effects as waived for this check.
     pub prior_effects: Option<BTreeSet<Effect>>,
     /// Stand in for a user confirmation.
@@ -288,12 +293,6 @@ impl TransientWaiver {
     /// `Acknowledgment`.
     pub fn kinds(&self) -> BTreeSet<WaiverKind> {
         let mut kinds = BTreeSet::new();
-        if self.trust.is_some() {
-            kinds.insert(WaiverKind::Trust);
-        }
-        if self.audience.is_some() {
-            kinds.insert(WaiverKind::Audience);
-        }
         if self.prior_effects.is_some() {
             kinds.insert(WaiverKind::Effects);
         }
@@ -491,30 +490,42 @@ mod tests {
             may_release_control: true,
             ..AuthorityMandate::none()
         };
+        // The endorse dims (trust/audience) are bounded on the Endorse grant.
+        let endorse = |trust, audience| ProposedGrant::Endorse {
+            source: ValueId::new(0),
+            delta: EndorseDelta { trust, audience },
+        };
+        let big_endorse = endorse(
+            Some(KnownTrust::Trusted),
+            Some(std::collections::BTreeSet::from([
+                UserId::new("bob"),
+                UserId::new("charlie"),
+            ])),
+        );
+        let small_endorse = endorse(None, Some(std::collections::BTreeSet::from([UserId::new("bob")])));
+        assert!(broad.covers(&big_endorse));
+        // The narrow mandate cannot vouch charlie or raise trust.
+        assert!(!narrow.covers(&big_endorse));
+        assert!(broad.covers(&small_endorse));
+        assert!(narrow.covers(&small_endorse));
+
+        // A transient waive is gated by its own (non-relabel) capabilities.
         let waive = |waiver| ProposedGrant::Waive {
             waiver,
             acknowledged: Vec::new(),
         };
-        let big_ask = waive(TransientWaiver {
-            trust: Some(KnownTrust::Trusted),
-            audience: Some(std::collections::BTreeSet::from([
-                UserId::new("bob"),
-                UserId::new("charlie"),
-            ])),
+        let confirm_and_release = waive(TransientWaiver {
             confirms: true,
             control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
             ..TransientWaiver::empty()
         });
-        let small_ask = waive(TransientWaiver {
-            audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
+        // broad may confirm and release; narrow may release but not confirm.
+        assert!(broad.covers(&confirm_and_release));
+        assert!(!narrow.covers(&confirm_and_release));
+        assert!(narrow.covers(&waive(TransientWaiver {
             control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
             ..TransientWaiver::empty()
-        });
-        assert!(broad.covers(&big_ask));
-        // The narrow mandate cannot vouch charlie, raise trust, or confirm.
-        assert!(!narrow.covers(&big_ask));
-        assert!(broad.covers(&small_ask));
-        assert!(narrow.covers(&small_ask));
+        })));
         // Every mandate covers the empty waive's lift dimensions.
         assert!(narrow.covers(&waive(TransientWaiver::empty())));
         assert!(AuthorityMandate::none().covers(&waive(TransientWaiver::empty())));

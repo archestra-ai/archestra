@@ -24,12 +24,12 @@ use crate::approval::{AncestrySnapshot, Authority, AuthorityMode, PendingApprova
 use crate::audit::AuditEvent;
 use crate::audit::AuthorityName;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
-use crate::dimension::Effects;
+use crate::dimension::{Effects, KnownTrust};
 use crate::plan::{ExitKind, NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::{
-    ActionTransition, DuplicateRegistration, ProposedGrant, RegisteredTransformer, TransientWaiver,
+    ActionTransition, DuplicateRegistration, EndorseDelta, ProposedGrant, RegisteredTransformer, TransientWaiver,
 };
 use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::{UnknownValue, ValueLabel};
@@ -1345,21 +1345,13 @@ impl PolicyEngine {
         authority: AuthorityName,
         original: ToolRequest,
     ) -> Decision {
-        let source_label = trajectory
-            .store()
-            .get(source)
-            .expect("plans reference only admitted values")
-            .label()
-            .clone();
-        let raised = ValueLabel {
-            trust: match delta.trust {
-                Some(attested) => source_label.trust.raised_to(attested),
-                None => source_label.trust,
-            },
-            audience: match &delta.audience {
-                Some(vouched) => source_label.audience.admitting(vouched),
-                None => source_label.audience.clone(),
-            },
+        let raised = {
+            let source_label = trajectory
+                .store()
+                .get(source)
+                .expect("plans reference only admitted values")
+                .label();
+            delta.raise(source_label)
         };
         trajectory.endorse_value(source, authority, delta, raised);
         self.evaluate(trajectory, original)
@@ -1500,6 +1492,38 @@ impl PolicyEngine {
 
                 let mut remaining = sim.violations(None);
 
+                // Criterion (2): peel a confidentiality sink breach into Endorse
+                // steps — one durable relabel per arg leaf whose own label fails
+                // the sink requirement (multi-source). Computed on the
+                // post-reduction residual, so a sanitizer's reduction shrinks what
+                // the authority must vouch. A control-borne residual is left to
+                // the control-release waiver below. All contributing leaves must
+                // be endorsable, else this branch cannot clear the breach.
+                let endorse = endorse_steps(&sim);
+                let endorsable = endorse.iter().all(|(leaf, delta)| {
+                    self.can_authorize(&ProposedGrant::Endorse {
+                        source: *leaf,
+                        delta: delta.clone(),
+                    })
+                });
+                if endorsable {
+                    for (leaf, delta) in endorse {
+                        let precondition = Posture {
+                            remaining: remaining.clone(),
+                        };
+                        let raised = delta.raise(&sim.leaf_labels[&leaf]);
+                        sim.leaf_labels.insert(leaf, raised);
+                        remaining = sim.violations(None);
+                        steps.push(TransitionSpec {
+                            precondition,
+                            postcondition: Posture {
+                                remaining: remaining.clone(),
+                            },
+                            kind: TransitionKind::EndorseValue { source: leaf, delta },
+                        });
+                    }
+                }
+
                 // Criterion (1): peel any surface growth into an Accept step
                 // before a waiver handles the confidentiality residual. Accept
                 // composes additively with a waiver — they are separate steps to
@@ -1564,52 +1588,61 @@ impl PolicyEngine {
 
     /// Deterministic waiver candidates for a remaining violation set: the
     /// scoped control-release variant first when releasing control shrinks the
-    /// need, then the plain full-attestation delta.
+    /// residual, then the plain delta. The waiver clears only the non-relabel
+    /// dims (prior effects, confirmation, control release); trust/audience route
+    /// to Endorse steps peeled before this.
     fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
-        let plain = needed_delta(remaining, &sim.recipients, &sim.requires);
         let mut candidates = Vec::new();
-        if let Some(control) = self.minimal_control_release(sim, &plain) {
-            candidates.push(control);
+        if let Some(release) = self.minimal_control_release(sim) {
+            let after = sim.violations(Some(&TransientWaiver {
+                control_release: release.clone(),
+                ..TransientWaiver::empty()
+            }));
+            let mut delta = needed_delta(&after);
+            delta.control_release = release;
+            candidates.push(delta);
         }
+        let plain = needed_delta(remaining);
         if !candidates.contains(&plain) {
             candidates.push(plain);
         }
         candidates
     }
 
-    /// The least-privilege control-release waiver: an inclusion-minimal set of
-    /// control deps whose release shrinks the residual as far as releasing every
-    /// control dep would. `None` when releasing control changes nothing (the
-    /// taint is arg-borne, not control-borne). We take the best achievable
-    /// reduction (release everything), then remove redundant deps to a fixpoint
-    /// (below), so an unrelated or non-load-bearing control dep is never released
-    /// (D4). At most O(control²) probes; no bound on the control-set size.
-    fn minimal_control_release(&self, sim: &SimFlow, plain: &TransientWaiver) -> Option<TransientWaiver> {
+    /// The least-privilege control-release set: an inclusion-minimal set of
+    /// control deps whose release shrinks the residual *violation set* as far as
+    /// releasing every control dep would. `None` when releasing control changes
+    /// nothing (the breach is arg-borne, not control-borne). Measured on the
+    /// violation set, not a waiver delta — so a control-borne trust/audience
+    /// breach, which no longer produces a waiver delta, still yields a release.
+    /// Take the best reduction (release all), then remove redundant deps to a
+    /// fixpoint: a dep can become redundant only after a *later* dep is dropped
+    /// (one control masking another's contribution to the fold — e.g. Suspicious
+    /// masking Unknown in the trust fold), which a single pass never revisits.
+    /// At the fixpoint no single dep is removable while still reaching `full`, so
+    /// the set is inclusion-minimal (D4). At most O(control²) probes.
+    fn minimal_control_release(&self, sim: &SimFlow) -> Option<BTreeSet<ValueId>> {
         let ids: Vec<ValueId> = sim.control_labels.keys().copied().collect();
         if ids.is_empty() {
             return None;
         }
-        let delta_releasing = |set: &BTreeSet<ValueId>| -> TransientWaiver {
-            let after = sim.violations(Some(&TransientWaiver {
+        let residual = |set: &BTreeSet<ValueId>| -> Vec<Violation> {
+            sim.violations(Some(&TransientWaiver {
                 control_release: set.clone(),
                 ..TransientWaiver::empty()
-            }));
-            needed_delta(&after, &sim.recipients, &sim.requires)
+            }))
         };
-        let mut minimal: BTreeSet<ValueId> = ids.iter().copied().collect();
-        let full = delta_releasing(&minimal);
-        if &full == plain {
+        // Compare like with like: both baselines go through `violations(Some(_))`,
+        // which filters acknowledge-only facts, so the difference is purely the
+        // control release (not the acknowledge-only filtering that separates
+        // `violations(None)` from `violations(Some(_))`).
+        let none = residual(&BTreeSet::new());
+        let all: BTreeSet<ValueId> = ids.iter().copied().collect();
+        let full = residual(&all);
+        if full == none {
             return None;
         }
-        // Iterate removal passes to a fixpoint. A single pass is not enough: a
-        // dep can become redundant only after a *later* dep is dropped (one
-        // control masking another's contribution to the fold — e.g. a Suspicious
-        // control masking an Unknown one in the trust fold), and a single pass
-        // never revisits the earlier decision. Repeat until a whole pass removes
-        // nothing. At that fixpoint no single dep is removable while still
-        // reaching `full`, so the set is inclusion-minimal for the current fold
-        // dimensions (the only masking case, Suspicious over Unknown, always
-        // leaves the masker itself removable, so no proper subset is missed).
+        let mut minimal = all;
         loop {
             let mut progressed = false;
             for id in &ids {
@@ -1618,7 +1651,7 @@ impl PolicyEngine {
                 }
                 let mut candidate = minimal.clone();
                 candidate.remove(id);
-                if delta_releasing(&candidate) == full {
+                if residual(&candidate) == full {
                     minimal = candidate;
                     progressed = true;
                 }
@@ -1627,10 +1660,7 @@ impl PolicyEngine {
                 break;
             }
         }
-        Some(TransientWaiver {
-            control_release: minimal,
-            ..full
-        })
+        Some(minimal)
     }
 
     /// Authorities competent for `grant`, in routing order: inline before
@@ -1844,16 +1874,13 @@ impl SimFlow {
                 Some(label.clone())
             }
         }));
-        let mut flow = ValueLabel::fold(self.leaf_labels.values().cloned()).combine(control);
+        // Trust and audience are no longer lifted here: raising a value's
+        // confidentiality label is a durable Endorse relabel that mints a new
+        // leaf value (folded above), not a transient whole-flow lift.
+        let flow = ValueLabel::fold(self.leaf_labels.values().cloned()).combine(control);
         let mut past = self.past_effects.clone();
         let mut confirmed = self.confirmed.clone();
         if let Some(w) = waiver {
-            if let Some(attested) = w.trust {
-                flow.trust = flow.trust.raised_to(attested);
-            }
-            if let Some(vouched) = &w.audience {
-                flow.audience = flow.audience.admitting(vouched);
-            }
             if let Some(waived) = &w.prior_effects {
                 past = past.waiving(waived);
             }
@@ -1921,35 +1948,15 @@ fn surface_growth_of(violations: &[Violation]) -> Option<Effects> {
     })
 }
 
-/// The delta that would cover the grant-fixable gaps in `violations` —
-/// acknowledge-only and structural members contribute nothing.
-fn needed_delta(
-    violations: &[Violation],
-    recipients: &BTreeSet<crate::dimension::UserId>,
-    requires: &Requirements,
-) -> TransientWaiver {
+/// The delta that would cover the grant-fixable *non-relabel* gaps in
+/// `violations`: prior effects and confirmation. Trust and audience are no
+/// longer waived — they route to Endorse steps — and acknowledge-only,
+/// surface-growth, and structural members contribute no lift.
+fn needed_delta(violations: &[Violation]) -> TransientWaiver {
     use crate::contract::Breach;
     let mut delta = TransientWaiver::empty();
     for violation in violations {
         match violation {
-            Violation::Breach(Breach::TrustBelow { required, .. }) => {
-                delta.trust = Some(*required);
-            }
-            Violation::Unprovable(Unprovable::TrustUnknown) => {
-                delta.trust = requires.trust;
-            }
-            Violation::Breach(Breach::AudienceExceeds { outside }) => {
-                delta
-                    .audience
-                    .get_or_insert_with(BTreeSet::new)
-                    .extend(outside.iter().cloned());
-            }
-            Violation::Unprovable(Unprovable::AudienceUnknown) => {
-                delta
-                    .audience
-                    .get_or_insert_with(BTreeSet::new)
-                    .extend(recipients.iter().cloned());
-            }
             Violation::Breach(Breach::ForbiddenPriorEffects { effects }) => {
                 delta
                     .prior_effects
@@ -1959,13 +1966,74 @@ fn needed_delta(
             Violation::Breach(Breach::ConfirmationMissing { .. } | Breach::ConfirmationForOtherTool { .. }) => {
                 delta.confirms = true;
             }
-            // Surface growth is not waiver-fixable — it routes to an Accept
-            // step, not into this delta.
-            Violation::Breach(Breach::UndeclaredRecipients | Breach::SurfaceGrowth { .. })
-            | Violation::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => {}
+            // Trust/audience route to Endorse; surface growth to Accept;
+            // acknowledge-only and structural members contribute no lift.
+            Violation::Breach(
+                Breach::TrustBelow { .. }
+                | Breach::AudienceExceeds { .. }
+                | Breach::UndeclaredRecipients
+                | Breach::SurfaceGrowth { .. },
+            )
+            | Violation::Unprovable(
+                Unprovable::TrustUnknown
+                | Unprovable::AudienceUnknown
+                | Unprovable::EffectsUnknown
+                | Unprovable::NoContract { .. },
+            ) => {}
         }
     }
     delta
+}
+
+/// The Endorse steps that clear a confidentiality sink breach: one durable
+/// relabel per argument leaf whose *own* label fails the sink's trust/audience
+/// requirement, each raising exactly that leaf to meet it. Multi-source — an
+/// aggregate breach carried by several leaves yields several steps. A
+/// control-borne breach yields none (no arg leaf fails): that is the
+/// control-release waiver's concern. Sufficient and minimal because the
+/// audience fold is intersection and the trust fold is meet, so once every
+/// contributing leaf passes, the fold passes.
+fn endorse_steps(sim: &SimFlow) -> Vec<(ValueId, EndorseDelta)> {
+    use crate::contract::Breach;
+    let violations = sim.violations(None);
+    let trust_req: Option<KnownTrust> = violations.iter().find_map(|v| match v {
+        Violation::Breach(Breach::TrustBelow { required, .. }) => Some(*required),
+        Violation::Unprovable(Unprovable::TrustUnknown) => sim.requires.trust,
+        _ => None,
+    });
+    let mut readers = BTreeSet::new();
+    for v in &violations {
+        match v {
+            Violation::Breach(Breach::AudienceExceeds { outside }) => readers.extend(outside.iter().cloned()),
+            Violation::Unprovable(Unprovable::AudienceUnknown) => readers.extend(sim.recipients.iter().cloned()),
+            _ => {}
+        }
+    }
+    let audience_req = if readers.is_empty() { None } else { Some(readers) };
+    if trust_req.is_none() && audience_req.is_none() {
+        return Vec::new();
+    }
+    let full = EndorseDelta {
+        trust: trust_req,
+        audience: audience_req,
+    };
+    let mut steps = Vec::new();
+    for (leaf, label) in &sim.leaf_labels {
+        // Only the dimensions this leaf actually fails: raising is monotone, so
+        // a no-op raise means the leaf already meets the requirement.
+        let delta = EndorseDelta {
+            trust: full.trust.filter(|req| label.trust.raised_to(*req) != label.trust),
+            audience: full
+                .audience
+                .as_ref()
+                .filter(|readers| label.audience.admitting(readers) != label.audience)
+                .cloned(),
+        };
+        if !delta.is_empty() {
+            steps.push((*leaf, delta));
+        }
+    }
+    steps
 }
 
 #[cfg(test)]
@@ -2803,10 +2871,10 @@ mod tests {
         assert!(trajectory.pending_action().is_some());
     }
 
-    /// An audience breach with a competent authority yields a waiver plan
-    /// routed to it.
+    /// An audience breach carried by an argument leaf yields an Endorse plan (a
+    /// durable relabel), routed to a competent authority.
     #[test]
-    fn audience_breach_plans_a_waiver() {
+    fn audience_breach_plans_an_endorse() {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
@@ -2818,22 +2886,114 @@ mod tests {
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
             panic!("expected remediable block");
         };
-        let waiver = plans.first();
-        assert_eq!(waiver.steps.len(), 1);
+        let endorse = plans.first();
+        assert_eq!(endorse.steps.len(), 1);
         assert!(matches!(
-            &waiver.steps.first().kind,
-            TransitionKind::ApplyWaiver {
-                delta: crate::transition::TransientWaiver { audience: Some(vouched), .. },
-            } if vouched.contains(&user("charlie"))
+            &endorse.steps.first().kind,
+            TransitionKind::EndorseValue { source, delta }
+                if *source == doc && delta.audience.as_ref().is_some_and(|r| r.contains(&user("charlie")))
         ));
-        // Routing is live at application: the waiver step is consulted against
-        // the registered authorities and defers to the competent external one.
-        let plan_id = waiver.id;
+        // Routing is live at application: the endorse step defers to the
+        // competent external human.
+        let plan_id = endorse.id;
         let capability = engine.mint_step(&trajectory, plan_id, 0).unwrap();
         let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
             panic!("expected the external human to be consulted");
         };
         assert_eq!(pending.authority().as_str(), "human");
+    }
+
+    /// A breach carried by more than one argument leaf endorses each
+    /// contributing leaf (multi-source), and clears only once every one is
+    /// raised — the audience fold is intersection, so a single raise is not
+    /// enough.
+    #[test]
+    fn a_multi_source_audience_breach_endorses_every_contributing_leaf() {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "auto".to_owned(),
+            })
+        }
+        let mut engine = engine_with([email_contract()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("auto"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+        // Two body parts, each readable only by alice; sending to bob exceeds
+        // both, so both must be endorsed.
+        let part1 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "part one");
+        let part2 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "part two");
+        let to = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to)),
+                (
+                    ArgumentName::new("body"),
+                    ArgumentTree::Object(std::collections::BTreeMap::from([
+                        (ArgumentName::new("0"), ArgumentTree::Value(part1)),
+                        (ArgumentName::new("1"), ArgumentTree::Value(part2)),
+                    ])),
+                ),
+            ])),
+            BTreeSet::new(),
+        );
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let plan_id = plans.first().id;
+        let endorsed: BTreeSet<ValueId> = plans
+            .first()
+            .steps
+            .iter()
+            .filter_map(|s| match &s.kind {
+                TransitionKind::EndorseValue { source, .. } => Some(*source),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            endorsed,
+            BTreeSet::from([part1, part2]),
+            "both contributing leaves are endorsed"
+        );
+
+        // Applying only the first endorse does not yet clear the breach.
+        let cap0 = engine.mint_step(&trajectory, plan_id, 0).unwrap();
+        let StepOutcome::Advanced(mut decision) = engine.apply_step(&mut trajectory, cap0).unwrap() else {
+            panic!("expected the step to advance");
+        };
+        assert!(
+            matches!(decision, Decision::Blocked(Blocked::Remediable { .. })),
+            "a single endorse does not clear a two-leaf intersection breach"
+        );
+        // Continuing endorses the second leaf and reaches a permit.
+        loop {
+            match decision {
+                Decision::Permitted(_) => break,
+                Decision::Blocked(Blocked::Remediable { plans, .. }) => {
+                    let cap = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+                    decision = match engine.apply_step(&mut trajectory, cap).unwrap() {
+                        StepOutcome::Advanced(d) => d,
+                        other => panic!("unexpected outcome: {other:?}"),
+                    };
+                }
+                other => panic!("expected to reach a permit, got {other:?}"),
+            }
+        }
     }
 
     /// A granted Endorse mints a durable relabel: the source keeps its narrow
@@ -3050,21 +3210,19 @@ mod tests {
         assert!(matches!(
             &plans.first().steps.first().kind,
             TransitionKind::ApplyWaiver {
-                delta: crate::transition::TransientWaiver {
-                    control_release,
-                    audience: None,
-                    ..
-                },
+                delta: crate::transition::TransientWaiver { control_release, .. },
             } if *control_release == BTreeSet::from([secret])
         ));
     }
 
-    /// Releasing control can *narrow* an audience breach witness without
-    /// eliminating it; the control-release candidate must still be offered so
-    /// the narrower waiver (vouch only the truly-exposed recipient) is
-    /// available. (Regression: the delta-comparison in `waiver_candidates`.)
+    /// A breach that is part control-borne and part arg-borne composes: the
+    /// control-release waiver drops the control-narrowed recipient (bob), and an
+    /// Endorse durably vouches the recipient the argument itself excludes
+    /// (charlie). The control-release candidate must still be offered even though
+    /// it only *narrows* the witness. (Regression: the violation-set comparison
+    /// in `minimal_control_release`.)
     #[test]
-    fn control_release_narrows_the_audience_witness() {
+    fn control_release_and_endorse_compose_for_a_mixed_audience_breach() {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
@@ -3102,22 +3260,27 @@ mod tests {
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
             panic!("expected a remediable block");
         };
-        let narrows = plans.iter().any(|plan| {
-            matches!(
-                &plan.steps.first().kind,
-                TransitionKind::ApplyWaiver {
-                    delta: crate::transition::TransientWaiver {
-                        control_release,
-                        audience: Some(vouched),
-                        ..
-                    },
-                } if *control_release == BTreeSet::from([control])
-                    && *vouched == BTreeSet::from([user("charlie")])
-            )
+        let composes = plans.iter().any(|plan| {
+            let endorses_charlie = plan.steps.iter().any(|step| {
+                matches!(
+                    &step.kind,
+                    TransitionKind::EndorseValue { source, delta }
+                        if *source == body && delta.audience.as_ref().is_some_and(|r| r.contains(&user("charlie")))
+                )
+            });
+            let releases_control = plan.steps.iter().any(|step| {
+                matches!(
+                    &step.kind,
+                    TransitionKind::ApplyWaiver {
+                        delta: crate::transition::TransientWaiver { control_release, .. },
+                    } if *control_release == BTreeSet::from([control])
+                )
+            });
+            endorses_charlie && releases_control
         });
         assert!(
-            narrows,
-            "a control-release waiver should vouch only charlie, not bob too"
+            composes,
+            "the mixed breach should endorse the body for charlie and release control for bob"
         );
     }
 
@@ -3367,9 +3530,9 @@ mod tests {
         trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
     }
 
-    /// A rule-approved waiver permits inline, with the application audited.
+    /// A rule-approved Endorse permits inline, with the application audited.
     #[test]
-    fn rule_approved_waiver_permits_inline() {
+    fn rule_approved_endorse_permits_inline() {
         fn approve(
             _: &crate::transition::ProposedGrant,
             _: &[Violation],
@@ -3397,19 +3560,19 @@ mod tests {
         };
         assert!(matches!(
             &plans.first().steps.first().kind,
-            TransitionKind::ApplyWaiver { .. }
+            TransitionKind::EndorseValue { .. }
         ));
         let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
         let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
         let StepOutcome::Advanced(Decision::Permitted(_token)) = outcome else {
-            panic!("expected inline waiver permit, got {outcome:?}");
+            panic!("expected inline endorse permit, got {outcome:?}");
         };
         assert!(
             trajectory
                 .state()
                 .audit()
                 .iter()
-                .any(|e| matches!(e, AuditEvent::WaiverApplied { .. }))
+                .any(|e| matches!(e, AuditEvent::EndorseApplied { .. }))
         );
     }
 
@@ -3460,10 +3623,10 @@ mod tests {
         else {
             panic!("expected the second authority to approve after the first abstained");
         };
-        // The applied waiver is attributed to the authority that actually ruled.
+        // The applied endorse is attributed to the authority that actually ruled.
         assert!(trajectory.state().audit().iter().any(|e| matches!(
             e,
-            AuditEvent::WaiverApplied { authority, .. } if authority.as_str() == "second"
+            AuditEvent::EndorseApplied { authority, .. } if authority.as_str() == "second"
         )));
     }
 
@@ -4351,15 +4514,32 @@ mod tests {
     }
 
     /// An external waiver round-trips through PendingApproval; approval
-    /// permits, and the whole loop is audited.
+    /// permits, and the whole loop is audited. Uses a control-borne breach so
+    /// the residual is a control-release waiver (an arg-borne breach would route
+    /// to Endorse instead).
     #[test]
     fn external_waiver_approval_roundtrip() {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
-        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
-        let request = email_request(&mut trajectory, doc, "charlie");
+        // A control selector narrows the flow audience below the recipient, so
+        // the residual is a control release rather than a value relabel.
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "selector");
+        let to = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to)),
+                (ArgumentName::new("body"), ArgumentTree::Value(body)),
+            ])),
+            BTreeSet::from([secret]),
+        );
 
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
             panic!("expected remediable block");
@@ -4413,7 +4593,7 @@ mod tests {
             let source_trusted = view
                 .label(crate::revision::ValueId::new(0))
                 .is_some_and(|label| label.trust == Trust::TRUSTED);
-            if audience_breach && source_trusted && matches!(grant, crate::transition::ProposedGrant::Waive { .. }) {
+            if audience_breach && source_trusted && matches!(grant, crate::transition::ProposedGrant::Endorse { .. }) {
                 Some(crate::approval::Ruling::Approve {
                     reason: "source document is trusted".to_owned(),
                 })

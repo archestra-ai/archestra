@@ -1729,6 +1729,13 @@ const config = {
       : undefined,
   },
   kb: {
+    // BETA gate for the auto-sync-permissions connector visibility: the
+    // permission-sync passes, the connector Permissions tab APIs, and manual
+    // member overrides. Off by default; a blank value falls back to the
+    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    autoSyncPermissionsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
+    ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
@@ -1738,6 +1745,14 @@ const config = {
     taskWorkerMaxConcurrent: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
       2,
+    ),
+    // Concurrency cap for the runtime-isolated permission-sync lane. Separate
+    // from the content lane so permission passes can neither starve nor be
+    // starved by content ingestion.
+    permissionSyncWorkerMaxConcurrent: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
+      1,
     ),
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,

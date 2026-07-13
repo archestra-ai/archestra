@@ -155,6 +155,20 @@ They are decisions, not open questions.
   names its *authorizer*" — an `Authority` for endorse/accept/waiver/acknowledge,
   **or a registered transformer/transition** for sanitize/constrain (registration
   is a distinct, audited authorization root; it does not become an `Authority`).
+- **Composition is least-privilege.** A flow may trip both criteria (a dirty
+  payload *and* a surface-growing sink), so a plan composes a reduce step with an
+  authorize step. Ordering: apply the registration-cheap **reductions first** —
+  Sanitize (shrinks the data taint) and Constrain (shrinks the tool effects) —
+  recompute the residual against the reduced state (SimFlow simulates each step),
+  then route only the **irreducible residual** to a pricey authority elevation:
+  Endorse (residual sink breach), Accept (residual surface growth), transient
+  Waiver (confirmation / control-release / prior-effect). The reduce/authorize
+  pairs are **per axis**: Constrain↔Accept on the effect axis, Sanitize↔Endorse
+  on the confidentiality axis — each reduction shrinks what its own elevation must
+  authorize; across axes the steps compose additively (a relabel does not shrink
+  what an Accept authorizes). This extends today's `enumerate_plans`
+  (`transform → constrain → waiver-the-residual`, which already computes a final
+  waiver over what remains); Accept slots into the same residual computation.
 
 ### Open encoding choices (decide at Build time, low-risk)
 - **OQ1:** one `TransitionKind::Relabel { source, via: Sanitize(TransformerRef)
@@ -228,6 +242,11 @@ same doc, on this same branch**.
   (no early `past_effects` commit); `acquire_effects` capability enforced.
 - [ ] `ExitKind`-tagged, cap-fair categorized routes (derive tag from steps;
   include Waiver/Acknowledge).
+- [ ] **Composition (Constrain↔Accept).** A flow that both breaches a sink and
+  grows the surface enumerates a plan that Constrains first, then Accepts the
+  residual growth; Accept is computed on the *reduced* effects (a full constrain
+  to no-egress leaves no Accept step). Test the residual computation, not just
+  the two remedies in isolation.
 
 ### Build 3 — Endorse as relabel + robustness visibility
 - [ ] Move trust/audience endorsement out of `TransientWaiver` into the relabel
@@ -239,6 +258,10 @@ same doc, on this same branch**.
   authority refusing to endorse a value with suspicious ancestry.
 - [ ] Refine crate `CLAUDE.md`: transient waivers change no stored state; a
   fiat-relabel mints a value like a transform.
+- [ ] **Full-composition test.** One flow needing Sanitize + Constrain (cheap
+  reductions) then Endorse + Accept (authority residual, across both axes),
+  proving the residual is recomputed after each reduction and the authority signs
+  off only on the irreducible remainder.
 
 ## Validation commands (every pass)
 ```

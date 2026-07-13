@@ -9,8 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use baton_core::{
     ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Audience, AudienceRule, Decision, Effects, KnownTrust,
-    OpaqueValue, PolicyEngine, Requirements, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust,
-    UnknownPolicy, UserId, ValueId, ValueLabel,
+    OpaqueValue, PolicyEngine, Requirements, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust, UserId,
+    ValueId, ValueLabel,
 };
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
@@ -33,7 +33,7 @@ impl World {
         let users: Vec<UserId> = (0..USER_COUNT).map(user).collect();
         let tool_names: Vec<ToolName> = (0..TOOL_COUNT).map(tool).collect();
 
-        let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
+        let mut engine = PolicyEngine::new();
         for name in &tool_names {
             engine
                 .register(random_contract(&mut rng, name.clone(), &users))

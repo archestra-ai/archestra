@@ -15,7 +15,7 @@ use baton_core::{
     AuthorityName, Blocked, Decision, Effect, Effects, KnownTrust, LabelPredicate, OpaqueValue, PolicyEngine,
     RegisteredTransformer, Requirements, ResponseDecision, ResponsePolicy, ResponseRequest, Ruling, Speaker,
     StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, TransformerDescriptor, TransformerError,
-    TransformerRef, Trust, UnknownPolicy, UserId, ValueId, ValueLabel,
+    TransformerRef, Trust, UserId, ValueId, ValueLabel,
 };
 use clap::Parser;
 
@@ -191,7 +191,7 @@ fn main() {
 }
 
 fn build_engine() -> PolicyEngine {
-    let mut engine = PolicyEngine::new(UnknownPolicy::Escalate).with_response_policy(ResponsePolicy {
+    let mut engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
         requires: Requirements {
             audience: AudienceRule::RecipientsWithinContext,
             ..Requirements::default()

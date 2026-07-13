@@ -139,8 +139,7 @@ impl fmt::Display for KnownTrust {
 /// `Unknown` is structurally separate from the known judgements so nothing
 /// can treat it as "probably fine" by accident: requirements are expressed
 /// over [`KnownTrust`] only, and unpacking `Unknown` into a judgement is
-/// always explicit — an [`crate::engine::UnknownPolicy`] choice or an
-/// [`crate::authority::Authority`] ruling, never a cast.
+/// always explicit — an [`crate::approval::Authority`] ruling, never a cast.
 ///
 /// The fold keeps the strongest bad evidence: definite suspicion dominates
 /// missing knowledge, which dominates trust

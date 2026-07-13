@@ -36,7 +36,7 @@ pub struct Requirements {
     /// Minimum *known* trust of the flow. `Trust::UNKNOWN` never satisfies
     /// any bar — deliberately over [`KnownTrust`], so "unknown suffices"
     /// cannot even be expressed; unpacking `Unknown` is always an explicit
-    /// [`crate::engine::UnknownPolicy`] decision.
+    /// [`crate::approval::Authority`] acknowledgment.
     /// `Some(KnownTrust::Suspicious)` means "provenance must merely be
     /// established".
     pub trust: Option<KnownTrust>,
@@ -59,8 +59,7 @@ pub enum Breach {
     },
     /// An audience-guarded sink was called with no recipients at all. The
     /// caller definitionally has this data, so its absence is an integration
-    /// bug, not an annotation gap — a breach, never softened by
-    /// [`crate::engine::UnknownPolicy`].
+    /// bug, not an annotation gap — a breach, never softened by an authority.
     UndeclaredRecipients,
     ConfirmationMissing {
         tool: ToolName,
@@ -183,8 +182,7 @@ impl Violation {
 
 /// The raw output of the sink check. Internal: a consumer receives a
 /// [`crate::engine::Decision`] (or [`crate::engine::ResponseDecision`]), which
-/// folds this verdict together with the engine's unknown-policy and remedy
-/// machinery.
+/// folds this verdict together with the engine's remedy machinery.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[must_use]
 pub(crate) enum Verdict {

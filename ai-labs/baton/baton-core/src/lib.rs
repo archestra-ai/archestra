@@ -29,8 +29,10 @@
 //!   trajectory + revision + pending action, and spent on use.
 //! - `Unknown` is a first-class value of audience, trust, and effects, and an
 //!   unregistered tool is evaluable (all-`Unknown` output, `Unknown`
-//!   effects). What `Unknown` means at a sink is an explicit policy choice
-//!   ([`engine::UnknownPolicy`]) — gradual typing for agent stacks.
+//!   effects). An unprovable flow is not accepted implicitly: it routes
+//!   through the authority chain like a breach, and an acknowledge-only gap
+//!   needs an `acknowledge_unknown`-competent [`approval::Authority`] to clear
+//!   — gradual typing for agent stacks, fail-closed by default.
 //!
 //! One deliberate deviation from the original notes: the audience fold is
 //! **intersection** (most-restrictive readers), not union — see
@@ -92,7 +94,7 @@ pub use contract::{Requirements, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
     Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
-    RejectedToken, TerminalBlock, ToolContract, UnknownPolicy,
+    RejectedToken, TerminalBlock, ToolContract,
 };
 pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
 pub use revision::{Revision, ValueId};

@@ -14,7 +14,6 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ToolName;
 use crate::contract::Violation;
 use crate::dimension::Effects;
 use crate::revision::{ActionId, PlanId, TransitionId, ValueId};
@@ -126,9 +125,6 @@ pub enum AuditEvent {
         authority: AuthorityName,
         resolved: Vec<Violation>,
     },
-    /// [`crate::engine::UnknownPolicy::AllowWithAudit`] let unprovable facts
-    /// through without consulting anyone.
-    UnknownAudited { tool: ToolName, facts: Vec<Violation> },
     /// Dispatch began: the action's proposed effects were committed to the
     /// monotone past-effects state *before* release.
     EffectsCommitted { action: ActionId, effects: Effects },
@@ -182,13 +178,6 @@ impl fmt::Display for AuditEvent {
                 write!(f, "waiver by {authority}:")?;
                 for change in changes {
                     write!(f, " {change}")?;
-                }
-                Ok(())
-            }
-            Self::UnknownAudited { tool, facts } => {
-                write!(f, "unverified flow through `{tool}`:")?;
-                for fact in facts {
-                    write!(f, " [{fact}]")?;
                 }
                 Ok(())
             }

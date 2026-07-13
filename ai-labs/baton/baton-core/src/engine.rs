@@ -59,23 +59,6 @@ impl fmt::Display for EngineId {
     }
 }
 
-/// What an unprovable (`Unknown`-caused) violation means at a sink.
-///
-/// This is the gradual-adoption knob: annotate a handful of high-risk tools,
-/// leave the rest unknown, and choose how loudly the gaps fail — without
-/// pretending the whole system is formally safe.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum UnknownPolicy {
-    /// Treat unprovable violations like breaches: escalate them.
-    #[default]
-    Escalate,
-    /// Fail closed.
-    Deny,
-    /// Let the flow through, recording an [`AuditEvent::UnknownAudited`] on
-    /// the trajectory's control-plane audit log.
-    AllowWithAudit,
-}
-
 /// A tool's annotation: what it demands of a flow, the intrinsic label its
 /// results wear, the effects running it proposes, and where its argument
 /// tree carries typed roles.
@@ -307,8 +290,6 @@ pub struct DuplicateContract {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum BlockReason {
-    /// [`UnknownPolicy::Deny`] and at least one requirement was unprovable.
-    UnknownDenied,
     /// A structural violation (an integration bug the caller must fix) was
     /// present; nothing may override it.
     RequiresStructuralFix,
@@ -338,7 +319,6 @@ pub enum BlockReason {
 impl fmt::Display for BlockReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnknownDenied => write!(f, "unknown-policy is deny and the flow is unprovable"),
             Self::RequiresStructuralFix => {
                 write!(f, "a structural violation nothing may override")
             }
@@ -422,8 +402,8 @@ pub struct ResponsePolicy {
     pub readers: BTreeSet<crate::dimension::UserId>,
 }
 
-/// Holds the tool contracts, the transition registries, the response policy,
-/// and the unknown policy. Registries are populated at construction time and
+/// Holds the tool contracts, the transition registries, the authorities, and
+/// the response policy. Registries are populated at construction time and
 /// never mutated mid-run.
 pub struct PolicyEngine {
     id: EngineId,
@@ -432,11 +412,16 @@ pub struct PolicyEngine {
     action_transitions: Vec<ActionTransition>,
     authorities: Vec<Authority>,
     response_policy: Option<ResponsePolicy>,
-    unknown_policy: UnknownPolicy,
+}
+
+impl Default for PolicyEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PolicyEngine {
-    pub fn new(unknown_policy: UnknownPolicy) -> Self {
+    pub fn new() -> Self {
         Self {
             id: EngineId::next(),
             contracts: BTreeMap::new(),
@@ -444,7 +429,6 @@ impl PolicyEngine {
             action_transitions: Vec::new(),
             authorities: Vec::new(),
             response_policy: None,
-            unknown_policy,
         }
     }
 
@@ -491,9 +475,9 @@ impl PolicyEngine {
         Ok(())
     }
 
-    /// Set the final-response sink policy. Without one, emitting a response
-    /// is unprovable (like calling a tool with no contract) and is disposed
-    /// of by the [`UnknownPolicy`].
+    /// Set the final-response sink policy. Without one, emitting a response is
+    /// unprovable (like calling a tool with no contract) and blocks terminally
+    /// — the response sink is strict emit-or-terminal (no remediation).
     #[must_use]
     pub fn with_response_policy(mut self, policy: ResponsePolicy) -> Self {
         self.response_policy = Some(policy);
@@ -646,55 +630,13 @@ impl PolicyEngine {
             return self.terminal(trajectory, violations, BlockReason::RequiresStructuralFix);
         }
 
-        // Axis: provability. Apply the UnknownPolicy to the unprovables.
-        let (unprovable, breaches): (Vec<Violation>, Vec<Violation>) = violations
-            .into_iter()
-            .partition(|v| matches!(v, Violation::Unprovable(_)));
-
-        let mut escalating = breaches;
-        let mut audited_unknowns = Vec::new();
-        debug!(
-            policy = ?self.unknown_policy,
-            unprovable = unprovable.len(),
-            breaches = escalating.len(),
-            "unknown-policy disposition",
-        );
-        match self.unknown_policy {
-            UnknownPolicy::Escalate => escalating.extend(unprovable),
-            UnknownPolicy::Deny => {
-                if !unprovable.is_empty() {
-                    escalating.extend(unprovable);
-                    debug!("blocked (unknown-policy deny)");
-                    return self.terminal(trajectory, escalating, BlockReason::UnknownDenied);
-                }
-            }
-            UnknownPolicy::AllowWithAudit => audited_unknowns = unprovable,
-        }
-
-        if escalating.is_empty() {
-            // Idempotent re-entry: a re-evaluation of the same original
-            // request must not append a second UnknownAudited event (the
-            // first evaluation already recorded it).
-            if !audited_unknowns.is_empty() && existing_action.is_none() {
-                debug!(count = audited_unknowns.len(), "recording policy-audited unknowns");
-                trajectory.record_event(AuditEvent::UnknownAudited {
-                    tool: checked_request.tool.clone(),
-                    facts: audited_unknowns,
-                });
-            }
-            debug!("permitted (no escalation)");
-            return self.permit(
-                trajectory,
-                existing_action,
-                request,
-                checked_request,
-                intrinsic,
-                proposed_effects,
-            );
-        }
-
-        // Enumerate remedy plans for the escalation. The pending action is
-        // the plans' shared target, so it must exist before planning.
+        // Everything else — provable breaches and unprovable facts alike —
+        // routes through the remedy chain. A grant-fixable gap routes to a
+        // waiver; an acknowledge-only unprovable to an `acknowledge_unknown`
+        // authority (see `enumerate_plans` and `grant_for`). There is no
+        // implicit accept: an unprovable with no competent authority blocks.
+        // The pending action is the plans' shared target, so it must exist
+        // before planning.
         let action = match existing_action {
             Some(action) => action,
             None => trajectory.set_pending(request, proposed_effects),
@@ -708,15 +650,11 @@ impl PolicyEngine {
         match NonEmptyVec::from_vec(trajectory.store_plans(action, self.id, drafts)) {
             Some(plans) => {
                 debug!(count = plans.len(), "blocked (remediable)");
-                Decision::Blocked(Blocked::Remediable {
-                    violations: escalating,
-                    plans,
-                })
+                Decision::Blocked(Blocked::Remediable { violations, plans })
             }
             None => {
                 debug!("blocked (no remedy)");
-                escalating.extend(audited_unknowns);
-                self.terminal(trajectory, escalating, BlockReason::NoRemedy)
+                self.terminal(trajectory, violations, BlockReason::NoRemedy)
             }
         }
     }
@@ -727,8 +665,10 @@ impl PolicyEngine {
     /// to emit. Revision-bound via `request.basis`; blocked responses touch
     /// nothing (in particular, they never clear a pending tool action).
     ///
-    /// Without a registered response policy the emission is unprovable, like
-    /// a tool with no contract, and the [`UnknownPolicy`] disposes of it.
+    /// The response is the front door: strict emit-or-terminal, no remediation
+    /// (a value too dirty to show is relabeled upstream, before the response is
+    /// composed). Without a registered response policy the emission is
+    /// unprovable, like a tool with no contract, and blocks terminally.
     #[tracing::instrument(level = "debug", skip_all)]
     pub fn evaluate_response(&self, trajectory: &mut Trajectory, request: ResponseRequest) -> ResponseDecision {
         let blocked =
@@ -773,34 +713,14 @@ impl PolicyEngine {
             debug!("response blocked (structural fix required)");
             return blocked(violations, BlockReason::RequiresStructuralFix);
         }
-        let (unprovable, breaches): (Vec<Violation>, Vec<Violation>) = violations
-            .into_iter()
-            .partition(|v| matches!(v, Violation::Unprovable(_)));
-        let mut escalating = breaches;
-        let mut audited_unknowns = Vec::new();
-        match self.unknown_policy {
-            UnknownPolicy::Escalate => escalating.extend(unprovable),
-            UnknownPolicy::Deny => {
-                if !unprovable.is_empty() {
-                    escalating.extend(unprovable);
-                    debug!("response blocked (unknown-policy deny)");
-                    return blocked(escalating, BlockReason::UnknownDenied);
-                }
-            }
-            UnknownPolicy::AllowWithAudit => audited_unknowns = unprovable,
-        }
-        if !escalating.is_empty() {
+        // Strict emit-or-terminal: any residual violation — breach or
+        // unprovable fact — blocks the front door. Nothing is acknowledged or
+        // waived here; dirty values are relabeled upstream.
+        if !violations.is_empty() {
             debug!("response blocked (no remedy)");
-            escalating.extend(audited_unknowns);
-            return blocked(escalating, BlockReason::NoRemedy);
+            return blocked(violations, BlockReason::NoRemedy);
         }
 
-        if !audited_unknowns.is_empty() {
-            trajectory.record_event(AuditEvent::UnknownAudited {
-                tool: sink,
-                facts: audited_unknowns,
-            });
-        }
         let (value, rendered) = trajectory
             .emit_response(&request.body, request.control)
             .expect("response dependencies were validated by flow_labels above");
@@ -1020,7 +940,7 @@ impl PolicyEngine {
                 Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
             }
             TransitionKind::ApplyWaiver { delta } => {
-                let grant = ProposedGrant::Waive(delta.clone());
+                let grant = grant_for(&delta, &spec.precondition.remaining);
                 // Route live: walk competent authorities in order. An inline
                 // authority that abstains falls through to the next; the first
                 // external one defers to an out-of-process ruling. The view
@@ -1344,7 +1264,7 @@ impl PolicyEngine {
                     if !sim.violations(Some(&delta)).is_empty() {
                         continue;
                     }
-                    let grant = ProposedGrant::Waive(delta.clone());
+                    let grant = grant_for(&delta, &remaining);
                     if !self.route_waiver(&grant) {
                         continue;
                     }
@@ -1554,6 +1474,25 @@ impl SimFlow {
     }
 }
 
+/// The typed grant a residual asks an authority to authorize. A non-empty
+/// lift is a [`ProposedGrant::Waive`]; an empty lift over an acknowledge-only
+/// residual is a [`ProposedGrant::Acknowledge`], which routes on the explicit
+/// `acknowledge_unknown` capability rather than being covered by every mandate.
+fn grant_for(delta: &TransientWaiver, resolved: &[Violation]) -> ProposedGrant {
+    if delta == &TransientWaiver::empty() {
+        let facts = resolved
+            .iter()
+            .filter_map(|violation| match violation {
+                Violation::Unprovable(fact) => Some(fact.clone()),
+                Violation::Breach(_) => None,
+            })
+            .collect();
+        ProposedGrant::Acknowledge { facts }
+    } else {
+        ProposedGrant::Waive(delta.clone())
+    }
+}
+
 /// The delta that would cover the grant-fixable gaps in `violations` —
 /// acknowledge-only and structural members contribute nothing.
 fn needed_delta(
@@ -1625,8 +1564,8 @@ mod tests {
         }
     }
 
-    fn engine_with(contracts: impl IntoIterator<Item = ToolContract>, policy: UnknownPolicy) -> PolicyEngine {
-        let mut engine = PolicyEngine::new(policy);
+    fn engine_with(contracts: impl IntoIterator<Item = ToolContract>) -> PolicyEngine {
+        let mut engine = PolicyEngine::new();
         for contract in contracts {
             engine.register(contract).unwrap();
         }
@@ -1669,7 +1608,7 @@ mod tests {
 
     #[test]
     fn clean_flow_is_permitted_and_result_admitted_with_folded_label() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1692,7 +1631,7 @@ mod tests {
 
     #[test]
     fn explicit_flow_taint_blocks_the_sink() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1710,7 +1649,7 @@ mod tests {
 
     #[test]
     fn control_dependence_taints_a_clean_payload() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
         let clean_body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
@@ -1742,8 +1681,8 @@ mod tests {
     }
 
     #[test]
-    fn unregistered_tool_denied_under_deny_policy() {
-        let engine = engine_with([], UnknownPolicy::Deny);
+    fn unregistered_tool_blocks_without_an_acknowledge_authority() {
+        let engine = engine_with([]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
         let request = ToolRequest::new(
@@ -1752,15 +1691,36 @@ mod tests {
             BTreeSet::new(),
         );
 
+        // No implicit accept: an unprovable flow with no competent authority
+        // has no remedy and blocks terminally (fail-closed default).
         let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
             panic!("expected terminal block");
         };
-        assert_eq!(block.reason, BlockReason::UnknownDenied);
+        assert_eq!(block.reason, BlockReason::NoRemedy);
     }
 
     #[test]
-    fn unregistered_tool_audited_through_with_unknown_output() {
-        let engine = engine_with([], UnknownPolicy::AllowWithAudit);
+    fn unregistered_tool_acknowledged_dispatches_with_unknown_output() {
+        fn accept_unknowns(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "operator accepts unknowns".to_owned(),
+            })
+        }
+        let mut engine = engine_with([]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("accept-unknowns"),
+                mandate: crate::transition::AuthorityMandate {
+                    acknowledge_unknown: true,
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(accept_unknowns),
+            })
+            .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
         let request = ToolRequest::new(
@@ -1769,13 +1729,20 @@ mod tests {
             BTreeSet::new(),
         );
 
-        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected permit");
+        // The unprovable flow routes through the chain: it blocks remediably,
+        // and acknowledging it (an `acknowledge_unknown` authority) clears it.
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected a remediable block");
         };
-        assert!(matches!(
-            trajectory.state().audit(),
-            [AuditEvent::UnknownAudited { .. }]
-        ));
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected the acknowledgment to permit");
+        };
+        assert!(trajectory.state().audit().iter().any(|e| matches!(
+            e,
+            AuditEvent::WaiverApplied { changes, .. } if changes.contains(&crate::audit::WaiverKind::Acknowledgment)
+        )));
 
         let result = dispatch(&mut trajectory, token, "???").unwrap();
         // Intrinsic unknown poisons the output despite trusted inputs...
@@ -1784,9 +1751,37 @@ mod tests {
         assert_eq!(trajectory.state().past_effects(), &Effects::UNKNOWN);
     }
 
+    /// A grant-fixable unprovable (unknown trust at a Trusted-requiring sink)
+    /// routes through the chain as a waiver, exactly like a breach.
+    #[test]
+    fn unknown_trust_routes_as_a_waiver() {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        // Unknown trust cannot prove the sink's `Trusted` requirement.
+        let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "doc");
+        let request = email_request(&mut trajectory, doc, "bob");
+
+        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
+        else {
+            panic!("expected a remediable block");
+        };
+        assert!(
+            violations
+                .iter()
+                .any(|v| matches!(v, Violation::Unprovable(crate::contract::Unprovable::TrustUnknown)))
+        );
+        // The waiver step routes to the trust-competent external human.
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        assert!(matches!(
+            engine.apply_step(&mut trajectory, capability).unwrap(),
+            StepOutcome::NeedsApproval(_)
+        ));
+    }
+
     #[test]
     fn guarded_sink_without_recipients_is_structural() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = ToolRequest::new(
@@ -1806,7 +1801,7 @@ mod tests {
 
     #[test]
     fn stale_token_is_rejected_after_any_mutation() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1826,7 +1821,7 @@ mod tests {
 
     #[test]
     fn foreign_trajectory_token_is_rejected() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1841,7 +1836,7 @@ mod tests {
 
     #[test]
     fn second_distinct_proposal_is_refused_until_abandoned() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let first = email_request(&mut trajectory, body, "bob");
@@ -1865,7 +1860,7 @@ mod tests {
 
     #[test]
     fn re_entry_reuses_the_pending_action() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1896,7 +1891,7 @@ mod tests {
         report.effects = Effects::none();
         report.arguments = ArgumentSchema::opaque();
 
-        let engine = engine_with([email_contract(), report], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract(), report]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1922,7 +1917,7 @@ mod tests {
 
     #[test]
     fn duplicate_contract_is_refused() {
-        let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
+        let mut engine = PolicyEngine::new();
         engine.register(email_contract()).unwrap();
         assert_eq!(
             engine.register(email_contract()),
@@ -1934,7 +1929,7 @@ mod tests {
 
     #[test]
     fn unknown_value_reference_blocks_loudly() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let ghost = ValueId::new(1000);
         let request = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::Value(ghost), BTreeSet::new());
@@ -1947,7 +1942,7 @@ mod tests {
 
     #[test]
     fn effects_survive_a_declared_dispatch_failure() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1968,7 +1963,7 @@ mod tests {
 
     #[test]
     fn canonical_request_renders_the_checked_tree() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -1983,7 +1978,7 @@ mod tests {
 
     #[test]
     fn stale_receipt_is_rejected_after_any_mutation() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -2001,7 +1996,7 @@ mod tests {
 
     #[test]
     fn foreign_receipt_is_rejected() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -2027,7 +2022,7 @@ mod tests {
             effects: Effects::declared([Effect::Mutation]),
             arguments: ArgumentSchema::opaque(),
         };
-        let engine = engine_with([drop_contract], UnknownPolicy::Escalate);
+        let engine = engine_with([drop_contract]);
         let mut trajectory = Trajectory::new();
         let go = trajectory.ingress(
             crate::turn::Speaker::confirming(user("alice"), ToolName::new("db.drop")),
@@ -2055,7 +2050,7 @@ mod tests {
     }
 
     fn response_engine(readers: &[&str]) -> PolicyEngine {
-        PolicyEngine::new(UnknownPolicy::Escalate).with_response_policy(ResponsePolicy {
+        PolicyEngine::new().with_response_policy(ResponsePolicy {
             requires: Requirements {
                 audience: crate::contract::AudienceRule::RecipientsWithinContext,
                 ..Requirements::default()
@@ -2171,7 +2166,7 @@ mod tests {
 
     #[test]
     fn response_without_policy_is_unprovable() {
-        let engine = engine_with([], UnknownPolicy::Deny);
+        let engine = engine_with([]);
         let mut trajectory = Trajectory::new();
         let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "hi");
         let request = ResponseRequest {
@@ -2184,12 +2179,14 @@ mod tests {
         else {
             panic!("expected block");
         };
-        assert_eq!(block.reason, BlockReason::UnknownDenied);
+        // The response sink is strict emit-or-terminal (D1): an unprovable
+        // response with no policy has no remedy.
+        assert_eq!(block.reason, BlockReason::NoRemedy);
     }
 
     #[test]
     fn duplicate_reentry_token_cannot_release_twice() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
@@ -2211,7 +2208,7 @@ mod tests {
 
     #[test]
     fn unknown_control_dependency_blocks_loudly() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let ghost = ValueId::new(1000);
@@ -2243,7 +2240,7 @@ mod tests {
             },
             run: passthrough,
         };
-        let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
+        let mut engine = PolicyEngine::new();
         engine.register_transformer(entry()).unwrap();
         assert!(engine.register_transformer(entry()).is_err());
 
@@ -2300,7 +2297,7 @@ mod tests {
     /// transform plan predicting a clean flow.
     #[test]
     fn tainted_payload_plans_a_transform() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_transformer(redact_transformer()).unwrap();
         let mut trajectory = Trajectory::new();
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
@@ -2334,7 +2331,7 @@ mod tests {
     /// routed to it.
     #[test]
     fn audience_breach_plans_a_waiver() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         // Only alice may read the doc; sending to charlie exceeds it.
@@ -2366,7 +2363,7 @@ mod tests {
     /// attesting the data itself.
     #[test]
     fn control_taint_plans_control_release_first() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
@@ -2427,7 +2424,7 @@ mod tests {
             effects: Effects::none(),
             arguments: ArgumentSchema::opaque(),
         };
-        let mut engine = engine_with([fetch, cached], UnknownPolicy::Escalate);
+        let mut engine = engine_with([fetch, cached]);
         engine
             .register_action_transition(ActionTransition {
                 id: crate::value::TransformerRef {
@@ -2457,7 +2454,7 @@ mod tests {
     /// terminal.
     #[test]
     fn no_applicable_remedy_is_terminal() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw");
         let request = email_request(&mut trajectory, raw, "bob");
@@ -2474,7 +2471,7 @@ mod tests {
     /// the redacted bytes.
     #[test]
     fn transform_step_applies_and_flow_permits() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_transformer(redact_transformer()).unwrap();
         let mut trajectory = Trajectory::new();
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw secrets");
@@ -2521,7 +2518,7 @@ mod tests {
                 reason: "within policy".to_owned(),
             })
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine
             .register_authority(crate::approval::Authority {
                 name: crate::audit::AuthorityName::new("auto-approve"),
@@ -2574,7 +2571,7 @@ mod tests {
                 reason: "second".to_owned(),
             })
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine
             .register_authority(crate::approval::Authority {
                 name: crate::audit::AuthorityName::new("first"),
@@ -2620,7 +2617,7 @@ mod tests {
                 reason: "inline".to_owned(),
             })
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         // External registered first; the inline authority must still win.
         engine.register_authority(human()).unwrap();
         engine
@@ -2655,7 +2652,7 @@ mod tests {
         ) -> Option<crate::approval::Ruling> {
             None
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine
             .register_authority(crate::approval::Authority {
                 name: crate::audit::AuthorityName::new("only"),
@@ -2682,7 +2679,7 @@ mod tests {
     /// permits, and the whole loop is audited.
     #[test]
     fn external_waiver_approval_roundtrip() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
@@ -2748,7 +2745,7 @@ mod tests {
                 None
             }
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine
             .register_authority(crate::approval::Authority {
                 name: crate::audit::AuthorityName::new("vouch"),
@@ -2791,7 +2788,7 @@ mod tests {
     /// completes on approval.
     #[test]
     fn external_pending_carries_an_ancestry_snapshot() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
@@ -2825,7 +2822,7 @@ mod tests {
     /// escalates afresh (nothing was stored loosened).
     #[test]
     fn external_waiver_denial_blocks_terminally() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
@@ -2866,7 +2863,7 @@ mod tests {
     /// touching state.
     #[test]
     fn stale_and_foreign_step_capabilities_are_refused() {
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
@@ -2928,7 +2925,7 @@ mod tests {
                 message: "redactor crashed".to_owned(),
             })
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         let mut transformer = redact_transformer();
         transformer.run = broken;
         engine.register_transformer(transformer).unwrap();
@@ -2968,7 +2965,7 @@ mod tests {
         fn redact(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
             Ok(OpaqueValue::new("[redacted]"))
         }
-        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine = engine_with([email_contract()]);
         engine
             .register_transformer(RegisteredTransformer {
                 descriptor: crate::transition::TransformerDescriptor {
@@ -3052,7 +3049,7 @@ mod tests {
             effects: Effects::declared([Effect::Mutation]),
             arguments: ArgumentSchema::opaque(),
         };
-        let mut engine = engine_with([drop_contract], UnknownPolicy::Escalate);
+        let mut engine = engine_with([drop_contract]);
         engine.register_transformer(redact_transformer()).unwrap();
         let mut trajectory = Trajectory::new();
         let table = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "users_table");
@@ -3100,7 +3097,7 @@ mod tests {
             mandate: crate::transition::AuthorityMandate::none(),
             mode,
         };
-        let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
+        let mut engine = PolicyEngine::new();
         engine
             .register_authority(gate(crate::approval::AuthorityMode::Inline(approve)))
             .unwrap();
@@ -3121,10 +3118,10 @@ mod tests {
     /// against another's — even one configured identically.
     #[test]
     fn capabilities_are_bound_to_their_engine() {
-        let mut engine_a = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine_a = engine_with([email_contract()]);
         engine_a.register_authority(human()).unwrap();
         // Engine B registers the same names — a different trust domain.
-        let mut engine_b = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let mut engine_b = engine_with([email_contract()]);
         engine_b.register_authority(human()).unwrap();
 
         let mut trajectory = Trajectory::new();
@@ -3186,7 +3183,7 @@ mod tests {
             effects: Effects::declared([Effect::Mutation]),
             arguments: ArgumentSchema::opaque(),
         };
-        let mut engine = engine_with([fetch, cached], UnknownPolicy::Escalate);
+        let mut engine = engine_with([fetch, cached]);
         engine
             .register_action_transition(ActionTransition {
                 id: crate::value::TransformerRef {
@@ -3239,7 +3236,7 @@ mod tests {
             effects: Effects::none(),
             arguments: ArgumentSchema::opaque(),
         };
-        let mut engine = engine_with([fetch, cached, report], UnknownPolicy::Escalate);
+        let mut engine = engine_with([fetch, cached, report]);
         engine
             .register_action_transition(ActionTransition {
                 id: crate::value::TransformerRef {
@@ -3295,7 +3292,7 @@ mod tests {
     /// naive re-entry would mint a fresh valid token).
     #[test]
     fn released_action_cannot_be_re_permitted_or_re_released() {
-        let engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        let engine = engine_with([email_contract()]);
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, doc, "bob");
@@ -3316,11 +3313,31 @@ mod tests {
         assert!(trajectory.pending_action().is_none());
     }
 
-    /// AllowWithAudit re-entry is idempotent: it does not append a second
-    /// UnknownAudited event.
+    /// Re-evaluating an unprovable flow is idempotent: acknowledgment happens
+    /// at application (once, on a consumed capability), so evaluation — first
+    /// or re-entrant — writes no acknowledgment audit.
     #[test]
-    fn allow_with_audit_re_entry_is_idempotent() {
-        let engine = engine_with([], UnknownPolicy::AllowWithAudit);
+    fn unprovable_re_entry_writes_no_audit() {
+        fn accept_unknowns(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "operator accepts unknowns".to_owned(),
+            })
+        }
+        let mut engine = engine_with([]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("accept-unknowns"),
+                mandate: crate::transition::AuthorityMandate {
+                    acknowledge_unknown: true,
+                    ..crate::transition::AuthorityMandate::none()
+                },
+                mode: crate::approval::AuthorityMode::Inline(accept_unknowns),
+            })
+            .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
         let request = ToolRequest::new(
@@ -3329,27 +3346,23 @@ mod tests {
             BTreeSet::new(),
         );
 
-        let Decision::Permitted(_) = engine.evaluate(&mut trajectory, request.clone()) else {
-            panic!("expected permit");
-        };
-        let audited = trajectory
-            .state()
-            .audit()
-            .iter()
-            .filter(|e| matches!(e, AuditEvent::UnknownAudited { .. }))
-            .count();
-        // Re-evaluate the same original request.
-        let Decision::Permitted(_) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected permit on re-entry");
-        };
-        assert_eq!(
+        let waiver_audits = |trajectory: &Trajectory| {
             trajectory
                 .state()
                 .audit()
                 .iter()
-                .filter(|e| matches!(e, AuditEvent::UnknownAudited { .. }))
-                .count(),
-            audited
-        );
+                .filter(|e| matches!(e, AuditEvent::WaiverApplied { .. }))
+                .count()
+        };
+
+        let Decision::Blocked(Blocked::Remediable { .. }) = engine.evaluate(&mut trajectory, request.clone()) else {
+            panic!("expected a remediable block");
+        };
+        assert_eq!(waiver_audits(&trajectory), 0);
+        // Re-evaluate the same original request: still remediable, still no audit.
+        let Decision::Blocked(Blocked::Remediable { .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected a remediable block on re-entry");
+        };
+        assert_eq!(waiver_audits(&trajectory), 0);
     }
 }

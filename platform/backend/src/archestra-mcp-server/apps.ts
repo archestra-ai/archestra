@@ -255,7 +255,7 @@ const EditAppSchema = z.strictObject({
     .min(1)
     .optional()
     .describe(
-      "The complete new document, replacing the current HTML outright with no old_str matching — for a full custom-document rewrite. On a managed app prefer sections; a replacement must keep the four platform-owned nodes. Pass exactly one of sections, edits, or replacementHtml.",
+      "The complete new document, replacing the current HTML outright with no old_str matching — for a full custom-document rewrite. On a managed app prefer sections; a replacement that drops the four platform-owned nodes is allowed and converts the app to a raw document (section editing no longer applies). Pass exactly one of sections, edits, or replacementHtml.",
     ),
 });
 
@@ -339,41 +339,47 @@ const AppEditorSchema = z
     'The app\'s editor mode: "managed_sections" (edit by title/css/body/javascript) or "raw" (edit_app with edits/replacementHtml).',
   );
 
-const ReadAppHtmlOutputSchema = z.object({
-  format: z.literal("html"),
+// A single object (not a union) so the advertised JSON output schema keeps a
+// root `type: "object"` — MCP tool output schemas require it, and a union would
+// serialize to a rootless oneOf that a compliant client rejects. `format`
+// selects which optional group is populated: html fields, or the sections group.
+const ReadAppOutputSchema = z.object({
+  format: z
+    .enum(["html", "sections"])
+    .describe("Which read shape this result carries."),
   id: z.string(),
   name: z.string(),
   scope: AppScopeSchema,
   version: z.number(),
   editor: AppEditorSchema,
+  // format: "html"
   byteSize: z
     .number()
-    .describe("UTF-8 byte size of the full stored HTML (never the window's)."),
+    .optional()
+    .describe("UTF-8 byte size of the full stored HTML (format html)."),
   totalChars: z
     .number()
-    .describe("Total character length of the full stored HTML."),
+    .optional()
+    .describe("Total character length of the full stored HTML (format html)."),
   offset: z
     .number()
+    .optional()
     .describe(
-      "Effective 0-based character offset of the returned window (0 for a full read; clamped to the end when past it).",
+      "Effective 0-based character offset of the returned window (format html).",
     ),
   hasMore: z
     .boolean()
-    .describe("True when the document continues past the returned window."),
+    .optional()
+    .describe(
+      "True when the document continues past the returned window (format html).",
+    ),
   html: z
     .string()
+    .optional()
     .describe(
-      "The stored HTML, pre-injection (no SDK/base CSS) — the requested character window when offset/limit was passed.",
+      "The stored HTML window, pre-injection — no SDK/base CSS (format html).",
     ),
-});
-
-const ReadAppSectionsOutputSchema = z.object({
-  format: z.literal("sections"),
-  id: z.string(),
-  name: z.string(),
-  scope: AppScopeSchema,
-  version: z.number(),
-  editor: z.literal("managed_sections"),
+  // format: "sections"
   sections: z
     .object({
       title: z.string(),
@@ -382,8 +388,9 @@ const ReadAppSectionsOutputSchema = z.object({
       javascript: z.string(),
     })
     .partial()
+    .optional()
     .describe(
-      "The authored section values: all four when no single section was selected, otherwise just the selected (possibly windowed) one.",
+      "Authored section values (format sections): all four, or just the selected (possibly windowed) one.",
     ),
   window: z
     .object({
@@ -393,13 +400,10 @@ const ReadAppSectionsOutputSchema = z.object({
       hasMore: z.boolean(),
     })
     .optional()
-    .describe("Window metadata, present only when a single section was read."),
+    .describe(
+      "Window metadata for a single-section read (format sections, section given).",
+    ),
 });
-
-const ReadAppOutputSchema = z.discriminatedUnion("format", [
-  ReadAppHtmlOutputSchema,
-  ReadAppSectionsOutputSchema,
-]);
 
 const ValidateAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id to validate."),
@@ -885,8 +889,16 @@ const registry = defineArchestraTools([
         if (args.section !== undefined) {
           const value = parsed[args.section];
           const win = sliceCharWindow(value, args.offset, args.limit);
+          // A limit-0 probe has more to read but nowhere to advance to, so it is
+          // told to pass a limit rather than to continue from the same offset.
+          const continuation =
+            win.hasMore && win.content.length > 0
+              ? ` (more follows — continue from offset ${win.offset + win.content.length})`
+              : win.hasMore
+                ? " (pass a limit to read content)"
+                : "";
           const windowNote = win.windowed
-            ? `, window ${win.offset}–${win.offset + win.content.length} of ${value.length} characters${win.hasMore ? ` (more follows — continue from offset ${win.offset + win.content.length})` : ""}`
+            ? `, window ${win.offset}–${win.offset + win.content.length} of ${value.length} characters${continuation}`
             : "";
           return structuredSuccessResult(
             {

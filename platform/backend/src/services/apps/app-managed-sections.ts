@@ -224,17 +224,26 @@ export type SectionMutations = {
 // Internals
 // ============================================================================
 
-const OWNED: Record<SectionKey, { attr: string; tag: string; parent: string }> =
-  {
-    title: { attr: "data-archestra-app-title", tag: "title", parent: "head" },
-    css: { attr: "data-archestra-app-css", tag: "style", parent: "head" },
-    body: { attr: "data-archestra-app-body", tag: "main", parent: "body" },
-    javascript: {
-      attr: "data-archestra-app-script",
-      tag: "script",
-      parent: "body",
-    },
-  };
+const OWNED: Record<
+  SectionKey,
+  { attr: string; tag: string; parent: string; id?: string }
+> = {
+  title: { attr: "data-archestra-app-title", tag: "title", parent: "head" },
+  css: { attr: "data-archestra-app-css", tag: "style", parent: "head" },
+  // id="app" is part of the owned shell (app CSS/JS target #app), so a raw edit
+  // that strips it de-manages the document rather than leaving a broken shell.
+  body: {
+    attr: "data-archestra-app-body",
+    tag: "main",
+    parent: "body",
+    id: "app",
+  },
+  javascript: {
+    attr: "data-archestra-app-script",
+    tag: "script",
+    parent: "body",
+  },
+};
 
 const ROUND_TRIP_ERROR =
   "The section content would corrupt the managed document (it closes or duplicates a platform-owned element). Nothing was saved. Check for a stray </main>, </script>, or </style>, or edit with replacementHtml.";
@@ -248,6 +257,7 @@ type ManagedNode = {
 // A cheerio/domhandler node with the fields this module reads.
 type DomNode = {
   name?: string;
+  attribs?: Record<string, string>;
   parent?: { name?: string } | null;
   sourceCodeLocation?: {
     startTag?: { endOffset: number };
@@ -260,20 +270,27 @@ function decodeOwnedTitle($: ReturnType<typeof load>): string {
   return $(`[${OWNED.title.attr}]`).first().text();
 }
 
-/** Cheap necessary-condition check: all four owned attributes appear verbatim. */
+/**
+ * Cheap necessary-condition check: all four owned attributes appear. HTML
+ * attribute names are ASCII case-insensitive and parse5 lowercases them, so the
+ * scan is case-insensitive too — otherwise an uppercased attribute would parse
+ * as managed yet be reported raw here.
+ */
 function hasAllOwnedMarkers(html: string): boolean {
-  return MANAGED_SECTION_KEYS.every((key) => html.includes(OWNED[key].attr));
+  const lower = html.toLowerCase();
+  return MANAGED_SECTION_KEYS.every((key) => lower.includes(OWNED[key].attr));
 }
 
 function findOwnedNode(
   $: ReturnType<typeof load>,
-  spec: { attr: string; tag: string; parent: string },
+  spec: { attr: string; tag: string; parent: string; id?: string },
 ): ManagedNode | null {
   const matches = $(`[${spec.attr}]`).toArray() as unknown as DomNode[];
   if (matches.length !== 1) return null;
   const el = matches[0];
   if (el.name !== spec.tag) return null;
   if (el.parent?.name !== spec.parent) return null;
+  if (spec.id !== undefined && el.attribs?.id !== spec.id) return null;
   const loc = el.sourceCodeLocation;
   const start = loc?.startTag?.endOffset;
   const end = loc?.endTag?.startOffset;

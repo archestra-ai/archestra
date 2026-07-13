@@ -951,6 +951,47 @@ describe("read_app / edit_app", () => {
     );
   });
 
+  test("every app tool advertises a root object input/output schema (MCP requires it)", () => {
+    // MCP tool input/output schemas must be a root `type: "object"`. A union
+    // (z.union/z.discriminatedUnion) serializes to a rootless oneOf that a
+    // compliant client rejects for the whole tools/list — this guards read_app's
+    // polymorphic output and the other app tools from that regression.
+    const appToolNames = new Set<string>(
+      (
+        [
+          TOOL_SCAFFOLD_APP_SHORT_NAME,
+          TOOL_REFINE_APP_SHORT_NAME,
+          TOOL_READ_APP_SHORT_NAME,
+          TOOL_EDIT_APP_SHORT_NAME,
+          TOOL_VALIDATE_APP_SHORT_NAME,
+          TOOL_LIST_APPS_SHORT_NAME,
+          TOOL_RENDER_APP_SHORT_NAME,
+          TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
+          TOOL_SET_APP_TOOLS_SHORT_NAME,
+          TOOL_PUBLISH_APP_SHORT_NAME,
+          TOOL_DELETE_APP_SHORT_NAME,
+          TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+        ] as const
+      ).map((shortName) => getArchestraToolFullName(shortName)),
+    );
+    const appTools = getArchestraMcpTools().filter((tool) =>
+      appToolNames.has(tool.name),
+    );
+    expect(appTools.length).toBe(appToolNames.size);
+    for (const tool of appTools) {
+      expect(
+        (tool.inputSchema as { type?: string })?.type,
+        `${tool.name} inputSchema`,
+      ).toBe("object");
+      if (tool.outputSchema) {
+        expect(
+          (tool.outputSchema as { type?: string }).type,
+          `${tool.name} outputSchema`,
+        ).toBe("object");
+      }
+    }
+  });
+
   test("replacementHtml replaces the whole document without old_str matching", async () => {
     const { appId, version } = await scaffoldWithHtml(
       "<html><head></head><body><p>old</p></body></html>",

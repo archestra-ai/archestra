@@ -2100,17 +2100,27 @@ Required RBAC permission: `app:read`
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `format` | `string` | Yes |  |
+| `format` | `"html" \| "sections"` | Yes | Which read shape this result carries. |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `version` | `number` | Yes |  |
 | `editor` | `"managed_sections" \| "raw"` | Yes | The app's editor mode: "managed_sections" (edit by title/css/body/javascript) or "raw" (edit_app with edits/replacementHtml). |
-| `byteSize` | `number` | Yes | UTF-8 byte size of the full stored HTML (never the window's). |
-| `totalChars` | `number` | Yes | Total character length of the full stored HTML. |
-| `offset` | `number` | Yes | Effective 0-based character offset of the returned window (0 for a full read; clamped to the end when past it). |
-| `hasMore` | `boolean` | Yes | True when the document continues past the returned window. |
-| `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS) — the requested character window when offset/limit was passed. |
+| `byteSize` | `number` | No | UTF-8 byte size of the full stored HTML (format html). |
+| `totalChars` | `number` | No | Total character length of the full stored HTML (format html). |
+| `offset` | `number` | No | Effective 0-based character offset of the returned window (format html). |
+| `hasMore` | `boolean` | No | True when the document continues past the returned window (format html). |
+| `html` | `string` | No | The stored HTML window, pre-injection — no SDK/base CSS (format html). |
+| `sections` | `object` | No | Authored section values (format sections): all four, or just the selected (possibly windowed) one. |
+| `sections.title` | `string` | No |  |
+| `sections.css` | `string` | No |  |
+| `sections.body` | `string` | No |  |
+| `sections.javascript` | `string` | No |  |
+| `window` | `object` | No | Window metadata for a single-section read (format sections, section given). |
+| `window.section` | `"title" \| "css" \| "body" \| "javascript"` | Yes |  |
+| `window.totalChars` | `number` | Yes |  |
+| `window.offset` | `number` | Yes |  |
+| `window.hasMore` | `boolean` | Yes |  |
 
 #### edit_app
 
@@ -2139,7 +2149,7 @@ Required RBAC permission: `app:update`
 | `edits` | `object[]` | No | Raw str_replace edits applied in order to the whole HTML document; the whole edit is atomic (any failure leaves the app unchanged). The escape hatch for a managed app (prefer sections) and the path for a raw/custom document. Pass exactly one of sections, edits, or replacementHtml. |
 | `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate). |
 | `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |
-| `replacementHtml` | `string` | No | The complete new document, replacing the current HTML outright with no old_str matching — for a full custom-document rewrite. On a managed app prefer sections; a replacement must keep the four platform-owned nodes. Pass exactly one of sections, edits, or replacementHtml. |
+| `replacementHtml` | `string` | No | The complete new document, replacing the current HTML outright with no old_str matching — for a full custom-document rewrite. On a managed app prefer sections; a replacement that drops the four platform-owned nodes is allowed and converts the app to a raw document (section editing no longer applies). Pass exactly one of sections, edits, or replacementHtml. |
 
 ##### Output
 

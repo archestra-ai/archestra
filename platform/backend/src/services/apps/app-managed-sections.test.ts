@@ -110,6 +110,29 @@ describe("composeManagedDocument + parseManagedSections", () => {
     expect(parseManagedSections(html)).toBeNull();
   });
 
+  it('requires id="app" on the owned body node', () => {
+    // Stripping id="app" (which app CSS/JS targets) de-manages the document
+    // rather than leaving a shell that claims managed but breaks #app.
+    const html = base().replace(
+      '<main id="app" data-archestra-app-body>',
+      "<main data-archestra-app-body>",
+    );
+    expect(html).toContain("data-archestra-app-body");
+    expect(isManagedDocument(html)).toBe(false);
+  });
+
+  it("recognizes owned attributes regardless of case", () => {
+    // HTML attribute names are case-insensitive; the fast-path must agree with
+    // parse5's normalization rather than report an uppercased shell as raw.
+    const upper = base()
+      .replace(/data-archestra-app-title/g, "DATA-ARCHESTRA-APP-TITLE")
+      .replace(/data-archestra-app-css/g, "DATA-ARCHESTRA-APP-CSS")
+      .replace(/data-archestra-app-body/g, "DATA-ARCHESTRA-APP-BODY")
+      .replace(/data-archestra-app-script/g, "DATA-ARCHESTRA-APP-SCRIPT");
+    expect(isManagedDocument(upper)).toBe(true);
+    expect(parseManagedSections(upper)?.title).toBe(SAMPLE.title);
+  });
+
   it("rejects section content that would break out of an owned node", () => {
     expect(() =>
       composeManagedDocument({ ...SAMPLE, css: "a{} </style> b" }),

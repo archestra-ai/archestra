@@ -20,7 +20,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use crate::ToolName;
-use crate::approval::{Authority, AuthorityMode, PendingApproval, Ruling};
+use crate::approval::{AncestrySnapshot, Authority, AuthorityMode, PendingApproval, Ruling, TrajectoryView};
 use crate::audit::AuditEvent;
 use crate::audit::AuthorityName;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
@@ -1023,9 +1023,13 @@ impl PolicyEngine {
                 let grant = ProposedGrant::Waive(delta.clone());
                 // Route live: walk competent authorities in order. An inline
                 // authority that abstains falls through to the next; the first
-                // external one defers to an out-of-process ruling. Decide the
-                // outcome under the borrow, then act once it has ended.
-                let routed = self.route_grant(&grant, &spec.precondition.remaining);
+                // external one defers to an out-of-process ruling. The view
+                // borrows the store read-only and is taken (and dropped) before
+                // any mutation, so an inline ruling cannot observe its effects.
+                let routed = {
+                    let view = TrajectoryView::new(trajectory.store());
+                    self.route_grant(&grant, &spec.precondition.remaining, &view)
+                };
                 match routed {
                     RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(self.waiver_permit(
                         trajectory,
@@ -1051,14 +1055,15 @@ impl PolicyEngine {
                             authority: authority.clone(),
                             resolved: spec.precondition.remaining.clone(),
                         });
-                        let basis_values = checked.arguments.leaves().into_iter().chain(checked.control).collect();
+                        let basis = checked.arguments.leaves().into_iter().chain(checked.control);
+                        let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
                         Ok(StepOutcome::NeedsApproval(PendingApproval::new(
                             capability.plan,
                             capability.action,
                             delta,
                             authority,
                             spec.precondition.remaining,
-                            basis_values,
+                            ancestry,
                             trajectory.id(),
                             trajectory.revision(),
                             self.id,
@@ -1080,10 +1085,10 @@ impl PolicyEngine {
     /// The first competent external authority defers to an out-of-process
     /// ruling. `NoRuling` means every competent authority was inline and every
     /// one abstained.
-    fn route_grant(&self, grant: &ProposedGrant, resolved: &[Violation]) -> RoutedRuling {
+    fn route_grant(&self, grant: &ProposedGrant, resolved: &[Violation], view: &TrajectoryView) -> RoutedRuling {
         for authority in self.competent_authorities(grant) {
             match &authority.mode {
-                AuthorityMode::Inline(decide) => match decide(grant, resolved) {
+                AuthorityMode::Inline(decide) => match decide(grant, resolved, view) {
                     Some(Ruling::Approve { .. }) => return RoutedRuling::Approved(authority.name.clone()),
                     Some(Ruling::Deny { reason }) => {
                         return RoutedRuling::Denied {
@@ -2507,7 +2512,11 @@ mod tests {
     /// A rule-approved waiver permits inline, with the application audited.
     #[test]
     fn rule_approved_waiver_permits_inline() {
-        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "within policy".to_owned(),
             })
@@ -2549,10 +2558,18 @@ mod tests {
     /// authority rather than denying the flow.
     #[test]
     fn inline_abstention_falls_through_to_the_next_authority() {
-        fn abstain(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn abstain(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
             None
         }
-        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "second".to_owned(),
             })
@@ -2594,7 +2611,11 @@ mod tests {
     /// external authority was registered first.
     #[test]
     fn inline_authority_is_consulted_before_external() {
-        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "inline".to_owned(),
             })
@@ -2627,7 +2648,11 @@ mod tests {
     /// fails closed with no ruling produced.
     #[test]
     fn all_inline_abstentions_block_with_no_ruling() {
-        fn abstain(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn abstain(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
             None
         }
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
@@ -2696,6 +2721,104 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, AuditEvent::WaiverApplied { .. }))
         );
+    }
+
+    /// An inline authority reads the trajectory view (a value's label) and the
+    /// violations to decide, and abstains when the view fails its check.
+    #[test]
+    fn inline_authority_inspects_the_view_and_violations() {
+        // Auto-vouch an audience expansion only when the trajectory's first
+        // ingress (the document under review) is itself trusted.
+        fn vouch_trusted_source(
+            grant: &crate::transition::ProposedGrant,
+            violations: &[Violation],
+            view: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            let audience_breach = violations
+                .iter()
+                .any(|v| matches!(v, Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })));
+            let source_trusted = view
+                .label(crate::revision::ValueId::new(0))
+                .is_some_and(|label| label.trust == Trust::TRUSTED);
+            if audience_breach && source_trusted && matches!(grant, crate::transition::ProposedGrant::Waive(_)) {
+                Some(crate::approval::Ruling::Approve {
+                    reason: "source document is trusted".to_owned(),
+                })
+            } else {
+                None
+            }
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("vouch"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(vouch_trusted_source),
+            })
+            .unwrap();
+
+        // Trusted source (value#0): the view read passes, the authority approves.
+        let mut trusted = Trajectory::new();
+        let doc = ingress(&mut trusted, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trusted, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trusted, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trusted, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trusted, capability).unwrap() else {
+            panic!("expected approval when the view shows a trusted source");
+        };
+
+        // Suspicious source: same audience breach, but the view read fails the
+        // trust check, so the authority abstains and no ruling is produced.
+        let mut suspicious = Trajectory::new();
+        let doc = ingress(&mut suspicious, &["alice"], Trust::SUSPICIOUS, "private");
+        let request = email_request(&mut suspicious, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut suspicious, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&suspicious, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
+            engine.apply_step(&mut suspicious, capability).unwrap()
+        else {
+            panic!("expected abstention when the view shows a suspicious source");
+        };
+        assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
+    }
+
+    /// An external pending approval carries an owned ancestry snapshot — the
+    /// labels and provenance of the values in scope — and the round-trip
+    /// completes on approval.
+    #[test]
+    fn external_pending_carries_an_ancestry_snapshot() {
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        // The snapshot carries the doc's label and provenance, never its bytes.
+        let doc_view = pending.ancestry().get(doc).expect("the doc is in the grant's scope");
+        assert_eq!(doc_view.label.trust, Trust::TRUSTED);
+        assert!(matches!(doc_view.provenance, crate::value::Provenance::Ingress { .. }));
+
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "reviewed the ancestry".to_owned(),
+                },
+            )
+            .unwrap();
+        assert!(matches!(decision, Decision::Permitted(_)));
     }
 
     /// A denial blocks terminally and is audited; the identical later flow
@@ -2963,7 +3086,11 @@ mod tests {
 
     #[test]
     fn authorities_share_one_name_space() {
-        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn approve(
+            _: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            _: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "ok".to_owned(),
             })

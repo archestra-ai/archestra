@@ -19,7 +19,7 @@
 //! including a process restart, since nothing can deserialize one —
 //! invalidates it.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::Serialize;
@@ -30,6 +30,7 @@ use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::{AuthorityMandate, ProposedGrant, TransientWaiver};
 use crate::turn::TrajectoryId;
+use crate::value::{Provenance, ValueLabel, ValueStore};
 
 /// A ruling outcome, from an inline or external authority.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -39,10 +40,85 @@ pub enum Ruling {
 }
 
 /// A deterministic inline decision function: registered policy over the grant
-/// it is asked to authorize and the violations that grant targets. `None`
-/// abstains — routing falls through to the next competent authority, so
-/// abstention keeps the contract total.
-pub type AuthorityFn = fn(&ProposedGrant, &[Violation]) -> Option<Ruling>;
+/// it is asked to authorize, the violations that grant targets, and a
+/// read-only view of the trajectory (labels and provenance of the values in
+/// scope). `None` abstains — routing falls through to the next competent
+/// authority, so abstention keeps the contract total.
+pub type AuthorityFn = fn(&ProposedGrant, &[Violation], &TrajectoryView<'_>) -> Option<Ruling>;
+
+/// A read-only projection of the trajectory handed to an inline authority: the
+/// label and provenance of any value it needs to judge a grant. Borrowed and
+/// taken before any mutation, so an inline ruling cannot observe its own
+/// effects.
+pub struct TrajectoryView<'a> {
+    store: &'a ValueStore,
+}
+
+impl<'a> TrajectoryView<'a> {
+    pub(crate) fn new(store: &'a ValueStore) -> Self {
+        Self { store }
+    }
+
+    /// The label of a value the trajectory admitted, if any.
+    pub fn label(&self, value: ValueId) -> Option<&ValueLabel> {
+        self.store.get(value).ok().map(|stored| stored.label())
+    }
+
+    /// The provenance of a value the trajectory admitted, if any.
+    pub fn provenance(&self, value: ValueId) -> Option<&Provenance> {
+        self.store.get(value).ok().map(|stored| stored.provenance())
+    }
+}
+
+/// One value's ruling-relevant projection: its label and provenance, never its
+/// bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ValueView {
+    pub label: ValueLabel,
+    pub provenance: Provenance,
+}
+
+/// An owned, serializable snapshot of the values relevant to a grant, embedded
+/// in a [`PendingApproval`] so an out-of-process authority can judge without a
+/// live trajectory — a borrow cannot cross the approval boundary. Scoped to
+/// the operation's values, never the whole trajectory, and never bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AncestrySnapshot {
+    values: BTreeMap<ValueId, ValueView>,
+}
+
+impl AncestrySnapshot {
+    /// Snapshot the label and provenance of each admitted value in `ids`,
+    /// taken before any mutation. Unknown ids are skipped — the snapshot is
+    /// context for a ruling, not a check.
+    pub(crate) fn of(store: &ValueStore, ids: impl IntoIterator<Item = ValueId>) -> Self {
+        let values = ids
+            .into_iter()
+            .filter_map(|id| {
+                store.get(id).ok().map(|stored| {
+                    (
+                        id,
+                        ValueView {
+                            label: stored.label().clone(),
+                            provenance: stored.provenance().clone(),
+                        },
+                    )
+                })
+            })
+            .collect();
+        Self { values }
+    }
+
+    /// The projection of one value in scope, if the snapshot carries it.
+    pub fn get(&self, value: ValueId) -> Option<&ValueView> {
+        self.values.get(&value)
+    }
+
+    /// Every value in scope, by identity.
+    pub fn iter(&self) -> impl Iterator<Item = (ValueId, &ValueView)> {
+        self.values.iter().map(|(id, view)| (*id, view))
+    }
+}
 
 /// A registered decision-maker: a name, the competence it may exercise, and
 /// how it decides. Inline authorities decide synchronously; external ones
@@ -78,9 +154,9 @@ pub struct PendingApproval {
     authority: AuthorityName,
     /// The violations this waiver targets, as predicted at issuance.
     resolved: Vec<Violation>,
-    /// Values whose labels the delta attests over, for the authority's
-    /// context (identities only — never bytes).
-    basis_values: BTreeSet<ValueId>,
+    /// An owned snapshot of the values the grant is judged over — labels and
+    /// provenance, never bytes — so the out-of-process authority has context.
+    ancestry: AncestrySnapshot,
     trajectory: TrajectoryId,
     revision: Revision,
     engine: EngineId,
@@ -110,7 +186,7 @@ impl PendingApproval {
         delta: TransientWaiver,
         authority: AuthorityName,
         resolved: Vec<Violation>,
-        basis_values: BTreeSet<ValueId>,
+        ancestry: AncestrySnapshot,
         trajectory: TrajectoryId,
         revision: Revision,
         engine: EngineId,
@@ -121,7 +197,7 @@ impl PendingApproval {
             delta,
             authority,
             resolved,
-            basis_values,
+            ancestry,
             trajectory,
             revision,
             engine,
@@ -131,6 +207,11 @@ impl PendingApproval {
     /// Which authority must rule.
     pub fn authority(&self) -> &AuthorityName {
         &self.authority
+    }
+
+    /// The owned snapshot of the values this grant is judged over.
+    pub fn ancestry(&self) -> &AncestrySnapshot {
+        &self.ancestry
     }
 
     /// The transient waiver the ruling would grant.

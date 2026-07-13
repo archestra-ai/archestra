@@ -1,44 +1,28 @@
 // Route-level auth tests for the A2A endpoints (v1 `/v1/a2a` and v2 `/v2/a2a`)
-// exercising the REAL `validateMCPGatewayToken` path — the same validator the
-// MCP gateway and LLM proxy use. Unlike a2a.test.ts / a2a-v2.stream.test.ts
-// (which mock `validateMCPGatewayToken` away), these seed the actual DB state
-// for each inbound auth method and present a matching bearer, so they prove A2A
-// accepts static Archestra tokens, external-IdP JWTs, and platform OAuth tokens.
-// Only the LLM run (executeA2AMessage) and the low-level JWKS network verify are
-// mocked.
+// exercising the REAL `validateMCPGatewayToken` path — not a mock of it. The
+// other A2A tests (a2a.test.ts / a2a-v2.stream.test.ts) stub the validator, so
+// real token validation was previously untested.
+//
+// A2A only authenticates with static Archestra platform tokens (personal /
+// team / org). The external-IdP JWT and OAuth methods the validator also
+// supports are gated to `mcp_gateway` / `llm_proxy` agents (IdP binding and the
+// OAuth "allowed gateways" picker), and A2A serves only `agentType: "agent"`,
+// so they are not reachable for A2A agents — hence not covered here.
 
-import { randomBytes } from "node:crypto";
-import {
-  MCP_GATEWAY_OAUTH_SCOPE,
-  MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
-} from "@archestra/shared";
 import { vi } from "vitest";
-import {
-  McpOauthClientModel,
-  OAuthAccessTokenModel,
-  TeamTokenModel,
-  UserTokenModel,
-} from "@/models";
+import { TeamTokenModel, UserTokenModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import type { JwksValidationResult } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
-const { mockExecuteA2AMessage, mockValidateJwt } = vi.hoisted(() => ({
+const { mockExecuteA2AMessage } = vi.hoisted(() => ({
   mockExecuteA2AMessage: vi.fn(),
-  mockValidateJwt: vi.fn(),
 }));
 
 // NOTE: `@/routes/mcp-gateway.utils` is intentionally NOT mocked — the real
-// validator runs. Only the LLM run and the JWKS network verify are stubbed.
+// validator runs. Only the LLM run is stubbed so no model is invoked.
 vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
-}));
-
-vi.mock("@/services/jwks-validator", () => ({
-  jwksValidator: {
-    validateJwt: (...args: unknown[]) => mockValidateJwt(...args),
-  },
 }));
 
 vi.mock("@/observability/tracing", async () => {
@@ -52,9 +36,6 @@ vi.mock("@/observability/tracing", async () => {
     }): Promise<T> => params.callback(),
   };
 });
-
-// A JWT-shaped, non-Archestra-prefixed bearer forces the JWKS path.
-const FAKE_JWT = "eyJhbGciOiJSUzI1NiJ9.fake.jwt";
 
 const bearer = (t: string) => ({ authorization: `Bearer ${t}` });
 
@@ -78,35 +59,11 @@ const v1Payload = (text = "hi") => ({
   params: { message: { parts: [{ kind: "text", text }] } },
 });
 
-async function makeClientCredentialsToken(params: {
-  organizationId: string;
-  authorId: string;
-  allowedGatewayIds: string[];
-  scopes?: string[];
-}): Promise<string> {
-  const { oauthClient } = await McpOauthClientModel.create({
-    organizationId: params.organizationId,
-    authorId: params.authorId,
-    name: "service",
-    allowedGatewayIds: params.allowedGatewayIds,
-  });
-  const raw = `mcp_at_${randomBytes(32).toString("base64url")}`;
-  await OAuthAccessTokenModel.createClientCredentialsToken({
-    tokenHash: OAuthAccessTokenModel.hashTokenForLookup(raw),
-    clientId: oauthClient.clientId,
-    expiresAt: new Date(Date.now() + 3_600_000),
-    scopes: params.scopes ?? [MCP_GATEWAY_OAUTH_SCOPE],
-    referenceId: `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
-  });
-  return raw;
-}
-
 describe("a2a route-level authentication", () => {
   let app: FastifyInstanceWithZod;
 
   beforeEach(async () => {
     mockExecuteA2AMessage.mockReset();
-    mockValidateJwt.mockReset();
     // A successful run: a uuid message id so v2's stateful persistence accepts it.
     mockExecuteA2AMessage.mockImplementation(async () => {
       const messageId = crypto.randomUUID();
@@ -134,7 +91,7 @@ describe("a2a route-level authentication", () => {
     vi.restoreAllMocks();
   });
 
-  // === v2: each supported inbound auth method reaches execution ===
+  // === v2: each static-token scope authenticates and reaches execution ===
 
   test("v2 SendMessage accepts a static organization token", async ({
     makeOrganization,
@@ -184,100 +141,30 @@ describe("a2a route-level authentication", () => {
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
   });
 
-  test("v2 SendMessage accepts an external-IdP JWT validated via JWKS", async ({
+  test("v2 SendMessage accepts a team token for an agent shared with that team", async ({
     makeOrganization,
     makeUser,
-    makeMember,
+    makeTeam,
     makeInternalAgent,
-    makeIdentityProvider,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const idp = await makeIdentityProvider(org.id, {
-      oidcConfig: {
-        clientId: "test-client",
-        jwksEndpoint: "https://idp.example.com/.well-known/jwks.json",
-      },
-    });
+    const team = await makeTeam(org.id, user.id, { name: "Dev Team" });
     const agent = await makeInternalAgent({
       organizationId: org.id,
-      identityProviderId: idp.id,
+      teams: [team.id],
+      scope: "team",
     });
-    // The real validator resolves the user from the JWT's email claim.
-    mockValidateJwt.mockResolvedValue({
-      sub: user.email,
-      email: user.email,
-      name: "Caller",
-      rawClaims: { sub: user.email },
-    } as JwksValidationResult);
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/v2/a2a/${agent.id}`,
-      headers: bearer(FAKE_JWT),
-      payload: v2Payload(),
-    });
-
-    expect(res.json().error).toBeUndefined();
-    expect(mockValidateJwt).toHaveBeenCalledTimes(1);
-    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
-  });
-
-  test("v2 SendMessage accepts a client-credentials OAuth token scoped to the agent", async ({
-    makeOrganization,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeInternalAgent({ organizationId: org.id });
-    const raw = await makeClientCredentialsToken({
+    const { value } = await TeamTokenModel.create({
       organizationId: org.id,
-      authorId: crypto.randomUUID(),
-      allowedGatewayIds: [agent.id],
+      name: "Team Token",
+      teamId: team.id,
     });
 
     const res = await app.inject({
       method: "POST",
       url: `/v2/a2a/${agent.id}`,
-      headers: bearer(raw),
-      payload: v2Payload(),
-    });
-
-    expect(res.json().error).toBeUndefined();
-    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
-  });
-
-  test("v2 SendMessage accepts a user-bound OAuth access token", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeInternalAgent({ organizationId: org.id });
-    const { oauthClient } = await McpOauthClientModel.create({
-      organizationId: org.id,
-      authorId: user.id,
-      name: "Agentic App",
-      grantType: "authorization_code",
-      redirectUris: ["https://app.example.com/oauth/callback"],
-    });
-    const raw = randomBytes(32).toString("base64url");
-    await OAuthAccessTokenModel.create({
-      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(raw),
-      clientId: oauthClient.clientId,
-      userId: user.id,
-      expiresAt: new Date(Date.now() + 3_600_000),
-      scopes: [MCP_GATEWAY_OAUTH_SCOPE],
-      referenceId: null,
-    });
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/v2/a2a/${agent.id}`,
-      headers: bearer(raw),
+      headers: bearer(value),
       payload: v2Payload(),
     });
 
@@ -323,32 +210,7 @@ describe("a2a route-level authentication", () => {
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 
-  test("v2 rejects an OAuth token whose client is not scoped to this agent", async ({
-    makeOrganization,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeInternalAgent({ organizationId: org.id });
-    const otherAgent = await makeInternalAgent({ organizationId: org.id });
-    // Token scoped to a different agent id — must not authorize this agent.
-    const raw = await makeClientCredentialsToken({
-      organizationId: org.id,
-      authorId: crypto.randomUUID(),
-      allowedGatewayIds: [otherAgent.id],
-    });
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/v2/a2a/${agent.id}`,
-      headers: bearer(raw),
-      payload: v2Payload(),
-    });
-
-    expect(res.json().error).toBeDefined();
-    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-  });
-
-  // === v1: the same three methods authenticate through the same validator ===
+  // === v1: the same validator authenticates the legacy endpoint ===
 
   test("v1 accepts a static organization token", async ({
     makeOrganization,
@@ -367,68 +229,6 @@ describe("a2a route-level authentication", () => {
       method: "POST",
       url: `/v1/a2a/${agent.id}`,
       headers: bearer(value),
-      payload: v1Payload(),
-    });
-
-    expect(res.json().result).toBeDefined();
-    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
-  });
-
-  test("v1 accepts an external-IdP JWT validated via JWKS", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeInternalAgent,
-    makeIdentityProvider,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const idp = await makeIdentityProvider(org.id, {
-      oidcConfig: {
-        clientId: "test-client",
-        jwksEndpoint: "https://idp.example.com/.well-known/jwks.json",
-      },
-    });
-    const agent = await makeInternalAgent({
-      organizationId: org.id,
-      identityProviderId: idp.id,
-    });
-    mockValidateJwt.mockResolvedValue({
-      sub: user.email,
-      email: user.email,
-      name: "Caller",
-      rawClaims: { sub: user.email },
-    } as JwksValidationResult);
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/v1/a2a/${agent.id}`,
-      headers: bearer(FAKE_JWT),
-      payload: v1Payload(),
-    });
-
-    expect(res.json().result).toBeDefined();
-    expect(mockValidateJwt).toHaveBeenCalledTimes(1);
-    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
-  });
-
-  test("v1 accepts a client-credentials OAuth token scoped to the agent", async ({
-    makeOrganization,
-    makeInternalAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeInternalAgent({ organizationId: org.id });
-    const raw = await makeClientCredentialsToken({
-      organizationId: org.id,
-      authorId: crypto.randomUUID(),
-      allowedGatewayIds: [agent.id],
-    });
-
-    const res = await app.inject({
-      method: "POST",
-      url: `/v1/a2a/${agent.id}`,
-      headers: bearer(raw),
       payload: v1Payload(),
     });
 

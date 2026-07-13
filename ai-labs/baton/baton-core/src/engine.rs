@@ -1256,7 +1256,14 @@ impl PolicyEngine {
             debug!("acceptance did not clear the surface growth, failing closed");
             return self.terminal(trajectory, after.violations(None), BlockReason::PostconditionFailed);
         }
-        trajectory.accept_growth(effects, authority, resolved);
+        // Attribute to the acquire authority only the surface growth it actually
+        // acquired — a co-resident breach (e.g. a trust breach it cannot clear)
+        // is a separate step's concern and must not appear as resolved by Accept.
+        let acquired: Vec<Violation> = resolved
+            .into_iter()
+            .filter(|v| matches!(v, Violation::Breach(crate::contract::Breach::SurfaceGrowth { .. })))
+            .collect();
+        trajectory.accept_growth(effects, authority, acquired);
         self.evaluate(trajectory, original)
     }
 
@@ -1331,11 +1338,12 @@ impl PolicyEngine {
         let constrain_options: Vec<Option<&&ActionTransition>> =
             std::iter::once(None).chain(constrains.iter().map(Some)).collect();
 
-        'outer: for transform in &transform_options {
+        // Generate the full candidate cartesian (bounded by the registries, an
+        // operator trust decision fixed at construction) so `select_fair` sees
+        // every applicable category before trimming to MAX_PLANS — a mid-loop cap
+        // could starve a category the fairness pass never gets to see.
+        for transform in &transform_options {
             for constrain in &constrain_options {
-                if plans.len() >= GENERATION_CAP {
-                    break 'outer;
-                }
                 let mut sim = base.clone();
                 let mut steps: Vec<TransitionSpec> = Vec::new();
 
@@ -1471,16 +1479,16 @@ impl PolicyEngine {
     /// The least-privilege control-release waiver: the inclusion-minimal set of
     /// control deps whose release shrinks the residual as far as releasing every
     /// control dep would. `None` when releasing control changes nothing (the
-    /// taint is arg-borne, not control-borne) or the control set is too large to
-    /// search — the plain waiver still clears via attestation, which the
-    /// enumerate loop verifies. Releasing control can only remove taint, so its
-    /// `needed_delta` is a subset of `plain`; we target the best achievable
-    /// reduction (release everything) and return the fewest deps that reach it,
-    /// so an unrelated or redundant control dep is never released (D4).
+    /// taint is arg-borne, not control-borne). Releasing control can only remove
+    /// taint, so `needed_delta` is monotone non-increasing as the released set
+    /// grows: we take the best achievable reduction (release everything), then
+    /// greedily drop each dep whose removal still reaches it. By monotonicity a
+    /// dropped dep is redundant, so the result is inclusion-minimal — an
+    /// unrelated or non-load-bearing control dep is never released (D4) — in a
+    /// linear number of probes, with no bound on the control-set size.
     fn minimal_control_release(&self, sim: &SimFlow, plain: &TransientWaiver) -> Option<TransientWaiver> {
         let ids: Vec<ValueId> = sim.control_labels.keys().copied().collect();
-        let n = ids.len();
-        if n == 0 || n > CONTROL_RELEASE_SEARCH_LIMIT {
+        if ids.is_empty() {
             return None;
         }
         let delta_releasing = |set: &BTreeSet<ValueId>| -> TransientWaiver {
@@ -1490,23 +1498,22 @@ impl PolicyEngine {
             }));
             needed_delta(&after, &sim.recipients, &sim.requires)
         };
-        let full = delta_releasing(&ids.iter().copied().collect());
+        let mut minimal: BTreeSet<ValueId> = ids.iter().copied().collect();
+        let full = delta_releasing(&minimal);
         if &full == plain {
             return None;
         }
-        // Smallest subset (ties by mask order) whose release reaches `full`.
-        let mut masks: Vec<u32> = (1u32..(1u32 << n)).collect();
-        masks.sort_by_key(|mask| (mask.count_ones(), *mask));
-        for mask in masks {
-            let subset: BTreeSet<ValueId> = (0..n).filter(|i| mask & (1u32 << i) != 0).map(|i| ids[i]).collect();
-            if delta_releasing(&subset) == full {
-                return Some(TransientWaiver {
-                    control_release: subset,
-                    ..full
-                });
+        for id in &ids {
+            let mut candidate = minimal.clone();
+            candidate.remove(id);
+            if delta_releasing(&candidate) == full {
+                minimal = candidate;
             }
         }
-        None
+        Some(TransientWaiver {
+            control_release: minimal,
+            ..full
+        })
     }
 
     /// Authorities competent for `grant`, in routing order: inline before
@@ -1572,11 +1579,6 @@ impl PolicyEngine {
 /// Bound on enumerated plans returned per blocked flow.
 const MAX_PLANS: usize = 8;
 
-/// Bound on candidates *generated* before fair selection trims to `MAX_PLANS`.
-/// Headroom above `MAX_PLANS` so every applicable category is represented in the
-/// pool the fair pass selects from; only a pathological registry reaches it.
-const GENERATION_CAP: usize = 64;
-
 /// Trim enumerated candidates to `cap`, guaranteeing the best (fewest-step, then
 /// earliest) route of each applicable [`ExitKind`] survives before remaining
 /// slots fill in enumeration order — so the cap never starves a category.
@@ -1621,11 +1623,6 @@ fn select_fair(
         .filter_map(|(plan, keep)| keep.then_some(plan))
         .collect()
 }
-
-/// Above this many control deps, the exhaustive minimal-release subset search is
-/// skipped (the plain attestation waiver still clears the flow). Control sets are
-/// small in practice; the bound only guards against pathological inputs.
-const CONTROL_RELEASE_SEARCH_LIMIT: usize = 8;
 
 fn push_plan(
     plans: &mut Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
@@ -1906,6 +1903,26 @@ mod tests {
         trajectory.record_output(receipt, OpaqueValue::new(body))
     }
 
+    /// Drive a blocked flow through its first-plan remedy steps to a permit —
+    /// for effect-axis tests that must genuinely acquire the growth (walk the
+    /// Accept) rather than pre-seed a downhill past.
+    fn walk_to_permit(engine: &PolicyEngine, trajectory: &mut Trajectory, request: ToolRequest) -> ExecutionToken {
+        let mut decision = engine.evaluate(trajectory, request);
+        loop {
+            match decision {
+                Decision::Permitted(token) => break token,
+                Decision::Blocked(Blocked::Remediable { plans, .. }) => {
+                    let capability = engine.mint_step(trajectory, plans.first().id, 0).unwrap();
+                    decision = match engine.apply_step(trajectory, capability).unwrap() {
+                        StepOutcome::Advanced(decision) => decision,
+                        other => panic!("unexpected step outcome: {other:?}"),
+                    };
+                }
+                other => panic!("expected to reach a permit, got {other:?}"),
+            }
+        }
+    }
+
     fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) -> ToolRequest {
         let to = trajectory.ingress(
             Speaker::user(user("alice")),
@@ -1924,16 +1941,18 @@ mod tests {
 
     #[test]
     fn clean_flow_is_permitted_and_result_admitted_with_folded_label() {
-        let engine = engine_with([email_contract()]);
+        // The confidentiality flow is clean; the only obstacle is the first
+        // egress growing the surface, so an acquirer walks it to a permit and
+        // the egress genuinely commits at dispatch.
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(inline_acquirer()).unwrap();
         let mut trajectory = Trajectory::new();
-        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
         let request = email_request(&mut trajectory, body, "bob");
 
-        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected permit");
-        };
+        let token = walk_to_permit(&engine, &mut trajectory, request);
         assert!(trajectory.pending_action().is_some());
+        assert_eq!(trajectory.state().past_effects(), &Effects::none());
 
         let result = dispatch(&mut trajectory, token, "sent").unwrap();
         assert!(trajectory.pending_action().is_none());
@@ -1942,7 +1961,7 @@ mod tests {
             trajectory.value(result).unwrap().label().audience,
             Audience::readers([user("alice"), user("bob")])
         );
-        // Effects were committed at dispatch.
+        // Effects were committed at dispatch, not before.
         assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
     }
 
@@ -2029,19 +2048,21 @@ mod tests {
                 reason: "operator accepts unknowns".to_owned(),
             })
         }
+        // A no-contract call needs both competences: acquire its Unknown growth
+        // and acknowledge the missing contract.
         let mut engine = engine_with([]);
         engine
             .register_authority(crate::approval::Authority {
                 name: crate::audit::AuthorityName::new("accept-unknowns"),
                 mandate: crate::transition::AuthorityMandate {
                     acknowledge_unknown: true,
+                    acquire_effects: true,
                     ..crate::transition::AuthorityMandate::none()
                 },
                 mode: crate::approval::AuthorityMode::Inline(accept_unknowns),
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
-        trajectory.seed_committed_effects(Effects::UNKNOWN);
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
         let request = ToolRequest::new(
             ToolName::new("mystery.tool"),
@@ -2049,25 +2070,25 @@ mod tests {
             BTreeSet::new(),
         );
 
-        // The unprovable flow routes through the chain: it blocks remediably,
-        // and acknowledging it (an `acknowledge_unknown` authority) clears it.
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected a remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
-        else {
-            panic!("expected the acknowledgment to permit");
-        };
+        // The unprovable, surface-growing flow routes through the chain: walking
+        // it acquires the growth and acknowledges the missing contract.
+        let token = walk_to_permit(&engine, &mut trajectory, request);
         assert!(trajectory.state().audit().iter().any(|e| matches!(
             e,
             AuditEvent::WaiverApplied { changes, .. } if changes.contains(&crate::audit::WaiverKind::Acknowledgment)
         )));
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::AcceptApplied { effects, .. } if *effects == Effects::UNKNOWN))
+        );
 
         let result = dispatch(&mut trajectory, token, "???").unwrap();
         // Intrinsic unknown poisons the output despite trusted inputs...
         assert_eq!(trajectory.value(result).unwrap().label(), &ValueLabel::unknown());
-        // ...and unknown effects absorb the past.
+        // ...and the unknown effect commits at dispatch, absorbing the past.
         assert_eq!(trajectory.state().past_effects(), &Effects::UNKNOWN);
     }
 
@@ -2215,15 +2236,15 @@ mod tests {
         report.effects = Effects::none();
         report.arguments = ArgumentSchema::opaque();
 
-        let engine = engine_with([email_contract(), report]);
+        let mut engine = engine_with([email_contract(), report]);
+        engine.register_authority(inline_acquirer()).unwrap();
         let mut trajectory = Trajectory::new();
-        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
-        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected permit");
-        };
+        // Acquire the egress and dispatch it: the commit is what the later sink
+        // check must observe.
+        let token = walk_to_permit(&engine, &mut trajectory, request);
         dispatch(&mut trajectory, token, "sent").unwrap();
 
         let report_request = ToolRequest::new(
@@ -2267,15 +2288,13 @@ mod tests {
 
     #[test]
     fn effects_survive_a_declared_dispatch_failure() {
-        let engine = engine_with([email_contract()]);
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(inline_acquirer()).unwrap();
         let mut trajectory = Trajectory::new();
-        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let request = email_request(&mut trajectory, body, "bob");
 
-        let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected permit");
-        };
+        let token = walk_to_permit(&engine, &mut trajectory, request);
         let (canonical, receipt) = trajectory.release(token).unwrap();
         assert_eq!(canonical.tool, ToolName::new("email.send"));
         // Effects are committed at release, before any result exists.
@@ -2843,6 +2862,16 @@ mod tests {
             released,
             "release the two joint carriers only, never the unrelated control"
         );
+        // And no enumerated plan may over-release the unrelated control.
+        let over_releases = plans.iter().any(|plan| {
+            plan.steps.iter().any(|step| {
+                matches!(
+                    &step.kind,
+                    TransitionKind::ApplyWaiver { delta } if delta.control_release.contains(&noise)
+                )
+            })
+        });
+        assert!(!over_releases, "the unrelated control must never be released");
     }
 
     /// A registered tool-identity mapping to a weaker-contract tool yields a
@@ -3849,6 +3878,15 @@ mod tests {
                 other => panic!("expected to reach a permit, got {other:?}"),
             }
         };
+        // Both steps ran at runtime — the constrain, then the acquisition of the
+        // reduced growth — not merely predicted by the planner.
+        let audit = trajectory.state().audit();
+        assert!(audit.iter().any(|e| matches!(e, AuditEvent::ActionConstrained { .. })));
+        assert!(
+            audit
+                .iter()
+                .any(|e| matches!(e, AuditEvent::AcceptApplied { effects, .. } if *effects == Effects::declared([Effect::Egress])))
+        );
         dispatch(&mut trajectory, token, "exported").unwrap();
         assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
     }
@@ -3871,6 +3909,62 @@ mod tests {
         ];
         let selected = select_fair(pool.clone(), MAX_PLANS);
         assert_eq!(selected, pool);
+    }
+
+    /// End-to-end through `enumerate_plans`: many Constrain routes are generated
+    /// before the single (late) Sanitize route, exceeding MAX_PLANS. Fair
+    /// selection must still surface the Sanitize category — a flat truncation, or
+    /// a generation cap that stopped before the sanitizer, would drop it.
+    #[test]
+    fn cap_fairness_rescues_a_late_category_end_to_end() {
+        let sink = ToolContract {
+            name: ToolName::new("sink"),
+            requires: Requirements {
+                trust: Some(KnownTrust::Trusted),
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        };
+        let variants = MAX_PLANS + 2;
+        let mut contracts = vec![sink];
+        for i in 0..variants {
+            contracts.push(ToolContract {
+                name: ToolName::new(format!("sink.v{i}")),
+                requires: Requirements::default(),
+                output_label: ValueLabel::identity(),
+                effects: Effects::none(),
+                arguments: ArgumentSchema::opaque(),
+            });
+        }
+        let mut engine = engine_with(contracts);
+        for i in 0..variants {
+            engine
+                .register_action_transition(ActionTransition {
+                    id: tref(&format!("c{i}")),
+                    from_tool: ToolName::new("sink"),
+                    to_tool: ToolName::new(format!("sink.v{i}")),
+                    effects: Effects::none(),
+                })
+                .unwrap();
+        }
+        // One transformer clears the trust breach content-wise — the sole,
+        // late-generated Sanitize route.
+        engine.register_transformer(redact_transformer()).unwrap();
+
+        let mut trajectory = Trajectory::new();
+        let payload = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
+        let request = ToolRequest::new(ToolName::new("sink"), ArgumentTree::Value(payload), BTreeSet::new());
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected a remediable block");
+        };
+        assert!(plans.len() <= MAX_PLANS);
+        assert!(
+            plans.iter().any(|p| p.exit_kind() == ExitKind::Sanitize),
+            "fair selection must keep the late-generated Sanitize route"
+        );
+        assert!(plans.iter().any(|p| p.exit_kind() == ExitKind::Constrain));
     }
 
     /// An external waiver round-trips through PendingApproval; approval

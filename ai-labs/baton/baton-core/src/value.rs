@@ -24,8 +24,10 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
+use crate::audit::AuthorityName;
 use crate::dimension::{Audience, Trust};
 use crate::revision::{ActionId, TransitionId, TurnId, ValueId};
+use crate::transition::EndorseDelta;
 
 /// Bytes the engine never inspects — except where a contract's argument role
 /// (e.g. recipients) requires a typed reading, which is explicit at the use
@@ -133,6 +135,14 @@ pub enum Provenance {
         source: ValueId,
         transition: TransitionId,
         transformer: TransformerRef,
+    },
+    /// Minted by an authority's fiat relabel (Endorse): `source`'s bytes under
+    /// a label raised by `delta`. Attributed to the vouching authority, not to
+    /// any content transform — the raise is justified by the authority alone.
+    Endorsed {
+        source: ValueId,
+        authority: AuthorityName,
+        delta: EndorseDelta,
     },
 }
 
@@ -265,6 +275,32 @@ impl ValueStore {
                 source,
                 transition,
                 transformer,
+            },
+        ))
+    }
+
+    /// Admit an authority's endorsed value: `source`'s bytes under the
+    /// authority-raised `label`, attributed to the vouching authority. Like
+    /// [`Self::admit_transformed`] it sits below the conservative fold — here
+    /// justified by the authority's competence, not by content — and leaves the
+    /// source's own label untouched. The engine's transition machinery has
+    /// already routed the grant to a competent authority.
+    pub(crate) fn admit_endorsed(
+        &mut self,
+        source: ValueId,
+        authority: AuthorityName,
+        delta: EndorseDelta,
+        label: ValueLabel,
+        body: OpaqueValue,
+    ) -> Result<ValueId, UnknownValue> {
+        self.get(source)?;
+        Ok(self.push(
+            body,
+            label,
+            Provenance::Endorsed {
+                source,
+                authority,
+                delta,
             },
         ))
     }

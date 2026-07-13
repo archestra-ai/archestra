@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::contract::Violation;
 use crate::dimension::Effects;
 use crate::revision::{ActionId, PlanId, TransitionId, ValueId};
+use crate::transition::EndorseDelta;
 use crate::value::{TransformerRef, ValueLabel};
 
 /// Name of a registered authority.
@@ -159,6 +160,20 @@ pub enum AuditEvent {
     },
     /// An authority denied acquiring a surface growth.
     AcceptDenied { authority: AuthorityName, reason: String },
+    /// An authority vouched a durable label raise (Endorse): a new value was
+    /// minted under the raised label. The raise is the authority's fiat, not a
+    /// verified property of the bytes.
+    EndorseApplied {
+        transition: TransitionId,
+        source: ValueId,
+        derived: ValueId,
+        authority: AuthorityName,
+        delta: EndorseDelta,
+        input: ValueLabel,
+        raised: ValueLabel,
+    },
+    /// An authority denied a label raise.
+    EndorseDenied { authority: AuthorityName, reason: String },
 }
 
 impl fmt::Display for AuditEvent {
@@ -217,6 +232,18 @@ impl fmt::Display for AuditEvent {
             }
             Self::AcceptDenied { authority, reason } => {
                 write!(f, "accept denied by {authority}: {reason}")
+            }
+            Self::EndorseApplied {
+                source,
+                derived,
+                authority,
+                delta,
+                ..
+            } => {
+                write!(f, "{source} -> {derived} endorsed by {authority} ({delta})")
+            }
+            Self::EndorseDenied { authority, reason } => {
+                write!(f, "endorse denied by {authority}: {reason}")
             }
         }
     }

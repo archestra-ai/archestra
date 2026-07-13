@@ -548,6 +548,43 @@ impl Trajectory {
         self.advance();
     }
 
+    /// Apply a granted `EndorseValue` step as one transaction: admit a new
+    /// value carrying `source`'s bytes under the authority-`raised` label,
+    /// substitute it into the pending action's current argument tree, and audit
+    /// the authority. The bytes are unchanged (a no-op relabel); the source
+    /// keeps its own label and its slot in the immutable original proposal.
+    pub(crate) fn endorse_value(
+        &mut self,
+        source: ValueId,
+        authority: crate::audit::AuthorityName,
+        delta: crate::transition::EndorseDelta,
+        raised: ValueLabel,
+    ) -> ValueId {
+        let transition = self.mint_transition();
+        let source_value = self.store.get(source).expect("endorse source validated by the engine");
+        let input = source_value.label().clone();
+        let body = source_value.body().clone();
+        let derived = self
+            .store
+            .admit_endorsed(source, authority.clone(), delta.clone(), raised.clone(), body)
+            .expect("endorse source validated by the engine");
+        self.pending
+            .as_mut()
+            .expect("pending action validated by the engine")
+            .substitute_argument(source, derived);
+        self.state.record(AuditEvent::EndorseApplied {
+            transition,
+            source,
+            derived,
+            authority,
+            delta,
+            input,
+            raised,
+        });
+        self.advance();
+        derived
+    }
+
     pub(crate) fn mint_transition(&mut self) -> TransitionId {
         let id = TransitionId::new(self.next_transition);
         self.next_transition += 1;

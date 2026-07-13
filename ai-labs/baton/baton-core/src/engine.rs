@@ -1070,6 +1070,57 @@ impl PolicyEngine {
                     ))),
                 }
             }
+            TransitionKind::EndorseValue { source, delta } => {
+                let grant = ProposedGrant::Endorse {
+                    source,
+                    delta: delta.clone(),
+                };
+                let routed = {
+                    let view = TrajectoryView::new(trajectory.store());
+                    self.route_grant(&grant, &spec.precondition.remaining, &view)
+                };
+                match routed {
+                    RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(
+                        self.endorse_permit(trajectory, source, delta, authority, original),
+                    )),
+                    RoutedRuling::Denied { authority, reason } => {
+                        trajectory.record_event(AuditEvent::EndorseDenied {
+                            authority: authority.clone(),
+                            reason: reason.clone(),
+                        });
+                        Ok(StepOutcome::Advanced(self.terminal(
+                            trajectory,
+                            spec.precondition.remaining,
+                            BlockReason::DeniedByAuthority { authority, reason },
+                        )))
+                    }
+                    RoutedRuling::External(authority) => {
+                        trajectory.record_event(AuditEvent::ApprovalRequested {
+                            plan: capability.plan,
+                            authority: authority.clone(),
+                            resolved: spec.precondition.remaining.clone(),
+                        });
+                        let basis = checked.arguments.leaves().into_iter().chain(checked.control);
+                        let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
+                        Ok(StepOutcome::NeedsApproval(PendingApproval::new(
+                            capability.plan,
+                            capability.action,
+                            grant,
+                            authority,
+                            spec.precondition.remaining,
+                            ancestry,
+                            trajectory.id(),
+                            trajectory.revision(),
+                            self.id,
+                        )))
+                    }
+                    RoutedRuling::NoRuling => Ok(StepOutcome::Advanced(self.terminal(
+                        trajectory,
+                        spec.precondition.remaining,
+                        BlockReason::NoAuthorityRuled,
+                    ))),
+                }
+            }
         }
     }
 
@@ -1135,6 +1186,14 @@ impl PolicyEngine {
             // Dispatch on the grant: a waiver (or acknowledgment) rechecks and
             // permits; an accept records the growth marker and re-evaluates.
             Ruling::Approve { .. } => match parts.grant {
+                ProposedGrant::Endorse { source, delta } => {
+                    let original = trajectory
+                        .pending_action()
+                        .expect("validated pending above")
+                        .original()
+                        .clone();
+                    Ok(self.endorse_permit(trajectory, source, delta, parts.authority, original))
+                }
                 ProposedGrant::Waive { waiver, .. } => {
                     Ok(self.waiver_permit(trajectory, parts.action, waiver, parts.authority, parts.resolved))
                 }
@@ -1157,6 +1216,10 @@ impl PolicyEngine {
             Ruling::Deny { reason } => {
                 let event = match parts.grant {
                     ProposedGrant::Accept { .. } => AuditEvent::AcceptDenied {
+                        authority: parts.authority.clone(),
+                        reason: reason.clone(),
+                    },
+                    ProposedGrant::Endorse { .. } => AuditEvent::EndorseDenied {
                         authority: parts.authority.clone(),
                         reason: reason.clone(),
                     },
@@ -1264,6 +1327,41 @@ impl PolicyEngine {
             .filter(|v| matches!(v, Violation::Breach(crate::contract::Breach::SurfaceGrowth { .. })))
             .collect();
         trajectory.accept_growth(effects, authority, acquired);
+        self.evaluate(trajectory, original)
+    }
+
+    /// A granted endorsement: mint the durable relabel of `source` — its bytes
+    /// under a label raised by `delta` — auditing the authority, then
+    /// re-evaluate. The raise is monotone (`raised_to`/`admitting` only lift a
+    /// label), so the re-evaluation is the fail-closed recheck: a residual on
+    /// another leaf (a multi-source breach) routes the next step, and an
+    /// under-covered flow is never permitted. Each endorse raises a distinct arg
+    /// leaf to a passing label, so the re-entry terminates.
+    fn endorse_permit(
+        &self,
+        trajectory: &mut Trajectory,
+        source: ValueId,
+        delta: crate::transition::EndorseDelta,
+        authority: AuthorityName,
+        original: ToolRequest,
+    ) -> Decision {
+        let source_label = trajectory
+            .store()
+            .get(source)
+            .expect("plans reference only admitted values")
+            .label()
+            .clone();
+        let raised = ValueLabel {
+            trust: match delta.trust {
+                Some(attested) => source_label.trust.raised_to(attested),
+                None => source_label.trust,
+            },
+            audience: match &delta.audience {
+                Some(vouched) => source_label.audience.admitting(vouched),
+                None => source_label.audience.clone(),
+            },
+        };
+        trajectory.endorse_value(source, authority, delta, raised);
         self.evaluate(trajectory, original)
     }
 
@@ -2736,6 +2834,190 @@ mod tests {
             panic!("expected the external human to be consulted");
         };
         assert_eq!(pending.authority().as_str(), "human");
+    }
+
+    /// A granted Endorse mints a durable relabel: the source keeps its narrow
+    /// label, a new value carries the raise under `Provenance::Endorsed`, the
+    /// authority is audited, and the re-evaluated flow is permitted. (S9 has no
+    /// enumerator for Endorse yet, so the grant is delivered through the
+    /// external approval path an out-of-process authority re-enters — the same
+    /// route S10 will reach from `enumerate_plans`.)
+    #[test]
+    fn a_granted_endorse_durably_relabels_the_source_and_permits() {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
+        let doc_label = trajectory.store().get(doc).unwrap().label().clone();
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
+        else {
+            panic!("expected remediable block");
+        };
+        let action = trajectory.pending_action().unwrap().id();
+        let plan = plans.first().id;
+        let revision = trajectory.revision();
+
+        // The human vouches the doc for charlie by fiat — the durable analogue
+        // of the audience waiver.
+        let grant = crate::transition::ProposedGrant::Endorse {
+            source: doc,
+            delta: crate::transition::EndorseDelta {
+                trust: None,
+                audience: Some(BTreeSet::from([user("charlie")])),
+            },
+        };
+        let ancestry = crate::approval::AncestrySnapshot::of(trajectory.store(), [doc]);
+        let pending = crate::approval::PendingApproval::new(
+            plan,
+            action,
+            grant,
+            crate::audit::AuthorityName::new("human"),
+            violations,
+            ancestry,
+            trajectory.id(),
+            revision,
+            engine.id,
+        );
+
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                Ruling::Approve {
+                    reason: "vouched".into(),
+                },
+            )
+            .unwrap();
+        assert!(
+            matches!(decision, Decision::Permitted(_)),
+            "the raise clears the audience breach"
+        );
+
+        // Durability by construction: the source is untouched; a new value
+        // carries the raised label with Endorsed provenance naming the authority.
+        assert_eq!(trajectory.store().get(doc).unwrap().label(), &doc_label);
+        let (derived, authority) = trajectory
+            .state()
+            .audit()
+            .iter()
+            .find_map(|e| match e {
+                AuditEvent::EndorseApplied { derived, authority, .. } => Some((*derived, authority.clone())),
+                _ => None,
+            })
+            .expect("the endorse was audited");
+        assert_eq!(authority.as_str(), "human");
+        let derived_stored = trajectory.store().get(derived).unwrap();
+        assert_ne!(
+            derived_stored.label(),
+            &doc_label,
+            "the derived value's label was raised"
+        );
+        assert!(matches!(
+            derived_stored.provenance(),
+            crate::value::Provenance::Endorsed { source, .. } if *source == doc
+        ));
+    }
+
+    /// Routing an Endorse honours the mandate bounds: a delta the authority
+    /// cannot vouch finds no competent authority; a bounded one routes.
+    #[test]
+    fn an_endorse_routes_only_within_the_mandate_bounds() {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap(); // may vouch alice/bob/charlie
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "doc");
+        let view = TrajectoryView::new(trajectory.store());
+
+        let beyond = crate::transition::ProposedGrant::Endorse {
+            source: doc,
+            delta: crate::transition::EndorseDelta {
+                trust: None,
+                audience: Some(BTreeSet::from([user("dave")])),
+            },
+        };
+        assert!(matches!(
+            engine.route_grant(&beyond, &[], &view),
+            RoutedRuling::NoRuling
+        ));
+
+        let within = crate::transition::ProposedGrant::Endorse {
+            source: doc,
+            delta: crate::transition::EndorseDelta {
+                trust: None,
+                audience: Some(BTreeSet::from([user("charlie")])),
+            },
+        };
+        assert!(matches!(
+            engine.route_grant(&within, &[], &view),
+            RoutedRuling::External(_)
+        ));
+    }
+
+    /// A denied Endorse is terminal and mints no value: the fiat relabel never
+    /// happens, so the store and the source label are untouched.
+    #[test]
+    fn a_denied_endorse_is_terminal_and_mints_no_value() {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
+        let request = email_request(&mut trajectory, doc, "charlie");
+
+        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
+        else {
+            panic!("expected remediable block");
+        };
+        let action = trajectory.pending_action().unwrap().id();
+        let plan = plans.first().id;
+        let revision = trajectory.revision();
+        let values_before = trajectory.store().len();
+
+        let grant = crate::transition::ProposedGrant::Endorse {
+            source: doc,
+            delta: crate::transition::EndorseDelta {
+                trust: None,
+                audience: Some(BTreeSet::from([user("charlie")])),
+            },
+        };
+        let ancestry = crate::approval::AncestrySnapshot::of(trajectory.store(), [doc]);
+        let pending = crate::approval::PendingApproval::new(
+            plan,
+            action,
+            grant,
+            crate::audit::AuthorityName::new("human"),
+            violations,
+            ancestry,
+            trajectory.id(),
+            revision,
+            engine.id,
+        );
+
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                Ruling::Deny {
+                    reason: "suspicious source".into(),
+                },
+            )
+            .unwrap();
+        assert!(matches!(decision, Decision::Blocked(Blocked::Terminal(_))));
+        assert_eq!(
+            trajectory.store().len(),
+            values_before,
+            "a denied endorse mints nothing"
+        );
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::EndorseDenied { .. }))
+        );
     }
 
     /// Control-borne taint prefers the narrower control-release waiver over

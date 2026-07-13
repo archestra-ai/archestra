@@ -197,8 +197,55 @@ impl AuthorityMandate {
                 let acknowledge_ok = acknowledged.is_empty() || self.acknowledge_unknown;
                 trust_ok && audience_ok && effects_ok && confirms_ok && control_ok && acknowledge_ok
             }
+            ProposedGrant::Endorse { delta, .. } => delta.covered_by(self),
             ProposedGrant::Accept { .. } => self.acquire_effects,
             ProposedGrant::Acknowledge { .. } => self.acknowledge_unknown,
+        }
+    }
+}
+
+/// The confidentiality raise an Endorse grant asks an authority to vouch: a
+/// trust attestation and/or an audience it admits. Unlike a [`TransientWaiver`]
+/// this is not a check-transient lift — it is the durable ΔL minted onto a new
+/// value (see [`ProposedGrant::Endorse`]). A mandate bounds it exactly as it
+/// bounded the transient trust/audience lift this replaces.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct EndorseDelta {
+    /// Raise the endorsed value's trust to at least this.
+    pub trust: Option<KnownTrust>,
+    /// Vouch exactly these readers into the endorsed value's audience.
+    pub audience: Option<BTreeSet<UserId>>,
+}
+
+impl EndorseDelta {
+    /// Does `mandate` bound at least this raise? Trust by [`KnownTrust`] order,
+    /// audience by set inclusion.
+    #[must_use]
+    pub fn covered_by(&self, mandate: &AuthorityMandate) -> bool {
+        let trust_ok = match self.trust {
+            None => true,
+            Some(need) => matches!(mandate.trust, Some(ceiling) if ceiling >= need),
+        };
+        let audience_ok = match &self.audience {
+            None => true,
+            Some(need) => matches!(&mandate.audience, Some(vouchable) if need.is_subset(vouchable)),
+        };
+        trust_ok && audience_ok
+    }
+
+    /// Raises nothing.
+    pub fn is_empty(&self) -> bool {
+        self.trust.is_none() && self.audience.is_none()
+    }
+}
+
+impl fmt::Display for EndorseDelta {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self.trust, &self.audience) {
+            (Some(trust), Some(readers)) => write!(f, "trust>={trust}+audience+{}", readers.len()),
+            (Some(trust), None) => write!(f, "trust>={trust}"),
+            (None, Some(readers)) => write!(f, "audience+{}", readers.len()),
+            (None, None) => write!(f, "nothing"),
         }
     }
 }
@@ -277,11 +324,15 @@ impl fmt::Display for TransientWaiver {
 
 /// The typed elevation an authority rules on — it carries *what* is being
 /// asked, so a mandate can judge competence and a ruling function can inspect
-/// the operation. Endorse (durable relabel) and Accept (effect acquisition)
-/// join later passes; today an authority rules on a transient waiver or an
-/// acknowledgment of unprovable facts.
+/// the operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ProposedGrant {
+    /// Durably raise a value's label by fiat (Endorse): mint a new value
+    /// carrying the raised label and `source`'s bytes, substituted into the
+    /// flow. Routes on the mandate bounding `delta`. Clears a criterion-(2)
+    /// sink breach the way a registered sanitizer does, but justified by the
+    /// authority rather than by the content.
+    Endorse { source: ValueId, delta: EndorseDelta },
     /// Grant a check-transient loosening, plus any acknowledge-only facts the
     /// lift also clears on the recheck. Those facts need `acknowledge_unknown`
     /// competence: a lift dimension must not launder an unknown the authority
@@ -302,6 +353,7 @@ pub enum ProposedGrant {
 impl fmt::Display for ProposedGrant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Endorse { source, delta } => write!(f, "endorse {source} ({delta})"),
             Self::Waive { waiver, .. } => write!(f, "waive {waiver}"),
             Self::Accept { effects } => write!(f, "accept {effects}"),
             Self::Acknowledge { .. } => write!(f, "acknowledgment"),

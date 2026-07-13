@@ -15,7 +15,7 @@ use crate::contract::Violation;
 use crate::dimension::Effects;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
-use crate::transition::TransientWaiver;
+use crate::transition::{EndorseDelta, TransientWaiver};
 use crate::value::TransformerRef;
 
 /// A vector that provably holds at least one element. "Remediable with zero
@@ -91,6 +91,13 @@ pub enum TransitionKind {
     AcceptGrowth {
         effects: Effects,
     },
+    /// An authority durably raises `source`'s label by `delta` (Endorse). Like
+    /// a transform it mints a derived value and substitutes it into the flow;
+    /// unlike one the raise is authority-justified, not content-justified.
+    EndorseValue {
+        source: ValueId,
+        delta: EndorseDelta,
+    },
 }
 
 /// The category of a remedy route, derived from its decisive step — the most
@@ -106,9 +113,13 @@ pub enum ExitKind {
     Constrain,
     /// An authority acquired a criterion-(1) surface growth.
     Accept,
-    /// An authority lifted a check (trust, audience, prior effects,
-    /// confirmation, control release) or acknowledged an unprovable fact.
+    /// An authority lifted a check (prior effects, confirmation, control
+    /// release) or acknowledged an unprovable fact.
     WaiverOrAcknowledge,
+    /// An authority durably raised a value's label by fiat — taint erased, the
+    /// priciest (robustness-dangerous) elevation, so it is the decisive step of
+    /// any route that contains it.
+    Endorse,
 }
 
 impl ExitKind {
@@ -118,6 +129,7 @@ impl ExitKind {
             TransitionKind::ConstrainAction { .. } => Self::Constrain,
             TransitionKind::AcceptGrowth { .. } => Self::Accept,
             TransitionKind::ApplyWaiver { .. } => Self::WaiverOrAcknowledge,
+            TransitionKind::EndorseValue { .. } => Self::Endorse,
         }
     }
 

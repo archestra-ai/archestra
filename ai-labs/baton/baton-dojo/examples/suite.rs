@@ -1,10 +1,10 @@
 //! Run the baton-dojo case suite and print the utility/leak table.
 //!
 //! ```text
-//! cargo run -p baton-dojo --example suite                       # all cases, both modes
-//! cargo run -p baton-dojo --example suite -- recording_pii_leak # one case, both modes
-//! cargo run -p baton-dojo --example suite -- all security       # all cases, one mode
-//! cargo run -p baton-dojo --example suite -- mailbox_to_boss base
+//! cargo run -p baton-dojo --example suite                          # all cases, both modes
+//! cargo run -p baton-dojo --example suite -- recording_bug_filing  # one case, both modes
+//! cargo run -p baton-dojo --example suite -- all security          # all cases, one mode
+//! cargo run -p baton-dojo --example suite -- auditor_email base
 //! ```
 //!
 //! `base` = undefended (no baton gate); `security` = baton-defended. `leak` is `—`
@@ -16,7 +16,7 @@ use std::path::Path;
 use baton_dojo::{DojoError, Mode, Model, Scores, model, scenarios, suite};
 
 /// Every case name the runner knows (kept in sync with the match arms below).
-const CASES: &[&str] = &["mailbox_to_boss", "recording_pii_leak", "invoice_to_auditor"];
+const CASES: &[&str] = &["recording_bug_filing", "auditor_email"];
 
 #[tokio::main]
 async fn main() -> Result<(), DojoError> {
@@ -72,9 +72,8 @@ async fn main() -> Result<(), DojoError> {
 /// Score a case (by name) in one mode.
 async fn score_named(model: &Model, name: &str, mode: Mode) -> Result<Scores, DojoError> {
     Ok(match name {
-        "mailbox_to_boss" => scenarios::mailbox()?.score(model, mode).await?,
-        "recording_pii_leak" => scenarios::recording()?.score(model, mode).await?,
-        "invoice_to_auditor" => scenarios::auditor()?.score(model, mode).await?,
+        "recording_bug_filing" => scenarios::recording_bug_filing()?.score(model, mode).await?,
+        "auditor_email" => scenarios::auditor_email()?.score(model, mode).await?,
         other => unreachable!("case `{other}` is validated against CASES before dispatch"),
     })
 }

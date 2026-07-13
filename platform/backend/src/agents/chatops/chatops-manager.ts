@@ -54,7 +54,8 @@ import {
   ensureProvisionedUser,
   isSsoConfigured,
 } from "./auto-provision";
-import { claimThreadMuteHint } from "./channel-activation";
+import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
+import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
@@ -1595,6 +1596,21 @@ export class ChatOpsManager {
         .catch(() => {});
     }
 
+    // Register this run so muting the thread can abort it mid-flight, and record
+    // the thread's mute marker now: if it changes before we reply, the thread
+    // was muted while we were working and the reply must be dropped (see
+    // muteChannelThread / getThreadMuteMarker). The abort stops this pod's model
+    // request; the marker is the cross-pod guarantee that no reply is posted
+    // after a mute even when the run executed on a different pod than the mute.
+    const threadKey = {
+      provider: provider.providerId,
+      channelId: message.channelId,
+      threadId: message.threadId ?? message.channelId,
+    };
+    const { signal: abortSignal, unregister } =
+      chatOpsRunRegistry.register(threadKey);
+    const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
+
     try {
       const executeParams = {
         agent,
@@ -1603,11 +1619,22 @@ export class ChatOpsManager {
         provider,
         fullMessage,
         userId,
+        abortSignal,
       };
       let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
       try {
         execution = await this.executeMessage(executeParams);
       } catch (error) {
+        // The thread was muted mid-run: we aborted this run on purpose, so stay
+        // silent rather than posting the abort as an error. The marker check
+        // below also covers a run aborted on another pod (no local signal).
+        if (abortSignal.aborted) {
+          return await this.suppressMutedReply({
+            provider,
+            message,
+            threadKey,
+          });
+        }
         // Web chat surfaces transient provider failures as a retry button;
         // chatops has no interactive affordance, so one automatic retry
         // stands in for it. The retry re-runs the whole agent turn, exactly
@@ -1627,6 +1654,17 @@ export class ChatOpsManager {
       }
       const { result, responseAgent } = execution;
 
+      // Drop the reply if the thread was muted while the run was in flight —
+      // whether we aborted it here (abortSignal) or it ran to completion on
+      // another pod (the marker moved). Muting means "be quiet now", so an
+      // answer that lands after it would defeat the request.
+      if (
+        abortSignal.aborted ||
+        (await this.threadMutedSinceStart(threadKey, muteMarkerAtStart))
+      ) {
+        return await this.suppressMutedReply({ provider, message, threadKey });
+      }
+
       return await this.replyByMessageExecutionResult({
         agent: responseAgent,
         message,
@@ -1635,6 +1673,13 @@ export class ChatOpsManager {
         result,
       });
     } catch (error) {
+      // A mute that aborted the run mid-flight (e.g. during the retry leg above)
+      // surfaces here as a throw — stay silent rather than posting it as an
+      // error, since the user just asked the bot to be quiet.
+      if (abortSignal.aborted) {
+        return await this.suppressMutedReply({ provider, message, threadKey });
+      }
+
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
         "[ChatOps] Failed to execute A2A message",
@@ -1655,7 +1700,59 @@ export class ChatOpsManager {
       }
 
       return { success: false, error: errorMessage(error) };
+    } finally {
+      unregister();
     }
+  }
+
+  /**
+   * Whether the thread was muted after this run started, by comparing the mute
+   * marker captured at the start against the current one. A non-null current
+   * marker that differs from the captured value means a mute landed mid-run; a
+   * null current value (lapsed marker) is never treated as a mute, so it can't
+   * cause a spurious suppression.
+   */
+  private async threadMutedSinceStart(
+    threadKey: {
+      provider: ChatOpsProviderType;
+      channelId: string;
+      threadId: string;
+    },
+    muteMarkerAtStart: string | null,
+  ): Promise<boolean> {
+    const current = await getThreadMuteMarker(threadKey);
+    return current !== null && current !== muteMarkerAtStart;
+  }
+
+  /**
+   * Silently drop the reply for a run whose thread was muted mid-flight: clear
+   * the lingering "typing…" indicator and report success with no response (same
+   * shape as the agent deliberately staying quiet), so nothing is posted to the
+   * now-muted thread.
+   */
+  private async suppressMutedReply(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    threadKey: {
+      provider: ChatOpsProviderType;
+      channelId: string;
+      threadId: string;
+    };
+  }): Promise<ChatOpsProcessingResult> {
+    const { provider, message, threadKey } = params;
+    logger.info(
+      {
+        messageId: message.messageId,
+        provider: threadKey.provider,
+        channelId: threadKey.channelId,
+        threadId: threadKey.threadId,
+      },
+      "[ChatOps] Thread muted during execution — dropping reply",
+    );
+    await provider
+      .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+      ?.catch(() => {});
+    return { success: true, agentResponse: "" };
   }
 
   /**
@@ -1989,11 +2086,21 @@ export class ChatOpsManager {
     provider: ChatOpsProvider;
     fullMessage: string;
     userId: string;
+    /** Aborts the agent run when the thread is muted mid-flight. */
+    abortSignal?: AbortSignal;
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
   }> {
-    const { agent, binding, message, provider, fullMessage, userId } = params;
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      userId,
+      abortSignal,
+    } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
     // so all messages in the same thread are grouped together in logs
@@ -2030,6 +2137,7 @@ export class ChatOpsManager {
       agentId: agent.id,
       request,
       systemParams,
+      abortSignal,
     });
 
     // If swap_agent/swap_to_default_agent created a thread-level override
@@ -2083,6 +2191,7 @@ export class ChatOpsManager {
           agentId: swappedAgent.id,
           request,
           systemParams,
+          abortSignal,
         });
 
         return {

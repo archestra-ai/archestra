@@ -64,6 +64,10 @@ def run_bench(
     # Importing the attacks package populates the attack registry.
     import agentdojo.attacks  # noqa: F401
     from agentdojo.attacks.attack_registry import load_attack
+
+    from baton_dojo import _agentdojo_compat
+
+    _agentdojo_compat.apply()
     from agentdojo.benchmark import (
         benchmark_suite_with_injections,
         benchmark_suite_without_injections,

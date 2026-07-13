@@ -504,7 +504,7 @@ export default class K8sDeployment {
       policyName,
       buildManagedNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
       }),
     );
@@ -557,7 +557,7 @@ export default class K8sDeployment {
         policyName,
         body: buildUnrestrictedFloorAwsApplicationNetworkPolicy({
           name: policyName,
-          podSelectorLabels: this.getSystemLabels(),
+          podSelectorLabels: this.getPodSelectorLabels(),
           labels,
           clusterDnsIps,
         }),
@@ -578,7 +578,7 @@ export default class K8sDeployment {
       policyName,
       buildUnrestrictedFloorPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         labels,
         clusterDnsIps,
       }),
@@ -655,7 +655,7 @@ export default class K8sDeployment {
       policyName,
       body: buildManagedCiliumNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
       }),
     });
@@ -670,7 +670,7 @@ export default class K8sDeployment {
       policyName,
       body: buildManagedGkeFqdnNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
       }),
     });
@@ -699,7 +699,7 @@ export default class K8sDeployment {
       policyName,
       body: buildManagedAwsApplicationNetworkPolicy({
         name: policyName,
-        podSelectorLabels: this.getSystemLabels(),
+        podSelectorLabels: this.getPodSelectorLabels(),
         effectivePolicy,
         clusterDnsIps,
       }),
@@ -1161,7 +1161,7 @@ export default class K8sDeployment {
   }): boolean {
     if (!params.policyName) return false;
     if (!hasManagedNetworkPolicyLabels(params.metadataLabels)) return false;
-    if (!policyTargetsPodLabels(params.spec, this.getSystemLabels())) {
+    if (!policyTargetsPodLabels(params.spec, this.getPodSelectorLabels())) {
       return false;
     }
     return !params.keepPolicy || params.policyName !== params.desiredPolicyName;
@@ -1574,6 +1574,22 @@ export default class K8sDeployment {
       app: "mcp-server",
       "mcp-server-id": this.getPodSelectorServerId(),
       "mcp-server-name": this.mcpServer.name,
+    });
+  }
+
+  /**
+   * Labels the per-pod NetworkPolicy (and Service) selector keys on: `app` plus
+   * the catalog-stable `mcp-server-id` (see getPodSelectorServerId). It excludes
+   * `mcp-server-name`: for a multitenant catalog the shared pod is labeled with
+   * one install's name while the policy may be reconciled by another install, so
+   * an AND-semantics selector keyed on the name would match zero pods — the pod
+   * then falls through to the namespace deny-all baseline and gets no egress
+   * (DNS included). `mcp-server-id` alone uniquely identifies the server.
+   */
+  private getPodSelectorLabels(): Record<string, string> {
+    return sanitizeMetadataLabels({
+      app: "mcp-server",
+      "mcp-server-id": this.getPodSelectorServerId(),
     });
   }
 

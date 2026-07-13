@@ -118,6 +118,7 @@ import {
   useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
+import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 import {
   applyFeedbackToMessages,
   conversationStorageKeys,
@@ -1039,6 +1040,31 @@ export function ChatPageContent({
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
 
+  // `status` here is read from the shared session map, which each
+  // ChatSessionHook updates a render behind the real SDK status (via a
+  // post-render sync effect + notifySessionUpdate). Right after handleSubmit
+  // fires a direct send, the SDK is already busy but this `status` can still
+  // read "ready" for a tick or two. Without a synchronous guard, rapid
+  // follow-up submits take the direct-send path again and race each other
+  // inside the single useChat instance — every message reaches the model, but
+  // the concurrent sends clobber each other's optimistic user bubble, so most
+  // never render. This latch makes only the first submit of a turn direct-send;
+  // the rest enqueue and drain in order. Only meaningful with queueing on,
+  // which is the sole path able to absorb the extra submits.
+  const directSendPendingRef = useRef(false);
+  // The real SDK status leaving "ready" means the direct send has landed and
+  // this `status` snapshot will now gate follow-ups on its own; a conversation
+  // switch retargets everything. Either way the latch has done its job.
+  useEffect(() => {
+    if (status !== "ready") {
+      directSendPendingRef.current = false;
+    }
+  }, [status]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on conversation switch — the body writes a ref, so conversationId is a trigger, not a read
+  useEffect(() => {
+    directSendPendingRef.current = false;
+  }, [conversationId]);
+
   // Thumbs feedback on assistant messages: optimistic apply + rollback against
   // the originating session's setter, captured here so a conversation switch
   // mid-request cannot retarget the rollback (or the invalidation, which the
@@ -1187,22 +1213,28 @@ export function ChatPageContent({
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
-      if (!chatSession?.messages || !setMessages) {
+      if (!setMessages) {
         return;
       }
 
-      const mergedMessages = mergePersistedMessageMetadata({
-        liveMessages: chatSession.messages,
-        persistedMessages,
-      });
-
-      if (mergedMessages === chatSession.messages) {
-        return;
-      }
-
-      setMessages(mergedMessages);
+      // Merge against the SDK's CURRENT thread via the functional updater — NOT
+      // the `chatSession.messages` session snapshot, which trails the live SDK
+      // thread by a render (it is published through a post-render sync effect;
+      // see ChatSessionHook). During rapid queue drain that snapshot can be
+      // missing the just-sent user message; folding a stale, shorter snapshot
+      // and writing it back here would shrink the SDK thread and drop that
+      // in-flight user message, while the ongoing stream only re-adds the
+      // assistant reply — the user bubble then vanishes until a reload (the
+      // backend persisted it fine). mergePersistedMessageMetadata returns the
+      // same array reference when nothing changed, so React bails out.
+      setMessages((current) =>
+        mergePersistedMessageMetadata({
+          liveMessages: current,
+          persistedMessages,
+        }),
+      );
     },
-    [chatSession?.messages, setMessages],
+    [setMessages],
   );
 
   useEffect(() => {
@@ -1611,17 +1643,12 @@ export function ChatPageContent({
   ) => {
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
-    if (status === "submitted" || status === "streaming") {
-      // With queueing on, a submit while a response is in-flight queues the
-      // message; the conversation's ChatSessionHook sends it once the turn
-      // settles. (Stopping is the submit button's onClick, not a form
-      // submit.) With queueing off, the submit button doubles as Stop.
-      if (!isMessageQueueEnabled || !conversationId) {
-        handleStopStreaming();
-        // Throw to keep the textarea and draft intact — see onSubmit
-        // contract in ArchestraPromptInputProps.
-        throw new Error("stop-not-submit");
-      }
+
+    // Enqueue this submission instead of sending it now (throws on inputs that
+    // can't be queued, keeping the composer intact per the onSubmit contract).
+    // Only reached when queueing is on and a conversation exists.
+    const enqueueSubmission = () => {
+      if (!conversationId) return;
       if (message.files && message.files.length > 0) {
         toast.error(
           "Attachments can't be queued. Wait for the current response to finish, then send.",
@@ -1644,7 +1671,29 @@ export function ChatPageContent({
         agentId: conversation?.agentId ?? undefined,
         messageLength: message.text?.length ?? 0,
       });
+    };
+
+    const queueEnabled = isMessageQueueEnabled && !!conversationId;
+    const submitAction = classifyChatSubmitAction({
+      status,
+      queueEnabled,
+      directSendPending: directSendPendingRef.current,
+    });
+
+    if (submitAction === "stop") {
+      // Queueing off: the submit button doubles as Stop while a turn streams.
+      // (Stopping is the submit button's onClick, not a form submit.) Throw to
+      // keep the textarea and draft intact — see onSubmit contract in
+      // ArchestraPromptInputProps.
+      handleStopStreaming();
+      throw new Error("stop-not-submit");
+    }
+
+    if (submitAction === "queue") {
+      // Streaming (or a direct send is still settling): queue the message; the
+      // conversation's ChatSessionHook sends it once the turn settles.
       // Returning normally clears the textarea and draft, like a send.
+      enqueueSubmission();
       return;
     }
 
@@ -1727,6 +1776,14 @@ export function ChatPageContent({
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
+    // Mark the turn as in flight synchronously so follow-up submits queue
+    // instead of racing this send while the page's `status` catches up. Cleared
+    // by the status/conversation effects above. Only latch when queueing can
+    // absorb the overflow; otherwise leave the pre-existing (queue-off)
+    // behavior untouched.
+    if (queueEnabled) {
+      directSendPendingRef.current = true;
+    }
 
     trackEvent("message_sent", {
       conversationId,

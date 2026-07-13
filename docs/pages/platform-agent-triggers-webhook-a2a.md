@@ -14,7 +14,7 @@ Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent UR
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET`  | `/v2/a2a/{agentId}/.well-known/agent-card.json` | A2A 1.0 AgentCard for capability discovery |
-| `POST` | `/v2/a2a/{agentId}` | JSON-RPC entry point for `SendMessage` and `GetTask` |
+| `POST` | `/v2/a2a/{agentId}` | JSON-RPC entry point for `SendMessage`, `SendStreamingMessage`, and `GetTask` |
 
 The AgentCard advertises the agent's name, description, and a single skill derived from the agent. A2A clients fetch it first to discover what the agent can do, then send messages to the POST endpoint.
 
@@ -81,6 +81,40 @@ The response is one of two shapes inside `result`:
 ```
 
 If the agent needs human approval before running a tool, `result` contains a `task` with `status.state = "TASK_STATE_INPUT_REQUIRED"` and `metadata.approvalRequests`. See [Approvals](#approvals).
+
+## SendStreamingMessage
+
+`SendStreamingMessage` runs a message and streams the reply as [Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events), instead of one buffered response. Use it for long-running agents — the connection stays alive and delivers tokens as the agent produces them, so a slow turn never trips a client or proxy timeout.
+
+The request is a `SendMessage` body with `method` set to `SendStreamingMessage`. The AgentCard advertises support with `capabilities.streaming: true`.
+
+```bash
+curl -N -X POST https://archestra.example.com/v2/a2a/<agentId> \
+  -H "Authorization: Bearer <platform_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendStreamingMessage",
+    "params": {
+      "message": {
+        "messageId": "11111111-1111-1111-1111-111111111111",
+        "role": "ROLE_USER",
+        "parts": [{ "text": "Summarize the last 5 PRs in repo X." }]
+      }
+    }
+  }'
+```
+
+The response is a `text/event-stream`. Each `data:` frame is a JSON-RPC response carrying one `statusUpdate`. Interim frames hold a text delta with `final: false`; the last frame is `final: true` with `state: "TASK_STATE_COMPLETED"` and the complete message.
+
+```
+data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{"taskId":"...","status":{"state":"TASK_STATE_WORKING","message":{"role":"ROLE_AGENT","parts":[{"text":"Here "}]}},"final":false}}}
+
+data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{"taskId":"...","status":{"state":"TASK_STATE_COMPLETED","message":{"role":"ROLE_AGENT","parts":[{"text":"Here is the summary..."}]}},"final":true}}}
+```
+
+Read the final `TASK_STATE_COMPLETED` frame for the authoritative answer — the interim deltas are for live display. When an agent needs approval, the stream ends with a `task` frame instead (see [Approvals](#approvals)). Comment lines (`: keep-alive`) hold the connection open during long gaps; skip any line that is not a `data:` frame.
 
 ## Multi-turn conversations
 

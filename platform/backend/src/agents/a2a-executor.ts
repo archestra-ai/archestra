@@ -161,6 +161,18 @@ export interface A2AExecuteParams {
    * `subagentToolStream`.
    */
   delegationToolCallId?: string;
+
+  /**
+   * When provided, invoked with each incremental text delta as the model
+   * streams its answer, so a caller (A2A `SendStreamingMessage`) can forward
+   * tokens to an SSE client. The buffered {@link A2AExecuteResult} is still
+   * returned unchanged when the run completes, and its `text` is the
+   * authoritative, thinking-stripped answer — interim deltas are best-effort
+   * and may include raw model output (e.g. inline `<thinking>`). Deltas for a
+   * turn that is silently retried by the recovery loop are not emitted (the
+   * stream is only surfaced for the committed attempt).
+   */
+  onTextDelta?: (delta: string) => void;
 }
 
 /** @public — exported for testability */
@@ -497,6 +509,30 @@ export async function executeA2AMessage(
         },
       });
 
+      // Forward incremental text deltas to a streaming caller (A2A
+      // SendStreamingMessage). This is a separate buffered accessor over the
+      // same run — the AI SDK buffers each accessor independently, so draining
+      // `textStream` here does not steal events from the toUIMessageStream merge
+      // or the `.text`/`.usage`/`.finishReason` promises below. A failed forward
+      // (e.g. the SSE client disconnected) must not abort the buffered run, so
+      // each callback is guarded; the loop still drains the stream to
+      // completion.
+      const onTextDelta = params.onTextDelta;
+      const textDeltaConsumption = onTextDelta
+        ? (async () => {
+            for await (const delta of stream.textStream) {
+              try {
+                onTextDelta(delta);
+              } catch (error) {
+                logger.debug(
+                  { agentId: agent.id, error },
+                  "Failed to forward A2A text delta (non-fatal)",
+                );
+              }
+            }
+          })()
+        : Promise.resolve();
+
       // Wait for the stream to complete and get the final text.
       // When the underlying provider returns an error (e.g. 400 insufficient
       // credits), the stream produces zero steps and the AI SDK throws
@@ -507,6 +543,7 @@ export async function executeA2AMessage(
         stream.usage,
         stream.finishReason,
         uiMessageStreamConsumption,
+        textDeltaConsumption,
       ]);
 
       if (!responseUiMessage) {

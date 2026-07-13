@@ -96,6 +96,22 @@ function textChunks(text: string): ModelStreamPart[] {
   ];
 }
 
+// Emits one `text-delta` per supplied fragment so a test can observe the
+// incremental deltas a streaming caller would receive.
+function multiTextChunks(...deltas: string[]): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "1" },
+    ...deltas.map((delta) => ({
+      type: "text-delta" as const,
+      id: "1",
+      delta,
+    })),
+    { type: "text-end", id: "1" },
+    { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+  ];
+}
+
 // A content-free turn: only a finish event, no text — the probe treats it as an
 // empty (retryable) response.
 function emptyChunks(): ModelStreamPart[] {
@@ -170,6 +186,57 @@ describe("executeA2AMessage real stream boundary", () => {
     expect(result.responseUiMessage.role).toBe("assistant");
     expect(result.usage?.promptTokens).toBe(5);
     expect(result.usage?.completionTokens).toBe(2);
+  });
+
+  test("forwards each incremental text delta to onTextDelta while still returning the buffered result", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    primeAgent(modelEmitting(multiTextChunks("Hello ", "from ", "A2A")));
+
+    const deltas: string[] = [];
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+      onTextDelta: (delta) => deltas.push(delta),
+    });
+
+    // The deltas arrive incrementally and reassemble into the buffered answer.
+    expect(deltas).toEqual(["Hello ", "from ", "A2A"]);
+    expect(result.text).toBe("Hello from A2A");
+  });
+
+  test("a throwing onTextDelta callback does not abort the buffered run", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    primeAgent(modelEmitting(textChunks("Resilient answer")));
+
+    // A forward failure (e.g. the SSE socket closed) must be swallowed so the
+    // run still completes and returns its buffered result.
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+      onTextDelta: () => {
+        throw new Error("client disconnected");
+      },
+    });
+
+    expect(result.text).toBe("Resilient answer");
   });
 
   test("strips inline <thinking> blocks from the text and the response message", async ({

@@ -94,6 +94,17 @@ export class A2AManager {
       chatOpsBindingId?: string;
       chatOpsThreadId?: string;
     };
+    /**
+     * When provided (SendStreamingMessage), forwarded to the executor so each
+     * incremental text delta is surfaced to the streaming caller. The buffered
+     * response returned here is unchanged and remains authoritative.
+     */
+    onTextDelta?: (delta: string) => void;
+    /**
+     * Cancels the underlying agent run — used by SendStreamingMessage to abort
+     * when the SSE client disconnects.
+     */
+    abortSignal?: AbortSignal;
   }): Promise<A2AProtocolSendMessageResponse> {
     try {
       const { actor, agentId, request, systemParams } = params;
@@ -278,6 +289,8 @@ export class A2AManager {
             originalUiMessages: contextUiMessages,
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
+            onTextDelta: params.onTextDelta,
+            abortSignal: params.abortSignal,
           });
         },
       });

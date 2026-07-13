@@ -1,19 +1,19 @@
 //! Run the baton-dojo case suite and print the utility/leak table.
 //!
 //! ```text
-//! cargo run -p baton-dojo                          # all cases, both modes
-//! cargo run -p baton-dojo -- recording_bug_filing  # one case, both modes
-//! cargo run -p baton-dojo -- all security          # all cases, one mode
-//! cargo run -p baton-dojo -- auditor_email base    # one case, one mode
+//! cargo run -p baton-dojo                            # all cases, gate off and on
+//! cargo run -p baton-dojo -- recording_bug_filing    # one case, both
+//! cargo run -p baton-dojo -- --defended              # all cases, gate on only
+//! cargo run -p baton-dojo -- auditor_email --undefended
 //! ```
 //!
-//! `base` = undefended (no baton gate); `security` = baton-defended. `leak` is `—`
-//! for a utility-only case (no attacker). Needs `OPENROUTER_API_KEY` (or a line in
+//! By default each case runs twice — gate off, then on. `--defended` /
+//! `--undefended` restrict to one. Needs `OPENROUTER_API_KEY` (or a line in
 //! `ai-labs/.env`); `DOJO_MODEL` picks the model.
 
 use std::path::Path;
 
-use baton_dojo::{DojoError, Mode, Model, Scores, model, scenarios, suite};
+use baton_dojo::{DojoError, Model, Scores, model, scenarios, suite};
 
 /// Every case name the runner knows (kept in sync with the match arms below).
 const CASES: &[&str] = &["recording_bug_filing", "auditor_email"];
@@ -21,8 +21,11 @@ const CASES: &[&str] = &["recording_bug_filing", "auditor_email"];
 #[tokio::main]
 async fn main() -> Result<(), DojoError> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let case_sel = args.first().map(String::as_str).unwrap_or("all");
-    let mode_sel = args.get(1).map(String::as_str);
+    let case_sel = args
+        .iter()
+        .find(|a| !a.starts_with("--"))
+        .map(String::as_str)
+        .unwrap_or("all");
 
     // Which cases to run.
     let cases: Vec<&'static str> = if case_sel == "all" {
@@ -34,16 +37,18 @@ async fn main() -> Result<(), DojoError> {
         return Ok(());
     };
 
-    // Which modes: a named mode, or both.
-    let modes: Vec<Mode> = match mode_sel {
-        None => vec![Mode::Base, Mode::Security],
-        Some(m) => match Mode::parse(m) {
-            Some(mode) => vec![mode],
-            None => {
-                eprintln!("unknown mode `{m}`. use `base` or `security`");
-                return Ok(());
-            }
-        },
+    // Which gate passes: both, unless a flag restricts to one.
+    let passes: Vec<bool> = match (
+        args.iter().any(|a| a == "--undefended"),
+        args.iter().any(|a| a == "--defended"),
+    ) {
+        (false, false) => vec![false, true],
+        (true, false) => vec![false],
+        (false, true) => vec![true],
+        (true, true) => {
+            eprintln!("pass only one of `--defended` / `--undefended`");
+            return Ok(());
+        }
     };
 
     let Some(api_key) = resolve_api_key() else {
@@ -56,19 +61,19 @@ async fn main() -> Result<(), DojoError> {
 
     let mut rows = Vec::new();
     for name in cases {
-        for &mode in &modes {
-            rows.push((name, mode, score_named(&model, name, mode).await?));
+        for &defended in &passes {
+            rows.push((name, defended, score_named(&model, name, defended).await?));
         }
     }
-    print!("{}", suite::mode_table(&rows));
+    print!("{}", suite::table(&rows));
     Ok(())
 }
 
-/// Score a case (by name) in one mode.
-async fn score_named(model: &Model, name: &str, mode: Mode) -> Result<Scores, DojoError> {
+/// Score a case (by name) with the gate off or on.
+async fn score_named(model: &Model, name: &str, defended: bool) -> Result<Scores, DojoError> {
     Ok(match name {
-        "recording_bug_filing" => scenarios::recording_bug_filing()?.score(model, mode).await?,
-        "auditor_email" => scenarios::auditor_email()?.score(model, mode).await?,
+        "recording_bug_filing" => scenarios::recording_bug_filing()?.score(model, defended).await?,
+        "auditor_email" => scenarios::auditor_email()?.score(model, defended).await?,
         other => unreachable!("case `{other}` is validated against CASES before dispatch"),
     })
 }

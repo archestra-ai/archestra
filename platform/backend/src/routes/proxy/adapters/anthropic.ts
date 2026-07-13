@@ -1369,6 +1369,11 @@ function exceedsNonStreamingLimit(
   client: AnthropicProvider,
   maxTokens: number,
 ): boolean {
+  // Defensive: a real AnthropicProvider always exposes this, but partial/mock
+  // clients may not. If we can't obtain the estimate, don't force streaming.
+  if (typeof client.calculateNonstreamingTimeout !== "function") {
+    return false;
+  }
   try {
     client.calculateNonstreamingTimeout(maxTokens);
     return false;

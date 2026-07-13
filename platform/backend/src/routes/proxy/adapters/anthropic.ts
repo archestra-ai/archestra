@@ -1297,8 +1297,9 @@ export const anthropicAdapterFactory: LLMProvider<
       // still return a non-streaming *result*, Anthropic's recommended pattern
       // is to consume the streaming Messages API and hand back the accumulated
       // final Message — identical in shape to a non-streaming response, but over
-      // a connection that keeps producing events. See "Long requests":
-      // https://github.com/anthropics/anthropic-sdk-typescript#long-requests
+      // a connection that keeps producing events. This exact
+      // stream(...).finalMessage() pattern is documented under "Long requests":
+      // https://platform.claude.com/docs/en/api/errors#long-requests
       return anthropicClient.messages
         .stream(
           params as unknown as AnthropicProvider.Messages.MessageStreamParams,
@@ -1360,7 +1361,7 @@ export const anthropicAdapterFactory: LLMProvider<
  * non-streaming call's `max_tokens` implies a completion that could exceed 10
  * minutes. Matched by message so `execute` can transparently retry the request
  * over the streaming API and return the accumulated final Message. See:
- * https://github.com/anthropics/anthropic-sdk-typescript#long-requests
+ * https://platform.claude.com/docs/en/api/errors#long-requests
  */
 function isNonStreamingTooLongError(error: unknown): boolean {
   return (

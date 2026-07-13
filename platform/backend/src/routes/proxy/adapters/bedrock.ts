@@ -35,6 +35,10 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import {
+  type SamplingParam,
+  withSamplingParamFallback,
+} from "./sampling-param-fallback";
 
 // ToolCompressionStats imported from @/types
 
@@ -1664,94 +1668,35 @@ export function getCommandInput(request: BedrockRequest): BedrockCommandInput {
 // HELPER: Sampling-parameter fallback
 // =============================================================================
 
-/**
- * Some Bedrock-hosted models (reasoning models in particular) reject sampling
- * params instead of ignoring them, returning a ValidationException such as
- * "`temperature` is deprecated for this model." Rather than maintain a brittle
- * per-model allowlist of which params each model accepts, we detect the
- * rejection, strip the offending param(s), and retry the request once.
- *
- * Maps the wire-level name a provider may use in its error message back to the
- * corresponding `inferenceConfig` key.
- */
-const SAMPLING_PARAM_ALIASES: Record<string, "temperature" | "topP"> = {
+// Maps the canonical sampling-param names to Bedrock's `inferenceConfig` keys
+// (Bedrock uses camelCase `topP`).
+const BEDROCK_INFERENCE_KEY: Record<SamplingParam, "temperature" | "topP"> = {
   temperature: "temperature",
   top_p: "topP",
-  topp: "topP",
 };
 
 /**
- * Inspect an upstream error and return which sampling params it is rejecting.
- * Only matches "deprecated / not supported" style validation errors so
- * unrelated failures fall through untouched.
+ * Return a copy of the command input with the rejected sampling params removed
+ * from `inferenceConfig`, dropping `inferenceConfig` entirely once it's empty.
+ * Returns null when none were set. Passed to the shared
+ * {@link withSamplingParamFallback}.
  */
-function detectUnsupportedSamplingParams(
-  error: unknown,
-): Array<"temperature" | "topP"> {
-  if (!error || typeof error !== "object") return [];
-  const { message, responseBody } = error as {
-    message?: string;
-    responseBody?: string;
-  };
-  const text = `${message ?? ""} ${responseBody ?? ""}`.toLowerCase();
-  if (
-    !/deprecated|not supported|unsupported|does not support|isn't supported|not allowed/.test(
-      text,
-    )
-  ) {
-    return [];
-  }
-  const affected = new Set<"temperature" | "topP">();
-  for (const [alias, key] of Object.entries(SAMPLING_PARAM_ALIASES)) {
-    if (text.includes(alias)) affected.add(key);
-  }
-  return [...affected];
-}
-
-/**
- * Return a copy of the command input with the given sampling params removed,
- * dropping `inferenceConfig` entirely once it's empty. Returns null when none
- * of the params were actually set (so there's nothing worth retrying).
- */
-function stripSamplingParams(
+function stripBedrockSamplingParams(
   commandInput: BedrockCommandInput,
-  params: Array<"temperature" | "topP">,
+  rejected: SamplingParam[],
 ): BedrockCommandInput | null {
   const inferenceConfig = commandInput.inferenceConfig;
   if (!inferenceConfig) return null;
-  const present = params.filter((p) => inferenceConfig[p] !== undefined);
-  if (present.length === 0) return null;
+  const keys = rejected
+    .map((p) => BEDROCK_INFERENCE_KEY[p])
+    .filter((k) => inferenceConfig[k] !== undefined);
+  if (keys.length === 0) return null;
   const next = { ...inferenceConfig };
-  for (const p of present) delete next[p];
+  for (const k of keys) delete next[k];
   return {
     ...commandInput,
     inferenceConfig: Object.keys(next).length > 0 ? next : undefined,
   };
-}
-
-/**
- * Run a Bedrock request and, if it fails solely because the model rejects a
- * sampling param (temperature/topP), strip that param and retry exactly once.
- * The retry only runs on an already-failing request, so it adds no latency to
- * the happy path.
- */
-async function withSamplingParamFallback<T>(
-  commandInput: BedrockCommandInput,
-  run: (input: BedrockCommandInput) => Promise<T>,
-): Promise<T> {
-  try {
-    return await run(commandInput);
-  } catch (error) {
-    const unsupported = detectUnsupportedSamplingParams(error);
-    if (unsupported.length === 0) throw error;
-    const retryInput = stripSamplingParams(commandInput, unsupported);
-    if (!retryInput) throw error;
-    logger.warn(
-      { modelId: commandInput.modelId, strippedParams: unsupported },
-      "[BedrockAdapter] model rejected sampling param(s); retrying without them",
-    );
-    return run(retryInput);
-  }
 }
 
 // =============================================================================
@@ -1864,9 +1809,12 @@ export const bedrockAdapterFactory: LLMProvider<
 
     // Use fetch-based client.converse(), retrying without sampling params the
     // model rejects (e.g. "`temperature` is deprecated for this model.").
-    const response = await withSamplingParamFallback(commandInput, (input) =>
-      bedrockClient.converse(request.modelId, input),
-    );
+    const response = await withSamplingParamFallback({
+      input: commandInput,
+      strip: stripBedrockSamplingParams,
+      logContext: { provider: "bedrock", modelId: commandInput.modelId },
+      run: (input) => bedrockClient.converse(request.modelId, input),
+    });
 
     // Convert response to our internal format with decoded tool names
     const outputContent: Array<
@@ -1935,9 +1883,12 @@ export const bedrockAdapterFactory: LLMProvider<
     // Use fetch-based client.converseStream() - returns events with __rawBytes
     // already set. Retry without sampling params the model rejects (e.g.
     // "`temperature` is deprecated for this model.").
-    return withSamplingParamFallback(commandInput, (input) =>
-      bedrockClient.converseStream(request.modelId, input),
-    );
+    return withSamplingParamFallback({
+      input: commandInput,
+      strip: stripBedrockSamplingParams,
+      logContext: { provider: "bedrock", modelId: commandInput.modelId },
+      run: (input) => bedrockClient.converseStream(request.modelId, input),
+    });
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

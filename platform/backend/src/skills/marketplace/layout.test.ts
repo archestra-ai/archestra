@@ -113,6 +113,31 @@ describe("computeLayout", () => {
     expect(files.some((f) => /evil\.md$/.test(f.path))).toBe(false);
   });
 
+  test("preserves the display name in metadata, letting an author-provided displayName win", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [
+        makeSkill([], { id: "a1", name: "PDF Helper" }),
+        makeSkill([], {
+          id: "a2",
+          name: "Build App",
+          metadata: { displayName: "Custom Label" },
+        }),
+      ],
+    });
+
+    const byDir = new Map(
+      files
+        .filter((f) => f.path.endsWith("/SKILL.md"))
+        .map((f) => [f.path.split("/").at(-2), parseSkillManifest(f.content)]),
+    );
+    expect(byDir.get("pdf-helper")?.metadata.displayName).toBe("PDF Helper");
+    expect(byDir.get("build-app")?.metadata.displayName).toBe("Custom Label");
+  });
+
   test("every SKILL.md frontmatter name equals its directory, matches the Agent Skills spec, and is unique", () => {
     const files = computeLayout({
       linkId: "aaaaaaaa-1111-2222-3333-444444444444",
@@ -144,10 +169,8 @@ describe("computeLayout", () => {
     for (const file of skillMds) {
       const dir = file.path.split("/").at(-2);
       const parsed = parseSkillManifest(file.content);
-      // clients derive the slash command from the frontmatter name, and the
-      // Agent Skills spec requires it to equal the directory name
       expect(parsed.name).toBe(dir);
-      expect(parsed.name).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/);
+      expect(parsed.name).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(parsed.name.length).toBeLessThanOrEqual(64);
       seen.add(parsed.name);
     }

@@ -234,6 +234,7 @@ describe("MarketplaceMaterializer", () => {
     expect(parsed.license).toBe("MIT");
     expect(parsed.compatibility).toBe("claude>=1.0");
     expect(parsed.metadata).toEqual({
+      displayName: "PDF Helper",
       author: "Acme",
       version: "2.0",
     });

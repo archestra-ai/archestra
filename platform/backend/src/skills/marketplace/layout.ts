@@ -171,9 +171,7 @@ function buildSkillMarkdown(
   if (skill.compatibility) frontmatter.compatibility = skill.compatibility;
   if (skill.allowedTools) frontmatter["allowed-tools"] = skill.allowedTools;
   if (skill.templated) frontmatter.templated = true;
-  if (skill.metadata && Object.keys(skill.metadata).length > 0) {
-    frontmatter.metadata = skill.metadata;
-  }
+  frontmatter.metadata = { displayName: skill.name, ...skill.metadata };
 
   const yamlBody = dumpYaml(frontmatter, {
     sortKeys: false,

@@ -637,7 +637,10 @@ class ConversationModel {
       // comparison, so a read must never leave lastReadAt behind
       // lastMessageAt.
       .set({
-        lastReadAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastMessageAt})`,
+        // now() (DB clock), not a JS Date param: node-postgres serializes
+        // Dates in host-local time and the ::timestamp cast drops the offset,
+        // shifting the stamp by the host's UTC offset on non-UTC hosts.
+        lastReadAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastMessageAt})`,
       })
       .where(
         and(

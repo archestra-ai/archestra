@@ -1287,25 +1287,25 @@ export const anthropicAdapterFactory: LLMProvider<
       ...request,
       stream: false,
     } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming;
-    try {
-      return await anthropicClient.messages.create(params);
-    } catch (error) {
-      if (!isNonStreamingTooLongError(error)) throw error;
-      // The SDK refuses a non-streaming request whose `max_tokens` implies a
-      // completion that could exceed 10 minutes, because a single long-lived
-      // response can be dropped by networks that close idle connections. To
-      // still return a non-streaming *result*, Anthropic's recommended pattern
-      // is to consume the streaming Messages API and hand back the accumulated
-      // final Message — identical in shape to a non-streaming response, but over
-      // a connection that keeps producing events. This exact
-      // stream(...).finalMessage() pattern is documented under "Long requests":
-      // https://platform.claude.com/docs/en/api/errors#long-requests
+
+    // A non-streaming request whose `max_tokens` implies a completion that could
+    // exceed ~10 minutes can't be served reliably: our client is built with an
+    // explicit timeout, so the SDK skips its own "streaming required" guard and
+    // instead sends the request and lets it hit that timeout, and networks may
+    // drop the idle connection before the single response arrives. The SSE body
+    // of a *streaming* request is not bounded by the client timeout (only its
+    // initial connection is), so — per Anthropic's guidance — consume such
+    // requests over the streaming Messages API and return the accumulated final
+    // Message, which is identical in shape to a non-streaming response.
+    // https://platform.claude.com/docs/en/api/errors#long-requests
+    if (exceedsNonStreamingLimit(anthropicClient, request.max_tokens)) {
       return anthropicClient.messages
         .stream(
           params as unknown as AnthropicProvider.Messages.MessageStreamParams,
         )
         .finalMessage();
     }
+    return anthropicClient.messages.create(params);
   },
 
   async executeStream(
@@ -1357,19 +1357,24 @@ export const anthropicAdapterFactory: LLMProvider<
 };
 
 /**
- * The Anthropic SDK throws this client-side (before any request is sent) when a
- * non-streaming call's `max_tokens` implies a completion that could exceed 10
- * minutes. Matched by message so `execute` can transparently retry the request
- * over the streaming API and return the accumulated final Message. See:
+ * Whether a non-streaming request with this `max_tokens` would exceed the SDK's
+ * ~10-minute non-streaming limit (i.e. should be served over the streaming API
+ * instead). Delegates to the SDK's own estimate — which throws exactly when
+ * streaming is required — so the threshold stays in sync with the SDK rather
+ * than being duplicated here. `maxNonstreamingTokens` is left unset so only the
+ * general 10-minute estimate applies, not any per-model cap.
  * https://platform.claude.com/docs/en/api/errors#long-requests
  */
-function isNonStreamingTooLongError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.includes(
-      "Streaming is required for operations that may take longer than 10 minutes",
-    )
-  );
+function exceedsNonStreamingLimit(
+  client: AnthropicProvider,
+  maxTokens: number,
+): boolean {
+  try {
+    client.calculateNonstreamingTimeout(maxTokens);
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 /** The SDK nests the provider body as `error.error.{type,message}`. */

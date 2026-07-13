@@ -803,23 +803,25 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 });
 
 describe("anthropicAdapterFactory.execute", () => {
-  // The SDK refuses non-streaming requests whose max_tokens implies a >10 min
-  // completion ("Streaming is required for operations that may take longer
-  // than 10 minutes") unless the client carries an explicit timeout. Claude
-  // Code sends max_tokens=32000 non-streaming; the proxy must forward it,
-  // not 500.
-  test("forwards large non-streaming max_tokens instead of tripping the SDK guard", async () => {
+  // Claude Code sends large max_tokens (e.g. 32000) non-streaming. Such a
+  // request would exceed the SDK's ~10-minute non-streaming limit, so — rather
+  // than attempt it non-streaming (which the client's explicit timeout would
+  // cap) — the proxy serves it over the streaming Messages API and returns the
+  // accumulated final Message. The result is forwarded, never 500-ed. Uses the
+  // real client so the real routing decision runs; only the stream transport is
+  // stubbed.
+  test("serves a large-max_tokens request over the streaming API and forwards the result", async () => {
     const client = anthropicAdapterFactory.createClient("test-key", {
       source: "api",
     }) as AnthropicProvider;
 
-    // Stub the transport: the guard under test runs synchronously inside
-    // messages.create before any network I/O.
-    const post = vi
-      .spyOn(client as unknown as { post: () => unknown }, "post")
-      .mockResolvedValue(
-        createMockResponse([{ type: "text", text: "ok", citations: null }]),
-      );
+    const finalMessage = createMockResponse([
+      { type: "text", text: "ok", citations: null },
+    ]);
+    const stream = vi.spyOn(client.messages, "stream").mockReturnValue({
+      finalMessage: () => Promise.resolve(finalMessage),
+    } as unknown as ReturnType<typeof client.messages.stream>);
+    const create = vi.spyOn(client.messages, "create");
 
     const response = await anthropicAdapterFactory.execute(
       client,
@@ -829,7 +831,10 @@ describe("anthropicAdapterFactory.execute", () => {
       }),
     );
 
-    expect(post).toHaveBeenCalled();
+    // Routed to streaming (max_tokens=64000 > the ~21k non-streaming limit),
+    // never the non-streaming path.
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
     expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
   });
 });
@@ -889,40 +894,49 @@ describe("anthropicAdapterFactory balance-too-low message", () => {
   });
 });
 
-describe("anthropicAdapterFactory.execute - long request streaming fallback", () => {
+describe("anthropicAdapterFactory.execute - long-request routing", () => {
   const messages = [
     { role: "user", content: "hi" },
   ] as Anthropic.Types.MessagesRequest["messages"];
 
-  // The SDK throws this client-side (before any network call) when a
-  // non-streaming request's max_tokens implies a >10-minute completion.
-  const longRequestError = new Error(
-    "Streaming is required for operations that may take longer than 10 minutes. See https://github.com/anthropics/anthropic-sdk-typescript#long-requests for more details",
-  );
-
-  test("returns the non-streaming response when create() succeeds", async () => {
+  test("routes to non-streaming create() when the request fits the non-streaming limit", async () => {
     const response = createMockResponse([{ type: "text", text: "ok" }]);
     const create = vi.fn().mockResolvedValue(response);
     const stream = vi.fn();
-    const client = { messages: { create, stream } };
+    // The SDK guard returns a timeout (does not throw) → request fits.
+    const calculateNonstreamingTimeout = vi.fn().mockReturnValue(600000);
+    const client = {
+      calculateNonstreamingTimeout,
+      messages: { create, stream },
+    };
 
     const result = await anthropicAdapterFactory.execute(
       client,
-      createMockRequest(messages),
+      createMockRequest(messages, { max_tokens: 1024 }),
     );
 
     expect(result).toBe(response);
     expect(create).toHaveBeenCalledTimes(1);
-    // The happy path must not touch the streaming helper.
     expect(stream).not.toHaveBeenCalled();
+    // The routing decision is keyed on the request's own max_tokens.
+    expect(calculateNonstreamingTimeout).toHaveBeenCalledWith(1024);
   });
 
-  test("falls back to the streaming API when the SDK rejects the request as too long", async () => {
+  test("routes to the streaming API and returns the final message when the request is too long for non-streaming", async () => {
     const response = createMockResponse([{ type: "text", text: "done" }]);
-    const create = vi.fn().mockRejectedValue(longRequestError);
+    const create = vi.fn();
     const finalMessage = vi.fn().mockResolvedValue(response);
     const stream = vi.fn().mockReturnValue({ finalMessage });
-    const client = { messages: { create, stream } };
+    // The SDK guard throws → max_tokens implies a >10-minute completion.
+    const calculateNonstreamingTimeout = vi.fn(() => {
+      throw new Error(
+        "Streaming is required for operations that may take longer than 10 minutes",
+      );
+    });
+    const client = {
+      calculateNonstreamingTimeout,
+      messages: { create, stream },
+    };
 
     const result = await anthropicAdapterFactory.execute(
       client,
@@ -931,19 +945,9 @@ describe("anthropicAdapterFactory.execute - long request streaming fallback", ()
 
     // Same shape a non-streaming create() would have returned.
     expect(result).toBe(response);
-    expect(create).toHaveBeenCalledTimes(1);
     expect(stream).toHaveBeenCalledTimes(1);
     expect(finalMessage).toHaveBeenCalledTimes(1);
-  });
-
-  test("rethrows unrelated errors without falling back to streaming", async () => {
-    const create = vi.fn().mockRejectedValue(new Error("overloaded_error"));
-    const stream = vi.fn();
-    const client = { messages: { create, stream } };
-
-    await expect(
-      anthropicAdapterFactory.execute(client, createMockRequest(messages)),
-    ).rejects.toThrow("overloaded_error");
-    expect(stream).not.toHaveBeenCalled();
+    // The non-streaming path is skipped entirely for long requests.
+    expect(create).not.toHaveBeenCalled();
   });
 });

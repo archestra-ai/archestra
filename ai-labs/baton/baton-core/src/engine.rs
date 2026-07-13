@@ -1284,34 +1284,59 @@ impl PolicyEngine {
     }
 
     /// Deterministic waiver candidates for a remaining violation set: the
-    /// control-release variant first when releasing control alone shrinks
-    /// the need, then the plain full-attestation delta.
+    /// scoped control-release variant first when releasing control shrinks the
+    /// need, then the plain full-attestation delta.
     fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
         let plain = needed_delta(remaining, &sim.recipients, &sim.requires);
-        // Offer the control-release variant only when releasing control makes a
-        // genuinely *narrower* grant. Releasing control can only remove taint,
-        // so its `needed_delta` is always a subset of `plain`; comparing the
-        // deltas (not violation counts) catches the case where release narrows
-        // a breach witness — e.g. an audience diff `{bob, charlie}` → `{charlie}`
-        // — without reducing the count, and rejects the spurious case where the
-        // apparent shrink was only acknowledge-only facts dropping under a
-        // waiver (they contribute nothing to `needed_delta`).
-        let after_control_release = sim.violations(Some(&TransientWaiver {
-            control_release: true,
-            ..TransientWaiver::empty()
-        }));
-        let released = needed_delta(&after_control_release, &sim.recipients, &sim.requires);
         let mut candidates = Vec::new();
-        if released != plain {
-            candidates.push(TransientWaiver {
-                control_release: true,
-                ..released
-            });
+        if let Some(control) = self.minimal_control_release(sim, &plain) {
+            candidates.push(control);
         }
         if !candidates.contains(&plain) {
             candidates.push(plain);
         }
         candidates
+    }
+
+    /// The least-privilege control-release waiver: the inclusion-minimal set of
+    /// control deps whose release shrinks the residual as far as releasing every
+    /// control dep would. `None` when releasing control changes nothing (the
+    /// taint is arg-borne, not control-borne) or the control set is too large to
+    /// search — the plain waiver still clears via attestation, which the
+    /// enumerate loop verifies. Releasing control can only remove taint, so its
+    /// `needed_delta` is a subset of `plain`; we target the best achievable
+    /// reduction (release everything) and return the fewest deps that reach it,
+    /// so an unrelated or redundant control dep is never released (D4).
+    fn minimal_control_release(&self, sim: &SimFlow, plain: &TransientWaiver) -> Option<TransientWaiver> {
+        let ids: Vec<ValueId> = sim.control_labels.keys().copied().collect();
+        let n = ids.len();
+        if n == 0 || n > CONTROL_RELEASE_SEARCH_LIMIT {
+            return None;
+        }
+        let delta_releasing = |set: &BTreeSet<ValueId>| -> TransientWaiver {
+            let after = sim.violations(Some(&TransientWaiver {
+                control_release: set.clone(),
+                ..TransientWaiver::empty()
+            }));
+            needed_delta(&after, &sim.recipients, &sim.requires)
+        };
+        let full = delta_releasing(&ids.iter().copied().collect());
+        if &full == plain {
+            return None;
+        }
+        // Smallest subset (ties by mask order) whose release reaches `full`.
+        let mut masks: Vec<u32> = (1u32..(1u32 << n)).collect();
+        masks.sort_by_key(|mask| (mask.count_ones(), *mask));
+        for mask in masks {
+            let subset: BTreeSet<ValueId> = (0..n).filter(|i| mask & (1u32 << i) != 0).map(|i| ids[i]).collect();
+            if delta_releasing(&subset) == full {
+                return Some(TransientWaiver {
+                    control_release: subset,
+                    ..full
+                });
+            }
+        }
+        None
     }
 
     /// Authorities competent for `grant`, in routing order: inline before
@@ -1376,6 +1401,11 @@ impl PolicyEngine {
 /// Bound on enumerated plans per blocked flow.
 const MAX_PLANS: usize = 8;
 
+/// Above this many control deps, the exhaustive minimal-release subset search is
+/// skipped (the plain attestation waiver still clears the flow). Control sets are
+/// small in practice; the bound only guards against pathological inputs.
+const CONTROL_RELEASE_SEARCH_LIMIT: usize = 8;
+
 fn push_plan(
     plans: &mut Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
     steps: NonEmptyVec<TransitionSpec>,
@@ -1394,7 +1424,10 @@ fn push_plan(
 #[derive(Debug, Clone)]
 pub(crate) struct SimFlow {
     pub(crate) leaf_labels: BTreeMap<ValueId, ValueLabel>,
-    pub(crate) control: ValueLabel,
+    /// Control dependencies kept individually (not pre-folded) so a scoped
+    /// `control_release` can exclude exactly the named deps and attribution can
+    /// ask which single dep carries a breach dimension.
+    pub(crate) control_labels: BTreeMap<ValueId, ValueLabel>,
     pub(crate) tool: ToolName,
     pub(crate) requires: Requirements,
     pub(crate) recipients: BTreeSet<crate::dimension::UserId>,
@@ -1415,7 +1448,10 @@ impl SimFlow {
         for leaf in checked.arguments.leaves() {
             leaf_labels.insert(leaf, store.get(leaf)?.label().clone());
         }
-        let control = store.fold_labels(checked.control.iter())?;
+        let mut control_labels = BTreeMap::new();
+        for id in checked.control.iter() {
+            control_labels.insert(*id, store.get(*id)?.label().clone());
+        }
         let (requires, recipients, extra) = match contract {
             Some(c) => (
                 c.requires.clone(),
@@ -1432,7 +1468,7 @@ impl SimFlow {
         };
         Ok(Self {
             leaf_labels,
-            control,
+            control_labels,
             tool: checked.tool.clone(),
             requires,
             recipients,
@@ -1446,10 +1482,14 @@ impl SimFlow {
     /// check-transient waiver. A waiver lifts exactly its declared
     /// dimensions and acknowledges acknowledge-only facts on the record.
     pub(crate) fn violations(&self, waiver: Option<&TransientWaiver>) -> Vec<Violation> {
-        let control = match waiver {
-            Some(w) if w.control_release => ValueLabel::identity(),
-            _ => self.control.clone(),
-        };
+        let released = waiver.map(|w| &w.control_release);
+        let control = ValueLabel::fold(self.control_labels.iter().filter_map(|(id, label)| {
+            if released.is_some_and(|set| set.contains(id)) {
+                None
+            } else {
+                Some(label.clone())
+            }
+        }));
         let mut flow = ValueLabel::fold(self.leaf_labels.values().cloned()).combine(control);
         let mut past = self.past_effects.clone();
         let mut confirmed = self.confirmed.clone();
@@ -2404,11 +2444,11 @@ mod tests {
             &plans.first().steps.first().kind,
             TransitionKind::ApplyWaiver {
                 delta: crate::transition::TransientWaiver {
-                    control_release: true,
+                    control_release,
                     audience: None,
                     ..
                 },
-            }
+            } if *control_release == BTreeSet::from([secret])
         ));
     }
 
@@ -2459,16 +2499,68 @@ mod tests {
                 &plan.steps.first().kind,
                 TransitionKind::ApplyWaiver {
                     delta: crate::transition::TransientWaiver {
-                        control_release: true,
+                        control_release,
                         audience: Some(vouched),
                         ..
                     },
-                } if *vouched == BTreeSet::from([user("charlie")])
+                } if *control_release == BTreeSet::from([control])
+                    && *vouched == BTreeSet::from([user("charlie")])
             )
         });
         assert!(
             narrows,
             "a control-release waiver should vouch only charlie, not bob too"
+        );
+    }
+
+    /// Least-privilege release: two control deps carry the same restriction
+    /// (joint-only — releasing either alone leaves the other still restricting)
+    /// alongside an unrelated identity-labelled control. The offered release set
+    /// is exactly the two carriers, never the innocent bystander. (Regression:
+    /// an all-or-nothing fallback would release all three, violating D4.)
+    #[test]
+    fn control_release_is_least_privilege_over_joint_carriers() {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        // Body admits alice and bob; the recipient is bob.
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "body");
+        // Two controls each restrict the audience to alice (joint carriers).
+        let secret_a = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "sel-a");
+        let secret_b = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "sel-b");
+        // An unrelated control at the identity label carries nothing.
+        let noise = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("noise"),
+        );
+        let to_bob = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to_bob)),
+                (ArgumentName::new("body"), ArgumentTree::Value(body)),
+            ])),
+            BTreeSet::from([secret_a, secret_b, noise]),
+        );
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected a remediable block");
+        };
+        let released = plans.iter().any(|plan| {
+            matches!(
+                &plan.steps.first().kind,
+                TransitionKind::ApplyWaiver {
+                    delta: crate::transition::TransientWaiver { control_release, .. },
+                } if *control_release == BTreeSet::from([secret_a, secret_b])
+            )
+        });
+        assert!(
+            released,
+            "release the two joint carriers only, never the unrelated control"
         );
     }
 

@@ -23,6 +23,7 @@ use crate::audit::{TransitionFailure, WaiverKind};
 use crate::contract::Unprovable;
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 use crate::request::PendingAction;
+use crate::revision::ValueId;
 use crate::value::{OpaqueValue, StoredValue, TransformerRef, ValueLabel};
 
 /// A registered transformer's input predicate: which source values it
@@ -185,7 +186,7 @@ impl AuthorityMandate {
                 };
                 let effects_ok = waiver.prior_effects.is_none() || self.waive_prior_effects;
                 let confirms_ok = !waiver.confirms || self.confirms;
-                let control_ok = !waiver.control_release || self.may_release_control;
+                let control_ok = waiver.control_release.is_empty() || self.may_release_control;
                 // A lift that also clears acknowledge-only facts needs the
                 // explicit acknowledge capability — the lift dims alone must
                 // not let an authority acknowledge an unknown it cannot vouch.
@@ -216,9 +217,11 @@ pub struct TransientWaiver {
     pub prior_effects: Option<BTreeSet<Effect>>,
     /// Stand in for a user confirmation.
     pub confirms: bool,
-    /// Exclude the control dependencies from the flow label for this check —
-    /// the explicit, audited release of a control-dependence taint.
-    pub control_release: bool,
+    /// Exclude exactly these control dependencies from the flow label for this
+    /// check — the explicit, audited, least-privilege release of a
+    /// control-dependence taint. Empty releases nothing; releasing one dep never
+    /// releases another.
+    pub control_release: BTreeSet<ValueId>,
 }
 
 impl TransientWaiver {
@@ -245,7 +248,7 @@ impl TransientWaiver {
         if self.confirms {
             kinds.insert(WaiverKind::Confirmation);
         }
-        if self.control_release {
+        if !self.control_release.is_empty() {
             kinds.insert(WaiverKind::ControlRelease);
         }
         if kinds.is_empty() {
@@ -428,12 +431,12 @@ mod tests {
                 UserId::new("charlie"),
             ])),
             confirms: true,
-            control_release: true,
+            control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
             ..TransientWaiver::empty()
         });
         let small_ask = waive(TransientWaiver {
             audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
-            control_release: true,
+            control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
             ..TransientWaiver::empty()
         });
         assert!(broad.covers(&big_ask));
@@ -456,7 +459,7 @@ mod tests {
         // capability, even when its lift dimensions alone are covered.
         let waive_and_ack = ProposedGrant::Waive {
             waiver: TransientWaiver {
-                control_release: true,
+                control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
                 ..TransientWaiver::empty()
             },
             acknowledged: vec![Unprovable::EffectsUnknown],
@@ -479,7 +482,7 @@ mod tests {
             std::collections::BTreeSet::from([WaiverKind::Acknowledgment])
         );
         let control = TransientWaiver {
-            control_release: true,
+            control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
             ..TransientWaiver::empty()
         };
         assert_eq!(

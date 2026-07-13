@@ -51,9 +51,12 @@ its own — the model never sees a dead end.
   user to accept/decline via MCP **elicitation** (so the prompt shows up in the
   client's own UI, e.g. Claude Code) and returns the ruling as a string the
   proxy parses. Accept → `GRANTED`, decline/cancel/unsupported → `DENIED`.
-- **`baton-demo-agent`** — a self-contained [rig](https://docs.rig.rs) agent
-  (built with `--features demo`) that plays the external harness end to end,
-  bundling the approval prompt so you can watch the flow with one command.
+- **`baton-demo-agent`** — a [rig](https://docs.rig.rs) agent (built with
+  `--features demo`) that plays the external harness. Its LLM points at the
+  proxy, and its `baton__request_approval` tool is a **real MCP client call** to
+  `baton-approver` — so it drives the whole system, elicitation included. It
+  answers the approver's elicitation by prompting you y/n (standing in for the
+  approval UI a client like Claude Code would render).
 
 ## Policy
 
@@ -71,19 +74,23 @@ upstream, so the key is what the demo agent sends).
 ```sh
 cd ai-labs/baton/baton-proxy
 
-# terminal 1 — the proxy, pointed at OpenRouter (its default upstream)
+# terminal 1 — the approval MCP server
+cargo run --bin baton-approver
+
+# terminal 2 — the proxy, pointed at OpenRouter (its default upstream)
 cargo run --bin baton-proxy -- --policy policy.toml
 
-# terminal 2 — the demo agent (rig), talking to the proxy
+# terminal 3 — the demo agent (rig + MCP client), driving both
 export OPENROUTER_API_KEY=sk-...      # or: source ../../.env
 cargo run --features demo --bin baton-demo-agent
 ```
 
 The agent reads the invoices and tries to email the auditor; the proxy turns
-that into an approval request; approve it in terminal 2 and the send goes
-through. The demo bundles its own y/n prompt inline (it is a plain rig agent,
-not an MCP client), so it does not use the elicitation approver — that is the
-path for a real MCP client (see "Wire your own harness").
+that into a `baton__request_approval` call; the demo runs it against the
+approver, which elicits — so the y/n prompt appears in terminal 3. Answer `y`
+and the send goes through; `n` and the model backs off. This is the whole real
+system (proxy + MCP approver + elicitation); a client like Claude Code would
+replace the demo agent (see "Wire your own harness").
 
 ## Trajectory log
 

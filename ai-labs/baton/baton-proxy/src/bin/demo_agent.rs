@@ -1,25 +1,36 @@
-//! `baton-demo-agent`: a rig-core agent that plays the "external harness".
+//! `baton-demo-agent`: a rig-core agent that drives the whole real system.
 //!
 //! Its LLM client points at `baton-proxy`, and it registers three tools —
-//! `invoices_list`, `send_email`, and `baton__request_approval`. The agent is
-//! asked to email a finance summary to an external auditor. The proxy blocks the
-//! out-of-audience send by rewriting it into an approval call; rig executes that
-//! (this binary prompts you y/n); on approval the model retries the send and the
-//! proxy lets it through. Built only under `--features demo`.
+//! `invoices_list`, `send_email`, and `baton__request_approval`. The approval
+//! tool is **not** a local stub: it is a real MCP client call to the running
+//! `baton-approver` server, so this binary plays the part a client like Claude
+//! Code would. When the approver elicits, this binary's elicitation handler
+//! prompts you y/n on the terminal — the stand-in for the client's own UI.
 //!
-//! Requires a real model via OpenRouter (`OPENROUTER_API_KEY`) and a running
-//! `baton-proxy` (see the crate README).
+//! End to end: the proxy rewrites the out-of-audience send into a
+//! `baton__request_approval` call; rig runs that tool, which calls the approver
+//! over MCP; the approver elicits; you answer here; on accept the approver
+//! returns GRANTED and the model retries the send, which the proxy now permits.
+//!
+//! Built only under `--features demo`. Needs `baton-proxy` and `baton-approver`
+//! running, and a model via OpenRouter (`OPENROUTER_API_KEY`).
 
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 
-use baton_core::{ToolName, UserId};
-use baton_proxy::approval::{ApprovalRecord, Verdict};
+use baton_core::UserId;
 use clap::Parser;
 use rig_core::client::CompletionClient;
 use rig_core::completion::{Prompt, ToolDefinition};
 use rig_core::providers::openai;
 use rig_core::tool::Tool;
+use rmcp::model::{
+    CallToolRequestParams, ClientCapabilities, ClientInfo, CreateElicitationRequestParams, CreateElicitationResult,
+    ElicitationAction, Implementation,
+};
+use rmcp::service::{Peer, RequestContext, RoleClient};
+use rmcp::transport::StreamableHttpClientTransport;
+use rmcp::{ClientHandler, ServiceExt};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -34,11 +45,14 @@ const PREAMBLE: &str = "You are a finance assistant with tools to read invoices 
      the user. Complete the user's request in as few steps as possible.";
 
 #[derive(Parser)]
-#[command(about = "Demo agent that drives baton-proxy through the approval flow")]
+#[command(about = "Demo agent that drives baton-proxy + baton-approver through the approval flow")]
 struct Args {
     /// The proxy's base URL (rig posts `{url}/chat/completions`).
     #[arg(long, env = "BATON_PROXY_URL", default_value = "http://127.0.0.1:8730/v1")]
     proxy_url: String,
+    /// The approver's MCP endpoint.
+    #[arg(long, env = "BATON_APPROVER_URL", default_value = "http://127.0.0.1:8731/mcp")]
+    approver_url: String,
     /// OpenRouter model id.
     #[arg(long, env = "BATON_DEMO_MODEL", default_value = "openai/gpt-4o-mini")]
     model: String,
@@ -62,6 +76,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .or_else(key_from_env_file)
         .ok_or("no OpenRouter API key: pass --api-key, set OPENROUTER_API_KEY, or add it to ai-labs/.env")?;
 
+    // Connect to the approver as an MCP client. The elicitation handler is this
+    // binary standing in for a client's approval UI.
+    let transport = StreamableHttpClientTransport::from_uri(args.approver_url.clone());
+    let approver = ElicitingClient.serve(transport).await.map_err(|e| {
+        format!(
+            "connecting to baton-approver at {}: {e} (is it running?)",
+            args.approver_url
+        )
+    })?;
+    let peer = approver.peer().clone();
+
     let client = openai::CompletionsClient::builder()
         .api_key(api_key)
         .base_url(&args.proxy_url)
@@ -71,39 +96,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .preamble(PREAMBLE)
         .tool(InvoicesList)
         .tool(SendEmail)
-        .tool(RequestApproval)
+        .tool(RequestApproval { approver: peer })
         .build();
 
     println!("task: {}\n", args.task);
     let answer = agent.prompt(args.task.as_str()).max_turns(12).await?;
     println!("\nagent: {answer}");
+
+    approver.cancel().await?;
     Ok(())
 }
 
-/// Strip surrounding whitespace and a single pair of matching quotes — the shape
-/// a value takes in a `.env` file (`KEY="sk-…"`).
-fn clean_key(raw: &str) -> String {
-    let t = raw.trim();
-    let t = t.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(t);
-    let t = t.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(t);
-    t.to_string()
+/// The MCP client half: it exposes elicitation support and answers an
+/// elicitation by prompting the operator on the terminal.
+#[derive(Clone)]
+struct ElicitingClient;
+
+impl ClientHandler for ElicitingClient {
+    fn get_info(&self) -> ClientInfo {
+        // These params are #[non_exhaustive]; build from Default and set fields.
+        let mut info = ClientInfo::default();
+        info.capabilities = ClientCapabilities::builder().enable_elicitation().build();
+        info.client_info = Implementation::new("baton-demo-agent", env!("CARGO_PKG_VERSION"));
+        info
+    }
+
+    async fn create_elicitation(
+        &self,
+        request: CreateElicitationRequestParams,
+        _context: RequestContext<RoleClient>,
+    ) -> Result<CreateElicitationResult, rmcp::ErrorData> {
+        let message = match request {
+            CreateElicitationRequestParams::FormElicitationParams { message, .. } => message,
+            CreateElicitationRequestParams::UrlElicitationParams { message, .. } => message,
+        };
+        let action = if prompt_yes(&message).await {
+            ElicitationAction::Accept
+        } else {
+            ElicitationAction::Decline
+        };
+        Ok(CreateElicitationResult::new(action))
+    }
 }
 
-/// Read `OPENROUTER_API_KEY` from `ai-labs/.env` (two levels up from this crate),
-/// the same file the AgentDojo harness uses. Returns `None` if absent.
-fn key_from_env_file() -> Option<String> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.env");
-    let text = std::fs::read_to_string(path).ok()?;
-    for line in text.lines() {
-        let line = line.trim().strip_prefix("export ").unwrap_or(line.trim());
-        if let Some(value) = line.strip_prefix("OPENROUTER_API_KEY=") {
-            let key = clean_key(value);
-            if !key.is_empty() {
-                return Some(key);
-            }
-        }
+async fn prompt_yes(message: &str) -> bool {
+    let card = format!("\n── approval request ──────────────────────────────\n{message}\napprove? [y/N] ");
+    let mut stdout = tokio::io::stdout();
+    if stdout.write_all(card.as_bytes()).await.is_err() || stdout.flush().await.is_err() {
+        return false;
     }
-    None
+    let mut line = String::new();
+    let mut reader = BufReader::new(tokio::io::stdin());
+    match reader.read_line(&mut line).await {
+        Ok(n) if n > 0 => matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes"),
+        _ => false,
+    }
 }
 
 #[derive(Deserialize)]
@@ -187,7 +234,10 @@ struct ApprovalArgs {
     reason: String,
 }
 
-struct RequestApproval;
+/// The approval tool — a thin proxy to the real `baton-approver` MCP server.
+struct RequestApproval {
+    approver: Peer<RoleClient>,
+}
 
 impl Tool for RequestApproval {
     const NAME: &'static str = "baton__request_approval";
@@ -212,39 +262,61 @@ impl Tool for RequestApproval {
     }
 
     async fn call(&self, args: ApprovalArgs) -> Result<String, Infallible> {
-        let recipients: BTreeSet<UserId> = args.recipients.iter().map(UserId::new).collect();
-        let verdict = prompt_human(&args.tool, &recipients, &args.reason).await;
-        let record = ApprovalRecord::new(verdict, ToolName::new(&args.tool), recipients);
-        Ok(record.to_string())
+        let recipients: Vec<&str> = args.recipients.iter().map(String::as_str).collect();
+        println!(
+            "[tool] baton__request_approval → asking baton-approver about {}",
+            recipients.join(", ")
+        );
+        let mut params = CallToolRequestParams::default();
+        params.name = Self::NAME.into();
+        params.arguments = json!({ "tool": args.tool, "recipients": args.recipients, "reason": args.reason })
+            .as_object()
+            .cloned();
+        // Fail closed to a parseable DENIED if the approver is unreachable.
+        let result = match self.approver.call_tool(params).await {
+            Ok(result) => result,
+            Err(e) => {
+                let recipients = args.recipients.iter().map(|r| r.as_str()).collect::<BTreeSet<_>>();
+                let record = baton_proxy::ApprovalRecord::new(
+                    baton_proxy::Verdict::Denied,
+                    baton_core::ToolName::new(&args.tool),
+                    recipients.into_iter().map(UserId::new).collect(),
+                );
+                eprintln!("[approver unreachable: {e}]");
+                return Ok(record.to_string());
+            }
+        };
+        let text = result
+            .content
+            .iter()
+            .find_map(|c| c.as_text().map(|t| t.text.clone()))
+            .unwrap_or_default();
+        Ok(text)
     }
 }
 
-async fn prompt_human(tool: &str, recipients: &BTreeSet<UserId>, reason: &str) -> Verdict {
-    let recipients: Vec<&str> = recipients.iter().map(UserId::as_str).collect();
-    let card = format!(
-        "\n── approval request ──────────────────────────────\n\
-         tool       {tool}\n\
-         recipients {}\n\
-         reason     {reason}\n\
-         approve? [y/N] ",
-        recipients.join(", "),
-    );
-    let mut stdout = tokio::io::stdout();
-    if stdout.write_all(card.as_bytes()).await.is_err() || stdout.flush().await.is_err() {
-        return Verdict::Denied;
-    }
+/// Strip surrounding whitespace and a single pair of matching quotes — the shape
+/// a value takes in a `.env` file (`KEY="sk-…"`).
+fn clean_key(raw: &str) -> String {
+    let t = raw.trim();
+    let t = t.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(t);
+    let t = t.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(t);
+    t.to_string()
+}
 
-    let mut line = String::new();
-    let mut reader = BufReader::new(tokio::io::stdin());
-    match reader.read_line(&mut line).await {
-        Ok(n) if n > 0 => {
-            let answer = line.trim().to_ascii_lowercase();
-            if answer == "y" || answer == "yes" {
-                Verdict::Granted
-            } else {
-                Verdict::Denied
+/// Read `OPENROUTER_API_KEY` from `ai-labs/.env` (two levels up from this crate),
+/// the same file the AgentDojo harness uses. Returns `None` if absent.
+fn key_from_env_file() -> Option<String> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.env");
+    let text = std::fs::read_to_string(path).ok()?;
+    for line in text.lines() {
+        let line = line.trim().strip_prefix("export ").unwrap_or(line.trim());
+        if let Some(value) = line.strip_prefix("OPENROUTER_API_KEY=") {
+            let key = clean_key(value);
+            if !key.is_empty() {
+                return Some(key);
             }
         }
-        _ => Verdict::Denied,
     }
+    None
 }

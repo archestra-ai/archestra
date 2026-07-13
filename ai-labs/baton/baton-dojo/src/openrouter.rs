@@ -51,6 +51,10 @@ pub enum ChatMessage {
     Assistant {
         text: Option<String>,
         tool_calls: Vec<ToolCall>,
+        /// Opaque provider reasoning blocks (`reasoning_details`), replayed
+        /// verbatim on continuation. Reasoning models (Anthropic thinking,
+        /// o-series) can require their signed blocks back after a tool call.
+        reasoning_details: Option<serde_json::Value>,
     },
     Tool {
         tool_call_id: String,
@@ -82,6 +86,8 @@ pub struct ChatResponse {
     pub text: Option<String>,
     pub tool_calls: Vec<ToolCall>,
     pub finish: FinishReason,
+    /// Opaque `reasoning_details` from the provider, to be replayed on the next turn.
+    pub reasoning_details: Option<serde_json::Value>,
 }
 
 /// A concrete OpenRouter client. Build with [`OpenRouter::new`] (inject the key)
@@ -137,7 +143,10 @@ impl OpenRouter {
 
         let status = resp.status();
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_else(|e| format!("<failed to read error body: {e}>"));
             return Err(DojoError::Provider {
                 status: status.as_u16(),
                 body,
@@ -184,7 +193,11 @@ fn message_to_wire(message: &ChatMessage) -> serde_json::Value {
         ChatMessage::Tool { tool_call_id, content } => {
             serde_json::json!({ "role": "tool", "tool_call_id": tool_call_id, "content": content })
         }
-        ChatMessage::Assistant { text, tool_calls } => {
+        ChatMessage::Assistant {
+            text,
+            tool_calls,
+            reasoning_details,
+        } => {
             let wire_calls: Vec<serde_json::Value> = tool_calls
                 .iter()
                 .map(|c| {
@@ -198,6 +211,9 @@ fn message_to_wire(message: &ChatMessage) -> serde_json::Value {
             let mut msg = serde_json::json!({ "role": "assistant", "content": text });
             if !wire_calls.is_empty() {
                 msg["tool_calls"] = serde_json::Value::Array(wire_calls);
+            }
+            if let Some(reasoning) = reasoning_details {
+                msg["reasoning_details"] = reasoning.clone();
             }
             msg
         }
@@ -217,6 +233,7 @@ fn parse_response(wire: WireResponse) -> Result<ChatResponse, DojoError> {
                         code: err.code,
                         message: err.message.unwrap_or_default(),
                     },
+                    reasoning_details: None,
                 });
             }
             return Err(DojoError::Decode {
@@ -261,6 +278,7 @@ fn parse_response(wire: WireResponse) -> Result<ChatResponse, DojoError> {
         text: choice.message.content,
         tool_calls,
         finish,
+        reasoning_details: choice.message.reasoning_details,
     })
 }
 
@@ -289,6 +307,8 @@ struct WireMessage {
     content: Option<String>,
     #[serde(default)]
     tool_calls: Option<Vec<WireToolCall>>,
+    #[serde(default)]
+    reasoning_details: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]

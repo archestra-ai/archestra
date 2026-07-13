@@ -87,6 +87,11 @@ impl<W> Toolset<W> {
             .collect()
     }
 
+    /// Whether a tool with this name is declared.
+    pub fn contains(&self, name: &str) -> bool {
+        self.tools.iter().any(|t| t.name == name)
+    }
+
     /// Run a tool by name against the workspace.
     pub fn dispatch(&self, ws: &mut W, name: &str, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
         match self.tools.iter().find(|t| t.name == name) {

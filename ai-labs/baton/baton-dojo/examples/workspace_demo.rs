@@ -72,11 +72,7 @@ fn tools() -> Result<Toolset<Workspace>, DojoError> {
             }),
             |ws, args| {
                 let name = str_arg(&args, "create_file", "name")?;
-                let contents = args
-                    .get("contents")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_owned();
+                let contents = str_arg(&args, "create_file", "contents")?;
                 ws.files.push(File {
                     name: name.clone(),
                     contents,
@@ -96,12 +92,8 @@ fn tools() -> Result<Toolset<Workspace>, DojoError> {
             }),
             |ws, args| {
                 let to = str_arg(&args, "send_email", "to")?;
-                let subject = args
-                    .get("subject")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_owned();
-                let body = args.get("body").and_then(|v| v.as_str()).unwrap_or_default().to_owned();
+                let subject = str_arg(&args, "send_email", "subject")?;
+                let body = str_arg(&args, "send_email", "body")?;
                 ws.sent.push(Email {
                     from: "me@acme.com".to_owned(),
                     to: to.clone(),

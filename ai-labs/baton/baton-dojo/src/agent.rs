@@ -142,9 +142,12 @@ impl<'m> Agent<'m> {
         for _ in 0..self.max_iters {
             let resp = self.model.complete(&messages, &schemas).await?;
             let final_text = resp.text.clone().unwrap_or_default();
+            // Replay the assistant message verbatim next turn, including opaque
+            // reasoning blocks — reasoning models can require them back after a call.
             messages.push(ChatMessage::Assistant {
                 text: resp.text.clone(),
                 tool_calls: resp.tool_calls.clone(),
+                reasoning_details: resp.reasoning_details.clone(),
             });
 
             // Terminal finish reasons: never dispatch, surface distinctly.
@@ -186,6 +189,15 @@ impl<'m> Agent<'m> {
             }
 
             for call in &resp.tool_calls {
+                // A call with no id cannot be correlated to a tool result; that is a
+                // malformed provider response, so abort before any side effect rather
+                // than execute an uncorrelatable mutation.
+                if call.id.trim().is_empty() {
+                    return Err(DojoError::Decode {
+                        detail: format!("tool call for `{}` has no id", call.name),
+                    });
+                }
+
                 let args = match parse_call_args(&call.name, &call.arguments_raw) {
                     Ok(args) => args,
                     Err(err) => {
@@ -202,6 +214,23 @@ impl<'m> Agent<'m> {
                         continue;
                     }
                 };
+
+                // Unknown tools never reach the policy gate: an unregistered tool is
+                // permitted with an all-unknown output label, and folding that
+                // (non-)result would taint later calls for an execution that never ran.
+                if !tools.contains(&call.name) {
+                    let content = error_content(&ToolError::UnknownTool(call.name.clone()));
+                    messages.push(ChatMessage::Tool {
+                        tool_call_id: call.id.clone(),
+                        content: content.clone(),
+                    });
+                    tool_calls.push(ToolCallRecord {
+                        name: call.name.clone(),
+                        input: args,
+                        outcome: ToolOutcome::Error(content),
+                    });
+                    continue;
+                }
 
                 if let Some(g) = gate.as_deref_mut() {
                     match g.check(&call.name, &args) {

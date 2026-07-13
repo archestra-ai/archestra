@@ -53,12 +53,12 @@ export type ManagedSections = {
 export type SectionSource = { replace: string } | { patch: StrReplaceEdit[] };
 
 /** The four section names, in document order — the tool's advertised set. */
-export const MANAGED_SECTION_KEYS: readonly SectionKey[] = [
+export const MANAGED_SECTION_KEYS = [
   "title",
   "css",
   "body",
   "javascript",
-] as const;
+] as const satisfies readonly SectionKey[];
 
 /**
  * Build a complete managed document from four section values. Used to seed the
@@ -101,6 +101,10 @@ export function composeManagedDocument(sections: ManagedSections): string {
  * byte-exact; title is returned as decoded text.
  */
 export function parseManagedSections(html: string): ManagedSections | null {
+  // Fast path: the owned markers are a necessary condition, so a raw/legacy
+  // document is rejected by a cheap substring scan without invoking the parser —
+  // keeping read_app/edit_app on raw documents parser-free.
+  if (!hasAllOwnedMarkers(html)) return null;
   const $ = load(html, { sourceCodeLocationInfo: true });
   const nodes: Record<SectionKey, ManagedNode> = {} as Record<
     SectionKey,
@@ -232,8 +236,6 @@ const OWNED: Record<SectionKey, { attr: string; tag: string; parent: string }> =
     },
   };
 
-const RESERVED_ATTR_PREFIX = "data-archestra-app-";
-
 const ROUND_TRIP_ERROR =
   "The section content would corrupt the managed document (it closes or duplicates a platform-owned element). Nothing was saved. Check for a stray </main>, </script>, or </style>, or edit with replacementHtml.";
 
@@ -256,6 +258,11 @@ type DomNode = {
 /** Decoded text of the owned title node (validated present by the caller). */
 function decodeOwnedTitle($: ReturnType<typeof load>): string {
   return $(`[${OWNED.title.attr}]`).first().text();
+}
+
+/** Cheap necessary-condition check: all four owned attributes appear verbatim. */
+function hasAllOwnedMarkers(html: string): boolean {
+  return MANAGED_SECTION_KEYS.every((key) => html.includes(OWNED[key].attr));
 }
 
 function findOwnedNode(
@@ -309,10 +316,12 @@ function resolveSection(
 
 /**
  * Reject section content whose raw text would terminate its owned node early:
- * `</style`/`</script` (as a browser tokenizes RAWTEXT), a stray `</main>`, or a
- * reserved owned attribute injected into the body. title is escaped before it is
- * written, so it can never break out. The final round-trip check is the
- * authoritative backstop; this gives a precise, early message.
+ * `</style`/`</script` (as a browser tokenizes RAWTEXT) or a stray `</main>`.
+ * title is escaped before it is written, so it can never break out. An injected
+ * *owned* node (e.g. a nested `<main data-archestra-app-body>`) is left to the
+ * round-trip backstop, which rejects it as a duplicate — checking the attribute
+ * as a substring here would also reject innocent body text that merely mentions
+ * it. These checks only add a precise, early message ahead of that backstop.
  */
 function assertSectionValueSafe(key: SectionKey, value: string): void {
   switch (key) {
@@ -327,12 +336,6 @@ function assertSectionValueSafe(key: SectionKey, value: string): void {
       }
       return;
     case "body":
-      if (value.toLowerCase().includes(RESERVED_ATTR_PREFIX)) {
-        throw new ApiError(
-          400,
-          `The body section must not contain the reserved "${RESERVED_ATTR_PREFIX}" attribute (it marks platform-owned nodes). Nothing was saved.`,
-        );
-      }
       if (/<\/main[\s/>]/i.test(value)) {
         throw new ApiError(400, breakoutError("body", "</main>"));
       }

@@ -1992,7 +1992,6 @@ Required RBAC permission: `app:create`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `changedSections` | `string[]` | No | Which managed sections a sections-mode edit_app actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements. |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `editor` | `string` | No | Present for a scaffolded app: it is a managed-sections document — edit it with edit_app's sections argument (title/css/body/javascript) rather than raw HTML. |
 | `sections` | `string[]` | No | The editable section names, when editor is managed_sections. |
@@ -2059,7 +2058,6 @@ Required RBAC permission: `app:read`
 | `apps[].description` | `string \| null` | Yes |  |
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
-| `apps[].changedSections` | `string[]` | No | Which managed sections a sections-mode edit_app actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements. |
 | `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### render_app
@@ -2081,7 +2079,6 @@ Required RBAC permission: `app:read`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `changedSections` | `string[]` | No | Which managed sections a sections-mode edit_app actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements. |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### read_app
@@ -2153,8 +2150,8 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `changedSections` | `string[]` | No | Which managed sections a sections-mode edit_app actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements. |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
+| `changedSections` | `string[]` | No | Which managed sections a sections-mode edit actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements. |
 
 #### set_app_tools
 

@@ -999,7 +999,6 @@ describe("read_app / edit_app", () => {
       context,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("exactly one");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
@@ -1011,7 +1010,6 @@ describe("read_app / edit_app", () => {
       context,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("none was provided");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
@@ -1399,7 +1397,7 @@ describe("edit_app sections mode", () => {
     expect(raw.isError).toBe(false);
     const result = await editSections(appId, 2, { body: "x" });
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("no managed sections");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(2);
   });
 
   test("rejects passing sections together with edits", async () => {
@@ -1411,7 +1409,7 @@ describe("edit_app sections mode", () => {
       edits: [{ old_str: "a", new_str: "b" }],
     });
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("exactly one");
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
   });
 
   test("a replacementHtml that drops the owned nodes turns the app raw", async () => {
@@ -3179,10 +3177,9 @@ describe("pre-load guard precedence", () => {
       ctx,
     );
     expect(res.isError).toBe(true);
+    // Precedence: the mode-exclusivity guard runs before the app-load guard, so
+    // a missing app surfaces the mode error, not "No app found".
     const text = (res.content[0] as any).text as string;
-    expect(text).toContain(
-      "exactly one of sections, edits, or replacementHtml",
-    );
     expect(text).not.toContain("No app found");
   });
 

@@ -204,12 +204,21 @@ describe("applySectionMutations", () => {
     ).toThrow(ApiError);
   });
 
-  it("rejects a body that injects a reserved owned attribute", () => {
+  it("rejects a body that injects a duplicate owned node (via the round-trip backstop)", () => {
     expect(() =>
       applySectionMutations(base(), {
         body: { replace: "<main data-archestra-app-body>x</main>" },
       }),
     ).toThrow(ApiError);
+  });
+
+  it("rejects content that only breaks topology at the round-trip backstop", () => {
+    // An unclosed comment passes every up-front delimiter check, but swallows
+    // the owned close tags when parsed, so the re-parse fails and nothing saves.
+    const err = expectApiError(() =>
+      applySectionMutations(base(), { body: { replace: "<!--" } }),
+    );
+    expect(err.statusCode).toBe(400);
   });
 
   it("changes the title via replacement", () => {

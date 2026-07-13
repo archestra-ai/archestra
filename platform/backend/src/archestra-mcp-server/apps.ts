@@ -313,17 +313,21 @@ const AppSummaryOutputSchema = z.object({
   description: z.string().nullable(),
   scope: AppScopeSchema,
   latestVersion: z.number(),
-  changedSections: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Which managed sections a sections-mode edit_app actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements.",
-    ),
   warnings: z
     .array(z.string())
     .optional()
     .describe(
       "Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app.",
+    ),
+});
+
+// edit_app's summary plus, for a sections-mode edit, which sections changed.
+const EditAppOutputSchema = AppSummaryOutputSchema.extend({
+  changedSections: z
+    .array(z.enum(MANAGED_SECTION_KEYS))
+    .optional()
+    .describe(
+      "Which managed sections a sections-mode edit actually changed (empty when the edit was a net no-op). Absent for raw edits and replacements.",
     ),
 });
 
@@ -392,7 +396,7 @@ const ReadAppSectionsOutputSchema = z.object({
     .describe("Window metadata, present only when a single section was read."),
 });
 
-const ReadAppOutputSchema = z.union([
+const ReadAppOutputSchema = z.discriminatedUnion("format", [
   ReadAppHtmlOutputSchema,
   ReadAppSectionsOutputSchema,
 ]);
@@ -963,7 +967,7 @@ const registry = defineArchestraTools([
     title: "Edit App",
     description: `Change an app's HTML. Pass exactly one of: sections (the default for a scaffolded app — edit its title/css/body/javascript by value, no HTML boilerplate to send or match), edits (raw str_replace over the whole document, for a custom app or a surgical raw change), or replacementHtml (a complete new document). Pass baseVersion from your last read_app/scaffold_app (see the schema for section, str_replace, and atomicity rules). A successful change forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
-    outputSchema: AppSummaryOutputSchema,
+    outputSchema: EditAppOutputSchema,
     async handler({ args, context }) {
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;

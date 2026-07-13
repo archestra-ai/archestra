@@ -884,6 +884,27 @@ export function reportKbLlmCall(params: {
   }
 }
 
+// Lazily registered instead of inside initializeMetrics(): it has no dynamic
+// agent labels, must never be reset when label keys change, and load failures
+// can occur before metrics initialization (the startup probe).
+let llmToonAddonLoadFailures: client.Counter<string> | undefined;
+
+/**
+ * Reports a failure to load or call the native proxy-transform addon.
+ * TOON tool-result compression fails open (skipped) when this fires, with the
+ * `addon_unavailable` skip reason persisted on the interaction.
+ */
+export function reportToonAddonUnavailable(
+  context: "startup" | "request",
+): void {
+  llmToonAddonLoadFailures ??= new client.Counter({
+    name: "llm_toon_addon_load_failures_total",
+    help: "Failures to load or call the native proxy-transform addon (TOON compression fails open and is skipped)",
+    labelNames: ["context"],
+  });
+  llmToonAddonLoadFailures.inc({ context });
+}
+
 function extractHeaderNames(
   headers: HeadersInit | undefined,
 ): Record<string, string> {

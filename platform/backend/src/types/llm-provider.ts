@@ -317,7 +317,23 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    */
   formatTextDeltaSSE(text: string): string | Uint8Array;
 
-  /** Get raw tool call events as SSE strings (for replay after policy approval) */
+  /**
+   * Get raw tool call events as SSE-encoded payloads, for replay after tool
+   * invocation policy evaluation.
+   *
+   * Contract (the streaming proxy handler depends on every point — it calls
+   * this after every tool-call chunk and again at final flush, deduplicating
+   * replayed events by ARRAY INDEX):
+   * - Returns the FULL event history accumulated so far, in arrival order.
+   * - Append-only: an event's index never changes across calls, and events
+   *   are never dropped or re-based.
+   * - Non-destructive: calling this any number of times must not change what
+   *   subsequent calls return.
+   *
+   * Because the getter runs once per tool-call chunk, implementations should
+   * serialize each event once at accumulation time and return the cached
+   * encodings; re-serializing the whole history per call is O(k^2) per stream.
+   */
   getRawToolCallEvents(): (string | Uint8Array)[];
 
   /**

@@ -1,0 +1,18 @@
+[package]
+name = "proxy_transform_rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = "3"
+napi-derive = "3"
+proxy_transform_core = { path = "../proxy-transform-core", features = ["napi"] }
+serde_json = "1"
+
+[build-dependencies]
+napi-build = "2"

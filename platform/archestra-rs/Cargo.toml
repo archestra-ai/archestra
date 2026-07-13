@@ -1,5 +1,14 @@
 [workspace]
-members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs"]
+members = [
+    "app-runtime-core",
+    "app-runtime-rs",
+    "image-core",
+    "image-rs",
+    "proxy-transform-core",
+    "proxy-transform-rs",
+    "sandbox-core",
+    "sandbox-rs",
+]
 resolver = "2"
 
 # No LTO: for these NAPI shims it measured slower to build AND a larger binary

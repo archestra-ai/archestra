@@ -129,6 +129,16 @@ importers:
 
   archestra-rs/napi-loader: {}
 
+  archestra-rs/proxy-transform-rs:
+    dependencies:
+      '@archestra/napi-loader':
+        specifier: workspace:*
+        version: link:../napi-loader
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.9.1)
+
   archestra-rs/sandbox-rs:
     dependencies:
       '@archestra/napi-loader':
@@ -183,6 +193,9 @@ importers:
       '@archestra/image-rs':
         specifier: workspace:*
         version: link:../archestra-rs/image-rs
+      '@archestra/proxy-transform-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/proxy-transform-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs
@@ -348,9 +361,6 @@ importers:
       '@smithy/util-utf8':
         specifier: ^4.2.2
         version: 4.2.2
-      '@toon-format/toon':
-        specifier: ^2.1.0
-        version: 2.1.0
       '@types/pdf-parse':
         specifier: ^1.1.5
         version: 1.1.5
@@ -5854,9 +5864,6 @@ packages:
 
   '@tokenizer/token@0.3.0':
     resolution: {integrity: sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==}
-
-  '@toon-format/toon@2.1.0':
-    resolution: {integrity: sha512-JwWptdF5eOA0HaQxbKAzkpQtR4wSWTEfDlEy/y3/4okmOAX1qwnpLZMmtEWr+ncAhTTY1raCKH0kteHhSXnQqg==}
 
   '@turbo/darwin-64@2.9.14':
     resolution: {integrity: sha512-t7QiPflaEyBE4oayeZtSmu4mEfjgIrcNlNNl1z1dmIVPqEdtA7+CfTf8d7KXsOGPh6aNgWjKxyvQg9uGfDQF+A==}
@@ -16555,8 +16562,6 @@ snapshots:
       - supports-color
 
   '@tokenizer/token@0.3.0': {}
-
-  '@toon-format/toon@2.1.0': {}
 
   '@turbo/darwin-64@2.9.14':
     optional: true

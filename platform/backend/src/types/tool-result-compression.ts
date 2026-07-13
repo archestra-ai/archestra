@@ -4,6 +4,7 @@ export const ToonSkipReasonSchema = z.enum([
   "not_enabled",
   "not_effective",
   "no_tool_results",
+  "addon_unavailable",
 ]);
 export type ToonSkipReason = z.infer<typeof ToonSkipReasonSchema>;
 
@@ -21,6 +22,13 @@ export interface ToolCompressionStats {
   wasEffective: boolean;
   /** Whether there were any tool results to compress */
   hadToolResults: boolean;
+  /**
+   * Set when compression could not run at all (native addon unavailable —
+   * an infrastructure failure, not an outcome of trying). Takes precedence
+   * over the reasons the handler derives from the count fields, so the
+   * interaction is never misreported as not_effective/no_tool_results.
+   */
+  skipReason?: Extract<ToonSkipReason, "addon_unavailable">;
 }
 
 /**

@@ -60,6 +60,21 @@ describe("Tokenizers", () => {
       // Should at least count the role
       expect(tokenCount).toBeGreaterThanOrEqual(0);
     });
+
+    test("counts reserved-marker literals as text instead of throwing", () => {
+      // A tool result can contain `<|endoftext|>` verbatim; the default
+      // `encode()` raises on reserved markers, which would crash counting.
+      // Ordinary encoding counts them as plain text.
+      const tokenizer = new TiktokenTokenizer();
+      const message: ProviderMessage = {
+        role: "user",
+        content: "row 1 <|endoftext|> row 2 <|fim_prefix|>",
+      };
+
+      const tokenCount = tokenizer.countTokens(message);
+
+      expect(tokenCount).toBeGreaterThan(0);
+    });
   });
 
   describe("AnthropicTokenizer", () => {

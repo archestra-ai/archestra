@@ -20,6 +20,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "@archestra/proxy-transform-rs#build": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "dev": {
       "persistent": true,
       "cache": false,
@@ -42,7 +46,7 @@
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]
     },
     "@backend#check:ci": {
-      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build"]
+      "dependsOn": ["@archestra/app-runtime-rs#build", "@archestra/sandbox-rs#build", "@archestra/proxy-transform-rs#build"]
     },
     "check:commit": {
       "inputs": ["$TURBO_DEFAULT$", "**/*.tsx", "**/*.ts", "./biome.json", "**/knip.config.ts", "**/package.json", "src/database/migrations/**"]

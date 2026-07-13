@@ -159,7 +159,12 @@ class AnthropicOpenaiStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.pendingToolCallEvents.splice(0);
+    // Full append-only history, per the LLMStreamAdapter contract: the handler
+    // dedups replayed events by array index, so draining the buffer here
+    // (as an earlier splice(0) implementation did) re-based indices at 0 and
+    // made the handler drop every tool-call argument delta after the first
+    // event — and flush nothing at all for buffered-then-approved tool calls.
+    return this.pendingToolCallEvents;
   }
 
   formatCompleteTextSSE(text: string): string[] {

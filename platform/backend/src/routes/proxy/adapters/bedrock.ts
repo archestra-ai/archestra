@@ -6,7 +6,6 @@ import {
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
-import { encode as toonEncode } from "@toon-format/toon";
 import { BedrockClient } from "@/clients/bedrock-client";
 import {
   decodeBedrockSigV4Marker,
@@ -35,6 +34,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { toonEncodeToolResults } from "../utils/toon-native";
 
 // ToolCompressionStats imported from @/types
 
@@ -972,6 +972,12 @@ class BedrockStreamAdapter
 {
   readonly provider = "bedrock" as const;
   readonly state: StreamAccumulatorState;
+  // Event-stream encoding of each accumulated tool-call event (tool names
+  // already decoded) and of the buffered final events, cached at accumulation
+  // time. getRawToolCallEvents runs once per tool-call chunk, so encoding
+  // there would re-encode the whole history per chunk (O(k^2) per stream).
+  private encodedToolCallEvents: Uint8Array[] = [];
+  private encodedPendingFinalEvents: Uint8Array[] = [];
   private currentToolCallIndex = -1;
   private toolNameMapping: ToolNameMapping = createEmptyToolNameMapping();
   // Set to the refusal text when the streamed response was replaced by a policy
@@ -985,9 +991,6 @@ class BedrockStreamAdapter
   private bedrockState: {
     latencyMs: number | null;
     trace: unknown | null;
-    // Buffer for messageStop and metadata events when tool calls are pending
-    // These must be sent AFTER tool call events in the correct stream order
-    pendingFinalEvents: BedrockStreamEventWithRaw[];
   };
 
   constructor() {
@@ -1007,7 +1010,6 @@ class BedrockStreamAdapter
     this.bedrockState = {
       latencyMs: null,
       trace: null,
-      pendingFinalEvents: [],
     };
   }
 
@@ -1045,13 +1047,28 @@ class BedrockStreamAdapter
       ) {
         // Tool use block - buffer for policy evaluation
         const toolUse = blockStart.start.toolUse;
+        const decodedName = decodeToolName(
+          toolUse.name ?? "",
+          this.toolNameMapping,
+        );
         this.currentToolCallIndex = this.state.toolCalls.length;
         this.state.toolCalls.push({
           id: toolUse.toolUseId ?? "",
-          name: decodeToolName(toolUse.name ?? "", this.toolNameMapping),
+          name: decodedName,
           arguments: "",
         });
+        // Re-encode with the decoded tool name for replay; the raw bytes
+        // contain the encoded name (hyphens replaced with underscores).
+        // Encode before pushing so a throwing encoder can't desync the arrays.
+        const encodedBlockStart = encodeEventStreamMessage(
+          "contentBlockStart",
+          {
+            ...blockStart,
+            start: { toolUse: { ...toolUse, name: decodedName } },
+          },
+        );
         this.state.rawToolCallEvents.push(chunk);
+        this.encodedToolCallEvents.push(encodedBlockStart);
         isToolCallChunk = true;
       } else {
         sseData =
@@ -1086,7 +1103,12 @@ class BedrockStreamAdapter
           this.state.toolCalls[this.currentToolCallIndex].arguments +=
             toolUseDelta.input;
         }
+        const encodedBlockDelta = encodeEventStreamMessage(
+          "contentBlockDelta",
+          chunk.contentBlockDelta,
+        );
         this.state.rawToolCallEvents.push(chunk);
+        this.encodedToolCallEvents.push(encodedBlockDelta);
         isToolCallChunk = true;
       }
     } else if ("contentBlockStop" in chunk && chunk.contentBlockStop) {
@@ -1095,7 +1117,12 @@ class BedrockStreamAdapter
         this.currentToolCallIndex === this.state.toolCalls.length - 1;
 
       if (isToolBlock) {
+        const encodedBlockStop = encodeEventStreamMessage(
+          "contentBlockStop",
+          chunk.contentBlockStop,
+        );
         this.state.rawToolCallEvents.push(chunk);
+        this.encodedToolCallEvents.push(encodedBlockStop);
         isToolCallChunk = true;
       } else {
         sseData =
@@ -1107,7 +1134,12 @@ class BedrockStreamAdapter
       // If we have pending tool calls, buffer this event to send after tool blocks
       // The stream order must be: text blocks → tool blocks → messageStop → metadata
       if (this.state.toolCalls.length > 0) {
-        this.bedrockState.pendingFinalEvents.push(chunk);
+        // Buffer for replay after the tool events; raw bytes are safe here
+        // because final events carry no tool names.
+        this.encodedPendingFinalEvents.push(
+          rawBytes ??
+            encodeEventStreamMessage("messageStop", chunk.messageStop),
+        );
         isToolCallChunk = true; // Mark as tool-related so it's not streamed yet
       } else {
         sseData =
@@ -1144,7 +1176,10 @@ class BedrockStreamAdapter
       }
       // If we have pending tool calls, buffer this event to send after tool blocks
       if (this.state.toolCalls.length > 0) {
-        this.bedrockState.pendingFinalEvents.push(chunk);
+        // Raw bytes are safe here: final events carry no tool names.
+        this.encodedPendingFinalEvents.push(
+          rawBytes ?? encodeEventStreamMessage("metadata", chunk.metadata),
+        );
         isToolCallChunk = true; // Mark as tool-related so it's not streamed yet
       } else {
         // Pass through metadata chunk as-is - this is the final event
@@ -1237,80 +1272,11 @@ class BedrockStreamAdapter
   }
 
   getRawToolCallEvents(): Uint8Array[] {
-    const result: Uint8Array[] = [];
-
-    // Re-encode all tool call content blocks with decoded tool names
-    // We cannot use raw bytes because they contain encoded names (hyphens replaced with underscores)
-    for (const rawEvent of this.state.rawToolCallEvents) {
-      const event = rawEvent as BedrockStreamEventWithRaw;
-
-      if ("contentBlockStart" in event && event.contentBlockStart) {
-        const blockStart = event.contentBlockStart;
-        // Decode tool name if this is a tool use block
-        if (
-          blockStart.start &&
-          "toolUse" in blockStart.start &&
-          blockStart.start.toolUse
-        ) {
-          const originalName = blockStart.start.toolUse.name ?? "";
-          const decodedName = decodeToolName(
-            originalName,
-            this.toolNameMapping,
-          );
-          const decodedEvent = {
-            ...blockStart,
-            start: {
-              toolUse: {
-                ...blockStart.start.toolUse,
-                name: decodedName,
-              },
-            },
-          };
-          result.push(
-            encodeEventStreamMessage("contentBlockStart", decodedEvent),
-          );
-        } else {
-          result.push(
-            encodeEventStreamMessage(
-              "contentBlockStart",
-              event.contentBlockStart,
-            ),
-          );
-        }
-      } else if ("contentBlockDelta" in event && event.contentBlockDelta) {
-        result.push(
-          encodeEventStreamMessage(
-            "contentBlockDelta",
-            event.contentBlockDelta,
-          ),
-        );
-      } else if ("contentBlockStop" in event && event.contentBlockStop) {
-        result.push(
-          encodeEventStreamMessage("contentBlockStop", event.contentBlockStop),
-        );
-      }
-    }
-
-    // Then, add the buffered final events (messageStop and metadata) in order
-    // These must come AFTER all content blocks for correct stream order
-    for (const finalEvent of this.bedrockState.pendingFinalEvents) {
-      const event = finalEvent as BedrockStreamEventWithRaw;
-
-      // Use original raw bytes if available (these don't contain tool names)
-      if (event.__rawBytes) {
-        result.push(event.__rawBytes);
-        continue;
-      }
-
-      // Fallback to re-encoding
-      if ("messageStop" in event && event.messageStop) {
-        result.push(encodeEventStreamMessage("messageStop", event.messageStop));
-      } else if ("metadata" in event && event.metadata) {
-        result.push(encodeEventStreamMessage("metadata", event.metadata));
-      }
-    }
-
-    return result;
+    // Both caches are encoded at accumulation time. The buffered final events
+    // (messageStop and metadata) must come AFTER all content blocks for
+    // correct stream order; Bedrock emits them last, so appending the second
+    // cache preserves arrival order and keeps indices stable across calls.
+    return [...this.encodedToolCallEvents, ...this.encodedPendingFinalEvents];
   }
 
   formatCompleteTextSSE(text: string): Uint8Array[] {
@@ -1460,10 +1426,27 @@ export async function convertToolResultsToToon(
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
-  const result = messages.map((message) => {
+  // Collect candidate tool results first so the native parse→encode transform
+  // runs once per request (batched, off the JS thread); results are positional
+  // and reapplied via message/content-block locators. Preserved semantics:
+  // only content[0] is read, a compressed result replaces the WHOLE content
+  // array, neither branch unwraps client wrappers (unwrap: false), and
+  // compression is applied unconditionally (no keep/reject rule).
+  type BedrockToolResult = Extract<
+    Bedrock.Types.Message["content"][number],
+    { toolResult: unknown }
+  >["toolResult"];
+  const candidates: {
+    messageIndex: number;
+    blockIndex: number;
+    branch: "text" | "json";
+    toolResult: BedrockToolResult;
+    rawContent: string;
+  }[] = [];
+  messages.forEach((message, messageIndex) => {
     // Only process user messages with content arrays that contain tool_result blocks
     if (message.role === "user" && Array.isArray(message.content)) {
-      const updatedContent = message.content.map((contentBlock) => {
+      message.content.forEach((contentBlock, blockIndex) => {
         if (
           isToolResultBlock(contentBlock) &&
           contentBlock.toolResult.status !== "error"
@@ -1479,85 +1462,131 @@ export async function convertToolResultsToToon(
               "text" in firstContent &&
               typeof firstContent.text === "string"
             ) {
-              try {
-                const parsed = JSON.parse(firstContent.text);
-                const noncompressed = firstContent.text;
-                const compressed = toonEncode(parsed);
-
-                // Count tokens for before and after
-                const tokensBefore = tokenizer.countTokens([
-                  { role: "user", content: noncompressed },
-                ]);
-                const tokensAfter = tokenizer.countTokens([
-                  { role: "user", content: compressed },
-                ]);
-                totalTokensBefore += tokensBefore;
-                totalTokensAfter += tokensAfter;
-
-                logger.info(
-                  {
-                    toolUseId: toolResult.toolUseId,
-                    beforeLength: noncompressed.length,
-                    afterLength: compressed.length,
-                    tokensBefore,
-                    tokensAfter,
-                    provider: "bedrock",
-                  },
-                  "convertToolResultsToToon: compressed",
-                );
-
-                return {
-                  toolResult: {
-                    ...toolResult,
-                    content: [{ text: compressed }],
-                  },
-                };
-              } catch {
-                logger.info(
-                  {
-                    toolUseId: toolResult.toolUseId,
-                  },
-                  "convertToolResultsToToon: skipping - content is not JSON",
-                );
-                return contentBlock;
-              }
+              candidates.push({
+                messageIndex,
+                blockIndex,
+                branch: "text",
+                toolResult,
+                rawContent: firstContent.text,
+              });
             } else if ("json" in firstContent && firstContent.json) {
               try {
-                const noncompressed = JSON.stringify(firstContent.json);
-                const compressed = toonEncode(firstContent.json);
-
-                const tokensBefore = tokenizer.countTokens([
-                  { role: "user", content: noncompressed },
-                ]);
-                const tokensAfter = tokenizer.countTokens([
-                  { role: "user", content: compressed },
-                ]);
-                totalTokensBefore += tokensBefore;
-                totalTokensAfter += tokensAfter;
-
-                return {
-                  toolResult: {
-                    ...toolResult,
-                    content: [{ text: compressed }],
-                  },
-                };
+                // JSON.stringify is typed as returning string but can yield
+                // undefined at runtime (e.g. a toJSON returning undefined);
+                // the old TS path then TOON-encoded the value as "null" and
+                // continued. Keep that, and never let a non-string poison the
+                // whole native batch.
+                const serialized: string | undefined = JSON.stringify(
+                  firstContent.json,
+                );
+                candidates.push({
+                  messageIndex,
+                  blockIndex,
+                  branch: "json",
+                  toolResult,
+                  rawContent:
+                    typeof serialized === "string" ? serialized : "null",
+                });
               } catch {
-                return contentBlock;
+                // Unstringifiable json content is kept as-is (silently, as before).
               }
             }
           }
         }
-        return contentBlock;
       });
+    }
+  });
 
-      return {
-        ...message,
-        content: updatedContent,
-      };
+  const encodedResults =
+    candidates.length > 0
+      ? await toonEncodeToolResults(
+          candidates.map((candidate) => ({
+            id: candidate.toolResult.toolUseId,
+            rawContent: candidate.rawContent,
+            unwrap: false,
+          })),
+        )
+      : [];
+
+  if (encodedResults === null) {
+    // Native addon unavailable: fail open — keep every message uncompressed
+    // and surface the explicit skip reason instead of fabricating stats.
+    return {
+      messages,
+      stats: {
+        tokensBefore: 0,
+        tokensAfter: 0,
+        costSavings: 0,
+        wasEffective: false,
+        hadToolResults: toolResultCount > 0,
+        skipReason: "addon_unavailable",
+      },
+    };
+  }
+
+  const result = [...messages];
+  // Clone a message's content array on first write so untouched messages keep
+  // their original objects.
+  const clonedContent = new Map<number, Bedrock.Types.Message["content"]>();
+  const contentFor = (messageIndex: number) => {
+    let cloned = clonedContent.get(messageIndex);
+    if (!cloned) {
+      const message = messages[messageIndex];
+      cloned = [...message.content];
+      clonedContent.set(messageIndex, cloned);
+      result[messageIndex] = { ...message, content: cloned };
+    }
+    return cloned;
+  };
+
+  candidates.forEach((candidate, candidateIndex) => {
+    const { encoded: compressed } = encodedResults[candidateIndex];
+    const { toolResult, rawContent } = candidate;
+
+    if (compressed === null) {
+      if (candidate.branch === "text") {
+        logger.info(
+          {
+            toolUseId: toolResult.toolUseId,
+          },
+          "convertToolResultsToToon: skipping - content is not JSON",
+        );
+      }
+      // json branch: kept as-is silently, as before.
+      return;
     }
 
-    return message;
-  }) as BedrockMessages;
+    // Token accounting on the original serialization (no unwrap on either branch).
+    const tokensBefore = tokenizer.countTokens([
+      { role: "user", content: rawContent },
+    ]);
+    const tokensAfter = tokenizer.countTokens([
+      { role: "user", content: compressed },
+    ]);
+    totalTokensBefore += tokensBefore;
+    totalTokensAfter += tokensAfter;
+
+    if (candidate.branch === "text") {
+      logger.info(
+        {
+          toolUseId: toolResult.toolUseId,
+          beforeLength: rawContent.length,
+          afterLength: compressed.length,
+          tokensBefore,
+          tokensAfter,
+          provider: "bedrock",
+        },
+        "convertToolResultsToToon: compressed",
+      );
+    }
+
+    contentFor(candidate.messageIndex)[candidate.blockIndex] = {
+      toolResult: {
+        ...toolResult,
+        content: [{ text: compressed }],
+      },
+    };
+  });
 
   logger.info(
     { messageCount: messages.length, toolResultCount },

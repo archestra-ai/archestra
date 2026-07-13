@@ -51,6 +51,7 @@ export function makeSessionSummary(
       notEnabled: 0,
       notEffective: 0,
       noToolResults: 0,
+      addonUnavailable: 0,
     },
     firstRequestTime: "2026-01-01T00:00:00.000Z",
     lastRequestTime: "2026-01-01T00:00:00.000Z",

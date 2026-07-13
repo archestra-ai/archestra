@@ -140,6 +140,11 @@ export function Savings({
                   <div>Tool result compression: Skipped (no token savings)</div>
                 ) : toonSkipReason === "no_tool_results" ? (
                   <div>Tool result compression: No tool results</div>
+                ) : toonSkipReason === "addon_unavailable" ? (
+                  <div>
+                    Tool result compression: Not applied (compression engine
+                    unavailable)
+                  </div>
                 ) : (
                   <div>Tool result compression: Not applied</div>
                 )}

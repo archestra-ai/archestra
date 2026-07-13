@@ -10,14 +10,12 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
-import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { metrics } from "@/observability";
-import { getTokenizer } from "@/tokenizers";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -40,7 +38,7 @@ import {
   isImageTooLarge,
   isMcpImageBlock,
 } from "../utils/mcp-image";
-import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { toonEncodeToolResults } from "../utils/toon-native";
 import { sanitizeGeminiToolSchema } from "./gemini-schema";
 
 // =============================================================================
@@ -867,15 +865,29 @@ async function convertToolResultsToToon(
   contents: GeminiContents;
   stats: ToolCompressionStats;
 }> {
-  const tokenizer = getTokenizer("gemini");
   let toolResultCount = 0;
   let totalTokensBefore = 0;
   let totalTokensAfter = 0;
 
-  const result = contents.map((content) => {
+  // Collect candidate functionResponse parts first so the native
+  // unwrap→parse→encode transform runs once per request (batched, off the JS
+  // thread); results are positional and reapplied via content/part locators.
+  // Gemini serializes the response object itself and tokenizes THAT original
+  // serialization (rawContent), while parsing goes through the unwrap path.
+  type GeminiFunctionResponsePart = Extract<
+    GeminiContents[number]["parts"][number],
+    { functionResponse: unknown }
+  >;
+  const candidates: {
+    contentIndex: number;
+    partIndex: number;
+    functionResponse: GeminiFunctionResponsePart["functionResponse"];
+    rawContent: string;
+  }[] = [];
+  contents.forEach((content, contentIndex) => {
     // Only process user messages with parts containing functionResponse
     if (content.role === "user" && content.parts) {
-      const updatedParts = content.parts.map((part) => {
+      content.parts.forEach((part, partIndex) => {
         // Check if this part has a functionResponse
         if (
           "functionResponse" in part &&
@@ -898,85 +910,24 @@ async function convertToolResultsToToon(
           // Handle response object - try to compress it
           const response = functionResponse.response;
           if (response && typeof response === "object") {
+            // JSON.stringify is typed as returning string but can throw or
+            // yield undefined at runtime (e.g. a toJSON returning undefined);
+            // a non-string must never reach the native binding — it would
+            // reject the WHOLE batch. Skip just this part, as before.
+            let rawContent: string | undefined;
             try {
-              const noncompressed = JSON.stringify(response);
-              const unwrapped = unwrapToolContent(noncompressed);
-              const parsed = JSON.parse(unwrapped);
-              const compressed = toonEncode(parsed);
-
-              // Count tokens for before and after
-              const tokensBefore = tokenizer.countTokens([
-                { role: "user", content: noncompressed },
-              ]);
-              const tokensAfter = tokenizer.countTokens([
-                { role: "user", content: compressed },
-              ]);
-
-              // Always count tokens
-              totalTokensBefore += tokensBefore;
-
-              // Only apply compression if it actually saves tokens
-              if (tokensAfter < tokensBefore) {
-                totalTokensAfter += tokensAfter;
-
-                logger.info(
-                  {
-                    functionName:
-                      "name" in functionResponse
-                        ? functionResponse.name
-                        : "unknown",
-                    beforeLength: noncompressed.length,
-                    afterLength: compressed.length,
-                    tokensBefore,
-                    tokensAfter,
-                    toonPreview: compressed.substring(0, 150),
-                    provider: "gemini",
-                  },
-                  "convertToolResultsToToon: compressed",
-                );
-                logger.trace(
-                  {
-                    functionName:
-                      "name" in functionResponse
-                        ? functionResponse.name
-                        : "unknown",
-                    before: noncompressed,
-                    after: compressed,
-                    provider: "gemini",
-                  },
-                  "convertToolResultsToToon: before/after",
-                );
-
-                // Return updated part with compressed response
-                return {
-                  functionResponse: {
-                    ...functionResponse,
-                    // Gemini expects response as Record<string, unknown>, but we now have a TOON string
-                    // We wrap it in a {"tool_result": "<TOON string>"} object to match the expected format
-                    response: { tool_result: compressed } as Record<
-                      string,
-                      unknown
-                    >,
-                  },
-                };
-              }
-
-              // Compression not applied - count non-compressed tokens to track total tokens anyway
-              totalTokensAfter += tokensBefore;
-              logger.info(
-                {
-                  functionName:
-                    "name" in functionResponse
-                      ? functionResponse.name
-                      : "unknown",
-                  tokensBefore,
-                  tokensAfter,
-                  provider: "gemini",
-                },
-                "Skipping TOON compression - compressed output has more tokens",
-              );
-              return part;
+              rawContent = JSON.stringify(response);
             } catch {
+              rawContent = undefined;
+            }
+            if (typeof rawContent === "string") {
+              candidates.push({
+                contentIndex,
+                partIndex,
+                functionResponse,
+                rawContent,
+              });
+            } else {
               logger.info(
                 {
                   functionName:
@@ -986,20 +937,141 @@ async function convertToolResultsToToon(
                 },
                 "convertToolResultsToToon: skipping - response cannot be compressed",
               );
-              return part;
             }
           }
         }
-        return part;
       });
+    }
+  });
 
-      return {
-        ...content,
-        parts: updatedParts,
-      };
+  const encodedResults =
+    candidates.length > 0
+      ? await toonEncodeToolResults(
+          candidates.map((candidate) => ({
+            id:
+              "name" in candidate.functionResponse &&
+              typeof candidate.functionResponse.name === "string"
+                ? candidate.functionResponse.name
+                : "unknown",
+            rawContent: candidate.rawContent,
+            unwrap: true,
+          })),
+          "raw",
+        )
+      : [];
+
+  if (encodedResults === null) {
+    // Native addon unavailable: fail open — keep every content entry
+    // uncompressed and surface the explicit skip reason instead of
+    // fabricating stats.
+    return {
+      contents,
+      stats: {
+        tokensBefore: 0,
+        tokensAfter: 0,
+        costSavings: 0,
+        wasEffective: false,
+        hadToolResults: toolResultCount > 0,
+        skipReason: "addon_unavailable",
+      },
+    };
+  }
+
+  const result = [...contents];
+  // Clone a content entry's parts array on first write so untouched entries
+  // keep their original objects.
+  const clonedParts = new Map<number, GeminiContents[number]["parts"]>();
+  const partsFor = (contentIndex: number) => {
+    let cloned = clonedParts.get(contentIndex);
+    if (!cloned) {
+      const content = contents[contentIndex];
+      cloned = [...content.parts];
+      clonedParts.set(contentIndex, cloned);
+      result[contentIndex] = { ...content, parts: cloned };
+    }
+    return cloned;
+  };
+
+  candidates.forEach((candidate, candidateIndex) => {
+    const {
+      encoded: compressed,
+      beforeTokens,
+      encodedTokens,
+    } = encodedResults[candidateIndex];
+    const { functionResponse, rawContent: noncompressed } = candidate;
+    const functionName =
+      "name" in functionResponse ? functionResponse.name : "unknown";
+
+    // Counts come from the native pass on the "raw" baseline — the original
+    // serialization, matching Gemini's accounting. Present iff the item was
+    // encoded; a null compressed output means it could not be compressed.
+    if (
+      compressed === null ||
+      beforeTokens === null ||
+      encodedTokens === null
+    ) {
+      logger.info(
+        { functionName },
+        "convertToolResultsToToon: skipping - response cannot be compressed",
+      );
+      return;
     }
 
-    return content;
+    const tokensBefore = beforeTokens;
+    const tokensAfter = encodedTokens;
+
+    // Always count tokens
+    totalTokensBefore += tokensBefore;
+
+    // Only apply compression if it actually saves tokens
+    if (tokensAfter < tokensBefore) {
+      totalTokensAfter += tokensAfter;
+
+      logger.info(
+        {
+          functionName,
+          beforeLength: noncompressed.length,
+          afterLength: compressed.length,
+          tokensBefore,
+          tokensAfter,
+          toonPreview: compressed.substring(0, 150),
+          provider: "gemini",
+        },
+        "convertToolResultsToToon: compressed",
+      );
+      logger.trace(
+        {
+          functionName,
+          before: noncompressed,
+          after: compressed,
+          provider: "gemini",
+        },
+        "convertToolResultsToToon: before/after",
+      );
+
+      // Replace the part with the compressed response
+      partsFor(candidate.contentIndex)[candidate.partIndex] = {
+        functionResponse: {
+          ...functionResponse,
+          // Gemini expects response as Record<string, unknown>, but we now have a TOON string
+          // We wrap it in a {"tool_result": "<TOON string>"} object to match the expected format
+          response: { tool_result: compressed } as Record<string, unknown>,
+        },
+      };
+      return;
+    }
+
+    // Compression not applied - count non-compressed tokens to track total tokens anyway
+    totalTokensAfter += tokensBefore;
+    logger.info(
+      {
+        functionName,
+        tokensBefore,
+        tokensAfter,
+        provider: "gemini",
+      },
+      "Skipping TOON compression - compressed output has more tokens",
+    );
   });
 
   logger.info(

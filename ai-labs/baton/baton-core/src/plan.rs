@@ -15,7 +15,7 @@ use crate::audit::AdjudicatorName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
-use crate::transition::WaiverDelta;
+use crate::transition::TransientWaiver;
 use crate::value::TransformerRef;
 
 /// A vector that provably holds at least one element. "Remediable with zero
@@ -100,7 +100,7 @@ pub enum TransitionKind {
         transition: TransformerRef,
     },
     ApplyWaiver {
-        delta: WaiverDelta,
+        delta: TransientWaiver,
         authority: WaiverAuthority,
     },
 }

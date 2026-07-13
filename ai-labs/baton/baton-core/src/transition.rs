@@ -20,6 +20,7 @@ use serde::Serialize;
 
 use crate::ToolName;
 use crate::audit::{AdjudicatorName, TransitionFailure, WaiverKind};
+use crate::contract::Unprovable;
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 use crate::request::PendingAction;
 use crate::value::{OpaqueValue, StoredValue, TransformerRef, ValueLabel};
@@ -139,18 +140,82 @@ fn effects_narrow(old: &Effects, new: &Effects) -> bool {
     }
 }
 
-/// An adjudicator-granted loosening of one flow's checks. Typed per
-/// dimension; each populated dimension is one [`WaiverKind`] in the audit
-/// record. Proposal data, not a capability — authority comes from the
-/// engine's competence routing plus the fail-closed recheck.
+/// A registered authority's competence: the largest elevation it may grant,
+/// trajectory-independent. Endorse dimensions are *bounded* (a [`KnownTrust`]
+/// ceiling, an audience it may vouch); every other elevation is a boolean
+/// capability. A mandate never names trajectory-local ids — an engine-global
+/// registration cannot speak of one conversation's values or effects.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
-pub struct WaiverDelta {
+pub struct AuthorityMandate {
+    /// Endorse flow trust up to (at most) this level.
+    pub trust: Option<KnownTrust>,
+    /// Vouch (at most) these readers into a flow audience.
+    pub audience: Option<BTreeSet<UserId>>,
+    /// Competent to authorize acquiring a new effect (Accept).
+    pub acquire_effects: bool,
+    /// Competent to waive an already-committed prior effect for one check —
+    /// distinct from acquiring a new one.
+    pub waive_prior_effects: bool,
+    /// Competent to stand in for a user confirmation.
+    pub confirms: bool,
+    /// Competent to acknowledge unprovable facts.
+    pub acknowledge_unknown: bool,
+    /// Competent to release a control dependency for one flow.
+    pub may_release_control: bool,
+}
+
+impl AuthorityMandate {
+    /// The identity mandate: competent for nothing but the empty ask.
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// Is this mandate competent for `grant`? Endorse dimensions compare by
+    /// their order (trust by [`KnownTrust`], audience by set inclusion); every
+    /// other elevation by boolean implication. An elevation the grant does not
+    /// ask for is not required of the mandate.
+    #[must_use]
+    pub fn covers(&self, grant: &ProposedGrant) -> bool {
+        match grant {
+            ProposedGrant::Waive(waiver) => {
+                let trust_ok = match waiver.trust {
+                    None => true,
+                    Some(need) => matches!(self.trust, Some(ceiling) if ceiling >= need),
+                };
+                let audience_ok = match &waiver.audience {
+                    None => true,
+                    Some(need) => matches!(&self.audience, Some(vouchable) if need.is_subset(vouchable)),
+                };
+                let effects_ok = match &waiver.prior_effects {
+                    None => true,
+                    Some(effects) => effects.is_empty() || self.waive_prior_effects,
+                };
+                let confirms_ok = !waiver.confirms || self.confirms;
+                let control_ok = !waiver.control_release || self.may_release_control;
+                trust_ok && audience_ok && effects_ok && confirms_ok && control_ok
+            }
+            ProposedGrant::Acknowledge { .. } => self.acknowledge_unknown,
+        }
+    }
+}
+
+/// A check-transient loosening applied to one flow: it lifts exactly its
+/// populated dimensions for a single sink check and changes no stored state.
+/// Proposal data, not a capability — authority comes from routing to a
+/// competent mandate plus the fail-closed recheck.
+///
+/// Trust and audience live here *for now*: today's endorsement is a transient
+/// whole-flow lift. A later pass relocates them to a durable relabel; the
+/// remaining dimensions (prior effects, confirmation, control release) are
+/// transient by nature.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct TransientWaiver {
     /// Attest that flow trust is at least this.
     pub trust: Option<KnownTrust>,
     /// Vouch exactly these readers into the flow audience.
     pub audience: Option<BTreeSet<UserId>>,
     /// Treat these already-present effects as waived for this check.
-    pub effects: Option<BTreeSet<Effect>>,
+    pub prior_effects: Option<BTreeSet<Effect>>,
     /// Stand in for a user confirmation.
     pub confirms: bool,
     /// Exclude the control dependencies from the flow label for this check —
@@ -158,37 +223,14 @@ pub struct WaiverDelta {
     pub control_release: bool,
 }
 
-impl WaiverDelta {
+impl TransientWaiver {
     /// The identity waiver: loosens nothing. Covered by every mandate, so an
-    /// acknowledgment-only waiver is competently handled by any adjudicator.
+    /// acknowledgment-only waiver is competently handled by any authority.
     pub fn empty() -> Self {
         Self::default()
     }
 
-    /// Does this delta, read as a *mandate*, cover `need`? A partial order:
-    /// trust by the [`KnownTrust`] order, audience/effects by set inclusion,
-    /// booleans by implication. An absent need asks nothing of that
-    /// dimension.
-    #[must_use]
-    pub fn covers(&self, need: &Self) -> bool {
-        let trust_ok = match need.trust {
-            None => true,
-            Some(n) => matches!(self.trust, Some(m) if m >= n),
-        };
-        let audience_ok = match &need.audience {
-            None => true,
-            Some(n) => matches!(&self.audience, Some(m) if n.is_subset(m)),
-        };
-        let effects_ok = match &need.effects {
-            None => true,
-            Some(n) => matches!(&self.effects, Some(m) if n.is_subset(m)),
-        };
-        let confirms_ok = !need.confirms || self.confirms;
-        let control_ok = !need.control_release || self.control_release;
-        trust_ok && audience_ok && effects_ok && confirms_ok && control_ok
-    }
-
-    /// The audit kinds of every populated dimension; empty delta →
+    /// The audit kinds of every populated dimension; empty waiver →
     /// `Acknowledgment`.
     pub fn kinds(&self) -> BTreeSet<WaiverKind> {
         let mut kinds = BTreeSet::new();
@@ -198,7 +240,7 @@ impl WaiverDelta {
         if self.audience.is_some() {
             kinds.insert(WaiverKind::Audience);
         }
-        if self.effects.is_some() {
+        if self.prior_effects.is_some() {
             kinds.insert(WaiverKind::Effects);
         }
         if self.confirms {
@@ -214,7 +256,7 @@ impl WaiverDelta {
     }
 }
 
-impl fmt::Display for WaiverDelta {
+impl fmt::Display for TransientWaiver {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, kind) in self.kinds().into_iter().enumerate() {
             if i > 0 {
@@ -224,6 +266,20 @@ impl fmt::Display for WaiverDelta {
         }
         Ok(())
     }
+}
+
+/// The typed elevation an authority rules on — it carries *what* is being
+/// asked, so a mandate can judge competence and a ruling function can inspect
+/// the operation. Endorse (durable relabel) and Accept (effect acquisition)
+/// join later passes; today an authority rules on a transient waiver or an
+/// acknowledgment of unprovable facts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub enum ProposedGrant {
+    /// Grant a check-transient loosening.
+    Waive(TransientWaiver),
+    /// Acknowledge unprovable facts. Routes on the explicit
+    /// `acknowledge_unknown` capability, not on covering an empty ask.
+    Acknowledge { facts: Vec<Unprovable> },
 }
 
 /// Registration was refused: an entry with that identity already exists.
@@ -242,8 +298,8 @@ pub struct DuplicateRegistration {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Adjudicator {
     pub name: AdjudicatorName,
-    /// The largest delta this adjudicator is competent to grant.
-    pub mandate: WaiverDelta,
+    /// The largest elevation this adjudicator is competent to grant.
+    pub mandate: AuthorityMandate,
 }
 
 #[cfg(test)]
@@ -351,37 +407,66 @@ mod tests {
     }
 
     #[test]
-    fn waiver_mandate_coverage_is_a_partial_order() {
-        let broad = WaiverDelta {
+    fn mandate_coverage_bounds_endorse_dims_and_gates_capabilities() {
+        let broad = AuthorityMandate {
             trust: Some(KnownTrust::Trusted),
             audience: Some(std::collections::BTreeSet::from([
                 UserId::new("bob"),
                 UserId::new("charlie"),
             ])),
-            effects: None,
+            confirms: true,
+            may_release_control: true,
+            ..AuthorityMandate::none()
+        };
+        let narrow = AuthorityMandate {
+            audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
+            may_release_control: true,
+            ..AuthorityMandate::none()
+        };
+        let big_ask = ProposedGrant::Waive(TransientWaiver {
+            trust: Some(KnownTrust::Trusted),
+            audience: Some(std::collections::BTreeSet::from([
+                UserId::new("bob"),
+                UserId::new("charlie"),
+            ])),
             confirms: true,
             control_release: true,
-        };
-        let narrow = WaiverDelta {
+            ..TransientWaiver::empty()
+        });
+        let small_ask = ProposedGrant::Waive(TransientWaiver {
             audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
             control_release: true,
-            ..WaiverDelta::empty()
-        };
-        assert!(broad.covers(&narrow));
-        assert!(!narrow.covers(&broad));
-        // The empty delta is covered by everything.
-        assert!(narrow.covers(&WaiverDelta::empty()));
+            ..TransientWaiver::empty()
+        });
+        assert!(broad.covers(&big_ask));
+        // The narrow mandate cannot vouch charlie, raise trust, or confirm.
+        assert!(!narrow.covers(&big_ask));
+        assert!(broad.covers(&small_ask));
+        assert!(narrow.covers(&small_ask));
+        // Every mandate covers the empty waive (acknowledgment-only).
+        assert!(narrow.covers(&ProposedGrant::Waive(TransientWaiver::empty())));
+        assert!(AuthorityMandate::none().covers(&ProposedGrant::Waive(TransientWaiver::empty())));
+        // Acknowledging unprovable facts routes on the explicit capability.
+        let ack = ProposedGrant::Acknowledge { facts: Vec::new() };
+        assert!(!broad.covers(&ack));
+        assert!(
+            AuthorityMandate {
+                acknowledge_unknown: true,
+                ..AuthorityMandate::none()
+            }
+            .covers(&ack)
+        );
     }
 
     #[test]
-    fn empty_delta_audits_as_acknowledgment() {
+    fn empty_waiver_audits_as_acknowledgment() {
         assert_eq!(
-            WaiverDelta::empty().kinds(),
+            TransientWaiver::empty().kinds(),
             std::collections::BTreeSet::from([WaiverKind::Acknowledgment])
         );
-        let control = WaiverDelta {
+        let control = TransientWaiver {
             control_release: true,
-            ..WaiverDelta::empty()
+            ..TransientWaiver::empty()
         };
         assert_eq!(
             control.kinds(),

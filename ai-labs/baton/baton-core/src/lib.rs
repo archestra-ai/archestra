@@ -109,7 +109,7 @@ pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, 
 pub use plan::{NonEmptyVec, RemedyPlan, TransitionKind};
 pub use revision::PlanId;
 pub use transition::{
-    ActionTransition, Adjudicator, DuplicateRegistration, LabelPredicate, RegisteredTransformer, TransformerDescriptor,
-    TransformerError, TransformerFn, WaiverDelta,
+    ActionTransition, Adjudicator, AuthorityMandate, DuplicateRegistration, LabelPredicate, ProposedGrant,
+    RegisteredTransformer, TransformerDescriptor, TransformerError, TransformerFn, TransientWaiver,
 };
 pub use value::TransformerRef;

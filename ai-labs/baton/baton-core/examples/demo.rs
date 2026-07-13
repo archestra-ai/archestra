@@ -242,16 +242,18 @@ fn build_engine() -> PolicyEngine {
     engine
         .register_adjudicator(Adjudicator {
             name: AdjudicatorName::new("human-in-the-loop"),
-            mandate: baton_core::WaiverDelta {
+            mandate: baton_core::AuthorityMandate {
                 trust: Some(KnownTrust::Trusted),
                 audience: Some(BTreeSet::from([
                     UserId::new("alice"),
                     UserId::new("bob"),
                     UserId::new("charlie"),
                 ])),
-                effects: None,
+                acquire_effects: false,
+                waive_prior_effects: false,
                 confirms: true,
-                control_release: true,
+                acknowledge_unknown: true,
+                may_release_control: true,
             },
         })
         .unwrap();

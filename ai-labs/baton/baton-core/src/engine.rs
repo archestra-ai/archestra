@@ -28,7 +28,9 @@ use crate::dimension::Effects;
 use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
-use crate::transition::{ActionTransition, Adjudicator, DuplicateRegistration, RegisteredTransformer, WaiverDelta};
+use crate::transition::{
+    ActionTransition, Adjudicator, DuplicateRegistration, ProposedGrant, RegisteredTransformer, TransientWaiver,
+};
 use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::{UnknownValue, ValueLabel};
 
@@ -1028,7 +1030,8 @@ impl PolicyEngine {
                         .iter()
                         .find(|r| r.name == name)
                         .expect("plans reference only registered rules");
-                    let ruling = (rule.decide)(&delta, &spec.precondition.remaining).unwrap_or(Ruling::Deny {
+                    let grant = ProposedGrant::Waive(delta.clone());
+                    let ruling = (rule.decide)(&grant, &spec.precondition.remaining).unwrap_or(Ruling::Deny {
                         reason: "rule abstained".to_owned(),
                     });
                     match ruling {
@@ -1138,7 +1141,7 @@ impl PolicyEngine {
         &self,
         trajectory: &mut Trajectory,
         action: ActionId,
-        delta: WaiverDelta,
+        delta: TransientWaiver,
         authority: AdjudicatorName,
         resolved: Vec<Violation>,
     ) -> Decision {
@@ -1318,7 +1321,8 @@ impl PolicyEngine {
                     if !sim.violations(Some(&delta)).is_empty() {
                         continue;
                     }
-                    let Some(authority) = self.route_waiver(&delta) else {
+                    let grant = ProposedGrant::Waive(delta.clone());
+                    let Some(authority) = self.route_waiver(&grant) else {
                         continue;
                     };
                     let mut waiver_steps = steps.clone();
@@ -1339,15 +1343,15 @@ impl PolicyEngine {
     /// Deterministic waiver candidates for a remaining violation set: the
     /// control-release variant first when releasing control alone shrinks
     /// the need, then the plain full-attestation delta.
-    fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<WaiverDelta> {
+    fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
         let plain = needed_delta(remaining, &sim.recipients, &sim.requires);
-        let after_control_release = sim.violations(Some(&WaiverDelta {
+        let after_control_release = sim.violations(Some(&TransientWaiver {
             control_release: true,
-            ..WaiverDelta::empty()
+            ..TransientWaiver::empty()
         }));
         let mut candidates = Vec::new();
         if after_control_release.len() < remaining.len() {
-            let with_release = WaiverDelta {
+            let with_release = TransientWaiver {
                 control_release: true,
                 ..needed_delta(&after_control_release, &sim.recipients, &sim.requires)
             };
@@ -1359,18 +1363,18 @@ impl PolicyEngine {
         candidates
     }
 
-    /// Route a waiver delta to the first competent authority: inline policy
+    /// Route a proposed grant to the first competent authority: inline policy
     /// rules first (a deterministic answer beats a round-trip to a human),
     /// then external adjudicators, each in registration order.
-    fn route_waiver(&self, delta: &WaiverDelta) -> Option<WaiverAuthority> {
+    fn route_waiver(&self, grant: &ProposedGrant) -> Option<WaiverAuthority> {
         self.policy_rules
             .iter()
-            .find(|r| r.mandate.covers(delta))
+            .find(|r| r.mandate.covers(grant))
             .map(|r| WaiverAuthority::Rule(r.name.clone()))
             .or_else(|| {
                 self.adjudicators
                     .iter()
-                    .find(|a| a.mandate.covers(delta))
+                    .find(|a| a.mandate.covers(grant))
                     .map(|a| WaiverAuthority::External(a.name.clone()))
             })
     }
@@ -1483,7 +1487,7 @@ impl SimFlow {
     /// The violations this flow would report, optionally under a
     /// check-transient waiver. A waiver lifts exactly its declared
     /// dimensions and acknowledges acknowledge-only facts on the record.
-    pub(crate) fn violations(&self, waiver: Option<&WaiverDelta>) -> Vec<Violation> {
+    pub(crate) fn violations(&self, waiver: Option<&TransientWaiver>) -> Vec<Violation> {
         let control = match waiver {
             Some(w) if w.control_release => ValueLabel::identity(),
             _ => self.control.clone(),
@@ -1498,7 +1502,7 @@ impl SimFlow {
             if let Some(vouched) = &w.audience {
                 flow.audience = flow.audience.admitting(vouched);
             }
-            if let Some(waived) = &w.effects {
+            if let Some(waived) = &w.prior_effects {
                 past = past.waiving(waived);
             }
             if w.confirms {
@@ -1526,9 +1530,9 @@ fn needed_delta(
     violations: &[Violation],
     recipients: &BTreeSet<crate::dimension::UserId>,
     requires: &Requirements,
-) -> WaiverDelta {
+) -> TransientWaiver {
     use crate::contract::Breach;
-    let mut delta = WaiverDelta::empty();
+    let mut delta = TransientWaiver::empty();
     for violation in violations {
         match violation {
             Violation::Breach(Breach::TrustBelow { required, .. }) => {
@@ -1551,7 +1555,7 @@ fn needed_delta(
             }
             Violation::Breach(Breach::ForbiddenPriorEffects { effects }) => {
                 delta
-                    .effects
+                    .prior_effects
                     .get_or_insert_with(BTreeSet::new)
                     .extend(effects.iter().copied());
             }
@@ -2249,12 +2253,14 @@ mod tests {
     fn human() -> crate::transition::Adjudicator {
         crate::transition::Adjudicator {
             name: crate::audit::AdjudicatorName::new("human"),
-            mandate: crate::transition::WaiverDelta {
+            mandate: crate::transition::AuthorityMandate {
                 trust: Some(crate::dimension::KnownTrust::Trusted),
                 audience: Some(BTreeSet::from([user("alice"), user("bob"), user("charlie")])),
-                effects: Some(BTreeSet::from([Effect::Mutation, Effect::Egress])),
+                acquire_effects: false,
+                waive_prior_effects: true,
                 confirms: true,
-                control_release: true,
+                acknowledge_unknown: true,
+                may_release_control: true,
             },
         }
     }
@@ -2312,7 +2318,7 @@ mod tests {
         assert!(matches!(
             &waiver.steps.first().kind,
             TransitionKind::ApplyWaiver {
-                delta: crate::transition::WaiverDelta { audience: Some(vouched), .. },
+                delta: crate::transition::TransientWaiver { audience: Some(vouched), .. },
                 authority: crate::plan::WaiverAuthority::External(name),
             } if vouched.contains(&user("charlie")) && name.as_str() == "human"
         ));
@@ -2347,7 +2353,7 @@ mod tests {
         assert!(matches!(
             &plans.first().steps.first().kind,
             TransitionKind::ApplyWaiver {
-                delta: crate::transition::WaiverDelta {
+                delta: crate::transition::TransientWaiver {
                     control_release: true,
                     audience: None,
                     ..
@@ -2469,7 +2475,7 @@ mod tests {
     /// A rule-approved waiver permits inline, with the application audited.
     #[test]
     fn rule_approved_waiver_permits_inline() {
-        fn approve(_: &crate::transition::WaiverDelta, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "within policy".to_owned(),
             })
@@ -2820,7 +2826,7 @@ mod tests {
 
     #[test]
     fn rules_and_adjudicators_share_one_name_space() {
-        fn approve(_: &crate::transition::WaiverDelta, _: &[Violation]) -> Option<crate::approval::Ruling> {
+        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "ok".to_owned(),
             })
@@ -2829,7 +2835,7 @@ mod tests {
         engine
             .register_policy_rule(crate::approval::PolicyRule {
                 name: crate::audit::AdjudicatorName::new("gate"),
-                mandate: crate::transition::WaiverDelta::empty(),
+                mandate: crate::transition::AuthorityMandate::none(),
                 decide: approve,
             })
             .unwrap();
@@ -2838,7 +2844,7 @@ mod tests {
             engine
                 .register_policy_rule(crate::approval::PolicyRule {
                     name: crate::audit::AdjudicatorName::new("gate"),
-                    mandate: crate::transition::WaiverDelta::empty(),
+                    mandate: crate::transition::AuthorityMandate::none(),
                     decide: approve,
                 })
                 .is_err()
@@ -2847,7 +2853,7 @@ mod tests {
             engine
                 .register_adjudicator(crate::transition::Adjudicator {
                     name: crate::audit::AdjudicatorName::new("gate"),
-                    mandate: crate::transition::WaiverDelta::empty(),
+                    mandate: crate::transition::AuthorityMandate::none(),
                 })
                 .is_err()
         );

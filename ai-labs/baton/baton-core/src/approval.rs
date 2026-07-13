@@ -29,7 +29,7 @@ use crate::audit::AdjudicatorName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
-use crate::transition::WaiverDelta;
+use crate::transition::{AuthorityMandate, ProposedGrant, TransientWaiver};
 use crate::turn::TrajectoryId;
 
 /// An adjudication outcome, from a policy rule or an external adjudicator.
@@ -40,10 +40,10 @@ pub enum Ruling {
 }
 
 /// A deterministic inline decision function: registered policy over the
-/// waiver delta it is asked to grant and the violations that delta targets.
-/// `None` means the rule abstains (it should not be consulted for deltas
+/// grant it is asked to authorize and the violations that grant targets.
+/// `None` means the rule abstains (it should not be consulted for grants
 /// outside its mandate, but abstention keeps the contract total).
-pub type PolicyRuleFn = fn(&WaiverDelta, &[Violation]) -> Option<Ruling>;
+pub type PolicyRuleFn = fn(&ProposedGrant, &[Violation]) -> Option<Ruling>;
 
 /// An inline policy rule: name, mandate, and its decision function. Routing
 /// prefers rules over external adjudicators — a deterministic answer beats a
@@ -51,8 +51,8 @@ pub type PolicyRuleFn = fn(&WaiverDelta, &[Violation]) -> Option<Ruling>;
 #[derive(Debug, Clone)]
 pub struct PolicyRule {
     pub name: AdjudicatorName,
-    /// The largest delta this rule is competent to grant.
-    pub mandate: WaiverDelta,
+    /// The largest elevation this rule is competent to grant.
+    pub mandate: AuthorityMandate,
     pub decide: PolicyRuleFn,
 }
 
@@ -63,7 +63,7 @@ pub struct PolicyRule {
 pub struct PendingApproval {
     plan: PlanId,
     action: ActionId,
-    delta: WaiverDelta,
+    delta: TransientWaiver,
     adjudicator: AdjudicatorName,
     /// The violations this waiver targets, as predicted at issuance.
     resolved: Vec<Violation>,
@@ -80,7 +80,7 @@ pub struct PendingApproval {
 /// and the pending action.
 pub(crate) struct ApprovalParts {
     pub(crate) action: ActionId,
-    pub(crate) delta: WaiverDelta,
+    pub(crate) delta: TransientWaiver,
     pub(crate) adjudicator: AdjudicatorName,
     pub(crate) resolved: Vec<Violation>,
     pub(crate) trajectory: TrajectoryId,
@@ -96,7 +96,7 @@ impl PendingApproval {
     pub(crate) fn new(
         plan: PlanId,
         action: ActionId,
-        delta: WaiverDelta,
+        delta: TransientWaiver,
         adjudicator: AdjudicatorName,
         resolved: Vec<Violation>,
         basis_values: BTreeSet<ValueId>,
@@ -122,8 +122,8 @@ impl PendingApproval {
         &self.adjudicator
     }
 
-    /// The delta the ruling would grant.
-    pub fn delta(&self) -> &WaiverDelta {
+    /// The transient waiver the ruling would grant.
+    pub fn delta(&self) -> &TransientWaiver {
         &self.delta
     }
 

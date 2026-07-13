@@ -1,10 +1,10 @@
 //! Run the baton-dojo case suite and print the utility/leak table.
 //!
 //! ```text
-//! cargo run -p baton-dojo --bin suite                          # all cases, both modes
-//! cargo run -p baton-dojo --bin suite -- recording_bug_filing  # one case, both modes
-//! cargo run -p baton-dojo --bin suite -- all security          # all cases, one mode
-//! cargo run -p baton-dojo --bin suite -- auditor_email base
+//! cargo run -p baton-dojo                          # all cases, both modes
+//! cargo run -p baton-dojo -- recording_bug_filing  # one case, both modes
+//! cargo run -p baton-dojo -- all security          # all cases, one mode
+//! cargo run -p baton-dojo -- auditor_email base    # one case, one mode
 //! ```
 //!
 //! `base` = undefended (no baton gate); `security` = baton-defended. `leak` is `—`

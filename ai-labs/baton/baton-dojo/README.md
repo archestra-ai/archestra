@@ -39,9 +39,9 @@ Run the authored cases (`src/scenarios/`, one file each), each with the baton ga
 and on (`security`). Needs a key in `OPENROUTER_API_KEY` or `ai-labs/.env`; `DOJO_MODEL` picks the model.
 
 ```sh
-cargo run -p baton-dojo --bin suite                          # all cases, both modes
-cargo run -p baton-dojo --bin suite -- recording_bug_filing  # one case
-cargo run -p baton-dojo --bin suite -- all security          # one mode
+cargo run -p baton-dojo                          # all cases, both modes
+cargo run -p baton-dojo -- recording_bug_filing  # one case
+cargo run -p baton-dojo -- all security          # one mode (base | security)
 ```
 
 ```text

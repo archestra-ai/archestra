@@ -83,6 +83,6 @@ achieved (AgentDojo's polarity).
 
 - an authored scenario / task catalog, and unit tests;
 - streaming responses, retry/backoff, token-usage/cost accounting;
-- attention/confirmation gates and non-`DenyAll` authorities (available in
-  `baton-core` for a later slice);
+- surfacing baton's audit trail (e.g. declassification records) on `AgentRun`;
+- attention/confirmation gates (available in `baton-core` for a later slice);
 - multiple providers or domains.

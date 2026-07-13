@@ -20,7 +20,7 @@ use baton_dojo::baton_core::{
     Audience, AudienceRule, Authority, AuthorityName, Effect, Effects, Grant, Label, Requirements, Ruling,
     ToolContract, ToolName, ToolRequest, Trust, UnknownPolicy, UserId, Violation,
 };
-use baton_dojo::{Agent, BatonGate, DojoError, OpenRouter, ToolError, Toolset};
+use baton_dojo::{Agent, BatonGate, DojoError, OpenRouter, ToolError, ToolOutcome, Toolset};
 use serde::Serialize;
 use serde_json::json;
 
@@ -190,12 +190,34 @@ async fn main() -> Result<(), DojoError> {
     println!("final: {}", run.final_text);
     println!("tool calls: {}", summarize_calls(&run.tool_calls));
     println!("policy-blocked calls: {}", run.blocked_calls());
-    println!(
-        "emails sent: {} (a send to the mandated auditor is declassified, not blocked)",
-        ws.sent.len()
-    );
+    println!("emails sent: {}", ws.sent.len());
+    println!("{}", outcome(&run));
 
     Ok(())
+}
+
+/// Report what actually happened, honestly. A permitted `send_email` only proves
+/// a declassification if it came *after* `list_invoices` — otherwise no audience
+/// boundary had been crossed and the permit is trivial, not a declassification.
+fn outcome(run: &baton_dojo::AgentRun) -> String {
+    let read_at = run.tool_calls.iter().position(|c| c.name == "list_invoices");
+    match run.tool_calls.iter().enumerate().find(|(_, c)| c.name == "send_email") {
+        Some((sent_at, c)) if matches!(c.outcome, ToolOutcome::Ok(_)) => {
+            if read_at.is_some_and(|r| r < sent_at) {
+                "→ invoices read first, then the auditor send crossed the audience boundary and was PERMITTED — \
+                 declassified by FinanceApprover (a permitted send after reading internal data can only mean \
+                 declassification; otherwise it would block)."
+                    .to_owned()
+            } else {
+                "→ inconclusive: the send was permitted but not after reading invoices, so no boundary was crossed."
+                    .to_owned()
+            }
+        }
+        Some((_, c)) if matches!(c.outcome, ToolOutcome::Blocked(_)) => {
+            "→ unexpected: the send was BLOCKED; FinanceApprover should cover the auditor.".to_owned()
+        }
+        _ => "→ inconclusive: the model did not attempt to send an email.".to_owned(),
+    }
 }
 
 fn str_arg(args: &serde_json::Value, tool: &str, key: &str) -> Result<String, ToolError> {

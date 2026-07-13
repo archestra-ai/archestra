@@ -1288,22 +1288,25 @@ impl PolicyEngine {
     /// the need, then the plain full-attestation delta.
     fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
         let plain = needed_delta(remaining, &sim.recipients, &sim.requires);
-        // Compare against the empty-waiver baseline (which already drops
-        // acknowledge-only facts) so a control-release candidate is offered
-        // only when releasing control shrinks the *breach* set — not merely
-        // because acknowledging the unknowns happened under any waiver.
-        let baseline = sim.violations(Some(&TransientWaiver::empty()));
+        // Offer the control-release variant only when releasing control makes a
+        // genuinely *narrower* grant. Releasing control can only remove taint,
+        // so its `needed_delta` is always a subset of `plain`; comparing the
+        // deltas (not violation counts) catches the case where release narrows
+        // a breach witness — e.g. an audience diff `{bob, charlie}` → `{charlie}`
+        // — without reducing the count, and rejects the spurious case where the
+        // apparent shrink was only acknowledge-only facts dropping under a
+        // waiver (they contribute nothing to `needed_delta`).
         let after_control_release = sim.violations(Some(&TransientWaiver {
             control_release: true,
             ..TransientWaiver::empty()
         }));
+        let released = needed_delta(&after_control_release, &sim.recipients, &sim.requires);
         let mut candidates = Vec::new();
-        if after_control_release.len() < baseline.len() {
-            let with_release = TransientWaiver {
+        if released != plain {
+            candidates.push(TransientWaiver {
                 control_release: true,
-                ..needed_delta(&after_control_release, &sim.recipients, &sim.requires)
-            };
-            candidates.push(with_release);
+                ..released
+            });
         }
         if !candidates.contains(&plain) {
             candidates.push(plain);
@@ -2407,6 +2410,66 @@ mod tests {
                 },
             }
         ));
+    }
+
+    /// Releasing control can *narrow* an audience breach witness without
+    /// eliminating it; the control-release candidate must still be offered so
+    /// the narrower waiver (vouch only the truly-exposed recipient) is
+    /// available. (Regression: the delta-comparison in `waiver_candidates`.)
+    #[test]
+    fn control_release_narrows_the_audience_witness() {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap();
+        let mut trajectory = Trajectory::new();
+        // The body admits alice and bob; a control selector restricts to alice.
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+        let control = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "selector");
+        let to_bob = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        let to_charlie = trajectory.ingress(
+            crate::turn::Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("charlie"),
+        );
+        // Sending to {bob, charlie}: with control folded the flow audience is
+        // {alice}, so both are outside. Releasing control admits bob, leaving
+        // only charlie exposed.
+        let request = ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (
+                    ArgumentName::new("to"),
+                    ArgumentTree::Object(std::collections::BTreeMap::from([
+                        (ArgumentName::new("0"), ArgumentTree::Value(to_bob)),
+                        (ArgumentName::new("1"), ArgumentTree::Value(to_charlie)),
+                    ])),
+                ),
+                (ArgumentName::new("body"), ArgumentTree::Value(body)),
+            ])),
+            BTreeSet::from([control]),
+        );
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected a remediable block");
+        };
+        let narrows = plans.iter().any(|plan| {
+            matches!(
+                &plan.steps.first().kind,
+                TransitionKind::ApplyWaiver {
+                    delta: crate::transition::TransientWaiver {
+                        control_release: true,
+                        audience: Some(vouched),
+                        ..
+                    },
+                } if *vouched == BTreeSet::from([user("charlie")])
+            )
+        });
+        assert!(
+            narrows,
+            "a control-release waiver should vouch only charlie, not bob too"
+        );
     }
 
     /// A registered tool-identity mapping to a weaker-contract tool yields a

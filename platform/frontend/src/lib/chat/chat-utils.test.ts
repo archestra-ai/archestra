@@ -305,7 +305,9 @@ describe("mergePersistedMessageMetadata", () => {
       "live-assistant-2",
     ]);
     // the unpersisted in-flight user turn keeps its text
-    expect(mergedMessages[2]?.parts).toEqual([{ type: "text", text: "second" }]);
+    expect(mergedMessages[2]?.parts).toEqual([
+      { type: "text", text: "second" },
+    ]);
   });
 
   it("returns the original array when no metadata changes are needed", () => {

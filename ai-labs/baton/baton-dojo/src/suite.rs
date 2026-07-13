@@ -1,8 +1,8 @@
-//! A tiny benchmark suite: run named [`Case`]s with the baton gate off and on,
-//! and report the utility/security trade-off as one table.
+//! A tiny benchmark suite: run named [`Case`]s in one or both [`Mode`]s and
+//! report the utility/security trade-off as a table.
 //!
 //! This is the "cases as data" shape — each case is a library value (see
-//! [`crate::scenarios`]), and the runner loops them uniformly, rather than one
+//! [`crate::scenarios`]), and the runner selects and loops them, rather than one
 //! hand-written binary per scenario.
 
 use crate::error::DojoError;
@@ -13,10 +13,8 @@ use crate::tool::Toolset;
 
 /// A named, self-scoring benchmark case over a workspace `W`.
 ///
-/// The task is scored twice — undefended and baton-defended — so the report can
-/// show what the gate changed. There is no injection here: the "security" check
-/// asks whether the *disallowed data flow* completed, which is the model's own
-/// behaviour, gated or not.
+/// There is no injection here: the "security" check asks whether the *disallowed
+/// data flow* completed, which is the model's own behaviour, gated or not.
 pub struct Case<W> {
     pub name: &'static str,
     /// A fresh workspace for each run.
@@ -31,6 +29,33 @@ pub struct Case<W> {
     pub security: SecurityCheck<W>,
 }
 
+/// Which run of a case to score.
+#[derive(Clone, Copy, Debug)]
+pub enum Mode {
+    /// Baseline — no baton gate (what happens undefended).
+    Base,
+    /// Defended — the baton gate is on.
+    Security,
+}
+
+impl Mode {
+    /// Parse a mode name (`base` / `security`).
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "base" => Some(Mode::Base),
+            "security" => Some(Mode::Security),
+            _ => None,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Mode::Base => "base",
+            Mode::Security => "security",
+        }
+    }
+}
+
 /// The scalar signals of one run.
 #[derive(Clone, Copy)]
 pub struct Scores {
@@ -39,7 +64,7 @@ pub struct Scores {
     pub blocked: usize,
 }
 
-/// One case scored with the gate off and on.
+/// One case scored in both modes.
 pub struct CaseReport {
     pub name: &'static str,
     pub off: Scores,
@@ -47,49 +72,43 @@ pub struct CaseReport {
 }
 
 impl<W: Clone> Case<W> {
-    /// Run the task undefended and then baton-defended, scoring both.
+    /// Run and score the case in one mode.
+    pub async fn score(&self, model: &Model, mode: Mode) -> Result<Scores, DojoError> {
+        let gate = match mode {
+            Mode::Base => None,
+            Mode::Security => Some((self.gate)()?),
+        };
+        let ep = run_episode(
+            model,
+            (self.seed)(),
+            &self.tools,
+            gate,
+            None,
+            self.prompt,
+            &self.utility,
+            &self.security,
+        )
+        .await?;
+        Ok(Scores {
+            utility: ep.utility,
+            security: ep.security,
+            blocked: ep.blocked_calls,
+        })
+    }
+
+    /// Run and score the case in both modes (base, then security).
     pub async fn run(&self, model: &Model) -> Result<CaseReport, DojoError> {
-        let off = run_episode(
-            model,
-            (self.seed)(),
-            &self.tools,
-            None,
-            None,
-            self.prompt,
-            &self.utility,
-            &self.security,
-        )
-        .await?;
-        let on = run_episode(
-            model,
-            (self.seed)(),
-            &self.tools,
-            Some((self.gate)()?),
-            None,
-            self.prompt,
-            &self.utility,
-            &self.security,
-        )
-        .await?;
         Ok(CaseReport {
             name: self.name,
-            off: Scores {
-                utility: off.utility,
-                security: off.security,
-                blocked: off.blocked_calls,
-            },
-            on: Scores {
-                utility: on.utility,
-                security: on.security,
-                blocked: on.blocked_calls,
-            },
+            off: self.score(model, Mode::Base).await?,
+            on: self.score(model, Mode::Security).await?,
         })
     }
 }
 
-/// Render the reports as a table showing the gate's effect on each case.
-/// `utility` and `leak` are shown as `off → on`; a good gate drives `leak` to 0
-/// while keeping `utility` up.
+/// Render both-mode reports as a table showing the gate's effect on each case.
+/// `utility` and `leak` are shown as `base → security`; a good gate drives `leak`
+/// to 0 while keeping `utility` up.
 pub fn report_table(reports: &[CaseReport]) -> String {
     let bit = |x: bool| if x { 1 } else { 0 };
     let mut out = String::new();
@@ -115,12 +134,34 @@ pub fn report_table(reports: &[CaseReport]) -> String {
     let mean_blocked = reports.iter().map(|r| r.on.blocked).sum::<usize>() as f64 / n;
     out.push_str(&format!("{}\n", "-".repeat(62)));
     out.push_str(&format!(
-        "overall  utility off/on {:.2}/{:.2}   leak off/on {:.2}/{:.2}   mean blocked {:.2}\n",
+        "overall  utility base/security {:.2}/{:.2}   leak base/security {:.2}/{:.2}   mean blocked {:.2}\n",
         rate(&|r| r.off.utility),
         rate(&|r| r.on.utility),
         rate(&|r| r.off.security),
         rate(&|r| r.on.security),
         mean_blocked,
     ));
+    out
+}
+
+/// Render single-mode results (case, mode, utility, leak, blocked).
+pub fn mode_table(rows: &[(&'static str, Mode, Scores)]) -> String {
+    let bit = |x: bool| if x { 1 } else { 0 };
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{:<22} {:<9} {:>7} {:>5} {:>8}\n",
+        "case", "mode", "utility", "leak", "blocked"
+    ));
+    out.push_str(&format!("{}\n", "-".repeat(55)));
+    for (name, mode, s) in rows {
+        out.push_str(&format!(
+            "{:<22} {:<9} {:>7} {:>5} {:>8}\n",
+            name,
+            mode.label(),
+            bit(s.utility),
+            bit(s.security),
+            s.blocked,
+        ));
+    }
     out
 }

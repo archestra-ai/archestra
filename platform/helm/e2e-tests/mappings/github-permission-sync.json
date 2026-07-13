@@ -1,0 +1,147 @@
+{
+  "mappings": [
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": {
+          "id": 1,
+          "name": "private-repo",
+          "full_name": "test-org/private-repo",
+          "private": true,
+          "default_branch": "main",
+          "html_url": "http://example.com/test-org/private-repo",
+          "owner": { "login": "test-org" }
+        }
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo/issues"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": [
+          {
+            "number": 1,
+            "title": "Secret issue",
+            "body": "confidential contents",
+            "state": "open",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "html_url": "http://example.com/issue/1",
+            "labels": [],
+            "user": { "login": "alice" }
+          }
+        ]
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo/issues/1/comments"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": []
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/search/issues.*"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "total_count": 0, "items": [] }
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo/git/.*"
+      },
+      "response": {
+        "status": 404,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "message": "Not Found" }
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo/teams.*"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": []
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/orgs/test-org/teams.*"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": []
+      }
+    },
+    {
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/users/alice"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "login": "alice", "email": "alice@example.com" }
+      }
+    },
+    {
+      "scenarioName": "github-collaborators",
+      "requiredScenarioState": "Started",
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo/collaborators.*"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": [{ "login": "alice" }]
+      }
+    },
+    {
+      "scenarioName": "github-collaborators",
+      "requiredScenarioState": "Revoked",
+      "priority": 5,
+      "request": {
+        "method": "GET",
+        "urlPathPattern": "/github/repos/test-org/private-repo/collaborators.*"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": []
+      }
+    }
+  ]
+}

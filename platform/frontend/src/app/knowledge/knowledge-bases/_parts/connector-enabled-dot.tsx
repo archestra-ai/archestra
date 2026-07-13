@@ -54,6 +54,8 @@ function getDotConfig(
 ): DotConfig {
   if (lastSyncStatus === "running")
     return { dotClass: "bg-blue-500", pulse: true, label: "Syncing" };
+  if (lastSyncStatus === "queued")
+    return { dotClass: "bg-blue-500", pulse: false, label: "Sync queued" };
   if (lastSyncStatus === "failed")
     return { dotClass: "bg-red-500", pulse: false, label: "Last sync failed" };
   if (!enabled)

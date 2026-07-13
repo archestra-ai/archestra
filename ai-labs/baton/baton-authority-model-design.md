@@ -102,8 +102,10 @@ They are decisions, not open questions.
 - **Type split (was: one `WaiverDelta` for everything).** Three distinct types:
   - `AuthorityMandate` — competence flags/bounds, trajectory-independent:
     endorse dims (`trust: Option<KnownTrust>`, `audience: Option<Set<UserId>>`),
-    `acquire_effects` competence, `waive_prior_effects` competence (**distinct**
-    from acquire), `confirms`, `acknowledge_unknown`, `may_release_control`.
+    `waive_prior_effects` competence, `confirms`, `acknowledge_unknown`,
+    `may_release_control`. (`acquire_effects` competence — **distinct** from
+    waiving a prior effect — lands with the `Accept` grant in Build 2; it is not
+    in the Build-1 mandate, since nothing reads it until then.)
   - `ProposedGrant` — the typed operation an authority rules on (so it knows
     *what* it is ruling on, incl. the Endorse **source `ValueId`**, the Accept
     effects, the concrete control-release set): `Endorse{source, delta}` |
@@ -189,32 +191,42 @@ working as a *transient* waiver under the new types until Build 3 relocates it;
 Each slice compiles all targets, migrating its own demo/bench so no slice leaves
 the crate red. Per slice: change · invariant · validation · escalation.
 
-- [ ] **S1 — Type split.** Replace the tri-purpose `WaiverDelta` with
-  `AuthorityMandate` (competence flags/bounds — endorse dims, `acquire_effects`,
+- [x] **S1 — Type split.** Replace the tri-purpose `WaiverDelta` with
+  `AuthorityMandate` (competence flags/bounds — endorse dims,
   `waive_prior_effects`, `confirms`, `acknowledge_unknown`, `may_release_control`),
-  `ProposedGrant` (the typed operation an authority rules on, incl. the Endorse
-  source `ValueId`), and `TransientWaiver` (applied non-relabel lift:
+  `ProposedGrant` (the typed operation an authority rules on), and
+  `TransientWaiver` (applied non-relabel lift:
   trust/audience/prior_effects/confirms/control_release-bool for now).
   *Invariant:* invalid states unrepresentable (a mandate can't carry request-only
   IDs; a request can't carry competence flags). *Validation:* build + clippy +
   adapted waiver tests. *Escalate* if a live call site needs a field that fits
-  none of the three.
-- [ ] **S2 — Authority unification + routing.** `Authority { name, mandate,
+  none of the three. — **Encoding decisions:** `ProposedGrant::Waive` wraps
+  `TransientWaiver` rather than duplicating it; the `Endorse`/`Accept` variants
+  (and `acquire_effects`) are omitted until Builds 2/3 wire them, so Rust
+  exhaustiveness forces each later build to handle them.
+- [x] **S2 — Authority unification + routing.** `Authority { name, mandate,
   mode: Inline(fn)|External }`; one registry; `register_authority`; delete
   `PolicyRule`/`Adjudicator`/`WaiverAuthority`. Routing = first mandate covering
   the `ProposedGrant`, Inline-first, registration order, **abstain (`None`) falls
   through** to the next competent authority; acknowledgment routes on the explicit
   `acknowledge_unknown` capability, **not** `covers(empty)`. Migrate demo/bench.
   *Invariant:* determinism (inline-first, reg-order); abstain never becomes
-  denial. *Validation:* first-match-shadowing + abstain-fallthrough tests.
-- [ ] **S3 — Ruling context.** Widen the inline decision fn to
+  denial. *Validation:* first-match-shadowing + abstain-fallthrough tests. —
+  **Built as live apply-time routing** (the plan step no longer pins its
+  authority; `apply_step` walks the competent set live). This makes the
+  construction-time-only registry rule load-bearing for safety; a mid-run
+  registration TOCTOU is accepted-and-documented (maintainer decision), not
+  hardened, in Build 1.
+- [x] **S3 — Ruling context.** Widen the inline decision fn to
   `fn(&ProposedGrant, &[Violation], &TrajectoryView) -> Option<Ruling>` (borrow
   taken before any mutation); external authorities get an **owned** ancestry
   snapshot embedded in `PendingApproval`, scoped to the operation, with a public
   accessor. *Invariant:* inline borrow ends before mutation; external snapshot is
   owned + serializable. *Validation:* an inline rule inspecting the grant source
-  + a violation; an external round-trip carrying the snapshot.
-- [ ] **S4 — `UnknownPolicy` dissolution + idempotence.** Delete the enum, field,
+  + a violation; an external round-trip carrying the snapshot. — The snapshot is
+  the **direct** operation scope (arg leaves + control), not the transitive
+  provenance closure; walking that closure is Build 3 (D3).
+- [x] **S4 — `UnknownPolicy` dissolution + idempotence.** Delete the enum, field,
   ctor arg, both `match unknown_policy` blocks, `AuditEvent::UnknownAudited`,
   `BlockReason::UnknownDenied`. Unprovables route through the chain; an
   `acknowledge_unknown`-competent authority grants (audited
@@ -223,9 +235,22 @@ the crate red. Per slice: change · invariant · validation · escalation.
   default fail-closed. Migrate demo/bench. *Invariant:* default fail-closed;
   unknown re-entry writes no duplicate audit. *Validation:* four `Unprovable`
   variants routed; no-authority → terminal; ack-authority → granted; unknown
-  re-entry idempotent; response-with-no-`ResponsePolicy` → terminal (D1).
-- [ ] **Gate.** Full `fmt`/`clippy`/`test`/`demo`; external + internal
-  `REVIEW(diff)`; address findings; then check the Build-1 boxes above.
+  re-entry idempotent; response-with-no-`ResponsePolicy` → terminal (D1). —
+  **Built as remedy-chain routing:** unprovables route through `enumerate_plans`;
+  a grant-fixable gap is a `Waive`, an acknowledge-only residual an `Acknowledge`
+  (or a `Waive` *carrying* the acknowledged facts when a lift rides alongside —
+  `covers` then requires `acknowledge_unknown`, so a lift dimension cannot
+  launder an unknown). Idempotence is **structural**: acknowledgment is audited
+  at application (a consumed capability), so re-evaluation writes no audit —
+  simpler than the pending-action marker §3 anticipated.
+- [x] **Gate.** Full `fmt`/`clippy`/`test`/`demo` green (111 lib tests);
+  external (Codex) + internal `REVIEW(diff)`, three rounds. Round 1 found the
+  `acknowledge_unknown` bypass (blocker) — fixed by making `Waive` carry its
+  acknowledged facts and gating `covers` on them. Round 2 confirmed the fix and
+  caught a control-release regression it introduced — fixed by comparing
+  `needed_delta`s (not counts). Two findings **deferred by maintainer decision**:
+  the live-routing registry TOCTOU (accept + document, above) and approval
+  re-entry idempotence (pre-existing revision-binding; follow-up ledger).
 
 ## 5. Next steps — deferred, NOT this pass
 

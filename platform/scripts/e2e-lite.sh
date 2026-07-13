@@ -45,6 +45,14 @@ EMBEDDED_KIND_CONTAINER="archestra-mcp-control-plane"
 KEYCLOAK_IMAGE="${REGISTRY}/keycloak:pr46048-5afbf42"
 WIREMOCK_IMAGE="wiremock/wiremock:3.13.1"
 
+# Pull from the public registry ignoring configured credential helpers: a
+# stale `gcloud auth configure-docker` helper otherwise fails anonymous pulls
+# with a reauthentication error. Falls back to a normal pull.
+pull_public() {
+  DOCKER_CONFIG="$(mktemp -d)" docker pull --quiet "$1" > /dev/null 2>&1 \
+    || docker pull --quiet "$1" > /dev/null
+}
+
 wait_for() {
   local name="$1" url="$2" attempts="$3"
   for ((i = 1; i <= attempts; i++)); do
@@ -72,7 +80,7 @@ resolve_platform_image() {
     full_tree=$(cd "${REPO_ROOT}" && git rev-parse "HEAD:platform")
     excl_tree=$(cd "${REPO_ROOT}" && git ls-tree "HEAD:platform" | grep -v $'\te2e-tests$' | git hash-object --stdin)
     for tag in "tree-${excl_tree}" "tree-${full_tree}"; do
-      if docker pull --quiet "${REGISTRY}/platform:${tag}" > /dev/null 2>&1; then
+      if pull_public "${REGISTRY}/platform:${tag}" 2> /dev/null; then
         echo "${REGISTRY}/platform:${tag}"
         return
       fi
@@ -88,9 +96,24 @@ resolve_platform_image() {
 cmd_up() {
   cmd_down quiet
 
+  # The harness owns these host ports. A dev stack (tilt up / pnpm dev) uses
+  # 3000/9000 too — if anything still answers, the health checks below and
+  # the tests would silently talk to THAT app instead of this stack.
+  local port
+  for port in 3000 9000 9050 9092 30081; do
+    if curl -sf --max-time 1 -o /dev/null "http://127.0.0.1:${port}/" 2> /dev/null \
+      || nc -z 127.0.0.1 "${port}" > /dev/null 2>&1; then
+      echo "ERROR: something is already listening on 127.0.0.1:${port} (a dev stack?)." >&2
+      echo "Stop it first — the lite e2e stack needs ports 3000, 9000, 9050, 9092, 30081." >&2
+      exit 1
+    fi
+  done
+
   local image
   image=$(resolve_platform_image)
   echo "Platform image: ${image}"
+  docker image inspect "${image}" > /dev/null 2>&1 || pull_public "${image}"
+  docker image inspect "${KEYCLOAK_IMAGE}" > /dev/null 2>&1 || pull_public "${KEYCLOAK_IMAGE}"
 
   docker network create "${NETWORK}" > /dev/null
 

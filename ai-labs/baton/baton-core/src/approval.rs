@@ -1,22 +1,21 @@
-//! Policy rules and process-local external approval.
+//! Authorities and process-local external approval.
 //!
-//! The old `Authority` trait combined mandate discovery, synchronous
-//! execution, attribution, and adjudication. It is split into two surfaces:
+//! An [`Authority`] is one registered decision-maker: a name, the competence
+//! it may exercise ([`AuthorityMandate`]), and a mode.
 //!
-//! - **Policy rules** run inline during waiver application. A Rust type
-//!   cannot prove purity, so `PolicyRuleFn` means "allowed to run inline",
-//!   not "formally established pure" — it is a plain function pointer of
-//!   registered policy over the structural request state.
-//! - **External adjudicators** ([`crate::transition::Adjudicator`]) are
-//!   registered metadata. The engine may plan an `ApplyWaiver` step for one,
-//!   but never invokes the human, webhook, or judge model itself:
-//!   adjudication re-enters through
-//!   [`crate::engine::PolicyEngine::apply_approval`] with a
-//!   [`PendingApproval`] the engine issued.
+//! - **Inline** authorities carry a decision function ([`AuthorityFn`]) the
+//!   engine runs synchronously during waiver application. A Rust type cannot
+//!   prove purity, so an inline fn means "allowed to run inline", not
+//!   "formally established pure".
+//! - **External** authorities carry no code. The engine plans an `ApplyWaiver`
+//!   step routed to one, but never invokes the human, webhook, or judge model
+//!   itself: the ruling re-enters through
+//!   [`crate::engine::PolicyEngine::apply_approval`] with a [`PendingApproval`]
+//!   the engine issued.
 //!
 //! A [`PendingApproval`] is opaque, linear (non-`Clone`), `Serialize`-only,
-//! and bound to the exact trajectory revision, pending action, waiver delta,
-//! targeted violations, and adjudicator registration. Any state change —
+//! and bound to the exact trajectory revision, pending action, waiver,
+//! targeted violations, and authority registration. Any state change —
 //! including a process restart, since nothing can deserialize one —
 //! invalidates it.
 
@@ -25,49 +24,61 @@ use std::fmt;
 
 use serde::Serialize;
 
-use crate::audit::AdjudicatorName;
+use crate::audit::AuthorityName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::{AuthorityMandate, ProposedGrant, TransientWaiver};
 use crate::turn::TrajectoryId;
 
-/// An adjudication outcome, from a policy rule or an external adjudicator.
+/// A ruling outcome, from an inline or external authority.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Ruling {
     Approve { reason: String },
     Deny { reason: String },
 }
 
-/// A deterministic inline decision function: registered policy over the
-/// grant it is asked to authorize and the violations that grant targets.
-/// `None` means the rule abstains (it should not be consulted for grants
-/// outside its mandate, but abstention keeps the contract total).
-pub type PolicyRuleFn = fn(&ProposedGrant, &[Violation]) -> Option<Ruling>;
+/// A deterministic inline decision function: registered policy over the grant
+/// it is asked to authorize and the violations that grant targets. `None`
+/// abstains — routing falls through to the next competent authority, so
+/// abstention keeps the contract total.
+pub type AuthorityFn = fn(&ProposedGrant, &[Violation]) -> Option<Ruling>;
 
-/// An inline policy rule: name, mandate, and its decision function. Routing
-/// prefers rules over external adjudicators — a deterministic answer beats a
-/// round-trip to a human.
+/// A registered decision-maker: a name, the competence it may exercise, and
+/// how it decides. Inline authorities decide synchronously; external ones
+/// defer to an out-of-process ruling through [`PendingApproval`].
 #[derive(Debug, Clone)]
-pub struct PolicyRule {
-    pub name: AdjudicatorName,
-    /// The largest elevation this rule is competent to grant.
+pub struct Authority {
+    pub name: AuthorityName,
+    /// The largest elevation this authority is competent to grant.
     pub mandate: AuthorityMandate,
-    pub decide: PolicyRuleFn,
+    pub mode: AuthorityMode,
 }
 
-/// A waiver step awaiting an external adjudicator's ruling. Issued by the
-/// engine when an `ApplyWaiver` step names an external adjudicator; consumed
+/// How an [`Authority`] rules. Inline authorities are consulted before
+/// external ones during routing (a deterministic answer beats a round-trip to
+/// a human).
+#[derive(Debug, Clone)]
+pub enum AuthorityMode {
+    /// Decide synchronously in-process; `None` abstains and falls through.
+    Inline(AuthorityFn),
+    /// Defer to an out-of-process ruling re-entered through
+    /// [`crate::engine::PolicyEngine::apply_approval`].
+    External,
+}
+
+/// A waiver step awaiting an external authority's ruling. Issued by the
+/// engine when an `ApplyWaiver` step names an external authority; consumed
 /// by [`crate::engine::PolicyEngine::apply_approval`].
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PendingApproval {
     plan: PlanId,
     action: ActionId,
     delta: TransientWaiver,
-    adjudicator: AdjudicatorName,
+    authority: AuthorityName,
     /// The violations this waiver targets, as predicted at issuance.
     resolved: Vec<Violation>,
-    /// Values whose labels the delta attests over, for the adjudicator's
+    /// Values whose labels the delta attests over, for the authority's
     /// context (identities only — never bytes).
     basis_values: BTreeSet<ValueId>,
     trajectory: TrajectoryId,
@@ -81,7 +92,7 @@ pub struct PendingApproval {
 pub(crate) struct ApprovalParts {
     pub(crate) action: ActionId,
     pub(crate) delta: TransientWaiver,
-    pub(crate) adjudicator: AdjudicatorName,
+    pub(crate) authority: AuthorityName,
     pub(crate) resolved: Vec<Violation>,
     pub(crate) trajectory: TrajectoryId,
     pub(crate) revision: Revision,
@@ -97,7 +108,7 @@ impl PendingApproval {
         plan: PlanId,
         action: ActionId,
         delta: TransientWaiver,
-        adjudicator: AdjudicatorName,
+        authority: AuthorityName,
         resolved: Vec<Violation>,
         basis_values: BTreeSet<ValueId>,
         trajectory: TrajectoryId,
@@ -108,7 +119,7 @@ impl PendingApproval {
             plan,
             action,
             delta,
-            adjudicator,
+            authority,
             resolved,
             basis_values,
             trajectory,
@@ -117,9 +128,9 @@ impl PendingApproval {
         }
     }
 
-    /// Which adjudicator must rule.
-    pub fn adjudicator(&self) -> &AdjudicatorName {
-        &self.adjudicator
+    /// Which authority must rule.
+    pub fn authority(&self) -> &AuthorityName {
+        &self.authority
     }
 
     /// The transient waiver the ruling would grant.
@@ -136,7 +147,7 @@ impl PendingApproval {
         ApprovalParts {
             action: self.action,
             delta: self.delta,
-            adjudicator: self.adjudicator,
+            authority: self.authority,
             resolved: self.resolved,
             trajectory: self.trajectory,
             revision: self.revision,
@@ -150,7 +161,7 @@ impl fmt::Display for PendingApproval {
         write!(
             f,
             "approval of {} by {} pending on {} at {}",
-            self.delta, self.adjudicator, self.trajectory, self.revision
+            self.delta, self.authority, self.trajectory, self.revision
         )
     }
 }

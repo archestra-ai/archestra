@@ -19,7 +19,7 @@ use std::fmt;
 use serde::Serialize;
 
 use crate::ToolName;
-use crate::audit::{AdjudicatorName, TransitionFailure, WaiverKind};
+use crate::audit::{TransitionFailure, WaiverKind};
 use crate::contract::Unprovable;
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 use crate::request::PendingAction;
@@ -289,17 +289,6 @@ pub enum ProposedGrant {
 #[error("`{id}` is already registered")]
 pub struct DuplicateRegistration {
     pub id: String,
-}
-
-/// The external adjudicator registry entry: metadata only. `evaluate` may
-/// plan an `ApplyWaiver` step for one, but never invokes the human, webhook,
-/// or judge model itself — adjudication re-enters through
-/// [`crate::engine::PolicyEngine::apply_approval`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Adjudicator {
-    pub name: AdjudicatorName,
-    /// The largest elevation this adjudicator is competent to grant.
-    pub mandate: AuthorityMandate,
 }
 
 #[cfg(test)]

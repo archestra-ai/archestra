@@ -20,16 +20,16 @@ use serde::Serialize;
 use tracing::debug;
 
 use crate::ToolName;
-use crate::approval::{PendingApproval, PolicyRule, Ruling};
-use crate::audit::AdjudicatorName;
+use crate::approval::{Authority, AuthorityMode, PendingApproval, Ruling};
 use crate::audit::AuditEvent;
+use crate::audit::AuthorityName;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::Effects;
-use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
+use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::{
-    ActionTransition, Adjudicator, DuplicateRegistration, ProposedGrant, RegisteredTransformer, TransientWaiver,
+    ActionTransition, DuplicateRegistration, ProposedGrant, RegisteredTransformer, TransientWaiver,
 };
 use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::{UnknownValue, ValueLabel};
@@ -286,7 +286,7 @@ pub enum StepOutcome {
     /// The step applied; the original flow was re-evaluated against the new
     /// state (permitting, re-planning, or blocking terminally).
     Advanced(Decision),
-    /// The step names an external adjudicator: its ruling re-enters through
+    /// The step names an external authority: its ruling re-enters through
     /// [`PolicyEngine::apply_approval`].
     NeedsApproval(PendingApproval),
     /// The step's precondition no longer held or its transformer failed. The
@@ -323,12 +323,16 @@ pub enum BlockReason {
     /// The response was composed against a revision the trajectory has moved
     /// past; recompose against the real state.
     StaleResponse { composed_at: Revision, current: Revision },
-    /// An adjudicator or policy rule denied the waiver this flow needed.
-    DeniedByAdjudicator { authority: AdjudicatorName, reason: String },
+    /// An authority denied the waiver this flow needed.
+    DeniedByAuthority { authority: AuthorityName, reason: String },
     /// An approved or applied remedy did not clear the checks it targeted on
     /// the fail-closed recheck — a bug in prediction or registration; the
     /// engine blocks rather than permit an under-covered flow.
     PostconditionFailed,
+    /// Every competent inline authority abstained and none was external, so no
+    /// ruling was produced. The plan was enumerable (a competent authority
+    /// existed) but its rulings did not resolve the flow; fail closed.
+    NoAuthorityRuled,
 }
 
 impl fmt::Display for BlockReason {
@@ -351,14 +355,27 @@ impl fmt::Display for BlockReason {
                     "response composed at {composed_at}, but the trajectory is now at {current}"
                 )
             }
-            Self::DeniedByAdjudicator { authority, reason } => {
+            Self::DeniedByAuthority { authority, reason } => {
                 write!(f, "denied by {authority}: {reason}")
             }
             Self::PostconditionFailed => {
                 write!(f, "an applied remedy did not clear the checks it targeted")
             }
+            Self::NoAuthorityRuled => {
+                write!(f, "every competent authority abstained; no ruling was produced")
+            }
         }
     }
+}
+
+/// The result of routing a grant through the competent authorities: the first
+/// resolving inline ruling, a deferral to an external authority, or no ruling
+/// at all (every competent authority was inline and abstained).
+enum RoutedRuling {
+    Approved(AuthorityName),
+    Denied { authority: AuthorityName, reason: String },
+    External(AuthorityName),
+    NoRuling,
 }
 
 /// A blocked flow. `Terminal` is an explicit type, not an empty plan list:
@@ -413,8 +430,7 @@ pub struct PolicyEngine {
     contracts: BTreeMap<ToolName, ToolContract>,
     transformers: Vec<RegisteredTransformer>,
     action_transitions: Vec<ActionTransition>,
-    policy_rules: Vec<PolicyRule>,
-    adjudicators: Vec<Adjudicator>,
+    authorities: Vec<Authority>,
     response_policy: Option<ResponsePolicy>,
     unknown_policy: UnknownPolicy,
 }
@@ -426,45 +442,25 @@ impl PolicyEngine {
             contracts: BTreeMap::new(),
             transformers: Vec::new(),
             action_transitions: Vec::new(),
-            policy_rules: Vec::new(),
-            adjudicators: Vec::new(),
+            authorities: Vec::new(),
             response_policy: None,
             unknown_policy,
         }
     }
 
-    /// Register an inline policy rule. Rules and adjudicators share one name
-    /// space (routing attributes a waiver to exactly one of them); duplicates
-    /// across either registry are refused. Rules are routed before
-    /// adjudicators, each registry in registration order.
-    pub fn register_policy_rule(&mut self, rule: PolicyRule) -> Result<(), DuplicateRegistration> {
-        if self.policy_rules.iter().any(|r| r.name == rule.name)
-            || self.adjudicators.iter().any(|a| a.name == rule.name)
-        {
-            debug!(rule = %rule.name, "register_policy_rule: duplicate refused");
+    /// Register a decision-making authority. All authorities share one name
+    /// space; a duplicate name is refused. Routing consults inline authorities
+    /// before external ones, each in registration order, so registration order
+    /// is load-bearing.
+    pub fn register_authority(&mut self, authority: Authority) -> Result<(), DuplicateRegistration> {
+        if self.authorities.iter().any(|a| a.name == authority.name) {
+            debug!(authority = %authority.name, "register_authority: duplicate refused");
             return Err(DuplicateRegistration {
-                id: rule.name.to_string(),
+                id: authority.name.to_string(),
             });
         }
-        debug!(rule = %rule.name, "register_policy_rule: registered");
-        self.policy_rules.push(rule);
-        Ok(())
-    }
-
-    /// Register an external adjudicator (metadata only — never invoked by
-    /// `evaluate`). Fails on a duplicate name; registration order is the
-    /// deterministic routing order.
-    pub fn register_adjudicator(&mut self, adjudicator: Adjudicator) -> Result<(), DuplicateRegistration> {
-        if self.adjudicators.iter().any(|a| a.name == adjudicator.name)
-            || self.policy_rules.iter().any(|r| r.name == adjudicator.name)
-        {
-            debug!(adjudicator = %adjudicator.name, "register_adjudicator: duplicate refused");
-            return Err(DuplicateRegistration {
-                id: adjudicator.name.to_string(),
-            });
-        }
-        debug!(adjudicator = %adjudicator.name, "register_adjudicator: registered");
-        self.adjudicators.push(adjudicator);
+        debug!(authority = %authority.name, "register_authority: registered");
+        self.authorities.push(authority);
         Ok(())
     }
 
@@ -1023,65 +1019,87 @@ impl PolicyEngine {
                 trajectory.apply_constraint(registered.to_tool.clone(), registered.effects.clone());
                 Ok(StepOutcome::Advanced(self.evaluate(trajectory, original)))
             }
-            TransitionKind::ApplyWaiver { delta, authority } => match authority {
-                WaiverAuthority::Rule(name) => {
-                    let rule = self
-                        .policy_rules
-                        .iter()
-                        .find(|r| r.name == name)
-                        .expect("plans reference only registered rules");
-                    let grant = ProposedGrant::Waive(delta.clone());
-                    let ruling = (rule.decide)(&grant, &spec.precondition.remaining).unwrap_or(Ruling::Deny {
-                        reason: "rule abstained".to_owned(),
-                    });
-                    match ruling {
-                        Ruling::Approve { .. } => Ok(StepOutcome::Advanced(self.waiver_permit(
-                            trajectory,
-                            capability.action,
-                            delta,
-                            name,
-                            spec.precondition.remaining,
-                        ))),
-                        Ruling::Deny { reason } => {
-                            trajectory.record_event(AuditEvent::WaiverDenied {
-                                authority: name.clone(),
-                                reason: reason.clone(),
-                            });
-                            Ok(StepOutcome::Advanced(self.terminal(
-                                trajectory,
-                                spec.precondition.remaining,
-                                BlockReason::DeniedByAdjudicator {
-                                    authority: name,
-                                    reason,
-                                },
-                            )))
-                        }
-                    }
-                }
-                WaiverAuthority::External(name) => {
-                    trajectory.record_event(AuditEvent::ApprovalRequested {
-                        plan: capability.plan,
-                        authority: name.clone(),
-                        resolved: spec.precondition.remaining.clone(),
-                    });
-                    let basis_values = checked.arguments.leaves().into_iter().chain(checked.control).collect();
-                    Ok(StepOutcome::NeedsApproval(PendingApproval::new(
-                        capability.plan,
+            TransitionKind::ApplyWaiver { delta } => {
+                let grant = ProposedGrant::Waive(delta.clone());
+                // Route live: walk competent authorities in order. An inline
+                // authority that abstains falls through to the next; the first
+                // external one defers to an out-of-process ruling. Decide the
+                // outcome under the borrow, then act once it has ended.
+                let routed = self.route_grant(&grant, &spec.precondition.remaining);
+                match routed {
+                    RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(self.waiver_permit(
+                        trajectory,
                         capability.action,
                         delta,
-                        name,
+                        authority,
                         spec.precondition.remaining,
-                        basis_values,
-                        trajectory.id(),
-                        trajectory.revision(),
-                        self.id,
-                    )))
+                    ))),
+                    RoutedRuling::Denied { authority, reason } => {
+                        trajectory.record_event(AuditEvent::WaiverDenied {
+                            authority: authority.clone(),
+                            reason: reason.clone(),
+                        });
+                        Ok(StepOutcome::Advanced(self.terminal(
+                            trajectory,
+                            spec.precondition.remaining,
+                            BlockReason::DeniedByAuthority { authority, reason },
+                        )))
+                    }
+                    RoutedRuling::External(authority) => {
+                        trajectory.record_event(AuditEvent::ApprovalRequested {
+                            plan: capability.plan,
+                            authority: authority.clone(),
+                            resolved: spec.precondition.remaining.clone(),
+                        });
+                        let basis_values = checked.arguments.leaves().into_iter().chain(checked.control).collect();
+                        Ok(StepOutcome::NeedsApproval(PendingApproval::new(
+                            capability.plan,
+                            capability.action,
+                            delta,
+                            authority,
+                            spec.precondition.remaining,
+                            basis_values,
+                            trajectory.id(),
+                            trajectory.revision(),
+                            self.id,
+                        )))
+                    }
+                    RoutedRuling::NoRuling => Ok(StepOutcome::Advanced(self.terminal(
+                        trajectory,
+                        spec.precondition.remaining,
+                        BlockReason::NoAuthorityRuled,
+                    ))),
                 }
-            },
+            }
         }
     }
 
-    /// Consume a pending approval with the adjudicator's ruling. Binding
+    /// Consult competent authorities for `grant` in routing order and return
+    /// the first resolving ruling. Inline authorities decide synchronously;
+    /// an abstention (`None`) falls through to the next competent authority.
+    /// The first competent external authority defers to an out-of-process
+    /// ruling. `NoRuling` means every competent authority was inline and every
+    /// one abstained.
+    fn route_grant(&self, grant: &ProposedGrant, resolved: &[Violation]) -> RoutedRuling {
+        for authority in self.competent_authorities(grant) {
+            match &authority.mode {
+                AuthorityMode::Inline(decide) => match decide(grant, resolved) {
+                    Some(Ruling::Approve { .. }) => return RoutedRuling::Approved(authority.name.clone()),
+                    Some(Ruling::Deny { reason }) => {
+                        return RoutedRuling::Denied {
+                            authority: authority.name.clone(),
+                            reason,
+                        };
+                    }
+                    None => continue,
+                },
+                AuthorityMode::External => return RoutedRuling::External(authority.name.clone()),
+            }
+        }
+        RoutedRuling::NoRuling
+    }
+
+    /// Consume a pending approval with the authority's ruling. Binding
     /// failures refuse without touching state. A denial is audited and
     /// blocks terminally; an approval rechecks the flow fail-closed under
     /// the waiver and mints the execution token.
@@ -1116,18 +1134,18 @@ impl PolicyEngine {
         }
         match ruling {
             Ruling::Approve { .. } => {
-                Ok(self.waiver_permit(trajectory, parts.action, parts.delta, parts.adjudicator, parts.resolved))
+                Ok(self.waiver_permit(trajectory, parts.action, parts.delta, parts.authority, parts.resolved))
             }
             Ruling::Deny { reason } => {
                 trajectory.record_event(AuditEvent::WaiverDenied {
-                    authority: parts.adjudicator.clone(),
+                    authority: parts.authority.clone(),
                     reason: reason.clone(),
                 });
                 Ok(self.terminal(
                     trajectory,
                     parts.resolved,
-                    BlockReason::DeniedByAdjudicator {
-                        authority: parts.adjudicator,
+                    BlockReason::DeniedByAuthority {
+                        authority: parts.authority,
                         reason,
                     },
                 ))
@@ -1142,7 +1160,7 @@ impl PolicyEngine {
         trajectory: &mut Trajectory,
         action: ActionId,
         delta: TransientWaiver,
-        authority: AdjudicatorName,
+        authority: AuthorityName,
         resolved: Vec<Violation>,
     ) -> Decision {
         let pending = trajectory
@@ -1322,14 +1340,14 @@ impl PolicyEngine {
                         continue;
                     }
                     let grant = ProposedGrant::Waive(delta.clone());
-                    let Some(authority) = self.route_waiver(&grant) else {
+                    if !self.route_waiver(&grant) {
                         continue;
-                    };
+                    }
                     let mut waiver_steps = steps.clone();
                     waiver_steps.push(TransitionSpec {
                         precondition: precondition.clone(),
                         postcondition: Posture::clean(),
-                        kind: TransitionKind::ApplyWaiver { delta, authority },
+                        kind: TransitionKind::ApplyWaiver { delta },
                     });
                     let steps = NonEmptyVec::from_vec(waiver_steps).expect("waiver step just pushed");
                     push_plan(&mut plans, steps, Posture::clean());
@@ -1363,20 +1381,27 @@ impl PolicyEngine {
         candidates
     }
 
-    /// Route a proposed grant to the first competent authority: inline policy
-    /// rules first (a deterministic answer beats a round-trip to a human),
-    /// then external adjudicators, each in registration order.
-    fn route_waiver(&self, grant: &ProposedGrant) -> Option<WaiverAuthority> {
-        self.policy_rules
+    /// Authorities competent for `grant`, in routing order: inline before
+    /// external (a deterministic answer beats a round-trip to a human), each in
+    /// registration order. An inline authority may still abstain at ruling
+    /// time, which falls through to the next authority in this order.
+    fn competent_authorities<'a>(&'a self, grant: &'a ProposedGrant) -> impl Iterator<Item = &'a Authority> {
+        let inline = self
+            .authorities
             .iter()
-            .find(|r| r.mandate.covers(grant))
-            .map(|r| WaiverAuthority::Rule(r.name.clone()))
-            .or_else(|| {
-                self.adjudicators
-                    .iter()
-                    .find(|a| a.mandate.covers(grant))
-                    .map(|a| WaiverAuthority::External(a.name.clone()))
-            })
+            .filter(move |a| matches!(a.mode, AuthorityMode::Inline(_)) && a.mandate.covers(grant));
+        let external = self
+            .authorities
+            .iter()
+            .filter(move |a| matches!(a.mode, AuthorityMode::External) && a.mandate.covers(grant));
+        inline.chain(external)
+    }
+
+    /// Is any authority competent for `grant`? A waiver plan is enumerated only
+    /// when one exists; the actual ruling — which an inline authority may
+    /// abstain from, falling through to the next — happens at application.
+    fn route_waiver(&self, grant: &ProposedGrant) -> bool {
+        self.competent_authorities(grant).next().is_some()
     }
 
     /// Mint the execution token, storing the pending action first if this is
@@ -2250,9 +2275,9 @@ mod tests {
         }
     }
 
-    fn human() -> crate::transition::Adjudicator {
-        crate::transition::Adjudicator {
-            name: crate::audit::AdjudicatorName::new("human"),
+    fn human() -> crate::approval::Authority {
+        crate::approval::Authority {
+            name: crate::audit::AuthorityName::new("human"),
             mandate: crate::transition::AuthorityMandate {
                 trust: Some(crate::dimension::KnownTrust::Trusted),
                 audience: Some(BTreeSet::from([user("alice"), user("bob"), user("charlie")])),
@@ -2262,6 +2287,7 @@ mod tests {
                 acknowledge_unknown: true,
                 may_release_control: true,
             },
+            mode: crate::approval::AuthorityMode::External,
         }
     }
 
@@ -2299,12 +2325,12 @@ mod tests {
         assert!(trajectory.pending_action().is_some());
     }
 
-    /// An audience breach with a competent adjudicator yields a waiver plan
+    /// An audience breach with a competent authority yields a waiver plan
     /// routed to it.
     #[test]
     fn audience_breach_plans_a_waiver() {
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine.register_adjudicator(human()).unwrap();
+        engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         // Only alice may read the doc; sending to charlie exceeds it.
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
@@ -2319,9 +2345,16 @@ mod tests {
             &waiver.steps.first().kind,
             TransitionKind::ApplyWaiver {
                 delta: crate::transition::TransientWaiver { audience: Some(vouched), .. },
-                authority: crate::plan::WaiverAuthority::External(name),
-            } if vouched.contains(&user("charlie")) && name.as_str() == "human"
+            } if vouched.contains(&user("charlie"))
         ));
+        // Routing is live at application: the waiver step is consulted against
+        // the registered authorities and defers to the competent external one.
+        let plan_id = waiver.id;
+        let capability = engine.mint_step(&trajectory, plan_id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected the external human to be consulted");
+        };
+        assert_eq!(pending.authority().as_str(), "human");
     }
 
     /// Control-borne taint prefers the narrower control-release waiver over
@@ -2329,7 +2362,7 @@ mod tests {
     #[test]
     fn control_taint_plans_control_release_first() {
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine.register_adjudicator(human()).unwrap();
+        engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
         let clean = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
@@ -2358,7 +2391,6 @@ mod tests {
                     audience: None,
                     ..
                 },
-                ..
             }
         ));
     }
@@ -2482,10 +2514,10 @@ mod tests {
         }
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
         engine
-            .register_policy_rule(crate::approval::PolicyRule {
-                name: crate::audit::AdjudicatorName::new("auto-approve"),
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("auto-approve"),
                 mandate: human().mandate,
-                decide: approve,
+                mode: crate::approval::AuthorityMode::Inline(approve),
             })
             .unwrap();
         let mut trajectory = Trajectory::new();
@@ -2497,10 +2529,7 @@ mod tests {
         };
         assert!(matches!(
             &plans.first().steps.first().kind,
-            TransitionKind::ApplyWaiver {
-                authority: crate::plan::WaiverAuthority::Rule(_),
-                ..
-            }
+            TransitionKind::ApplyWaiver { .. }
         ));
         let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
         let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
@@ -2516,12 +2545,120 @@ mod tests {
         );
     }
 
+    /// An inline authority that abstains falls through to the next competent
+    /// authority rather than denying the flow.
+    #[test]
+    fn inline_abstention_falls_through_to_the_next_authority() {
+        fn abstain(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+            None
+        }
+        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "second".to_owned(),
+            })
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("first"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(abstain),
+            })
+            .unwrap();
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("second"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected the second authority to approve after the first abstained");
+        };
+        // The applied waiver is attributed to the authority that actually ruled.
+        assert!(trajectory.state().audit().iter().any(|e| matches!(
+            e,
+            AuditEvent::WaiverApplied { authority, .. } if authority.as_str() == "second"
+        )));
+    }
+
+    /// Inline authorities are consulted before external ones, even when an
+    /// external authority was registered first.
+    #[test]
+    fn inline_authority_is_consulted_before_external() {
+        fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+            Some(crate::approval::Ruling::Approve {
+                reason: "inline".to_owned(),
+            })
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        // External registered first; the inline authority must still win.
+        engine.register_authority(human()).unwrap();
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("inline"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(approve),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        // Inline resolves synchronously — no round-trip to the external human.
+        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected the inline authority to decide before the external one");
+        };
+    }
+
+    /// When every competent authority is inline and all abstain, the flow
+    /// fails closed with no ruling produced.
+    #[test]
+    fn all_inline_abstentions_block_with_no_ruling() {
+        fn abstain(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
+            None
+        }
+        let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("only"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(abstain),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
+            engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected a terminal block when every authority abstains");
+        };
+        assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
+    }
+
     /// An external waiver round-trips through PendingApproval; approval
     /// permits, and the whole loop is audited.
     #[test]
     fn external_waiver_approval_roundtrip() {
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine.register_adjudicator(human()).unwrap();
+        engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
@@ -2533,7 +2670,7 @@ mod tests {
         let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
             panic!("expected pending approval");
         };
-        assert_eq!(pending.adjudicator().as_str(), "human");
+        assert_eq!(pending.authority().as_str(), "human");
 
         let decision = engine
             .apply_approval(
@@ -2566,7 +2703,7 @@ mod tests {
     #[test]
     fn external_waiver_denial_blocks_terminally() {
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine.register_adjudicator(human()).unwrap();
+        engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
@@ -2591,7 +2728,7 @@ mod tests {
         let Decision::Blocked(Blocked::Terminal(block)) = decision else {
             panic!("expected terminal block");
         };
-        assert!(matches!(block.reason, BlockReason::DeniedByAdjudicator { .. }));
+        assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
         assert!(trajectory.pending_action().is_none());
 
         // The same flow escalates again from scratch: the denial loosened
@@ -2607,7 +2744,7 @@ mod tests {
     #[test]
     fn stale_and_foreign_step_capabilities_are_refused() {
         let mut engine = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine.register_adjudicator(human()).unwrap();
+        engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
@@ -2728,7 +2865,7 @@ mod tests {
                 run: redact,
             })
             .unwrap();
-        engine.register_adjudicator(human()).unwrap();
+        engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         // Suspicious AND readable only by alice, sent to charlie: needs both
         // a transform (trust) and a waiver (audience).
@@ -2825,36 +2962,30 @@ mod tests {
     }
 
     #[test]
-    fn rules_and_adjudicators_share_one_name_space() {
+    fn authorities_share_one_name_space() {
         fn approve(_: &crate::transition::ProposedGrant, _: &[Violation]) -> Option<crate::approval::Ruling> {
             Some(crate::approval::Ruling::Approve {
                 reason: "ok".to_owned(),
             })
         }
+        let gate = |mode| crate::approval::Authority {
+            name: crate::audit::AuthorityName::new("gate"),
+            mandate: crate::transition::AuthorityMandate::none(),
+            mode,
+        };
         let mut engine = PolicyEngine::new(UnknownPolicy::Escalate);
         engine
-            .register_policy_rule(crate::approval::PolicyRule {
-                name: crate::audit::AdjudicatorName::new("gate"),
-                mandate: crate::transition::AuthorityMandate::none(),
-                decide: approve,
-            })
+            .register_authority(gate(crate::approval::AuthorityMode::Inline(approve)))
             .unwrap();
-        // The same name is refused for another rule AND for an adjudicator.
+        // The same name is refused regardless of mode.
         assert!(
             engine
-                .register_policy_rule(crate::approval::PolicyRule {
-                    name: crate::audit::AdjudicatorName::new("gate"),
-                    mandate: crate::transition::AuthorityMandate::none(),
-                    decide: approve,
-                })
+                .register_authority(gate(crate::approval::AuthorityMode::Inline(approve)))
                 .is_err()
         );
         assert!(
             engine
-                .register_adjudicator(crate::transition::Adjudicator {
-                    name: crate::audit::AdjudicatorName::new("gate"),
-                    mandate: crate::transition::AuthorityMandate::none(),
-                })
+                .register_authority(gate(crate::approval::AuthorityMode::External))
                 .is_err()
         );
     }
@@ -2864,10 +2995,10 @@ mod tests {
     #[test]
     fn capabilities_are_bound_to_their_engine() {
         let mut engine_a = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine_a.register_adjudicator(human()).unwrap();
+        engine_a.register_authority(human()).unwrap();
         // Engine B registers the same names — a different trust domain.
         let mut engine_b = engine_with([email_contract()], UnknownPolicy::Escalate);
-        engine_b.register_adjudicator(human()).unwrap();
+        engine_b.register_authority(human()).unwrap();
 
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");

@@ -102,14 +102,14 @@ pub use value::{OpaqueValue, UnknownValue, ValueLabel};
 // ── Feature ─────────────────────────────────────────────────────────────
 // Named only when you opt into the corresponding capability: the response
 // sink, remediation, transformers, action constraints, or waivers.
-pub use approval::{PendingApproval, PolicyRule, PolicyRuleFn, Ruling};
-pub use audit::{AdjudicatorName, TransitionFailure};
+pub use approval::{Authority, AuthorityFn, AuthorityMode, PendingApproval, Ruling};
+pub use audit::{AuthorityName, TransitionFailure};
 pub use contract::{AttentionRule, AudienceRule};
 pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
 pub use plan::{NonEmptyVec, RemedyPlan, TransitionKind};
 pub use revision::PlanId;
 pub use transition::{
-    ActionTransition, Adjudicator, AuthorityMandate, DuplicateRegistration, LabelPredicate, ProposedGrant,
-    RegisteredTransformer, TransformerDescriptor, TransformerError, TransformerFn, TransientWaiver,
+    ActionTransition, AuthorityMandate, DuplicateRegistration, LabelPredicate, ProposedGrant, RegisteredTransformer,
+    TransformerDescriptor, TransformerError, TransformerFn, TransientWaiver,
 };
 pub use value::TransformerRef;

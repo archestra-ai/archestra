@@ -11,11 +11,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use baton_core::{
-    Adjudicator, AdjudicatorName, ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Blocked,
-    Decision, Effect, Effects, KnownTrust, LabelPredicate, OpaqueValue, PolicyEngine, RegisteredTransformer,
-    Requirements, ResponseDecision, ResponsePolicy, ResponseRequest, Ruling, Speaker, StepOutcome, ToolContract,
-    ToolName, ToolRequest, Trajectory, TransformerDescriptor, TransformerError, TransformerRef, Trust, UnknownPolicy,
-    UserId, ValueId, ValueLabel,
+    ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
+    AuthorityName, Blocked, Decision, Effect, Effects, KnownTrust, LabelPredicate, OpaqueValue, PolicyEngine,
+    RegisteredTransformer, Requirements, ResponseDecision, ResponsePolicy, ResponseRequest, Ruling, Speaker,
+    StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, TransformerDescriptor, TransformerError,
+    TransformerRef, Trust, UnknownPolicy, UserId, ValueId, ValueLabel,
 };
 use clap::Parser;
 
@@ -240,9 +240,9 @@ fn build_engine() -> PolicyEngine {
         })
         .unwrap();
     engine
-        .register_adjudicator(Adjudicator {
-            name: AdjudicatorName::new("human-in-the-loop"),
-            mandate: baton_core::AuthorityMandate {
+        .register_authority(Authority {
+            name: AuthorityName::new("human-in-the-loop"),
+            mandate: AuthorityMandate {
                 trust: Some(KnownTrust::Trusted),
                 audience: Some(BTreeSet::from([
                     UserId::new("alice"),
@@ -255,6 +255,7 @@ fn build_engine() -> PolicyEngine {
                 acknowledge_unknown: true,
                 may_release_control: true,
             },
+            mode: AuthorityMode::External,
         })
         .unwrap();
     engine

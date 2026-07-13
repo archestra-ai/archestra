@@ -11,7 +11,6 @@
 
 use serde::Serialize;
 
-use crate::audit::AdjudicatorName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
@@ -66,24 +65,6 @@ impl<'a, T> IntoIterator for &'a NonEmptyVec<T> {
     }
 }
 
-/// Who is competent to grant an [`TransitionKind::ApplyWaiver`] step: an
-/// inline policy rule (deterministic, runs inside the engine) or an external
-/// adjudicator (metadata only — approval re-enters through
-/// [`crate::engine::PolicyEngine::apply_approval`]).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub enum WaiverAuthority {
-    Rule(AdjudicatorName),
-    External(AdjudicatorName),
-}
-
-impl WaiverAuthority {
-    pub fn name(&self) -> &AdjudicatorName {
-        match self {
-            Self::Rule(name) | Self::External(name) => name,
-        }
-    }
-}
-
 /// One closed, typed transition. The variants enforce different conservation
 /// laws (see design note §6): a value transform creates derived values but
 /// cannot touch actions or past effects; an action constraint replaces the
@@ -101,7 +82,6 @@ pub enum TransitionKind {
     },
     ApplyWaiver {
         delta: TransientWaiver,
-        authority: WaiverAuthority,
     },
 }
 
@@ -146,9 +126,8 @@ pub struct RemedyPlan {
     /// state change invalidates the plan.
     pub basis: Revision,
     /// The engine (registry configuration) that computed the prediction.
-    /// Steps resolve transformers, transitions, rules, and adjudicators from
-    /// their registries, so a plan is applicable only on the engine that
-    /// minted it.
+    /// Steps resolve transformers, transitions, and authorities from their
+    /// registries, so a plan is applicable only on the engine that minted it.
     pub engine: EngineId,
 }
 

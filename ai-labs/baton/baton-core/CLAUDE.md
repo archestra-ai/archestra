@@ -97,9 +97,12 @@ observable; preserve it (there is a typed-order test).
 - Registration is an operator trust decision, not content correctness: audit
   wording says "admitted under the transition declared by registered
   transformer X", never "verified as clean". Registries are populated at
-  construction, duplicates refused, never silently replaced. Rules and
-  adjudicators share one name space; routing prefers rules, each registry in
-  registration order — determinism is load-bearing for plan enumeration.
+  construction, duplicates refused, never silently replaced. Authorities
+  (`Authority { name, mandate, mode: Inline(fn) | External }`) share one
+  registry and name space; a grant routes to competent authorities inline-first
+  then external, each in registration order, and an inline abstention (`None`)
+  falls through to the next competent authority — determinism is load-bearing
+  for plan enumeration.
 - Transformers are plain `fn` pointers (`TransformerFn`) beside a
   serializable descriptor. No capturing closures, no `dyn`/`Box` in engine
   state.

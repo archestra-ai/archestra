@@ -20,12 +20,12 @@ use crate::dimension::Effects;
 use crate::revision::{ActionId, PlanId, TransitionId, ValueId};
 use crate::value::{TransformerRef, ValueLabel};
 
-/// Name of a registered policy rule or external adjudicator.
+/// Name of a registered authority.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct AdjudicatorName(String);
+pub struct AuthorityName(String);
 
-impl AdjudicatorName {
+impl AuthorityName {
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
@@ -35,7 +35,7 @@ impl AdjudicatorName {
     }
 }
 
-impl fmt::Display for AdjudicatorName {
+impl fmt::Display for AuthorityName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -123,7 +123,7 @@ pub enum AuditEvent {
     WaiverApplied {
         transition: TransitionId,
         changes: BTreeSet<WaiverKind>,
-        authority: AdjudicatorName,
+        authority: AuthorityName,
         resolved: Vec<Violation>,
     },
     /// [`crate::engine::UnknownPolicy::AllowWithAudit`] let unprovable facts
@@ -143,15 +143,15 @@ pub enum AuditEvent {
         step: u64,
         failure: TransitionFailure,
     },
-    /// An `ApplyWaiver` step reached an external adjudicator: the ruling is
+    /// An `ApplyWaiver` step reached an external authority: the ruling is
     /// pending re-entry.
     ApprovalRequested {
         plan: PlanId,
-        authority: AdjudicatorName,
+        authority: AuthorityName,
         resolved: Vec<Violation>,
     },
-    /// An adjudicator or policy rule denied a waiver.
-    WaiverDenied { authority: AdjudicatorName, reason: String },
+    /// An authority denied a waiver.
+    WaiverDenied { authority: AuthorityName, reason: String },
 }
 
 impl fmt::Display for AuditEvent {

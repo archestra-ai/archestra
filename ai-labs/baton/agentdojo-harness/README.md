@@ -46,6 +46,34 @@ addresses the model by name and needs a model id AgentDojo knows (e.g. the
 dated `openai/gpt-4o-mini-2024-07-18`); the `…_no_model_name` attack variant
 works with any model id.
 
+### Running sharded
+
+AgentDojo runs one episode at a time, so a full suite (40 user tasks × 14
+injections = 600 episodes per defense) is slow. But episodes are independent
+and cached (`force_rerun=False`), so you can split the user tasks across
+several `bench` processes writing to the *same* `--logdir`: each fills
+different cells of the grid, cached cells are skipped, and a killed run just
+resumes where it stopped.
+
+```sh
+# build baton-check once and pin it, so the shards don't each rebuild it
+( cd ../baton-check && cargo build --release )
+export BATON_CHECK_BIN="$PWD/../baton-check/target/release/baton-check"
+
+model=openai/gpt-4o-mini-2024-07-18
+for lo in 0 10 20 30; do                       # 4 shards of 10 user tasks each
+  tasks=$(seq $lo $((lo + 9)) | sed 's/^/user_task_/')
+  uv run baton-dojo bench --model "$model" --defense baton \
+    --user-tasks $tasks --logdir runs > "runs/shard_$lo.log" 2>&1 &
+done
+wait
+```
+
+Each shard prints only its own slice. To get whole-suite numbers, run one
+plain `bench` over all tasks afterwards — every episode is cached, so it just
+reads the grid and prints the totals. (Run the loop again with `--defense none`
+for the undefended baseline; those shards spawn no baton-check.)
+
 ## The trust-only limitation
 
 With source-type labels, a benign "search my emails, then send one" and a

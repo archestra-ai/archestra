@@ -583,7 +583,10 @@ export function AgentDialog({
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
-    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
+    open &&
+    (agentType === "mcp_gateway" ||
+      agentType === "llm_proxy" ||
+      agentType === "agent");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });

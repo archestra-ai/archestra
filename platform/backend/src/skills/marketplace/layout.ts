@@ -122,7 +122,7 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
     const skillRoot = `${pluginRoot}/skills/${slug}`;
     const skillMd = textFile(
       `${skillRoot}/SKILL.md`,
-      buildSkillMarkdown(skill),
+      buildSkillMarkdown(skill, slug),
     );
     files.push(skillMd);
     seenLowerPaths.add(skillMd.path.toLowerCase());
@@ -156,18 +156,22 @@ function jsonStringify(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function buildSkillMarkdown(skill: MaterializeSkillInput): string {
+function buildSkillMarkdown(
+  skill: MaterializeSkillInput,
+  slug: string,
+): string {
+  // The Agent Skills spec requires frontmatter `name` to be a kebab slug that
+  // equals the parent directory name — clients derive the slash command from
+  // it, so the display name (which may contain spaces) must not leak here.
   const frontmatter: Record<string, unknown> = {
-    name: skill.name,
+    name: slug,
     description: skill.description,
   };
   if (skill.license) frontmatter.license = skill.license;
   if (skill.compatibility) frontmatter.compatibility = skill.compatibility;
   if (skill.allowedTools) frontmatter["allowed-tools"] = skill.allowedTools;
   if (skill.templated) frontmatter.templated = true;
-  if (skill.metadata && Object.keys(skill.metadata).length > 0) {
-    frontmatter.metadata = skill.metadata;
-  }
+  frontmatter.metadata = { displayName: skill.name, ...skill.metadata };
 
   const yamlBody = dumpYaml(frontmatter, {
     sortKeys: false,

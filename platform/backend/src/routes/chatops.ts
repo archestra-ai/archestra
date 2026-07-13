@@ -16,11 +16,11 @@ import {
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
 import {
-  clearChannelThreadActive,
   isChannelThreadActive,
   isThreadMuteCommand,
   markChannelThreadActive,
   mightBeAddressedMuteCommand,
+  muteChannelThread,
   resolveChannelGateAction,
 } from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
@@ -2086,7 +2086,7 @@ async function muteTeamsThreadAndNotify(
   context: TurnContext,
   activation: { provider: "ms-teams"; channelId: string; threadId: string },
 ): Promise<void> {
-  if (await clearChannelThreadActive(activation)) {
+  if (await muteChannelThread(activation)) {
     await context.sendActivity(buildThreadMutedNotice());
   }
 }

@@ -3832,6 +3832,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsHttpMethods: boolean;
       message: string | null;
     };
+    multitenant?: boolean;
   }): K8sDeployment {
     return new K8sDeployment({
       mcpServer: makeNetworkPolicyTestServer(),
@@ -3843,7 +3844,12 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       k8sLog: {} as Log,
       k8sExec: {} as Exec,
       namespace: "default",
-      catalogItem: null,
+      catalogItem: params.multitenant
+        ? ({
+            multitenant: true,
+            name: "test-catalog",
+          } as unknown as import("@/types").InternalMcpCatalog)
+        : null,
       effectiveNetworkPolicy: params.effectiveNetworkPolicy,
       networkPolicyCapabilities: params.networkPolicyCapabilities,
     });
@@ -4768,6 +4774,41 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     const policy = policies.get(POLICY_NAME);
     expect(policy?.spec?.policyTypes).toEqual(["Egress"]);
     expect(policy?.spec?.egress).toEqual(PLAIN_FLOOR_EGRESS);
+  });
+
+  test("per-pod policy selector keys on app + mcp-server-id only, never the per-install name", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const selector = policies.get(POLICY_NAME)?.spec?.podSelector?.matchLabels;
+    expect(selector).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+    });
+    // mcp-server-name is per-install; including it in the AND-semantics selector
+    // makes a multitenant policy select zero pods.
+    expect(selector).not.toHaveProperty("mcp-server-name");
+  });
+
+  test("multitenant per-pod policy selects on the catalog-stable id, matching the shared pod", async () => {
+    const { api, policies } = makeStatefulNetworkingApi();
+    await makeNetworkPolicyDeployment({
+      networkingApi: api,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: PLAIN_CAPS,
+      multitenant: true,
+    }).applyK8sNetworkPolicy();
+
+    const selector = [...policies.values()][0]?.spec?.podSelector?.matchLabels;
+    expect(selector).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-catalog-id",
+    });
+    expect(selector).not.toHaveProperty("mcp-server-name");
   });
 
   test("applies the SSRF floor for a built-in (null) policy — the case the union bug silently opened", async () => {

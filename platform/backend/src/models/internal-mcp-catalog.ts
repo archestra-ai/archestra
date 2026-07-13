@@ -11,6 +11,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import {
   type CatalogItemApprovalStatus,
@@ -901,7 +902,21 @@ class InternalMcpCatalogModel {
     const resolvedSecretPromises = nonByosSecretIds.map((id) =>
       secretManager()
         .getSecret(id)
-        .then((secret) => [id, secret] as const),
+        .then((secret) => [id, secret] as const)
+        .catch((error): readonly [string, null] => {
+          // A single secret failing to resolve (a transient secrets-manager
+          // error, a stale reference, a permission issue) must not fail the
+          // whole catalog listing. Treat it as unresolved — the enrichment
+          // below already tolerates a missing secret via optional chaining — so
+          // read paths (list / findById) degrade gracefully instead of 5xx-ing.
+          // Runtime flows that require real values use
+          // expandSecretsAndAlwaysResolveValues(), which still propagates errors.
+          logger.error(
+            { err: error, secretId: id },
+            "[InternalMcpCatalog] failed to resolve secret during catalog expansion; continuing without it",
+          );
+          return [id, null] as const;
+        }),
     );
     const resolvedSecretEntries = await Promise.all(resolvedSecretPromises);
     const resolvedSecretMap = new Map(

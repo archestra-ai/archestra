@@ -1283,10 +1283,29 @@ export const anthropicAdapterFactory: LLMProvider<
     request: AnthropicRequest,
   ): Promise<AnthropicResponse> {
     const anthropicClient = client as AnthropicProvider;
-    return anthropicClient.messages.create({
+    const params = {
       ...request,
       stream: false,
-    } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming);
+    } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming;
+
+    // A non-streaming request whose `max_tokens` implies a completion that could
+    // exceed ~10 minutes can't be served reliably: our client is built with an
+    // explicit timeout, so the SDK skips its own "streaming required" guard and
+    // instead sends the request and lets it hit that timeout, and networks may
+    // drop the idle connection before the single response arrives. The SSE body
+    // of a *streaming* request is not bounded by the client timeout (only its
+    // initial connection is), so — per Anthropic's guidance — consume such
+    // requests over the streaming Messages API and return the accumulated final
+    // Message, which is identical in shape to a non-streaming response.
+    // https://platform.claude.com/docs/en/api/errors#long-requests
+    if (exceedsNonStreamingLimit(anthropicClient, request.max_tokens)) {
+      return anthropicClient.messages
+        .stream(
+          params as unknown as AnthropicProvider.Messages.MessageStreamParams,
+        )
+        .finalMessage();
+    }
+    return anthropicClient.messages.create(params);
   },
 
   async executeStream(
@@ -1336,6 +1355,32 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/**
+ * Whether a non-streaming request with this `max_tokens` would exceed the SDK's
+ * ~10-minute non-streaming limit (i.e. should be served over the streaming API
+ * instead). Delegates to the SDK's own estimate — which throws exactly when
+ * streaming is required — so the threshold stays in sync with the SDK rather
+ * than being duplicated here. `maxNonstreamingTokens` is left unset so only the
+ * general 10-minute estimate applies, not any per-model cap.
+ * https://platform.claude.com/docs/en/api/errors#long-requests
+ */
+function exceedsNonStreamingLimit(
+  client: AnthropicProvider,
+  maxTokens: number,
+): boolean {
+  // Defensive: a real AnthropicProvider always exposes this, but partial/mock
+  // clients may not. If we can't obtain the estimate, don't force streaming.
+  if (typeof client.calculateNonstreamingTimeout !== "function") {
+    return false;
+  }
+  try {
+    client.calculateNonstreamingTimeout(maxTokens);
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 /** The SDK nests the provider body as `error.error.{type,message}`. */
 function isAnthropicBalanceTooLow(error: unknown): boolean {

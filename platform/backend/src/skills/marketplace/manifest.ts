@@ -115,7 +115,8 @@ export function resolveMarketplaceSkills(
     let slug = base;
     let counter = 2;
     while (used.has(slug)) {
-      slug = `${base}-${counter}`;
+      const suffix = `-${counter}`;
+      slug = `${truncateSlug(base, MAX_SKILL_SLUG_LENGTH - suffix.length)}${suffix}`;
       counter += 1;
     }
     used.add(slug);
@@ -130,15 +131,18 @@ export function resolveMarketplaceSkills(
 }
 
 /**
- * Version for the single bundle plugin. Derived from the sorted set of skill
- * (id, updatedAt) pairs so two replicas materializing the same input agree on
- * the same value, and editing any skill bumps the version exactly once.
+ * Version for the single bundle plugin. Derived from the layout format
+ * version plus the sorted set of skill (id, updatedAt) pairs so two replicas
+ * materializing the same input agree on the same value, and editing any skill
+ * (or changing the layout format) bumps the version exactly once.
  * @public — exported for testability
  */
 export function resolveBundleVersion(skills: MarketplaceSkillInput[]): string {
   if (skills.length === 0) return "0.0.0+empty";
   const sorted = [...skills].sort((a, b) => a.id.localeCompare(b.id));
   const h = createHash("sha256");
+  h.update(LAYOUT_FORMAT_VERSION);
+  h.update("\0");
   for (const s of sorted) {
     h.update(s.id);
     h.update("\0");
@@ -225,7 +229,7 @@ interface SimpleManifestParams {
 }
 
 function baseSlug(skill: MarketplaceSkillInput): string {
-  const slugged = urlSlugify(skill.name);
+  const slugged = truncateSlug(urlSlugify(skill.name), MAX_SKILL_SLUG_LENGTH);
   if (slugged) return slugged;
   // Names that slugify to empty (e.g. all punctuation or non-ASCII) still
   // need a stable slug; fall back to a prefix of the skill id.
@@ -234,6 +238,21 @@ function baseSlug(skill: MarketplaceSkillInput): string {
     .slice(0, 8)
     .toLowerCase()}`;
 }
+
+// The Agent Skills spec caps skill names (and therefore directory slugs,
+// which must equal the frontmatter name) at 64 characters.
+const MAX_SKILL_SLUG_LENGTH = 64;
+
+function truncateSlug(slug: string, max: number): string {
+  return slug.slice(0, max).replace(/-+$/g, "");
+}
+
+/**
+ * Salt for {@link resolveBundleVersion}. Bump when the materialized layout
+ * output changes shape without any skill edit, so already-installed clients
+ * see a new plugin version and re-sync.
+ */
+const LAYOUT_FORMAT_VERSION = "2";
 
 function bundleDescription(skillCount: number, sourceLabel: string): string {
   const noun = skillCount === 1 ? "skill" : "skills";

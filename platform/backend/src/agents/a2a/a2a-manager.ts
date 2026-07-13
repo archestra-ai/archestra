@@ -101,13 +101,15 @@ export class A2AManager {
      */
     onTextDelta?: (delta: string) => void;
     /**
-     * Cancels the underlying agent run — used by SendStreamingMessage to abort
-     * when the SSE client disconnects.
+     * Cancellation signal forwarded into the agent run. SendStreamingMessage
+     * aborts when the SSE client disconnects; chatops aborts a muted thread's
+     * in-flight model requests instead of letting them finish and post a
+     * now-unwanted reply.
      */
     abortSignal?: AbortSignal;
   }): Promise<A2AProtocolSendMessageResponse> {
     try {
-      const { actor, agentId, request, systemParams } = params;
+      const { actor, agentId, request, systemParams, abortSignal } = params;
 
       const [a2aUser, agent] = await Promise.all([
         actor.kind === "user" && actor.id !== "system"
@@ -290,7 +292,7 @@ export class A2AManager {
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
             onTextDelta: params.onTextDelta,
-            abortSignal: params.abortSignal,
+            abortSignal,
           });
         },
       });

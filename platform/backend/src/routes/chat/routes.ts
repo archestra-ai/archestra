@@ -168,7 +168,10 @@ import {
   detectSandboxCommand,
   runSandboxCommandTurn,
 } from "./sandbox-command-turn";
-import { repairHarmonyToolName } from "./tool-call-repair";
+import {
+  repairHarmonyToolName,
+  repairMalformedToolInput,
+} from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 import { sendGatedUiMessageStreamResponse } from "./ui-stream-response";
 
@@ -1040,6 +1043,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     }
 
                     if (InvalidToolInputError.isInstance(error)) {
+                      // Cheap, deterministic first: models often tack a stray
+                      // token (an extra closing brace, trailing prose) onto
+                      // otherwise-valid tool JSON. Recover the first complete
+                      // JSON value with no extra model round-trip, and only fall
+                      // back to the model re-ask below when that can't safely
+                      // repair it.
+                      const deterministicInput = repairMalformedToolInput(
+                        toolCall.input,
+                      );
+                      if (deterministicInput !== null) {
+                        logger.info(
+                          { conversationId, toolName: toolCall.toolName },
+                          "Repaired malformed tool-call arguments without a model re-ask",
+                        );
+                        return { ...toolCall, input: deterministicInput };
+                      }
+
                       try {
                         const schema = await inputSchema({
                           toolName: toolCall.toolName,

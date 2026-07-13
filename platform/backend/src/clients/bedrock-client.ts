@@ -95,7 +95,7 @@ export class BedrockClient {
         "[BedrockClient] converse error",
       );
       const error = new Error(
-        errorBody || `Bedrock API error: ${response.status}`,
+        buildBedrockErrorMessage(response.status, errorBody),
       );
       (error as Error & { statusCode: number }).statusCode = response.status;
       (error as Error & { responseBody: string }).responseBody = errorBody;
@@ -137,7 +137,7 @@ export class BedrockClient {
         "[BedrockClient] converseStream error",
       );
       const error = new Error(
-        errorBody || `Bedrock API error: ${response.status}`,
+        buildBedrockErrorMessage(response.status, errorBody),
       );
       (error as Error & { statusCode: number }).statusCode = response.status;
       (error as Error & { responseBody: string }).responseBody = errorBody;
@@ -359,4 +359,46 @@ function encodeEventStreamMessage(
     },
     body: bodyBytes,
   });
+}
+
+/**
+ * Build the message for an error thrown from a non-OK Bedrock response.
+ *
+ * The raw response body is only used when it carries a human-readable detail.
+ * An empty body, a whitespace-only body, or a message-less JSON object such as
+ * `{}` would otherwise become the Error's message verbatim, producing an opaque
+ * `Error: {}` that hides the HTTP status. In those cases we fall back to the
+ * status code so the failure is always identifiable. The full raw body is still
+ * preserved on the thrown error's `responseBody` property for callers that need
+ * it.
+ */
+function buildBedrockErrorMessage(status: number, errorBody: string): string {
+  const detail = extractBedrockErrorDetail(errorBody);
+  return detail
+    ? `Bedrock API error (${status}): ${detail}`
+    : `Bedrock API error: ${status}`;
+}
+
+/**
+ * Pull a human-readable detail out of a Bedrock error body, or `undefined` when
+ * the body carries nothing useful. AWS returns JSON payloads shaped like
+ * `{"message": "...", "__type": "..."}`; an empty body or a field-less object
+ * (e.g. `{}`) yields `undefined` so the caller falls back to the HTTP status.
+ */
+function extractBedrockErrorDetail(errorBody: string): string | undefined {
+  const trimmed = errorBody.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object") {
+      const { message, Message, __type } = parsed as Record<string, unknown>;
+      const detail = message ?? Message ?? __type;
+      return typeof detail === "string" && detail.trim() ? detail : undefined;
+    }
+    // A JSON primitive (string/number/boolean) is itself the detail.
+    return String(parsed);
+  } catch {
+    // Not JSON — the raw text is the most useful signal we have.
+    return trimmed;
+  }
 }

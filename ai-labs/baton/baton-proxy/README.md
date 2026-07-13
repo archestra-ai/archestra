@@ -1,0 +1,130 @@
+# baton-proxy
+
+A prototype that puts baton's audience policy on the **inference layer**: an
+OpenAI-compatible HTTP proxy sits between an agent harness and the LLM, and when
+a tool call would send data outside its audience, it makes the harness ask a
+human first — no changes to the harness beyond two lines of config.
+
+The human's approval travels back as an ordinary tool result, so the evidence
+lives *in the trajectory itself*. The proxy keeps no state: it rebuilds the
+baton trajectory from the request `messages` on every call and re-derives the
+decision — the same full-replay design as `baton-check`.
+
+## The flow
+
+Alice asks the agent to email a finance summary to an external auditor who is
+not a reader of the invoices.
+
+1. The model calls `send_email(to = alex@finance-audit.com, …)`.
+2. The proxy rebuilds the trajectory, sees the invoices' audience is
+   `{alice, bob}`, and that the auditor is outside it — an `AudienceExceeds`
+   flow. It **rewrites that tool call** in the response into a call to
+   `baton__request_approval`, carrying the tool, recipients, and reason.
+3. The harness runs `baton__request_approval` like any other tool. It reaches
+   the approver, which shows a person the request and waits for y/n.
+4. On yes the approver returns `GRANTED tool=send_email recipients=alex@…`. The
+   harness appends it as a tool result.
+5. On the next request the proxy replays the trajectory, finds the `GRANTED`
+   record, and permits the re-issued `send_email` — it passes through untouched
+   and the harness sends it. On `DENIED`, the retry is blocked terminally and
+   never re-prompts.
+
+```
+harness ──chat/completions──▶ baton-proxy ──▶ LLM
+   │                              │  rewrites blocked call → baton__request_approval
+   ├──tools/call baton__…──▶ baton-approver ──▶ human (y/n)
+   │                              │  returns GRANTED/DENIED
+   └──retry send_email──▶ baton-proxy ──▶ (permitted) ──▶ LLM
+```
+
+Because the proxy rewrites the blocked call into the approval call (rather than
+returning a text instruction), an autonomous tool loop drives the whole flow on
+its own — the model never sees a dead end.
+
+## Components
+
+- **`baton-proxy`** — the HTTP proxy. `POST /v1/chat/completions`, forwards
+  upstream, rewrites blocked tool calls. Config in `policy.toml`.
+- **`baton-approver`** — an MCP server exposing one tool,
+  `baton__request_approval`. It runs no policy; it only asks a person (terminal
+  y/n, or `--auto approve|deny` for tests) and returns the ruling as a string
+  the proxy parses.
+- **`baton-demo-agent`** — a self-contained [rig](https://docs.rig.rs) agent
+  (built with `--features demo`) that plays the external harness end to end,
+  bundling the approval prompt so you can watch the flow with one command.
+
+## Policy
+
+`policy.toml` declares the requesting user's label, the upstream, and a contract
+per tool (audience readers, trust, effects, requirements, and which arguments
+carry recipients). See the checked-in `policy.toml` for the auditor scenario.
+Tools without a contract are outside the policy and pass through untouched
+(gradual adoption — annotate the risky tools, leave the rest).
+
+## Run the demo
+
+Needs an `OPENROUTER_API_KEY` (the proxy forwards your `Authorization` header
+upstream, so the key is what the demo agent sends).
+
+```sh
+cd ai-labs/baton/baton-proxy
+
+# terminal 1 — the proxy, pointed at OpenRouter (its default upstream)
+cargo run --bin baton-proxy -- --policy policy.toml
+
+# terminal 2 — the demo agent (rig), talking to the proxy
+export OPENROUTER_API_KEY=sk-...      # or: source ../../.env
+cargo run --features demo --bin baton-demo-agent
+```
+
+The agent reads the invoices and tries to email the auditor; the proxy turns
+that into an approval request; approve it in terminal 2 and the send goes
+through. The standalone `baton-approver` binary
+(`cargo run --bin baton-approver`) is the same approval tool as an MCP server,
+for wiring a real external harness instead of the bundled demo.
+
+## Wire your own harness
+
+Two changes, both mechanical:
+
+1. Point the harness's OpenAI `base_url` at the proxy (e.g.
+   `http://127.0.0.1:8730/v1`).
+2. Register the `baton-approver` MCP server so `baton__request_approval` is an
+   available tool.
+
+Streaming is not supported (`stream: true` returns 400); set `stream: false`.
+
+## Trust model (prototype)
+
+The harness is trusted: it alone writes tool-role messages, and only from
+results real MCP servers returned — so a `GRANTED` record in the trajectory is
+authentic by assumption. The model and other tools' *content* are not trusted:
+injected text cannot fabricate a tool-role approval record; the worst it can do
+is get the model to *request* approval, and a human sees every request.
+
+Deliberate limitations, documented rather than hidden:
+
+- **No cryptography.** A harness that copies the messages array copies its
+  approvals with it, and a compromised harness can forge one. Both are outside
+  the threat model — matching `baton-check`'s "permits never cross the process
+  boundary" posture.
+- **Audience, not content.** An approval admits the ruled-on *recipients* for a
+  tool; baton polices who can read, not the message body. Re-sending different
+  content to the same approved recipient is allowed; sending to a *different*
+  outside recipient re-blocks.
+- **Regenerated retries.** Since the blocked call is replaced by the approval
+  call, the model reconstructs the original send from context after `GRANTED`
+  rather than replaying exact bytes.
+- No TLS, no persistence, no multi-approver queue, no execute-once across
+  conversation forks.
+
+## Develop
+
+```sh
+cargo test
+cargo clippy --all-targets --all-features -- -D warnings
+cargo fmt --check
+```
+
+Standalone crate (its own `[workspace]`), like `baton-core` and `baton-check`.
+Concepts of the policy engine live in `baton-core/src/lib.rs`.

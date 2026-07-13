@@ -208,6 +208,17 @@ export class McpServerRuntimeManager {
         logger.info(`${successes.length} MCP server(s) started successfully`);
       }
 
+      // Re-assert every server's egress policy so a restart reconciles floors for
+      // already-running servers, not only newly-created ones. Without this a
+      // server whose deploy path didn't (re)apply its floor stays under the
+      // namespace deny-all baseline — no egress — until a manual policy change.
+      await this.reconcileEgressPolicies({
+        localServers,
+        localCatalogItems,
+        capabilities: networkPolicyCapabilities,
+        cache: networkPolicyResolutionCache,
+      });
+
       logger.info("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
 
@@ -253,6 +264,83 @@ export class McpServerRuntimeManager {
       this.egressBaselineByNamespace.set(namespace, ensured);
     }
     return ensured;
+  }
+
+  /**
+   * Re-assert every local MCP server's egress policy (baseline + per-pod floor /
+   * off / restricted), policy-only — no pod redeploy. Runs at the end of start()
+   * so a restart re-applies the per-pod policy to servers that were already
+   * running (or whose deploy path skipped it), instead of leaving them under the
+   * namespace deny-all baseline with no floor — no egress — until a manual policy
+   * change. Per-server failures are logged and skipped so one server can't abort
+   * the sweep.
+   */
+  private async reconcileEgressPolicies(params: {
+    localServers: McpServer[];
+    localCatalogItems: CatalogItem[];
+    capabilities: K8sNetworkPolicyCapabilities;
+    cache: NetworkPolicyResolutionCache;
+  }): Promise<void> {
+    const {
+      k8sApi,
+      k8sAppsApi,
+      k8sNetworkingApi,
+      k8sCustomObjectsApi,
+      k8sAttach,
+      k8sLog,
+      k8sExec,
+    } = this;
+    if (
+      !k8sApi ||
+      !k8sAppsApi ||
+      !k8sNetworkingApi ||
+      !k8sCustomObjectsApi ||
+      !k8sAttach ||
+      !k8sLog ||
+      !k8sExec
+    ) {
+      return;
+    }
+
+    logger.info(
+      `Reconciling egress policies for ${params.localServers.length} MCP server(s)`,
+    );
+
+    for (let i = 0; i < params.localServers.length; i++) {
+      const mcpServer = params.localServers[i];
+      const catalogItem = params.localCatalogItems[i];
+      try {
+        const namespace = await this.resolveNamespaceForCatalog(
+          catalogItem,
+          params.cache,
+        );
+        await this.ensureEgressBaseline(namespace, params.capabilities);
+        const k8sDeployment = new K8sDeployment({
+          mcpServer,
+          k8sApi,
+          k8sAppsApi,
+          k8sNetworkingApi,
+          k8sCustomObjectsApi,
+          k8sAttach,
+          k8sLog,
+          k8sExec,
+          namespace,
+          catalogItem,
+          effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+            mcpServer,
+            catalogItem,
+            cache: params.cache,
+          }),
+          networkPolicyCapabilities: params.capabilities,
+        });
+        await k8sDeployment.applyK8sNetworkPolicy();
+      } catch (err) {
+        logger.warn(
+          { err, mcpServerId: mcpServer.id },
+          "Failed to reconcile egress policy for MCP server on startup",
+        );
+      }
+    }
   }
 
   private async resolveNamespaceForCatalog(

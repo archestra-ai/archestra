@@ -24,4 +24,4 @@ pub mod wire;
 pub use approval::{ApprovalRecord, Verdict};
 pub use config::{ConfigError, Policy};
 pub use replay::{CallOutcome, ReplayError, Session};
-pub use rewrite::rewrite_response;
+pub use rewrite::{TurnDecision, rewrite_response};

@@ -15,11 +15,28 @@ use serde_json::json;
 use crate::replay::{CallOutcome, Session};
 use crate::wire::{ChatResponse, FunctionCall, ResponseMessage, ToolCall};
 
+/// The policy decision for one model tool-call turn — what the trajectory log
+/// records.
+#[derive(Debug, Clone)]
+pub struct TurnDecision {
+    pub tool: String,
+    pub outcome: &'static str,
+    pub recipients: Vec<String>,
+    pub reason: Option<String>,
+}
+
+impl TurnDecision {
+    /// Whether this decision changed what the model asked for.
+    pub fn rewritten(&self) -> bool {
+        self.outcome != "permitted"
+    }
+}
+
 /// Apply the policy to every choice in `response`, mutating blocked ones in
-/// place. Returns the number of choices that were rewritten.
-pub fn rewrite_response(session: &Session, response: &mut ChatResponse) -> usize {
+/// place. Returns one [`TurnDecision`] per evaluated tool call, for logging.
+pub fn rewrite_response(session: &Session, response: &mut ChatResponse) -> Vec<TurnDecision> {
     let approval_tool = session.approval_tool().as_str();
-    let mut rewritten = 0;
+    let mut decisions = Vec::new();
     for choice in &mut response.choices {
         // The deprecated `function_call` form is not modeled and thus not
         // evaluated; rather than let it bypass the policy, block it fail-closed.
@@ -31,7 +48,12 @@ pub fn rewrite_response(session: &Session, response: &mut ChatResponse) -> usize
                     .to_string(),
             );
             choice.finish_reason = Some("stop".to_string());
-            rewritten += 1;
+            decisions.push(TurnDecision {
+                tool: "function_call".to_string(),
+                outcome: "terminal",
+                recipients: Vec::new(),
+                reason: Some("deprecated function_call form is not inspectable".to_string()),
+            });
             continue;
         }
 
@@ -43,22 +65,23 @@ pub fn rewrite_response(session: &Session, response: &mut ChatResponse) -> usize
         }
 
         let outcomes: Vec<CallOutcome> = calls.iter().map(|call| session.evaluate_new_call(call)).collect();
-        let terminals: Vec<&str> = outcomes
-            .iter()
-            .filter_map(|o| match o {
-                CallOutcome::Terminal { reason } => Some(reason.as_str()),
-                _ => None,
-            })
-            .collect();
+        for (call, outcome) in calls.iter().zip(&outcomes) {
+            decisions.push(decision_of(&call.function.name, outcome));
+        }
+        let has_terminal = outcomes.iter().any(|o| matches!(o, CallOutcome::Terminal { .. }));
+        let has_approval = outcomes.iter().any(|o| matches!(o, CallOutcome::NeedsApproval { .. }));
 
-        if !terminals.is_empty() {
+        if has_terminal {
+            let terminals: Vec<&str> = outcomes
+                .iter()
+                .filter_map(|o| match o {
+                    CallOutcome::Terminal { reason } => Some(reason.as_str()),
+                    _ => None,
+                })
+                .collect();
             replace_with_text(&mut choice.message, terminal_text(&terminals));
             choice.finish_reason = Some("stop".to_string());
-            rewritten += 1;
-            continue;
-        }
-
-        if outcomes.iter().any(|o| matches!(o, CallOutcome::NeedsApproval { .. })) {
+        } else if has_approval {
             let rewired: Vec<ToolCall> = calls
                 .into_iter()
                 .zip(outcomes)
@@ -73,11 +96,33 @@ pub fn rewrite_response(session: &Session, response: &mut ChatResponse) -> usize
                 .collect();
             choice.message.tool_calls = Some(rewired);
             choice.finish_reason = Some("tool_calls".to_string());
-            rewritten += 1;
         }
         // else: every call permitted — leave the choice untouched.
     }
-    rewritten
+    decisions
+}
+
+fn decision_of(tool: &str, outcome: &CallOutcome) -> TurnDecision {
+    match outcome {
+        CallOutcome::Permitted => TurnDecision {
+            tool: tool.to_string(),
+            outcome: "permitted",
+            recipients: Vec::new(),
+            reason: None,
+        },
+        CallOutcome::NeedsApproval { recipients, reason, .. } => TurnDecision {
+            tool: tool.to_string(),
+            outcome: "needs_approval",
+            recipients: recipients.iter().map(|r| r.as_str().to_string()).collect(),
+            reason: Some(reason.clone()),
+        },
+        CallOutcome::Terminal { reason } => TurnDecision {
+            tool: tool.to_string(),
+            outcome: "terminal",
+            recipients: Vec::new(),
+            reason: Some(reason.clone()),
+        },
+    }
 }
 
 /// A call to the approval MCP tool standing in for a blocked call.

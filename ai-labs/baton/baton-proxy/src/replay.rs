@@ -188,6 +188,12 @@ impl<'a> Session<'a> {
     pub fn approval_tool(&self) -> &ToolName {
         &self.policy.approval_tool
     }
+
+    /// A display of the trajectory's current folded audience — the context each
+    /// new call is judged against. For the trajectory log.
+    pub fn context_audience(&self) -> String {
+        self.trajectory.context_label().audience.to_string()
+    }
 }
 
 /// The proxy's authority: a harvested approval record covers a needed audience

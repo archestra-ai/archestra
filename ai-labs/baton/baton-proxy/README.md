@@ -83,6 +83,20 @@ through. The standalone `baton-approver` binary
 (`cargo run --bin baton-approver`) is the same approval tool as an MCP server,
 for wiring a real external harness instead of the bundled demo.
 
+## Trajectory log
+
+`baton-proxy --log trajectory.jsonl` appends one JSON line per evaluated
+tool-call turn — the folded context audience, the tool, its recipients, the
+outcome (`permitted` / `needs_approval` / `terminal`), and the reason:
+
+```json
+{"ts_ms":1783978244211,"context_audience":"{alice@archestra.ai, bob@archestra.ai}","tool":"send_email","outcome":"needs_approval","recipients":["alex@finance-audit.com"],"reason":"breach: recipients outside context audience: alex@finance-audit.com"}
+```
+
+It records the proxy's *decisions* (the durable trajectory record itself is the
+harness's message history). For the engine's step-by-step reasoning instead, run
+with `RUST_LOG=baton_core=debug` (to stderr).
+
 ## Wire your own harness
 
 Two changes, both mechanical:

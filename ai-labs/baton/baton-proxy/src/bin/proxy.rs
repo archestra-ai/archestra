@@ -2,8 +2,11 @@
 //! tool calls on a human. Point a harness's `base_url` at it; register the
 //! approval MCP server so the model can call `baton__request_approval`.
 
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Router;
 use axum::body::Bytes;
@@ -12,7 +15,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use baton_proxy::wire::{ChatResponse, RequestView};
-use baton_proxy::{Policy, Session, rewrite_response};
+use baton_proxy::{Policy, Session, TurnDecision, rewrite_response};
 use clap::Parser;
 use tokio::net::TcpListener;
 
@@ -28,11 +31,15 @@ struct Args {
     /// Address to listen on.
     #[arg(long, env = "BATON_PROXY_ADDR", default_value = "127.0.0.1:8730")]
     addr: String,
+    /// Append one JSON line per evaluated tool-call turn to this file.
+    #[arg(long, env = "BATON_PROXY_LOG")]
+    log: Option<PathBuf>,
 }
 
 struct App {
     policy: Policy,
     client: reqwest::Client,
+    log: Option<Mutex<std::fs::File>>,
 }
 
 #[tokio::main]
@@ -48,9 +55,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let policy = Policy::from_toml(&text)?;
     tracing::info!(upstream = %policy.upstream_base_url, tools = policy.contracts.len(), "loaded policy");
 
+    let log = match &args.log {
+        Some(path) => {
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .map_err(|e| format!("opening log {}: {e}", path.display()))?;
+            tracing::info!(path = %path.display(), "writing trajectory log");
+            Some(Mutex::new(file))
+        }
+        None => None,
+    };
+
     let app = Arc::new(App {
         policy,
         client: reqwest::Client::new(),
+        log,
     });
     let router = Router::new()
         .route("/v1/chat/completions", post(handler))
@@ -135,13 +156,48 @@ async fn handler(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -
         Ok(session) => session,
         Err(e) => return error(StatusCode::CONFLICT, format!("policy replay failed: {e}")),
     };
-    let rewritten = rewrite_response(&session, &mut response);
+    let decisions = rewrite_response(&session, &mut response);
+    let rewritten = decisions.iter().filter(|d| d.rewritten()).count();
     if rewritten > 0 {
         tracing::info!(rewritten, "withheld tool call(s) pending approval or blocked");
     }
+    log_turns(&app, &session.context_audience(), &decisions);
     match serde_json::to_vec(&response) {
         Ok(out) => json_bytes(StatusCode::OK, out),
         Err(_) => json_bytes(out_status, bytes.to_vec()),
+    }
+}
+
+/// Append one JSON line per evaluated tool-call turn to the log file, if one is
+/// configured. Best-effort — a log write failure never blocks a response.
+fn log_turns(app: &App, context_audience: &str, decisions: &[TurnDecision]) {
+    let Some(log) = &app.log else {
+        return;
+    };
+    let ts_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let mut lines = String::new();
+    for decision in decisions {
+        let entry = serde_json::json!({
+            "ts_ms": ts_ms,
+            "context_audience": context_audience,
+            "tool": decision.tool,
+            "outcome": decision.outcome,
+            "recipients": decision.recipients,
+            "reason": decision.reason,
+        });
+        lines.push_str(&entry.to_string());
+        lines.push('\n');
+    }
+    if lines.is_empty() {
+        return;
+    }
+    if let Ok(mut file) = log.lock()
+        && let Err(e) = file.write_all(lines.as_bytes())
+    {
+        tracing::warn!(error = %e, "failed to write trajectory log");
     }
 }
 

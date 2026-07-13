@@ -46,7 +46,9 @@ pub mod agent;
 pub mod error;
 pub mod model;
 pub mod policy;
+pub mod scenarios;
 pub mod scoring;
+pub mod suite;
 pub mod tool;
 
 /// Re-exported so callers can construct baton contracts ([`baton_core::ToolContract`],
@@ -61,4 +63,5 @@ pub use scoring::{
     Attack, EmptyCohort, Episode, ImportantInstructions, InjectionVector, Metrics, SecurityCheck, UtilityCheck,
     run_episode,
 };
+pub use suite::{Case, CaseReport, Scores, report_table};
 pub use tool::{Tool, ToolError, Toolset};

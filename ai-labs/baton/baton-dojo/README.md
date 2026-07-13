@@ -33,13 +33,16 @@ let model = model::from_env("anthropic/claude-3.5-sonnet")?;
 let run = Agent::new(&model).run(&mut ws, &tools, "Summarize my inbox").await?;
 ```
 
-Run an example (each needs a key in `OPENROUTER_API_KEY` or `ai-labs/.env`):
+Run the suite (needs a key in `OPENROUTER_API_KEY` or `ai-labs/.env`):
 
 ```sh
-cargo run -p baton-dojo --example workspace_demo     # trust: reading a suspicious inbox blocks a trusted-only send
-cargo run -p baton-dojo --example recording_to_task  # audience: leaking an internal recording to a public issue is blocked
-cargo run -p baton-dojo --example external_auditor   # audience: a mandated authority declassifies a send to the auditor
+cargo run -p baton-dojo --example suite
 ```
+
+It runs the authored cases (`src/scenarios.rs`) — mailbox (trust), recording→public-issue
+(audience), invoices→auditor (audience + declassification) — each with the gate off and on,
+and prints one table: the gate should drive `leak` to 0 while keeping `utility` up. Add cases
+as library `Case` values in `scenarios.rs`.
 
 ## AgentDojo, in Rust
 

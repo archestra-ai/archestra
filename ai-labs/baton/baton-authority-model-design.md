@@ -264,20 +264,41 @@ Explicitly out of Build 1. The mechanics are fully specified in §3, so each blo
 is pick-up-ready: when a pass starts, convert it into §4-style slices **in this
 same doc, on this same branch**.
 
-### Build 2 — control-release scoping + criterion (1) + Accept
-- [ ] `control_release` bool → `BTreeSet<ValueId>` (D2/D4); `SimFlow.control_labels`
-  + `needed_delta` source attribution; `may_release_control` capability enforced.
-- [ ] Criterion (1): `SimFlow.proposed_effects`; trigger
-  `past.combine(proposed) != past` on finalized effects; `SurfaceGrowth` violation.
-- [ ] `Accept` transition + enumeration branch + on-pending-action authorization
-  (no early `past_effects` commit); `acquire_effects` capability enforced.
-- [ ] `ExitKind`-tagged, cap-fair categorized routes (derive tag from steps;
-  include Waiver/Acknowledge).
-- [ ] **Composition (Constrain↔Accept).** A flow that both breaches a sink and
-  grows the surface enumerates a plan that Constrains first, then Accepts the
-  residual growth; Accept is computed on the *reduced* effects (a full constrain
-  to no-egress leaves no Accept step). Test the residual computation, not just
-  the two remedies in isolation.
+### Build 2 — control-release scoping + criterion (1) + Accept (done)
+Built as slices S5–S8 on this branch; 126 lib tests; external (Codex) + internal
+`REVIEW(diff)`, three rounds to convergence.
+- [x] **S5 — `control_release` bool → `BTreeSet<ValueId>`** (D2/D4). `SimFlow` keeps
+  `control_labels` per-dep (not a pre-folded aggregate); `violations` excludes exactly
+  the named deps; `may_release_control` gates. Attribution is an **inclusion-minimal
+  release solver**: from "release all", drop each redundant dep to a **fixpoint** (a
+  single pass over-releases a dep masked by a later one — e.g. Suspicious masking
+  Unknown in the trust fold — so it iterates until stable). Never over- or
+  under-releases (D4).
+- [x] **S6 — Criterion (1) + `Accept`.** `SurfaceGrowth { growth: Effects }` (carries
+  `Effects`, so a known→`Unknown` jump is representable and still needs acquisition),
+  emitted by a shared growth check consulted on **every** decision (initial evaluate,
+  planning, apply-time rechecks) — not just planning. `Accept` records an
+  `accepted_effects` marker on the pending action and re-evaluates; **no early commit**
+  (release stays the sole committer, and every permit path clones the pending action's
+  proposed effects). `acquire_effects` capability; authority-attributed `AcceptApplied`
+  audit naming only the growth it acquired. The approval carrier generalized from a
+  waiver to a typed `ProposedGrant`, so Accept round-trips the external path and
+  composes with a residual waiver as two sequential single-grant steps.
+- [x] **S7 — `ExitKind`-tagged, cap-fair routes.** `ExitKind` (Sanitize < Constrain <
+  Accept < WaiverOrAcknowledge — the design's singular "Waiver-or-Acknowledge"
+  category) is the route's decisive step; `select_fair` keeps the best route of each
+  applicable category before filling in enumeration order. **No pre-trim cap:** a
+  candidate/plan cap starves a category (confirming a category has no clearing route
+  needs all its candidates), so the full candidate cartesian is generated — the residual
+  O(leaves²) enumeration cost is a follow-up (bounded by construction-time registries
+  and the agent's own request, not adversarial).
+- [x] **S8 — Composition (Constrain↔Accept).** A flow that both breaches a sink and
+  grows enumerates [constrain → accept] with Accept computed on the *reduced* effects
+  (a full constrain to no-egress leaves no Accept step); the walk asserts both steps
+  ran at runtime.
+- **Deferred to the follow-up ledger:** approval/acknowledgment re-entry idempotence
+  (the Build-1 item; Accept→Acknowledge makes it more reachable but S6 did not regress
+  it) and the enumeration-perf scaling above.
 
 ### Build 3 — Endorse as relabel + robustness visibility
 - [ ] Move trust/audience endorsement out of `TransientWaiver` into the relabel

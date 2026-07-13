@@ -600,6 +600,37 @@ impl Trajectory {
         self.state.commit_effects(effects);
     }
 
+    /// Test setup: admit a derived value under `output`, attributed to `source`
+    /// via a real `Provenance::Transformed`, without a pending action or plan.
+    /// Builds a multi-level provenance chain so a D3 test can exercise the
+    /// transitive ancestry walk (a value laundered below the fold whose
+    /// suspicious ancestor is several edges back).
+    #[cfg(test)]
+    pub(crate) fn seed_transformed(&mut self, source: ValueId, output: ValueLabel) -> ValueId {
+        let transition = self.mint_transition();
+        let body = self
+            .store
+            .get(source)
+            .expect("seed_transformed source admitted")
+            .body()
+            .clone();
+        let derived = self
+            .store
+            .admit_transformed(
+                source,
+                transition,
+                crate::value::TransformerRef {
+                    id: "seed".to_owned(),
+                    version: 0,
+                },
+                output,
+                body,
+            )
+            .expect("seed_transformed source admitted");
+        self.advance();
+        derived
+    }
+
     /// Every public mutation advances the revision exactly once, as one
     /// transaction.
     fn advance(&mut self) {

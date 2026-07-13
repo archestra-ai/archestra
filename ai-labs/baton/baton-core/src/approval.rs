@@ -68,6 +68,21 @@ impl<'a> TrajectoryView<'a> {
     pub fn provenance(&self, value: ValueId) -> Option<&Provenance> {
         self.store.get(value).ok().map(|stored| stored.provenance())
     }
+
+    /// The transitive provenance ancestry of `value` — the value and every
+    /// value it derives from — as (id, label, provenance) triples, so an inline
+    /// authority can refuse to endorse a value with suspicious ancestry even
+    /// when the value's own label is clean (D3). A value laundered below the
+    /// fold does not name a suspicious ancestor in its own label; only walking
+    /// the closure reveals it.
+    pub fn ancestry(&self, value: ValueId) -> impl Iterator<Item = (ValueId, &ValueLabel, &Provenance)> {
+        self.store.provenance_closure([value]).into_iter().filter_map(|id| {
+            self.store
+                .get(id)
+                .ok()
+                .map(|stored| (id, stored.label(), stored.provenance()))
+        })
+    }
 }
 
 /// One value's ruling-relevant projection: its label and provenance, never its
@@ -82,22 +97,24 @@ pub struct ValueView {
 /// in a [`PendingApproval`] so an out-of-process authority can judge without a
 /// live trajectory — a borrow cannot cross the approval boundary. Never bytes.
 ///
-/// Scoped to the operation's *direct* values (the argument leaves and control
-/// dependencies), not the transitive provenance closure: a snapshotted value's
-/// `Provenance` may name ancestors this snapshot does not carry. Walking that
-/// closure so an authority can inspect suspicious ancestry is a later pass
-/// (design §5, D3); today the snapshot is the immediate operation scope.
+/// Carries the **transitive provenance closure** of the operation's direct
+/// values (argument leaves and control dependencies) — every ancestor they
+/// derive from — so an out-of-process authority can inspect suspicious ancestry
+/// exactly as an inline one walks [`TrajectoryView::ancestry`] (D3). The
+/// closure is intrinsic to [`Self::of`], so every grant site (waive, accept,
+/// endorse) carries it uniformly.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AncestrySnapshot {
     values: BTreeMap<ValueId, ValueView>,
 }
 
 impl AncestrySnapshot {
-    /// Snapshot the label and provenance of each admitted value in `ids`,
-    /// taken before any mutation. Unknown ids are skipped — the snapshot is
-    /// context for a ruling, not a check.
+    /// Snapshot the label and provenance of the transitive provenance closure
+    /// of `ids`, taken before any mutation. Unknown ids are skipped — the
+    /// snapshot is context for a ruling, not a check.
     pub(crate) fn of(store: &ValueStore, ids: impl IntoIterator<Item = ValueId>) -> Self {
-        let values = ids
+        let values = store
+            .provenance_closure(ids)
             .into_iter()
             .filter_map(|id| {
                 store.get(id).ok().map(|stored| {
@@ -149,9 +166,10 @@ pub enum AuthorityMode {
 }
 
 /// A grant step awaiting an external authority's ruling. Issued by the engine
-/// when an `ApplyWaiver` or `AcceptGrowth` step names an external authority;
-/// consumed by [`crate::engine::PolicyEngine::apply_approval`], which dispatches
-/// on the grant variant.
+/// when an `ApplyWaiver`, `AcceptGrowth`, or `EndorseValue` step names an
+/// external authority; consumed by
+/// [`crate::engine::PolicyEngine::apply_approval`], which dispatches on the
+/// grant variant.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PendingApproval {
     plan: PlanId,

@@ -144,7 +144,7 @@ fn main() {
         .record_output(receipt, OpaqueValue::new("message-id: 1"))
         .unwrap();
 
-    println!("6. emailing the doc to charlie (outside its audience): the plan needs a human waiver.");
+    println!("6. emailing the doc to charlie (outside its audience): a human must endorse the doc for charlie.");
     let request = email(&mut trajectory, doc, "charlie");
     let plans = match engine.evaluate(&mut trajectory, request) {
         Decision::Blocked(Blocked::Remediable { plans, .. }) => plans,

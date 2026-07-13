@@ -3180,6 +3180,76 @@ mod tests {
         );
     }
 
+    /// D3: an inline authority walks the *transitive* ancestry and refuses to
+    /// endorse a value whose suspicious source is two provenance edges back —
+    /// invisible to the value's own laundered label and to a single provenance
+    /// lookup, visible only through the closure walk.
+    #[test]
+    fn endorse_authority_refuses_a_suspicious_transitive_ancestry() {
+        fn refuse_suspicious_ancestry(
+            grant: &crate::transition::ProposedGrant,
+            _: &[Violation],
+            view: &crate::approval::TrajectoryView,
+        ) -> Option<crate::approval::Ruling> {
+            let crate::transition::ProposedGrant::Endorse { source, .. } = grant else {
+                return None;
+            };
+            let tainted = view
+                .ancestry(*source)
+                .any(|(_, label, _)| label.trust == Trust::SUSPICIOUS);
+            if tainted {
+                None
+            } else {
+                Some(crate::approval::Ruling::Approve {
+                    reason: "clean ancestry".to_owned(),
+                })
+            }
+        }
+        let mut engine = engine_with([email_contract()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("vetter"),
+                mandate: human().mandate,
+                mode: crate::approval::AuthorityMode::Inline(refuse_suspicious_ancestry),
+            })
+            .unwrap();
+
+        // A body laundered twice below the fold: trusted itself, but its root
+        // (two edges back) carries `root_trust`.
+        let laundered_body = |trajectory: &mut Trajectory, root_trust: Trust| -> ValueId {
+            let root = ingress(trajectory, &["alice"], root_trust, "raw");
+            let trusted = ValueLabel {
+                audience: Audience::readers([user("alice")]),
+                trust: Trust::TRUSTED,
+            };
+            let mid = trajectory.seed_transformed(root, trusted.clone());
+            trajectory.seed_transformed(mid, trusted)
+        };
+
+        // Suspicious root → the authority abstains → terminal.
+        let mut tainted = Trajectory::new();
+        tainted.seed_committed_effects(Effects::declared([Effect::Egress]));
+        let body = laundered_body(&mut tainted, Trust::SUSPICIOUS);
+        let request = email_request(&mut tainted, body, "charlie");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut tainted, request) else {
+            panic!("expected remediable block");
+        };
+        let cap = engine.mint_step(&tainted, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
+            engine.apply_step(&mut tainted, cap).unwrap()
+        else {
+            panic!("a suspicious transitive ancestor should be refused");
+        };
+        assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
+
+        // Trusted root, same shape → endorsed and permitted.
+        let mut clean = Trajectory::new();
+        clean.seed_committed_effects(Effects::declared([Effect::Egress]));
+        let body = laundered_body(&mut clean, Trust::TRUSTED);
+        let request = email_request(&mut clean, body, "charlie");
+        let _token = walk_to_permit(&engine, &mut clean, request);
+    }
+
     /// Control-borne taint prefers the narrower control-release waiver over
     /// attesting the data itself.
     #[test]

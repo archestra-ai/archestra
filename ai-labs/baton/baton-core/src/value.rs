@@ -200,6 +200,26 @@ impl ValueStore {
         self.values.is_empty()
     }
 
+    /// Every value reachable from `seeds` by following provenance edges — the
+    /// transitive ancestry, seeds included. A visited-set BFS; it terminates
+    /// because provenance names only already-admitted values (minted with a
+    /// lower id by `push`), so the ancestry graph is a DAG. Powers the D3
+    /// ruling context so an authority can inspect an endorsed value's suspicious
+    /// ancestors, not just the immediate operation scope.
+    pub(crate) fn provenance_closure(&self, seeds: impl IntoIterator<Item = ValueId>) -> BTreeSet<ValueId> {
+        let mut seen = BTreeSet::new();
+        let mut queue: Vec<ValueId> = seeds.into_iter().collect();
+        while let Some(id) = queue.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            if let Ok(stored) = self.get(id) {
+                queue.extend(provenance_parents(stored.provenance()));
+            }
+        }
+        seen
+    }
+
     /// Fold the labels of `ids`. Fails loudly on an unknown id: silently
     /// treating a missing dependency as `Unknown` would hide a caller bug.
     pub fn fold_labels<'a>(&self, ids: impl IntoIterator<Item = &'a ValueId>) -> Result<ValueLabel, UnknownValue> {
@@ -314,6 +334,17 @@ impl ValueStore {
             provenance,
         });
         id
+    }
+}
+
+/// The values a provenance names as its direct ancestors — the edges the
+/// closure walk follows.
+fn provenance_parents(provenance: &Provenance) -> Vec<ValueId> {
+    match provenance {
+        Provenance::Ingress { .. } => Vec::new(),
+        Provenance::ModelOutput { reads, control } => reads.iter().chain(control).copied().collect(),
+        Provenance::ToolOutput { arguments, control, .. } => arguments.iter().chain(control).copied().collect(),
+        Provenance::Transformed { source, .. } | Provenance::Endorsed { source, .. } => vec![*source],
     }
 }
 

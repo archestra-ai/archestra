@@ -280,7 +280,7 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
         path.join(target, "plugins/org-test-skills/skills/clone-me/SKILL.md"),
         "utf8",
       );
-      expect(skillMd).toContain("name: Clone Me");
+      expect(skillMd).toContain("name: clone-me");
       expect(skillMd).toContain("# Clone Me");
     }, 30_000);
   },

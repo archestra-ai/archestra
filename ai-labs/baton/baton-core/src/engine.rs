@@ -25,7 +25,7 @@ use crate::audit::AuditEvent;
 use crate::audit::AuthorityName;
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::Effects;
-use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
+use crate::plan::{ExitKind, NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
 use crate::request::{ArgumentSchema, ResponseRequest, ToolRequest};
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::transition::{
@@ -1333,7 +1333,7 @@ impl PolicyEngine {
 
         'outer: for transform in &transform_options {
             for constrain in &constrain_options {
-                if plans.len() >= MAX_PLANS {
+                if plans.len() >= GENERATION_CAP {
                     break 'outer;
                 }
                 let mut sim = base.clone();
@@ -1450,7 +1450,7 @@ impl PolicyEngine {
                 }
             }
         }
-        plans
+        select_fair(plans, MAX_PLANS)
     }
 
     /// Deterministic waiver candidates for a remaining violation set: the
@@ -1569,8 +1569,58 @@ impl PolicyEngine {
     }
 }
 
-/// Bound on enumerated plans per blocked flow.
+/// Bound on enumerated plans returned per blocked flow.
 const MAX_PLANS: usize = 8;
+
+/// Bound on candidates *generated* before fair selection trims to `MAX_PLANS`.
+/// Headroom above `MAX_PLANS` so every applicable category is represented in the
+/// pool the fair pass selects from; only a pathological registry reaches it.
+const GENERATION_CAP: usize = 64;
+
+/// Trim enumerated candidates to `cap`, guaranteeing the best (fewest-step, then
+/// earliest) route of each applicable [`ExitKind`] survives before remaining
+/// slots fill in enumeration order — so the cap never starves a category.
+/// Enumeration order is otherwise preserved, and a pool already within `cap` is
+/// returned unchanged.
+fn select_fair(
+    plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
+    cap: usize,
+) -> Vec<(NonEmptyVec<TransitionSpec>, Posture)> {
+    if plans.len() <= cap {
+        return plans;
+    }
+    let categories: Vec<ExitKind> = plans.iter().map(|(steps, _)| ExitKind::decisive(steps)).collect();
+    let mut keep = vec![false; plans.len()];
+    let mut kept = 0usize;
+    // Pass 1: the fewest-step (then earliest) route of each category.
+    for cat in categories.iter().copied().collect::<BTreeSet<_>>() {
+        if kept >= cap {
+            break;
+        }
+        if let Some(best) = (0..plans.len())
+            .filter(|&i| categories[i] == cat)
+            .min_by_key(|&i| (plans[i].0.len(), i))
+        {
+            keep[best] = true;
+            kept += 1;
+        }
+    }
+    // Pass 2: fill remaining slots in enumeration order.
+    for slot in keep.iter_mut() {
+        if kept >= cap {
+            break;
+        }
+        if !*slot {
+            *slot = true;
+            kept += 1;
+        }
+    }
+    plans
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(plan, keep)| keep.then_some(plan))
+        .collect()
+}
 
 /// Above this many control deps, the exhaustive minimal-release subset search is
 /// skipped (the plain attestation waiver still clears the flow). Control sets are
@@ -3571,6 +3621,136 @@ mod tests {
             panic!("re-entry after acceptance should permit idempotently");
         };
         assert_eq!(accepts(&trajectory), 1);
+    }
+
+    // ---- S7: ExitKind categorization + cap fairness ----
+
+    fn tref(id: &str) -> crate::value::TransformerRef {
+        crate::value::TransformerRef {
+            id: id.into(),
+            version: 1,
+        }
+    }
+
+    fn plan_steps(kinds: Vec<TransitionKind>) -> NonEmptyVec<TransitionSpec> {
+        NonEmptyVec::from_vec(
+            kinds
+                .into_iter()
+                .map(|kind| TransitionSpec {
+                    precondition: Posture::clean(),
+                    postcondition: Posture::clean(),
+                    kind,
+                })
+                .collect(),
+        )
+        .expect("non-empty")
+    }
+
+    /// A route's category is its decisive (most authority-dependent) step; a
+    /// composite is categorized by that step, not its first.
+    #[test]
+    fn exit_kind_is_the_decisive_step() {
+        let transform = TransitionKind::TransformValue {
+            source: ValueId::new(0),
+            transformer: tref("s"),
+        };
+        let constrain = TransitionKind::ConstrainAction { transition: tref("c") };
+        let accept = TransitionKind::AcceptGrowth {
+            effects: Effects::declared([Effect::Egress]),
+        };
+        let waiver = TransitionKind::ApplyWaiver {
+            delta: crate::transition::TransientWaiver::empty(),
+        };
+        assert_eq!(
+            ExitKind::decisive(&plan_steps(vec![transform.clone()])),
+            ExitKind::Sanitize
+        );
+        assert_eq!(
+            ExitKind::decisive(&plan_steps(vec![constrain.clone()])),
+            ExitKind::Constrain
+        );
+        assert_eq!(ExitKind::decisive(&plan_steps(vec![accept.clone()])), ExitKind::Accept);
+        assert_eq!(
+            ExitKind::decisive(&plan_steps(vec![waiver.clone()])),
+            ExitKind::WaiverOrAcknowledge
+        );
+        // [constrain -> accept] is decided by the accept.
+        assert_eq!(
+            ExitKind::decisive(&plan_steps(vec![constrain, accept])),
+            ExitKind::Accept
+        );
+        // [transform -> waiver] is decided by the waiver.
+        assert_eq!(
+            ExitKind::decisive(&plan_steps(vec![transform, waiver])),
+            ExitKind::WaiverOrAcknowledge
+        );
+    }
+
+    /// With more routes than the cap but no more categories than the cap, fair
+    /// selection keeps one route of every category — a flat truncation would
+    /// let the many Sanitize routes starve the rest.
+    #[test]
+    fn cap_fairness_keeps_one_route_per_category() {
+        let clean = Posture::clean();
+        let mut pool: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
+        for i in 0..6u64 {
+            pool.push((
+                plan_steps(vec![TransitionKind::TransformValue {
+                    source: ValueId::new(i),
+                    transformer: tref("s"),
+                }]),
+                clean.clone(),
+            ));
+        }
+        pool.push((
+            plan_steps(vec![TransitionKind::ConstrainAction { transition: tref("c") }]),
+            clean.clone(),
+        ));
+        pool.push((
+            plan_steps(vec![TransitionKind::AcceptGrowth {
+                effects: Effects::declared([Effect::Egress]),
+            }]),
+            clean.clone(),
+        ));
+        pool.push((
+            plan_steps(vec![TransitionKind::ApplyWaiver {
+                delta: crate::transition::TransientWaiver::empty(),
+            }]),
+            clean.clone(),
+        ));
+        // 9 routes, 4 categories, cap 4.
+        let selected = select_fair(pool, 4);
+        assert_eq!(selected.len(), 4);
+        let categories: BTreeSet<ExitKind> = selected.iter().map(|(steps, _)| ExitKind::decisive(steps)).collect();
+        assert_eq!(
+            categories,
+            BTreeSet::from([
+                ExitKind::Sanitize,
+                ExitKind::Constrain,
+                ExitKind::Accept,
+                ExitKind::WaiverOrAcknowledge,
+            ])
+        );
+    }
+
+    /// A pool already within the cap is returned unchanged (order preserved).
+    #[test]
+    fn cap_fairness_is_a_noop_within_the_cap() {
+        let clean = Posture::clean();
+        let pool: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = vec![
+            (
+                plan_steps(vec![TransitionKind::ConstrainAction { transition: tref("c") }]),
+                clean.clone(),
+            ),
+            (
+                plan_steps(vec![TransitionKind::ApplyWaiver {
+                    delta: crate::transition::TransientWaiver::empty(),
+                }]),
+                clean.clone(),
+            ),
+        ];
+        let selected = select_fair(pool.clone(), MAX_PLANS);
+        assert_eq!(selected, pool);
     }
 
     /// An external waiver round-trips through PendingApproval; approval

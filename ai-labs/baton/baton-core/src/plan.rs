@@ -93,6 +93,45 @@ pub enum TransitionKind {
     },
 }
 
+/// The category of a remedy route, derived from its decisive step — the most
+/// authority-dependent one. Used to present routes and to keep the plan cap
+/// from starving any one kind. Variants are ordered by increasing authority
+/// dependence (a registration-justified reduction is cheapest; a declassifying
+/// waiver is the most powerful), so the decisive step is the `max`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum ExitKind {
+    /// A content-justified relabel by a registered transformer.
+    Sanitize,
+    /// A registered narrowing of the action (tool, effects, recipients).
+    Constrain,
+    /// An authority acquired a criterion-(1) surface growth.
+    Accept,
+    /// An authority lifted a check (trust, audience, prior effects,
+    /// confirmation, control release) or acknowledged an unprovable fact.
+    WaiverOrAcknowledge,
+}
+
+impl ExitKind {
+    fn of_step(kind: &TransitionKind) -> Self {
+        match kind {
+            TransitionKind::TransformValue { .. } => Self::Sanitize,
+            TransitionKind::ConstrainAction { .. } => Self::Constrain,
+            TransitionKind::AcceptGrowth { .. } => Self::Accept,
+            TransitionKind::ApplyWaiver { .. } => Self::WaiverOrAcknowledge,
+        }
+    }
+
+    /// The decisive category of a step sequence: its most authority-dependent
+    /// step.
+    pub fn decisive(steps: &NonEmptyVec<TransitionSpec>) -> Self {
+        steps
+            .iter()
+            .map(|step| Self::of_step(&step.kind))
+            .max()
+            .expect("a plan has at least one step")
+    }
+}
+
 /// What the flow's evaluation is predicted to report at a point in a plan:
 /// the violations that remain, in the check's emission order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -137,6 +176,13 @@ pub struct RemedyPlan {
     /// Steps resolve transformers, transitions, and authorities from their
     /// registries, so a plan is applicable only on the engine that minted it.
     pub engine: EngineId,
+}
+
+impl RemedyPlan {
+    /// This route's category — its decisive (most authority-dependent) step.
+    pub fn exit_kind(&self) -> ExitKind {
+        ExitKind::decisive(&self.steps)
+    }
 }
 
 #[cfg(test)]

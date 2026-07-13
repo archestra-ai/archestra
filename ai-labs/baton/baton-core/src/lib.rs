@@ -110,7 +110,7 @@ pub use approval::{
 pub use audit::{AuthorityName, TransitionFailure};
 pub use contract::{AttentionRule, AudienceRule};
 pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
-pub use plan::{NonEmptyVec, RemedyPlan, TransitionKind};
+pub use plan::{ExitKind, NonEmptyVec, RemedyPlan, TransitionKind};
 pub use revision::PlanId;
 pub use transition::{
     ActionTransition, AuthorityMandate, DuplicateRegistration, LabelPredicate, ProposedGrant, RegisteredTransformer,

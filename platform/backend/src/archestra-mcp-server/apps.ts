@@ -1026,8 +1026,9 @@ const registry = defineArchestraTools([
       }
 
       // Whether the base is a managed-sections document decides which edits are
-      // allowed (sections mode requires it; a raw edit must not strip it) and
-      // whether a wholesale replacement earns the efficiency nudge. Computed once.
+      // allowed (sections mode requires it) and how the result reads: a raw edit
+      // that drops the owned nodes converts the app to raw, and a wholesale
+      // replacement of a managed app earns the efficiency nudge. Computed once.
       const baseManaged = isManagedDocument(base.html);
 
       let version: VersionPayload;

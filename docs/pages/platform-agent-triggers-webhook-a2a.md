@@ -29,13 +29,22 @@ Other languages can call the JSON-RPC endpoint directly using the request shapes
 
 ## Authentication
 
-Both endpoints require an Archestra token in the `Authorization` header:
+Every request carries a bearer token in the `Authorization` header:
 
 ```
-Authorization: Bearer <platform_token>
+Authorization: Bearer <token>
 ```
 
-A personal token from **Settings > Your Account**, a team token from **Settings > Teams**, or the organization token from **Settings > Organization** all work, as long as the token has access to the target agent.
+A2A validates the token the same way the [MCP gateway](/docs/mcp-authentication) does, so it accepts the methods below. Whichever you use, the resolved caller's [role and team access](/docs/platform-access-control) still gate which agents they can reach.
+
+| Method | Best for | Acting user | Notes |
+| --- | --- | --- | --- |
+| Bearer token | Direct API integrations and scripts | Personal tokens only | Static platform token from **Settings > Your Account** (personal), **Settings > Teams** (team), or **Settings > Organization** (org). Team and org tokens don't identify a single user. |
+| External IdP JWT | Callers signed in through a corporate identity provider | Yes | The caller presents their IdP's JWT directly. Bind the agent to an [identity provider](/docs/platform-identity-providers), and Archestra validates the JWT against it and resolves the user — no Archestra token to hand out. |
+| OAuth client credentials | Backend services and machine-to-machine callers | No | A pre-registered [OAuth client](/docs/mcp-authentication) scoped to the agent. |
+| OAuth authorization code | An app acting for whoever is signed in | Yes | A confidential OAuth client that resolves the individual user. |
+
+For a browser app in front of a long-running agent, keep the token in your backend and call A2A server-to-server. To give each of your users their own identity without handing out tokens, bind the agent to your identity provider and forward each user's JWT from that backend — the External IdP JWT method.
 
 ## SendMessage
 

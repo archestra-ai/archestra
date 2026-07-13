@@ -57,7 +57,13 @@ not built in the current pass is called out explicitly in §5, ready to pick up.
    route through the same chain as breaches. This is an **intentional** semantic
    change, not equivalence. Old modes map: `Escalate`→normal routing; `Deny`→no
    acknowledge authority registered; `AllowWithAudit`→register a max-mandate
-   Inline authority.
+   Inline authority. **`Unknown` stays first-class** — a definite fold position,
+   not an error or a missing value — so it is a *routable* state, not a dead end:
+   an authority must be able to map an unknown to a known label (Endorse raises an
+   unknown-trust/audience value to a vouched label; Acknowledge clears an
+   unprovable fact), exactly as it clears a breach. Nothing silently coerces an
+   `Unknown` to a default; every unknown→known step is an authority's audited
+   decision.
 10. **The block returns categorized routes** (Endorse / Sanitize / Accept /
     Constrain / Waiver-or-Acknowledge + competent authority), not a flat list.
 

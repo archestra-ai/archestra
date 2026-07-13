@@ -33,7 +33,7 @@ use crate::turn::{Trajectory, TrajectoryId};
 use crate::value::{UnknownValue, ValueLabel};
 
 /// The reserved sink name the final assistant response is checked under.
-pub const RESPONSE_SINK: &str = "assistant.response";
+pub(crate) const RESPONSE_SINK: &str = "assistant.response";
 
 /// Identity of one engine configuration, unique within the process. Plans,
 /// step capabilities, and pending approvals bind to it: registries are the

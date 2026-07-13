@@ -42,6 +42,8 @@ pub mod contract;
 pub mod dimension;
 pub mod engine;
 pub mod plan;
+// Technically public (reusable label algebras) but never re-exported at the
+// root: a consumer composes the built-in dimensions, not the raw presets.
 pub mod preset;
 pub mod request;
 pub mod revision;
@@ -77,24 +79,37 @@ impl fmt::Display for ToolName {
     }
 }
 
-pub use approval::{PendingApproval, PolicyRule, PolicyRuleFn, Ruling};
-pub use audit::{AdjudicatorName, AuditEvent, TrajectoryState, TransitionFailure, TransitionOutcome, WaiverKind};
-pub use contract::{AttentionRule, AudienceRule, Breach, Requirements, Unprovable, Verdict, Violation};
+// The crate root re-exports two tiers of the public surface. Everything else
+// stays reachable through its own module (`baton_core::audit::AuditEvent`, …)
+// but is deliberately not hoisted here: those types are read off returned
+// values, never constructed by a consumer, so they don't belong in the API
+// namespace a caller builds against.
+
+// ── Core ────────────────────────────────────────────────────────────────
+// The vocabulary you cannot use baton without: build an engine, run a
+// trajectory, evaluate a flow, dispatch it, or handle a block.
+pub use contract::{Requirements, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, EngineId, ExecutionToken,
-    PolicyEngine, RESPONSE_SINK, RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome,
-    StepRefused, TerminalBlock, ToolContract, UnknownPolicy,
+    Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
+    RejectedToken, TerminalBlock, ToolContract, UnknownPolicy,
 };
-pub use plan::{NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec, WaiverAuthority};
-pub use request::{
-    ActionState, ArgumentName, ArgumentSchema, ArgumentTree, FlowLabels, PendingAction, ResponseRequest, ToolRequest,
-    render,
-};
-pub use revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
+pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
+pub use revision::{Revision, ValueId};
+pub use turn::{Speaker, Trajectory};
+pub use value::{OpaqueValue, UnknownValue, ValueLabel};
+
+// ── Feature ─────────────────────────────────────────────────────────────
+// Named only when you opt into the corresponding capability: the response
+// sink, remediation, transformers, action constraints, or waivers.
+pub use approval::{PendingApproval, PolicyRule, PolicyRuleFn, Ruling};
+pub use audit::{AdjudicatorName, TransitionFailure};
+pub use contract::{AttentionRule, AudienceRule};
+pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
+pub use plan::{NonEmptyVec, RemedyPlan, TransitionKind};
+pub use revision::PlanId;
 pub use transition::{
     ActionTransition, Adjudicator, DuplicateRegistration, LabelPredicate, RegisteredTransformer, TransformerDescriptor,
     TransformerError, TransformerFn, WaiverDelta,
 };
-pub use turn::{Actor, Speaker, Trajectory, TrajectoryId, Turn, UserTurn};
-pub use value::{OpaqueValue, Provenance, StoredValue, TransformerRef, UnknownValue, ValueLabel, ValueStore};
+pub use value::TransformerRef;

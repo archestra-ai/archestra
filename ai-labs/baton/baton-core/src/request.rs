@@ -167,18 +167,20 @@ impl ArgumentSchema {
     }
 }
 
-/// The explicit and control label folds of one flow.
+/// The explicit and control label folds of one flow. Internal to the check
+/// pipeline — a consumer sees the result of a check ([`crate::engine::Decision`]),
+/// not this intermediate fold.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FlowLabels {
-    pub args: ValueLabel,
-    pub control: ValueLabel,
+pub(crate) struct FlowLabels {
+    pub(crate) args: ValueLabel,
+    pub(crate) control: ValueLabel,
 }
 
 impl FlowLabels {
     /// `L_flow = combine(L_args, L_control)` — what audience and trust
     /// requirements are checked against.
     #[must_use]
-    pub fn flow(&self) -> ValueLabel {
+    pub(crate) fn flow(&self) -> ValueLabel {
         self.args.clone().combine(self.control.clone())
     }
 }
@@ -206,7 +208,7 @@ impl ToolRequest {
     }
 
     /// Fold the explicit and control labels of this request from the store.
-    pub fn flow_labels(&self, store: &ValueStore) -> Result<FlowLabels, UnknownValue> {
+    pub(crate) fn flow_labels(&self, store: &ValueStore) -> Result<FlowLabels, UnknownValue> {
         let leaves = self.arguments.leaves();
         Ok(FlowLabels {
             args: store.fold_labels(leaves.iter())?,
@@ -227,7 +229,7 @@ pub struct ResponseRequest {
 }
 
 impl ResponseRequest {
-    pub fn flow_labels(&self, store: &ValueStore) -> Result<FlowLabels, UnknownValue> {
+    pub(crate) fn flow_labels(&self, store: &ValueStore) -> Result<FlowLabels, UnknownValue> {
         let leaves = self.body.leaves();
         Ok(FlowLabels {
             args: store.fold_labels(leaves.iter())?,
@@ -313,7 +315,7 @@ impl PendingAction {
 /// stored bytes as JSON strings, lists and objects render in structural
 /// (`BTreeMap`) order. The engine renders once at release time and hands the
 /// adapter the owned result — adapters never re-render.
-pub fn render(tree: &ArgumentTree<ValueId>, store: &ValueStore) -> Result<String, UnknownValue> {
+pub(crate) fn render(tree: &ArgumentTree<ValueId>, store: &ValueStore) -> Result<String, UnknownValue> {
     let mut out = String::new();
     render_into(tree, store, &mut out)?;
     Ok(out)

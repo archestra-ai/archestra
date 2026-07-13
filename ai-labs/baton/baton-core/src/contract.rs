@@ -181,9 +181,13 @@ impl Violation {
     }
 }
 
+/// The raw output of the sink check. Internal: a consumer receives a
+/// [`crate::engine::Decision`] (or [`crate::engine::ResponseDecision`]), which
+/// folds this verdict together with the engine's unknown-policy and remedy
+/// machinery.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[must_use]
-pub enum Verdict {
+pub(crate) enum Verdict {
     Allow,
     Escalate(Vec<Violation>),
 }
@@ -199,7 +203,7 @@ impl Requirements {
     /// contract, so each arm pushes in turn. The per-dimension order
     /// semantics live beside each combine in `dimension.rs`; this is only
     /// the composition and the structural (non-dimension) arms.
-    pub fn check_flow(
+    pub(crate) fn check_flow(
         &self,
         flow: &ValueLabel,
         past_effects: &Effects,

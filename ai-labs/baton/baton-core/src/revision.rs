@@ -39,11 +39,11 @@ impl fmt::Display for Revision {
 }
 
 macro_rules! sequential_id {
-    ($(#[$doc:meta])* $name:ident, $display:literal) => {
+    ($(#[$doc:meta])* $vis:vis $name:ident, $display:literal) => {
         $(#[$doc])*
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
         #[serde(transparent)]
-        pub struct $name(u64);
+        $vis struct $name(u64);
 
         impl $name {
             pub fn new(index: u64) -> Self {
@@ -67,30 +67,32 @@ sequential_id!(
     /// Identity of one stored value within its trajectory. Identifies
     /// *provenance*, not byte equality: two byte-identical values may carry
     /// different labels and derivations.
-    ValueId,
+    pub ValueId,
     "value"
 );
 
 sequential_id!(
-    /// Position of one turn within its trajectory.
-    TurnId,
+    /// Position of one turn within its trajectory. Surfaced only through
+    /// [`crate::value::Provenance`] when inspecting a value's history — not
+    /// re-exported at the crate root.
+    pub TurnId,
     "turn"
 );
 
 sequential_id!(
     /// Identity of one pending action within its trajectory.
-    ActionId,
+    pub ActionId,
     "action"
 );
 
 sequential_id!(
     /// Identity of one remedy plan minted for one blocked flow.
-    PlanId,
+    pub PlanId,
     "plan"
 );
 
 sequential_id!(
     /// Identity of one transition step within its trajectory's history.
-    TransitionId,
+    pub TransitionId,
     "transition"
 );

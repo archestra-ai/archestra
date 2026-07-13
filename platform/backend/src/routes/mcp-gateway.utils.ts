@@ -78,6 +78,11 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import {
+  appLaunchToolDescription,
+  appLaunchToolTitle,
+  sanitizeAppNameForToolMetadata,
+} from "@/services/apps/app-run-link";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -93,6 +98,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -296,11 +302,14 @@ export async function createAgentServer(
             TOOL_RENDER_APP_SHORT_NAME,
         );
 
-    // Resolve the backing catalogs of the assigned tools once: their names feed
-    // both the search_tools description and the app launch-tool titles below.
+    // Resolve the backing catalogs of the advertised tools once: their names
+    // feed both the search_tools description and the app launch-tool title and
+    // description below. Cover BOTH assigned tools and the dynamically-widened
+    // ones (access-all-tools) — otherwise a dynamically-surfaced app launch
+    // tool has no catalog here and falls through to its raw stored metadata.
     const catalogsById = await InternalMcpCatalogModel.getByIds([
       ...new Set(
-        mcpTools
+        [...mcpTools, ...dynamicUiTools]
           .map((tool) => tool.catalogId)
           .filter(
             (id): id is string =>
@@ -310,14 +319,35 @@ export async function createAgentServer(
     ]);
 
     // An app's launch tool keeps its unique slug `name` for invocation, but a
-    // gateway client should show a human label. Derive "Open <app>" from the
-    // backing catalog name (kept in lockstep with the app) so it never goes
-    // stale; non-app tools keep their existing title.
+    // gateway client should show a human label and description. Both derive from
+    // the backing catalog name (kept in lockstep with the app) so they never go
+    // stale and are sanitized regardless of the stored value. `appLaunchCatalog`
+    // is the single gate: the catalog only when this row IS the app's `__open`
+    // launch tool, so a non-launch tool that ever shares an app catalog is never
+    // mislabeled. Non-app tools keep their existing title/description.
+    const appLaunchCatalog = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ) => {
+      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
+      return catalog?.serverType === "app" &&
+        ToolModel.unslugifyName(toolName) === APP_LAUNCH_TOOL_NAME
+        ? catalog
+        : undefined;
+    };
     const appLaunchTitle = (
       catalogId: string | null | undefined,
+      toolName: string,
     ): string | undefined => {
-      const catalog = catalogId ? catalogsById.get(catalogId) : undefined;
-      return catalog?.serverType === "app" ? `Open ${catalog.name}` : undefined;
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolTitle(catalog.name) : undefined;
+    };
+    const appLaunchDescription = (
+      catalogId: string | null | undefined,
+      toolName: string,
+    ): string | undefined => {
+      const catalog = appLaunchCatalog(catalogId, toolName);
+      return catalog ? appLaunchToolDescription(catalog.name) : undefined;
     };
 
     // Dynamically enrich the knowledge sources tool description with the
@@ -348,7 +378,9 @@ export async function createAgentServer(
       ({ name, description, parameters, meta, catalogId }) => ({
         name,
         title:
-          archestraToolTitles.get(name) || appLaunchTitle(catalogId) || name,
+          archestraToolTitles.get(name) ||
+          appLaunchTitle(catalogId, name) ||
+          name,
         description:
           name ===
             archestraMcpBranding.getToolName(
@@ -360,7 +392,9 @@ export async function createAgentServer(
                     TOOL_SEARCH_TOOLS_SHORT_NAME,
                   ) && searchToolsDescription
               ? searchToolsDescription
-              : (description ?? undefined),
+              : (appLaunchDescription(catalogId, name) ??
+                description ??
+                undefined),
         inputSchema: parameters,
         annotations: meta?.annotations || {},
         _meta: meta?._meta || {},
@@ -1957,11 +1991,14 @@ async function buildSearchToolsDescription(params: {
     .filter((catalog) => catalog !== undefined);
   const catalogSummaries = resolvedCatalogs
     .slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVERS)
-    .map((catalog) =>
-      catalog.description
-        ? `${catalog.name} (${summarizeCatalogDescription(catalog.description)})`
-        : catalog.name,
-    );
+    .map((catalog) => {
+      // Author-controlled catalog name/description flow into this model-facing
+      // description, so neutralize control/format/whitespace before embedding.
+      const name = sanitizeAppNameForToolMetadata(catalog.name);
+      return catalog.description
+        ? `${name} (${summarizeCatalogDescription(catalog.description)})`
+        : name;
+    });
 
   if (catalogSummaries.length === 0) {
     return baseDescription;
@@ -1975,9 +2012,11 @@ async function buildSearchToolsDescription(params: {
 }
 
 // One-line, length-capped rendering of a catalog's own description for
-// embedding in the search_tools description.
+// embedding in the search_tools description. Collapses control/format
+// characters (bidi overrides, and conservatively ZWJ/ZWNJ) alongside
+// whitespace so an author-set description cannot reshape the model-facing text.
 function summarizeCatalogDescription(description: string): string {
-  const collapsed = description.replace(/\s+/g, " ").trim();
+  const collapsed = description.replace(/[\p{Cc}\p{Cf}\s]+/gu, " ").trim();
   return collapsed.length >
     SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH
     ? `${collapsed.slice(0, SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH)}…`

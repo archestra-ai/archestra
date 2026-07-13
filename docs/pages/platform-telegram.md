@@ -3,12 +3,14 @@ title: Telegram
 category: Agents
 order: 6
 description: Connect Archestra agents to Telegram chats and groups
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-13
 ---
 
 Archestra connects to Telegram through a bot. Messages sent to the bot — in direct messages or group chats — are routed to the configured agent, and responses appear back in the chat.
 
 Telegram uses long polling: Archestra makes outbound requests to the Telegram API, so no public URL, webhook, or ngrok tunnel is needed. The only credential is a bot token.
+
+![The Telegram channel page with setup completed and a linked account](/docs/automated_screenshots/platform-telegram_setup.webp)
 
 ## Setup
 
@@ -16,6 +18,8 @@ The integration is off by default and hidden. Set `ARCHESTRA_CHATOPS_TELEGRAM_EN
 
 1. In Telegram, message [@BotFather](https://t.me/BotFather), send `/newbot`, and pick a display name and username. BotFather replies with a bot token.
 2. Paste the token into the Telegram setup on the Messaging Channels page (or set it via environment variables, see [Deployment](/docs/platform-deployment#telegram)).
+
+![The Telegram setup dialog asking for the bot token](/docs/automated_screenshots/platform-telegram_setup-dialog.webp)
 
 Archestra validates the token and starts polling immediately.
 
@@ -25,6 +29,8 @@ Telegram does not expose email addresses, so the bot cannot match users to their
 
 - From the Telegram channel page: click **Link Telegram account**, then tap **Start** in the Telegram chat that opens.
 - From Telegram: send `/start` to the bot and open the sign-in link it replies with.
+
+![The sign-in page the bot's link opens](/docs/automated_screenshots/platform-telegram_link-account.webp)
 
 Both paths use a one-shot code, valid for 15 minutes. The signed-in web session provides the identity and the Telegram chat proves ownership, so neither side can be spoofed.
 
@@ -47,6 +53,10 @@ Add the bot to a group. It replies when addressed:
 By default Telegram's privacy mode means the bot only receives these messages anyway. To let an agent observe all group messages (and decide when to chime in), disable Group Privacy for the bot in BotFather, then remove and re-add the bot to the group — Telegram caches the setting.
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
+
+Each chat the bot participates in shows up on the channel page, where you assign the agent that answers there.
+
+![DM and group chats with their default agents on the Telegram channel page](/docs/automated_screenshots/platform-telegram_channels.webp)
 
 ### Commands
 

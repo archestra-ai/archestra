@@ -44,8 +44,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   computeMcpEnvConflicts,
+  getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
+  shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
 } from "./agent-tools-editor.utils";
@@ -661,13 +663,16 @@ const AgentToolsEditorContent = forwardRef<
         ? pending.selectedToolIds.size
         : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
       const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
-      const hasNoTools = totalCount === 0;
-      const hasNoCredentials =
-        !isCredentialLessCatalogType(catalog.serverType) &&
-        !allCredentials?.[catalog.id]?.length;
-      const isEnvIncompatible =
-        environmentScopingEnabled && !isEnvCompatible(catalog);
-      const isDisabled = hasNoTools || hasNoCredentials || isEnvIncompatible;
+      const hasResolvableInstall =
+        isCredentialLessCatalogType(catalog.serverType) ||
+        !!allCredentials?.[catalog.id]?.length;
+      const gate = getCatalogAssignmentGate({
+        hasDiscoveredTools: totalCount > 0,
+        hasResolvableInstall,
+        isEnvIncompatible:
+          environmentScopingEnabled && !isEnvCompatible(catalog),
+        environmentName: agentEnvironmentName,
+      });
       const displayName =
         catalog.id === ARCHESTRA_MCP_CATALOG_ID ? catalogName : catalog.name;
       return {
@@ -682,23 +687,15 @@ const AgentToolsEditorContent = forwardRef<
             size={16}
           />
         ),
-        badge: isDisabled
+        badge: gate.disabled
           ? undefined
-          : assignedCount > 0
-            ? `${assignedCount}/${totalCount}`
-            : `${totalCount} tools`,
-        disabled: isDisabled,
-        disabledReason: isEnvIncompatible
-          ? `Not in ${
-              agentEnvironmentName
-                ? `the "${agentEnvironmentName}" environment`
-                : "the Default environment"
-            }`
-          : hasNoTools
-            ? "Not installed"
-            : hasNoCredentials
-              ? "Not installed"
-              : undefined,
+          : gate.unavailable
+            ? "Not connected"
+            : assignedCount > 0
+              ? `${assignedCount}/${totalCount}`
+              : `${totalCount} tools`,
+        disabled: gate.disabled,
+        disabledReason: gate.disabledReason,
       };
     });
   }, [
@@ -745,11 +742,15 @@ const AgentToolsEditorContent = forwardRef<
             ? pending.selectedToolIds.size
             : (assignedToolsByCatalog.get(catalog.id)?.length ?? 0);
           const totalCount = toolCountByCatalog.get(catalog.id) ?? 0;
-          const hasNoTools = totalCount === 0;
-          const hasNoCredentials =
-            !isCredentialLessCatalogType(catalog.serverType) &&
-            !allCredentials?.[catalog.id]?.length;
-          const isDisabled = hasNoTools || hasNoCredentials;
+          // The cards layout is not environment-scoped (McpServerCard has no
+          // reason slot), so tool discovery is the only assignability gate here.
+          const gate = getCatalogAssignmentGate({
+            hasDiscoveredTools: totalCount > 0,
+            hasResolvableInstall:
+              isCredentialLessCatalogType(catalog.serverType) ||
+              !!allCredentials?.[catalog.id]?.length,
+            isEnvIncompatible: false,
+          });
 
           return (
             <McpServerCard
@@ -761,7 +762,8 @@ const AgentToolsEditorContent = forwardRef<
                   : catalog.name
               }
               isSelected={isSelected}
-              isDisabled={isDisabled}
+              isDisabled={gate.disabled}
+              unavailable={gate.unavailable}
               assignedCount={assignedCount}
               totalCount={totalCount}
               onToggle={() => handleCatalogToggle(catalog.id)}
@@ -819,6 +821,7 @@ function McpServerCard({
   displayName,
   isSelected,
   isDisabled,
+  unavailable,
   assignedCount,
   totalCount,
   onToggle,
@@ -827,6 +830,7 @@ function McpServerCard({
   displayName: string;
   isSelected: boolean;
   isDisabled: boolean;
+  unavailable: boolean;
   assignedCount: number;
   totalCount: number;
   onToggle: () => void;
@@ -848,9 +852,11 @@ function McpServerCard({
       <span className="text-[10px] text-muted-foreground">
         {isDisabled
           ? "Not installed"
-          : isSelected
-            ? `${assignedCount}/${totalCount} tools`
-            : `${totalCount} tools`}
+          : unavailable
+            ? "Not connected"
+            : isSelected
+              ? `${assignedCount}/${totalCount} tools`
+              : `${totalCount} tools`}
       </span>
     </button>
   );
@@ -955,25 +961,19 @@ function McpServerPill({
   }, [currentAssignedToolIdsKey]);
 
   useEffect(() => {
-    // Wait until credentials load so a valid static pin isn't reset to
-    // dynamic while the list is still empty.
-    if (!credentials) {
-      return;
-    }
-
-    if (selectedCredential === DYNAMIC_CREDENTIAL_VALUE) {
-      return;
-    }
-
     if (
-      selectedCredential &&
-      mcpServers.some((server) => server.id === selectedCredential)
+      shouldResetCredentialPin({
+        credentialsLoaded: !!credentials,
+        selectionIsDynamic: selectedCredential === DYNAMIC_CREDENTIAL_VALUE,
+        pinnedServerId:
+          selectedCredential && selectedCredential !== DYNAMIC_CREDENTIAL_VALUE
+            ? selectedCredential
+            : null,
+        resolvableServerIds: mcpServers.map((server) => server.id),
+      })
     ) {
-      return;
+      setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
     }
-
-    // Unset or stale selection — fall back to resolve-at-call-time.
-    setSelectedCredential(DYNAMIC_CREDENTIAL_VALUE);
   }, [credentials, mcpServers, selectedCredential]);
 
   // Auto-select all tools when selectAll flag is set and tools finish loading.
@@ -1013,15 +1013,6 @@ function McpServerPill({
     return false;
   }, [selectedToolIds, currentAssignedToolIds]);
 
-  // Don't show MCP server if no credentials are available (except for builtin
-  // servers and in-process Apps, which need neither an install nor credentials)
-  if (
-    !isCredentialLessCatalogType(catalogItem.serverType) &&
-    mcpServers.length === 0
-  ) {
-    return null;
-  }
-
   const assignedCount = assignedTools.length;
   const totalCount = allTools.length;
   const displayedCount = hasPendingChanges
@@ -1029,13 +1020,14 @@ function McpServerPill({
     : assignedCount;
   const isEmpty = displayedCount === 0;
 
-  // Show credential selector for non-builtin, non-App, non-Playwright servers
-  // that have credentials available
+  // Show the connection selector for non-builtin, non-App, non-Playwright
+  // servers. It always offers resolve-at-call-time, so a server with no
+  // connection that resolves for the caller still shows it — that is how the
+  // dynamic per-caller resolution (and any pinned-but-unavailable connection)
+  // stays visible for an assignment made without a local install.
   const isPlaywright = isPlaywrightCatalogItem(catalogItem.id);
   const showCredentialSelector =
-    !isCredentialLessCatalogType(catalogItem.serverType) &&
-    !isPlaywright &&
-    mcpServers.length > 0;
+    !isCredentialLessCatalogType(catalogItem.serverType) && !isPlaywright;
   return (
     <McpServerPillShell
       icon={

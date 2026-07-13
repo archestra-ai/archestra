@@ -1357,10 +1357,11 @@ impl PolicyEngine {
         self.evaluate(trajectory, original)
     }
 
-    /// Deterministic bounded plan enumeration: candidate step sequences in
-    /// the canonical order Transform? -> Constrain? -> Waiver?, each subset
-    /// instantiated from the registries in registration order, kept iff the
-    /// predicted final posture is clean, capped at [`MAX_PLANS`].
+    /// Deterministic bounded plan enumeration: candidate step sequences in the
+    /// canonical order Sanitize? -> Constrain? -> Endorse* -> Accept? ->
+    /// Waiver?, each subset instantiated from the registries in registration
+    /// order, kept iff the predicted final posture is clean, capped at
+    /// [`MAX_PLANS`].
     fn enumerate_plans(
         &self,
         trajectory: &Trajectory,
@@ -2019,15 +2020,25 @@ fn endorse_steps(sim: &SimFlow) -> Vec<(ValueId, EndorseDelta)> {
     };
     let mut steps = Vec::new();
     for (leaf, label) in &sim.leaf_labels {
-        // Only the dimensions this leaf actually fails: raising is monotone, so
-        // a no-op raise means the leaf already meets the requirement.
+        // The minimal per-leaf delta: only the dimensions this leaf actually
+        // fails, and for audience only the readers it does not already admit —
+        // never the whole aggregate witness (a leaf that already admits some of
+        // the required readers must not ask an authority to re-vouch them, which
+        // could inflate the grant past a competent mandate). Raising is monotone,
+        // so a reader that leaves the leaf's audience unchanged is already admitted.
+        let audience = full.audience.as_ref().map(|readers| {
+            readers
+                .iter()
+                .filter(|reader| {
+                    let one = BTreeSet::from([(*reader).clone()]);
+                    label.audience.admitting(&one) != label.audience
+                })
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        });
         let delta = EndorseDelta {
             trust: full.trust.filter(|req| label.trust.raised_to(*req) != label.trust),
-            audience: full
-                .audience
-                .as_ref()
-                .filter(|readers| label.audience.admitting(readers) != label.audience)
-                .cloned(),
+            audience: audience.filter(|deficit| !deficit.is_empty()),
         };
         if !delta.is_empty() {
             steps.push((*leaf, delta));

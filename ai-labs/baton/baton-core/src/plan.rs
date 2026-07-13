@@ -103,8 +103,8 @@ pub enum TransitionKind {
 /// The category of a remedy route, derived from its decisive step — the most
 /// authority-dependent one. Used to present routes and to keep the plan cap
 /// from starving any one kind. Variants are ordered by increasing authority
-/// dependence (a registration-justified reduction is cheapest; a declassifying
-/// waiver is the most powerful), so the decisive step is the `max`.
+/// dependence (a registration-justified reduction is cheapest; a fiat relabel
+/// that erases taint is the priciest), so the decisive step is the `max`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum ExitKind {
     /// A content-justified relabel by a registered transformer.

@@ -201,8 +201,8 @@ impl ValueStore {
     }
 
     /// Every value reachable from `seeds` by following provenance edges — the
-    /// transitive ancestry, seeds included. A visited-set BFS; it terminates
-    /// because provenance names only already-admitted values (minted with a
+    /// transitive ancestry, seeds included. A visited-set graph walk; it
+    /// terminates because provenance names only already-admitted values (minted with a
     /// lower id by `push`), so the ancestry graph is a DAG. Powers the D3
     /// ruling context so an authority can inspect an endorsed value's suspicious
     /// ancestors, not just the immediate operation scope.

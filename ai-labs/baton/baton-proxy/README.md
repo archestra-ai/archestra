@@ -71,26 +71,31 @@ Tools without a contract are outside the policy and pass through untouched
 Needs an `OPENROUTER_API_KEY` (the proxy forwards your `Authorization` header
 upstream, so the key is what the demo agent sends).
 
+One command — `run-demo.sh` builds everything, starts the approver and proxy,
+runs the agent, and cleans up on exit. It resolves the key from the environment
+or `ai-labs/.env` (including the main checkout's, when run from a worktree):
+
 ```sh
-cd ai-labs/baton/baton-proxy
-
-# terminal 1 — the approval MCP server
-cargo run --bin baton-approver
-
-# terminal 2 — the proxy, pointed at OpenRouter (its default upstream)
-cargo run --bin baton-proxy -- --policy policy.toml
-
-# terminal 3 — the demo agent (rig + MCP client), driving both
-export OPENROUTER_API_KEY=sk-...      # or: source ../../.env
-cargo run --features demo --bin baton-demo-agent
+ai-labs/baton/baton-proxy/run-demo.sh
+# or with a different ask: run-demo.sh --task "email bob@archestra.ai the summary"
 ```
 
 The agent reads the invoices and tries to email the auditor; the proxy turns
 that into a `baton__request_approval` call; the demo runs it against the
-approver, which elicits — so the y/n prompt appears in terminal 3. Answer `y`
+approver, which elicits — so the y/n prompt appears in your terminal. Answer `y`
 and the send goes through; `n` and the model backs off. This is the whole real
 system (proxy + MCP approver + elicitation); a client like Claude Code would
 replace the demo agent (see "Wire your own harness").
+
+To run the three processes by hand instead:
+
+```sh
+cd ai-labs/baton/baton-proxy
+cargo run --bin baton-approver                      # terminal 1
+cargo run --bin baton-proxy -- --policy policy.toml # terminal 2
+export OPENROUTER_API_KEY=sk-...                    # terminal 3
+cargo run --features demo --bin baton-demo-agent
+```
 
 ## Trajectory log
 

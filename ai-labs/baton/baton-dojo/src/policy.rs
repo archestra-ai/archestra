@@ -53,11 +53,28 @@ impl Authority for DenyAll {
     }
 }
 
+/// Type-erases the gate's authority so [`BatonGate`] stays one concrete type
+/// (and `Agent`/`run_episode` need no authority type parameter). A local newtype
+/// is required: the orphan rule forbids `impl Authority for Box<dyn Authority>`.
+struct DynAuthority(Box<dyn Authority + Send + Sync>);
+
+impl Authority for DynAuthority {
+    fn rule(
+        &self,
+        needed: &Grant,
+        request: &ToolRequest,
+        context: &Label,
+        violations: &[Violation],
+    ) -> Option<(AuthorityName, Ruling)> {
+        self.0.rule(needed, request, context, violations)
+    }
+}
+
 type RecipientFn = Box<dyn Fn(&serde_json::Value) -> Vec<UserId> + Send + Sync>;
 
 /// An in-process baton policy gate carrying one run's trajectory.
 pub struct BatonGate {
-    engine: PolicyEngine<DenyAll>,
+    engine: PolicyEngine<DynAuthority>,
     recipients: HashMap<String, RecipientFn>,
     trajectory: Trajectory,
     pending: Option<Permit>,
@@ -65,9 +82,12 @@ pub struct BatonGate {
 
 impl BatonGate {
     /// Start building a gate. `unknown_policy` governs tools with no contract.
+    /// The escalation authority defaults to the fail-closed [`DenyAll`]; override
+    /// it with [`BatonGateBuilder::authority`].
     pub fn builder(unknown_policy: UnknownPolicy) -> BatonGateBuilder {
         BatonGateBuilder {
             unknown_policy,
+            authority: Box::new(DenyAll),
             contracts: Vec::new(),
             recipients: HashMap::new(),
         }
@@ -116,11 +136,20 @@ impl BatonGate {
 /// extractors, then [`build`](BatonGateBuilder::build).
 pub struct BatonGateBuilder {
     unknown_policy: UnknownPolicy,
+    authority: Box<dyn Authority + Send + Sync>,
     contracts: Vec<ToolContract>,
     recipients: HashMap<String, RecipientFn>,
 }
 
 impl BatonGateBuilder {
+    /// Override the escalation authority (default: the fail-closed [`DenyAll`]).
+    /// A mandated authority can declassify a boundary-crossing flow it vouches for
+    /// (e.g. approving a send to a specific external recipient) instead of blocking.
+    pub fn authority(mut self, authority: impl Authority + Send + Sync + 'static) -> Self {
+        self.authority = Box::new(authority);
+        self
+    }
+
     /// Register a baton contract (baton's real boundary: a tool's `requires` +
     /// `output_label`).
     pub fn contract(mut self, contract: ToolContract) -> Self {
@@ -147,7 +176,7 @@ impl BatonGateBuilder {
     /// Build the gate. Rejects duplicate contracts and any contract requiring an
     /// explicit confirmation (no confirming-turn API this slice).
     pub fn build(self) -> Result<BatonGate, DojoError> {
-        let mut engine = PolicyEngine::new(DenyAll, self.unknown_policy);
+        let mut engine = PolicyEngine::new(DynAuthority(self.authority), self.unknown_policy);
         for contract in self.contracts {
             if contract.requires.attention == AttentionRule::ExplicitConfirmation {
                 return Err(DojoError::UnsupportedContract {

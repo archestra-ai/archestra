@@ -33,10 +33,12 @@ let model = OpenRouter::from_env("anthropic/claude-3.5-sonnet")?;
 let run = Agent::new(&model).run(&mut ws, &tools, "Summarize my inbox").await?;
 ```
 
-Run the worked example (needs a key in `OPENROUTER_API_KEY` or `ai-labs/.env`):
+Run an example (each needs a key in `OPENROUTER_API_KEY` or `ai-labs/.env`):
 
 ```sh
-cargo run -p baton-dojo --example workspace_demo
+cargo run -p baton-dojo --example workspace_demo     # trust: reading a suspicious inbox blocks a trusted-only send
+cargo run -p baton-dojo --example recording_to_task  # audience: leaking an internal recording to a public issue is blocked
+cargo run -p baton-dojo --example external_auditor   # audience: a mandated authority declassifies a send to the auditor
 ```
 
 ## AgentDojo, in Rust

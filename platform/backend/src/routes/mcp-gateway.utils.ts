@@ -1804,7 +1804,11 @@ export async function buildKnowledgeSourcesDescription(
   const [knowledgeBases, kbConnectors, directConnectors] = await Promise.all([
     kbIds.length > 0 ? KnowledgeBaseModel.findByIds(kbIds) : [],
     kbIds.length > 0
-      ? KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds)
+      ? // Query scope: the description lists the sources queries may span,
+        // which includes auto-sync-permissions connectors for every user.
+        KnowledgeBaseConnectorModel.findByKnowledgeBaseIds(kbIds, {
+          visibilityScope: "query",
+        })
       : [],
     KnowledgeBaseConnectorModel.findByIds(directConnectorIds),
   ]);

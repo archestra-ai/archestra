@@ -43,6 +43,9 @@ export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 // ===== Connector Sync Status =====
 
 export const ConnectorSyncStatusSchema = z.enum([
+  // A sync is enqueued but no worker has claimed it yet. Only connector
+  // last-status stamps carry this; run rows are created already "running".
+  "queued",
   "running",
   "success",
   "completed_with_errors",
@@ -70,6 +73,13 @@ export type ConnectorRunType = z.infer<typeof ConnectorRunTypeSchema>;
 export const ConnectorCredentialsSchema = z.object({
   email: z.string().optional(),
   apiToken: z.string(),
+  // Atlassian Cloud organization admin API key for the admin/Directory APIs
+  // (managed-account email resolution during permission sync). A separate
+  // field because the two Atlassian API families accept different credential
+  // kinds: product REST APIs take a user API token in basic auth and reject
+  // org-admin API keys (observed live: every product call 401s), while the
+  // admin APIs take an org-admin API key as Bearer and reject user tokens.
+  adminApiKey: z.string().optional(),
   // resolved GitHub App metadata (paired with the App private key in apiToken)
   // when a connector authenticates via a github_app_configs reference
   githubApp: z

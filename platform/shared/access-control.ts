@@ -54,6 +54,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query", "admin"],
+  knowledgeSourceAutoSync: ["read", "create", "update", "delete"],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -120,6 +121,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "create", "update", "delete", "query"],
+  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -192,6 +194,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Knowledge
   knowledgeSource: ["read", "query"],
+  knowledgeSourceAutoSync: [],
 
   // Other
   chat: ["read", "create", "update", "delete"],
@@ -434,7 +437,14 @@ export const permissionDescriptions: Record<string, string> = {
   "knowledgeSource:delete": "Delete Knowledge Bases and Connectors",
   "knowledgeSource:query": "Query knowledge sources for information retrieval",
   "knowledgeSource:admin":
-    "View all Knowledge Bases and Connectors, bypassing visibility restrictions",
+    "View all org-wide and team-scoped Knowledge Bases and Connectors, bypassing team visibility restrictions",
+  "knowledgeSourceAutoSync:read":
+    "View auto-sync-permissions connectors: configuration, sync runs, user groups, and member mappings",
+  "knowledgeSourceAutoSync:create":
+    "Create connectors with auto-sync permissions (access mirrors the source system)",
+  "knowledgeSourceAutoSync:update":
+    "Modify auto-sync-permissions connectors: settings, member mappings, and manual permission syncs",
+  "knowledgeSourceAutoSync:delete": "Delete auto-sync-permissions connectors",
   "knowledgeSettings:read":
     "View knowledge settings (embedding and reranking models)",
   "knowledgeSettings:update":
@@ -1350,6 +1360,15 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteConnector]: { knowledgeSource: ["delete"] },
   [RouteId.DeleteConnectorDocument]: { knowledgeSource: ["delete"] },
   [RouteId.SyncConnector]: { knowledgeSource: ["update"] },
+  [RouteId.TriggerPermissionSync]: { knowledgeSourceAutoSync: ["update"] },
+  [RouteId.GetPermissionSyncCoverage]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.GetConnectorUserGroups]: { knowledgeSourceAutoSync: ["read"] },
+  [RouteId.UpsertConnectorMemberOverride]: {
+    knowledgeSourceAutoSync: ["update"],
+  },
+  [RouteId.DeleteConnectorMemberOverride]: {
+    knowledgeSourceAutoSync: ["update"],
+  },
   [RouteId.ForceResyncConnector]: { knowledgeSource: ["update"] },
   [RouteId.TestConnectorConnection]: { knowledgeSource: ["read"] },
 

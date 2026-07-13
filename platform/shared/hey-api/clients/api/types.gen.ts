@@ -17657,7 +17657,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -17761,7 +17761,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -27320,6 +27320,7 @@ export type GetConfigResponses = {
             chatSecretScanEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
+            kbAutoSyncPermissionsEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -43887,7 +43888,7 @@ export type GetConnectorsResponses = {
             organizationId: string;
             name: string;
             description: string | null;
-            visibility: 'org-wide' | 'team-scoped';
+            visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
             teamIds: Array<string>;
             connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
             config: {
@@ -44028,13 +44029,17 @@ export type GetConnectorsResponses = {
             secretId: string | null;
             environmentId: string | null;
             schedule: string;
+            permissionSyncIntervalSeconds: number;
             enabled: boolean;
             lastSyncAt: string | null;
-            lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+            lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
             lastSyncError: string | null;
+            lastPermissionSyncAt: string | null;
+            lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            aclConfigEpoch: number;
             createdAt: string;
             updatedAt: string;
             assignedAgents: Array<{
@@ -44060,7 +44065,7 @@ export type CreateConnectorData = {
     body: {
         name: string;
         description?: string | null;
-        visibility?: 'org-wide' | 'team-scoped';
+        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
@@ -44201,6 +44206,7 @@ export type CreateConnectorData = {
         credentials?: {
             email?: string;
             apiToken: string;
+            adminApiKey?: string;
             githubApp?: {
                 githubUrl: string;
                 appId: string;
@@ -44208,6 +44214,7 @@ export type CreateConnectorData = {
             };
         };
         schedule?: string;
+        permissionSyncIntervalSeconds?: number;
         enabled?: boolean;
         knowledgeBaseIds?: Array<string>;
         environmentId?: string | null;
@@ -44291,7 +44298,7 @@ export type CreateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped';
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
@@ -44432,13 +44439,17 @@ export type CreateConnectorResponses = {
         secretId: string | null;
         environmentId: string | null;
         schedule: string;
+        permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
+        lastPermissionSyncAt: string | null;
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        aclConfigEpoch: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -44614,7 +44625,7 @@ export type GetConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped';
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
@@ -44755,13 +44766,17 @@ export type GetConnectorResponses = {
         secretId: string | null;
         environmentId: string | null;
         schedule: string;
+        permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
+        lastPermissionSyncAt: string | null;
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        aclConfigEpoch: number;
         createdAt: string;
         updatedAt: string;
         totalDocsIngested: number;
@@ -44774,7 +44789,7 @@ export type UpdateConnectorData = {
     body: {
         name?: string;
         description?: string | null;
-        visibility?: 'org-wide' | 'team-scoped';
+        visibility?: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds?: Array<string>;
         config?: {
             type: 'jira';
@@ -44913,7 +44928,8 @@ export type UpdateConnectorData = {
         };
         credentials?: {
             email?: string;
-            apiToken: string;
+            apiToken?: string;
+            adminApiKey?: string;
             githubApp?: {
                 githubUrl: string;
                 appId: string;
@@ -44921,6 +44937,7 @@ export type UpdateConnectorData = {
             };
         };
         schedule?: string;
+        permissionSyncIntervalSeconds?: number;
         enabled?: boolean;
         environmentId?: string | null;
     };
@@ -45005,7 +45022,7 @@ export type UpdateConnectorResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        visibility: 'org-wide' | 'team-scoped';
+        visibility: 'org-wide' | 'team-scoped' | 'auto-sync-permissions';
         teamIds: Array<string>;
         connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
@@ -45146,13 +45163,17 @@ export type UpdateConnectorResponses = {
         secretId: string | null;
         environmentId: string | null;
         schedule: string;
+        permissionSyncIntervalSeconds: number;
         enabled: boolean;
         lastSyncAt: string | null;
-        lastSyncStatus: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        lastSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         lastSyncError: string | null;
+        lastPermissionSyncAt: string | null;
+        lastPermissionSyncStatus: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        aclConfigEpoch: number;
         createdAt: string;
         updatedAt: string;
     };
@@ -45169,6 +45190,10 @@ export type GetConnectorDocumentsData = {
         limit?: number;
         offset?: number;
         search?: string;
+        /**
+         * Only documents whose effective audience grants this upstream group (auto-sync-permissions connectors)
+         */
+        group?: string;
     };
     url: '/api/connectors/{id}/documents';
 };
@@ -45547,6 +45572,457 @@ export type SyncConnectorResponses = {
 };
 
 export type SyncConnectorResponse = SyncConnectorResponses[keyof SyncConnectorResponses];
+
+export type TriggerPermissionSyncData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/permission-sync';
+};
+
+export type TriggerPermissionSyncErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type TriggerPermissionSyncError = TriggerPermissionSyncErrors[keyof TriggerPermissionSyncErrors];
+
+export type TriggerPermissionSyncResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        taskId: string;
+        status: string;
+    };
+};
+
+export type TriggerPermissionSyncResponse = TriggerPermissionSyncResponses[keyof TriggerPermissionSyncResponses];
+
+export type GetPermissionSyncCoverageData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/permission-coverage';
+};
+
+export type GetPermissionSyncCoverageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPermissionSyncCoverageError = GetPermissionSyncCoverageErrors[keyof GetPermissionSyncCoverageErrors];
+
+export type GetPermissionSyncCoverageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        totalDocuments: number;
+        failClosedDocuments: number;
+        permissionSyncRunning: boolean;
+        nextScheduledAt: string | null;
+    };
+};
+
+export type GetPermissionSyncCoverageResponse = GetPermissionSyncCoverageResponses[keyof GetPermissionSyncCoverageResponses];
+
+export type GetConnectorUserGroupsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/user-groups';
+};
+
+export type GetConnectorUserGroupsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectorUserGroupsError = GetConnectorUserGroupsErrors[keyof GetConnectorUserGroupsErrors];
+
+export type GetConnectorUserGroupsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        truncated: boolean;
+        totalMemberships: number;
+        groups: Array<{
+            groupId: string;
+            token: string;
+            documentCount: number;
+            lastSyncedAt: string | null;
+            members: Array<{
+                accountId: string;
+                displayName: string | null;
+                email: string | null;
+                accountType: string | null;
+                user: {
+                    id: string;
+                    name: string;
+                } | null;
+                resolvedVia: 'override' | 'email';
+            }>;
+        }>;
+    };
+};
+
+export type GetConnectorUserGroupsResponse = GetConnectorUserGroupsResponses[keyof GetConnectorUserGroupsResponses];
+
+export type UpsertConnectorMemberOverrideData = {
+    body: {
+        externalAccountId: string;
+        userId: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/member-overrides';
+};
+
+export type UpsertConnectorMemberOverrideErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpsertConnectorMemberOverrideError = UpsertConnectorMemberOverrideErrors[keyof UpsertConnectorMemberOverrideErrors];
+
+export type UpsertConnectorMemberOverrideResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UpsertConnectorMemberOverrideResponse = UpsertConnectorMemberOverrideResponses[keyof UpsertConnectorMemberOverrideResponses];
+
+export type DeleteConnectorMemberOverrideData = {
+    body?: never;
+    path: {
+        id: string;
+        externalAccountId: string;
+    };
+    query?: never;
+    url: '/api/connectors/{id}/member-overrides/{externalAccountId}';
+};
+
+export type DeleteConnectorMemberOverrideErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteConnectorMemberOverrideError = DeleteConnectorMemberOverrideErrors[keyof DeleteConnectorMemberOverrideErrors];
+
+export type DeleteConnectorMemberOverrideResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteConnectorMemberOverrideResponse = DeleteConnectorMemberOverrideResponses[keyof DeleteConnectorMemberOverrideResponses];
 
 export type ForceResyncConnectorData = {
     body?: never;
@@ -45994,6 +46470,12 @@ export type GetConnectorRunsData = {
     query?: {
         limit?: number;
         offset?: number;
+        runType?: 'content' | 'permission';
+        status?: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        /**
+         * Only runs that changed something (or nothing)
+         */
+        result?: 'changes' | 'no-changes';
     };
     url: '/api/connectors/{id}/runs';
 };
@@ -46071,7 +46553,8 @@ export type GetConnectorRunsResponses = {
         data: Array<{
             id: string;
             connectorId: string;
-            status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+            status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+            runType: 'content' | 'permission';
             startedAt: string;
             completedAt: string | null;
             documentsProcessed: number | null;
@@ -46085,6 +46568,24 @@ export type GetConnectorRunsResponses = {
             checkpoint: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            stats: {
+                mode?: 'full' | 'delta';
+                totalDocs: number;
+                docsScanned: number;
+                aclsChanged: number;
+                chunksRewritten: number;
+                failClosed: number;
+                groupsSynced: number;
+                membershipsUpserted: number;
+                membershipsRemoved?: number;
+                containersSynced?: number;
+                containersChanged?: number;
+                containerAudienceFailures?: number;
+                docsAdopted?: number;
+                docsReassigned?: number;
+                groupSyncFailed?: boolean;
+                contentSyncActiveDuringRun: boolean;
+            } | null;
             createdAt: string;
         }>;
         pagination: {
@@ -46094,6 +46595,10 @@ export type GetConnectorRunsResponses = {
             totalPages: number;
             hasNext: boolean;
             hasPrev: boolean;
+        };
+        queued: {
+            content: boolean;
+            permission: boolean;
         };
     };
 };
@@ -46182,7 +46687,8 @@ export type GetConnectorRunResponses = {
     200: {
         id: string;
         connectorId: string;
-        status: 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        status: 'queued' | 'running' | 'success' | 'completed_with_errors' | 'failed' | 'partial' | 'superseded';
+        runType: 'content' | 'permission';
         startedAt: string;
         completedAt: string | null;
         documentsProcessed: number | null;
@@ -46197,6 +46703,24 @@ export type GetConnectorRunResponses = {
         checkpoint: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        stats: {
+            mode?: 'full' | 'delta';
+            totalDocs: number;
+            docsScanned: number;
+            aclsChanged: number;
+            chunksRewritten: number;
+            failClosed: number;
+            groupsSynced: number;
+            membershipsUpserted: number;
+            membershipsRemoved?: number;
+            containersSynced?: number;
+            containersChanged?: number;
+            containerAudienceFailures?: number;
+            docsAdopted?: number;
+            docsReassigned?: number;
+            groupSyncFailed?: boolean;
+            contentSyncActiveDuringRun: boolean;
+        } | null;
         createdAt: string;
     };
 };

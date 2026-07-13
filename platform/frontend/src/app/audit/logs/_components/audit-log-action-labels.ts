@@ -45,6 +45,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.permission_sync_triggered": "Connector permission sync triggered",
   // Default user limit
   "defaultUserLimit.created": "Default user limit created",
   "defaultUserLimit.updated": "Default user limit updated",

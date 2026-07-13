@@ -521,7 +521,8 @@ describe("isDynamicallyAvailableArchestraTool", () => {
       visibility: "team-scoped",
       teamIds: [team.id],
     });
-    // non-admin viewer outside the team (knowledgeSource admins see all)
+    // non-admin viewer outside the team (knowledgeSource:admin sees all
+    // org/team-scoped sources)
     const outsider = await makeUser();
     const role = await makeCustomRole(organizationId, {
       permission: { agent: ["read"], knowledgeSource: ["query"] },

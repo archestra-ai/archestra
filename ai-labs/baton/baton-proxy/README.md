@@ -21,9 +21,10 @@ not a reader of the invoices.
    flow. It **rewrites that tool call** in the response into a call to
    `baton__request_approval`, carrying the tool, recipients, and reason.
 3. The harness runs `baton__request_approval` like any other tool. It reaches
-   the approver, which shows a person the request and waits for y/n.
-4. On yes the approver returns `GRANTED tool=send_email recipients=alex@…`. The
-   harness appends it as a tool result.
+   the approver, which asks the person **through the MCP client's own UI** (via
+   MCP elicitation) and waits for accept/decline.
+4. On accept the approver returns `GRANTED {"tool":"send_email","recipients":["alex@…"]}`.
+   The harness appends it as a tool result.
 5. On the next request the proxy replays the trajectory, finds the `GRANTED`
    record, and permits the re-issued `send_email` — it passes through untouched
    and the harness sends it. On `DENIED`, the retry is blocked terminally and
@@ -32,7 +33,7 @@ not a reader of the invoices.
 ```
 harness ──chat/completions──▶ baton-proxy ──▶ LLM
    │                              │  rewrites blocked call → baton__request_approval
-   ├──tools/call baton__…──▶ baton-approver ──▶ human (y/n)
+   ├──tools/call baton__…──▶ baton-approver ──elicitation──▶ human (in the client UI)
    │                              │  returns GRANTED/DENIED
    └──retry send_email──▶ baton-proxy ──▶ (permitted) ──▶ LLM
 ```
@@ -45,10 +46,11 @@ its own — the model never sees a dead end.
 
 - **`baton-proxy`** — the HTTP proxy. `POST /v1/chat/completions`, forwards
   upstream, rewrites blocked tool calls. Config in `policy.toml`.
-- **`baton-approver`** — an MCP server exposing one tool,
-  `baton__request_approval`. It runs no policy; it only asks a person (terminal
-  y/n, or `--auto approve|deny` for tests) and returns the ruling as a string
-  the proxy parses.
+- **`baton-approver`** — an MCP server (streamable HTTP) exposing one tool,
+  `baton__request_approval`. It runs no policy; it asks the connected client's
+  user to accept/decline via MCP **elicitation** (so the prompt shows up in the
+  client's own UI, e.g. Claude Code) and returns the ruling as a string the
+  proxy parses. Accept → `GRANTED`, decline/cancel/unsupported → `DENIED`.
 - **`baton-demo-agent`** — a self-contained [rig](https://docs.rig.rs) agent
   (built with `--features demo`) that plays the external harness end to end,
   bundling the approval prompt so you can watch the flow with one command.
@@ -79,9 +81,9 @@ cargo run --features demo --bin baton-demo-agent
 
 The agent reads the invoices and tries to email the auditor; the proxy turns
 that into an approval request; approve it in terminal 2 and the send goes
-through. The standalone `baton-approver` binary
-(`cargo run --bin baton-approver`) is the same approval tool as an MCP server,
-for wiring a real external harness instead of the bundled demo.
+through. The demo bundles its own y/n prompt inline (it is a plain rig agent,
+not an MCP client), so it does not use the elicitation approver — that is the
+path for a real MCP client (see "Wire your own harness").
 
 ## Trajectory log
 
@@ -103,10 +105,14 @@ Two changes, both mechanical:
 
 1. Point the harness's OpenAI `base_url` at the proxy (e.g.
    `http://127.0.0.1:8730/v1`).
-2. Register the `baton-approver` MCP server so `baton__request_approval` is an
-   available tool.
+2. Run `cargo run --bin baton-approver` and register it as an MCP server
+   (streamable HTTP at `http://127.0.0.1:8731/mcp`) so `baton__request_approval`
+   is an available tool.
 
-Streaming is not supported (`stream: true` returns 400); set `stream: false`.
+The approver asks for approval via MCP **elicitation**, so the client must
+support it (e.g. Claude Code); a client that does not will get a `DENIED`
+(fail closed). Streaming is not supported (`stream: true` returns 400); set
+`stream: false`.
 
 ## Trust model (prototype)
 

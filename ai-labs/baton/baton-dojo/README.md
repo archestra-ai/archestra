@@ -11,7 +11,7 @@ ships no authored task catalog yet: you bring your own workspace and checks.
 ## Three-step authoring
 
 ```rust
-use baton_dojo::{Agent, OpenRouter, Toolset};
+use baton_dojo::{Agent, Toolset, model};
 use serde_json::json;
 
 // 1. A workspace is any mutable struct.
@@ -29,7 +29,7 @@ let tools = Toolset::<Mailbox>::new()
     .finalize()?;                       // rejects duplicate tool names
 
 // 3. Give the tools to an OpenRouter agent.
-let model = OpenRouter::from_env("anthropic/claude-3.5-sonnet")?;
+let model = model::from_env("anthropic/claude-3.5-sonnet")?;
 let run = Agent::new(&model).run(&mut ws, &tools, "Summarize my inbox").await?;
 ```
 

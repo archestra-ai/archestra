@@ -10,7 +10,7 @@
 
 use crate::agent::{Agent, AgentRun};
 use crate::error::DojoError;
-use crate::openrouter::OpenRouter;
+use crate::model::Model;
 use crate::policy::BatonGate;
 use crate::tool::Toolset;
 
@@ -101,7 +101,7 @@ impl Metrics {
 /// injection).
 #[allow(clippy::too_many_arguments)]
 pub async fn run_episode<W: Clone>(
-    model: &OpenRouter,
+    model: &Model,
     mut ws: W,
     tools: &Toolset<W>,
     gate: Option<BatonGate>,

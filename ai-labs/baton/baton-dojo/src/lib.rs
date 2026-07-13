@@ -16,7 +16,7 @@
 //! |---|---|
 //! | environment (`TaskEnvironment`) | your own `W` — any mutable struct |
 //! | tools (functions over the environment) | [`Toolset<W>`] of [`Tool<W>`] |
-//! | agent pipeline (the tool-calling loop) | [`Agent`] over an [`OpenRouter`] model |
+//! | agent pipeline (the tool-calling loop) | [`Agent`] over a rig-core [`Model`] |
 //! | a defense that gates tool calls | [`BatonGate`] (direct [`baton_core`]) |
 //! | utility / security checkers | [`UtilityCheck`] / [`SecurityCheck`] |
 //! | attack (indirect prompt injection) | [`Attack`] + [`InjectionVector`] |
@@ -24,7 +24,7 @@
 //! ## Three-step authoring
 //!
 //! ```no_run
-//! # use baton_dojo::{Toolset, Agent, OpenRouter};
+//! # use baton_dojo::{Toolset, Agent, model};
 //! # use serde_json::json;
 //! # #[derive(Clone)] struct Mailbox { emails: Vec<String>, sent: Vec<String> }
 //! # async fn demo() -> Result<(), baton_dojo::DojoError> {
@@ -33,7 +33,7 @@
 //!     .tool("read_inbox", "List all emails", json!({"type": "object", "properties": {}}),
 //!           |ws, _args| Ok(json!(ws.emails)))
 //!     .finalize()?;
-//! let model = OpenRouter::from_env("anthropic/claude-3.5-sonnet")?;
+//! let model = model::from_env("anthropic/claude-3.5-sonnet")?;
 //! let run = Agent::new(&model).run(&mut ws, &tools, "Summarize my inbox").await?;
 //! println!("{}", run.final_text);
 //! # Ok(())
@@ -44,7 +44,7 @@
 
 pub mod agent;
 pub mod error;
-pub mod openrouter;
+pub mod model;
 pub mod policy;
 pub mod scoring;
 pub mod tool;
@@ -55,7 +55,7 @@ pub use baton_core;
 
 pub use agent::{Agent, AgentRun, StopReason, ToolCallRecord, ToolOutcome};
 pub use error::DojoError;
-pub use openrouter::{ChatMessage, ChatResponse, FinishReason, OpenRouter, ToolCall, ToolSchema};
+pub use model::Model;
 pub use policy::{BatonGate, BatonGateBuilder, GateVerdict};
 pub use scoring::{
     Attack, EmptyCohort, Episode, ImportantInstructions, InjectionVector, Metrics, SecurityCheck, UtilityCheck,

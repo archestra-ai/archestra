@@ -1,13 +1,18 @@
-//! The agent: give a [`Toolset`] and a workspace to an [`OpenRouter`] model and
-//! run the tool-calling loop, optionally behind a [`BatonGate`].
+//! The agent: give a [`Toolset`] and a workspace to a rig-core OpenRouter model
+//! and run the tool-calling loop, optionally behind a [`BatonGate`].
 //!
-//! This is AgentDojo's agent pipeline: alternate model turns with tool execution
-//! until the model stops. When defended, every proposed call goes through baton's
-//! `evaluate → execute → record_result` protocol; a blocked call is not executed
-//! and its reason is handed back to the model as that tool's result.
+//! rig-core owns the wire: `CompletionModel::completion` returns typed
+//! [`AssistantContent`] (text / tool calls / reasoning), so this loop reads those
+//! directly and keeps the baton `evaluate → execute → record_result` protocol at
+//! the dispatch seam. A blocked call is not executed and its reason is handed back
+//! to the model as that tool's result.
+
+use rig_core::OneOrMany;
+use rig_core::completion::message::{AssistantContent, Message, ToolChoice};
+use rig_core::completion::{CompletionModel, CompletionRequest};
 
 use crate::error::DojoError;
-use crate::openrouter::{ChatMessage, FinishReason, OpenRouter};
+use crate::model::Model;
 use crate::policy::{BatonGate, GateVerdict};
 use crate::tool::{ToolError, Toolset};
 
@@ -39,12 +44,6 @@ pub enum StopReason {
     Stop,
     /// The iteration cap was hit with tool calls still pending.
     MaxIters,
-    /// The provider truncated the completion (`finish_reason = length`).
-    Length,
-    /// The provider filtered the completion (`finish_reason = content_filter`).
-    ContentFilter,
-    /// The provider reported an in-band error on a successful HTTP response.
-    ProviderError(String),
 }
 
 /// The result of one agent run: the final text, the full transcript, the ordered
@@ -52,11 +51,8 @@ pub enum StopReason {
 #[derive(Debug, Clone)]
 pub struct AgentRun {
     pub final_text: String,
-    /// The full message log, for inspection. On a terminal finish
-    /// (`Length`/`ContentFilter`/`ProviderError`) this can end with an assistant
-    /// `tool_calls` turn that has no matching tool results — do not replay it to a
-    /// provider verbatim.
-    pub transcript: Vec<ChatMessage>,
+    /// The full rig message log, for inspection.
+    pub transcript: Vec<Message>,
     pub tool_calls: Vec<ToolCallRecord>,
     pub stop_reason: StopReason,
 }
@@ -75,7 +71,7 @@ impl AgentRun {
 /// An agent bound to a model. Configure a system prompt and iteration cap, then
 /// [`run`](Agent::run) it (undefended) or [`run_defended`](Agent::run_defended).
 pub struct Agent<'m> {
-    model: &'m OpenRouter,
+    model: &'m Model,
     system: Option<String>,
     max_iters: usize,
 }
@@ -84,7 +80,7 @@ pub struct Agent<'m> {
 const DEFAULT_MAX_ITERS: usize = 12;
 
 impl<'m> Agent<'m> {
-    pub fn new(model: &'m OpenRouter) -> Self {
+    pub fn new(model: &'m Model) -> Self {
         Self {
             model,
             system: None,
@@ -132,11 +128,15 @@ impl<'m> Agent<'m> {
         mut gate: Option<&mut BatonGate>,
     ) -> Result<AgentRun, DojoError> {
         let schemas = tools.schemas();
-        let mut messages: Vec<ChatMessage> = Vec::new();
+        let tool_choice = (!schemas.is_empty()).then_some(ToolChoice::Auto);
+
+        // The system prompt is a leading `Message::System` (one canonical
+        // representation; no `preamble`).
+        let mut messages: Vec<Message> = Vec::new();
         if let Some(system) = &self.system {
-            messages.push(ChatMessage::System(system.clone()));
+            messages.push(Message::system(system.clone()));
         }
-        messages.push(ChatMessage::User(user_prompt.clone()));
+        messages.push(Message::user(user_prompt.clone()));
         if let Some(g) = gate.as_deref_mut() {
             g.begin(&user_prompt);
         }
@@ -144,46 +144,48 @@ impl<'m> Agent<'m> {
         let mut tool_calls: Vec<ToolCallRecord> = Vec::new();
 
         for _ in 0..self.max_iters {
-            let resp = self.model.complete(&messages, &schemas).await?;
-            let final_text = resp.text.clone().unwrap_or_default();
-            // Replay the assistant message verbatim next turn, including opaque
-            // reasoning blocks — reasoning models can require them back after a call.
-            messages.push(ChatMessage::Assistant {
-                text: resp.text.clone(),
-                tool_calls: resp.tool_calls.clone(),
-                reasoning_details: resp.reasoning_details.clone(),
-            });
+            let chat_history = OneOrMany::many(messages.clone()).expect("chat history always holds the prompt");
+            let request = CompletionRequest {
+                model: None,
+                preamble: None,
+                chat_history,
+                documents: Vec::new(),
+                tools: schemas.clone(),
+                temperature: Some(0.0),
+                max_tokens: None,
+                tool_choice: tool_choice.clone(),
+                additional_params: None,
+                output_schema: None,
+            };
+            // rig collapses transport/provider errors and malformed tool args into
+            // one error here (propagated); it never silently continues.
+            let response = self.model.completion(request).await?;
 
-            // Terminal finish reasons: never dispatch, surface distinctly.
-            match &resp.finish {
-                FinishReason::Length => {
-                    return Ok(AgentRun {
-                        final_text,
-                        transcript: messages,
-                        tool_calls,
-                        stop_reason: StopReason::Length,
-                    });
-                }
-                FinishReason::ContentFilter => {
-                    return Ok(AgentRun {
-                        final_text,
-                        transcript: messages,
-                        tool_calls,
-                        stop_reason: StopReason::ContentFilter,
-                    });
-                }
-                FinishReason::Error { message, .. } => {
-                    return Ok(AgentRun {
-                        final_text,
-                        transcript: messages,
-                        tool_calls,
-                        stop_reason: StopReason::ProviderError(message.clone()),
-                    });
-                }
-                _ => {}
-            }
+            let final_text: String = response
+                .choice
+                .iter()
+                .filter_map(|c| match c {
+                    AssistantContent::Text(t) => Some(t.text.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("");
+            let calls: Vec<(String, String, serde_json::Value)> = response
+                .choice
+                .iter()
+                .filter_map(|c| match c {
+                    AssistantContent::ToolCall(tc) => {
+                        Some((tc.id.clone(), tc.function.name.clone(), tc.function.arguments.clone()))
+                    }
+                    _ => None,
+                })
+                .collect();
 
-            if resp.tool_calls.is_empty() {
+            // Replay the assistant turn verbatim next round (rig round-trips its
+            // reasoning blocks through this).
+            messages.push(Message::from(response.choice));
+
+            if calls.is_empty() {
                 return Ok(AgentRun {
                     final_text,
                     transcript: messages,
@@ -192,90 +194,45 @@ impl<'m> Agent<'m> {
                 });
             }
 
-            for call in &resp.tool_calls {
-                // A call with no id cannot be correlated to a tool result; that is a
-                // malformed provider response, so abort before any side effect rather
-                // than execute an uncorrelatable mutation.
-                if call.id.trim().is_empty() {
-                    return Err(DojoError::Decode {
-                        detail: format!("tool call for `{}` has no id", call.name),
-                    });
-                }
-
-                let args = match parse_call_args(&call.name, &call.arguments_raw) {
-                    Ok(args) => args,
-                    Err(err) => {
-                        let content = error_content(&err);
-                        messages.push(ChatMessage::Tool {
-                            tool_call_id: call.id.clone(),
-                            content: content.clone(),
-                        });
-                        tool_calls.push(ToolCallRecord {
-                            name: call.name.clone(),
-                            input: serde_json::Value::String(call.arguments_raw.clone()),
-                            outcome: ToolOutcome::Error(content),
-                        });
-                        continue;
-                    }
-                };
-
-                // Unknown tools never reach the policy gate: an unregistered tool is
-                // permitted with an all-unknown output label, and folding that
-                // (non-)result would taint later calls for an execution that never ran.
-                if !tools.contains(&call.name) {
-                    let content = error_content(&ToolError::UnknownTool(call.name.clone()));
-                    messages.push(ChatMessage::Tool {
-                        tool_call_id: call.id.clone(),
-                        content: content.clone(),
-                    });
+            for (id, name, args) in calls {
+                let content = if name.trim().is_empty() || !tools.contains(&name) {
+                    // Unknown tools never reach the gate: an unregistered tool would be
+                    // permitted with an all-unknown label and taint later calls.
+                    let content = error_content(&ToolError::UnknownTool(name.clone()));
                     tool_calls.push(ToolCallRecord {
-                        name: call.name.clone(),
+                        name,
                         input: args,
-                        outcome: ToolOutcome::Error(content),
+                        outcome: ToolOutcome::Error(content.clone()),
                     });
-                    continue;
-                }
-
-                if let Some(g) = gate.as_deref_mut() {
-                    match g.check(&call.name, &args) {
+                    content
+                } else if let Some(g) = gate.as_deref_mut() {
+                    match g.check(&name, &args) {
                         GateVerdict::Block { reason } => {
                             let content = format!("blocked by policy: {reason}");
-                            messages.push(ChatMessage::Tool {
-                                tool_call_id: call.id.clone(),
-                                content,
-                            });
                             tool_calls.push(ToolCallRecord {
-                                name: call.name.clone(),
+                                name,
                                 input: args,
                                 outcome: ToolOutcome::Blocked(reason),
                             });
-                            continue;
+                            content
                         }
                         GateVerdict::Allow => {
-                            let result = tools.dispatch(ws, &call.name, args.clone());
+                            let result = tools.dispatch(ws, &name, args.clone());
                             let content = result_content(&result);
-                            // Fold the tool's contract-fixed output label into the trajectory.
-                            // Done even on error: a handler may mutate state before failing, and
-                            // we can't tell pre- from post-mutation failures, so we taint the
-                            // security-safe direction. Cost: a handler that fails before any side
-                            // effect still taints, which can slightly depress utility downstream.
+                            // Fold the tool's contract-fixed output label into the trajectory,
+                            // even on error: the handler may mutate state before failing.
                             g.commit(&content)?;
-                            messages.push(ChatMessage::Tool {
-                                tool_call_id: call.id.clone(),
-                                content,
-                            });
-                            tool_calls.push(record(call.name.clone(), args, result));
+                            tool_calls.push(record(name, args, result));
+                            content
                         }
                     }
                 } else {
-                    let result = tools.dispatch(ws, &call.name, args.clone());
+                    let result = tools.dispatch(ws, &name, args.clone());
                     let content = result_content(&result);
-                    messages.push(ChatMessage::Tool {
-                        tool_call_id: call.id.clone(),
-                        content,
-                    });
-                    tool_calls.push(record(call.name.clone(), args, result));
-                }
+                    tool_calls.push(record(name, args, result));
+                    content
+                };
+                messages.push(Message::tool_result(id, content));
             }
         }
 
@@ -286,26 +243,6 @@ impl<'m> Agent<'m> {
             stop_reason: StopReason::MaxIters,
         })
     }
-}
-
-/// Parse a proposed call's raw argument string. An empty tool name (a known
-/// provider quirk) and malformed JSON both become a [`ToolError::BadArgs`], which
-/// the loop feeds back as one bad tool result rather than failing the completion.
-fn parse_call_args(name: &str, raw: &str) -> Result<serde_json::Value, ToolError> {
-    if name.trim().is_empty() {
-        return Err(ToolError::BadArgs {
-            tool: name.to_owned(),
-            detail: "empty tool name".to_owned(),
-        });
-    }
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Ok(serde_json::json!({}));
-    }
-    serde_json::from_str(trimmed).map_err(|e| ToolError::BadArgs {
-        tool: name.to_owned(),
-        detail: e.to_string(),
-    })
 }
 
 fn record(name: String, input: serde_json::Value, result: Result<serde_json::Value, ToolError>) -> ToolCallRecord {

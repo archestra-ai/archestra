@@ -5,7 +5,7 @@
 //! is handed. Tools are the AgentDojo "tools runtime": the only way the model
 //! changes the environment.
 
-use crate::openrouter::ToolSchema;
+use rig_core::completion::ToolDefinition;
 
 /// Why a tool call did not produce a value.
 #[derive(Debug, thiserror::Error)]
@@ -75,11 +75,11 @@ impl<W> Toolset<W> {
         Ok(self)
     }
 
-    /// The schemas exposed to the model, in declaration order.
-    pub fn schemas(&self) -> Vec<ToolSchema> {
+    /// The tool definitions exposed to the model, in declaration order.
+    pub fn schemas(&self) -> Vec<ToolDefinition> {
         self.tools
             .iter()
-            .map(|t| ToolSchema {
+            .map(|t| ToolDefinition {
                 name: t.name.clone(),
                 description: t.description.clone(),
                 parameters: t.parameters.clone(),

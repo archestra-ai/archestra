@@ -6,21 +6,16 @@ use crate::tool::ToolError;
 /// a provider error or a policy rejection behind a default.
 #[derive(Debug, thiserror::Error)]
 pub enum DojoError {
-    /// `OPENROUTER_API_KEY` was neither in the environment nor resolvable.
-    #[error("OPENROUTER_API_KEY is not set (set it in the environment or ai-labs/.env)")]
-    MissingApiKey,
+    /// Building the provider client failed (e.g. no `OPENROUTER_API_KEY`).
+    #[error("could not build the model client: {0}")]
+    Client(String),
 
-    /// The HTTP request to the provider failed at the transport layer.
-    #[error("http transport error: {0}")]
-    Http(#[from] reqwest::Error),
-
-    /// The provider returned a non-2xx status.
-    #[error("provider returned status {status}: {body}")]
-    Provider { status: u16, body: String },
-
-    /// A provider response could not be decoded into the expected shape.
-    #[error("could not decode provider response: {detail}")]
-    Decode { detail: String },
+    /// The rig-core completion call failed (transport, provider error, or decode).
+    /// Note: rig collapses non-2xx and in-band provider errors into one error, and
+    /// a malformed tool-call argument surfaces here rather than as a recoverable
+    /// per-call result — a deliberate trade of the rig-core migration.
+    #[error("completion failed: {0}")]
+    Completion(#[from] rig_core::completion::CompletionError),
 
     /// Two tools were declared with the same name.
     #[error("duplicate tool name: {0}")]

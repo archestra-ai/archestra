@@ -21,7 +21,7 @@ use std::path::Path;
 use baton_dojo::baton_core::{
     Audience, AudienceRule, Effect, Effects, Label, Requirements, ToolContract, ToolName, Trust, UnknownPolicy, UserId,
 };
-use baton_dojo::{Agent, BatonGate, DojoError, OpenRouter, ToolError, ToolOutcome, Toolset};
+use baton_dojo::{Agent, BatonGate, DojoError, ToolError, ToolOutcome, Toolset};
 use serde::Serialize;
 use serde_json::json;
 
@@ -145,7 +145,7 @@ async fn main() -> Result<(), DojoError> {
         return Ok(());
     };
     let model_id = std::env::var("DOJO_MODEL").unwrap_or_else(|_| "openai/gpt-4o-mini".to_owned());
-    let model = OpenRouter::with_key(&model_id, api_key);
+    let model = baton_dojo::model::with_key(&model_id, &api_key)?;
     let tools = tools()?;
 
     println!("model: {model_id}\nprompt: {PROMPT}\n");

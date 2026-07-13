@@ -359,7 +359,7 @@ name = "baton-dojo"
 version = "0.1.0"
 dependencies = [
  "baton-core",
- "reqwest 0.13.1",
+ "rig-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

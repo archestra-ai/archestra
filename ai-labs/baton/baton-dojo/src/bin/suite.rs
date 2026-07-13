@@ -1,10 +1,10 @@
 //! Run the baton-dojo case suite and print the utility/leak table.
 //!
 //! ```text
-//! cargo run -p baton-dojo --example suite                          # all cases, both modes
-//! cargo run -p baton-dojo --example suite -- recording_bug_filing  # one case, both modes
-//! cargo run -p baton-dojo --example suite -- all security          # all cases, one mode
-//! cargo run -p baton-dojo --example suite -- auditor_email base
+//! cargo run -p baton-dojo --bin suite                          # all cases, both modes
+//! cargo run -p baton-dojo --bin suite -- recording_bug_filing  # one case, both modes
+//! cargo run -p baton-dojo --bin suite -- all security          # all cases, one mode
+//! cargo run -p baton-dojo --bin suite -- auditor_email base
 //! ```
 //!
 //! `base` = undefended (no baton gate); `security` = baton-defended. `leak` is `—`
@@ -20,11 +20,6 @@ const CASES: &[&str] = &["recording_bug_filing", "auditor_email"];
 
 #[tokio::main]
 async fn main() -> Result<(), DojoError> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
-
     let args: Vec<String> = std::env::args().skip(1).collect();
     let case_sel = args.first().map(String::as_str).unwrap_or("all");
     let mode_sel = args.get(1).map(String::as_str);

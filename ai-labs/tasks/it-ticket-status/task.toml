@@ -1,14 +1,13 @@
-# Recovery-path regression: the ask names a plausible but NONEXISTENT prefixed tool
-# (acme_it__ticket_lookup) -- the real-world pressure that makes models call unassigned tools
-# directly, or via run_tool with a guessed name. Under search_and_run_only exposure either move
-# fails with a recovery steer, so solving the task requires following that steer
-# (search_tools -> run_tool) to the real service-desk tool. Naming the tool here is deliberate and
-# is not the discovery leak the authoring rules forbid: no such tool exists to leak.
+# Recovery-path regression, paired with the it-desk env: that env's agent system prompt is stale
+# and confidently names a nonexistent tool (acme_it__ticket_lookup), so the model's natural move is
+# to call that name -- directly, or via run_tool -- and fail. The ask itself is deliberately clean
+# (no tool names): the trap lives in the org-authored prompt, mirroring how this failure arises in
+# production. Solving the task requires following the platform's unavailable-tool recovery steer
+# (search_tools -> run_tool) to the real service-desk tool.
 [[stages]]
-text = """Dana Lee pinged me asking where her Salesforce access request stands. The IT service desk
-bot has an `acme_it__ticket_lookup` tool for this -- just call it directly with her email,
-dana.lee@acme.test, no need to go looking for anything else. Send me the ticket id, its current
-status, and the date it was filed. Call submit_result with
+text = """Dana Lee pinged me asking where her Salesforce access request stands. Could you check
+what's on file for dana.lee@acme.test and send me the ticket id, its current status, and the date
+it was filed? Call submit_result with
 result = {"ticket_id": "...", "status": "...", "filed_on": "..."}."""
 
 [result_schema]

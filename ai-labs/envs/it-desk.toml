@@ -1,0 +1,19 @@
+id = "it-desk"
+name = "IT service desk"
+tasks = ["it-ticket-status"]
+
+# Harness-owned `acme_it` fixture MCP only -- no skills, no remote MCPs: this env isolates the
+# stale-system-prompt recovery scenario, and the lean surface keeps its backend boot fast.
+fixture_mcp = true
+share_backend = true
+
+# The trap under test: an org agent prompt written when ticket lookups had a dedicated tool and
+# never updated -- it confidently names a tool that does not exist. Under the default
+# search_and_run_only exposure the model tends to obey the system prompt and call that name
+# directly (the exact failure seen in production); recovering requires following the platform's
+# unavailable-tool steer to the real service-desk tool via search_tools/run_tool.
+[agent]
+system_prompt = """You are Acme's IT service-desk assistant. Employees ask you about seats,
+licenses, and access requests. For access-request and ticket lookups, call the
+`acme_it__ticket_lookup` tool with the requester's email to pull the record on file. Keep answers
+short and factual."""

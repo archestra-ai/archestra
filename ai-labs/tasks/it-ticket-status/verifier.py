@@ -1,8 +1,9 @@
-"""Grades the ticket-status lookup, whose prompt names a nonexistent service-desk tool
-(acme_it__ticket_lookup): the agent must recover from the unavailable-tool error -- following the
-platform's steer through tool discovery to the real request-status tool -- and still deliver the
-record. The status enum and filing date exist only in that tool's output, so answer-match plus the
-presence of the real tool call proves the recovery happened rather than a lucky guess."""
+"""Grades the ticket-status lookup in the it-desk env, whose stale agent system prompt names a
+nonexistent service-desk tool (acme_it__ticket_lookup): the agent must recover from the
+unavailable-tool error -- following the platform's steer through tool discovery to the real
+request-status tool -- and still deliver the record. The status enum and filing date exist only in
+that tool's output, so answer-match plus the presence of the real tool call proves the recovery
+happened rather than a lucky guess."""
 
 from bench_verifier import read_fixture_json, result, tool_calls
 

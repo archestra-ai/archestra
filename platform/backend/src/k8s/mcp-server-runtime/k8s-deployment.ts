@@ -751,21 +751,37 @@ export default class K8sDeployment {
         // and keep the policy from selecting its pod. A blind PUT is rejected
         // without a resourceVersion, so read the live object and carry its
         // resourceVersion (and any controller-owned finalizers) into the body.
-        const existing = await k8sCustomObjectsApi.getNamespacedCustomObject({
-          group,
-          version,
-          namespace: this.namespace,
-          plural,
-          name: params.policyName,
-        });
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group,
-          version,
-          namespace: this.namespace,
-          plural,
-          name: params.policyName,
-          body: bodyWithPreservedMetadata(params.body, existing),
-        });
+        // Retry the read-modify-write on a 409: the policy's own CRD controller
+        // (AWS VPC CNI, Cilium operator) can bump resourceVersion by writing
+        // finalizers/status between the GET and the PUT.
+        for (let attempt = 1; ; attempt++) {
+          const existing = await k8sCustomObjectsApi.getNamespacedCustomObject({
+            group,
+            version,
+            namespace: this.namespace,
+            plural,
+            name: params.policyName,
+          });
+          try {
+            await k8sCustomObjectsApi.replaceNamespacedCustomObject({
+              group,
+              version,
+              namespace: this.namespace,
+              plural,
+              name: params.policyName,
+              body: bodyWithPreservedMetadata(params.body, existing),
+            });
+            break;
+          } catch (replaceError: unknown) {
+            if (
+              isK8sConflictError(replaceError) &&
+              attempt < CUSTOM_POLICY_REPLACE_MAX_ATTEMPTS
+            ) {
+              continue;
+            }
+            throw replaceError;
+          }
+        }
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
@@ -4003,6 +4019,10 @@ function listCustomObjectItems(response: unknown): Array<{
     } => Boolean(item) && typeof item === "object",
   );
 }
+
+// Bounded optimistic-concurrency retries for the custom-policy read-modify-write
+// replace: a CRD controller can bump resourceVersion between the GET and the PUT.
+const CUSTOM_POLICY_REPLACE_MAX_ATTEMPTS = 4;
 
 /**
  * Carry the live object's resourceVersion (a CRD replace/PUT is rejected 422

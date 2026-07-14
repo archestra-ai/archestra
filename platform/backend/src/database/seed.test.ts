@@ -7,7 +7,7 @@ import {
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";

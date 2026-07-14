@@ -1,0 +1,17 @@
+[package]
+name = "baton-dojo"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Rust-native AgentDojo-like substrate: workspaces, declared tools, a rig-core agent loop, an in-process baton policy gate, and utility/security scoring abstractions."
+
+[dependencies]
+baton-core = { path = "../baton-core" }
+rig-core = "0.39"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[lints]
+workspace = true

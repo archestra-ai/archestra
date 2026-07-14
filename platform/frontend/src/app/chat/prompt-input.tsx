@@ -50,6 +50,12 @@ import {
 } from "@/components/ai-elements/queue";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { Kbd } from "@/components/ui/kbd";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
@@ -465,53 +471,6 @@ const PromptInputContent = ({
     [controller.textInput, runCompactCommand, runDebugCommand, textareaRef],
   );
 
-  const handleTextareaKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActiveCommandIndex(
-          (current) => (current + 1) % visibleSlashCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveCommandIndex(
-          (current) =>
-            (current - 1 + visibleSlashCommands.length) %
-            visibleSlashCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        const command = visibleSlashCommands[selectedCommandIndex];
-        if (command) {
-          selectSlashCommand(command);
-        }
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setDismissedSlashCommandValue(controller.textInput.value);
-      }
-    },
-    [
-      controller.textInput.value,
-      isSlashCommandOpen,
-      selectSlashCommand,
-      selectedCommandIndex,
-      visibleSlashCommands,
-    ],
-  );
-
   const sensitiveDataDetectionEnabled =
     useFeature("chatSecretScanEnabled") ?? false;
   const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
@@ -677,6 +636,102 @@ const PromptInputContent = ({
   // order) by the conversation's chat session once each turn settles.
   const queuedMessages = useConversationMessageQueue(
     isMessageQueueEnabled ? conversationId : undefined,
+  );
+
+  // Composer keyboard shortcuts layered on top of the primitive textarea:
+  //   • Esc — stop the in-flight response (mirrors the Stop button).
+  //   • ArrowUp on an empty composer — pop the most recently queued message
+  //     back into the input to edit / resend (like shell history recall).
+  // Both defer to the slash-command menu when it is open: Esc dismisses that
+  // menu and ArrowUp navigates it (handled further down).
+  const handleTextareaKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        event.key === "Escape" &&
+        !isSlashCommandOpen &&
+        isResponseInFlight &&
+        onStop
+      ) {
+        event.preventDefault();
+        onStop();
+        return;
+      }
+
+      if (
+        event.key === "ArrowUp" &&
+        !isSlashCommandOpen &&
+        isMessageQueueEnabled &&
+        conversationId &&
+        controller.textInput.value === "" &&
+        queuedMessages.length > 0
+      ) {
+        event.preventDefault();
+        const mostRecent = queuedMessages[queuedMessages.length - 1];
+        if (mostRecent) {
+          chatMessageQueue.remove(conversationId, mostRecent.id);
+          const restored = `${
+            mostRecent.skill ? `/${mostRecent.skill.name} ` : ""
+          }${mostRecent.text}`;
+          controller.textInput.setInput(restored);
+          // Caret to the end so the user can append / edit immediately.
+          requestAnimationFrame(() => {
+            const element = textareaRef.current;
+            element?.focus();
+            element?.setSelectionRange(restored.length, restored.length);
+          });
+        }
+        return;
+      }
+
+      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) => (current + 1) % visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) =>
+            (current - 1 + visibleSlashCommands.length) %
+            visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const command = visibleSlashCommands[selectedCommandIndex];
+        if (command) {
+          selectSlashCommand(command);
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedSlashCommandValue(controller.textInput.value);
+      }
+    },
+    [
+      conversationId,
+      controller.textInput,
+      isMessageQueueEnabled,
+      isResponseInFlight,
+      isSlashCommandOpen,
+      onStop,
+      queuedMessages,
+      selectSlashCommand,
+      selectedCommandIndex,
+      textareaRef,
+      visibleSlashCommands,
+    ],
   );
 
   return (
@@ -861,22 +916,38 @@ const PromptInputContent = ({
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
             />
-            <PromptInputSubmit
-              className="!h-8"
-              status={submitStatus}
-              disabled={submitDisabled || isContextCompacting}
-              onClick={(event) => {
-                // While a response is in-flight the button shows Stop; a
-                // click stops the stream instead of submitting the form
-                // (which would queue the typed text — see onStop docs). With
-                // queueing off, the click falls through to the form submit,
-                // whose handler stops the stream (the pre-queue behavior).
-                if (isMessageQueueEnabled && onStop && isResponseInFlight) {
-                  event.preventDefault();
-                  onStop();
-                }
-              }}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PromptInputSubmit
+                  className="!h-8"
+                  status={submitStatus}
+                  disabled={submitDisabled || isContextCompacting}
+                  onClick={(event) => {
+                    // While a response is in-flight the button shows Stop; a
+                    // click stops the stream instead of submitting the form
+                    // (which would queue the typed text — see onStop docs).
+                    // With queueing off, the click falls through to the form
+                    // submit, whose handler stops the stream (pre-queue
+                    // behavior).
+                    if (isMessageQueueEnabled && onStop && isResponseInFlight) {
+                      event.preventDefault();
+                      onStop();
+                    }
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isResponseInFlight && onStop ? (
+                  <span className="flex items-center gap-1.5">
+                    Stop <Kbd>Esc</Kbd>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    Send <Kbd>Enter</Kbd>
+                  </span>
+                )}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </PromptInputFooter>
       </PromptInput>

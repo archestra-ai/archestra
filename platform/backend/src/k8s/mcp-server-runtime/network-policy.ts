@@ -228,16 +228,173 @@ export function shouldUseAwsApplicationNetworkPolicy(params: {
   effectivePolicy?: EffectiveNetworkPolicy | null;
   capabilities?: K8sNetworkPolicyCapabilities | null;
 }): boolean {
+  // On the AWS VPC CNI a plain NetworkPolicy is accepted but not enforced, so any
+  // enforcing per-pod policy must be an ApplicationNetworkPolicy — `restricted`
+  // (even a CIDR-only allow-list, which would otherwise be blocked entirely by the
+  // deny baseline) and `off` alike, so `off` does not depend solely on the
+  // best-effort baseline for its kill-switch.
+  const egressMode = params.effectivePolicy?.policy?.egressMode;
   return (
     params.capabilities?.ciliumNetworkPolicy !== true &&
     params.capabilities?.gkeFqdnNetworkPolicy !== true &&
     params.capabilities?.awsApplicationNetworkPolicy === true &&
-    params.effectivePolicy?.policy?.egressMode === "restricted" &&
-    networkPolicyDomains(params.effectivePolicy.policy).length > 0
+    (egressMode === "restricted" || egressMode === "off")
   );
 }
 
+export function buildUnrestrictedFloorPolicy(params: {
+  name: string;
+  podSelectorLabels: Record<string, string>;
+  labels: Record<string, string>;
+  clusterDnsIps?: string[];
+}): k8s.V1NetworkPolicy {
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: params.podSelectorLabels },
+      policyTypes: ["Egress"],
+      egress: [
+        // Selector-based DNS to the kube-dns pods (DNAT-proof): kube-proxy DNATs
+        // the resolver ClusterIP to a CoreDNS pod IP before the egress policy is
+        // evaluated, so an ipBlock allow for the ClusterIP would never match.
+        // Same rule the restricted path emits. The AWS ANP floor keeps the
+        // ClusterIP rule since ApplicationNetworkPolicy cannot express selector
+        // peers and is not subject to kube-proxy DNAT.
+        buildDnsEgressRule(),
+        // Also allow :53 to the resolved nameserver IP(s), for clusters whose
+        // resolver is not a labelled kube-dns pod (NodeLocal DNSCache, custom
+        // DNS) — its resolv.conf nameserver may be a link-local/private IP the
+        // public rule below blocks. Empty when the resolver is unknown; the
+        // selector rule above still covers the standard kube-dns case.
+        ...buildResolverIpDnsEgressRules(params.clusterDnsIps ?? []),
+        ...floorPublicEgressRules(),
+      ],
+    },
+  };
+}
+
+export function buildUnrestrictedFloorAwsApplicationNetworkPolicy(params: {
+  name: string;
+  podSelectorLabels: Record<string, string>;
+  labels: Record<string, string>;
+  clusterDnsIps?: string[];
+}): Record<string, unknown> {
+  return {
+    apiVersion: "networking.k8s.aws/v1alpha1",
+    kind: "ApplicationNetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: params.podSelectorLabels },
+      policyTypes: ["Egress"],
+      egress: [
+        buildAwsDnsBootstrapEgressRule(params.clusterDnsIps ?? []),
+        ...floorPublicEgressRules(),
+      ],
+    },
+  };
+}
+
+export function buildEgressBaselineNetworkPolicy(params: {
+  name: string;
+  labels: Record<string, string>;
+}): k8s.V1NetworkPolicy {
+  return {
+    apiVersion: "networking.k8s.io/v1",
+    kind: "NetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: BASELINE_POD_SELECTOR_LABELS },
+      policyTypes: ["Egress"],
+      egress: [],
+    },
+  };
+}
+
+export function buildEgressBaselineAwsApplicationNetworkPolicy(params: {
+  name: string;
+  labels: Record<string, string>;
+}): Record<string, unknown> {
+  return {
+    apiVersion: "networking.k8s.aws/v1alpha1",
+    kind: "ApplicationNetworkPolicy",
+    metadata: {
+      name: params.name,
+      labels: sanitizeMetadataLabels(params.labels),
+    },
+    spec: {
+      podSelector: { matchLabels: BASELINE_POD_SELECTOR_LABELS },
+      policyTypes: ["Egress"],
+      egress: [],
+    },
+  };
+}
+
+/**
+ * True when the cluster's enforcing dataplane is the AWS VPC CNI, where a plain
+ * `NetworkPolicy` is accepted but not enforced — the deny base and unrestricted
+ * floor must be emitted as `ApplicationNetworkPolicy` to take effect.
+ */
+export function isAwsApplicationNetworkPolicyProvider(
+  capabilities?: K8sNetworkPolicyCapabilities | null,
+): boolean {
+  return capabilities?.provider === "aws-application-network-policy";
+}
+
 // === Internal helpers ===
+
+const BASELINE_POD_SELECTOR_LABELS = { app: "mcp-server" };
+
+// Reserved, private, and cloud-metadata ranges the unrestricted floor blocks
+// (spec egress-policy.md LIM-1). 168.63.129.16/32 (Azure platform metadata) is a
+// public IP covered by no range, so it is listed explicitly; the other metadata
+// endpoints fall under 169.254.0.0/16 (IMDS, container creds) and 100.64.0.0/10.
+const FLOOR_DENIED_IPV4_CIDRS = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "169.254.0.0/16",
+  "100.64.0.0/10",
+  "127.0.0.0/8",
+  "0.0.0.0/8",
+  "168.63.129.16/32",
+];
+// 64:ff9b::/96 (NAT64) blocks reaching the IPv4 ranges above via IPv6. The
+// IPv4-mapped prefix ::ffff:0:0/96 is intentionally omitted: the Kubernetes
+// NetworkPolicy validator rejects it as an ipBlock `except` ("must be a strict
+// subset of ::/0" — Go parses the IPv4-mapped form as IPv4), and it is redundant
+// since the kernel routes IPv4-mapped IPv6 as IPv4, already covered above.
+const FLOOR_DENIED_IPV6_CIDRS = [
+  "::1/128",
+  "fc00::/7",
+  "fe80::/10",
+  "64:ff9b::/96",
+];
+
+// Public egress for the unrestricted floor: all IPv4/IPv6 minus the reserved,
+// private, and cloud-metadata ranges above. Each floor variant prepends its own
+// provider-appropriate DNS rule (selector-based for the plain NetworkPolicy, the
+// cluster resolver ipBlock for the AWS ApplicationNetworkPolicy).
+function floorPublicEgressRules(): k8s.V1NetworkPolicyEgressRule[] {
+  return [
+    {
+      to: [{ ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } }],
+    },
+    {
+      to: [{ ipBlock: { cidr: "::/0", except: FLOOR_DENIED_IPV6_CIDRS } }],
+    },
+  ];
+}
 
 function buildKubernetesEgressRules(
   policy: NonNullable<EffectiveNetworkPolicy["policy"]>,
@@ -356,6 +513,29 @@ function buildCiliumDnsEgressRule(): Record<string, unknown> {
       },
     ],
   };
+}
+
+// Explicit :53 allow to the resolved cluster resolver IP(s), for plain-
+// NetworkPolicy clusters whose resolver is not a labelled kube-dns pod (NodeLocal
+// DNSCache, custom DNS). Empty when the resolver could not be determined — the
+// selector-based rule still covers the standard kube-dns case.
+function buildResolverIpDnsEgressRules(
+  clusterDnsIps: string[],
+): k8s.V1NetworkPolicyEgressRule[] {
+  if (clusterDnsIps.length === 0) {
+    return [];
+  }
+  return [
+    {
+      to: clusterDnsIps.map((ip) => ({
+        ipBlock: { cidr: ip.includes(":") ? `${ip}/128` : `${ip}/32` },
+      })),
+      ports: [
+        { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
+        { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
+      ],
+    },
+  ];
 }
 
 function buildDnsEgressRule(): k8s.V1NetworkPolicyEgressRule {

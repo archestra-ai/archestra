@@ -82,6 +82,12 @@ export const PolicyDeniedMcpToolErrorSchema = z
     input: z.record(z.string(), z.unknown()),
     reason: z.string(),
     reasonType: PolicyDeniedReasonTypeSchema.optional(),
+    // Deep link to this tool's guardrail editor, included only when the blocked
+    // caller both is a known user and holds toolPolicy:update — so a client can
+    // offer "view/modify this guardrail" without dangling a link that 403s.
+    // Absent for callers without edit rights and for denials persisted before
+    // this field existed.
+    policyUrl: z.string().url().optional(),
   })
   .strict();
 
@@ -149,6 +155,7 @@ export function buildPolicyDeniedMcpToolError(params: {
   input: Record<string, unknown>;
   reason: string;
   message: string;
+  policyUrl?: string;
 }): PolicyDeniedMcpToolError {
   return {
     type: "policy_denied",
@@ -158,6 +165,7 @@ export function buildPolicyDeniedMcpToolError(params: {
     input: params.input,
     reason: params.reason,
     reasonType: classifyPolicyDeniedReason(params.reason),
+    policyUrl: params.policyUrl,
   };
 }
 

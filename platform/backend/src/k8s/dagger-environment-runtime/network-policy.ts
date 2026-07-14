@@ -4,6 +4,7 @@ import {
   buildManagedCiliumNetworkPolicy,
   buildManagedGkeFqdnNetworkPolicy,
   buildManagedNetworkPolicy,
+  buildUnrestrictedFloorPolicy,
   constructManagedNetworkPolicyName,
   shouldManageK8sNetworkPolicy,
   shouldUseAwsApplicationNetworkPolicy,
@@ -95,7 +96,14 @@ export function buildDaggerEgressPolicies(params: {
     return [
       {
         kind: "NetworkPolicy",
-        object: buildUnrestrictedFloorPolicy({ name, podSelectorLabels }),
+        object: buildUnrestrictedFloorPolicy({
+          name,
+          podSelectorLabels,
+          labels: {
+            "app.kubernetes.io/managed-by": "archestra",
+            "archestra.io/resource": "dagger-egress-policy",
+          },
+        }),
       },
     ];
   }
@@ -158,56 +166,4 @@ export function buildDaggerEgressPolicies(params: {
       }),
     },
   ];
-}
-
-// Private/link-local ranges excluded from the open-egress floor.
-const FLOOR_DENIED_IPV4_CIDRS = [
-  "10.0.0.0/8",
-  "172.16.0.0/12",
-  "192.168.0.0/16",
-  "169.254.0.0/16",
-  "100.64.0.0/10",
-  "127.0.0.0/8",
-  "0.0.0.0/32",
-];
-const FLOOR_DENIED_IPV6_CIDRS = ["::1/128", "fc00::/7", "fe80::/10"];
-
-// Open-egress floor for `unrestricted` engines: DNS + all public egress with the
-// ranges above blocked.
-function buildUnrestrictedFloorPolicy(params: {
-  name: string;
-  podSelectorLabels: Record<string, string>;
-}): k8s.V1NetworkPolicy {
-  return {
-    apiVersion: "networking.k8s.io/v1",
-    kind: "NetworkPolicy",
-    metadata: {
-      name: params.name,
-      labels: {
-        "app.kubernetes.io/managed-by": "archestra",
-        "archestra.io/resource": "dagger-egress-policy",
-      },
-    },
-    spec: {
-      podSelector: { matchLabels: params.podSelectorLabels },
-      policyTypes: ["Egress"],
-      egress: [
-        // DNS on :53 to any resolver.
-        {
-          ports: [
-            { protocol: "UDP", port: 53 as unknown as k8s.IntOrString },
-            { protocol: "TCP", port: 53 as unknown as k8s.IntOrString },
-          ],
-        },
-        {
-          to: [
-            { ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } },
-          ],
-        },
-        {
-          to: [{ ipBlock: { cidr: "::/0", except: FLOOR_DENIED_IPV6_CIDRS } }],
-        },
-      ],
-    },
-  };
 }

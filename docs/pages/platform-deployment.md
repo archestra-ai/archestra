@@ -224,9 +224,6 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
 - `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources for MCP workload management, including pods, services, secrets, deployments, and generated `NetworkPolicy` objects (default: true)
-- `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: false). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
-- `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
-- `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked
 
 Environment network policies require the chart's default MCP manager RBAC so Archestra can create Kubernetes `NetworkPolicy` objects and any detected FQDN policy objects. See [Network Policies](/docs/platform-private-registry#network-policies).
 
@@ -484,84 +481,29 @@ archestra:
 
 #### SSRF Protection for MCP Server Pods
 
-The Helm chart includes an optional Kubernetes `NetworkPolicy` that prevents MCP server pods from performing Server-Side Request Forgery (SSRF) attacks. When enabled, it blocks outbound connections to private/internal IP ranges while allowing DNS resolution and public internet access.
+Archestra protects every MCP server pod from Server-Side Request Forgery (SSRF) automatically — there is no Helm toggle to turn on. The backend applies an egress policy to each pod, so a server cannot reach cloud metadata endpoints or private cluster ranges unless its environment network policy explicitly allows it.
 
-This policy is **disabled by default** to avoid breaking MCP servers that connect to internal Kubernetes services (e.g., `grafana.monitoring.svc.cluster.local`). If your MCP servers only need public internet access, enabling this policy is recommended.
+Each pod gets one policy, chosen by its environment's egress mode:
 
-To enable the policy:
+- **Unrestricted** (the default) — a reserved-range floor: DNS and the public internet are allowed; private, link-local, and metadata ranges are blocked.
+- **Restricted** — only the CIDRs and domains the environment allow-lists, plus DNS.
+- **Off** — all egress is denied.
 
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        create: true
-```
+A namespace-wide default-deny baseline also selects every MCP pod, so a pod that is still starting up is denied by default rather than left open.
 
-**Blocked IPv4 ranges** (when enabled):
+**Blocked reserved ranges** (the unrestricted floor):
 
 - `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` - RFC 1918 private ranges (cluster pods, services, nodes)
 - `169.254.0.0/16` - Link-local / cloud metadata endpoints (AWS IMDSv1, GCP, Azure)
+- `168.63.129.16/32` - Azure platform metadata (a public IP outside the private ranges)
 - `100.64.0.0/10` - Carrier-grade NAT (RFC 6598)
-- `127.0.0.0/8` - Loopback
-- `0.0.0.0/32` - Treated as localhost by some HTTP libraries
+- `127.0.0.0/8`, `0.0.0.0/8` - Loopback and unspecified addresses
+- `::1/128`, `fc00::/7`, `fe80::/10` - The IPv6 equivalents
+- `64:ff9b::/96` - NAT64 (blocks reaching the IPv4 ranges via IPv6; IPv4-mapped IPv6 is already covered by the IPv4 rules)
 
-**Blocked IPv6 ranges** (for dual-stack clusters):
+**Prerequisite**: your cluster must use a CNI that enforces network policies. Calico, Cilium, and GKE Dataplane V2 enforce standard `NetworkPolicy` objects; on EKS Auto Mode, where `ApplicationNetworkPolicy` is the enforcement mechanism, the policy is emitted as an `ApplicationNetworkPolicy` instead. Where no enforcing dataplane is present, the policies are created but not enforced.
 
-- `::1/128` - IPv6 loopback
-- `fc00::/7` - Unique local addresses (equivalent to RFC 1918)
-- `fe80::/10` - Link-local
-
-**Prerequisite**: Your cluster must use a CNI plugin that enforces `NetworkPolicies` (e.g., Calico, Cilium). The default GKE CNI (kubenet) does **not** enforce `NetworkPolicies` unless Dataplane V2 or Calico is enabled.
-
-MCP servers that need to connect to internal Kubernetes services will be blocked when this policy is enabled because ClusterIPs fall within the denied private ranges. Use `additionalEgressRules` to whitelist specific internal services.
-
-By pod/namespace labels (recommended — survives IP changes):
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalEgressRules:
-          - to:
-              - namespaceSelector:
-                  matchLabels:
-                    kubernetes.io/metadata.name: monitoring
-                podSelector:
-                  matchLabels:
-                    app: grafana
-            ports:
-              - protocol: TCP
-                port: 3000
-```
-
-By IP CIDR:
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalEgressRules:
-          - to:
-              - ipBlock:
-                  cidr: 10.0.50.0/24
-            ports:
-              - protocol: TCP
-                port: 443
-```
-
-To block additional CIDR ranges beyond the defaults:
-
-```yaml
-archestra:
-  orchestrator:
-    kubernetes:
-      networkPolicy:
-        additionalDeniedCidrs:
-          - 198.51.100.0/24
-```
+To let a server reach a specific internal service — a Grafana instance in the `monitoring` namespace, for example — set its environment's network policy to `restricted` and add that CIDR or domain to the allow-list. See [Network Policies](/docs/platform-private-registry#network-policies).
 
 ### Accessing the Platform
 
@@ -607,7 +549,7 @@ If pgvector is not installed or the database user lacks permissions, the Knowled
 
 #### SSRF Protection
 
-Enable the SSRF protection `NetworkPolicy` to prevent MCP server pods from accessing private/internal networks. This is especially important when MCP servers execute untrusted code or connect to external services. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods) for configuration details.
+MCP server pods are protected from SSRF automatically: each pod's egress is confined to DNS and the public internet, with private and cloud-metadata ranges blocked. This matters most when MCP servers run untrusted code. To tighten a server to a specific allow-list — or deny its egress entirely — set its environment's network policy. See [SSRF Protection for MCP Server Pods](#ssrf-protection-for-mcp-server-pods).
 
 ## Infrastructure as Code
 

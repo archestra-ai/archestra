@@ -62,8 +62,12 @@ const TRANSIENT_ERROR_PATTERNS: ReadonlyArray<{
   { pattern: "ECONNRESET", code: "ECONNRESET" },
   { pattern: "EPIPE", code: "EPIPE" },
   { pattern: "ETIMEDOUT", code: "ETIMEDOUT" },
-  // Temporary DNS resolution failure (getaddrinfo). By definition retryable.
+  // DNS resolution failures (getaddrinfo). EAI_AGAIN is an explicitly
+  // temporary lookup failure; ENOTFOUND is a name that did not resolve,
+  // which is transient when a database host briefly stops resolving during
+  // a restart or failover (common with in-cluster service DNS).
   { pattern: "EAI_AGAIN", code: "EAI_AGAIN" },
+  { pattern: "ENOTFOUND", code: "ENOTFOUND" },
   { pattern: "Connection terminated", code: "connection_terminated" },
   {
     pattern: "timeout exceeded when trying to connect",

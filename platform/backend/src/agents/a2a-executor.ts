@@ -731,7 +731,16 @@ export async function buildUserContent(
     stageAttachments?: StageAttachmentsFn;
   },
 ): Promise<{ content: UserContent | null; note: string }> {
-  const allAttachments = attachments ?? [];
+  // `A2AAttachment.contentType` is typed non-optional, but every value
+  // originates from an external source (A2A protocol parts, chat-platform or
+  // email uploads) and stays populated only because each ingestion path defaults
+  // it — the A2A path in particular narrows an optional SDK `mediaType` through
+  // an `as string` cast behind a co-located filter. Default a missing content
+  // type once here so a slip at any of those sites can't crash the image/mime
+  // classification below or emit a `data:undefined;base64,...` URL further down.
+  const allAttachments = (attachments ?? []).map((att) =>
+    att.contentType ? att : { ...att, contentType: "application/octet-stream" },
+  );
   // A sandbox is usable iff the caller supplied a stager; deriving it here (vs a
   // separate flag) makes the "available but unstageable" state unrepresentable.
   const sandboxAvailable = opts.stageAttachments !== undefined;

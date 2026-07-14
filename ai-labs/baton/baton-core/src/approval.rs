@@ -148,6 +148,27 @@ pub struct Authority {
     pub mode: AuthorityMode,
 }
 
+impl Authority {
+    /// An in-process authority deciding synchronously through `rule`.
+    pub fn inline(name: impl Into<String>, mandate: AuthorityMandate, rule: AuthorityFn) -> Self {
+        Self {
+            name: AuthorityName::new(name),
+            mandate,
+            mode: AuthorityMode::Inline(rule),
+        }
+    }
+
+    /// An out-of-process authority whose rulings re-enter through
+    /// [`crate::engine::PolicyEngine::apply_approval`].
+    pub fn external(name: impl Into<String>, mandate: AuthorityMandate) -> Self {
+        Self {
+            name: AuthorityName::new(name),
+            mandate,
+            mode: AuthorityMode::External,
+        }
+    }
+}
+
 /// How an [`Authority`] rules. Inline authorities are consulted before
 /// external ones during routing (a deterministic answer beats a round-trip to
 /// a human).

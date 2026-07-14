@@ -605,6 +605,46 @@ fn pursue_keeps_the_slot_for_an_external_ruling() {
     dispatch(&mut trajectory, token, "pong").unwrap();
 }
 
+/// A combinator-built inline authority routes and rules end-to-end: vouching
+/// carol in (Endorse) and acquiring the egress (Accept) walk the flow to a
+/// genuine permit — the combinators grant real, sufficient competence.
+#[test]
+fn combinator_built_inline_authority_endorses_to_a_permit() {
+    let mut engine = engine_with([email_contract()]);
+    engine
+        .register_authority(Authority::inline(
+            "approver",
+            crate::transition::AuthorityMandate::none()
+                .vouch_audience([user("carol")])
+                .acquire_effects(),
+            approve_all,
+        ))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "doc");
+    let request = email_request(&mut trajectory, body, "carol");
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "sent").unwrap();
+}
+
+/// A combinator-built external authority defers, and the pursuit names it.
+#[test]
+fn combinator_built_external_authority_defers_naming_it() {
+    let mut engine = engine_with([egress_tool()]);
+    engine
+        .register_authority(Authority::external(
+            "effect-approver",
+            crate::transition::AuthorityMandate::none().acquire_effects(),
+        ))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::NeedsApproval(pending) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("the external acquirer should defer");
+    };
+    assert_eq!(pending.authority(), &AuthorityName::new("effect-approver"));
+}
+
 /// A `source`-registered tool is a pure read whose recorded output wears the
 /// declared label after the admission fold.
 #[test]

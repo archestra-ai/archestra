@@ -11,12 +11,9 @@
 //!
 //! Run with `cargo run --example external_auditor`.
 
-use std::collections::BTreeSet;
-
 use baton_core::{
-    ArgumentTree, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Decision, OpaqueValue, PolicyEngine,
-    ProposedGrant, Pursuit, Ruling, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, UserId,
-    ValueId, ValueLabel, Violation,
+    ArgumentTree, Authority, AuthorityMandate, Decision, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Ruling,
+    Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, UserId, ValueId, ValueLabel, Violation,
 };
 
 /// The internal finance team with access to the invoicing system.
@@ -39,19 +36,11 @@ fn approve_auditor(_: &ProposedGrant, _: &[Violation], _: &TrajectoryView<'_>) -
 }
 
 fn finance_approver() -> Authority {
-    Authority {
-        name: AuthorityName::new("finance-approver"),
-        mandate: AuthorityMandate {
-            trust: None,
-            audience: Some(BTreeSet::from([u(AUDITOR)])),
-            waive_prior_effects: false,
-            confirms: false,
-            acknowledge_unknown: false,
-            may_release_control: false,
-            acquire_effects: true,
-        },
-        mode: AuthorityMode::Inline(approve_auditor),
-    }
+    Authority::inline(
+        "finance-approver",
+        AuthorityMandate::none().vouch_audience([u(AUDITOR)]).acquire_effects(),
+        approve_auditor,
+    )
 }
 
 fn build_engine() -> PolicyEngine {

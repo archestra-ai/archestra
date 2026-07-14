@@ -267,12 +267,9 @@ impl BatonGateBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use baton_core::{
-        Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Effect, Effects,
-        ProposedGrant, Requirements, Ruling, ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel,
-        Violation,
+        Audience, AudienceRule, Authority, AuthorityMandate, Effect, Effects, ProposedGrant, Requirements, Ruling,
+        ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel, Violation,
     };
     use serde_json::json;
 
@@ -321,20 +318,14 @@ mod tests {
     }
 
     /// Vouches in exactly the auditor and accepts the resulting first egress.
+    fn auditor_mandate() -> AuthorityMandate {
+        AuthorityMandate::none()
+            .vouch_audience([UserId::new(AUDITOR)])
+            .acquire_effects()
+    }
+
     fn auditor_authority() -> Authority {
-        Authority {
-            name: AuthorityName::new("finance-approver"),
-            mandate: AuthorityMandate {
-                trust: None,
-                audience: Some(BTreeSet::from([UserId::new(AUDITOR)])),
-                waive_prior_effects: false,
-                confirms: false,
-                acknowledge_unknown: false,
-                may_release_control: false,
-                acquire_effects: true,
-            },
-            mode: AuthorityMode::Inline(approve),
-        }
+        Authority::inline("finance-approver", auditor_mandate(), approve)
     }
 
     fn auditor_gate() -> BatonGate {
@@ -380,19 +371,7 @@ mod tests {
     /// reaches its grant step blocks with `NeedsApproval` rather than permitting.
     fn external_auditor_gate() -> BatonGate {
         BatonGate::builder()
-            .authority(Authority {
-                name: AuthorityName::new("finance-approver"),
-                mandate: AuthorityMandate {
-                    trust: None,
-                    audience: Some(BTreeSet::from([UserId::new(AUDITOR)])),
-                    waive_prior_effects: false,
-                    confirms: false,
-                    acknowledge_unknown: false,
-                    may_release_control: false,
-                    acquire_effects: true,
-                },
-                mode: AuthorityMode::External,
-            })
+            .authority(Authority::external("finance-approver", auditor_mandate()))
             .contract(read_contract("list_invoices"))
             .contract(sink_contract("send_email"))
             .recipients_for("send_email", |a| {

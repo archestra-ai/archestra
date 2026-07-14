@@ -168,8 +168,59 @@ pub struct AuthorityMandate {
 
 impl AuthorityMandate {
     /// The identity mandate: competent for nothing but the empty ask.
+    /// Powers are granted one combinator at a time, so a mandate reads as
+    /// exactly what it may do.
     pub fn none() -> Self {
         Self::default()
+    }
+
+    /// Competent to endorse flow trust up to `ceiling`.
+    #[must_use]
+    pub fn endorse_trust(mut self, ceiling: KnownTrust) -> Self {
+        self.trust = Some(ceiling);
+        self
+    }
+
+    /// Competent to vouch exactly `readers` into a flow audience.
+    #[must_use]
+    pub fn vouch_audience(mut self, readers: impl IntoIterator<Item = UserId>) -> Self {
+        self.audience = Some(readers.into_iter().collect());
+        self
+    }
+
+    /// Competent to waive an already-committed prior effect for one check.
+    #[must_use]
+    pub fn waive_prior_effects(mut self) -> Self {
+        self.waive_prior_effects = true;
+        self
+    }
+
+    /// Competent to stand in for a user confirmation.
+    #[must_use]
+    pub fn confirms(mut self) -> Self {
+        self.confirms = true;
+        self
+    }
+
+    /// Competent to acknowledge unprovable facts.
+    #[must_use]
+    pub fn acknowledge_unknown(mut self) -> Self {
+        self.acknowledge_unknown = true;
+        self
+    }
+
+    /// Competent to release a control dependency for one flow.
+    #[must_use]
+    pub fn release_control(mut self) -> Self {
+        self.may_release_control = true;
+        self
+    }
+
+    /// Competent to acquire a new effect for one action.
+    #[must_use]
+    pub fn acquire_effects(mut self) -> Self {
+        self.acquire_effects = true;
+        self
     }
 
     /// Is this mandate competent for `grant`? Endorse dimensions compare by

@@ -373,26 +373,45 @@ only; a confidentiality breach carried by a **control dependency** clears via
   demonstrated by the `endorse_authority_refuses_a_suspicious_transitive_ancestry` test*
   (acceptance criterion reads "demo/test"); the narrative `demo` keeps the Endorse
   happy-path, since a visible refusal there would need its own single-authority engine.
-- **Known fail-closed limitation (gate round 1, maintainer-accepted).** Endorse and
-  control-release do not *jointly* solve: enumeration peels Endorse before the
-  control-release waiver on the pre-release residual, and `minimal_control_release`
-  treats the release-all residual as the reduction optimum. Both assume releasing
-  control monotonically improves adequacy — false when a `Suspicious` control masks an
-  argument's `Unknown` trust (the trust fold and the adequacy order disagree on
-  `Unknown`). Such a flow — which has a valid *Endorse-then-release* plan — is
-  enumerated **terminal instead of remediable** (a Build-2 regression, since the removed
-  trust waiver used to clear it via release-all). Fail-closed: it withholds a remedy,
-  never permits an unsafe flow; the config is narrow (Unknown-trust arg, Suspicious
-  masking control, Suspicious-requiring sink). A correct fix needs a joint
-  Endorse×control-release solve — deferred to the follow-up ledger.
+- **Joint Endorse×control-release solve (was the "known fail-closed limitation";
+  fixed in the pre-merge cleanup pass, maintainer-approved).** Ordinary enumeration
+  peels Endorse from the *unreleased* residual and measures a control release against
+  the release-all raw vector — both assume releasing control monotonically improves
+  adequacy, which is false when a `Suspicious` control masks an argument's `Unknown`
+  trust (the trust fold and the adequacy order disagree on `Unknown`). Such a flow used
+  to be enumerated terminal despite having a valid *Endorse-then-release* plan. **As
+  built:** a terminal-rescue solver (`rescue_plans`), consulted **only when ordinary
+  enumeration yields no plan** (existing plan sets untouched), searches release
+  candidates for *joint cleanability*: project the release, derive per-leaf Endorse
+  deltas from the projected residual (`violations(None)`, so acknowledge-only facts and
+  growth survive the projection), compose an Accept for projected growth and the final
+  waiver (carrying acknowledged facts, so `acknowledge_unknown` competence is still
+  required), keep the candidate iff every grant is authorizable and the projection
+  clears, and minimize with the same drop-redundant fixpoint as
+  `minimal_control_release`. The Endorse step gained an explicit `targets` field — the
+  projected residual the authority is asked to clear — because the *actual* posture may
+  not mention trust at all while the mask holds; plan postures stay the actual vectors
+  (apply-time preconditions compare against reality). Regression matrix:
+  `rescue_*` tests (composition, projected-target visibility, least-privilege release,
+  Accept and acknowledge-only composition, and both missing-authority configs staying
+  terminal).
 - **Prediction artifact (not a defect).** A `Transform → Endorse` plan serializes the
   Endorse step's `source` as the *pre-transform* leaf id, but the transform re-ids the
   value at application and Endorse then targets the transformed descendant. A plan is a
   prediction, re-enumerated after every applied step (revision-binding forces it), so a
   stale downstream `source` is never applied; it is a display artifact of the shared
   `SimFlow` (which swaps a leaf's label in place without re-id-ing), not an unsafe path.
-- **Deferred to the follow-up ledger (unchanged):** approval/acknowledgment re-entry
-  idempotence and the enumeration O(leaves²) perf.
+- **Approval/acknowledgment re-entry idempotence — investigated, not a defect
+  (pre-merge cleanup pass).** `PendingApproval` is non-`Clone`, never `Deserialize`,
+  and consumed by value, so double-application is unrepresentable; a ruling landing
+  after any interleaved mutation refuses (`StepRefused::StalePlan`) without touching
+  state and the flow re-escalates with a fresh `ApprovalRequested` (a fail-closed
+  re-ask, never a duplicate application); transient waiver grants are deliberately
+  permit-scoped (re-entry re-escalates, each ruling audited once), and the durable
+  grants are idempotent by construction. Pinned by
+  `accept_re_entry_writes_no_duplicate_audit`, `unprovable_re_entry_writes_no_audit`,
+  and `stale_and_foreign_step_capabilities_are_refused`.
+- **Deferred to the follow-up ledger (unchanged):** the enumeration O(leaves²) perf.
 
 ## Validation commands (every pass)
 ```

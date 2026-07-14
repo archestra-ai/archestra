@@ -104,6 +104,14 @@ pub enum TransitionKind {
     EndorseValue {
         source: ValueId,
         delta: EndorseDelta,
+        /// The violations this endorse asks the authority to clear, as the
+        /// authority should see them. For an ordinary enumerated step this is
+        /// the residual at the peel (the step's own precondition); for a
+        /// terminal-rescue step it is the *projected post-release* residual —
+        /// the actual posture may not mention trust at all while a control
+        /// dep masks it, and ruling on the masked vector would mislead the
+        /// authority.
+        targets: Vec<Violation>,
     },
 }
 

@@ -117,12 +117,18 @@ impl PolicyEngine {
             Some(action) => action,
             None => trajectory.set_pending(request, proposed_effects),
         };
-        let drafts = self.enumerate_plans(
+        let mut drafts = self.enumerate_plans(
             trajectory,
             &checked_request,
             contract,
             trajectory.pending_action().expect("pending action set above"),
         );
+        if drafts.is_empty() {
+            // Terminal rescue: only a flow ordinary enumeration cannot clear
+            // consults the joint Endorse×control-release solver, so plan sets
+            // for remediable flows are untouched.
+            drafts = self.rescue_plans(trajectory, &checked_request, contract);
+        }
         match NonEmptyVec::from_vec(trajectory.store_plans(action, self.id, drafts)) {
             Some(plans) => {
                 debug!(count = plans.len(), "blocked (remediable)");

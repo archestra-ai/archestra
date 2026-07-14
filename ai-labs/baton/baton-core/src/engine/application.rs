@@ -282,13 +282,17 @@ impl PolicyEngine {
                     },
                 )
             }
-            TransitionKind::EndorseValue { source, delta } => {
+            TransitionKind::EndorseValue { source, delta, targets } => {
                 let grant = ProposedGrant::Endorse {
                     source,
                     delta: delta.clone(),
                 };
+                // The authority rules on the step's declared targets, not the
+                // actual posture: for an ordinary step they coincide, but a
+                // terminal-rescue endorse targets the projected post-release
+                // residual a masking control hides from the actual vector.
                 Ok(
-                    match self.route_step_grant(trajectory, &capability, &checked, grant, spec.precondition.remaining) {
+                    match self.route_step_grant(trajectory, &capability, &checked, grant, targets) {
                         RoutedStep::Approved { authority, .. } => {
                             StepOutcome::Advanced(self.endorse_permit(trajectory, source, delta, authority, original))
                         }

@@ -14,6 +14,15 @@ use crate::value::{UnknownValue, ValueLabel};
 use super::capability::ToolContract;
 use super::{MAX_PLANS, PolicyEngine};
 
+/// A successful joint-cleanability probe: the per-leaf raises, the final
+/// waiver (release + residual lift + acknowledged facts), and the projected
+/// post-release residual the endorse steps target.
+struct JointRescue {
+    endorse: Vec<(ValueId, EndorseDelta)>,
+    delta: TransientWaiver,
+    targets: Vec<Violation>,
+}
+
 impl PolicyEngine {
     /// Deterministic bounded plan enumeration: candidate step sequences in the
     /// canonical order Sanitize? -> Constrain? -> Endorse* -> Accept? ->
@@ -155,13 +164,18 @@ impl PolicyEngine {
                         };
                         let raised = delta.raise(&sim.leaf_labels[&leaf]);
                         sim.leaf_labels.insert(leaf, raised);
+                        let targets = precondition.remaining.clone();
                         remaining = sim.violations(None);
                         steps.push(TransitionSpec {
                             precondition,
                             postcondition: Posture {
                                 remaining: remaining.clone(),
                             },
-                            kind: TransitionKind::EndorseValue { source: leaf, delta },
+                            kind: TransitionKind::EndorseValue {
+                                source: leaf,
+                                delta,
+                                targets,
+                            },
                         });
                     }
                 }
@@ -233,6 +247,169 @@ impl PolicyEngine {
     /// residual, then the plain delta. The waiver clears only the non-relabel
     /// dims (prior effects, confirmation, control release); trust/audience route
     /// to Endorse steps peeled before this.
+    /// Terminal rescue: a joint Endorse×control-release solve, consulted only
+    /// when ordinary enumeration yields no plan — so existing plan sets are
+    /// untouched, and a rescue route exists only where the flow was terminal.
+    ///
+    /// Ordinary enumeration peels Endorse from the *unreleased* residual and
+    /// measures a control release against the release-all raw vector, both of
+    /// which assume releasing control monotonically improves adequacy. That is
+    /// false when a control dep masks an argument's `Unknown` in the trust
+    /// fold: the valid plan must endorse against the *projected post-release*
+    /// residual and then release. This solver searches release candidates for
+    /// joint cleanability: project the release, derive per-leaf Endorse
+    /// deltas from the projection, compose an Accept for any projected
+    /// growth and the final waiver (carrying its acknowledge-only facts),
+    /// and keep the candidate iff every grant is authorizable and the
+    /// projection then clears — minimized with the same drop-redundant
+    /// fixpoint as [`PolicyEngine::minimal_control_release`].
+    pub(super) fn rescue_plans(
+        &self,
+        trajectory: &Trajectory,
+        checked: &ToolRequest,
+        contract: Option<&ToolContract>,
+    ) -> Vec<(NonEmptyVec<TransitionSpec>, Posture)> {
+        let base = match SimFlow::of(trajectory, checked, contract) {
+            Ok(base) => base,
+            Err(_) => return Vec::new(),
+        };
+        if base.control_labels.is_empty() {
+            return Vec::new();
+        }
+        let ids: Vec<ValueId> = base.control_labels.keys().copied().collect();
+        let mut release: BTreeSet<ValueId> = ids.iter().copied().collect();
+        if self.joint_rescue(&base, &release).is_none() {
+            return Vec::new();
+        }
+        loop {
+            let mut progressed = false;
+            for id in &ids {
+                if !release.contains(id) {
+                    continue;
+                }
+                let mut candidate = release.clone();
+                candidate.remove(id);
+                if self.joint_rescue(&base, &candidate).is_some() {
+                    release = candidate;
+                    progressed = true;
+                }
+            }
+            if !progressed {
+                break;
+            }
+        }
+        let Some(rescue) = self.joint_rescue(&base, &release) else {
+            return Vec::new();
+        };
+
+        // The plan's postures are the *actual* flow at each application point
+        // (apply-time preconditions compare against reality); an Endorse step
+        // may leave the actual posture unchanged while the mask holds — its
+        // effect is visible only in the projection its `targets` carry.
+        let mut sim = base;
+        let mut steps = Vec::new();
+        let mut remaining = sim.violations(None);
+        for (leaf, delta) in &rescue.endorse {
+            let precondition = Posture {
+                remaining: remaining.clone(),
+            };
+            let raised = delta.raise(&sim.leaf_labels[leaf]);
+            sim.leaf_labels.insert(*leaf, raised);
+            remaining = sim.violations(None);
+            steps.push(TransitionSpec {
+                precondition,
+                postcondition: Posture {
+                    remaining: remaining.clone(),
+                },
+                kind: TransitionKind::EndorseValue {
+                    source: *leaf,
+                    delta: delta.clone(),
+                    targets: rescue.targets.clone(),
+                },
+            });
+        }
+        if let Some(growth) = surface_growth_of(&remaining) {
+            let precondition = Posture {
+                remaining: remaining.clone(),
+            };
+            sim.accepted_effects = sim.accepted_effects.clone().combine(growth.clone());
+            remaining = sim.violations(None);
+            steps.push(TransitionSpec {
+                precondition,
+                postcondition: Posture {
+                    remaining: remaining.clone(),
+                },
+                kind: TransitionKind::AcceptGrowth { effects: growth },
+            });
+        }
+        if !sim.violations(Some(&rescue.delta)).is_empty() {
+            return Vec::new();
+        }
+        steps.push(TransitionSpec {
+            precondition: Posture {
+                remaining: remaining.clone(),
+            },
+            postcondition: Posture::clean(),
+            kind: TransitionKind::ApplyWaiver { delta: rescue.delta },
+        });
+        match NonEmptyVec::from_vec(steps) {
+            Some(steps) => vec![(steps, Posture::clean())],
+            None => Vec::new(),
+        }
+    }
+
+    /// One joint-cleanability probe for a release candidate. `None` when the
+    /// projection has no endorsable argument deficit, any required grant has
+    /// no competent authority, or the composed remedies do not clear it.
+    fn joint_rescue(&self, base: &SimFlow, release: &BTreeSet<ValueId>) -> Option<JointRescue> {
+        let mut projected = base.clone();
+        projected.control_labels.retain(|id, _| !release.contains(id));
+        // `violations(None)`, not `violations(Some(_))`: the projection must
+        // keep acknowledge-only facts (they route the final grant to an
+        // `acknowledge_unknown` competence) and the growth breach.
+        let residual = projected.violations(None);
+        let endorse = endorse_steps(&projected, &residual);
+        if endorse.is_empty() {
+            // Nothing argument-borne to raise: ordinary enumeration already
+            // covers pure-release solves, so there is nothing to rescue.
+            return None;
+        }
+        let targets = residual;
+        for (leaf, delta) in &endorse {
+            if !self.can_authorize(&ProposedGrant::Endorse {
+                source: *leaf,
+                delta: delta.clone(),
+            }) {
+                return None;
+            }
+            let raised = delta.raise(&projected.leaf_labels[leaf]);
+            projected.leaf_labels.insert(*leaf, raised);
+        }
+        let mut residual = projected.violations(None);
+        if let Some(growth) = surface_growth_of(&residual) {
+            if !self.can_authorize(&ProposedGrant::Accept {
+                effects: growth.clone(),
+            }) {
+                return None;
+            }
+            projected.accepted_effects = projected.accepted_effects.clone().combine(growth);
+            residual = projected.violations(None);
+        }
+        let mut delta = needed_delta(&residual);
+        delta.control_release = release.clone();
+        if !self.can_authorize(&grant_for(&delta, &residual)) {
+            return None;
+        }
+        if !projected.violations(Some(&delta)).is_empty() {
+            return None;
+        }
+        Some(JointRescue {
+            endorse,
+            delta,
+            targets,
+        })
+    }
+
     fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
         let mut candidates = Vec::new();
         if let Some(release) = self.minimal_control_release(sim) {

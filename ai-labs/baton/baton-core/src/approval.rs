@@ -182,7 +182,7 @@ pub enum AuthorityMode {
 }
 
 /// A grant step awaiting an external authority's ruling. Issued by the engine
-/// when an `ApplyWaiver`, `AcceptGrowth`, or `EndorseValue` step names an
+/// when an `ApplyWaiver`, `AcceptGrowth`, or fiat `Derive` (Endorse) step names an
 /// external authority; consumed by
 /// [`crate::engine::PolicyEngine::apply_approval`], which dispatches on the
 /// grant variant.

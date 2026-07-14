@@ -8,7 +8,7 @@ use crate::approval::{AuthorityMode, Ruling, TrajectoryView};
 use crate::audit::{AuditEvent, AuthorityName};
 use crate::contract::{Requirements, Unprovable, Violation};
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
-use crate::plan::{ExitKind, NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
+use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
 use crate::request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
 use crate::revision::{PlanId, ValueId};
 use crate::turn::{Speaker, Trajectory};
@@ -313,7 +313,7 @@ fn unknown_trust_routes_as_an_endorse() {
     // the sink's requirement.
     assert!(matches!(
         &plans.first().steps.first().kind,
-        TransitionKind::EndorseValue { source, delta, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { delta, .. } }
             if *source == doc && delta.trust == Some(KnownTrust::Trusted)
     ));
     // ...routed to the trust-competent external human.
@@ -1058,7 +1058,7 @@ fn tainted_payload_plans_a_transform() {
         .expect("single-step transform plan");
     assert!(matches!(
         &transform_plan.steps.first().kind,
-        TransitionKind::TransformValue { source, .. } if *source == raw
+        TransitionKind::Derive { source, justification: Justification::Content(_) } if *source == raw
     ));
     assert!(transform_plan.final_postcondition.is_clean());
     // Plans are stored on the trajectory, bound to its current revision,
@@ -1085,7 +1085,7 @@ fn audience_breach_plans_an_endorse() {
     assert_eq!(endorse.steps.len(), 1);
     assert!(matches!(
         &endorse.steps.first().kind,
-        TransitionKind::EndorseValue { source, delta, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { delta, .. } }
             if *source == doc && delta.audience.as_ref().is_some_and(|r| r.contains(&user("charlie")))
     ));
     // Routing is live at application: the endorse step defers to the
@@ -1135,7 +1135,10 @@ fn a_multi_source_audience_breach_endorses_every_contributing_leaf() {
         .steps
         .iter()
         .filter_map(|s| match &s.kind {
-            TransitionKind::EndorseValue { source, .. } => Some(*source),
+            TransitionKind::Derive {
+                source,
+                justification: Justification::Fiat { .. },
+            } => Some(*source),
             _ => None,
         })
         .collect();
@@ -1189,7 +1192,7 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
     let plans = remediable(&engine, &mut trajectory, request);
     let endorse_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, TransitionKind::EndorseValue { source, .. } if *source == doc))
+        .find(|p| matches!(&p.steps.first().kind, TransitionKind::Derive { source, justification: Justification::Fiat { .. } } if *source == doc))
         .expect("an endorse plan for the doc");
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse_plan.id) else {
         panic!("expected the external human to be consulted");
@@ -1284,7 +1287,7 @@ fn a_denied_endorse_is_terminal_and_mints_no_value() {
     let plans = remediable(&engine, &mut trajectory, request);
     let endorse_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, TransitionKind::EndorseValue { source, .. } if *source == doc))
+        .find(|p| matches!(&p.steps.first().kind, TransitionKind::Derive { source, justification: Justification::Fiat { .. } } if *source == doc))
         .expect("an endorse plan for the doc");
     let values_before = trajectory.store().len();
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse_plan.id) else {
@@ -1446,7 +1449,7 @@ fn control_release_and_endorse_compose_for_a_mixed_audience_breach() {
         let endorses_charlie = plan.steps.iter().any(|step| {
             matches!(
                 &step.kind,
-                TransitionKind::EndorseValue { source, delta, .. }
+                TransitionKind::Derive { source, justification: Justification::Fiat { delta, .. } }
                     if *source == body && delta.audience.as_ref().is_some_and(|r| r.contains(&user("charlie")))
             )
         });
@@ -1677,7 +1680,16 @@ fn transform_step_applies_and_flow_permits() {
     let plans = remediable(&engine, &mut trajectory, request);
     let plan = plans
         .iter()
-        .find(|p| p.steps.len() == 1 && matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
+        .find(|p| {
+            p.steps.len() == 1
+                && matches!(
+                    &p.steps.first().kind,
+                    TransitionKind::Derive {
+                        justification: Justification::Content(_),
+                        ..
+                    }
+                )
+        })
         .expect("transform plan");
 
     let outcome = apply_first_step(&engine, &mut trajectory, plan.id);
@@ -1715,7 +1727,10 @@ fn rule_approved_endorse_permits_inline() {
     let plans = remediable(&engine, &mut trajectory, request);
     assert!(matches!(
         &plans.first().steps.first().kind,
-        TransitionKind::EndorseValue { .. }
+        TransitionKind::Derive {
+            justification: Justification::Fiat { .. },
+            ..
+        }
     ));
     let outcome = apply_first_step(&engine, &mut trajectory, plans.first().id);
     let StepOutcome::Advanced(Decision::Permitted(_token)) = outcome else {
@@ -2214,9 +2229,9 @@ fn plan_steps(kinds: Vec<TransitionKind>) -> NonEmptyVec<TransitionSpec> {
 /// composite is categorized by that step, not its first.
 #[test]
 fn exit_kind_is_the_decisive_step() {
-    let transform = TransitionKind::TransformValue {
+    let transform = TransitionKind::Derive {
         source: ValueId::new(0),
-        transformer: tref("s"),
+        justification: Justification::Content(tref("s")),
     };
     let constrain = TransitionKind::ConstrainAction { transition: tref("c") };
     let accept = TransitionKind::AcceptGrowth {
@@ -2259,9 +2274,9 @@ fn cap_fairness_keeps_one_route_per_category() {
     let mut pool: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
     for i in 0..6u64 {
         pool.push((
-            plan_steps(vec![TransitionKind::TransformValue {
+            plan_steps(vec![TransitionKind::Derive {
                 source: ValueId::new(i),
-                transformer: tref("s"),
+                justification: Justification::Content(tref("s")),
             }]),
             clean.clone(),
         ));
@@ -2423,9 +2438,15 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
 /// The discriminant of a step's kind, for asserting the order steps ran.
 fn step_label(kind: &TransitionKind) -> &'static str {
     match kind {
-        TransitionKind::TransformValue { .. } => "sanitize",
+        TransitionKind::Derive {
+            justification: Justification::Content(_),
+            ..
+        } => "sanitize",
         TransitionKind::ConstrainAction { .. } => "constrain",
-        TransitionKind::EndorseValue { .. } => "endorse",
+        TransitionKind::Derive {
+            justification: Justification::Fiat { .. },
+            ..
+        } => "endorse",
         TransitionKind::AcceptGrowth { .. } => "accept",
         TransitionKind::ApplyWaiver { .. } => "waiver",
     }
@@ -2523,7 +2544,10 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
         .steps
         .iter()
         .find_map(|s| match &s.kind {
-            TransitionKind::EndorseValue { delta, .. } => Some(delta),
+            TransitionKind::Derive {
+                justification: Justification::Fiat { delta, .. },
+                ..
+            } => Some(delta),
             _ => None,
         })
         .expect("an endorse step");
@@ -2969,7 +2993,15 @@ fn multi_step_composition_transform_then_waiver() {
     // ...and application goes step by step, re-planning in between.
     let transform_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
+        .find(|p| {
+            matches!(
+                &p.steps.first().kind,
+                TransitionKind::Derive {
+                    justification: Justification::Content(_),
+                    ..
+                }
+            )
+        })
         .expect("plan starting with a transform");
     let StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans, violations })) =
         apply_first_step(&engine, &mut trajectory, transform_plan.id)
@@ -3669,7 +3701,7 @@ fn rescue_composes_endorse_then_release_for_a_masked_flow() {
     let steps = &plans.first().steps;
     assert!(matches!(
         &steps.first().kind,
-        TransitionKind::EndorseValue { source, delta, targets }
+        TransitionKind::Derive { source, justification: Justification::Fiat { delta, targets } }
             if *source == body
                 && delta.trust == Some(KnownTrust::Suspicious)
                 && *targets == vec![Violation::Unprovable(Unprovable::TrustUnknown)]
@@ -4051,7 +4083,7 @@ fn rescue_does_not_over_endorse_re_masked_leaves() {
     assert_eq!(steps.len(), 2);
     assert!(matches!(
         &steps.first().kind,
-        TransitionKind::EndorseValue { source, .. } if *source == first
+        TransitionKind::Derive { source, justification: Justification::Fiat { .. } } if *source == first
     ));
     assert!(matches!(
         &steps.get(1).unwrap().kind,
@@ -4113,14 +4145,14 @@ fn rescue_endorse_targets_shrink_per_peel() {
     let steps = &plans.first().steps;
     assert!(matches!(
         &steps.first().kind,
-        TransitionKind::EndorseValue { source, targets, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { targets, .. } }
             if *source == first
                 && targets.iter().any(|v| matches!(v, Violation::Unprovable(Unprovable::TrustUnknown)))
                 && targets.iter().any(|v| matches!(v, Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })))
     ));
     assert!(matches!(
         &steps.get(1).unwrap().kind,
-        TransitionKind::EndorseValue { source, targets, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { targets, .. } }
             if *source == second
                 && *targets == vec![Violation::Breach(crate::contract::Breach::AudienceExceeds {
                     outside: BTreeSet::from([user("bob")]),

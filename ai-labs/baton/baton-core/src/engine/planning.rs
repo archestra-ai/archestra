@@ -4,7 +4,7 @@ use crate::ToolName;
 use crate::approval::{Authority, AuthorityMode};
 use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::{Effects, KnownTrust};
-use crate::plan::{ExitKind, NonEmptyVec, Posture, TransitionKind, TransitionSpec};
+use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, TransitionKind, TransitionSpec};
 use crate::request::ToolRequest;
 use crate::revision::ValueId;
 use crate::transition::{ActionTransition, EndorseDelta, ProposedGrant, RegisteredTransformer, TransientWaiver};
@@ -128,9 +128,9 @@ impl PolicyEngine {
                         postcondition: Posture {
                             remaining: sim.violations(None),
                         },
-                        kind: TransitionKind::TransformValue {
+                        kind: TransitionKind::Derive {
                             source: *leaf,
-                            transformer: transformer.descriptor.transformer.clone(),
+                            justification: Justification::Content(transformer.descriptor.transformer.clone()),
                         },
                     });
                 }
@@ -192,10 +192,9 @@ impl PolicyEngine {
                             postcondition: Posture {
                                 remaining: remaining.clone(),
                             },
-                            kind: TransitionKind::EndorseValue {
+                            kind: TransitionKind::Derive {
                                 source: leaf,
-                                delta,
-                                targets,
+                                justification: Justification::Fiat { delta, targets },
                             },
                         });
                     }
@@ -317,10 +316,12 @@ impl PolicyEngine {
                 postcondition: Posture {
                     remaining: remaining.clone(),
                 },
-                kind: TransitionKind::EndorseValue {
+                kind: TransitionKind::Derive {
                     source: *leaf,
-                    delta: delta.clone(),
-                    targets: targets.clone(),
+                    justification: Justification::Fiat {
+                        delta: delta.clone(),
+                        targets: targets.clone(),
+                    },
                 },
             });
         }

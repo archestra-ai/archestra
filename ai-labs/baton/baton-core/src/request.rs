@@ -335,7 +335,7 @@ impl PendingAction {
         self.state = ActionState::Released;
     }
 
-    /// A `TransformValue` step replaced `from` with the derived `to` in the
+    /// A content-justified `Derive` step replaced `from` with the derived `to` in the
     /// current argument tree. The original proposal is untouched — it is the
     /// identity basis, never dispatched.
     pub(crate) fn substitute_argument(&mut self, from: ValueId, to: ValueId) {

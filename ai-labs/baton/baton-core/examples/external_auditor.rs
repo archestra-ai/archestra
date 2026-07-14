@@ -15,9 +15,9 @@ use std::collections::BTreeSet;
 
 use baton_core::{
     ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
-    AuthorityName, Blocked, Decision, Effect, Effects, OpaqueValue, PolicyEngine, ProposedGrant, Requirements, Ruling,
-    Speaker, StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId,
-    ValueLabel, Violation,
+    AuthorityName, Decision, Effect, Effects, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Requirements, Ruling,
+    Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId, ValueLabel,
+    Violation,
 };
 
 /// The internal finance team with access to the invoicing system.
@@ -112,12 +112,19 @@ fn main() {
     );
 
     // E-mail the report to the auditor: an audience breach and the first egress,
-    // both cleared by the mandated finance approver.
+    // both cleared by the mandated finance approver as `pursue` walks the plan.
     let send = email(&mut trajectory, report, AUDITOR);
     print!("  email → {AUDITOR}: ");
-    match declassify_to_permit(&engine, &mut trajectory, send) {
-        Ok(()) => println!("PERMITTED (finance approver endorsed the auditor and accepted the egress)"),
-        Err(reason) => println!("BLOCKED — {reason}"),
+    match engine.pursue(&mut trajectory, send, 8) {
+        Pursuit::Permitted(token) => {
+            let (_canonical, receipt) = trajectory.release(token).unwrap();
+            trajectory
+                .record_output(receipt, OpaqueValue::new("message-id: 1"))
+                .unwrap();
+            println!("PERMITTED (finance approver endorsed the auditor and accepted the egress)");
+        }
+        Pursuit::Terminal(block) => println!("BLOCKED — {}", block.reason),
+        other => println!("BLOCKED — {other:?}"),
     }
 
     println!("\naudit trail:");
@@ -140,33 +147,4 @@ fn email(trajectory: &mut Trajectory, report: ValueId, recipient: &str) -> ToolR
         ArgumentTree::object([("to", to), ("body", report)]),
         [],
     )
-}
-
-/// Drive a blocked-but-remediable send through its first plan, letting the
-/// inline authorities rule, until it permits (then dispatch) or blocks.
-fn declassify_to_permit(
-    engine: &PolicyEngine,
-    trajectory: &mut Trajectory,
-    request: ToolRequest,
-) -> Result<(), String> {
-    let mut decision = engine.evaluate(trajectory, request);
-    loop {
-        match decision {
-            Decision::Permitted(token) => {
-                let (_canonical, receipt) = trajectory.release(token).unwrap();
-                trajectory
-                    .record_output(receipt, OpaqueValue::new("message-id: 1"))
-                    .unwrap();
-                return Ok(());
-            }
-            Decision::Blocked(Blocked::Terminal(block)) => return Err(block.reason.to_string()),
-            Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                let capability = engine.mint_step(trajectory, plans.first().id, 0).unwrap();
-                decision = match engine.apply_step(trajectory, capability).unwrap() {
-                    StepOutcome::Advanced(next) => next,
-                    other => return Err(format!("unexpected step outcome: {other:?}")),
-                };
-            }
-        }
-    }
 }

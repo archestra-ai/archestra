@@ -30,9 +30,9 @@
 use std::collections::HashMap;
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, Blocked, Decision, ExecutionToken,
-    OpaqueValue, PolicyEngine, Speaker, StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId,
-    ValueLabel, Violation,
+    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, ExecutionToken, OpaqueValue, PolicyEngine,
+    Pursuit, Speaker, StallCause, ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId, ValueLabel,
+    Violation,
 };
 
 use crate::error::DojoError;
@@ -96,65 +96,39 @@ impl BatonGate {
     /// then call [`commit`](BatonGate::commit).
     pub(crate) fn check(&mut self, tool: &str, args: &serde_json::Value) -> GateVerdict {
         let request = self.build_request(tool, args);
-        let mut decision = self.engine.evaluate(&mut self.trajectory, request);
-        // Each iteration applies one remedy step, resolving at least one
-        // violation; a plan needs at most one Endorse per audience-failing
-        // context leaf, plus an Accept and a waiver. Bound the walk on the
-        // context, not a fixed count, so a longer run still converges. The
-        // bound is a fail-closed backstop, not the expected path.
+        // A plan needs at most one Endorse per audience-failing context leaf,
+        // plus an Accept and a waiver. Bound the walk on the context, not a
+        // fixed count, so a longer run still converges; the bound is a
+        // fail-closed backstop, not the expected path.
         let max_steps = self.context.len() + 8;
-        let mut steps = 0;
-        loop {
-            match decision {
-                Decision::Permitted(token) => {
-                    self.pending = Some(token);
-                    return GateVerdict::Allow;
-                }
-                // The engine already cleared the pending slot on a terminal block.
-                Decision::Blocked(Blocked::Terminal(block)) => {
-                    return GateVerdict::Block {
-                        reason: block.reason.to_string(),
-                    };
-                }
-                Decision::Blocked(Blocked::Remediable { violations, plans }) => {
-                    // Guard the *next* step, so a permit produced by the last
-                    // allowed step is still inspected above before the bound bites.
-                    if steps >= max_steps {
-                        return self.block("remedy did not converge within the step bound".to_owned());
-                    }
-                    steps += 1;
-                    let plan = plans.first().id;
-                    let capability = match self.engine.mint_step(&self.trajectory, plan, 0) {
-                        Ok(capability) => capability,
-                        Err(_) => return self.block(block_reason(&violations)),
-                    };
-                    match self.engine.apply_step(&mut self.trajectory, capability) {
-                        Ok(StepOutcome::Advanced(next)) => decision = next,
-                        // Inline authorities resolve synchronously; a needs-approval
-                        // means only an out-of-process authority could clear it,
-                        // which this in-process gate cannot answer — fail closed.
-                        Ok(StepOutcome::NeedsApproval(pending)) => {
-                            return self.block(format!("needs external ruling from {}", pending.authority()));
-                        }
-                        // A precondition no longer held or a transformer failed:
-                        // audited, revision advanced, nothing changed — fail closed.
-                        Ok(StepOutcome::Failed(failure)) => {
-                            return self.block(format!("remedy step failed: {failure:?}"));
-                        }
-                        Err(refused) => return self.block(format!("policy step refused: {refused:?}")),
-                    }
-                }
+        match self.engine.pursue(&mut self.trajectory, request, max_steps) {
+            Pursuit::Permitted(token) => {
+                self.pending = Some(token);
+                GateVerdict::Allow
             }
+            // The engine already cleared the pending slot on a terminal block.
+            Pursuit::Terminal(block) => GateVerdict::Block {
+                reason: block.reason.to_string(),
+            },
+            // Inline authorities resolve synchronously; a needs-approval means
+            // only an out-of-process authority could clear it, which this
+            // in-process gate cannot answer — fail closed, discarding the
+            // approval and freeing the slot the pursuit deliberately kept.
+            Pursuit::NeedsApproval(pending) => {
+                let reason = format!("needs external ruling from {}", pending.authority());
+                drop(pending);
+                self.trajectory.abandon_pending();
+                GateVerdict::Block { reason }
+            }
+            // A stalled pursuit already abandoned the pending action.
+            Pursuit::Stalled { violations, cause } => GateVerdict::Block {
+                reason: match cause {
+                    StallCause::BoundExhausted => "remedy did not converge within the step bound".to_owned(),
+                    StallCause::Refused(_) => block_reason(&violations),
+                    StallCause::Failed(failure) => format!("remedy step failed: {failure:?}"),
+                },
+            },
         }
-    }
-
-    /// Fail closed on a remedy the walk could not complete: abandon any pending
-    /// action the partial walk left behind (a remediable block keeps the slot;
-    /// leaving it would refuse every later call with `ActionAlreadyPending`),
-    /// then report the block. Harmless when nothing is pending.
-    fn block(&mut self, reason: String) -> GateVerdict {
-        self.trajectory.abandon_pending();
-        GateVerdict::Block { reason }
     }
 
     /// Fold an executed call's result into the trajectory, consuming the stashed

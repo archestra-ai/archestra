@@ -62,18 +62,9 @@ fn dispatch(trajectory: &mut Trajectory, token: ExecutionToken, body: &str) -> R
 /// for effect-axis tests that must genuinely acquire the growth (walk the
 /// Accept) rather than pre-seed a downhill past.
 fn walk_to_permit(engine: &PolicyEngine, trajectory: &mut Trajectory, request: ToolRequest) -> ExecutionToken {
-    let mut decision = engine.evaluate(trajectory, request);
-    loop {
-        match decision {
-            Decision::Permitted(token) => break token,
-            Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                decision = match apply_first_step(engine, trajectory, plans.first().id) {
-                    StepOutcome::Advanced(decision) => decision,
-                    other => panic!("unexpected step outcome: {other:?}"),
-                };
-            }
-            other => panic!("expected to reach a permit, got {other:?}"),
-        }
+    match engine.pursue(trajectory, request, 16) {
+        Pursuit::Permitted(token) => token,
+        other => panic!("expected to reach a permit, got {other:?}"),
     }
 }
 
@@ -532,6 +523,86 @@ fn canonical_request_renders_the_checked_tree() {
     let (canonical, receipt) = trajectory.release(token).unwrap();
     assert_eq!(canonical.rendered, r#"{"body":"the doc","to":"bob"}"#);
     trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+}
+
+/// The bound is checked before a step, never after: with exactly enough
+/// budget for the one Accept step, the resulting permit is still returned.
+#[test]
+fn pursue_returns_a_permit_produced_by_the_final_allowed_step() {
+    let mut engine = engine_with([egress_tool()]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 1) else {
+        panic!("the final allowed step's permit must be returned");
+    };
+    dispatch(&mut trajectory, token, "pong").unwrap();
+}
+
+/// A permitted pursuit authorizes but commits nothing: effects land at
+/// release, not while walking — the two-phase boundary is untouched.
+#[test]
+fn pursue_permit_commits_nothing_before_release() {
+    let mut engine = engine_with([egress_tool()]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("expected a permit");
+    };
+    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    let (_, receipt) = trajectory.release(token).unwrap();
+    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    trajectory.record_output(receipt, OpaqueValue::new("pong")).unwrap();
+}
+
+/// A stalled pursuit abandons the pending action: the trajectory stays free
+/// for the next proposal instead of refusing it as already-pending.
+#[test]
+fn pursue_stall_abandons_the_pending_action() {
+    let mut engine = engine_with([egress_tool()]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::Stalled { violations, cause } = engine.pursue(&mut trajectory, ping_request(body), 0) else {
+        panic!("a zero bound must stall a remediable flow");
+    };
+    assert_eq!(cause, StallCause::BoundExhausted);
+    assert!(!violations.is_empty());
+    assert!(trajectory.pending_action().is_none());
+    let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("the trajectory must be free after a stall");
+    };
+    dispatch(&mut trajectory, token, "pong").unwrap();
+}
+
+/// A pursuit deferring to an external authority keeps the pending action, so
+/// the held approval can re-enter through `apply_approval`.
+#[test]
+fn pursue_keeps_the_slot_for_an_external_ruling() {
+    let mut engine = engine_with([egress_tool()]);
+    engine
+        .register_authority(external_authority("effect-approver", acquirer_mandate()))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::NeedsApproval(pending) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("the external acquirer should defer");
+    };
+    assert!(trajectory.pending_action().is_some());
+    let Decision::Permitted(token) = engine
+        .apply_approval(
+            &mut trajectory,
+            pending,
+            crate::approval::Ruling::Approve {
+                reason: "acquired".to_owned(),
+            },
+        )
+        .unwrap()
+    else {
+        panic!("the approval should permit");
+    };
+    dispatch(&mut trajectory, token, "pong").unwrap();
 }
 
 #[test]

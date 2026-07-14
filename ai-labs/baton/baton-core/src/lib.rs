@@ -93,8 +93,8 @@ impl fmt::Display for ToolName {
 pub use contract::{Requirements, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine,
-    RejectedToken, TerminalBlock, ToolContract,
+    Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine, Pursuit,
+    RejectedToken, StallCause, TerminalBlock, ToolContract,
 };
 pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
 pub use revision::{Revision, ValueId};

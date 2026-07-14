@@ -74,7 +74,9 @@ export default function A2APage() {
         </Select>
       </div>
 
-      {selectedAgent && <A2AConnectionInstructions agent={selectedAgent} />}
+      {selectedAgent && (
+        <A2AConnectionInstructions agent={selectedAgent} layout="page" />
+      )}
     </div>
   );
 }

@@ -1,9 +1,13 @@
 "use client";
 
-import { Check, Copy, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { CodeBlock } from "@/components/ai-elements/code-block";
+import {
+  SECRET_PLACEHOLDER_TOKEN,
+  SecretCopyButton,
+} from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
 import type {
   TeamToken,
@@ -30,8 +34,6 @@ export function CurlExampleSection({
   fetchUserTokenMutation,
   fetchTeamTokenMutation,
 }: CurlExampleSectionProps) {
-  const [copied, setCopied] = useState(false);
-  const [isCopying, setIsCopying] = useState(false);
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [isLoadingToken, setIsLoadingToken] = useState(false);
   const [exposedTokenValue, setExposedTokenValue] = useState<string | null>(
@@ -83,40 +85,14 @@ export function CurlExampleSection({
     }
   }, [showExposedToken, fetchToken]);
 
-  const handleCopyCode = useCallback(async () => {
-    setIsCopying(true);
-    try {
-      let tokenValue = tokenForDisplay;
+  const canResolveToken =
+    isPersonalTokenSelected || (hasAdminPermission && !!selectedTeamToken);
 
-      if (
-        isPersonalTokenSelected ||
-        (hasAdminPermission && selectedTeamToken)
-      ) {
-        const fetched = await fetchToken();
-        // The displayed token is masked here; abort rather than copy the mask
-        // under a success toast (the mutation already surfaced the error).
-        if (!fetched) return;
-        tokenValue = fetched;
-      }
-
-      const codeWithRealToken = code.replace(tokenForDisplay, tokenValue);
-      await navigator.clipboard.writeText(codeWithRealToken);
-      setCopied(true);
-      toast.success("Code copied with token");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Failed to copy code");
-    } finally {
-      setIsCopying(false);
-    }
-  }, [
-    code,
-    tokenForDisplay,
-    isPersonalTokenSelected,
-    hasAdminPermission,
-    selectedTeamToken,
-    fetchToken,
-  ]);
+  const getSecretText = useCallback(async (): Promise<string | null> => {
+    const tokenValue = exposedTokenValue ?? (await fetchToken());
+    if (!tokenValue) return null;
+    return code.replace(tokenForDisplay, tokenValue);
+  }, [code, tokenForDisplay, exposedTokenValue, fetchToken]);
 
   return (
     <CodeBlock
@@ -133,9 +109,7 @@ export function CurlExampleSection({
           size="icon"
           title={showExposedToken ? "Hide token" : "Expose token"}
           onClick={handleExposeToken}
-          disabled={
-            isLoadingToken || (!isPersonalTokenSelected && !hasAdminPermission)
-          }
+          disabled={isLoadingToken || !canResolveToken}
         >
           {isLoadingToken ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -148,22 +122,13 @@ export function CurlExampleSection({
             {showExposedToken ? "Hide token" : "Expose token"}
           </span>
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          title="Copy with exposed token"
-          onClick={handleCopyCode}
-          disabled={isCopying}
-        >
-          {isCopying ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : copied ? (
-            <Check className="h-4 w-4 text-green-500" />
-          ) : (
-            <Copy className="h-4 w-4" />
+        <SecretCopyButton
+          getSecretText={canResolveToken ? getSecretText : null}
+          placeholderText={code.replace(
+            tokenForDisplay,
+            SECRET_PLACEHOLDER_TOKEN,
           )}
-          <span className="sr-only">Copy with exposed token</span>
-        </Button>
+        />
       </div>
     </CodeBlock>
   );

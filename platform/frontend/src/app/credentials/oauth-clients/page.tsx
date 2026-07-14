@@ -120,6 +120,23 @@ export default function UnifiedOAuthClientsPage() {
   const currentUserId = session?.user?.id;
 
   const [createOpen, setCreateOpen] = useState(false);
+  // Deep link (e.g. from an agent's connect dialog): ?create=true opens the
+  // create dialog with the client type and allowed resource pre-selected.
+  // The params are stripped once consumed so refresh/back don't re-open it.
+  const [createDefaults, setCreateDefaults] = useState<{
+    clientType: "mcp" | "llm";
+    allowedGatewayIds: string[];
+  } | null>(null);
+  useEffect(() => {
+    if (searchParams.get("create") !== "true") return;
+    const gatewayId = searchParams.get("gatewayId");
+    setCreateDefaults({
+      clientType: searchParams.get("clientType") === "llm" ? "llm" : "mcp",
+      allowedGatewayIds: gatewayId ? [gatewayId] : [],
+    });
+    setCreateOpen(true);
+    updateQueryParams({ create: null, clientType: null, gatewayId: null });
+  }, [searchParams, updateQueryParams]);
   const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
     useState(false);
   const [editing, setEditing] = useState<UnifiedRow | null>(null);
@@ -294,10 +311,18 @@ export default function UnifiedOAuthClientsPage() {
 
       <CreateOAuthClientDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
-        // The provider-key filter deep-links from an LLM provider key, so a
-        // client created from that view is almost certainly an LLM one.
-        defaultClientType={providerKeyFilterActive ? "llm" : "mcp"}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setCreateDefaults(null);
+        }}
+        // Deep-link defaults win; otherwise the provider-key filter deep-links
+        // from an LLM provider key, so a client created from that view is
+        // almost certainly an LLM one.
+        defaultClientType={
+          createDefaults?.clientType ??
+          (providerKeyFilterActive ? "llm" : "mcp")
+        }
+        defaultAllowedGatewayIds={createDefaults?.allowedGatewayIds}
         gateways={gateways}
         llmProxies={llmProxies}
         providerApiKeys={providerApiKeys}
@@ -317,6 +342,7 @@ export default function UnifiedOAuthClientsPage() {
                   : LLM_PROXY_OAUTH_SCOPE,
             });
             setCreateOpen(false);
+            setCreateDefaults(null);
           }
         }}
         isSubmitting={mcpCreate.isPending || llmCreate.isPending}

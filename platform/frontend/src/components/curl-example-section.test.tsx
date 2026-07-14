@@ -53,19 +53,24 @@ function renderSection(
   );
 }
 
+async function openCopyMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Copy" }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   fetchUserTokenValueMock.mockResolvedValue({ value: "archestra_real" });
 });
 
-describe("copy with exposed token", () => {
-  it("copies the code with the real token in place of the mask", async () => {
+describe("secret-aware copy menu", () => {
+  it("copies the code with the real token only via the explicit menu action", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
     renderSection();
 
+    await openCopyMenu(user);
     await user.click(
-      screen.getByRole("button", { name: "Copy with exposed token" }),
+      screen.getByRole("menuitem", { name: "Copy with real token" }),
     );
 
     await waitFor(() =>
@@ -73,16 +78,41 @@ describe("copy with exposed token", () => {
         CODE.replace(MASKED, "archestra_real"),
       ),
     );
+    expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
+      "Copied with real token",
+    );
   });
 
-  it("copies nothing when the masked token cannot be resolved", async () => {
+  it("copies the code with an obviously-fake placeholder via the placeholder action", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    renderSection();
+
+    await openCopyMenu(user);
+    await user.click(
+      screen.getByRole("menuitem", { name: "Copy with placeholder" }),
+    );
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        CODE.replace(MASKED, "archestra_TOKEN"),
+      ),
+    );
+    expect(fetchUserTokenValueMock).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
+      "Copied with placeholder token",
+    );
+  });
+
+  it("copies nothing when the real token cannot be resolved", async () => {
     fetchUserTokenValueMock.mockResolvedValue(null);
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
     renderSection();
 
+    await openCopyMenu(user);
     await user.click(
-      screen.getByRole("button", { name: "Copy with exposed token" }),
+      screen.getByRole("menuitem", { name: "Copy with real token" }),
     );
 
     await waitFor(() => expect(fetchUserTokenValueMock).toHaveBeenCalled());
@@ -90,7 +120,7 @@ describe("copy with exposed token", () => {
     expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
   });
 
-  it("copies the placeholder code as-is when no real token is selectable", async () => {
+  it("offers only a plain placeholder copy when no real token is selectable", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
     const placeholderCode = CODE.replace(MASKED, "ask-admin-for-access-token");
@@ -98,17 +128,22 @@ describe("copy with exposed token", () => {
       code: placeholderCode,
       tokenForDisplay: "ask-admin-for-access-token",
       isPersonalTokenSelected: false,
-      hasAdminPermission: true,
+      hasAdminPermission: false,
       selectedTeamToken: null,
     });
 
-    await user.click(
-      screen.getByRole("button", { name: "Copy with exposed token" }),
-    );
+    // No menu: the button copies the placeholder form directly.
+    await user.click(screen.getByRole("button", { name: "Copy" }));
 
     await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(placeholderCode),
+      expect(writeText).toHaveBeenCalledWith(
+        placeholderCode.replace(
+          "ask-admin-for-access-token",
+          "archestra_TOKEN",
+        ),
+      ),
     );
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
     expect(fetchUserTokenValueMock).not.toHaveBeenCalled();
     expect(fetchTeamTokenValueMock).not.toHaveBeenCalled();
   });

@@ -43,9 +43,26 @@ Baton does two things, and keeps them strictly separate:
 
 # Example
 
-# Moving parts
+# Architecture
 
-<!-- TODO: port the architecture diagram from the design doc -->
+```mermaid
+flowchart LR
+    Harness --> Proxy
+    subgraph Proxy
+        subgraph Engine["Baton Engine"]
+            Contract["Tool Contract"]
+        end
+    end
+    Proxy --> Inference
+    Policies["Policies<br/>(yaml/kyveno/etc)"] --> Contract
+
+    classDef blue fill:#cfe2f3,stroke:#333,color:#000
+    classDef yellow fill:#ffff66,stroke:#333,color:#000
+    classDef green fill:#93c47d,stroke:#333,color:#000
+    class Harness,Inference,Policies,Proxy blue
+    class Engine yellow
+    class Contract green
+```
 
 - **Blue** — NOT a part of baton itself. We provide a spec how to implement it and maybe an example implementation.
 - **Yellow** — Baton itself.

@@ -45,10 +45,16 @@ pids=()
 cleanup() { for p in "${pids[@]:-}"; do kill "$p" 2>/dev/null || true; done; }
 trap cleanup EXIT INT TERM
 
+APPROVER_LOG=/tmp/baton-approver.log
+PROXY_LOG=/tmp/baton-proxy.log
+TRAJECTORY_LOG=/tmp/baton-trajectory.jsonl
+: > "$TRAJECTORY_LOG"  # fresh per run
+
 echo "starting baton-approver ($APPROVER_ADDR) and baton-proxy ($PROXY_ADDR)…"
-./target/debug/baton-approver --addr "$APPROVER_ADDR" 2>/tmp/baton-approver.log &
+./target/debug/baton-approver --addr "$APPROVER_ADDR" 2>"$APPROVER_LOG" &
 pids+=($!)
-./target/debug/baton-proxy --policy policy.toml --addr "$PROXY_ADDR" 2>/tmp/baton-proxy.log &
+RUST_LOG=info ./target/debug/baton-proxy --policy policy.toml --addr "$PROXY_ADDR" \
+  --log "$TRAJECTORY_LOG" 2>"$PROXY_LOG" &
 pids+=($!)
 
 wait_port() {
@@ -65,6 +71,27 @@ wait_port "$PROXY_ADDR"
 
 # --- run the demo (foreground: answer y/n at the approval prompt) ---------------
 echo "running demo — answer y/n when the approval prompt appears."
-echo "(server logs: /tmp/baton-approver.log, /tmp/baton-proxy.log)"
 echo
 ./target/debug/baton-demo-agent "$@"
+
+# --- per-turn decision log ------------------------------------------------------
+echo
+echo "── proxy decisions (each tool-call turn) ──────────────────"
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$TRAJECTORY_LOG" <<'PY'
+import json, sys
+for i, line in enumerate((l for l in open(sys.argv[1]) if l.strip()), 1):
+    d = json.loads(line)
+    tool = d["tool"] + (" → " + ", ".join(d["recipients"]) if d.get("recipients") else "")
+    print(f"  {i}. {tool:44} {d['outcome']}")
+    if d.get("reason"):
+        print(f"     {d['reason']}")
+PY
+else
+  cat "$TRAJECTORY_LOG"
+fi
+echo
+echo "logs:"
+echo "  trajectory (per-turn JSON): $TRAJECTORY_LOG"
+echo "  proxy stderr:               $PROXY_LOG"
+echo "  approver stderr:            $APPROVER_LOG"

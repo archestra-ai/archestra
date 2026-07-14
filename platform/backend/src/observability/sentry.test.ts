@@ -99,6 +99,13 @@ describe("filterErrorEvent", () => {
     );
   });
 
+  test("drops MCP-server-unreachable errors surfaced by the shared policy", () => {
+    const notReady = Object.assign(new Error("server not running yet"), {
+      name: "McpServerNotReadyError",
+    });
+    expect(filterErrorEvent(makeEvent(), hintFor(notReady))).toBeNull();
+  });
+
   test("groups transient DB connectivity failures by root cause", () => {
     // A DNS lookup failure the ORM wrapped per-query: fingerprint by the
     // root cause so an outage groups into one issue, not one per statement.

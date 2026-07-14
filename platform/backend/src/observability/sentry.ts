@@ -1,4 +1,3 @@
-import { ArchestraInternalErrorCode } from "@archestra/shared";
 import type {
   ErrorEvent,
   EventHint,
@@ -7,9 +6,8 @@ import type {
 } from "@sentry/core";
 import * as Sentry from "@sentry/node";
 import config from "@/config";
-import { getTransientDbErrorCode } from "@/database/retry";
 import logger from "@/logging";
-import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import { classifyErrorForTracking } from "./error-tracking-policy";
 import {
   isNoiseRoute,
   isNoisyMcpGatewayGetRoute,
@@ -91,15 +89,10 @@ export function captureRawProviderErrorInSentry(params: {
 }
 
 /**
- * Decide whether an error event should be reported and normalize its
- * fingerprint/tags for known classes of non-bug failures. Returns null to
- * drop the event.
- *
- * Filters out expected client errors (4xx) — not found, validation errors,
- * upstream provider client errors, etc. — which don't indicate bugs and
- * would just create noise. Also groups availability incidents (transient DB
- * connectivity, secrets-backend outages) by root cause so one outage becomes
- * one issue instead of one issue per in-flight query/route.
+ * Sentry `beforeSend` filter. Delegates the drop/keep-and-group decision to the
+ * sink-agnostic {@link classifyErrorForTracking} policy (shared with the PostHog
+ * capture path), then applies the result in Sentry's shape: return null to drop,
+ * or set the event's fingerprint/tags to group an availability incident.
  *
  * https://docs.sentry.io/platforms/javascript/configuration/filtering/
  * @public — exported for testability
@@ -108,73 +101,16 @@ export function filterErrorEvent(
   event: ErrorEvent,
   hint: EventHint,
 ): ErrorEvent | null {
-  const error = hint.originalException;
-
-  // Transient database connectivity failures (DNS lookup, connection
-  // refused during a database restart, pool connect timeouts) get
-  // wrapped per-query by the ORM, which fragments one availability
-  // incident into an issue per SQL statement. Fingerprint them by root
-  // cause instead so each outage groups into a single issue.
-  const transientDbErrorCode = getTransientDbErrorCode(error);
-  if (transientDbErrorCode) {
-    event.fingerprint = ["db-transient", transientDbErrorCode];
-    event.tags = {
-      ...event.tags,
-      error_type: "db_transient",
-      db_error_code: transientDbErrorCode,
-    };
-  }
-
-  // A secrets-backend (e.g. Vault) outage fails every route that touches
-  // secrets, fragmenting one incident into an issue per endpoint and per
-  // upstream error message. Group by the root condition instead, same as
-  // the transient-DB handling above.
-  if (
-    error instanceof ApiError &&
-    error.internalCode === SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE
-  ) {
-    event.fingerprint = [SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE];
-    event.tags = {
-      ...event.tags,
-      error_type: SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
-    };
-  }
-
-  // Filter out ApiError instances with 4xx status codes
-  if (error instanceof ApiError) {
-    if (error.statusCode >= 400 && error.statusCode < 500) {
-      return null;
-    }
-    // Known-transient upstream conditions (e.g. the provider streamed an
-    // empty completion) are handled: the client receives a retryable 503.
-    // They indicate provider flakiness, not a bug, so don't report them.
-    if (
-      error.internalCode === ArchestraInternalErrorCode.UpstreamEmptyResponse
-    ) {
-      return null;
-    }
-    // 502/504 report an upstream's failure — a user-configured provider or an
-    // external/self-hosted MCP server that is unreachable, misconfigured, or
-    // timed out — not a crash of ours. The request-error handler already keeps
-    // these out of exception tracking; mirror that here so the two sinks agree.
-    if (error.statusCode === 502 || error.statusCode === 504) {
-      return null;
-    }
-  }
-
-  // Also check for statusCode property on generic errors (e.g., from Fastify
-  // or an upstream provider error built by buildRawProviderError)
-  if (
-    error &&
-    typeof error === "object" &&
-    "statusCode" in error &&
-    typeof error.statusCode === "number" &&
-    error.statusCode >= 400 &&
-    error.statusCode < 500
-  ) {
+  const decision = classifyErrorForTracking(hint.originalException);
+  if (!decision.report) {
     return null;
   }
-
+  if (decision.fingerprint) {
+    event.fingerprint = decision.fingerprint;
+  }
+  if (decision.tags) {
+    event.tags = { ...event.tags, ...decision.tags };
+  }
   return event;
 }
 

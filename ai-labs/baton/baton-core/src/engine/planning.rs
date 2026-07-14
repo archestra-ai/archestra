@@ -24,8 +24,8 @@ struct JointRescue {
     delta: TransientWaiver,
 }
 
-/// Exhaustive-subset bound for the rescue's release search; larger control
-/// sets degrade to the release-all-anchored greedy.
+/// Exhaustive-subset bound for the rescue's release search; a larger control
+/// set refuses the rescue outright (fail-closed).
 const RESCUE_EXHAUSTIVE_MAX: usize = 12;
 
 /// A constrain candidate that passed [`PolicyEngine::constrain_gate`]: the
@@ -358,50 +358,34 @@ impl PolicyEngine {
     /// an exhaustive size-ascending subset search, deterministic, whose first
     /// hit is size-minimal (hence inclusion-minimal — any feasible proper
     /// subset would have been probed earlier). The space is bounded by the
-    /// request's own control set — agent-shaped, not adversarial — and capped:
-    /// past [`RESCUE_EXHAUSTIVE_MAX`] deps the solver degrades to the
-    /// release-all anchor with a drop-redundant fixpoint (sound, possibly
-    /// non-minimal). The empty release is not probed: an unreleased
-    /// endorse-plus-waiver solve is ordinary enumeration's domain, and the
-    /// rescue only runs when that came up empty.
+    /// request's own control set — agent-shaped, not adversarial — and hard-
+    /// capped: past [`RESCUE_EXHAUSTIVE_MAX`] deps the rescue *refuses*
+    /// (fail-closed terminal). No partial search substitutes — a greedy
+    /// anchored anywhere inherits exactly the non-monotone blindness this
+    /// solver exists to fix, and the monotone cases a greedy could still
+    /// clear are ordinary enumeration's domain. The empty release is not
+    /// probed for the same reason: an unreleased endorse-plus-waiver solve is
+    /// ordinary enumeration's domain, and the rescue only runs when that came
+    /// up empty.
     fn minimal_joint_release(&self, base: &SimFlow, ids: &[ValueId]) -> Option<JointRescue> {
         let n = ids.len();
-        if n <= RESCUE_EXHAUSTIVE_MAX {
-            let mut masks: Vec<u32> = (1..(1u32 << n)).collect();
-            masks.sort_by_key(|mask| (mask.count_ones(), *mask));
-            for mask in masks {
-                let release: BTreeSet<ValueId> = ids
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| mask & (1 << i) != 0)
-                    .map(|(_, id)| *id)
-                    .collect();
-                if let Some(rescue) = self.joint_rescue(base, &release) {
-                    return Some(rescue);
-                }
-            }
+        if n > RESCUE_EXHAUSTIVE_MAX {
             return None;
         }
-        let mut release: BTreeSet<ValueId> = ids.iter().copied().collect();
-        self.joint_rescue(base, &release)?;
-        loop {
-            let mut progressed = false;
-            for id in ids {
-                if !release.contains(id) {
-                    continue;
-                }
-                let mut candidate = release.clone();
-                candidate.remove(id);
-                if self.joint_rescue(base, &candidate).is_some() {
-                    release = candidate;
-                    progressed = true;
-                }
-            }
-            if !progressed {
-                break;
+        let mut masks: Vec<u32> = (1..(1u32 << n)).collect();
+        masks.sort_by_key(|mask| (mask.count_ones(), *mask));
+        for mask in masks {
+            let release: BTreeSet<ValueId> = ids
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| mask & (1 << i) != 0)
+                .map(|(_, id)| *id)
+                .collect();
+            if let Some(rescue) = self.joint_rescue(base, &release) {
+                return Some(rescue);
             }
         }
-        self.joint_rescue(base, &release)
+        None
     }
 
     /// One joint-cleanability probe for a release candidate. `None` when any
@@ -414,24 +398,28 @@ impl PolicyEngine {
         // `violations(None)`, not `violations(Some(_))`: the projection must
         // keep acknowledge-only facts (they route the final grant to an
         // `acknowledge_unknown` competence) and the growth breach.
-        let mut residual = projected.violations(None);
+        // Peel one raise at a time and re-derive: a single raise can clear
+        // more than its own deficit (raising one leaf to the bottom bar
+        // re-masks the remaining `Unknown`s in the min-fold), so applying an
+        // up-front batch would over-endorse. Each step's targets are the
+        // projected residual at its own peel, so an authority is never shown
+        // deficits an earlier raise already cleared and never asked for a
+        // raise the fold no longer needs. Terminates: every step strictly
+        // raises one leaf's label, bounded by leaves × dimensions.
         let mut endorse = Vec::new();
-        for (leaf, delta) in endorse_steps(&projected, &residual) {
+        let mut residual = projected.violations(None);
+        while let Some((leaf, delta)) = endorse_steps(&projected, &residual).into_iter().next() {
             if !self.can_authorize(&ProposedGrant::Endorse {
                 source: leaf,
                 delta: delta.clone(),
             }) {
                 return None;
             }
-            // Each step targets the projected residual at its own peel, so an
-            // authority is never shown deficits an earlier raise already
-            // cleared.
-            let targets = projected.violations(None);
             let raised = delta.raise(&projected.leaf_labels[&leaf]);
             projected.leaf_labels.insert(leaf, raised);
-            endorse.push((leaf, delta, targets));
+            endorse.push((leaf, delta, residual));
+            residual = projected.violations(None);
         }
-        residual = projected.violations(None);
         if let Some(growth) = surface_growth_of(&residual) {
             if !self.can_authorize(&ProposedGrant::Accept {
                 effects: growth.clone(),
@@ -690,15 +678,15 @@ impl SimFlow {
         })
     }
 
-    /// The violations this flow would report, optionally under a
-    /// check-transient waiver. A waiver lifts exactly its declared
-    /// dimensions and acknowledges acknowledge-only facts on the record.
     /// The folded flow label — tracing context only, never a check input.
     pub(super) fn flow_label(&self) -> ValueLabel {
         ValueLabel::fold(self.leaf_labels.values().cloned())
             .combine(ValueLabel::fold(self.control_labels.values().cloned()))
     }
 
+    /// The violations this flow would report, optionally under a
+    /// check-transient waiver. A waiver lifts exactly its declared
+    /// dimensions and acknowledges acknowledge-only facts on the record.
     pub(crate) fn violations(&self, waiver: Option<&TransientWaiver>) -> Vec<Violation> {
         let released = waiver.map(|w| &w.control_release);
         let control = ValueLabel::fold(self.control_labels.iter().filter_map(|(id, label)| {

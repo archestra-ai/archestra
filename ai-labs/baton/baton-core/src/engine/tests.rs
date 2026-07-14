@@ -3806,3 +3806,92 @@ fn rescue_external_approval_resolves_the_projected_residual() {
         .unwrap();
     assert!(matches!(decision, Decision::Blocked(Blocked::Remediable { .. })));
 }
+
+/// Past the exhaustive-search bound the rescue refuses outright: fail-closed
+/// terminal, never a partial search that inherits the non-monotone blindness.
+#[test]
+fn rescue_refuses_past_the_exhaustive_bound() {
+    let mut engine = engine_with([masked_contract()]);
+    engine
+        .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let (_, mut request) = subset_release_flow(&mut trajectory);
+    // Pad with neutral identity-label controls until the control set exceeds
+    // the bound; they change no fold, so {gate} would still be the clean
+    // release if the solver searched.
+    for i in 0..11 {
+        request
+            .control
+            .insert(identity_ingress(&mut trajectory, &format!("noise-{i}")));
+    }
+    assert!(request.control.len() > 12);
+
+    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected the bounded rescue to refuse");
+    };
+    assert_eq!(block.reason, BlockReason::NoRemedy);
+}
+
+/// Each rescue endorse step targets the projected residual at its own peel:
+/// once the first raise clears the audience deficit, the second authority is
+/// shown only the remaining trust gap.
+#[test]
+fn rescue_endorse_targets_shrink_per_peel() {
+    let mut engine = engine_with([masked_contract()]);
+    let endorser = crate::transition::AuthorityMandate {
+        trust: Some(KnownTrust::Suspicious),
+        audience: Some(BTreeSet::from([user("bob")])),
+        ..crate::transition::AuthorityMandate::none()
+    };
+    engine
+        .register_authority(inline_authority("endorser", endorser, approve_all))
+        .unwrap();
+    engine
+        .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    // First-admitted leaf: Unknown trust AND missing bob; second leaf:
+    // trusted but missing bob. The masking control both keeps trust provable
+    // and restricts the audience, so no ordinary endorse can clear the flow
+    // without the release the rescue composes; the first raise clears the
+    // trust gap, leaving the second authority only second's audience deficit.
+    let first = ingress(&mut trajectory, &["alice"], Trust::UNKNOWN, "summary");
+    let second = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "appendix");
+    let mask = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "mask");
+    let to = identity_ingress(&mut trajectory, "bob");
+    let request = ToolRequest::new(
+        ToolName::new("post.publish"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("to"), ArgumentTree::Value(to)),
+            (
+                ArgumentName::new("body"),
+                ArgumentTree::List(vec![ArgumentTree::Value(first), ArgumentTree::Value(second)]),
+            ),
+        ])),
+        BTreeSet::from([mask]),
+    );
+
+    let plans = remediable(&engine, &mut trajectory, request.clone());
+    let steps = &plans.first().steps;
+    assert!(matches!(
+        &steps.first().kind,
+        TransitionKind::EndorseValue { source, targets, .. }
+            if *source == first
+                && targets.iter().any(|v| matches!(v, Violation::Unprovable(Unprovable::TrustUnknown)))
+                && targets.iter().any(|v| matches!(v, Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })))
+    ));
+    assert!(matches!(
+        &steps.get(1).unwrap().kind,
+        TransitionKind::EndorseValue { source, targets, .. }
+            if *source == second
+                && *targets == vec![Violation::Breach(crate::contract::Breach::AudienceExceeds {
+                    outside: BTreeSet::from([user("bob")]),
+                })]
+    ));
+
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "published").unwrap();
+}

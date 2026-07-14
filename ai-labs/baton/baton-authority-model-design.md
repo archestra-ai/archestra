@@ -391,8 +391,12 @@ only; a confidentiality breach carried by a **control dependency** clears via
   and keep the candidate iff every grant is authorizable and the projection clears. The
   search is an exhaustive size-ascending subset walk (deterministic; the first hit is
   size-minimal, hence inclusion-minimal), bounded by the request's own control set and
-  capped at 12 deps, past which it degrades to a release-all-anchored greedy (sound,
-  possibly non-minimal). Each Endorse step carries an explicit `targets` field — the
+  hard-capped at 12 deps — past the cap the rescue *refuses* (fail-closed terminal): a
+  partial search anchored anywhere would inherit exactly the non-monotone blindness
+  this solver exists to fix. Raises are peeled one at a time with the projection
+  re-derived after each — a single raise can clear more than its own deficit (raising
+  one leaf to the bottom bar re-masks the remaining `Unknown`s in the min-fold), so a
+  batch would over-endorse. Each Endorse step carries an explicit `targets` field — the
   projected residual *at its own peel* that the authority is asked to clear — because
   the actual posture may not mention trust at all while the mask holds; plan postures
   stay the actual vectors (apply-time preconditions compare against reality).

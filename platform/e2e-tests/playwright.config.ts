@@ -19,6 +19,7 @@ const projectNames = {
   webkit: "webkit",
   identityProviders: "identity-providers",
   api: "api",
+  apiK8s: "api-k8s",
   vaultK8s: "vault-k8s",
 };
 
@@ -57,22 +58,31 @@ const uiTestMatch = [
   "**/static-credentials-management.spec.ts",
 ];
 
+// API specs that run in the lite environment (platform as a plain container
+// with WireMock/Keycloak sidecars). MCP-server installs work there too: the
+// quickstart entrypoint provisions an embedded Kind cluster for the
+// orchestrator.
 const apiTestMatch = [
   "**/built-in-agents.spec.ts",
   "**/chat-api.spec.ts",
   "**/knowledge-permission-sync.spec.ts",
   "**/custom-yaml-restart.spec.ts",
-  "**/image-pull-secrets.spec.ts",
-  "**/mcp-enterprise-managed.ee.spec.ts",
-  "**/mcp-gateway-auth-at-call-time.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",
   "**/mcp-gateway-jwks.ee.spec.ts",
+  "**/orchestrator.spec.ts",
+  testPatterns.llmProxy,
+];
+
+// API specs that genuinely need the Kind+Helm CI environment: host-cluster
+// kubectl access (image-pull-secrets), NetworkPolicy enforcement (ssrf,
+// jwt-propagation), or helm-deployed fixture servers (oauth-self-hosted,
+// enterprise-managed). Everything else belongs in apiTestMatch above.
+const apiK8sTestMatch = [
+  "**/image-pull-secrets.spec.ts",
+  "**/mcp-enterprise-managed.ee.spec.ts",
   "**/mcp-gateway-jwt-propagation.ee.spec.ts",
   "**/oauth-self-hosted.spec.ts",
-  "**/orchestrator.spec.ts",
   "**/ssrf-protection.spec.ts",
-  "**/vault-k8s-startup.spec.ts",
-  testPatterns.llmProxy,
 ];
 
 const quickstartTestMatch = [
@@ -235,12 +245,22 @@ export default defineConfig({
       },
       dependencies: dependencies.testProjects,
     },
-    // API integration tests
+    // API integration tests (lite environment)
     {
       name: projectNames.api,
       testDir: "./tests",
       testMatch: apiTestMatch,
-      testIgnore: [testPatterns.vaultK8s],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: adminAuthFile,
+      },
+      dependencies: dependencies.testProjects,
+    },
+    // API integration tests that need the Kind+Helm CI environment
+    {
+      name: projectNames.apiK8s,
+      testDir: "./tests",
+      testMatch: apiK8sTestMatch,
       use: {
         ...devices["Desktop Chrome"],
         storageState: adminAuthFile,

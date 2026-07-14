@@ -3,7 +3,6 @@ import {
   and,
   asc,
   eq,
-  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -25,7 +24,7 @@ import type {
   ToolParametersContent,
   UpdateMcpServer,
 } from "@/types";
-import { escapeLikePattern } from "@/utils/sql-search";
+import { externalAppLabel } from "@/utils/external-app-label";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -398,6 +397,8 @@ class McpServerModel {
       resourceUri: string;
       /** The tool declares required inputs, so a bare render can't succeed. */
       requiresInput: boolean;
+      /** How many UI tools the whole catalog exposes (search-independent). */
+      uiToolCount: number;
     }>
   > {
     const { userId, organizationId, search } = params;
@@ -412,19 +413,43 @@ class McpServerModel {
 
     const uiApps = await McpServerModel.getUiApps({
       catalogIds: accessibleCatalogIds,
-      search,
     });
-    if (uiApps.length === 0) return [];
+
+    // A card's title depends on whether its server exposes one UI tool or
+    // several, so count per catalog BEFORE the search filter — a search that
+    // matches one of a server's tools must not retitle the surviving card.
+    const uiToolCountByCatalog = new Map<string, number>();
+    for (const app of uiApps) {
+      uiToolCountByCatalog.set(
+        app.catalogId,
+        (uiToolCountByCatalog.get(app.catalogId) ?? 0) + 1,
+      );
+    }
+
+    // Case-insensitive substring over the displayed fields (the tool name is
+    // matched in its stripped, card-visible form).
+    const searchTerm = search?.trim().toLowerCase();
+    const matched = searchTerm
+      ? uiApps.filter((app) =>
+          [
+            app.serverName,
+            app.serverDescription,
+            app.toolName,
+            app.toolDescription,
+          ].some((field) => field?.toLowerCase().includes(searchTerm)),
+        )
+      : uiApps;
+    if (matched.length === 0) return [];
 
     // Every UI tool of a catalog shares its installs, so resolve installs once
     // per distinct catalog, then expand each UI resource across them.
     const installsByCatalog =
       await McpServerModel.getAccessibleInstallsByCatalog({
         userId,
-        catalogIds: Array.from(new Set(uiApps.map((a) => a.catalogId))),
+        catalogIds: Array.from(new Set(matched.map((a) => a.catalogId))),
       });
 
-    return uiApps.flatMap((app) =>
+    return matched.flatMap((app) =>
       (installsByCatalog.get(app.catalogId) ?? []).map((install) => ({
         catalogId: app.catalogId,
         mcpServerId: install.mcpServerId,
@@ -435,6 +460,7 @@ class McpServerModel {
         toolDescription: app.toolDescription,
         resourceUri: app.resourceUri,
         requiresInput: toolRequiresInputs(app.toolParameters),
+        uiToolCount: uiToolCountByCatalog.get(app.catalogId) ?? 1,
       })),
     );
   }
@@ -459,6 +485,8 @@ class McpServerModel {
     toolName: string;
     resourceUri: string;
     toolParameters: ToolParametersContent;
+    /** How many UI tools the whole catalog exposes — decides the app label. */
+    uiToolCount: number;
   } | null> {
     const accessibleServerIds = await McpServerModel.getAccessibleInstallIds(
       params.userId,
@@ -480,6 +508,7 @@ class McpServerModel {
       toolName: match.toolName,
       resourceUri: match.resourceUri,
       toolParameters: match.toolParameters,
+      uiToolCount: uiApps.length,
     };
   }
 
@@ -543,7 +572,11 @@ class McpServerModel {
       resources: uiApps.map((app) => ({
         resourceUri: app.resourceUri,
         toolName: app.toolName,
-        name: `${app.serverName} / ${app.toolName}`,
+        name: externalAppLabel({
+          serverName: app.serverName,
+          toolName: app.toolName,
+          uiToolCount: uiApps.length,
+        }),
         requiresInput: toolRequiresInputs(app.toolParameters),
       })),
       defaultMcpServerId: McpServerModel.pickDefaultInstall(installs),
@@ -602,14 +635,14 @@ class McpServerModel {
    * is the tool's short name (the server prefix is stripped, so a stored
    * `excalidraw__create_view` surfaces as `create_view`); `toolDescription` is
    * the tool's own description. Sorted by server then tool for a stable listing.
+   * Always unfiltered — callers that search do so over the returned rows, so a
+   * catalog's full UI-tool count stays observable (it decides card titles).
    */
-  private static async getUiApps(params: {
-    catalogIds: string[];
-    search?: string;
-  }): Promise<
+  private static async getUiApps(params: { catalogIds: string[] }): Promise<
     Array<{
       catalogId: string;
       serverName: string;
+      serverDescription: string | null;
       serverIcon: string | null;
       toolName: string;
       toolDescription: string | null;
@@ -617,17 +650,14 @@ class McpServerModel {
       toolParameters: ToolParametersContent;
     }>
   > {
-    const { catalogIds, search } = params;
+    const { catalogIds } = params;
     if (catalogIds.length === 0) return [];
-    const searchTerm = search?.trim();
-    const searchPattern = searchTerm
-      ? `%${escapeLikePattern(searchTerm)}%`
-      : undefined;
     const uiResourceUri = toolUiResourceUriSql();
     const rows = await db
       .select({
         catalogId: schema.internalMcpCatalogTable.id,
         serverName: schema.internalMcpCatalogTable.name,
+        serverDescription: schema.internalMcpCatalogTable.description,
         serverIcon: schema.internalMcpCatalogTable.icon,
         toolName: schema.toolsTable.name,
         toolDescription: schema.toolsTable.description,
@@ -647,17 +677,6 @@ class McpServerModel {
           // the platform CSP — never surfaced as external apps.
           ne(schema.internalMcpCatalogTable.serverType, "app"),
           sql`${uiResourceUri} IS NOT NULL`,
-          searchPattern
-            ? or(
-                ilike(schema.internalMcpCatalogTable.name, searchPattern),
-                ilike(
-                  schema.internalMcpCatalogTable.description,
-                  searchPattern,
-                ),
-                ilike(schema.toolsTable.name, searchPattern),
-                ilike(schema.toolsTable.description, searchPattern),
-              )
-            : undefined,
         ),
       );
 
@@ -668,6 +687,7 @@ class McpServerModel {
               {
                 catalogId: row.catalogId,
                 serverName: row.serverName,
+                serverDescription: row.serverDescription,
                 serverIcon: row.serverIcon,
                 // Strip the server prefix: catalog tools are stored as
                 // `<server>__<tool>`, but the card shows just the tool.

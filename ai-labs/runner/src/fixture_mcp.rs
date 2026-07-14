@@ -303,6 +303,27 @@ fn create_access_request(args: &Map<String, JsonValue>) -> CallToolResult {
 }
 
 fn get_request_status(args: &Map<String, JsonValue>) -> CallToolResult {
+    let rows = access_requests();
+    let ticket = args.get("ticket_id").and_then(JsonValue::as_str);
+    let email = args.get("employee_email").and_then(JsonValue::as_str);
+    let filtered: Vec<&JsonValue> = rows
+        .iter()
+        .filter(|r| match ticket {
+            Some(t) if !t.is_empty() => r.get("ticket_id").and_then(JsonValue::as_str) == Some(t),
+            _ => true,
+        })
+        .filter(|r| match email {
+            Some(e) if !e.is_empty() => r.get("employee_email").and_then(JsonValue::as_str) == Some(e),
+            _ => true,
+        })
+        .collect();
+    text(serde_json::json!({ "requests": filtered }).to_string())
+}
+
+/// The access requests `get_request_status` serves. Fixed content, like the seat/contract tables:
+/// the it-ticket-status task grades against these rows, and the drift-guard test below pins its
+/// expected/answer.json to them.
+fn access_requests() -> Vec<JsonValue> {
     let requests = serde_json::json!([
         {
             "ticket_id": "REQ-10042",
@@ -321,21 +342,7 @@ fn get_request_status(args: &Map<String, JsonValue>) -> CallToolResult {
             "filed_on": "2026-05-20"
         }
     ]);
-    let rows = requests.as_array().cloned().unwrap_or_default();
-    let ticket = args.get("ticket_id").and_then(JsonValue::as_str);
-    let email = args.get("employee_email").and_then(JsonValue::as_str);
-    let filtered: Vec<&JsonValue> = rows
-        .iter()
-        .filter(|r| match ticket {
-            Some(t) if !t.is_empty() => r.get("ticket_id").and_then(JsonValue::as_str) == Some(t),
-            _ => true,
-        })
-        .filter(|r| match email {
-            Some(e) if !e.is_empty() => r.get("employee_email").and_then(JsonValue::as_str) == Some(e),
-            _ => true,
-        })
-        .collect();
-    text(serde_json::json!({ "requests": filtered }).to_string())
+    requests.as_array().cloned().unwrap_or_default()
 }
 
 fn seats() -> Vec<JsonValue> {
@@ -579,5 +586,20 @@ mod tests {
             .map(|v| v.as_str().unwrap())
             .collect();
         assert_eq!(reclaimable_ids, answer_ids);
+
+        let ticket = read_answer("it-ticket-status");
+        let requests = access_requests();
+        let dana: Vec<&JsonValue> = requests
+            .iter()
+            .filter(|r| seat_str(r, "employee_email") == "dana.lee@acme.test")
+            .collect();
+        assert_eq!(dana.len(), 1, "dana.lee must have exactly one request on file");
+        for field in ["ticket_id", "status", "filed_on"] {
+            assert_eq!(
+                ticket.get(field).and_then(JsonValue::as_str).unwrap_or_default(),
+                seat_str(dana[0], field),
+                "it-ticket-status answer field {field} drifted from the served request row"
+            );
+        }
     }
 }

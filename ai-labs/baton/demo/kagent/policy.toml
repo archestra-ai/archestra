@@ -7,10 +7,10 @@
 
 upstream_base_url = "https://openrouter.ai/api/v1"
 
-[contracts.user]
-id = "operator"
-# The operator's request is trusted (default), so a clean investigation that
-# never touches suspicious content can still reach the guarded sinks.
+# The user's turns default to trusted, so a clean investigation reaches the
+# guarded sinks; the injection blocks them by tainting the flow suspicious. Add
+# a `[contracts.user]` block only to change that (e.g. `trust = "suspicious"`
+# for a public-facing agent) or to use audience rules.
 
 # --- Injection vector: pod logs are third-party text. --------------------------
 [[contracts.tool]]

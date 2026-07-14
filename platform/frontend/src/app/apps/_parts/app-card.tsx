@@ -271,8 +271,9 @@ function OwnedAppCard({ app }: { app: OwnedApp }) {
 // the pending-chat handoff so `/chat/<id>` sends it as the first user message —
 // the agent asks for the inputs, calls the tool, and the result mounts the app.
 // Each card is one concrete install (only accessible installs are listed), so
-// the whole card is always a click target. The title is the chat-style
-// "<server> / <tool>" label (the catalog display name, never the slug prefix).
+// the whole card is always a click target. The title is the server's catalog
+// display name, "/ <tool>"-suffixed (short tool name, never the slug prefix)
+// only when the server exposes several UI tools.
 function ExternalAppCard({ app }: { app: ExternalApp }) {
   const router = useRouter();
   const openApp = useOpenExternalAppInChat();

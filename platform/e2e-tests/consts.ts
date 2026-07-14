@@ -54,9 +54,11 @@ export const WIREMOCK_BASE_URL =
 // Internal WireMock URL for backend-to-wiremock connections (used when storing URLs in database)
 // In CI, the backend pod needs to use the Kubernetes service DNS name
 // In local dev, localhost works because everything runs on the same host
-export const WIREMOCK_INTERNAL_URL = IS_CI
-  ? "http://e2e-tests-wiremock:8080"
-  : "http://localhost:9092";
+// The lite harness overrides this: its backend runs in a container, so URLs
+// stored in the DB must use the sidecar's docker network name.
+export const WIREMOCK_INTERNAL_URL =
+  process.env.E2E_WIREMOCK_INTERNAL_URL ||
+  (IS_CI ? "http://e2e-tests-wiremock:8080" : "http://localhost:9092");
 
 export const METRICS_BASE_URL = "http://localhost:9050";
 export const METRICS_BEARER_TOKEN = "foo-bar";
@@ -127,9 +129,12 @@ export const TEST_TOOL_NAME = `${TEST_CATALOG_ITEM_NAME}${MCP_SERVER_TOOL_NAME_S
 // =============================================================================
 
 export const KEYCLOAK_EXTERNAL_URL = "http://localhost:30081";
-export const KEYCLOAK_BACKEND_URL = IS_CI
-  ? "http://e2e-tests-keycloak:8080"
-  : "http://localhost:30081";
+// URL the backend uses to reach Keycloak (discovery/token/jwks). The lite
+// harness overrides this with the sidecar's docker network name, since its
+// backend runs in a container where localhost is the container itself.
+export const KEYCLOAK_BACKEND_URL =
+  process.env.E2E_KEYCLOAK_BACKEND_URL ||
+  (IS_CI ? "http://e2e-tests-keycloak:8080" : "http://localhost:30081");
 export const KEYCLOAK_REALM = "archestra";
 export const VAULT_ADDR =
   process.env.ARCHESTRA_HASHICORP_VAULT_ADDR ??

@@ -44,6 +44,7 @@ export function CreateOAuthClientDialog({
   open,
   onOpenChange,
   defaultClientType = "mcp",
+  defaultAllowedGatewayIds,
   gateways,
   llmProxies,
   providerApiKeys,
@@ -53,6 +54,8 @@ export function CreateOAuthClientDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultClientType?: OAuthClientType;
+  /** Pre-selected allowed gateways/agents (deep link from a connect dialog). */
+  defaultAllowedGatewayIds?: string[];
   gateways: AgentSelectorAgent[];
   llmProxies: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
@@ -77,14 +80,14 @@ export function CreateOAuthClientDialog({
       setClientType(defaultClientType);
       setName("");
       setGrantType("client_credentials");
-      setSelectedGatewayIds([]);
+      setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
       setSelectedProxyIds([]);
       setProviderApiKeyIds({});
       setRedirectUrisText("");
       setScope("personal");
       setTeamIds([]);
     }
-  }, [open, defaultClientType]);
+  }, [open, defaultClientType, defaultAllowedGatewayIds]);
 
   const isMcp = clientType === "mcp";
   const mappedProviderApiKeys = providerApiKeyMapToArray(providerApiKeyIds);

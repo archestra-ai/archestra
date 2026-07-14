@@ -367,6 +367,23 @@ enum RoutedStep {
     Terminal(Decision),
 }
 
+/// The stored plan `plan` names, or the refusal.
+fn stored_plan(trajectory: &Trajectory, plan: PlanId) -> Result<&crate::plan::RemedyPlan, StepRefused> {
+    trajectory
+        .plans()
+        .iter()
+        .find(|p| p.id == plan)
+        .ok_or(StepRefused::UnknownPlan { plan })
+}
+
+/// The pending action iff it is exactly `action`, or the refusal.
+fn pending_action_is(trajectory: &Trajectory, action: ActionId) -> Result<&crate::request::PendingAction, StepRefused> {
+    match trajectory.pending_action() {
+        Some(pending) if pending.id() == action => Ok(pending),
+        _ => Err(StepRefused::ActionNotPending { action }),
+    }
+}
+
 /// The per-grant-kind denial attribution, shared by inline routing and the
 /// external approval path.
 fn denial_event(grant: &ProposedGrant, authority: AuthorityName, reason: String) -> AuditEvent {
@@ -710,11 +727,7 @@ impl PolicyEngine {
     /// happens against the current revision; any later state change stales
     /// the capability.
     pub fn mint_step(&self, trajectory: &Trajectory, plan: PlanId, step: usize) -> Result<StepCapability, StepRefused> {
-        let stored = trajectory
-            .plans()
-            .iter()
-            .find(|p| p.id == plan)
-            .ok_or(StepRefused::UnknownPlan { plan })?;
+        let stored = stored_plan(trajectory, plan)?;
         if stored.basis != trajectory.revision() {
             return Err(StepRefused::StalePlan {
                 basis: stored.basis,
@@ -728,10 +741,7 @@ impl PolicyEngine {
             });
         }
         stored.steps.get(step).ok_or(StepRefused::NoSuchStep { plan, step })?;
-        match trajectory.pending_action() {
-            Some(pending) if pending.id() == stored.action => {}
-            _ => return Err(StepRefused::ActionNotPending { action: stored.action }),
-        }
+        pending_action_is(trajectory, stored.action)?;
         Ok(StepCapability {
             plan,
             step,
@@ -772,11 +782,7 @@ impl PolicyEngine {
                 current: trajectory.revision(),
             });
         }
-        let stored = trajectory
-            .plans()
-            .iter()
-            .find(|p| p.id == capability.plan)
-            .ok_or(StepRefused::UnknownPlan { plan: capability.plan })?;
+        let stored = stored_plan(trajectory, capability.plan)?;
         let spec = stored
             .steps
             .get(capability.step)
@@ -785,14 +791,7 @@ impl PolicyEngine {
                 step: capability.step,
             })?
             .clone();
-        let pending = match trajectory.pending_action() {
-            Some(pending) if pending.id() == capability.action => pending,
-            _ => {
-                return Err(StepRefused::ActionNotPending {
-                    action: capability.action,
-                });
-            }
-        };
+        let pending = pending_action_is(trajectory, capability.action)?;
         let checked = pending.current().clone();
         let original = pending.original().clone();
         let contract = self.contracts.get(&checked.tool);
@@ -1069,10 +1068,7 @@ impl PolicyEngine {
                 current: trajectory.revision(),
             });
         }
-        match trajectory.pending_action() {
-            Some(action) if action.id() == parts.action => {}
-            _ => return Err(StepRefused::ActionNotPending { action: parts.action }),
-        }
+        pending_action_is(trajectory, parts.action)?;
         match ruling {
             // Dispatch on the grant: a waiver (or acknowledgment) rechecks and
             // permits; an accept records the growth marker and re-evaluates.

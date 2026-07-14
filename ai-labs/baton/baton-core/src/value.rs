@@ -24,7 +24,7 @@ use serde::Serialize;
 use tracing::trace;
 
 use crate::audit::AuthorityName;
-use crate::dimension::{Audience, Trust};
+use crate::dimension::{Audience, Trust, UserId};
 use crate::revision::{ActionId, TransitionId, TurnId, ValueId};
 use crate::transition::EndorseDelta;
 
@@ -61,6 +61,15 @@ impl ValueLabel {
     pub fn identity() -> Self {
         Self {
             audience: Audience::PUBLIC,
+            trust: Trust::TRUSTED,
+        }
+    }
+
+    /// Trusted data readable by exactly `readers` — the everyday label for an
+    /// internal system's output.
+    pub fn trusted_readers(readers: impl IntoIterator<Item = UserId>) -> Self {
+        Self {
+            audience: Audience::readers(readers),
             trust: Trust::TRUSTED,
         }
     }

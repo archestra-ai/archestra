@@ -14,10 +14,9 @@
 use std::collections::BTreeSet;
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
-    AuthorityName, Decision, Effect, Effects, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Requirements, Ruling,
-    Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId, ValueLabel,
-    Violation,
+    ArgumentTree, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Decision, OpaqueValue, PolicyEngine,
+    ProposedGrant, Pursuit, Ruling, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, UserId,
+    ValueId, ValueLabel, Violation,
 };
 
 /// The internal finance team with access to the invoicing system.
@@ -58,29 +57,12 @@ fn finance_approver() -> Authority {
 fn build_engine() -> PolicyEngine {
     let mut engine = PolicyEngine::new();
     engine
-        .register(ToolContract {
-            name: ToolName::new("invoices.list"),
-            requires: Requirements::default(),
-            output_label: ValueLabel {
-                audience: Audience::readers([u(ALICE), u(BOB)]),
-                trust: Trust::TRUSTED,
-            },
-            effects: Effects::none(),
-            arguments: ArgumentSchema::opaque(),
-        })
+        .register(ToolContract::source(
+            "invoices.list",
+            ValueLabel::trusted_readers([u(ALICE), u(BOB)]),
+        ))
         .unwrap();
-    engine
-        .register(ToolContract {
-            name: ToolName::new("email.send"),
-            requires: Requirements {
-                audience: AudienceRule::RecipientsWithinContext,
-                ..Requirements::default()
-            },
-            output_label: ValueLabel::identity(),
-            effects: Effects::declared([Effect::Egress]),
-            arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
-        })
-        .unwrap();
+    engine.register(ToolContract::egress_sink("email.send", "to")).unwrap();
     engine.register_authority(finance_approver()).unwrap();
     engine
 }

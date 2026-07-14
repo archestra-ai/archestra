@@ -605,6 +605,48 @@ fn pursue_keeps_the_slot_for_an_external_ruling() {
     dispatch(&mut trajectory, token, "pong").unwrap();
 }
 
+/// A `source`-registered tool is a pure read whose recorded output wears the
+/// declared label after the admission fold.
+#[test]
+fn source_contract_output_wears_the_declared_label() {
+    let internal = || ValueLabel::trusted_readers([user("alice"), user("bob")]);
+    let engine = engine_with([ToolContract::source("invoices.list", internal())]);
+    let mut trajectory = Trajectory::new();
+    let request = ToolRequest::new(ToolName::new("invoices.list"), ArgumentTree::empty(), []);
+    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+        panic!("a pure read must permit");
+    };
+    let id = dispatch(&mut trajectory, token, "47 invoices").unwrap();
+    assert_eq!(trajectory.value(id).unwrap().label(), &internal());
+}
+
+/// An `egress_sink`-registered tool reads recipients from the named argument
+/// (walking the Accept for its declared egress), and blocks structurally when
+/// the recipients argument is missing.
+#[test]
+fn egress_sink_contract_resolves_recipients_and_blocks_undeclared() {
+    let mut engine = engine_with([ToolContract::egress_sink("email.send", "to")]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+
+    let body = ingress(&mut trajectory, &["bob"], Trust::TRUSTED, "doc");
+    let request = email_request(&mut trajectory, body, "bob");
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "sent").unwrap();
+    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+
+    let body = ingress(&mut trajectory, &["bob"], Trust::TRUSTED, "doc two");
+    let bare = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::object([("body", body)]), []);
+    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, bare) else {
+        panic!("an egress sink with no recipients argument must block terminally");
+    };
+    assert!(
+        block
+            .violations
+            .contains(&Violation::Breach(crate::contract::Breach::UndeclaredRecipients))
+    );
+}
+
 #[test]
 fn object_built_request_checks_and_renders_like_the_literal_tree() {
     let engine = engine_with([email_contract()]);

@@ -7,8 +7,7 @@
 //! so nothing leaks but the bug isn't filed either.
 
 use baton_core::{
-    ArgumentSchema, Audience, AudienceRule, Effect, Effects, Requirements, ToolContract, ToolName, Trust, UserId,
-    ValueLabel,
+    ArgumentSchema, AudienceRule, Effect, Effects, Requirements, ToolContract, ToolName, UserId, ValueLabel,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -59,16 +58,10 @@ fn gate() -> Result<BatonGate, DojoError> {
     // No authority is registered: the gate is fully fail-closed, so the public
     // issue's audience breach is terminal — nothing declassifies it.
     BatonGate::builder()
-        .contract(ToolContract {
-            name: ToolName::new("fetch_recording"),
-            requires: Requirements::default(),
-            output_label: ValueLabel {
-                audience: Audience::readers([UserId::new(ALICE), UserId::new(BOB)]),
-                trust: Trust::TRUSTED,
-            },
-            effects: Effects::none(),
-            arguments: ArgumentSchema::opaque(),
-        })
+        .contract(ToolContract::source(
+            "fetch_recording",
+            ValueLabel::trusted_readers([UserId::new(ALICE), UserId::new(BOB)]),
+        ))
         .contract(ToolContract {
             name: ToolName::new("open_issue"),
             requires: Requirements {

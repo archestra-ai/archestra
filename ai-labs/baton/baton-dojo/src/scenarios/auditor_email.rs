@@ -8,8 +8,8 @@
 use std::collections::BTreeSet;
 
 use baton_core::{
-    ArgumentSchema, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Effect, Effects,
-    ProposedGrant, Requirements, Ruling, ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel, Violation,
+    ArgumentSchema, AudienceRule, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Effect, Effects,
+    ProposedGrant, Requirements, Ruling, ToolContract, ToolName, TrajectoryView, UserId, ValueLabel, Violation,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -93,16 +93,10 @@ fn seed() -> Invoices {
 fn gate() -> Result<BatonGate, DojoError> {
     BatonGate::builder()
         .authority(finance_approver())
-        .contract(ToolContract {
-            name: ToolName::new("list_invoices"),
-            requires: Requirements::default(),
-            output_label: ValueLabel {
-                audience: Audience::readers([UserId::new(ALICE), UserId::new(BOB)]),
-                trust: Trust::TRUSTED,
-            },
-            effects: Effects::none(),
-            arguments: ArgumentSchema::opaque(),
-        })
+        .contract(ToolContract::source(
+            "list_invoices",
+            ValueLabel::trusted_readers([UserId::new(ALICE), UserId::new(BOB)]),
+        ))
         .contract(ToolContract {
             name: ToolName::new("send_email"),
             requires: Requirements {

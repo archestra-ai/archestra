@@ -11,9 +11,8 @@
 //! Run with `cargo run --example recording_to_task`.
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Blocked, Decision, Effect, Effects,
-    OpaqueValue, PolicyEngine, Requirements, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust, UserId,
-    ValueId, ValueLabel,
+    ArgumentTree, Blocked, Decision, OpaqueValue, PolicyEngine, Speaker, ToolContract, ToolName, ToolRequest,
+    Trajectory, UserId, ValueId, ValueLabel,
 };
 
 /// The internal team who may read the recording.
@@ -30,28 +29,13 @@ fn u(id: &str) -> UserId {
 fn build_engine() -> PolicyEngine {
     let mut engine = PolicyEngine::new();
     engine
-        .register(ToolContract {
-            name: ToolName::new("grain.fetch"),
-            requires: Requirements::default(),
-            output_label: ValueLabel {
-                audience: Audience::readers([u(ALICE), u(BOB)]),
-                trust: Trust::TRUSTED,
-            },
-            effects: Effects::none(),
-            arguments: ArgumentSchema::opaque(),
-        })
+        .register(ToolContract::source(
+            "grain.fetch",
+            ValueLabel::trusted_readers([u(ALICE), u(BOB)]),
+        ))
         .unwrap();
     engine
-        .register(ToolContract {
-            name: ToolName::new("github.open_issue"),
-            requires: Requirements {
-                audience: AudienceRule::RecipientsWithinContext,
-                ..Requirements::default()
-            },
-            output_label: ValueLabel::identity(),
-            effects: Effects::declared([Effect::Egress]),
-            arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
-        })
+        .register(ToolContract::egress_sink("github.open_issue", "to"))
         .unwrap();
     engine
 }

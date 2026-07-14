@@ -31,6 +31,7 @@ export function SecretCopyButton({
   getSecretText,
   placeholderText,
   variant = "default",
+  disabled = false,
   onBusyChange,
 }: {
   /**
@@ -43,6 +44,8 @@ export function SecretCopyButton({
   placeholderText: string;
   /** "terminal" matches the dark code-card controls on the connection page. */
   variant?: "default" | "terminal";
+  /** Lock the control while an adjacent action (e.g. a reveal fetch) runs. */
+  disabled?: boolean;
   /** Mirrors the in-flight state so callers can lock adjacent controls. */
   onBusyChange?: (busy: boolean) => void;
 }) {
@@ -55,6 +58,7 @@ export function SecretCopyButton({
   };
 
   const handleCopyPlaceholder = async () => {
+    if (disabled) return;
     try {
       await navigator.clipboard.writeText(placeholderText);
       flashCopied();
@@ -65,7 +69,7 @@ export function SecretCopyButton({
   };
 
   const handleCopySecret = async () => {
-    if (!getSecretText || isCopying) return;
+    if (!getSecretText || isCopying || disabled) return;
     setIsCopying(true);
     onBusyChange?.(true);
     try {
@@ -101,7 +105,7 @@ export function SecretCopyButton({
     variant === "terminal" ? (
       <button
         type="button"
-        disabled={isCopying}
+        disabled={isCopying || disabled}
         aria-label="Copy"
         className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
       >
@@ -112,7 +116,7 @@ export function SecretCopyButton({
         variant="ghost"
         size="icon"
         aria-label="Copy"
-        disabled={isCopying}
+        disabled={isCopying || disabled}
       >
         {icon}
       </Button>
@@ -124,6 +128,7 @@ export function SecretCopyButton({
       <button
         type="button"
         onClick={handleCopyPlaceholder}
+        disabled={disabled}
         aria-label="Copy"
         className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
       >
@@ -134,6 +139,7 @@ export function SecretCopyButton({
         variant="ghost"
         size="icon"
         aria-label="Copy"
+        disabled={disabled}
         onClick={handleCopyPlaceholder}
       >
         {icon}

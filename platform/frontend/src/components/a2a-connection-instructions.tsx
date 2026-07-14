@@ -80,6 +80,11 @@ export function A2AConnectionInstructions({
   const tokens = tokensData?.tokens;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
 
+  // messageId is required by the A2A protocol and must be unique per message,
+  // so each example gets a real UUID (fresh per dialog open).
+  const [sendExampleMessageId] = useState(() => crypto.randomUUID());
+  const [streamExampleMessageId] = useState(() => crypto.randomUUID());
+
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
   const { data: organization } = useOrganization();
@@ -191,11 +196,13 @@ curl -X POST "${a2aEndpoint}" \\
     "method": "SendMessage",
     "params": {
       "message": {
-        "parts": [{"kind": "text", "text": "Hello, can you help me?"}]
+        "messageId": "${sendExampleMessageId}",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Hello, can you help me?"}]
       }
     }
   }'`,
-    [a2aEndpoint, tokenForDisplay],
+    [a2aEndpoint, tokenForDisplay, sendExampleMessageId],
   );
 
   // cURL example for streaming the reply as Server-Sent Events
@@ -210,11 +217,13 @@ curl -N -X POST "${a2aEndpoint}" \\
     "method": "SendStreamingMessage",
     "params": {
       "message": {
-        "parts": [{"kind": "text", "text": "Hello, can you help me?"}]
+        "messageId": "${streamExampleMessageId}",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Hello, can you help me?"}]
       }
     }
   }'`,
-    [a2aEndpoint, tokenForDisplay],
+    [a2aEndpoint, tokenForDisplay, streamExampleMessageId],
   );
 
   const secondaryChannels = (

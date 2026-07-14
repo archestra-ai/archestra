@@ -12,7 +12,10 @@ import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
-import { SecretCopyButton } from "@/components/secret-copy-button";
+import {
+  SECRET_PLACEHOLDER_TOKEN,
+  SecretCopyButton,
+} from "@/components/secret-copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -129,7 +132,7 @@ export function McpClientInstructions({
             <McpBody
               client={client}
               mcpUrl={mcpUrl}
-              token="archestra_TOKEN"
+              token={SECRET_PLACEHOLDER_TOKEN}
               serverName={serverName}
               gatewayId={gatewayId}
               isQuick={isQuick}
@@ -149,7 +152,7 @@ export function McpClientInstructions({
         <McpBody
           client={client}
           mcpUrl={mcpUrl}
-          token="archestra_TOKEN"
+          token={SECRET_PLACEHOLDER_TOKEN}
           serverName={serverName}
           gatewayId={gatewayId}
           isQuick={isQuick}
@@ -478,6 +481,7 @@ function GenericAuthRow({
             variant="terminal"
             getSecretText={canResolveToken ? getSecretText : null}
             placeholderText={bare ? placeholder : `Bearer ${placeholder}`}
+            disabled={isLoading}
             onBusyChange={setIsCopying}
           />
           {/* Switching tokens mid-fetch would copy the old token while the

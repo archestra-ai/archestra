@@ -137,7 +137,10 @@ describe("secret-aware copy menu", () => {
 
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith(
-        placeholderCode.replace("ask-admin-for-access-token", "archestra_TOKEN"),
+        placeholderCode.replace(
+          "ask-admin-for-access-token",
+          "archestra_TOKEN",
+        ),
       ),
     );
     expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();

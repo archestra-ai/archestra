@@ -1,7 +1,8 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { Mail } from "lucide-react";
+import { ChevronDown, Mail, MessageCircle } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,11 @@ import {
 import { CodeText } from "@/components/code-text";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
@@ -35,6 +41,7 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
+import { cn } from "@/lib/utils";
 import {
   AgentEmailDisabledMessage,
   EmailNotConfiguredMessage,
@@ -47,16 +54,26 @@ const PERSONAL_TOKEN_ID = "__personal_token__";
 
 interface A2AConnectionInstructionsProps {
   agent: InternalAgent;
+  /**
+   * "dialog" collapses the secondary channels (chat deep link, email) behind
+   * a disclosure; "page" (the Messaging Channels → A2A page) keeps everything
+   * expanded.
+   */
+  layout?: "dialog" | "page";
 }
 
 export function A2AConnectionInstructions({
   agent,
+  layout = "dialog",
 }: A2AConnectionInstructionsProps) {
   // Filter tokens by the agent's teams (internal agents are profiles)
   const { data: tokensData } = useTokens({ profileId: agent.id });
   const { data: userToken } = useUserToken();
   const { data: hasAdminPermission } = useHasPermissions({
     agent: ["admin"],
+  });
+  const { data: canReadOauthClients } = useHasPermissions({
+    mcpOauthClient: ["read"],
   });
   const incomingEmail = useFeature("incomingEmail");
 
@@ -103,8 +120,9 @@ export function A2AConnectionInstructions({
   );
   const agentEmailAddress = emailAddressData?.emailAddress ?? null;
 
-  // A2A endpoint
-  const a2aEndpoint = `${connectionUrl}/a2a/${agent.id}`;
+  // The A2A protocol surface (SendMessage / SendStreamingMessage / the
+  // agent-card.json card) lives under /v2.
+  const a2aEndpoint = `${toA2ABaseUrl(connectionUrl)}/a2a/${agent.id}`;
 
   // Default to personal token if available, otherwise org token, then first token
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
@@ -148,21 +166,29 @@ export function A2AConnectionInstructions({
       : "ask-admin-for-access-token";
 
   // Agent Card URL for discovery
-  const agentCardUrl = `${connectionUrl}/a2a/${agent.id}/.well-known/agent.json`;
+  const agentCardUrl = `${a2aEndpoint}/.well-known/agent-card.json`;
   const chatDeepLink = `${window.location.origin}/chat/new?agent_id=${agent.id}&user_prompt=${encodeURIComponent(
     "Hello!\n\nPlease help me with the following task:\n- Review my code\n- Suggest improvements",
   )}`;
 
+  // cURL example for fetching the agent card (verifies endpoint + credential)
+  const agentCardCurlCode = useMemo(
+    () => `# Verify: fetch the A2A Agent Card
+curl "${agentCardUrl}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}"`,
+    [agentCardUrl, tokenForDisplay],
+  );
+
   // cURL example code for sending messages
   const curlCode = useMemo(
-    () => `# Send a message to the A2A agent
+    () => `# Send a message and wait for the full reply
 curl -X POST "${a2aEndpoint}" \\
   -H "Authorization: Bearer ${tokenForDisplay}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "message/send",
+    "method": "SendMessage",
     "params": {
       "message": {
         "parts": [{"kind": "text", "text": "Hello, can you help me?"}]
@@ -172,49 +198,33 @@ curl -X POST "${a2aEndpoint}" \\
     [a2aEndpoint, tokenForDisplay],
   );
 
-  // cURL example for fetching agent card
-  const agentCardCurlCode = useMemo(
-    () => `# Fetch the A2A Agent Card (discovery)
-curl -X GET "${agentCardUrl}" \\
-  -H "Authorization: Bearer ${tokenForDisplay}"`,
-    [agentCardUrl, tokenForDisplay],
+  // cURL example for streaming the reply as Server-Sent Events
+  const streamingCurlCode = useMemo(
+    () => `# Stream the reply as Server-Sent Events
+curl -N -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "SendStreamingMessage",
+    "params": {
+      "message": {
+        "parts": [{"kind": "text", "text": "Hello, can you help me?"}]
+      }
+    }
+  }'`,
+    [a2aEndpoint, tokenForDisplay],
   );
 
-  return (
+  const secondaryChannels = (
     <div className="space-y-6">
-      <ConnectionUrlStep
-        candidateUrls={candidateBaseUrls}
-        metadata={connectionBaseUrls}
-        value={connectionUrl}
-        onChange={setUserBaseUrl}
-      />
-      {/* A2A Endpoint URL */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">A2A Endpoint URL</Label>
-        <CodeBlock
-          code={a2aEndpoint}
-          language="text"
-          wrapLongLines
-          contentClassName="overflow-x-hidden"
-          contentStyle={{
-            fontSize: "0.75rem",
-            paddingRight: "3.5rem",
-          }}
-        >
-          <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <CodeBlockCopyButton
-              title="Copy A2A endpoint URL"
-              className="rounded-none"
-              onCopy={() => toast.success("A2A endpoint URL copied")}
-              onError={() => toast.error("Failed to copy A2A endpoint URL")}
-            />
-          </div>
-        </CodeBlock>
-      </div>
-
       {/* Chat Deep Link */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Chat Deep Link</Label>
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Chat Deep Link</Label>
+        </div>
         <p className="text-xs text-muted-foreground">
           Use this URL to open chat with the agent and send a message
           automatically.
@@ -240,107 +250,7 @@ curl -X GET "${agentCardUrl}" \\
         </CodeBlock>
       </div>
 
-      {/* Token Selector */}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Authentication Token</Label>
-        <Select
-          value={effectiveTokenId}
-          onValueChange={(value) => {
-            setSelectedTokenId(value);
-          }}
-        >
-          <SelectTrigger className="w-full min-h-[60px] py-2.5">
-            <SelectValue placeholder="Select token">
-              {effectiveTokenId && (
-                <div className="flex flex-col gap-0.5 items-start text-left">
-                  <div>{getTokenDisplayName()}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {isPersonalTokenSelected
-                      ? "The most secure option."
-                      : selectedTeamToken?.isOrganizationToken
-                        ? "To share org-wide"
-                        : "To share with your teammates"}
-                  </div>
-                </div>
-              )}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {userToken && (
-              <SelectItem value={PERSONAL_TOKEN_ID}>
-                <div className="flex flex-col gap-0.5 items-start">
-                  <div>Personal Token</div>
-                  <div className="text-xs text-muted-foreground">
-                    The most secure option.
-                  </div>
-                </div>
-              </SelectItem>
-            )}
-            {/* Team tokens (non-organization) */}
-            {tokens
-              ?.filter((token) => !token.isOrganizationToken)
-              .map((token) => (
-                <SelectItem key={token.id} value={token.id}>
-                  <div className="flex flex-col gap-0.5 items-start">
-                    <div>
-                      {token.team?.name
-                        ? `Team Token (${token.team.name})`
-                        : token.name}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      To share with your teammates
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-            {/* Organization token */}
-            {tokens
-              ?.filter((token) => token.isOrganizationToken)
-              .map((token) => (
-                <SelectItem key={token.id} value={token.id}>
-                  <div className="flex flex-col gap-0.5 items-start">
-                    <div>Organization Token</div>
-                    <div className="text-xs text-muted-foreground">
-                      To share org-wide
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* cURL Examples */}
-      <div className="space-y-3">
-        <Label className="text-sm font-medium">cURL Examples</Label>
-
-        {/* Send message example */}
-        <CurlExampleSection
-          key={`send-${effectiveTokenId}`}
-          code={curlCode}
-          tokenForDisplay={tokenForDisplay}
-          isPersonalTokenSelected={isPersonalTokenSelected}
-          hasAdminPermission={hasAdminPermission ?? false}
-          selectedTeamToken={selectedTeamToken ?? null}
-          fetchUserTokenMutation={fetchUserTokenMutation}
-          fetchTeamTokenMutation={fetchTeamTokenMutation}
-        />
-
-        {/* Agent Card discovery example */}
-        <CurlExampleSection
-          key={`card-${effectiveTokenId}`}
-          code={agentCardCurlCode}
-          tokenForDisplay={tokenForDisplay}
-          isPersonalTokenSelected={isPersonalTokenSelected}
-          hasAdminPermission={hasAdminPermission ?? false}
-          selectedTeamToken={selectedTeamToken ?? null}
-          fetchUserTokenMutation={fetchUserTokenMutation}
-          fetchTeamTokenMutation={fetchTeamTokenMutation}
-        />
-      </div>
-
-      {/* Email Invocation Section - always show, with configuration guidance when not enabled */}
-      <Separator />
+      {/* Email Invocation - always show, with configuration guidance when not enabled */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Mail className="h-4 w-4 text-muted-foreground" />
@@ -408,4 +318,215 @@ curl -X GET "${agentCardUrl}" \\
       </div>
     </div>
   );
+
+  return (
+    <div>
+      <WizardStep n={1} title="Endpoint">
+        <div className="space-y-3">
+          <ConnectionUrlStep
+            bare
+            candidateUrls={candidateBaseUrls}
+            metadata={connectionBaseUrls}
+            value={connectionUrl}
+            onChange={setUserBaseUrl}
+          />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">A2A Endpoint URL</Label>
+            <CodeBlock
+              code={a2aEndpoint}
+              language="text"
+              wrapLongLines
+              contentClassName="overflow-x-hidden"
+              contentStyle={{
+                fontSize: "0.75rem",
+                paddingRight: "3.5rem",
+              }}
+            >
+              <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                <CodeBlockCopyButton
+                  title="Copy A2A endpoint URL"
+                  className="rounded-none"
+                  onCopy={() => toast.success("A2A endpoint URL copied")}
+                  onError={() => toast.error("Failed to copy A2A endpoint URL")}
+                />
+              </div>
+            </CodeBlock>
+          </div>
+        </div>
+      </WizardStep>
+
+      <WizardStep n={2} title="Authentication">
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            A2A agents accept your platform tokens — the same tokens the MCP
+            Gateway uses — or OAuth clients. LLM API keys and virtual keys will
+            not work here.
+          </p>
+          <Select
+            value={effectiveTokenId}
+            onValueChange={(value) => {
+              setSelectedTokenId(value);
+            }}
+          >
+            <SelectTrigger className="w-full min-h-[60px] py-2.5">
+              <SelectValue placeholder="Select token">
+                {effectiveTokenId && (
+                  <div className="flex flex-col gap-0.5 items-start text-left">
+                    <div>{getTokenDisplayName()}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {isPersonalTokenSelected
+                        ? "The most secure option."
+                        : selectedTeamToken?.isOrganizationToken
+                          ? "To share org-wide"
+                          : "To share with your teammates"}
+                    </div>
+                  </div>
+                )}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {userToken && (
+                <SelectItem value={PERSONAL_TOKEN_ID}>
+                  <div className="flex flex-col gap-0.5 items-start">
+                    <div>Personal Token</div>
+                    <div className="text-xs text-muted-foreground">
+                      The most secure option.
+                    </div>
+                  </div>
+                </SelectItem>
+              )}
+              {/* Team tokens (non-organization) */}
+              {tokens
+                ?.filter((token) => !token.isOrganizationToken)
+                .map((token) => (
+                  <SelectItem key={token.id} value={token.id}>
+                    <div className="flex flex-col gap-0.5 items-start">
+                      <div>
+                        {token.team?.name
+                          ? `Team Token (${token.team.name})`
+                          : token.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        To share with your teammates
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              {/* Organization token */}
+              {tokens
+                ?.filter((token) => token.isOrganizationToken)
+                .map((token) => (
+                  <SelectItem key={token.id} value={token.id}>
+                    <div className="flex flex-col gap-0.5 items-start">
+                      <div>Organization Token</div>
+                      <div className="text-xs text-muted-foreground">
+                        To share org-wide
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            <Link
+              href="/settings/account?tab=tokens"
+              className="underline hover:text-foreground"
+            >
+              Manage your tokens
+            </Link>
+            {canReadOauthClients && (
+              <>
+                {" "}
+                · For machine-to-machine or user-delegated OAuth,{" "}
+                <Link
+                  href="/credentials/oauth-clients"
+                  className="underline hover:text-foreground"
+                >
+                  create an OAuth client
+                </Link>
+              </>
+            )}
+          </p>
+          {agent.identityProviderId && (
+            <p className="text-xs text-muted-foreground">
+              This agent is bound to an external identity provider — JWTs it
+              issues are also accepted as bearer tokens.
+            </p>
+          )}
+        </div>
+      </WizardStep>
+
+      <WizardStep n={3} title="Call the agent" last>
+        <div className="space-y-3">
+          <CurlExampleSection
+            key={`card-${effectiveTokenId}`}
+            code={agentCardCurlCode}
+            tokenForDisplay={tokenForDisplay}
+            isPersonalTokenSelected={isPersonalTokenSelected}
+            hasAdminPermission={hasAdminPermission ?? false}
+            selectedTeamToken={selectedTeamToken ?? null}
+            fetchUserTokenMutation={fetchUserTokenMutation}
+            fetchTeamTokenMutation={fetchTeamTokenMutation}
+          />
+          <CurlExampleSection
+            key={`send-${effectiveTokenId}`}
+            code={curlCode}
+            tokenForDisplay={tokenForDisplay}
+            isPersonalTokenSelected={isPersonalTokenSelected}
+            hasAdminPermission={hasAdminPermission ?? false}
+            selectedTeamToken={selectedTeamToken ?? null}
+            fetchUserTokenMutation={fetchUserTokenMutation}
+            fetchTeamTokenMutation={fetchTeamTokenMutation}
+          />
+          <CurlExampleSection
+            key={`stream-${effectiveTokenId}`}
+            code={streamingCurlCode}
+            tokenForDisplay={tokenForDisplay}
+            isPersonalTokenSelected={isPersonalTokenSelected}
+            hasAdminPermission={hasAdminPermission ?? false}
+            selectedTeamToken={selectedTeamToken ?? null}
+            fetchUserTokenMutation={fetchUserTokenMutation}
+            fetchTeamTokenMutation={fetchTeamTokenMutation}
+          />
+        </div>
+      </WizardStep>
+
+      {layout === "dialog" ? (
+        <Collapsible className="mt-2 rounded-lg border">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+            Other ways to reach this agent
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180",
+              )}
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-4 pb-4">
+            {secondaryChannels}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        <div className="mt-2 space-y-4 border-t pt-6">
+          <h3 className="text-sm font-semibold">
+            Other ways to reach this agent
+          </h3>
+          {secondaryChannels}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===
+// Internal helpers
+// ===
+
+/**
+ * Connection base URLs carry a /v1 suffix (see getExternalProxyUrls); the A2A
+ * protocol surface lives under /v2.
+ */
+function toA2ABaseUrl(connectionUrl: string): string {
+  return connectionUrl.endsWith("/v1")
+    ? `${connectionUrl.slice(0, -"/v1".length)}/v2`
+    : `${connectionUrl}/v2`;
 }

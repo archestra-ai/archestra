@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useCreateConnectionPassthroughKey,
@@ -53,7 +54,6 @@ import {
   toPlatformOption,
 } from "./platform.utils";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
-import { WizardStep } from "./wizard-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
 export function isConfigClient(clientId: string | null): boolean {

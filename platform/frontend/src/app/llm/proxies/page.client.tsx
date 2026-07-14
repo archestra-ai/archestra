@@ -20,6 +20,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -183,6 +184,10 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   const router = useRouter();
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [postCreateProxy, setPostCreateProxy] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const navigateToConnection = useCallback(
     (agentId: string) => {
       router.push(
@@ -464,8 +469,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               onOpenChange={setIsCreateDialogOpen}
               agentType="llm_proxy"
               defaultIconType="llm_proxy"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateProxy(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateProxy}
+              agentType="llm_proxy"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateProxy(null);
               }}
             />
 

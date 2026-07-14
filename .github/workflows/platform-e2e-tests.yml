@@ -325,7 +325,7 @@ jobs:
   # build, and then polls the registry for the pushed image up to
   # image-pull-timeout-seconds (900s). That overlap is a win when the build
   # succeeds, but when it FAILS the K8s job would otherwise burn the full ~15-min
-  # poll deadline on a 16vcpu runner for an image that will never arrive. The
+  # poll deadline on an 8vcpu runner for an image that will never arrive. The
   # merge is already blocked by the failed required "Build ... Image" check, so
   # cancelling the run here only reclaims that wasted runner time — it changes no
   # merge outcome. (The lite and quickstart jobs already fast-fail: they `needs`
@@ -353,10 +353,14 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One 16vcpu environment, no sharding: every extra shard pays the full
+  # One 8vcpu environment, no sharding: every extra shard pays the full
   # ~4min environment setup again to split a few minutes of tests, and bigger
   # runners don't speed the tests up either (the serial spec groups set the
-  # floor). The required check is "Merge E2E Test Reports", not this job.
+  # floor). 8vcpu is enough because the job is wait-bound, not compute-bound:
+  # setup blocks on image pulls and pod readiness probes, and the tests are
+  # API-bound Playwright specs. 16vcpu was sized for the old full-suite
+  # sharded runs, and measurements showed 16 vs 32 vcpu made no difference
+  # to test time. The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
@@ -369,9 +373,9 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
-    # hung run instead of letting it burn a 16vcpu runner for the GitHub default.
+    # hung run instead of letting it burn a runner for the GitHub default.
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -645,7 +649,7 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.

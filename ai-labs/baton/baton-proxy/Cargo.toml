@@ -1,0 +1,51 @@
+[package]
+name = "baton-proxy"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Inference-layer proxy + approval MCP server that gate out-of-audience tool calls on a human, over baton-core"
+
+# Standalone on purpose, like baton-core and baton-check: a harness sidecar for
+# the baton prototype, not part of the archestra-bench workspace.
+[workspace]
+
+[features]
+# The demo agent pulls a full agent framework (rig-core) and a real LLM; keep it
+# off the default build so the proxy/approver and their tests stay lean.
+default = []
+demo = [
+    "dep:rig-core",
+    "rmcp/client",
+    "rmcp/transport-streamable-http-client",
+    "rmcp/transport-streamable-http-client-reqwest",
+]
+
+[dependencies]
+baton-core = { path = "../baton-core" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std", "net"] }
+axum = "0.8"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json"] }
+rmcp = { version = "1.7", features = ["server", "macros", "elicitation", "transport-streamable-http-server"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+thiserror = "2"
+tokio-util = "0.7"
+rig-core = { version = "0.39", optional = true }
+
+[[bin]]
+name = "baton-proxy"
+path = "src/bin/proxy.rs"
+
+[[bin]]
+name = "baton-approver"
+path = "src/bin/approver.rs"
+
+[[bin]]
+name = "baton-demo-agent"
+path = "src/bin/demo_agent.rs"
+required-features = ["demo"]

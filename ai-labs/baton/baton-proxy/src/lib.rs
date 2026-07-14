@@ -8,19 +8,16 @@
 //! the blocked call never reaches the harness and is never executed.
 //!
 //! No authorities are registered — a flow the contracts cannot prove is
-//! blocked, fail closed. The prototype's human-approval flow (`approval`,
-//! `bin/approver.rs`, `bin/demo_agent.rs`) predates current baton-core's
-//! authority model and is parked behind the `demo` cargo feature.
-//! TODO(baton-kagent-poc follow-up): port the approval flow to External
-//! authorities (`PendingApproval` + `apply_approval`) and un-gate it.
+//! blocked, fail closed. The prototype's human-approval flow (the
+//! `baton-approver` / `baton-demo-agent` binaries) predates current baton-core's
+//! authority model; it lives in PR #6551 on `main` and will return as a port to
+//! External authorities (`PendingApproval` + `apply_approval`).
 //!
 //! Nothing here is cryptographic: authenticity rests on the harness only
 //! recording tool results that real MCP servers returned. See `README.md`.
 //!
 //! [`Trajectory`]: baton_core::Trajectory
 
-#[cfg(feature = "demo")]
-pub mod approval;
 pub mod config;
 pub mod replay;
 pub mod rewrite;

@@ -20,7 +20,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::trace;
 
 use crate::audit::AuthorityName;
@@ -31,7 +31,7 @@ use crate::transition::EndorseDelta;
 /// Bytes the engine never inspects — except where a contract's argument role
 /// (e.g. recipients) requires a typed reading, which is explicit at the use
 /// site.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct OpaqueValue(String);
 
@@ -50,7 +50,7 @@ impl OpaqueValue {
 /// Effects are deliberately absent — they are monotone *trajectory* state
 /// ([`crate::audit::TrajectoryState`]), not a property of a value. Audit is
 /// likewise control-plane history, not a label field.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ValueLabel {
     pub audience: Audience,
     pub trust: Trust,
@@ -98,7 +98,7 @@ impl fmt::Display for ValueLabel {
 /// Reference to a registered transformer: immutable identity plus version.
 /// Provenance and attribution data — registration itself lives in the engine's
 /// transformer registry.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct TransformerRef {
     pub id: String,
     pub version: u32,
@@ -191,12 +191,9 @@ impl ValueStore {
         self.values.get(id_index(id)).ok_or(UnknownValue { id })
     }
 
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
         self.values.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
     }
 
     /// Every value reachable from `seeds` by following provenance edges — the

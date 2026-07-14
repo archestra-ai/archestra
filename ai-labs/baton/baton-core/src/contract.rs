@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tracing::trace;
 
 use crate::ToolName;
@@ -12,7 +12,7 @@ use crate::dimension::{Effect, Effects, KnownTrust, UserId};
 use crate::preset::Adequacy;
 use crate::value::ValueLabel;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub enum AudienceRule {
     #[default]
     Unrestricted,
@@ -21,7 +21,7 @@ pub enum AudienceRule {
     RecipientsWithinContext,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub enum AttentionRule {
     #[default]
     NotRequired,
@@ -31,7 +31,7 @@ pub enum AttentionRule {
 }
 
 /// What a tool demands before it may run.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Requirements {
     /// Minimum *known* trust of the flow. `Trust::UNKNOWN` never satisfies
     /// any bar — deliberately over [`KnownTrust`], so "unknown suffices"
@@ -48,7 +48,7 @@ pub struct Requirements {
 }
 
 /// A requirement that is provably not met.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Breach {
     TrustBelow {
         required: KnownTrust,
@@ -119,7 +119,7 @@ impl fmt::Display for Breach {
 /// A requirement that cannot be proven either way because something is
 /// `Unknown`. Kept apart from [`Breach`] so policy can treat missing
 /// knowledge differently from proven violations.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Unprovable {
     TrustUnknown,
     AudienceUnknown,
@@ -143,7 +143,7 @@ impl fmt::Display for Unprovable {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Violation {
     Breach(Breach),
     Unprovable(Unprovable),
@@ -197,7 +197,7 @@ impl Violation {
 /// The raw output of the sink check. Internal: a consumer receives a
 /// [`crate::engine::Decision`] (or [`crate::engine::ResponseDecision`]), which
 /// folds this verdict together with the engine's remedy machinery.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
 pub(crate) enum Verdict {
     Allow,

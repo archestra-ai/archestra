@@ -64,11 +64,6 @@ impl<'a> TrajectoryView<'a> {
         self.store.get(value).ok().map(|stored| stored.label())
     }
 
-    /// The provenance of a value the trajectory admitted, if any.
-    pub fn provenance(&self, value: ValueId) -> Option<&Provenance> {
-        self.store.get(value).ok().map(|stored| stored.provenance())
-    }
-
     /// The transitive provenance ancestry of `value` — the value and every
     /// value it derives from — as (id, label, provenance) triples, so an inline
     /// authority can refuse to endorse a value with suspicious ancestry even

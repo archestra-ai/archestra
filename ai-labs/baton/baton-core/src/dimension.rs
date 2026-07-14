@@ -15,12 +15,12 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::preset::{Adequacy, HasBottom, JoinSet, MeetSet, MinLevel};
 
 /// A user known to the surrounding system (ACLs, directories, ...).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct UserId(String);
 
@@ -53,7 +53,7 @@ impl fmt::Display for UserId {
 ///
 /// [`PUBLIC`]: Audience::PUBLIC
 /// [`UNKNOWN`]: Audience::UNKNOWN
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Audience(MeetSet<UserId>);
 
@@ -110,7 +110,7 @@ impl fmt::Display for Audience {
 }
 
 /// A trust judgement that has actually been made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum KnownTrust {
     Suspicious,
     Trusted,
@@ -144,7 +144,7 @@ impl fmt::Display for KnownTrust {
 /// The fold keeps the strongest bad evidence: definite suspicion dominates
 /// missing knowledge, which dominates trust
 /// (`Suspicious ∧ Unknown = Suspicious`, `Trusted ∧ Unknown = Unknown`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Trust(MinLevel<KnownTrust>);
 
@@ -187,7 +187,7 @@ impl fmt::Display for Trust {
 }
 
 /// A side effect a tool has on the world outside the trajectory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Effect {
     Mutation,
     Egress,
@@ -208,7 +208,7 @@ impl fmt::Display for Effect {
 /// Union fold; [`none`](Effects::none) (`Has(∅)`) is the identity, and
 /// [`UNKNOWN`](Effects::UNKNOWN) (an unannotated tool ran, so anything may have
 /// happened) is absorbing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Effects(JoinSet<Effect>);
 

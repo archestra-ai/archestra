@@ -12,7 +12,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::contract::Violation;
 use crate::dimension::Effects;
@@ -21,7 +21,7 @@ use crate::transition::EndorseDelta;
 use crate::value::{TransformerRef, ValueLabel};
 
 /// Name of a registered authority.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct AuthorityName(String);
 
@@ -42,7 +42,7 @@ impl fmt::Display for AuthorityName {
 }
 
 /// Why a transition attempt did not apply.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum TransitionFailure {
     /// The source state no longer matches the transition's declared
     /// precondition.
@@ -64,7 +64,7 @@ impl fmt::Display for TransitionFailure {
 }
 
 /// Outcome of one transition attempt.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum TransitionOutcome {
     Applied,
     Failed(TransitionFailure),
@@ -73,7 +73,7 @@ pub enum TransitionOutcome {
 /// Which check a waiver loosened. `Acknowledgment` records an
 /// acknowledge-only fact (unprovable effects, a missing contract) accepted on
 /// the record without loosening anything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum WaiverKind {
     Effects,
     Confirmation,

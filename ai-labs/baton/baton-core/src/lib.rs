@@ -58,10 +58,10 @@ mod test_strategies;
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Identifier of a tool exposed to the agent.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct ToolName(String);
 

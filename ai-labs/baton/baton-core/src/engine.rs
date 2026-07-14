@@ -123,11 +123,6 @@ impl ExecutionToken {
         self.action
     }
 
-    /// The tool this token authorizes, verbatim as evaluated.
-    pub fn tool(&self) -> &ToolName {
-        &self.tool
-    }
-
     pub(crate) fn into_parts(self) -> TokenParts {
         TokenParts {
             action: self.action,

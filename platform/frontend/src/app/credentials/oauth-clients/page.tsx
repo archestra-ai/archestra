@@ -16,6 +16,7 @@ import {
 } from "@/app/mcp/credentials/oauth-clients/page";
 import { useSetCredentialsAction } from "@/components/credentials-action-context";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
@@ -71,6 +72,11 @@ type UnifiedRow =
 export default function UnifiedOAuthClientsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
+  // Provider-key filter is LLM-specific. When set, it deep-links from a
+  // provider API key ("view clients using this key") and hides MCP/A2A clients,
+  // which have no provider keys.
+  const providerApiKeyIdFilter = searchParams.get("providerApiKeyId") || "all";
+  const providerKeyFilterActive = providerApiKeyIdFilter !== "all";
 
   const {
     data: mcpClients = [],
@@ -83,7 +89,13 @@ export default function UnifiedOAuthClientsPage() {
     isPending: llmPending,
     isLoadingError: llmError,
     refetch: refetchLlm,
-  } = useLlmOauthClients({ search: search || undefined, toastOnError: false });
+  } = useLlmOauthClients({
+    search: search || undefined,
+    providerApiKeyId: providerKeyFilterActive
+      ? providerApiKeyIdFilter
+      : undefined,
+    toastOnError: false,
+  });
 
   // MCP clients scope to gateways and/or A2A agents; LLM clients scope to LLM
   // proxies and carry provider-key mappings.
@@ -109,6 +121,8 @@ export default function UnifiedOAuthClientsPage() {
 
   const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
   const [llmCreateOpen, setLlmCreateOpen] = useState(false);
+  const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
+    useState(false);
   const [editing, setEditing] = useState<UnifiedRow | null>(null);
   const [rotating, setRotating] = useState<UnifiedRow | null>(null);
   const [deleting, setDeleting] = useState<UnifiedRow | null>(null);
@@ -144,10 +158,12 @@ export default function UnifiedOAuthClientsPage() {
 
   const rows: UnifiedRow[] = useMemo(
     () => [
-      ...mcpClients.map((c) => ({ kind: "mcp" as const, ...c })),
+      ...(providerKeyFilterActive
+        ? []
+        : mcpClients.map((c) => ({ kind: "mcp" as const, ...c }))),
       ...llmClients.map((c) => ({ kind: "llm" as const, ...c })),
     ],
-    [mcpClients, llmClients],
+    [mcpClients, llmClients, providerKeyFilterActive],
   );
 
   const columns: ColumnDef<UnifiedRow>[] = useMemo(
@@ -266,6 +282,27 @@ export default function UnifiedOAuthClientsPage() {
           searchFields={["name"]}
           paramName="search"
         />
+        <LlmProviderApiKeyDropdown
+          availableKeys={providerApiKeys}
+          selectedApiKeyId={
+            providerKeyFilterActive ? providerApiKeyIdFilter : null
+          }
+          open={providerApiKeyFilterOpen}
+          onOpenChange={setProviderApiKeyFilterOpen}
+          onSelectKey={(value) => {
+            updateQueryParams({ providerApiKeyId: value, page: "1" });
+            setProviderApiKeyFilterOpen(false);
+          }}
+          triggerVariant="select"
+          triggerClassName="w-full sm:w-[280px] h-9 text-sm"
+          popoverClassName="w-[var(--radix-popover-trigger-width)]"
+          allOptionLabel="All provider API keys"
+          allOptionSelected={!providerKeyFilterActive}
+          onSelectAllOption={() => {
+            updateQueryParams({ providerApiKeyId: null, page: "1" });
+            setProviderApiKeyFilterOpen(false);
+          }}
+        />
       </div>
 
       {mcpError || llmError ? (
@@ -282,9 +319,15 @@ export default function UnifiedOAuthClientsPage() {
           data={rows}
           isLoading={mcpPending || llmPending}
           emptyMessage="No OAuth clients registered. Create one for an application that authenticates to your agents, MCP gateways, or LLM proxies."
-          hasActiveFilters={Boolean(search)}
+          hasActiveFilters={Boolean(search || providerKeyFilterActive)}
           filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
-          onClearFilters={() => updateQueryParams({ search: null, page: "1" })}
+          onClearFilters={() =>
+            updateQueryParams({
+              search: null,
+              providerApiKeyId: null,
+              page: "1",
+            })
+          }
         />
       )}
 

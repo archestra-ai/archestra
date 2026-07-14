@@ -154,8 +154,9 @@ const navigationItems = [
     icon: Key,
     label: "Credentials",
     value: "credentials",
-    keywords: "virtual keys oauth clients client credentials llm",
-    href: "/llm/credentials/virtual-keys",
+    keywords:
+      "virtual keys oauth clients client credentials llm mcp gateways agents a2a",
+    href: "/credentials/oauth-clients",
   },
   {
     icon: MessagesSquare,

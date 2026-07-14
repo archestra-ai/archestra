@@ -745,7 +745,7 @@ function PassthroughKeyField({
       <p className="text-[12.5px] leading-snug text-muted-foreground">
         Create a passthrough virtual key on the{" "}
         <Link
-          href="/llm/credentials/virtual-keys"
+          href="/credentials/virtual-keys"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Virtual API Keys
@@ -772,7 +772,7 @@ function PassthroughKeyField({
         </button>{" "}
         or create one on the{" "}
         <Link
-          href="/llm/credentials/virtual-keys"
+          href="/credentials/virtual-keys"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Virtual API Keys

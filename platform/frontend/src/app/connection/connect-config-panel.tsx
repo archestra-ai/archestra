@@ -551,7 +551,7 @@ function ConfigDownloadStep({
         You don't have permission to create virtual keys. Ask an admin to
         generate a configuration profile, or create the keys on the{" "}
         <Link
-          href="/llm/credentials/virtual-keys"
+          href="/credentials/virtual-keys"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Virtual API Keys

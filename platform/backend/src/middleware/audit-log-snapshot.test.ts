@@ -356,6 +356,11 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(snapshot).toHaveProperty("scope", "org");
     expect(Array.isArray(snapshot?.delegationTargets)).toBe(true);
     expect(typeof snapshot?.createdAt).toBe("string");
+    // Snapshot the live model FK (+ resolved name), not the deprecated
+    // `llmModel` column — otherwise a model change diffs to nothing (#6583).
+    expect(snapshot).toHaveProperty("modelId");
+    expect(snapshot).toHaveProperty("model");
+    expect(snapshot).not.toHaveProperty("llmModel");
   });
 
   test("AgentModel.findByIdForAudit returns null for wrong org", async ({

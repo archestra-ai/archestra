@@ -145,6 +145,22 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "agentId",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Syncing (replace-all) or removing an agent's delegation targets is a
+  // mutation of the agent, not a create. Without these entries the POST/DELETE
+  // fall through to the unknown.* fallback ("Unknown create" with an empty
+  // resource, #6583). Map them to the agent so the diff shows delegationTargets.
+  "/api/agents/:agentId/delegations": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/agents/:agentId/delegations/:targetAgentId": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
 
   "/api/agent-tools/:id": {
     resourceType: "agentTool",

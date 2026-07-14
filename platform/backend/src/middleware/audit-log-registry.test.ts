@@ -38,6 +38,30 @@ describe("resolveAuditableRouteConfig", () => {
     expect(typeof resolved?.cfg.fetchById).toBe("function");
   });
 
+  test("agent delegations sync route resolves to agent.updated, not the unknown.* create fallback", () => {
+    // POST /api/agents/:agentId/delegations replaces an agent's delegation
+    // targets — a mutation of the agent, not a create. Without an explicit
+    // entry it recorded "Unknown create" with an empty resource (#6583).
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:agentId/delegations",
+    );
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.resourceIdParam).toBe("agentId");
+    expect(resolved?.cfg.action).toBe("agent.updated");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
+  test("agent single-delegation removal route resolves to agent.updated", () => {
+    const resolved = resolveAuditableRouteConfig(
+      "/api/agents/:agentId/delegations/:targetAgentId",
+    );
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.resourceIdParam).toBe("agentId");
+    expect(resolved?.cfg.action).toBe("agent.updated");
+  });
+
   test("skill reset route uses updated action instead of POST create fallback", () => {
     const resolved = resolveAuditableRouteConfig("/api/skills/:id/reset");
     expect(resolved?.viaWalkUp).toBe(false);

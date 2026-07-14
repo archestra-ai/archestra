@@ -2943,19 +2943,37 @@ class AgentModel {
     // Fetch relational data so audit diffs capture tool/KB/team changes —
     // not just main-table columns.  Each sub-query is lightweight (index
     // lookup by agent_id) and the parallel fetch keeps latency low.
-    const [tools, teams, labels, knowledgeBaseIds, connectorIds, delegations] =
-      await Promise.all([
-        AgentToolModel.getToolsForAgent(id),
-        AgentTeamModel.getTeamDetailsForAgent(id),
-        AgentLabelModel.getLabelsForAgent(id),
-        AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
-        AgentConnectorAssignmentModel.getConnectorIds(id),
-        AgentToolModel.getDelegationTargets(id),
-      ]);
+    const [
+      tools,
+      teams,
+      labels,
+      knowledgeBaseIds,
+      connectorIds,
+      delegations,
+      modelRows,
+    ] = await Promise.all([
+      AgentToolModel.getToolsForAgent(id),
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+      AgentConnectorAssignmentModel.getConnectorIds(id),
+      AgentToolModel.getDelegationTargets(id),
+      // Resolve the human-facing model name (e.g. "gpt-4") so a model change
+      // shows "model: gpt-4 → claude-opus" rather than a bare UUID diff.
+      row.modelId
+        ? db
+            .select({ modelName: schema.modelsTable.modelId })
+            .from(schema.modelsTable)
+            .where(eq(schema.modelsTable.id, row.modelId))
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
 
     const delegationTargets = [...delegations]
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((d) => ({ id: d.id, name: d.name }));
+
+    const modelName = modelRows[0]?.modelName ?? null;
 
     return {
       id: row.id,
@@ -2967,7 +2985,12 @@ class AgentModel {
       systemPrompt: row.systemPrompt ?? null,
       slug: row.slug ?? null,
       isDefault: row.isDefault,
-      llmModel: row.llmModel ?? null,
+      // The agent's configured model. `modelId` (the live FK) drives diff
+      // detection; `model` is its resolved human name for a readable diff.
+      // The legacy `llmModel` text column is deprecated (never read/written), so
+      // snapshotting it hid every model change behind an empty diff (#6583).
+      modelId: row.modelId ?? null,
+      model: modelName,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       tools: tools.map((t) => t.name).sort(),

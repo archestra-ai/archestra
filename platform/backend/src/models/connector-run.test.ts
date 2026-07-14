@@ -128,7 +128,9 @@ describe("ConnectorRunModel", () => {
       await makeConnectorRun(connector.id);
       await makeConnectorRun(connector.id);
 
-      const count = await ConnectorRunModel.countByConnector(connector.id);
+      const count = await ConnectorRunModel.countByConnector({
+        connectorId: connector.id,
+      });
 
       expect(count).toBe(3);
     });
@@ -142,7 +144,9 @@ describe("ConnectorRunModel", () => {
       const kb = await makeKnowledgeBase(org.id);
       const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
 
-      const count = await ConnectorRunModel.countByConnector(connector.id);
+      const count = await ConnectorRunModel.countByConnector({
+        connectorId: connector.id,
+      });
 
       expect(count).toBe(0);
     });
@@ -161,7 +165,9 @@ describe("ConnectorRunModel", () => {
       await makeConnectorRun(connector2.id);
       await makeConnectorRun(connector2.id);
 
-      const count = await ConnectorRunModel.countByConnector(connector1.id);
+      const count = await ConnectorRunModel.countByConnector({
+        connectorId: connector1.id,
+      });
 
       expect(count).toBe(1);
     });
@@ -322,7 +328,9 @@ describe("ConnectorRunModel", () => {
 
       await ConnectorRunModel.deleteByConnector(connector.id);
 
-      const count = await ConnectorRunModel.countByConnector(connector.id);
+      const count = await ConnectorRunModel.countByConnector({
+        connectorId: connector.id,
+      });
       expect(count).toBe(0);
     });
 
@@ -342,8 +350,12 @@ describe("ConnectorRunModel", () => {
 
       await ConnectorRunModel.deleteByConnector(connector1.id);
 
-      const count1 = await ConnectorRunModel.countByConnector(connector1.id);
-      const count2 = await ConnectorRunModel.countByConnector(connector2.id);
+      const count1 = await ConnectorRunModel.countByConnector({
+        connectorId: connector1.id,
+      });
+      const count2 = await ConnectorRunModel.countByConnector({
+        connectorId: connector2.id,
+      });
       expect(count1).toBe(0);
       expect(count2).toBe(2);
     });
@@ -1017,6 +1029,46 @@ describe("ConnectorRunModel", () => {
       const result = await ConnectorRunModel.finalizeBatchesIfComplete(run.id);
 
       expect(result?.status).toBe("failed");
+    });
+  });
+  describe("countRunsSince", () => {
+    test("counts only the requested run family within the window", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+      // One recent run per family, plus a permission run outside the window.
+      await makeConnectorRun(connector.id, { startedAt: new Date() });
+      await makeConnectorRun(connector.id, {
+        startedAt: new Date(),
+        runType: "permission",
+      });
+      await makeConnectorRun(connector.id, {
+        startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        runType: "permission",
+      });
+
+      // The families never charge each other's resume budget: a connector's
+      // scheduled permission cadence must not count against content resumes.
+      expect(
+        await ConnectorRunModel.countRunsSince({
+          connectorId: connector.id,
+          seconds: 60 * 60,
+          runType: "content",
+        }),
+      ).toBe(1);
+      expect(
+        await ConnectorRunModel.countRunsSince({
+          connectorId: connector.id,
+          seconds: 60 * 60,
+          runType: "permission",
+        }),
+      ).toBe(1);
     });
   });
 });

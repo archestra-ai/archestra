@@ -42,6 +42,11 @@ const SITE_NOTIFICATION_READ_PERMISSION: Permissions = {
   siteNotification: ["read"],
 };
 
+// Target for the "skip to main content" link (WCAG 2.4.1 Bypass Blocks). The
+// <main> element carries this id and tabIndex={-1} so activating the link moves
+// keyboard focus past the sidebar navigation and into the page content.
+const MAIN_CONTENT_ID = "main-content";
+
 interface AppShellProps {
   children: React.ReactNode;
 }
@@ -121,10 +126,15 @@ export function AppShell({ children }: AppShellProps) {
       ) : (
         <NavigationStatusProvider>
           <SidebarProvider defaultOpen={!shouldCollapse}>
+            <SkipToContentLink />
             <AppSidebar />
             <NavAwareSidebarCircleToggle />
             <MaintenanceModeOverlay />
-            <main className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto">
+            <main
+              id={MAIN_CONTENT_ID}
+              tabIndex={-1}
+              className="h-screen w-full flex flex-col bg-background min-w-0 relative overflow-y-auto focus:outline-none"
+            >
               <ConnectivityBar />
               <EnvSiteNotificationBar />
               {notification && (
@@ -180,6 +190,19 @@ function NavAwareSidebarCircleToggle() {
       loading={isNavigating}
       showDot={showCollapsedToggleDot}
     />
+  );
+}
+
+// Visually hidden until focused; the first tab stop on every authenticated
+// page, letting keyboard and screen-reader users jump past the sidebar nav.
+function SkipToContentLink() {
+  return (
+    <a
+      href={`#${MAIN_CONTENT_ID}`}
+      className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-md focus:ring-2 focus:ring-ring"
+    >
+      Skip to main content
+    </a>
   );
 }
 

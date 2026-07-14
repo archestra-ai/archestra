@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPathPattern": "/microsoft-365-copilot/copilot/conversations/[^/]+/chatOverStream",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/event-stream"
+    },
+    "body": "data: {\"messages\":[{\"@odata.type\":\"#microsoft.graph.copilotConversationResponseMessage\",\"text\":\"Hello from \"}]}\n\ndata: {\"messages\":[{\"@odata.type\":\"#microsoft.graph.copilotConversationResponseMessage\",\"text\":\"Hello from Microsoft 365 Copilot (WireMock).\"}]}\n\ndata: [DONE]\n\n"
+  }
+}

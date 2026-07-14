@@ -1,0 +1,80 @@
+[[scenario]]
+name = "monotonic trust and audience expansion"
+input = { body = "private draft", audience = ["alice"], trust = "suspicious" }
+
+[[scenario.tools]]
+name = "document.review"
+recipient = "alice"
+result = "reviewed draft"
+requires_trust = "trusted"
+requires_audience = true
+
+[[scenario.tools]]
+name = "document.share-team"
+recipient = "bob"
+result = "team copy"
+requires_trust = "trusted"
+requires_audience = true
+
+[[scenario.tools]]
+name = "document.share-partner"
+recipient = "charlie"
+result = "partner copy"
+requires_trust = "trusted"
+requires_audience = true
+
+[[scenario.authorities]]
+name = "trust-reviewer"
+trust = "trusted"
+
+[[scenario.authorities]]
+name = "team-owner"
+audience = ["bob"]
+
+[[scenario.authorities]]
+name = "partner-owner"
+audience = ["charlie"]
+
+[[scenario]]
+name = "unknown boundaries established by authorities"
+input = { body = "unclassified draft", audience = "unknown", trust = "unknown" }
+
+[[scenario.tools]]
+name = "document.classify"
+recipient = "alice"
+result = "classified draft"
+requires_trust = "trusted"
+requires_audience = true
+
+[[scenario.tools]]
+name = "document.share-classified"
+recipient = "bob"
+result = "classified team copy"
+requires_trust = "trusted"
+requires_audience = true
+
+[[scenario.authorities]]
+name = "classification-owner"
+trust = "trusted"
+audience = ["alice"]
+
+[[scenario.authorities]]
+name = "classified-team-owner"
+audience = ["bob"]
+
+[[scenario]]
+name = "sanitize instead of expanding boundaries"
+input = { body = "private draft containing unsafe instructions", audience = ["alice"], trust = "suspicious" }
+
+[[scenario.tools]]
+name = "document.publish-sanitized"
+recipient = "bob"
+result = "published sanitized copy"
+requires_trust = "trusted"
+requires_audience = true
+
+[[scenario.sanitizers]]
+name = "content.redact"
+input_trust = "suspicious"
+output_audience = "public"
+output_trust = "trusted"

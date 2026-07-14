@@ -215,3 +215,54 @@ describe("prepareMessagesForProvider — tool-call id sanitization", () => {
     expect(extractToolCallId(messages)).toBe("functions.search:0");
   });
 });
+
+describe("prepareMessagesForProvider — bedrock empty-content padding", () => {
+  const NO_CONTENT = "(no content)";
+
+  function hasNoContentPlaceholder(message: ChatMessage): boolean {
+    return Boolean(
+      message.parts?.some((p) => p.type === "text" && p.text === NO_CONTENT),
+    );
+  }
+
+  it("does not pad an assistant message whose only part is a dynamic-tool (e.g. the render_app seed)", () => {
+    // The owned-app render_app seed is a single `dynamic-tool` part. It is real
+    // provider-visible content (a tool_use block), so Bedrock must not treat the
+    // message as empty and append a bogus "(no content)" text part.
+    const [message] = prepareMessagesForProvider({
+      messages: [
+        {
+          role: "assistant",
+          parts: [
+            {
+              type: "dynamic-tool",
+              toolName: "archestra__render_app",
+              toolCallId: "call_render_1",
+              state: "output-available",
+              input: { appId: "402e041f-a78c-40a0-b8b3-a14d91633fce" },
+              output: { content: [{ type: "text", text: "app rendered" }] },
+            },
+          ],
+        },
+      ] as unknown as ChatMessage[],
+      provider: "bedrock",
+    });
+
+    expect(hasNoContentPlaceholder(message)).toBe(false);
+    expect(message.parts).toHaveLength(1);
+    expect(message.parts?.[0]?.type).toBe("dynamic-tool");
+  });
+
+  it("still pads a genuinely empty assistant message with a placeholder", () => {
+    // Regression guard: the dynamic-tool fix must not disable the workaround for
+    // an assistant turn that really has no provider-visible content.
+    const [message] = prepareMessagesForProvider({
+      messages: [
+        { role: "assistant", parts: [{ type: "text", text: "" }] },
+      ] as unknown as ChatMessage[],
+      provider: "bedrock",
+    });
+
+    expect(hasNoContentPlaceholder(message)).toBe(true);
+  });
+});

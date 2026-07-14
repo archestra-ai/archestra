@@ -17,6 +17,7 @@ import {
   buildAppRenderResult,
   buildExternalAppRenderResult,
 } from "@/services/apps/app-render-result";
+import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
 import { ApiError } from "@/types";
 import { externalAppLabel } from "@/utils/external-app-label";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
@@ -284,7 +285,7 @@ async function resolveDefaultChatAgentId(params: {
 /** Markdown greeting seeded when an owned app is opened in chat. */
 function buildAppOpenedGreeting(name: string): string {
   return (
-    `Here's **${name}**.\n\n` +
+    `Here's **${escapeAppNameForModelText(name)}**.\n\n` +
     `Want to change the app? Tell me how!\n\n` +
     `Want to use the app? Use the UI 👉, or ask me to!`
   );

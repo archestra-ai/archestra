@@ -14,6 +14,7 @@ import type {
   Conversation,
   ConversationOrigin,
   InsertConversation,
+  MessageFeedback,
   ToolExposureMode,
   UpdateConversation,
 } from "@/types";
@@ -647,7 +648,10 @@ class ConversationModel {
       // comparison, so a read must never leave lastReadAt behind
       // lastMessageAt.
       .set({
-        lastReadAt: sql`GREATEST(${new Date()}::timestamp, ${schema.conversationsTable.lastMessageAt})`,
+        // now() (DB clock), not a JS Date param: node-postgres serializes
+        // Dates in host-local time and the ::timestamp cast drops the offset,
+        // shifting the stamp by the host's UTC offset on non-UTC hosts.
+        lastReadAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastMessageAt})`,
       })
       .where(
         and(
@@ -767,6 +771,7 @@ function shouldReturnPersistedMessageRow(message: {
 function addMessagePersistenceMetadata(message: {
   id: string;
   content: unknown;
+  feedback: MessageFeedback | null;
   createdAt: Date;
 }) {
   const content =
@@ -786,6 +791,9 @@ function addMessagePersistenceMetadata(message: {
     metadata: {
       ...metadata,
       createdAt: message.createdAt.toISOString(),
+      // The column is authoritative: content JSON may carry a stale copied
+      // value (e.g. a forked conversation), so always override it here.
+      feedback: message.feedback ?? undefined,
     },
   };
 }

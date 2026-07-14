@@ -38,6 +38,7 @@ export const resources = [
   "mcpRegistry",
   "mcpServerInstallation",
   "knowledgeSource",
+  "knowledgeSourceAutoSync",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "environment",
@@ -104,6 +105,7 @@ export const resourceLabels: Record<Resource, string> = {
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
   knowledgeSource: "Knowledge Sources",
+  knowledgeSourceAutoSync: "Auto-Sync Permissions Connectors",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   environment: "Environments",
@@ -183,6 +185,8 @@ export const resourceDescriptions: Record<Resource, string> = {
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
     "Knowledge sources including knowledge bases and connectors for RAG-based document retrieval",
+  knowledgeSourceAutoSync:
+    "Knowledge connectors with auto-sync permissions — access mirrors the source system, and managing them exposes upstream identities and group memberships",
   knowledgeSettings:
     "Knowledge settings (embedding and reranking models configuration)",
   simpleView: "Controls if the simple view of the app is enabled",
@@ -235,7 +239,11 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeSource", "knowledgeSettings"],
+  Knowledge: [
+    "knowledgeSource",
+    "knowledgeSourceAutoSync",
+    "knowledgeSettings",
+  ],
   Other: [
     "chat",
     "project",

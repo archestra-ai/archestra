@@ -63,6 +63,7 @@ export function ChatPlaceholdersEditor({
         {placeholders.map((placeholder, index) => (
           <div key={keysRef.current[index]} className="flex items-center gap-2">
             <Input
+              aria-label={`Chat placeholder ${index + 1}`}
               value={placeholder}
               onChange={(e) => handleChange(index, e.target.value)}
               placeholder={`Placeholder ${index + 1}`}
@@ -70,6 +71,7 @@ export function ChatPlaceholdersEditor({
             />
             <Button
               type="button"
+              aria-label="Remove placeholder"
               variant="ghost"
               size="sm"
               onClick={() => handleRemove(index)}

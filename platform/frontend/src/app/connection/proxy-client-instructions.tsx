@@ -59,6 +59,7 @@ const PROVIDER_ICONS: Record<
   minimax: { bg: "#0ea5a4", fg: "#fff", glyph: "M" },
   zhipuai: { bg: "#dc2626", fg: "#fff", glyph: "Z" },
   "github-copilot": { bg: "#24292f", fg: "#fff", glyph: "gh" },
+  "microsoft-365-copilot": { bg: "#0078d4", fg: "#fff", glyph: "ms" },
 };
 
 /** Original upstream base URLs — shown struck through next to the proxy URL. */
@@ -81,6 +82,7 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
   minimax: "https://api.minimax.io/v1/",
   zhipuai: "https://open.bigmodel.cn/api/",
   "github-copilot": "https://api.githubcopilot.com/",
+  "microsoft-365-copilot": "https://graph.microsoft.com/beta/",
 };
 
 interface ProxyClientInstructionsProps {
@@ -743,7 +745,7 @@ function PassthroughKeyField({
       <p className="text-[12.5px] leading-snug text-muted-foreground">
         Create a passthrough virtual key on the{" "}
         <Link
-          href="/llm/credentials/virtual-keys"
+          href="/credentials/virtual-keys"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Virtual API Keys
@@ -770,7 +772,7 @@ function PassthroughKeyField({
         </button>{" "}
         or create one on the{" "}
         <Link
-          href="/llm/credentials/virtual-keys"
+          href="/credentials/virtual-keys"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Virtual API Keys

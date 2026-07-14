@@ -593,7 +593,7 @@ test("gemini: render_app-seeded history gets a leading user turn so contents don
   expect(JSON.stringify(toolCall?.input)).toContain(RENDER_APP_APP_ID);
 });
 
-test("non-gemini: render_app-seeded history keeps the assistant tool-call first (no leading user turn injected)", async ({
+test("openai: render_app-seeded history keeps the assistant tool-call first (openai accepts an assistant-first turn, so no leading user turn is injected)", async ({
   makeAgent,
   makeConversation,
 }) => {
@@ -610,6 +610,70 @@ test("non-gemini: render_app-seeded history keeps the assistant tool-call first 
   });
 
   expect(modelMessages[0]?.role).toBe("assistant");
+});
+
+test("bedrock: render_app-seeded history gets a leading user turn so the assistant tool_use isn't rejected", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  // Real owned-app seed shape: render_app assistant tool-call, a separate
+  // greeting assistant message, then the user's first prompt.
+  const messages: ChatMessage[] = [
+    {
+      role: "assistant",
+      parts: [
+        {
+          type: "dynamic-tool",
+          toolName: "archestra__render_app",
+          toolCallId: "call_render_1",
+          state: "output-available",
+          input: { appId: RENDER_APP_APP_ID },
+          output: { content: [{ type: "text", text: "app rendered" }] },
+        },
+      ],
+    },
+    { role: "assistant", parts: [{ type: "text", text: "Here's the app." }] },
+    { role: "user", parts: [{ type: "text", text: "can I ask you things?" }] },
+  ] as unknown as ChatMessage[];
+
+  const { modelMessages } = await __test.buildModelMessagesForProvider({
+    messages,
+    provider: "bedrock",
+    conversationId: conversation.id,
+    sandboxAvailable: false,
+  });
+
+  // Bedrock's Converse API rejects a history that opens with an assistant
+  // tool_use ("`tool_use` ids were found without `tool_result` blocks
+  // immediately after"). Pin the full well-formed order: a leading user turn,
+  // the seed's tool-call immediately paired with its tool-result, the greeting,
+  // then the real prompt.
+  expect(modelMessages.map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+    "tool",
+    "assistant",
+    "user",
+  ]);
+
+  // The render_app seed is preserved (its result carries the app id app tools
+  // need), and the tool-call assistant message is NOT polluted with a bogus
+  // "(no content)" placeholder.
+  const toolCall = firstToolCall(modelMessages);
+  expect(toolCall?.toolName).toBe("archestra__render_app");
+  expect(JSON.stringify(toolCall?.input)).toContain(RENDER_APP_APP_ID);
+  const toolCallMessage = modelMessages[1];
+  expect(Array.isArray(toolCallMessage.content)).toBe(true);
+  expect(
+    (toolCallMessage.content as { type: string; text?: string }[]).some(
+      (part) => part.type === "text" && part.text === "(no content)",
+    ),
+  ).toBe(false);
 });
 
 test("gemini: a normal user-first history is left unchanged (no synthetic turn added)", async ({

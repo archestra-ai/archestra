@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import type { ChatSkillMetadata } from "@archestra/shared";
+import type { ChatMessageFeedback, ChatSkillMetadata } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -38,6 +38,7 @@ import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { collectBrowserToolCallIds } from "@/components/chat/chat-messages.utils";
+import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
@@ -110,16 +111,20 @@ import {
   useUpdateMemberDefaultModel,
 } from "@/lib/chat/chat.query";
 import { useChatAgentState } from "@/lib/chat/chat-agent-state.hook";
+import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import {
   useConversationShare,
   useForkConversation,
   useForkSharedConversation,
 } from "@/lib/chat/chat-share.query";
+import { classifyChatSubmitAction } from "@/lib/chat/chat-submit-action";
 import {
+  applyFeedbackToMessages,
   conversationStorageKeys,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
+  getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
@@ -136,6 +141,7 @@ import {
 } from "@/lib/chat/pending-tool-state";
 import {
   agentRequiresPerUserConnect,
+  agentToolsUnavailableForModel,
   deriveModelSource,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
@@ -776,6 +782,29 @@ export function ChatPageContent({
     chatModels,
   ]);
 
+  // A no-tools model (e.g. Microsoft 365 Copilot) paired with a tooled agent
+  // runs tool-less — the backend omits the tools — so an up-front notice
+  // above the composer replaces tools silently never firing.
+  const initialToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === initialAgentId),
+        selectedModelId: initialModel,
+        models: chatModels,
+      }),
+    [internalAgents, initialAgentId, initialModel, chatModels],
+  );
+
+  const conversationToolsUnavailable = useMemo(
+    () =>
+      agentToolsUnavailableForModel({
+        agent: internalAgents.find((a) => a.id === conversation?.agentId),
+        selectedModelId: conversation?.modelId,
+        models: chatModels,
+      }),
+    [internalAgents, conversation?.agentId, conversation?.modelId, chatModels],
+  );
+
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
     const modelId = conversation?.modelId ?? initialModel;
@@ -1010,6 +1039,74 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+
+  // `status` here is read from the shared session map, which each
+  // ChatSessionHook updates a render behind the real SDK status (via a
+  // post-render sync effect + notifySessionUpdate). Right after handleSubmit
+  // fires a direct send, the SDK is already busy but this `status` can still
+  // read "ready" for a tick or two. Without a synchronous guard, rapid
+  // follow-up submits take the direct-send path again and race each other
+  // inside the single useChat instance — every message reaches the model, but
+  // the concurrent sends clobber each other's optimistic user bubble, so most
+  // never render. This latch makes only the first submit of a turn direct-send;
+  // the rest enqueue and drain in order. Only meaningful with queueing on,
+  // which is the sole path able to absorb the extra submits.
+  const directSendPendingRef = useRef(false);
+  // The real SDK status leaving "ready" means the direct send has landed and
+  // this `status` snapshot will now gate follow-ups on its own; a conversation
+  // switch retargets everything. Either way the latch has done its job.
+  useEffect(() => {
+    if (status !== "ready") {
+      directSendPendingRef.current = false;
+    }
+  }, [status]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on conversation switch — the body writes a ref, so conversationId is a trigger, not a read
+  useEffect(() => {
+    directSendPendingRef.current = false;
+  }, [conversationId]);
+
+  // Thumbs feedback on assistant messages: optimistic apply + rollback against
+  // the originating session's setter, captured here so a conversation switch
+  // mid-request cannot retarget the rollback (or the invalidation, which the
+  // mutation keys off its per-call variables). The rollback rides this
+  // closure's own promise chain, NOT a mutation callback: switching
+  // conversations remounts the page and unmounts the mutation observer, which
+  // makes TanStack skip per-call callbacks — while the originating session
+  // (and this closure's setter into it) lives on in the global chat context.
+  const setChatMessageFeedback = useSetChatMessageFeedback();
+  const handleMessageFeedback = useCallback(
+    (messageId: string, feedback: ChatMessageFeedback | null) => {
+      const applyMessages = setMessages;
+      if (!applyMessages || !conversationId) {
+        return;
+      }
+      const previousFeedback = getMessageFeedback(
+        messages.find((message) => message.id === messageId),
+      );
+      applyMessages((current) =>
+        applyFeedbackToMessages({ messages: current, messageId, feedback }),
+      );
+      setChatMessageFeedback
+        .mutateAsync({ messageId, conversationId, feedback })
+        .catch(() => {
+          // Error toast already handled inside the mutation; only roll back —
+          // and only while the message still shows THIS request's value, so a
+          // slow failure can't overwrite a newer rating made in the meantime.
+          applyMessages((current) => {
+            const target = current.find((message) => message.id === messageId);
+            if (getMessageFeedback(target) !== feedback) {
+              return current;
+            }
+            return applyFeedbackToMessages({
+              messages: current,
+              messageId,
+              feedback: previousFeedback,
+            });
+          });
+        });
+    },
+    [setMessages, conversationId, messages, setChatMessageFeedback],
+  );
   // Message queueing is beta, gated by the ARCHESTRA_BETA master switch.
   const isMessageQueueEnabled = useFeature("betaEnabled") ?? false;
 
@@ -1116,22 +1213,28 @@ export function ChatPageContent({
 
   const syncPersistedMessageMetadata = useCallback(
     (persistedMessages: UIMessage[]) => {
-      if (!chatSession?.messages || !setMessages) {
+      if (!setMessages) {
         return;
       }
 
-      const mergedMessages = mergePersistedMessageMetadata({
-        liveMessages: chatSession.messages,
-        persistedMessages,
-      });
-
-      if (mergedMessages === chatSession.messages) {
-        return;
-      }
-
-      setMessages(mergedMessages);
+      // Merge against the SDK's CURRENT thread via the functional updater — NOT
+      // the `chatSession.messages` session snapshot, which trails the live SDK
+      // thread by a render (it is published through a post-render sync effect;
+      // see ChatSessionHook). During rapid queue drain that snapshot can be
+      // missing the just-sent user message; folding a stale, shorter snapshot
+      // and writing it back here would shrink the SDK thread and drop that
+      // in-flight user message, while the ongoing stream only re-adds the
+      // assistant reply — the user bubble then vanishes until a reload (the
+      // backend persisted it fine). mergePersistedMessageMetadata returns the
+      // same array reference when nothing changed, so React bails out.
+      setMessages((current) =>
+        mergePersistedMessageMetadata({
+          liveMessages: current,
+          persistedMessages,
+        }),
+      );
     },
-    [chatSession?.messages, setMessages],
+    [setMessages],
   );
 
   useEffect(() => {
@@ -1540,17 +1643,12 @@ export function ChatPageContent({
   ) => {
     e.preventDefault();
     if (isPlaywrightSetupVisible) return;
-    if (status === "submitted" || status === "streaming") {
-      // With queueing on, a submit while a response is in-flight queues the
-      // message; the conversation's ChatSessionHook sends it once the turn
-      // settles. (Stopping is the submit button's onClick, not a form
-      // submit.) With queueing off, the submit button doubles as Stop.
-      if (!isMessageQueueEnabled || !conversationId) {
-        handleStopStreaming();
-        // Throw to keep the textarea and draft intact — see onSubmit
-        // contract in ArchestraPromptInputProps.
-        throw new Error("stop-not-submit");
-      }
+
+    // Enqueue this submission instead of sending it now (throws on inputs that
+    // can't be queued, keeping the composer intact per the onSubmit contract).
+    // Only reached when queueing is on and a conversation exists.
+    const enqueueSubmission = () => {
+      if (!conversationId) return;
       if (message.files && message.files.length > 0) {
         toast.error(
           "Attachments can't be queued. Wait for the current response to finish, then send.",
@@ -1573,7 +1671,29 @@ export function ChatPageContent({
         agentId: conversation?.agentId ?? undefined,
         messageLength: message.text?.length ?? 0,
       });
+    };
+
+    const queueEnabled = isMessageQueueEnabled && !!conversationId;
+    const submitAction = classifyChatSubmitAction({
+      status,
+      queueEnabled,
+      directSendPending: directSendPendingRef.current,
+    });
+
+    if (submitAction === "stop") {
+      // Queueing off: the submit button doubles as Stop while a turn streams.
+      // (Stopping is the submit button's onClick, not a form submit.) Throw to
+      // keep the textarea and draft intact — see onSubmit contract in
+      // ArchestraPromptInputProps.
+      handleStopStreaming();
+      throw new Error("stop-not-submit");
+    }
+
+    if (submitAction === "queue") {
+      // Streaming (or a direct send is still settling): queue the message; the
+      // conversation's ChatSessionHook sends it once the turn settles.
       // Returning normally clears the textarea and draft, like a send.
+      enqueueSubmission();
       return;
     }
 
@@ -1656,6 +1776,14 @@ export function ChatPageContent({
         ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
+    // Mark the turn as in flight synchronously so follow-up submits queue
+    // instead of racing this send while the page's `status` catches up. Cleared
+    // by the status/conversation effects above. Only latch when queueing can
+    // absorb the overflow; otherwise leave the pre-existing (queue-off)
+    // behavior untouched.
+    if (queueEnabled) {
+      directSendPendingRef.current = true;
+    }
 
     trackEvent("message_sent", {
       conversationId,
@@ -2346,6 +2474,7 @@ export function ChatPageContent({
       onClosePanel={closeRightPanel}
     >
       <div className="flex flex-col h-full w-full min-h-0">
+        <ChatStatusAnnouncer status={status} />
         {/* Full-width top bar: title + the Files/Browser/Apps tab strip. It
             sits above the [chat | panel] split so the panel's resize divider
             only spans the content area below it. */}
@@ -2378,7 +2507,15 @@ export function ChatPageContent({
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex flex-col h-full min-h-0">
-              <StreamTimeoutWarning status={status} messages={messages} />
+              <StreamTimeoutWarning
+                status={status}
+                transportActivitySequence={
+                  chatSession?.transportActivitySequence ?? 0
+                }
+                responseProgressSequence={
+                  chatSession?.responseProgressSequence ?? 0
+                }
+              />
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
@@ -2455,6 +2592,12 @@ export function ChatPageContent({
                           optimisticToolCalls={optimisticToolCalls}
                           isLoadingConversation={isLoadingConversation}
                           onMessagesUpdate={setMessages}
+                          onMessageFeedback={
+                            // No thumbs until the live session's setter exists —
+                            // a click before then could not apply or roll back.
+                            setMessages ? handleMessageFeedback : undefined
+                          }
+                          feedbackDisabled={setChatMessageFeedback.isPending}
                           agentName={
                             (currentProfileId
                               ? internalAgents.find(
@@ -2571,6 +2714,7 @@ export function ChatPageContent({
                           <div className="max-w-4xl mx-auto space-y-3">
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
+                              toolsUnavailable={conversationToolsUnavailable}
                               onStop={handleStopStreaming}
                               status={status}
                               selectedModel={conversation?.modelId ?? ""}
@@ -2722,6 +2866,7 @@ export function ChatPageContent({
                           <div className="w-full max-w-4xl">
                             <ArchestraPromptInput
                               onSubmit={handleInitialSubmit}
+                              toolsUnavailable={initialToolsUnavailable}
                               status={
                                 createConversationMutation.isPending
                                   ? "submitted"

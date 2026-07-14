@@ -16,8 +16,10 @@
  * activation so the bot goes quiet until it is @mentioned again.
  */
 
+import { randomUUID } from "node:crypto";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import type { ChatOpsProviderType } from "@/types/chatops";
+import { chatOpsRunRegistry } from "./chatops-run-registry";
 import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
 
 /** Mark a channel thread active so the bot keeps replying without a mention. */
@@ -49,6 +51,9 @@ export async function isChannelThreadActive(params: {
  * it). Callers post the "muted" confirmation ONLY on a true active→muted
  * transition, so redelivered events and double-clicks don't spam the thread and
  * a no-op mute (already muted / never active) stays silent.
+ *
+ * @public — the primitive muteChannelThread builds on; also exercised directly
+ * in channel-activation.test.ts (knip --production can't see the test consumer).
  */
 export async function clearChannelThreadActive(params: {
   provider: ChatOpsProviderType;
@@ -56,6 +61,53 @@ export async function clearChannelThreadActive(params: {
   threadId: string;
 }): Promise<boolean> {
   return await cacheManager.delete(activationKey(params));
+}
+
+/**
+ * Mute a channel thread — the single side-effecting entry point both providers
+ * use when a user asks the bot to be quiet (a mute command, a mute reaction, or
+ * a "Mute this thread" button). It does three things, in order:
+ *
+ *  1. Records a fresh mute marker in the distributed cache. Every in-flight
+ *     agent run re-reads this marker before posting and drops its reply if it
+ *     changed since the run began (see getThreadMuteMarker) — so a mute is never
+ *     followed by a late answer, even for a run executing on another pod.
+ *  2. Aborts in-flight runs for this thread on THIS pod, stopping their model
+ *     requests immediately instead of letting them finish unseen.
+ *  3. Drops the sticky auto-reply activation, so future un-mentioned messages
+ *     stay quiet.
+ *
+ * Returns whether the thread was active (i.e. whether this actually muted it),
+ * so callers post the "muted" confirmation ONLY on a true active→muted
+ * transition, exactly like clearChannelThreadActive.
+ */
+export async function muteChannelThread(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<boolean> {
+  await recordThreadMute(params);
+  chatOpsRunRegistry.cancelThread(params);
+  return await clearChannelThreadActive(params);
+}
+
+/**
+ * Read the current mute marker for a channel thread, or null if none is set.
+ *
+ * The marker is an opaque token rewritten on every mute (see muteChannelThread).
+ * Callers capture it when a run starts and compare it just before replying: a
+ * non-null value that differs from the captured one means the thread was muted
+ * mid-run, so the reply must be suppressed. Comparing the shared token (never a
+ * local clock) makes this correct across pods without clock-skew assumptions,
+ * and a null current value is never treated as a mute, so a lapsed marker can't
+ * cause a spurious suppression.
+ */
+export async function getThreadMuteMarker(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<string | null> {
+  return (await cacheManager.get<string>(muteMarkerKey(params))) ?? null;
 }
 
 /**
@@ -205,6 +257,39 @@ function muteHintKey(params: {
       : CacheKey.TeamsThreadMuteHint;
   return `${prefix}-${params.channelId}::${params.threadId}`;
 }
+
+/** Write a fresh mute token so in-flight runs observe the thread was just muted. */
+async function recordThreadMute(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<void> {
+  await cacheManager.set(
+    muteMarkerKey(params),
+    randomUUID(),
+    THREAD_MUTE_MARKER_TTL_MS,
+  );
+}
+
+function muteMarkerKey(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): AllowedCacheKey {
+  const prefix =
+    params.provider === "slack"
+      ? CacheKey.SlackThreadMuteMarker
+      : CacheKey.TeamsThreadMuteMarker;
+  return `${prefix}-${params.channelId}::${params.threadId}`;
+}
+
+/**
+ * How long a mute marker lives. Only needs to outlast the longest single agent
+ * turn so a run started before a mute still observes the marker when it replies;
+ * correctness never depends on the exact value (a lapsed marker reads as null,
+ * which is treated as "not muted"), so a generous window is safe.
+ */
+const THREAD_MUTE_MARKER_TTL_MS = CHATOPS_CHANNEL_AUTO_REPLY.ACTIVE_TTL_MS;
 
 /**
  * Whole-message phrases that mute the bot in a channel thread. Kept short and

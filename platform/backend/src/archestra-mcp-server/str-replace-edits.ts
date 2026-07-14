@@ -1,4 +1,5 @@
 import { ApiError } from "@/types";
+import { fencedBlock } from "./helpers";
 
 /**
  * Provider-agnostic str_replace edit engine, shared by the app and skill
@@ -137,10 +138,17 @@ const EDIT_EXCERPT_MAX_EDITS = 5;
  * edits without a follow-up read. Spans arrive in final-document coordinates
  * from applyStrReplaceEdits; overlong inserted text is elided in the middle and
  * window truncation is marked with `…`.
+ *
+ * The excerpt echoes edited source (which a model may have filled with markdown —
+ * an image, heading, or code fence — or, for an app, the author-set name in a
+ * title), so the source region is wrapped in a fence that always outgrows any
+ * backtick run inside it: it can never break out and render as markdown where the
+ * result text is echoed. `lang` is the fence's language hint (e.g. `"html"`).
  */
 export function buildAppliedEditExcerpts(
   content: string,
   spans: AppliedEditSpan[],
+  lang = "",
 ): string {
   const shown = spans.slice(0, EDIT_EXCERPT_MAX_EDITS);
   const blocks = shown.map((span) => {
@@ -170,7 +178,7 @@ export function buildAppliedEditExcerpts(
     omitted > 0
       ? `\n(+${omitted} more edit${omitted === 1 ? "" : "s"} applied, not shown)`
       : "";
-  return `\nApplied-edit context (from the saved document — no need to re-read to verify):\n${blocks.join("\n")}${omittedNote}`;
+  return `\nApplied-edit context (from the saved document — no need to re-read to verify):\n${fencedBlock(`${blocks.join("\n")}${omittedNote}`, lang)}`;
 }
 
 export function formatSkippedEditsNote(skipped: SkippedEdit[]): string {

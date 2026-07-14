@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChatMessageFeedback } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
@@ -28,6 +29,9 @@ interface EditableAssistantMessageProps {
     partIndex: number,
     newText: string,
   ) => Promise<void>;
+  feedback?: ChatMessageFeedback | null;
+  onFeedbackChange?: (feedback: ChatMessageFeedback | null) => void;
+  feedbackDisabled?: boolean;
 }
 
 export function EditableAssistantMessage({
@@ -43,6 +47,9 @@ export function EditableAssistantMessage({
   onStartEdit,
   onCancelEdit,
   onSave,
+  feedback = null,
+  onFeedbackChange,
+  feedbackDisabled = false,
 }: EditableAssistantMessageProps) {
   const editor = useMessageEditor({
     text,
@@ -93,6 +100,9 @@ export function EditableAssistantMessage({
             textToCopy={text}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
+            feedback={feedback}
+            onFeedbackChange={onFeedbackChange}
+            feedbackDisabled={feedbackDisabled}
             className="absolute left-full top-1/2 ml-2 -translate-y-1/2 opacity-0 group-hover/message:opacity-100 transition-opacity"
           />
         )}

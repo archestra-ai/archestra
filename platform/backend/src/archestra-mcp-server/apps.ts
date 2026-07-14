@@ -51,6 +51,11 @@ import {
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { buildAppRenderResult } from "@/services/apps/app-render-result";
+import {
+  appRunLink,
+  appRunUrl,
+  escapeAppNameForModelText,
+} from "@/services/apps/app-run-link";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
@@ -78,6 +83,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  fencedBlock,
   structuredSuccessResult,
   successResult,
 } from "./helpers";
@@ -141,8 +147,9 @@ const EditAppSchema = z.strictObject({
     .number()
     .int()
     .positive()
+    .optional()
     .describe(
-      "The version the edits are based on (from read_app). The edit is rejected if the app's head has moved past it.",
+      "Optional optimistic-concurrency guard: the version (from read_app) the edits are based on. Defaults to the current head, so a single editor never has to echo it back. When supplied, the edit is rejected if the app's head has moved past it.",
     ),
   edits: z
     .array(
@@ -400,7 +407,7 @@ const registry = defineArchestraTools([
           resourceTeamIds: [],
         });
         // Scaffold always seeds the single default template.
-        const resolved = resolveCreateAppHtml({ name: args.name });
+        const resolved = await resolveCreateAppHtml({ name: args.name });
         const validated = await buildValidatedVersionPayload({
           html: resolved.html,
           uiPermissions: args.uiPermissions,
@@ -453,12 +460,13 @@ const registry = defineArchestraTools([
             authorId: userId,
             name: appName,
           });
+          const safeName = escapeAppNameForModelText(args.name);
           if (existingId) {
             return errorResult(
-              `An app named "${args.name}" already exists (id ${existingId}). Edit it with edit_app on that id — do not re-scaffold.`,
+              `An app named "${safeName}" already exists (id ${existingId}). Edit it with edit_app on that id — do not re-scaffold.`,
             );
           }
-          return errorResult(`You already have an app named "${args.name}".`);
+          return errorResult(`You already have an app named "${safeName}".`);
         }
         throw error;
       }
@@ -499,7 +507,7 @@ const registry = defineArchestraTools([
 
       // Return the seeded html so the model can build it up with edit_app
       // without a read-back round-trip.
-      const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${payload.html}`;
+      const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(payload.html, "html")}`;
       const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
@@ -512,7 +520,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -651,7 +659,7 @@ const registry = defineArchestraTools([
         ...(args.name ? { search: args.name } : {}),
         limit: Math.min(args.limit ?? 20, 100),
       });
-      return structuredSuccessResult({
+      const structured = {
         apps: apps.map((app) => ({
           id: app.id,
           name: app.name,
@@ -659,7 +667,11 @@ const registry = defineArchestraTools([
           scope: app.scope,
           latestVersion: app.latestVersion,
         })),
-      });
+      };
+      return structuredSuccessResult(
+        structured,
+        fencedBlock(JSON.stringify(structured, null, 2), "json"),
+      );
     },
   }),
   defineArchestraTool({
@@ -765,14 +777,14 @@ const registry = defineArchestraTools([
           hasMore,
           html,
         },
-        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes${windowNote}:\n\n${html}`,
+        `App "${escapeAppNameForModelText(app.name)}" (${app.id}) version ${row.version}, ${byteSize} bytes${windowNote}:\n\n${fencedBlock(html, "html")}`,
       );
     },
   }),
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context, and pass that read's version as baseVersion (see the schema for the str_replace matching and atomicity rules). A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, or replacementHtml to swap in a complete new document (no old_str matching) — one or the other, never both. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules); baseVersion is optional and defaults to the current head. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -800,16 +812,21 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
+      // baseVersion is an optional concurrency guard; default to the current
+      // head so a single-editor turn never has to read a version and echo it
+      // back. An explicit stale base still fails the CAS below and writes nothing.
+      const baseVersion = args.baseVersion ?? app.latestVersion;
+
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
       // a base that has been superseded fails the CAS and writes nothing.
       const base = await AppVersionModel.findByAppAndVersion(
         app.id,
-        args.baseVersion,
+        baseVersion,
       );
       if (!base) {
         return errorResult(
-          `App ${args.appId} has no version ${args.baseVersion}. Call read_app for the current head version.`,
+          `App ${args.appId} has no version ${baseVersion}. Call read_app for the current head version.`,
         );
       }
 
@@ -868,7 +885,7 @@ const registry = defineArchestraTools([
         updated = await AppModel.update({
           id: args.appId,
           version,
-          expectedLatestVersion: args.baseVersion,
+          expectedLatestVersion: baseVersion,
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -889,20 +906,23 @@ const registry = defineArchestraTools([
       // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
       // equal); when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
-      const forked = updated.latestVersion !== args.baseVersion;
+      const forked = updated.latestVersion !== baseVersion;
+      const displayName = escapeAppNameForModelText(updated.name);
       const summary = forked
-        ? `Applied ${editLabel} to app "${updated.name}" (now at version ${updated.latestVersion}).`
+        ? `Applied ${editLabel} to app "${displayName}" (now at version ${updated.latestVersion}).`
         : mode.kind === "edits" && appliedEditCount === 0
-          ? `No edits were applied to app "${updated.name}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
-          : `Applied ${editLabel} to app "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
+          ? `No edits were applied to app "${displayName}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
+          : `Applied ${editLabel} to app "${displayName}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
       const warningsNote = formatWarningsNote(warnings);
       const skippedNote = formatSkippedEditsNote(skippedEdits);
       // The context block lets the model verify str_replace edits landed
       // without a follow-up read_app. A replacement carries no news (the model
       // just wrote the document), and an unforked result saved nothing new.
+      // buildAppliedEditExcerpts fences the echoed source (an "html" hint here)
+      // so edited markup can't render as markdown where this text is echoed.
       const excerptsNote =
         mode.kind === "edits" && forked
-          ? buildAppliedEditExcerpts(editedHtml, editSpans)
+          ? `\n${buildAppliedEditExcerpts(editedHtml, editSpans, "html")}`
           : "";
       const replacementNote =
         mode.kind === "replacement" && forked
@@ -917,7 +937,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunUrl(updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
+        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(updated.name, updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -954,14 +974,14 @@ const registry = defineArchestraTools([
           "set_app_tools: tool assignment failed",
         );
         return errorResult(
-          `Failed to set tools for app "${app.name}" (${app.id}).`,
+          `Failed to set tools for app "${escapeAppNameForModelText(app.name)}" (${app.id}).`,
         );
       }
 
       const toolsParts = toolsResultParts(resolution.tools);
       return structuredSuccessResult(
         { id: app.id, tools: toolsParts.structured.tools ?? [] },
-        `Set assigned tools for app "${app.name}" (${app.id}).${toolsParts.note}`,
+        `Set assigned tools for app "${escapeAppNameForModelText(app.name)}" (${app.id}).${toolsParts.note}`,
       );
     },
   }),
@@ -992,7 +1012,7 @@ const registry = defineArchestraTools([
       const staticHasError = findings.some(
         (finding) => finding.severity === "error",
       );
-      const safeName = await safeAppName(app.name);
+      const safeName = escapeAppNameForModelText(app.name);
 
       const snapshot = await waitForHeadRenderSnapshot({
         appId: app.id,
@@ -1108,7 +1128,7 @@ const registry = defineArchestraTools([
           : "the selected team(s)";
       return structuredSuccessResult(
         { id: updated.id, scope: updated.scope, runUrl },
-        `Published "${updated.name}" to ${audience}. Standalone page: ${runUrl}`,
+        `Published "${escapeAppNameForModelText(updated.name)}" to ${audience}. Standalone page: ${appRunLink(updated.name, updated.id)}`,
       );
     },
   }),
@@ -1194,6 +1214,7 @@ const registry = defineArchestraTools([
         },
         appOwner(app.id),
         tokenAuth,
+        { abortSignal: context.abortSignal },
       );
       return formatPreviewResult(resolvedToolName, result);
     },
@@ -1213,7 +1234,7 @@ const registry = defineArchestraTools([
       const { app } = gate;
 
       const head = app.latestVersion;
-      const safeName = await safeAppName(app.name);
+      const safeName = escapeAppNameForModelText(app.name);
       const snapshot = await waitForHeadRenderSnapshot({
         appId: app.id,
         userId: auth.userId,
@@ -1302,7 +1323,9 @@ const registry = defineArchestraTools([
         { appId: args.appId, userId: auth.userId },
         "App deleted via Archestra tool",
       );
-      return successResult(`Deleted app "${app.name}".`);
+      return successResult(
+        `Deleted app "${escapeAppNameForModelText(app.name)}".`,
+      );
     },
   }),
 ] as const);
@@ -1373,24 +1396,13 @@ async function loadApp(params: {
   return { app };
 }
 
-// An app's standalone page.
-function appRunUrl(appId: string): string {
-  return `/a/${appId}`;
-}
-
-// Collapse whitespace and escape angle brackets in an author-set app name so it
-// cannot break the diagnostics/validation framing it is interpolated into.
-async function safeAppName(name: string): Promise<string> {
-  return (await escapeAngleBrackets(name)).replace(/\s+/g, " ").trim();
-}
-
 /**
  * Next-edit rider on scaffold_app/edit_app success texts: names the head
- * version the next edit_app call must pass as baseVersion, so the model never
- * has to guess (or re-read) it.
+ * version so the model knows edit_app defaults to it and that baseVersion is
+ * only needed to guard against a concurrent edit.
  */
 function nextEditBaseVersionHint(latestVersion: number): string {
-  return ` Use baseVersion=${latestVersion} for the next edit_app call.`;
+  return ` edit_app now defaults to this head (version ${latestVersion}); pass baseVersion only to guard against a concurrent edit.`;
 }
 
 // The soft save-time validation-warnings note appended to a mutation's result
@@ -1758,7 +1770,7 @@ export function scaffoldPartialToolFailureResult(
       latestVersion: app.latestVersion,
       status: "partial" as const,
     },
-    `Created app "${app.name}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${seededHtml}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+    `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app.id)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(seededHtml, "html")}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
 }
 

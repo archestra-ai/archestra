@@ -6,6 +6,7 @@ import type {
   NgrokDbConfig,
   SecretValue,
   SlackDbConfig,
+  TelegramDbConfig,
 } from "@/types";
 import SecretModel from "./secret";
 
@@ -18,6 +19,7 @@ const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
+const TELEGRAM_SECRET_NAME = "chatops-telegram";
 const NGROK_SECRET_NAME = "chatops-ngrok";
 
 class ChatOpsConfigModel {
@@ -58,6 +60,18 @@ class ChatOpsConfigModel {
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
   }
 
+  async getTelegramConfig(): Promise<TelegramDbConfig | null> {
+    return this.getConfig<TelegramDbConfig>(TELEGRAM_SECRET_NAME);
+  }
+
+  async saveTelegramConfig(value: TelegramDbConfig): Promise<void> {
+    await this.saveConfig(
+      TELEGRAM_SECRET_NAME,
+      value as unknown as SecretValue,
+    );
+    logger.info("ChatOpsConfigModel: saved Telegram config to DB");
+  }
+
   async getNgrokConfig(): Promise<NgrokDbConfig | null> {
     return this.getConfig<NgrokDbConfig>(NGROK_SECRET_NAME);
   }
@@ -71,9 +85,10 @@ class ChatOpsConfigModel {
    * Non-secret ChatOps connectivity snapshot for audit diffs.
    */
   async getRedactedSnapshotForAudit(): Promise<Record<string, unknown>> {
-    const [ms, slack, ngrok] = await Promise.all([
+    const [ms, slack, telegram, ngrok] = await Promise.all([
       this.getMsTeamsConfig(),
       this.getSlackConfig(),
+      this.getTelegramConfig(),
       this.getNgrokConfig(),
     ]);
 
@@ -94,6 +109,12 @@ class ChatOpsConfigModel {
             hasSigningSecret: Boolean(slack.signingSecret),
             hasAppId: Boolean(slack.appId),
             hasAppLevelToken: Boolean(slack.appLevelToken),
+          }
+        : null,
+      telegram: telegram
+        ? {
+            enabled: telegram.enabled,
+            hasBotToken: Boolean(telegram.botToken),
           }
         : null,
       ngrok: ngrok

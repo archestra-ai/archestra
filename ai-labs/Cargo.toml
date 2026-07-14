@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "runner", "analyzer", "cli", "dashboard", "baton/baton-core"]
+members = ["core", "runner", "analyzer", "cli", "dashboard", "baton/baton-core", "baton/baton-dojo"]
 resolver = "2"
 
 [workspace.lints.rust]

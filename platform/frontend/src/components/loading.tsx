@@ -19,14 +19,28 @@ export function LoadingSkeletons({
   );
 }
 
-export function LoadingSpinner({ className }: { className?: string }) {
+export function LoadingSpinner({
+  className,
+  label = "Loading",
+}: {
+  className?: string;
+  /**
+   * Accessible name announced to assistive tech (WCAG 4.1.3 Status Messages).
+   * The spinner is a polite live region, so screen-reader users hear this when
+   * it appears. Pass a context-specific label (e.g. "Loading tools") where the
+   * generic default is unhelpful.
+   */
+  label?: string;
+}) {
   return (
-    <div
+    <output
       className={cn(
-        "animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto",
+        "block animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto",
         className,
       )}
-    />
+    >
+      <span className="sr-only">{label}</span>
+    </output>
   );
 }
 

@@ -271,6 +271,12 @@ describe("MCP backing for apps", () => {
     const [toolAfter] = await ToolModel.findByCatalogIdWithMeta(catalogId);
     expect(toolAfter.name).toBe(toolBefore.name);
     expect(toolAfter.name.endsWith("__open")).toBe(true);
+    // The launch tool's derived description IS refreshed on rename, so stored
+    // metadata never keeps a stale (or pre-sanitization) app name.
+    expect(toolAfter.description).toBe(
+      'Open the "Renamed Dashboard" app and render its UI.',
+    );
+    expect(toolAfter.description).not.toBe(toolBefore.description);
   });
 
   test("deleting an app tears down its backing catalog and server", async () => {

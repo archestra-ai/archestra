@@ -107,6 +107,23 @@ export function isBlankAssistantTextPart(
   return role === "assistant" && part.type === "text" && !part.text.trim();
 }
 
+/**
+ * Anthropic `redacted_thinking` blocks (encrypted, no visible text) and
+ * signature-only `thinking` blocks arrive as `reasoning` parts with empty text.
+ * They are load-bearing — the thinking signature must be replayed to the
+ * provider on the next turn — so they are persisted and reload verbatim, but
+ * rendered they show as empty "Thinking…" accordions. Suppress those; a
+ * reasoning part only renders when it carries readable text. Structurally typed
+ * so both the live-chat (`UIMessage`) and read-only (`PartialUIMessage`) part
+ * shapes qualify.
+ */
+export function isBlankReasoningPart(part: {
+  type: string;
+  text?: string;
+}): boolean {
+  return part.type === "reasoning" && !part.text?.trim();
+}
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

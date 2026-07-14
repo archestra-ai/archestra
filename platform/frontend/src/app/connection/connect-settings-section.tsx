@@ -431,6 +431,7 @@ export function ConnectSettingsSection() {
                             </div>
                             <Input
                               id={inputId}
+                              aria-label="URL description"
                               value={meta.description}
                               onChange={(e) =>
                                 setBaseUrlDescription(url, e.target.value)

@@ -47,6 +47,7 @@ export interface PolicyEnforcementContext {
  */
 export function policyBlockToToolError(
   policyBlock: PolicyBlockResult,
+  policyUrl?: string,
 ): PolicyDeniedMcpToolError {
   return buildPolicyDeniedMcpToolError({
     toolName: policyBlock.blockedToolName,
@@ -54,6 +55,7 @@ export function policyBlockToToolError(
     input: policyBlock.toolInput,
     reason: policyBlock.reason,
     message: policyBlock.contentMessage,
+    policyUrl,
   });
 }
 

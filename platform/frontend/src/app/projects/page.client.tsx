@@ -464,6 +464,7 @@ function CreateProjectDialog({
         <div className="flex-1 space-y-3 min-w-0">
           <Input
             autoFocus
+            aria-label="Project name"
             placeholder="Project name"
             maxLength={PROJECT_NAME_MAX_LENGTH}
             aria-invalid={!!form.formState.errors.name}
@@ -481,6 +482,7 @@ function CreateProjectDialog({
             </p>
           )}
           <Textarea
+            aria-label="Project description"
             placeholder="Description (optional)"
             rows={3}
             maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}

@@ -282,6 +282,7 @@ function EditPageDialog({
                 setDraft((prev) => ({ ...prev, content: e.target.value }))
               }
               placeholder="Write page content as markdown. Headings, lists, links, and code blocks are supported."
+              aria-label="Page content"
               className="flex-1 border-0 rounded-none font-mono text-xs resize-none focus-visible:ring-0"
             />
           ) : (
@@ -347,6 +348,7 @@ function EditPageDialog({
           ref={fileInputRef}
           type="file"
           accept="image/png,image/gif"
+          aria-label="Upload image"
           className="hidden"
           onChange={handleFileSelect}
         />

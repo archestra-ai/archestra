@@ -393,6 +393,7 @@ class OptimizationRuleModel {
         zhipuai: [],
         deepseek: [],
         "github-copilot": [], // Copilot model availability is subscription-specific, no defaults
+        "microsoft-365-copilot": [], // single pseudo-model, nothing to optimize between
         bedrock: [], // Bedrock optimization rules are deployment-specific, no defaults
         minimax: [],
         azure: [], // Azure optimization rules are deployment-specific, no defaults

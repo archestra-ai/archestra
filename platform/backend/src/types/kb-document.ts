@@ -9,18 +9,25 @@ import { schema } from "@/database";
 /**
  * ACL entry type for knowledge base documents and chunks.
  * Used for query-time access control filtering via PostgreSQL's `?|` operator.
+ *
+ * `container:<connectorId>:<containerKey>` defers the audience to a
+ * `kb_container_acls` row; query-time resolution expands a user's base tokens
+ * into the container tokens they can read. The connector id is embedded
+ * because searches span connectors — without it, same-keyed containers on two
+ * connectors would cross-grant.
  */
 export type AclEntry =
   | "org:*"
   | `team:${string}`
   | `user_email:${string}`
-  | `group:${string}`;
+  | `group:${string}`
+  | `container:${string}`;
 
 export const AclEntrySchema = z
   .string()
   .regex(
-    /^(org:\*|team:.+|user_email:.+|group:.+)$/,
-    "ACL entry must match org:*, team:<id>, user_email:<email>, or group:<id>",
+    /^(org:\*|team:.+|user_email:.+|group:.+|container:.+)$/,
+    "ACL entry must match org:*, team:<id>, user_email:<email>, group:<id>, or container:<connectorId>:<key>",
   );
 
 export const EmbeddingStatusSchema = z.enum([

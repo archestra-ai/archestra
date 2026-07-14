@@ -889,6 +889,11 @@ function resolveDriveFile(
   const exportMimeType = GOOGLE_DOC_MIME_TYPES[mimeType];
   if (exportMimeType) return { kind: "google", exportMimeType };
 
+  // Any remaining Google-native type (forms, drawings, shortcuts, ...) has no
+  // raw media — alt=media always 403s with fileNotDownloadable — so a
+  // text-like file NAME must not route it to the download paths below.
+  if (mimeType.startsWith("application/vnd.google-apps.")) return null;
+
   // Binary formats we extract with libraries (PDF/DOCX/PPTX/XLSX).
   const format = binaryFormatFor(mimeType, ext);
   if (format) return { kind: "binary", format };

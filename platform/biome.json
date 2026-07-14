@@ -1,5 +1,6 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.7/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
+  "plugins": ["./biome-plugins/icon-button-aria-label.grit"],
   "vcs": {
     "enabled": true,
     "clientKind": "git",

@@ -480,6 +480,7 @@ export function McpServerCard({
       className="h-8 w-8"
       data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
       onClick={() => goToItemPage()}
+      aria-label="Server settings"
     >
       <Pencil className="h-4 w-4" />
     </Button>

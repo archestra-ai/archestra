@@ -5,6 +5,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -137,7 +138,9 @@ export function AppsProvider({
     knownToolCallIds: ReadonlySet<string>;
   } | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsToolCallId, setSettingsToolCallId] = useState<string | null>(
+    null,
+  );
 
   // One group per app: owned renders fold into a shared group with a single
   // visible `activeRender` (the user's pick while present, else the latest);
@@ -187,7 +190,7 @@ export function AppsProvider({
           return next;
         });
       }
-      setSettingsOpen(false);
+      setSettingsToolCallId(null);
     },
     [groupByToolCallId, closedKeys],
   );
@@ -208,7 +211,7 @@ export function AppsProvider({
         next.delete(key);
         return next;
       });
-      setSettingsOpen(false);
+      setSettingsToolCallId(null);
     },
     [groupByToolCallId],
   );
@@ -220,7 +223,7 @@ export function AppsProvider({
         toolCallId: canonicalToolCallId(id),
         knownToolCallIds: new Set(apps.map((a) => a.toolCallId)),
       });
-      setSettingsOpen(false);
+      setSettingsToolCallId(null);
     },
     [canonicalToolCallId, apps],
   );
@@ -259,12 +262,27 @@ export function AppsProvider({
     return latestOpen ?? latestBy(isActive);
   }, [explicitPanel, apps, closedKeys, groupByToolCallId]);
 
+  const settingsOpen =
+    settingsToolCallId !== null && settingsToolCallId === panelToolCallId;
+  const setSettingsOpen = useCallback(
+    (open: boolean) => {
+      setSettingsToolCallId(open ? panelToolCallId : null);
+    },
+    [panelToolCallId],
+  );
+
+  useEffect(() => {
+    if (settingsToolCallId !== null && !settingsOpen) {
+      setSettingsToolCallId(null);
+    }
+  }, [settingsOpen, settingsToolCallId]);
+
   const openRightPanel = useCallback(() => {
     onShowInPanel?.();
   }, [onShowInPanel]);
 
   const closePanel = useCallback(() => {
-    setSettingsOpen(false);
+    setSettingsToolCallId(null);
     onClosePanel?.();
   }, [onClosePanel]);
 
@@ -296,6 +314,7 @@ export function AppsProvider({
       portalTarget,
       closePanel,
       settingsOpen,
+      setSettingsOpen,
     ],
   );
 

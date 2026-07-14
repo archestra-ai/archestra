@@ -57,4 +57,14 @@ describe("AppCreateDialog", () => {
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/a/app-123"));
   });
+
+  it("does not create an app with a whitespace-only name", async () => {
+    const user = userEvent.setup();
+    render(<AppCreateDialog open onOpenChange={() => {}} />);
+
+    await user.type(screen.getByLabelText("Name"), "   ");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(createMutateMock).not.toHaveBeenCalled();
+  });
 });

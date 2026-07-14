@@ -6,7 +6,8 @@ export const LLM_PROXY_OAUTH_SCOPE = "llm:proxy";
 
 /**
  * Scope requested by MCP OAuth clients (machine-to-machine / service-account
- * access to MCP gateways via the `client_credentials` grant). Matches the scope
+ * access to MCP gateways — and to A2A agents, which are validated by the same
+ * gateway path — via the `client_credentials` grant). Matches the scope
  * advertised in the protected-resource-metadata document.
  */
 export const MCP_GATEWAY_OAUTH_SCOPE = "mcp";
@@ -32,7 +33,7 @@ export type OAuthScope = (typeof OAUTH_SCOPES)[number];
  * Used by the consent page to explain what each scope grants.
  */
 export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
-  mcp: "Access MCP tools and resources",
+  mcp: "Access MCP gateways and A2A agents",
   "llm:proxy": "Access LLM proxy endpoints",
   openid: "Verify your identity",
   profile: "Access your profile information",

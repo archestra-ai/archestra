@@ -8,7 +8,7 @@ import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
 import { PROJECT_INSTRUCTIONS_PREFIX } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { MessageModel, ProjectModel, SkillModel } from "@/models";
+import { MessageModel, ModelModel, ProjectModel, SkillModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
@@ -907,6 +907,58 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(Object.keys(call.tools ?? {})).toEqual(
       expect.arrayContaining([searchToolsName, runToolName]),
     );
+  });
+
+  test("omits tools from streamText when the conversation model doesn't support tool calling", async ({
+    makeConversation,
+  }) => {
+    // Mirrors Microsoft 365 Copilot: its model row is synced with
+    // supportsToolCalling=false, so the turn must run tool-less instead of
+    // letting the provider reject the declared tools.
+    const noToolsModel = await ModelModel.create({
+      externalId: "microsoft-365-copilot/microsoft-365-copilot",
+      provider: "microsoft-365-copilot",
+      modelId: "microsoft-365-copilot",
+      description: "Microsoft 365 Copilot",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const noToolsConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: noToolsModel.id,
+    });
+    mockStreamText.mockClear();
+    mockGetChatMcpTools.mockResolvedValueOnce({
+      some_tool: { description: "A tool the model can't take" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: noToolsConversation.id,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].tools).toBeUndefined();
   });
 
   test("adds load-tools guidance when the agent has no authored prompt", async () => {

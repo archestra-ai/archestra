@@ -671,7 +671,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
+              href={`/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
             >
               View all
             </Link>
@@ -704,7 +704,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/llm/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
+              href={`/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
             >
               View all
             </Link>

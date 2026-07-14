@@ -1,0 +1,76 @@
+# The agent, its model config, and the baton-proxy sidecar.
+#
+# The agent's OpenAI client is pointed at the sidecar (localhost:8730); the
+# sidecar forwards to OpenRouter, gating each proposed tool call. The agent is
+# unaware baton exists.
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: baton-openrouter
+  namespace: kagent
+spec:
+  provider: OpenAI
+  # Pick a current OpenRouter model id (see NOTES.md); overridable at run time.
+  model: anthropic/claude-sonnet-4.5
+  apiKeySecret: baton-openrouter
+  apiKeySecretKey: OPENROUTER_API_KEY
+  openAI:
+    # Point the agent runtime at the in-pod baton-proxy sidecar, not OpenRouter.
+    baseUrl: http://localhost:8730/v1
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: ops-agent
+  namespace: kagent
+spec:
+  type: Declarative
+  description: Investigates and remediates Kubernetes workload issues.
+  declarative:
+    modelConfig: baton-openrouter
+    a2aConfig: {}
+    systemMessage: |
+      You are a Kubernetes operations agent. When asked about a problem, use the
+      read-only tools to investigate (get resources, describe, read pod logs),
+      explain the root cause, and take the minimal corrective action. Prefer the
+      least destructive fix. If a step is refused by policy, tell the user what
+      you were prevented from doing and why, and do not retry it.
+    tools:
+      - type: McpServer
+        mcpServer:
+          apiGroup: kagent.dev
+          kind: RemoteMCPServer
+          name: kagent-tool-server
+          toolNames:
+            - k8s_get_resources
+            - k8s_describe_resource
+            - k8s_get_pod_logs
+            - k8s_get_events
+            - k8s_delete_resource
+            - k8s_apply_manifest
+            - k8s_patch_resource
+    deployment:
+      extraContainers:
+        - name: baton-proxy
+          image: baton-proxy:poc
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: RUST_LOG
+              value: info
+          args:
+            - --policy
+            - /etc/baton/policy.toml
+            - --addr
+            - 0.0.0.0:8730
+            - --log
+            - /dev/stdout
+          ports:
+            - containerPort: 8730
+          volumeMounts:
+            - name: baton-policy
+              mountPath: /etc/baton
+              readOnly: true
+      volumes:
+        - name: baton-policy
+          configMap:
+            name: baton-policy

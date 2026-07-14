@@ -348,6 +348,7 @@ export function ChatSidebarSection({
             <div className="flex items-center gap-1 flex-1">
               <Input
                 ref={inputRef}
+                aria-label="Conversation title"
                 value={editingTitle}
                 onChange={(e) => setEditingTitle(e.target.value)}
                 onBlur={() => handleSaveEdit(conv.id)}
@@ -366,6 +367,7 @@ export function ChatSidebarSection({
                   <TooltipTrigger asChild>
                     <Button
                       type="button"
+                      aria-label="Regenerate title"
                       size="icon-sm"
                       variant="ghost"
                       onMouseDown={(e) => {

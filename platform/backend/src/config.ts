@@ -724,13 +724,16 @@ export function parseActiveChatRunPollIntervalMs(params: {
  */
 /**
  * Raw URL sources a /connection setup baseUrl may come from: the frontend
- * origin plus every URL in `ARCHESTRA_API_BASE_URL` (the same list the
- * frontend's connection page derives its endpoint candidates from). Returned
- * unparsed; callers normalize and compare full URLs, not just hosts.
+ * origin, every URL in `ARCHESTRA_API_BASE_URL`, and the in-cluster
+ * `ARCHESTRA_INTERNAL_API_BASE_URL` (the connection page falls back to the
+ * internal URL when every external URL is hidden). Returned unparsed; callers
+ * normalize and compare full URLs, not just hosts.
  * @public — exported for testability
  */
 export const getConnectionBaseUrlSources = (): string[] => {
   const sources = [frontendBaseUrl];
+  const internalUrl = process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim();
+  if (internalUrl) sources.push(internalUrl);
   const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
   if (externalUrls) {
     for (const url of externalUrls.split(",")) {

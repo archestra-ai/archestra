@@ -160,7 +160,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(CreateConnectionSetupResponseSchema),
       },
     },
-    async ({ body, organizationId, user }, reply) => {
+    async ({ body, headers, organizationId, user }, reply) => {
       const {
         clientId,
         platform,
@@ -193,7 +193,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const organization = await OrganizationModel.getById(organizationId);
-      if (!organization || !isAllowedBaseUrl({ baseUrl, organization })) {
+      if (
+        !organization ||
+        !isAllowedBaseUrl({
+          baseUrl,
+          organization,
+          requestOrigin: headers.origin,
+        })
+      ) {
         throw new ApiError(
           400,
           "baseUrl is not an allowed connection endpoint",
@@ -765,21 +772,40 @@ async function assertSkillsBelongToOrg(params: {
  * baseUrl ends up verbatim in a script served from a public endpoint AND in
  * the copy-pasted curl one-liner, so it must EXACTLY match (normalized full
  * URL, not just host) a URL the deployment already trusts: the env-configured
- * public URLs, the admin-curated connection URLs (each optionally with the
- * /v1 suffix the connection page appends), or localhost with no path beyond
- * /v1. Host-only matching would let a crafted path smuggle shell syntax into
- * the rendered script.
+ * public/internal URLs, the admin-curated connection URLs (each optionally
+ * with the /v1 suffix the connection page appends), or — with no path beyond
+ * /v1 — localhost or the origin the browser reached the app on (the request's
+ * Origin header). The Origin match is what keeps zero-config deployments
+ * working: without ARCHESTRA_API_BASE_URL/ARCHESTRA_FRONTEND_URL the
+ * connection page derives its endpoint from window.location.origin, which no
+ * env-derived source can know. Restricting origin-level matches to the exact
+ * ""/"/v1" paths the page generates prevents a crafted path from smuggling
+ * shell syntax into the rendered script, and URL parsing confines the origin
+ * itself to the host/port charset.
  */
 function isAllowedBaseUrl(params: {
   baseUrl: string;
   organization: Organization;
+  requestOrigin: string | undefined;
 }): boolean {
   const normalized = normalizeBaseUrl(params.baseUrl);
   if (!normalized) return false;
 
-  const localHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
-  if (localHostnames.has(normalized.hostname)) {
-    return normalized.path === "" || normalized.path === "/v1";
+  if (normalized.path === "" || normalized.path === "/v1") {
+    const localHostnames = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+    if (localHostnames.has(normalized.hostname)) return true;
+
+    const requestOrigin = params.requestOrigin
+      ? normalizeBaseUrl(params.requestOrigin)
+      : null;
+    // A browser Origin header is origin-only; a path means it was forged.
+    if (
+      requestOrigin &&
+      requestOrigin.path === "" &&
+      requestOrigin.url === normalized.origin
+    ) {
+      return true;
+    }
   }
 
   const allowed = new Set<string>();
@@ -804,7 +830,7 @@ function isAllowedBaseUrl(params: {
  */
 function normalizeBaseUrl(
   raw: string,
-): { url: string; hostname: string; path: string } | null {
+): { url: string; origin: string; hostname: string; path: string } | null {
   let parsed: URL;
   try {
     parsed = new URL(raw);
@@ -818,8 +844,10 @@ function normalizeBaseUrl(
 
   const path = parsed.pathname.replace(/\/+$/, "");
   const hostname = parsed.hostname.toLowerCase();
+  const origin = `${parsed.protocol}//${parsed.host.toLowerCase()}`;
   return {
-    url: `${parsed.protocol}//${parsed.host.toLowerCase()}${path}`,
+    url: `${origin}${path}`,
+    origin,
     hostname,
     path,
   };

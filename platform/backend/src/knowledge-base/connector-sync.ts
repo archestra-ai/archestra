@@ -315,9 +315,16 @@ class ConnectorSyncService {
           });
         }
 
-        // Track item-level failures from this batch
+        // Sub-resource fallbacks (safeItemFetch): the item itself was still
+        // produced and ingested, possibly degraded — a warning in the run
+        // logs (each is logged at fetch time), NOT an error that flips the
+        // run to completed_with_errors. Only documents that actually failed
+        // to ingest leave data missing and deserve that status.
         if (batch.failures?.length) {
-          itemErrors += batch.failures.length;
+          runLog.warn(
+            { failures: batch.failures.length },
+            "Batch completed with sub-resource fallbacks (see item warnings above)",
+          );
         }
 
         // Track skipped items from this batch

@@ -127,6 +127,47 @@ describe("ConnectorSyncService", () => {
     expect(updated?.lastSyncStatus).toBe("running");
   });
 
+  test("sub-resource fallbacks stay warnings: a run that ingested every document is a success", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    // A connector that degraded gracefully mid-fetch (safeItemFetch fallback,
+    // e.g. one issue's comments couldn't load) but still produced and ingested
+    // every document. An admin has nothing to fix — the run must NOT read
+    // "completed with errors"; the details live in the run logs.
+    const mockImpl = {
+      estimateTotalItems: vi.fn().mockResolvedValue(1),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [{ id: "ext-1", title: "Doc 1", content: "Content" }],
+            failures: [
+              { itemId: "ext-1", resource: "comments", error: "HTTP 403" },
+            ],
+            checkpoint: { page: 1 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    };
+    mockGetConnector.mockReturnValue(mockImpl);
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("success");
+    const run = await ConnectorRunModel.findById(result.runId);
+    expect(run?.itemErrors).toBe(0);
+    expect(run?.documentsIngested).toBe(1);
+  });
+
   test("executeSync throws when connector not found", async () => {
     await expect(
       connectorSyncService.executeSync("00000000-0000-0000-0000-000000000000"),

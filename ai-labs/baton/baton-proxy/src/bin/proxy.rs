@@ -1,6 +1,6 @@
-//! `baton-proxy`: an OpenAI chat-completions proxy that gates out-of-audience
-//! tool calls on a human. Point a harness's `base_url` at it; register the
-//! approval MCP server so the model can call `baton__request_approval`.
+//! `baton-proxy`: an OpenAI chat-completions proxy that blocks tool calls
+//! failing their baton contract. Point a harness's `base_url` at it; a blocked
+//! call is stripped from the response and never reaches the harness.
 
 use std::fs::OpenOptions;
 use std::io::{IsTerminal, Write};
@@ -25,7 +25,7 @@ use tokio::net::TcpListener;
 const FORWARD_HEADERS: &[&str] = &["http-referer", "x-title", "openai-organization"];
 
 #[derive(Parser)]
-#[command(about = "Inference-layer proxy that gates out-of-audience tool calls on a human")]
+#[command(about = "Inference-layer proxy that blocks tool calls failing their baton contract")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let text =
         std::fs::read_to_string(&args.policy).map_err(|e| format!("reading policy {}: {e}", args.policy.display()))?;
     let policy = Policy::from_toml(&text)?;
-    tracing::info!(upstream = %policy.upstream_base_url, tools = policy.contracts.len(), "loaded policy");
+    tracing::info!(upstream = %policy.upstream_base_url, tools = policy.contracts.contracts.len(), "loaded policy");
 
     let log = match &args.log {
         Some(path) => {
@@ -139,12 +139,23 @@ async fn handler(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -
             );
         }
     };
-    if view.stream {
-        return error(
-            StatusCode::BAD_REQUEST,
-            "streaming (stream:true) is not supported by baton-proxy; set stream:false".to_string(),
-        );
-    }
+
+    // The proxy must see the whole response to gate its tool calls, so it never
+    // streams upstream. If the harness asked for `stream:true`, force it off in
+    // the forwarded body and answer with a single buffered JSON response.
+    let body = if view.stream {
+        match serde_json::from_slice::<serde_json::Value>(&body) {
+            Ok(mut json) => {
+                if let Some(obj) = json.as_object_mut() {
+                    obj.insert("stream".to_string(), serde_json::Value::Bool(false));
+                }
+                Bytes::from(serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()))
+            }
+            Err(_) => body,
+        }
+    } else {
+        body
+    };
 
     // Capture the request body for the wire log before it is moved upstream.
     let request_json: Option<serde_json::Value> = app.wire.as_ref().and_then(|_| serde_json::from_slice(&body).ok());
@@ -200,16 +211,17 @@ async fn handler(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -
         }
     };
 
-    let session = match Session::build(&app.policy, &view.messages) {
+    let mut session = match Session::build(&app.policy, &view.messages) {
         Ok(session) => session,
         Err(e) => return error(StatusCode::CONFLICT, format!("policy replay failed: {e}")),
     };
-    let decisions = rewrite_response(&session, &mut response);
+    let context_audience = session.context_audience();
+    let decisions = rewrite_response(&mut session, &mut response);
     let rewritten = decisions.iter().filter(|d| d.rewritten()).count();
     if rewritten > 0 {
-        tracing::info!(rewritten, "withheld tool call(s) pending approval or blocked");
+        tracing::info!(rewritten, "blocked tool call(s)");
     }
-    log_turns(&app, &session.context_audience(), &decisions);
+    log_turns(&app, &context_audience, &decisions);
     log_wire(&app, request_json, &bytes, &response);
     match serde_json::to_vec(&response) {
         Ok(out) => json_bytes(StatusCode::OK, out),
@@ -263,7 +275,6 @@ fn log_turns(app: &App, context_audience: &str, decisions: &[TurnDecision]) {
             "context_audience": context_audience,
             "tool": decision.tool,
             "outcome": decision.outcome,
-            "recipients": decision.recipients,
             "reason": decision.reason,
         });
         lines.push_str(&entry.to_string());

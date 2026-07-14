@@ -355,6 +355,30 @@ enum RoutedRuling {
     NoRuling,
 }
 
+/// A routed grant-bearing step after the shared shell handled denial,
+/// external deferral, and abstention. Only the approved continuation is left
+/// to the caller — each grant kind advances its own state machine.
+enum RoutedStep {
+    Approved {
+        authority: AuthorityName,
+        resolved: Vec<Violation>,
+    },
+    NeedsApproval(PendingApproval),
+    Terminal(Decision),
+}
+
+/// The per-grant-kind denial attribution, shared by inline routing and the
+/// external approval path.
+fn denial_event(grant: &ProposedGrant, authority: AuthorityName, reason: String) -> AuditEvent {
+    match grant {
+        ProposedGrant::Accept { .. } => AuditEvent::AcceptDenied { authority, reason },
+        ProposedGrant::Endorse { .. } => AuditEvent::EndorseDenied { authority, reason },
+        ProposedGrant::Waive { .. } | ProposedGrant::Acknowledge { .. } => {
+            AuditEvent::WaiverDenied { authority, reason }
+        }
+    }
+}
+
 /// A blocked flow. `Terminal` is an explicit type, not an empty plan list:
 /// there is nothing any transition or waiver could change. `Remediable`
 /// carries at least one predicted route to a permit.
@@ -899,165 +923,108 @@ impl PolicyEngine {
             }
             TransitionKind::ApplyWaiver { delta } => {
                 let grant = grant_for(&delta, &spec.precondition.remaining);
-                // Route live: walk competent authorities in order. An inline
-                // authority that abstains falls through to the next; the first
-                // external one defers to an out-of-process ruling. The view
-                // borrows the store read-only and is taken (and dropped) before
-                // any mutation, so an inline ruling cannot observe its effects.
-                let routed = {
-                    let view = TrajectoryView::new(trajectory.store());
-                    self.route_grant(&grant, &spec.precondition.remaining, &view)
-                };
-                match routed {
-                    RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(self.waiver_permit(
-                        trajectory,
-                        capability.action,
-                        delta,
-                        authority,
-                        spec.precondition.remaining,
-                    ))),
-                    RoutedRuling::Denied { authority, reason } => {
-                        trajectory.record_event(AuditEvent::WaiverDenied {
-                            authority: authority.clone(),
-                            reason: reason.clone(),
-                        });
-                        Ok(StepOutcome::Advanced(self.terminal(
+                Ok(
+                    match self.route_step_grant(trajectory, &capability, &checked, grant, spec.precondition.remaining) {
+                        RoutedStep::Approved { authority, resolved } => StepOutcome::Advanced(self.waiver_permit(
                             trajectory,
-                            spec.precondition.remaining,
-                            BlockReason::DeniedByAuthority { authority, reason },
-                        )))
-                    }
-                    RoutedRuling::External(authority) => {
-                        trajectory.record_event(AuditEvent::ApprovalRequested {
-                            plan: capability.plan,
-                            authority: authority.clone(),
-                            resolved: spec.precondition.remaining.clone(),
-                        });
-                        let basis = checked.arguments.leaves().into_iter().chain(checked.control);
-                        let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
-                        Ok(StepOutcome::NeedsApproval(PendingApproval::new(
-                            capability.plan,
                             capability.action,
-                            grant,
+                            delta,
                             authority,
-                            spec.precondition.remaining,
-                            ancestry,
-                            trajectory.id(),
-                            trajectory.revision(),
-                            self.id,
-                        )))
-                    }
-                    RoutedRuling::NoRuling => Ok(StepOutcome::Advanced(self.terminal(
-                        trajectory,
-                        spec.precondition.remaining,
-                        BlockReason::NoAuthorityRuled,
-                    ))),
-                }
+                            resolved,
+                        )),
+                        RoutedStep::NeedsApproval(pending) => StepOutcome::NeedsApproval(pending),
+                        RoutedStep::Terminal(decision) => StepOutcome::Advanced(decision),
+                    },
+                )
             }
             TransitionKind::AcceptGrowth { effects } => {
                 let grant = ProposedGrant::Accept {
                     effects: effects.clone(),
                 };
-                let routed = {
-                    let view = TrajectoryView::new(trajectory.store());
-                    self.route_grant(&grant, &spec.precondition.remaining, &view)
-                };
-                match routed {
-                    RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(self.accept_permit(
-                        trajectory,
-                        effects,
-                        authority,
-                        spec.precondition.remaining,
-                        original,
-                    ))),
-                    RoutedRuling::Denied { authority, reason } => {
-                        trajectory.record_event(AuditEvent::AcceptDenied {
-                            authority: authority.clone(),
-                            reason: reason.clone(),
-                        });
-                        Ok(StepOutcome::Advanced(self.terminal(
-                            trajectory,
-                            spec.precondition.remaining,
-                            BlockReason::DeniedByAuthority { authority, reason },
-                        )))
-                    }
-                    RoutedRuling::External(authority) => {
-                        trajectory.record_event(AuditEvent::ApprovalRequested {
-                            plan: capability.plan,
-                            authority: authority.clone(),
-                            resolved: spec.precondition.remaining.clone(),
-                        });
-                        let basis = checked.arguments.leaves().into_iter().chain(checked.control);
-                        let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
-                        Ok(StepOutcome::NeedsApproval(PendingApproval::new(
-                            capability.plan,
-                            capability.action,
-                            grant,
-                            authority,
-                            spec.precondition.remaining,
-                            ancestry,
-                            trajectory.id(),
-                            trajectory.revision(),
-                            self.id,
-                        )))
-                    }
-                    RoutedRuling::NoRuling => Ok(StepOutcome::Advanced(self.terminal(
-                        trajectory,
-                        spec.precondition.remaining,
-                        BlockReason::NoAuthorityRuled,
-                    ))),
-                }
+                Ok(
+                    match self.route_step_grant(trajectory, &capability, &checked, grant, spec.precondition.remaining) {
+                        RoutedStep::Approved { authority, resolved } => StepOutcome::Advanced(
+                            self.accept_permit(trajectory, effects, authority, resolved, original),
+                        ),
+                        RoutedStep::NeedsApproval(pending) => StepOutcome::NeedsApproval(pending),
+                        RoutedStep::Terminal(decision) => StepOutcome::Advanced(decision),
+                    },
+                )
             }
             TransitionKind::EndorseValue { source, delta } => {
                 let grant = ProposedGrant::Endorse {
                     source,
                     delta: delta.clone(),
                 };
-                let routed = {
-                    let view = TrajectoryView::new(trajectory.store());
-                    self.route_grant(&grant, &spec.precondition.remaining, &view)
-                };
-                match routed {
-                    RoutedRuling::Approved(authority) => Ok(StepOutcome::Advanced(
-                        self.endorse_permit(trajectory, source, delta, authority, original),
-                    )),
-                    RoutedRuling::Denied { authority, reason } => {
-                        trajectory.record_event(AuditEvent::EndorseDenied {
-                            authority: authority.clone(),
-                            reason: reason.clone(),
-                        });
-                        Ok(StepOutcome::Advanced(self.terminal(
-                            trajectory,
-                            spec.precondition.remaining,
-                            BlockReason::DeniedByAuthority { authority, reason },
-                        )))
-                    }
-                    RoutedRuling::External(authority) => {
-                        trajectory.record_event(AuditEvent::ApprovalRequested {
-                            plan: capability.plan,
-                            authority: authority.clone(),
-                            resolved: spec.precondition.remaining.clone(),
-                        });
-                        let basis = checked.arguments.leaves().into_iter().chain(checked.control);
-                        let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
-                        Ok(StepOutcome::NeedsApproval(PendingApproval::new(
-                            capability.plan,
-                            capability.action,
-                            grant,
-                            authority,
-                            spec.precondition.remaining,
-                            ancestry,
-                            trajectory.id(),
-                            trajectory.revision(),
-                            self.id,
-                        )))
-                    }
-                    RoutedRuling::NoRuling => Ok(StepOutcome::Advanced(self.terminal(
-                        trajectory,
-                        spec.precondition.remaining,
-                        BlockReason::NoAuthorityRuled,
-                    ))),
-                }
+                Ok(
+                    match self.route_step_grant(trajectory, &capability, &checked, grant, spec.precondition.remaining) {
+                        RoutedStep::Approved { authority, .. } => {
+                            StepOutcome::Advanced(self.endorse_permit(trajectory, source, delta, authority, original))
+                        }
+                        RoutedStep::NeedsApproval(pending) => StepOutcome::NeedsApproval(pending),
+                        RoutedStep::Terminal(decision) => StepOutcome::Advanced(decision),
+                    },
+                )
+            }
+        }
+    }
+
+    /// The routing shell every grant-bearing step shares. Consults the
+    /// competent authorities through a read-only view taken (and dropped)
+    /// before any mutation, so an inline ruling cannot observe its own
+    /// effects; a denial is audited under its grant kind and blocks
+    /// terminally; an external deferral audits `ApprovalRequested` *first*
+    /// and only then mints the approval, so the approval is bound to the
+    /// post-audit revision (`record_event` advances it — the order is
+    /// load-bearing); an all-inline abstention blocks with no ruling.
+    fn route_step_grant(
+        &self,
+        trajectory: &mut Trajectory,
+        capability: &StepCapability,
+        checked: &ToolRequest,
+        grant: ProposedGrant,
+        resolved: Vec<Violation>,
+    ) -> RoutedStep {
+        let routed = {
+            let view = TrajectoryView::new(trajectory.store());
+            self.route_grant(&grant, &resolved, &view)
+        };
+        match routed {
+            RoutedRuling::Approved(authority) => RoutedStep::Approved { authority, resolved },
+            RoutedRuling::Denied { authority, reason } => {
+                trajectory.record_event(denial_event(&grant, authority.clone(), reason.clone()));
+                RoutedStep::Terminal(self.terminal(
+                    trajectory,
+                    resolved,
+                    BlockReason::DeniedByAuthority { authority, reason },
+                ))
+            }
+            RoutedRuling::External(authority) => {
+                trajectory.record_event(AuditEvent::ApprovalRequested {
+                    plan: capability.plan,
+                    authority: authority.clone(),
+                    resolved: resolved.clone(),
+                });
+                let basis = checked
+                    .arguments
+                    .leaves()
+                    .into_iter()
+                    .chain(checked.control.iter().copied());
+                let ancestry = AncestrySnapshot::of(trajectory.store(), basis);
+                RoutedStep::NeedsApproval(PendingApproval::new(
+                    capability.plan,
+                    capability.action,
+                    grant,
+                    authority,
+                    resolved,
+                    ancestry,
+                    trajectory.id(),
+                    trajectory.revision(),
+                    self.id,
+                ))
+            }
+            RoutedRuling::NoRuling => {
+                RoutedStep::Terminal(self.terminal(trajectory, resolved, BlockReason::NoAuthorityRuled))
             }
         }
     }
@@ -1152,21 +1119,7 @@ impl PolicyEngine {
                 }
             },
             Ruling::Deny { reason } => {
-                let event = match parts.grant {
-                    ProposedGrant::Accept { .. } => AuditEvent::AcceptDenied {
-                        authority: parts.authority.clone(),
-                        reason: reason.clone(),
-                    },
-                    ProposedGrant::Endorse { .. } => AuditEvent::EndorseDenied {
-                        authority: parts.authority.clone(),
-                        reason: reason.clone(),
-                    },
-                    _ => AuditEvent::WaiverDenied {
-                        authority: parts.authority.clone(),
-                        reason: reason.clone(),
-                    },
-                };
-                trajectory.record_event(event);
+                trajectory.record_event(denial_event(&parts.grant, parts.authority.clone(), reason.clone()));
                 Ok(self.terminal(
                     trajectory,
                     parts.resolved,

@@ -5,6 +5,7 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -34,12 +35,18 @@ struct Args {
     /// Append one JSON line per evaluated tool-call turn to this file.
     #[arg(long, env = "BATON_PROXY_LOG")]
     log: Option<PathBuf>,
+    /// Directory for the raw model-wire log: one timestamped file per run, one
+    /// JSON line per turn (request, raw model response, returned response).
+    #[arg(long, env = "BATON_PROXY_WIRE_DIR")]
+    wire_log_dir: Option<PathBuf>,
 }
 
 struct App {
     policy: Policy,
     client: reqwest::Client,
     log: Option<Mutex<std::fs::File>>,
+    wire: Option<Mutex<std::fs::File>>,
+    wire_turn: AtomicU64,
 }
 
 #[tokio::main]
@@ -68,10 +75,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => None,
     };
 
+    let wire = match &args.wire_log_dir {
+        Some(dir) => {
+            std::fs::create_dir_all(dir).map_err(|e| format!("creating wire-log dir {}: {e}", dir.display()))?;
+            let name = format!("model-wire-{}.jsonl", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+            let path = dir.join(name);
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .map_err(|e| format!("opening wire log {}: {e}", path.display()))?;
+            tracing::info!(path = %path.display(), "writing raw model-wire log");
+            Some(Mutex::new(file))
+        }
+        None => None,
+    };
+
     let app = Arc::new(App {
         policy,
         client: reqwest::Client::new(),
         log,
+        wire,
+        wire_turn: AtomicU64::new(1),
     });
     let router = Router::new()
         .route("/v1/chat/completions", post(handler))
@@ -100,6 +125,9 @@ async fn handler(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -
             "streaming (stream:true) is not supported by baton-proxy; set stream:false".to_string(),
         );
     }
+
+    // Capture the request body for the wire log before it is moved upstream.
+    let request_json: Option<serde_json::Value> = app.wire.as_ref().and_then(|_| serde_json::from_slice(&body).ok());
 
     // Forward upstream, preserving auth and provider headers.
     let url = format!(
@@ -162,9 +190,39 @@ async fn handler(State(app): State<Arc<App>>, headers: HeaderMap, body: Bytes) -
         tracing::info!(rewritten, "withheld tool call(s) pending approval or blocked");
     }
     log_turns(&app, &session.context_audience(), &decisions);
+    log_wire(&app, request_json, &bytes, &response);
     match serde_json::to_vec(&response) {
         Ok(out) => json_bytes(StatusCode::OK, out),
         Err(_) => json_bytes(out_status, bytes.to_vec()),
+    }
+}
+
+/// Append one JSON line for this turn to the raw model-wire log: the request the
+/// harness sent, the raw response the model returned, and the response the proxy
+/// returned (rewritten when a call was gated). Best-effort.
+fn log_wire(app: &App, request: Option<serde_json::Value>, raw_response: &[u8], returned: &ChatResponse) {
+    let Some(wire) = &app.wire else {
+        return;
+    };
+    let turn = app.wire_turn.fetch_add(1, Ordering::Relaxed);
+    let ts_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let model_response: serde_json::Value = serde_json::from_slice(raw_response).unwrap_or(serde_json::Value::Null);
+    let entry = serde_json::json!({
+        "turn": turn,
+        "ts_ms": ts_ms,
+        "request": request,
+        "model_response": model_response,
+        "returned_response": returned,
+    });
+    let mut line = entry.to_string();
+    line.push('\n');
+    if let Ok(mut file) = wire.lock()
+        && let Err(e) = file.write_all(line.as_bytes())
+    {
+        tracing::warn!(error = %e, "failed to write model-wire log");
     }
 }
 

@@ -32,6 +32,7 @@ toml = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror = "2"
 tokio-util = "0.7"
 rig-core = { version = "0.39", optional = true }

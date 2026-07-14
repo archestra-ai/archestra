@@ -223,6 +223,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "baton-core",
+ "chrono",
  "clap",
  "reqwest",
  "rig-core",

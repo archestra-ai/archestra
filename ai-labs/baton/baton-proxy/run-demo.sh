@@ -48,13 +48,14 @@ trap cleanup EXIT INT TERM
 APPROVER_LOG=/tmp/baton-approver.log
 PROXY_LOG=/tmp/baton-proxy.log
 TRAJECTORY_LOG=/tmp/baton-trajectory.jsonl
+WIRE_DIR="$CRATE_DIR/wire-logs"   # raw model request/response, kept in-project
 : > "$TRAJECTORY_LOG"  # fresh per run
 
 echo "starting baton-approver ($APPROVER_ADDR) and baton-proxy ($PROXY_ADDR)…"
 ./target/debug/baton-approver --addr "$APPROVER_ADDR" 2>"$APPROVER_LOG" &
 pids+=($!)
 RUST_LOG=info ./target/debug/baton-proxy --policy policy.toml --addr "$PROXY_ADDR" \
-  --log "$TRAJECTORY_LOG" 2>"$PROXY_LOG" &
+  --log "$TRAJECTORY_LOG" --wire-log-dir "$WIRE_DIR" 2>"$PROXY_LOG" &
 pids+=($!)
 
 wait_port() {
@@ -91,7 +92,9 @@ else
   cat "$TRAJECTORY_LOG"
 fi
 echo
+wire_file="$(ls -t "$WIRE_DIR"/model-wire-*.jsonl 2>/dev/null | head -1)"
 echo "logs:"
+echo "  raw model wire (req/resp):  ${wire_file:-$WIRE_DIR/model-wire-<timestamp>.jsonl}"
 echo "  trajectory (per-turn JSON): $TRAJECTORY_LOG"
 echo "  proxy stderr:               $PROXY_LOG"
 echo "  approver stderr:            $APPROVER_LOG"

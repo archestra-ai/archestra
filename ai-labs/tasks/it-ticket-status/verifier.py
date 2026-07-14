@@ -1,4 +1,4 @@
-"""Grades the ticket-status lookup in the it-desk env, whose stale agent system prompt names a
+"""Grades the ticket-status lookup, whose stale per-task agent system prompt names a
 nonexistent service-desk tool (acme_it__ticket_lookup): the agent must recover from the
 unavailable-tool error -- following the platform's steer through tool discovery to the real
 request-status tool -- and still deliver the record. The status enum and filing date exist only in

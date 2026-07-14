@@ -56,6 +56,7 @@ import {
   isToolIdentityExcluded,
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
+import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
   type ResolvedEnterpriseTransportCredential,
@@ -426,7 +427,12 @@ class McpClient {
         toolCall,
         owner,
         mcpServerName: catalogItem.name,
-        content: [{ type: "text", text: `Opening ${catalogItem.name}.` }],
+        content: [
+          {
+            type: "text",
+            text: `Opening ${escapeAppNameForModelText(catalogItem.name)}.`,
+          },
+        ],
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,

@@ -803,23 +803,25 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 });
 
 describe("anthropicAdapterFactory.execute", () => {
-  // The SDK refuses non-streaming requests whose max_tokens implies a >10 min
-  // completion ("Streaming is required for operations that may take longer
-  // than 10 minutes") unless the client carries an explicit timeout. Claude
-  // Code sends max_tokens=32000 non-streaming; the proxy must forward it,
-  // not 500.
-  test("forwards large non-streaming max_tokens instead of tripping the SDK guard", async () => {
+  // Claude Code sends large max_tokens (e.g. 32000) non-streaming. Such a
+  // request would exceed the SDK's ~10-minute non-streaming limit, so — rather
+  // than attempt it non-streaming (which the client's explicit timeout would
+  // cap) — the proxy serves it over the streaming Messages API and returns the
+  // accumulated final Message. The result is forwarded, never 500-ed. Uses the
+  // real client so the real routing decision runs; only the stream transport is
+  // stubbed.
+  test("serves a large-max_tokens request over the streaming API and forwards the result", async () => {
     const client = anthropicAdapterFactory.createClient("test-key", {
       source: "api",
     }) as AnthropicProvider;
 
-    // Stub the transport: the guard under test runs synchronously inside
-    // messages.create before any network I/O.
-    const post = vi
-      .spyOn(client as unknown as { post: () => unknown }, "post")
-      .mockResolvedValue(
-        createMockResponse([{ type: "text", text: "ok", citations: null }]),
-      );
+    const finalMessage = createMockResponse([
+      { type: "text", text: "ok", citations: null },
+    ]);
+    const stream = vi.spyOn(client.messages, "stream").mockReturnValue({
+      finalMessage: () => Promise.resolve(finalMessage),
+    } as unknown as ReturnType<typeof client.messages.stream>);
+    const create = vi.spyOn(client.messages, "create");
 
     const response = await anthropicAdapterFactory.execute(
       client,
@@ -829,7 +831,10 @@ describe("anthropicAdapterFactory.execute", () => {
       }),
     );
 
-    expect(post).toHaveBeenCalled();
+    // Routed to streaming (max_tokens=64000 > the ~21k non-streaming limit),
+    // never the non-streaming path.
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(create).not.toHaveBeenCalled();
     expect(response.content[0]).toMatchObject({ type: "text", text: "ok" });
   });
 });
@@ -886,5 +891,139 @@ describe("anthropicAdapterFactory balance-too-low message", () => {
     expect(anthropicAdapterFactory.extractErrorMessage(error)).toContain(
       "roles must alternate",
     );
+  });
+});
+
+describe("anthropicAdapterFactory.execute - long-request routing", () => {
+  const messages = [
+    { role: "user", content: "hi" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  test("routes to non-streaming create() when the request fits the non-streaming limit", async () => {
+    const response = createMockResponse([{ type: "text", text: "ok" }]);
+    const create = vi.fn().mockResolvedValue(response);
+    const stream = vi.fn();
+    // The SDK guard returns a timeout (does not throw) → request fits.
+    const calculateNonstreamingTimeout = vi.fn().mockReturnValue(600000);
+    const client = {
+      calculateNonstreamingTimeout,
+      messages: { create, stream },
+    };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { max_tokens: 1024 }),
+    );
+
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(stream).not.toHaveBeenCalled();
+    // The routing decision is keyed on the request's own max_tokens.
+    expect(calculateNonstreamingTimeout).toHaveBeenCalledWith(1024);
+  });
+
+  test("routes to the streaming API and returns the final message when the request is too long for non-streaming", async () => {
+    const response = createMockResponse([{ type: "text", text: "done" }]);
+    const create = vi.fn();
+    const finalMessage = vi.fn().mockResolvedValue(response);
+    const stream = vi.fn().mockReturnValue({ finalMessage });
+    // The SDK guard throws → max_tokens implies a >10-minute completion.
+    const calculateNonstreamingTimeout = vi.fn(() => {
+      throw new Error(
+        "Streaming is required for operations that may take longer than 10 minutes",
+      );
+    });
+    const client = {
+      calculateNonstreamingTimeout,
+      messages: { create, stream },
+    };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { max_tokens: 64000 }),
+    );
+
+    // Same shape a non-streaming create() would have returned.
+    expect(result).toBe(response);
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(finalMessage).toHaveBeenCalledTimes(1);
+    // The non-streaming path is skipped entirely for long requests.
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("anthropicAdapterFactory - unsupported sampling params", () => {
+  const messages = [
+    { role: "user", content: "hi" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  // Shape of the Anthropic 400 for a model that rejects a sampling param.
+  function deprecatedTemperatureError() {
+    return new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_x"}',
+    );
+  }
+
+  test("execute strips the rejected param and retries once, preserving others", async () => {
+    const response = createMockResponse([{ type: "text", text: "ok" }]);
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(deprecatedTemperatureError())
+      .mockResolvedValueOnce(response);
+    const client = { messages: { create } };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { temperature: 0.7, top_p: 0.9 }),
+    );
+
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(2);
+    // First attempt carried temperature; the retry dropped it.
+    expect(create.mock.calls[0][0]).toMatchObject({ temperature: 0.7 });
+    expect(create.mock.calls[1][0]).not.toHaveProperty("temperature");
+    // top_p wasn't named in the error, so it survives the retry.
+    expect(create.mock.calls[1][0]).toMatchObject({ top_p: 0.9 });
+  });
+
+  test("execute does not retry when the rejected param wasn't set", async () => {
+    const create = vi.fn().mockRejectedValue(deprecatedTemperatureError());
+    const client = { messages: { create } };
+
+    await expect(
+      anthropicAdapterFactory.execute(client, createMockRequest(messages)),
+    ).rejects.toThrow("temperature");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("execute rethrows unrelated errors without retrying", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("overloaded_error"));
+    const client = { messages: { create } };
+
+    await expect(
+      anthropicAdapterFactory.execute(
+        client,
+        createMockRequest(messages, { temperature: 0.5 }),
+      ),
+    ).rejects.toThrow("overloaded_error");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("executeStream applies the same fallback and keeps stream: true", async () => {
+    async function* emptyStream(): AsyncGenerator<never> {}
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(deprecatedTemperatureError())
+      .mockResolvedValueOnce(emptyStream());
+    const client = { messages: { create } };
+
+    await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest(messages, { temperature: 0.7 }),
+    );
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1][0]).not.toHaveProperty("temperature");
+    expect(create.mock.calls[1][0]).toMatchObject({ stream: true });
   });
 });

@@ -119,6 +119,7 @@ function InviteByLinkCardContent({
             <Label>Invitation Link</Label>
             <div className="flex items-center gap-2">
               <Input
+                aria-label="Invitation link"
                 value={invitationLink}
                 readOnly
                 className="flex-1"
@@ -129,6 +130,7 @@ function InviteByLinkCardContent({
                 size="icon"
                 variant="outline"
                 onClick={handleCopyLink}
+                aria-label="Copy invitation link"
                 data-testid={E2eTestId.InvitationLinkCopyButton}
               >
                 {isCopied ? (

@@ -8,8 +8,14 @@ import ipaddr from "ipaddr.js";
  *  - IPv4 loopback range `127.0.0.0/8`  (any `127.x.x.x`)
  *  - IPv6 loopback `::1`
  *  - IPv4-mapped IPv6 loopback `::ffff:127.x.x.x`
+ *
+ * Accepts a possibly-missing value: Fastify types `request.ip` as `string` but
+ * it can be `undefined` at runtime (e.g. a socket with no remote address, or an
+ * empty `X-Forwarded-For` under `trustProxy`). An unknown origin is treated as
+ * non-loopback — the secure default — rather than throwing on `.startsWith`.
  */
-export function isLoopbackAddress(ip: string): boolean {
+export function isLoopbackAddress(ip: string | null | undefined): boolean {
+  if (typeof ip !== "string") return false;
   if (ip === "::1") return true;
 
   // Handle IPv4-mapped IPv6 (e.g. "::ffff:127.0.0.1")

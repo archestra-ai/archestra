@@ -73,6 +73,9 @@ async function loadSecretCredentials(
   return {
     email: (data.email as string) || "",
     apiToken: (data.apiToken as string) || "",
+    // Atlassian org-admin API key for the admin/Directory APIs; without it
+    // the admin email resolver falls back to the apiToken and gets rejected.
+    ...(data.adminApiKey ? { adminApiKey: data.adminApiKey as string } : {}),
   };
 }
 

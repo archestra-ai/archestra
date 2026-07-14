@@ -273,7 +273,7 @@ async function loadSkillsForLinks(
       eq(schema.skillShareLinkSkillsTable.skillId, schema.skillsTable.id),
     )
     .where(inArray(schema.skillShareLinkSkillsTable.shareLinkId, linkIds))
-    .orderBy(schema.skillsTable.name);
+    .orderBy(schema.skillsTable.name, schema.skillsTable.id);
 
   for (const row of rows) {
     const list = map.get(row.shareLinkId);

@@ -130,7 +130,7 @@ export function TokenSelect({
             <span>Resolve at call time</span>
           </div>
         </SelectItem>
-        {mcpServers.length > 0 && (
+        {mcpServers.length > 0 ? (
           <>
             {organizationCredentials.length > 0 && (
               <>
@@ -187,6 +187,15 @@ export function TokenSelect({
                 ))}
               </>
             )}
+          </>
+        ) : (
+          <>
+            <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+              Static
+            </div>
+            <div className="px-2 pb-2 text-xs text-muted-foreground">
+              No saved credentials for this server.
+            </div>
           </>
         )}
       </SelectContent>

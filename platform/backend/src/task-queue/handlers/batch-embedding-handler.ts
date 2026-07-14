@@ -1,4 +1,7 @@
-import { embeddingService } from "@/knowledge-base";
+import {
+  embeddingService,
+  enqueuePermissionSyncAfterContentSync,
+} from "@/knowledge-base";
 import logger from "@/logging";
 import { ConnectorRunModel, KnowledgeBaseConnectorModel } from "@/models";
 import * as metrics from "@/observability/metrics";
@@ -73,6 +76,15 @@ export async function handleBatchEmbedding(
         { runId: connectorRunId, connectorId: updatedRun.connectorId },
         "[BatchEmbeddingHandler] All batches complete, connector run finalized",
       );
+      // Content trigger: a completed documents sync of an auto-sync
+      // connector enqueues a (de-duped) permission pass so new documents are
+      // tagged promptly instead of waiting for the next scheduled tick.
+      if (connector) {
+        await enqueuePermissionSyncAfterContentSync({
+          connector,
+          documentsIngested: updatedRun.documentsIngested ?? 0,
+        });
+      }
     } else {
       logger.info(
         {

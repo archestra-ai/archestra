@@ -48,6 +48,11 @@ vi.mock("@/clients/mcp-client", () => ({
   default: {
     executeToolCallForOwner: vi.fn(),
     resolveUiAppInstallIdForCaller: vi.fn().mockResolvedValue(null),
+    // Enrichment gates attaching a tool's ui:// resource on it being readable;
+    // default to a successful read so UI-resource attachment tests are unaffected.
+    readResource: vi.fn().mockResolvedValue({
+      contents: [{ uri: "ui://x", text: "<html></html>" }],
+    }),
   },
 }));
 
@@ -65,6 +70,10 @@ beforeEach(() => {
   vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
   vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockReset();
   vi.mocked(mcpClient.resolveUiAppInstallIdForCaller).mockResolvedValue(null);
+  vi.mocked(mcpClient.readResource).mockReset();
+  vi.mocked(mcpClient.readResource).mockResolvedValue({
+    contents: [{ uri: "ui://x", text: "<html></html>" }],
+  });
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
@@ -2197,6 +2206,41 @@ describe("buildArchestraToolOutput", () => {
       },
       structuredContent: { checkpoint: "abc" },
     });
+  });
+
+  test("does not attach the UI resource when its upstream resource can't be read", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "excalidraw__create_view",
+      catalogId: catalog.id,
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    // The upstream server advertises the ui:// resource but doesn't serve it
+    // (e.g. resources/read -> -32601 Method not found). The app must NOT register
+    // — no `_meta.ui` — so chat renders a plain tool call instead of an empty
+    // pill and an auto-opened, blank right panel.
+    vi.mocked(mcpClient.readResource).mockRejectedValue(
+      new Error("MCP error -32601: Method not found"),
+    );
+
+    const result = await buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
   });
 
   test("does not attach the UI resource when the target tool is not assigned to the agent", async ({

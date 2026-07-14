@@ -49,6 +49,26 @@ describe("isTransientDbError", () => {
     ).toBe(true);
   });
 
+  test("detects ENOTFOUND (DNS name did not resolve)", () => {
+    expect(
+      isTransientDbError(
+        new Error("getaddrinfo ENOTFOUND db.example.internal"),
+      ),
+    ).toBe(true);
+  });
+
+  test("detects ENOTFOUND wrapped as a DrizzleQueryError cause", () => {
+    const pgError = Object.assign(
+      new Error("getaddrinfo ENOTFOUND postgresql.archestra-dev"),
+      { code: "ENOTFOUND" },
+    );
+    const drizzleError = new Error(
+      'Failed query: select "id" from "agents" where "slug" = $1',
+      { cause: pgError },
+    );
+    expect(isTransientDbError(drizzleError)).toBe(true);
+  });
+
   test("detects 'Connection terminated'", () => {
     expect(isTransientDbError(new Error("Connection terminated"))).toBe(true);
   });
@@ -142,6 +162,9 @@ describe("getTransientDbErrorCode", () => {
     expect(
       getTransientDbErrorCode(new Error("getaddrinfo EAI_AGAIN db.internal")),
     ).toBe("EAI_AGAIN");
+    expect(
+      getTransientDbErrorCode(new Error("getaddrinfo ENOTFOUND db.internal")),
+    ).toBe("ENOTFOUND");
   });
 
   test("maps message patterns to low-cardinality codes", () => {

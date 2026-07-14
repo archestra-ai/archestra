@@ -122,6 +122,36 @@ describe("createFastifyInstance", () => {
       captureSpy.mockRestore();
     });
 
+    test("skips MCP-server-unreachable errors on the PostHog sink too", async () => {
+      const { posthogErrorTrackingService } = await import(
+        "@/services/error-tracking"
+      );
+      const captureSpy = vi.spyOn(
+        posthogErrorTrackingService,
+        "captureException",
+      );
+
+      const app = createFastifyInstance();
+      // A user's MCP server being unreachable is an operational/config
+      // condition, not a bug: the shared tracking policy drops it, so the
+      // PostHog capture funnel skips it just as the Sentry filter does.
+      app.get("/test-mcp-unreachable", async () => {
+        throw Object.assign(new Error("MCP server is not running yet"), {
+          name: "McpServerNotReadyError",
+        });
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/test-mcp-unreachable",
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(captureSpy).not.toHaveBeenCalled();
+
+      captureSpy.mockRestore();
+    });
+
     test("maps transient database connectivity errors to a retryable 503 with root-cause grouping", async () => {
       const { posthogErrorTrackingService } = await import(
         "@/services/error-tracking"

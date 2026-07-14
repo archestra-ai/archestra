@@ -312,6 +312,57 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
   return CONNECTOR_DISPLAY_LABELS[type];
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Connector types whose backend implementation supports auto-sync-permissions
+ * (`supportsPermissionSync`). Stage 1: GitHub, Confluence, Jira. Keep in sync
+ * with the connectors that set `supportsPermissionSync = true`; the backend
+ * re-validates on create/update (400 otherwise), so this only gates the UI.
+ */
+const AUTO_SYNC_CONNECTOR_TYPES: ReadonlySet<ConnectorType> = new Set([
+  "github",
+  "confluence",
+  "jira",
+]);
+
+export function connectorSupportsAutoSync(type: ConnectorType): boolean {
+  return AUTO_SYNC_CONNECTOR_TYPES.has(type);
+}
+
+/**
+ * Atlassian Cloud connectors take an optional organization admin API key
+ * alongside the product API token: the admin APIs (managed-account email
+ * resolution) reject user API tokens, and the product APIs reject org-admin
+ * API keys, so one value cannot serve both.
+ */
+export function connectorSupportsAdminApiKey(type: ConnectorType): boolean {
+  return type === "jira" || type === "confluence";
+}
+
+/**
+ * What the credential must be able to see for auto-sync permissions to
+ * resolve members to users (the email join). Shown under the credential field
+ * when Auto-sync permissions is selected: each source hides emails behind a
+ * specific, non-obvious visibility rule, and a credential without it produces
+ * a snapshot full of unresolvable members.
+ */
+export function getPermissionSyncCredentialNote(
+  type: ConnectorType,
+): string | null {
+  switch (type) {
+    case "jira":
+    case "confluence":
+      return "Auto-sync permissions matches members by email, and Atlassian Cloud only returns another user's email when that user's profile email visibility is set to \"Anyone\" — admin roles on this API token do not unlock hidden emails. Add an organization admin API key below so permission sync can resolve managed accounts' emails through the Atlassian admin APIs.";
+    case "github":
+      return "Auto-sync permissions matches members by their public GitHub profile email. No token scope reveals a private email, so members without a public profile email are recorded but stay unresolvable.";
+    default:
+      return null;
+  }
+}
+// SPDX-SnippetEnd
+
 export function getConnectorUrlConfig(
   type: ConnectorType,
 ): ConnectorUrlConfig | null {

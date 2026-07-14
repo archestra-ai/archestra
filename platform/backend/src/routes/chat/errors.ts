@@ -34,6 +34,7 @@ import { unavailableToolDispatchModeMessage } from "@/archestra-mcp-server/tool-
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
+import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
@@ -348,7 +349,8 @@ function extractArchestraInternalCode(
     if (
       code === ArchestraInternalErrorCode.ContextLengthExceeded ||
       code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
-      code === ArchestraInternalErrorCode.UpstreamEmptyResponse
+      code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
+      code === ArchestraInternalErrorCode.UpstreamTimeout
     ) {
       return code;
     }
@@ -1349,6 +1351,27 @@ const openAiCompatibleErrorHandler = providerErrorHandler(
 );
 
 /**
+ * Microsoft 365 Copilot shares the OpenAI-compatible error body; its one
+ * provider-specific case is the proxy adapter's tools rejection, which must
+ * surface as the actionable ToolsUnsupported headline instead of the generic
+ * invalid-request copy (whose details are visible to admins only).
+ */
+function mapMicrosoft365CopilotErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  if (
+    statusCode === 400 &&
+    parsedError?.message?.includes(
+      MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE,
+    )
+  ) {
+    return ChatErrorCode.ToolsUnsupported;
+  }
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+/**
  * Registry of provider-specific error parse/map pairs.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -1370,6 +1393,10 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   "github-copilot": openAiCompatibleErrorHandler,
+  "microsoft-365-copilot": providerErrorHandler(
+    parseOpenAIError,
+    mapMicrosoft365CopilotErrorToCode,
+  ),
   minimax: providerErrorHandler(parseMinimaxError, mapMinimaxErrorToCode),
   azure: openAiCompatibleErrorHandler,
 };
@@ -1779,6 +1806,10 @@ export function mapProviderError(
     // ("the provider is experiencing issues"). Reclassify to the retryable
     // EmptyResponse code so the card names what actually happened.
     errorCode = ChatErrorCode.EmptyResponse;
+  } else if (normalizedCode === ArchestraInternalErrorCode.UpstreamTimeout) {
+    // Mid-stream HTTP status is already committed as 200, so the normalized
+    // code preserves the upstream 504 semantics and retryability.
+    errorCode = ChatErrorCode.NetworkError;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
   // An Archestra usage-limit block arrives over the proxy envelope as an HTTP

@@ -10,5 +10,15 @@ export function getEncoding(): Tiktoken {
 }
 
 export function countTokens(encoding: Tiktoken, text: string): number {
-  return encoding.encode(text).length;
+  return encodeText(encoding, text).length;
+}
+
+/**
+ * Encode arbitrary user content. tiktoken's bare `encode(text)` THROWS when
+ * the text contains a special-token literal (a GitHub issue quoting
+ * "<|endoftext|>" failed ingestion this way); passing an empty
+ * disallowed-special set encodes such literals as ordinary text instead.
+ */
+export function encodeText(encoding: Tiktoken, text: string): Uint32Array {
+  return encoding.encode(text, undefined, []);
 }

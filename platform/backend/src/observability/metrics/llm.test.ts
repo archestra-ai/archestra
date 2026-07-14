@@ -36,6 +36,7 @@ import {
   reportLLMCacheCost,
   reportLLMCost,
   reportLLMTokens,
+  reportRequestDuration,
   reportTimeToFirstToken,
   reportTokensPerSecond,
 } from "./llm";
@@ -981,6 +982,80 @@ describe("reportTokensPerSecond", () => {
         model: "claude-3",
       },
       value: 20,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+});
+
+describe("reportRequestDuration", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("records duration with a success status code", () => {
+    reportRequestDuration(
+      "bedrock",
+      testAgent,
+      "claude-sonnet",
+      1.5,
+      "200",
+      "api",
+    );
+
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: {
+        provider: "bedrock",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "claude-sonnet",
+        status_code: "200",
+      },
+      value: 1.5,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("records duration with an error status code", () => {
+    reportRequestDuration(
+      "bedrock",
+      testAgent,
+      "claude-sonnet",
+      0.2,
+      "400",
+      "chat",
+    );
+
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: {
+        provider: "bedrock",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "chat",
+        model: "claude-sonnet",
+        status_code: "400",
+      },
+      value: 0.2,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("falls back to unknown model label", () => {
+    reportRequestDuration("bedrock", testAgent, "unknown", 3, "0", "api");
+
+    expect(histogramObserve).toHaveBeenCalledWith({
+      labels: expect.objectContaining({
+        provider: "bedrock",
+        model: "unknown",
+        status_code: "0",
+      }),
+      value: 3,
       exemplarLabels: expect.any(Object),
     });
   });

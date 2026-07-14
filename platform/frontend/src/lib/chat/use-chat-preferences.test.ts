@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
   agentRequiresPerUserConnect,
+  agentToolsUnavailableForModel,
   CHAT_STORAGE_KEYS,
   deriveModelSource,
   getSavedAgent,
@@ -346,6 +347,86 @@ describe("agentRequiresPerUserConnect", () => {
         agent: undefined,
         selectedModelId: "uuid-copilot",
         isModelAvailable: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("agentToolsUnavailableForModel", () => {
+  const noToolsModel = {
+    dbId: "uuid-m365",
+    capabilities: { supportsToolCalling: false },
+  };
+  const toolCallingModel = {
+    dbId: "uuid-anthropic",
+    capabilities: { supportsToolCalling: true },
+  };
+  const unknownCapabilityModel = { dbId: "uuid-unknown" };
+  const models = [noToolsModel, toolCallingModel, unknownCapabilityModel];
+
+  test("true for a tooled agent on a no-tools model", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: false, tools: [{}] },
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  test("true for an Auto-mode agent (no assignments) on a no-tools model", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [] },
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(true);
+  });
+
+  test("false for a tool-less Custom agent on a no-tools model", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: false, tools: [] },
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when the model supports tool calling", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-anthropic",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false when the model's capability is unknown", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [{}] },
+        selectedModelId: "uuid-unknown",
+        models,
+      }),
+    ).toBe(false);
+  });
+
+  test("false without an agent or a selection", () => {
+    expect(
+      agentToolsUnavailableForModel({
+        agent: undefined,
+        selectedModelId: "uuid-m365",
+        models,
+      }),
+    ).toBe(false);
+    expect(
+      agentToolsUnavailableForModel({
+        agent: { accessAllTools: true, tools: [] },
+        selectedModelId: null,
+        models,
       }),
     ).toBe(false);
   });

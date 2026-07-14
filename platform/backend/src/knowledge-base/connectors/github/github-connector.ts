@@ -1,12 +1,20 @@
 import { Octokit } from "@octokit/rest";
 import type pino from "pino";
+import { LRUCacheManager } from "@/cache-manager";
 import { resolveInstallationToken } from "@/integrations/github/app-auth";
+import * as metrics from "@/observability/metrics";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
   ConnectorSyncBatch,
+  DocumentPermissions,
   GithubCheckpoint,
   GithubConfig,
+  GroupMembershipYield,
+  GroupMemberYield,
+  PermissionSnapshotYield,
+  PermissionSyncParams,
+  ResolveMappedEmail,
 } from "@/types";
 import { GithubConfigSchema } from "@/types";
 import {
@@ -15,11 +23,71 @@ import {
   extractErrorMessage,
   REQUEST_TIMEOUT_MS,
 } from "../base-connector";
+import { ConnectorIdentityCache } from "../identity-cache";
 
 const BATCH_SIZE = 50;
+/** Cap for the per-pass login → profile cache: sized so a normal org never evicts. */
+const USER_PROFILE_CACHE_MAX_SIZE = 10_000;
+/**
+ * Requests left in the credential's hourly budget below which a permission pass
+ * stops making OPTIONAL identity lookups (the per-login profile fetch).
+ *
+ * Resolving a login to an email is one rate-limited request per account, and a
+ * token gets 5,000 an hour for EVERYTHING — including the content sync that
+ * shares the credential. Without a floor, a pass over a few large repos spends
+ * the whole budget on profile lookups and then every later request 403s, which
+ * fails the mandatory calls too: `resolveRepoAudience` catches, returns an empty
+ * audience, and the repo's entire corpus goes dark. Stopping the optional work
+ * early costs the unresolved accounts their grants (fail-closed under-grant, the
+ * same as a private email, and rescued by an admin member mapping) and leaves
+ * the mandatory calls a budget to finish in.
+ */
+const RATE_LIMIT_RESERVE = 500;
+
+/** A login whose profile we could not (or chose not to) fetch. */
+const UNRESOLVED_PROFILE: { email: string | null; name: string | null } = {
+  email: null,
+  name: null,
+};
 
 export class GithubConnector extends BaseConnector {
   type = "github" as const;
+  supportsPermissionSync = true;
+
+  /**
+   * Per-pass cache of GitHub login → public profile (email null when private).
+   * Size-bounded LRU (no TTL — the instance is per-pass) so a huge org cannot
+   * grow it without limit; eviction only costs a re-fetch.
+   */
+  private userProfileCache = new LRUCacheManager<{
+    email: string | null;
+    name: string | null;
+  }>({ maxSize: USER_PROFILE_CACHE_MAX_SIZE, defaultTtl: 0 });
+  /**
+   * Cross-pass persistence behind `userProfileCache`: login → profile results
+   * (including private-email negatives) survive the pass so the next run does
+   * not re-probe every collaborator/member. Armed per permission pass.
+   */
+  private persistentProfileCache: ConnectorIdentityCache<{
+    email: string | null;
+    name: string | null;
+  }> | null = null;
+  /**
+   * Admin member mappings (login → mapped email), armed per pass. Consulted
+   * FIRST when materializing a direct collaborator grant, so a mapped account
+   * whose GitHub email is private still lands on container audiences instead
+   * of being dropped fail-closed. Group-derived access needs no
+   * materialization — memberships carry the login and resolve the mapping at
+   * query time.
+   */
+  private resolveMappedEmail: ResolveMappedEmail | null = null;
+  /**
+   * Requests left in the credential's hourly budget, as of the last response
+   * this pass saw (`x-ratelimit-remaining`). Null until the first response.
+   */
+  private remainingRateLimit: number | null = null;
+  /** Profile lookups this pass declined to make because of the reserve. */
+  private identityLookupsSkipped = 0;
 
   async validateConfig(
     config: Record<string, unknown>,
@@ -483,9 +551,402 @@ export class GithubConnector extends BaseConnector {
       };
     }
   }
+
+  // ===== Permission sync hooks =====
+
+  /**
+   * Repo-scoped snapshot. Each repo is one top-level container
+   * `repo:<owner>/<name>` whose audience is resolved ONCE (private/public +
+   * collaborators + teams); its already-ingested documents are assigned via
+   * read-back — upstream calls are O(repos + collaborators), never O(docs).
+   * The read-back mirrors our own corpus, so the pass's per-container
+   * fail-close diff is naturally empty for GitHub (content-sync owns document
+   * deletions); a repo that VANISHES upstream is caught by the pass's stale
+   * container sweep instead.
+   */
+  async *syncPermissionSnapshot(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<PermissionSnapshotYield> {
+    const config = parseGithubConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid GitHub configuration for permission sync");
+    }
+    const octokit = await createOctokit(config, params.credentials, this.log);
+    this.initPersistentProfileCache(
+      config,
+      params.credentials,
+      params.refreshIdentities,
+    );
+    this.resolveMappedEmail = params.resolveMappedEmail ?? null;
+    const repos = await getRepos(octokit, config);
+    // Stable codepoint order so the resume cursor (a container key) is
+    // monotonic under plain string comparison.
+    const sorted = [...repos].sort((a, b) => {
+      const left = githubRepoKey(a);
+      const right = githubRepoKey(b);
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+
+    const scope = params.scope ? new Set(params.scope.containerKeys) : null;
+    for (const repo of sorted) {
+      const repoKey = githubRepoKey(repo);
+      const containerKey = `repo:${repoKey}`;
+      if (scope && !scope.has(containerKey)) continue;
+      // Resume: containers strictly before the cursor are already done. The
+      // cursor container is re-processed (idempotent — same audience).
+      if (params.cursor && containerKey < params.cursor) continue;
+
+      const audience = await this.resolveRepoAudience(octokit, repo);
+      yield {
+        kind: "container",
+        containerKey,
+        permissions: audience.permissions,
+        audienceResolutionFailed: audience.resolutionFailed,
+        cursor: containerKey,
+      };
+
+      let afterId: string | null = null;
+      for (;;) {
+        const { documents, nextAfterId } = await params.readIngestedDocuments({
+          metadataFilter: { repo: repoKey },
+          afterId,
+          limit: GITHUB_READBACK_PAGE_SIZE,
+        });
+        for (const doc of documents) {
+          yield {
+            kind: "document",
+            sourceId: doc.sourceId,
+            containerKey,
+            cursor: containerKey,
+          };
+        }
+        if (documents.length < GITHUB_READBACK_PAGE_SIZE) break;
+        afterId = nextAfterId;
+      }
+    }
+
+    this.reportSkippedIdentityLookups();
+  }
+
+  /**
+   * Local-adoption scoping for delta passes: a stored document is covered by
+   * its repository's enumeration (content-sync writes `metadata.repo` =
+   * `<owner>/<name>`, matching the container key). Scoping only — the repo
+   * enumeration resolves the authoritative audience, so this can never
+   * over-grant.
+   */
+  scopeKeyForDocument(metadata: Record<string, unknown>): string | null {
+    const repo = metadata.repo;
+    return typeof repo === "string" && repo.length > 0 ? `repo:${repo}` : null;
+  }
+
+  /**
+   * Org teams → member emails, across every org that owns a synced repo. Group
+   * ids are namespaced `<org>/<team-slug>` to match the tokens written on
+   * documents (see resolveRepoAudience).
+   */
+  async *syncGroups(
+    params: PermissionSyncParams,
+  ): AsyncGenerator<GroupMembershipYield> {
+    const config = parseGithubConfig(params.config);
+    if (!config) {
+      throw new Error("Invalid GitHub configuration for permission sync");
+    }
+    const octokit = await createOctokit(config, params.credentials, this.log);
+    this.initPersistentProfileCache(
+      config,
+      params.credentials,
+      params.refreshIdentities,
+    );
+    const repos = await getRepos(octokit, config);
+    const orgs = [...new Set(repos.map((repo) => repo.owner))].sort();
+
+    for (const org of orgs) {
+      for await (const team of this.paginate((page) =>
+        octokit.rest.teams.list({ org, per_page: 100, page }),
+      )) {
+        const members: GroupMemberYield[] = [];
+        for await (const member of this.paginate((page) =>
+          octokit.rest.teams.listMembersInOrg({
+            org,
+            team_slug: team.slug,
+            per_page: 100,
+            page,
+          }),
+        )) {
+          // Every member is recorded; GitHub only exposes an email the user
+          // made public, so `email` is often null (fail-closed, but visible
+          // to admins as unresolvable instead of silently dropped). The member
+          // listing already carries the public email when there is one, so most
+          // members cost no request of their own.
+          const profile = await this.resolveUserProfile(octokit, member.login, {
+            email: member.email,
+            name: member.name,
+          });
+          members.push({
+            accountId: member.login,
+            displayName: profile.name,
+            email: profile.email,
+          });
+        }
+        yield {
+          groupId: githubGroupId(org, team.slug),
+          members,
+          cursor: `${org}/${team.slug}`,
+        };
+      }
+    }
+
+    this.reportSkippedIdentityLookups();
+  }
+
+  private async resolveRepoAudience(
+    octokit: Octokit,
+    repo: GithubRepo,
+  ): Promise<{ permissions: DocumentPermissions; resolutionFailed: boolean }> {
+    try {
+      await this.rateLimit();
+      const meta = await octokit.rest.repos.get({
+        owner: repo.owner,
+        repo: repo.name,
+      });
+      this.noteRateLimit(meta.headers);
+      const isPublic = !meta.data.private;
+
+      const users: string[] = [];
+      let dropped = 0;
+      for await (const collaborator of this.paginate((page) =>
+        octokit.rest.repos.listCollaborators({
+          owner: repo.owner,
+          repo: repo.name,
+          per_page: 100,
+          page,
+        }),
+      )) {
+        // The public-profile email always wins (automatic matching takes
+        // precedence); the mapping only rescues accounts whose email GitHub
+        // keeps private. The collaborator listing already carries that public
+        // email when there is one, so it costs no request of its own.
+        const email =
+          (
+            await this.resolveUserProfile(octokit, collaborator.login, {
+              email: collaborator.email,
+              name: collaborator.name,
+            })
+          ).email ?? this.resolveMappedEmail?.(collaborator.login);
+        if (email) users.push(email);
+        else dropped++;
+      }
+      this.meterDroppedPrincipals(dropped);
+
+      const groups: string[] = [];
+      for await (const team of this.paginate((page) =>
+        octokit.rest.repos.listTeams({
+          owner: repo.owner,
+          repo: repo.name,
+          per_page: 100,
+          page,
+        }),
+      )) {
+        groups.push(githubGroupId(repo.owner, team.slug));
+      }
+
+      return {
+        permissions: { isPublic, users, groups },
+        resolutionFailed: false,
+      };
+    } catch (error) {
+      // Same per-container failure isolation as Jira/Confluence: a transient
+      // upstream error must not fail the whole pass. Partial results are
+      // discarded — an empty audience fail-closes the repo (under-grant)
+      // until the next successful pass, and the pass counts it so the repo
+      // going dark does not read as "nobody has access to this repo".
+      this.log.error(
+        { repo: githubRepoKey(repo), error: extractErrorMessage(error) },
+        "Could not read the repository's audience; every document in it is fail-closed for this pass",
+      );
+      return {
+        permissions: { isPublic: false, users: [], groups: [] },
+        resolutionFailed: true,
+      };
+    }
+  }
+
+  /**
+   * Meter upstream principals dropped because their email could not be resolved
+   * (private GitHub email). Fail-closed under-grant — surfaced so admins see the
+   * coverage gap rather than silently narrowing an audience.
+   */
+  private meterDroppedPrincipals(count: number): void {
+    if (count <= 0) return;
+    this.log.debug(
+      { count, connectorType: this.type },
+      "Dropped GitHub principals with no resolvable email (fail-closed)",
+    );
+    metrics.rag.reportPermissionSyncDroppedPrincipals({
+      connectorType: this.type,
+      reason: "no_email",
+      count,
+    });
+  }
+
+  /**
+   * Resolve a login to its public profile. GitHub only exposes an email when the
+   * user has made it public — no token scope reveals a private one — so `email`
+   * is null for most members (fail-closed, documented limitation).
+   *
+   * `known` is the email/name GitHub already put in the list response that named
+   * this login. The collaborator and org-member schemas both carry them, and
+   * they are the same public-profile values `GET /users/{login}` would return —
+   * so when one is there, taking it turns a per-account request into no request
+   * at all. This is the difference between O(collaborators) and O(1) requests
+   * for a repo whose collaborators GitHub already told us about.
+   */
+  private async resolveUserProfile(
+    octokit: Octokit,
+    login: string,
+    known?: { email?: string | null; name?: string | null },
+  ): Promise<{ email: string | null; name: string | null }> {
+    if (known?.email) {
+      const profile = { email: known.email, name: known.name ?? null };
+      this.userProfileCache.set(login, profile);
+      await this.persistentProfileCache?.set(login, profile);
+      return profile;
+    }
+
+    const cached = this.userProfileCache.get(login);
+    if (cached !== undefined) return cached;
+    const persisted = await this.persistentProfileCache?.get(login);
+    if (persisted !== undefined) {
+      this.userProfileCache.set(login, persisted);
+      return persisted;
+    }
+
+    if (
+      this.remainingRateLimit !== null &&
+      this.remainingRateLimit <= RATE_LIMIT_RESERVE
+    ) {
+      // Out of budget for optional work. Remembered for the rest of THIS pass
+      // only — never written to the cross-pass cache, which would persist a
+      // fabricated "no email" for a day and lock the account out of its grants
+      // long after the budget recovered.
+      this.identityLookupsSkipped += 1;
+      this.userProfileCache.set(login, UNRESOLVED_PROFILE);
+      return UNRESOLVED_PROFILE;
+    }
+
+    let profile: { email: string | null; name: string | null } =
+      UNRESOLVED_PROFILE;
+    try {
+      await this.rateLimit();
+      const response = await octokit.rest.users.getByUsername({
+        username: login,
+      });
+      this.noteRateLimit(response.headers);
+      profile = {
+        email: response.data.email ?? null,
+        name: response.data.name ?? null,
+      };
+    } catch (error) {
+      this.log.debug(
+        { login, error: extractErrorMessage(error) },
+        "Could not resolve GitHub user profile",
+      );
+    }
+    this.userProfileCache.set(login, profile);
+    await this.persistentProfileCache?.set(login, profile);
+    return profile;
+  }
+
+  /**
+   * Note the credential's remaining hourly budget, which GitHub returns on every
+   * response, so `resolveUserProfile` can stop spending it on optional lookups
+   * before the mandatory calls start failing (see RATE_LIMIT_RESERVE). Read off
+   * the responses rather than an octokit request hook, so it needs nothing of
+   * the client but the shape every REST call already returns. A response without
+   * the header simply leaves the budget unknown, and an unknown budget never
+   * skips anything.
+   */
+  private noteRateLimit(headers?: {
+    "x-ratelimit-remaining"?: string | number;
+  }): void {
+    const remaining = Number(headers?.["x-ratelimit-remaining"]);
+    if (Number.isFinite(remaining)) this.remainingRateLimit = remaining;
+  }
+
+  /** Report (and reset) the identity lookups the reserve made this pass skip. */
+  private reportSkippedIdentityLookups(): void {
+    if (this.identityLookupsSkipped === 0) return;
+    const skipped = this.identityLookupsSkipped;
+    this.identityLookupsSkipped = 0;
+    this.log.warn(
+      { skipped, remainingRateLimit: this.remainingRateLimit },
+      "GitHub rate-limit budget hit the reserve; stopped resolving member emails for this pass (those members lose their grants until the next pass — map them manually on the Users tab if this persists)",
+    );
+    metrics.rag.reportPermissionSyncIdentityLookupsSkipped({
+      connectorType: this.type,
+      count: skipped,
+    });
+  }
+
+  /** Arm the cross-pass profile cache for one permission pass. */
+  private initPersistentProfileCache(
+    config: GithubConfig,
+    credentials: ConnectorCredentials,
+    refresh?: boolean,
+  ): void {
+    this.persistentProfileCache = new ConnectorIdentityCache({
+      namespace: "github-profile",
+      host: resolveGithubApiUrl(config, credentials),
+      credentials,
+      refresh,
+    });
+  }
+
+  /** Rate-limited generic pager over a 100-per-page GitHub list endpoint. */
+  private async *paginate<T>(
+    fetchPage: (page: number) => Promise<{
+      data: T[];
+      headers?: { "x-ratelimit-remaining"?: string | number };
+    }>,
+  ): AsyncGenerator<T> {
+    let page = 1;
+    for (;;) {
+      await this.rateLimit();
+      const response = await fetchPage(page);
+      this.noteRateLimit(response.headers);
+      const items = response.data;
+      for (const item of items) yield item;
+      if (items.length < 100) break;
+      page++;
+    }
+  }
 }
 
 // ===== Module-level helpers =====
+
+const GITHUB_READBACK_PAGE_SIZE = 200;
+
+function githubItemSourceId(repoName: string, itemNumber: number): string {
+  return `${repoName}#${itemNumber}`;
+}
+
+function githubFileSourceId(repoName: string, filePath: string): string {
+  return `${repoName}#file:${filePath}`;
+}
+
+function githubRepoKey(repo: { owner: string; name: string }): string {
+  return `${repo.owner}/${repo.name}`;
+}
+
+/**
+ * Namespace a team by its org so team slugs never collide across orgs. Written
+ * on documents and stored by syncGroups identically, so the group data-contract
+ * byte-matches.
+ */
+function githubGroupId(org: string, teamSlug: string): string {
+  return `${org}/${teamSlug}`;
+}
 
 async function createOctokit(
   config: GithubConfig,
@@ -776,7 +1237,7 @@ function repositoryFileToDocument(
 ): ConnectorDocument {
   const fileName = filePath.split("/").pop() ?? filePath;
   return {
-    id: `${repo.name}#file:${filePath}`,
+    id: githubFileSourceId(repo.name, filePath),
     title: `${fileName} (${repo.owner}/${repo.name})`,
     content,
     sourceUrl: `${repo.htmlUrl}/blob/${branch}/${filePath}`,
@@ -808,7 +1269,7 @@ function itemToDocument(
   }
 
   return {
-    id: `${repo.name}#${item.number}`,
+    id: githubItemSourceId(repo.name, item.number),
     title: `${item.title} (${repo.owner}/${repo.name}#${item.number})`,
     content: contentParts.join("\n"),
     sourceUrl: item.html_url,

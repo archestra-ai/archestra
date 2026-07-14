@@ -415,6 +415,7 @@ export function ActiveFilterBadges({
                 type="button"
                 onClick={() => handleRemoveTeam(team.id)}
                 className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                aria-label="Remove team from filter"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -444,6 +445,7 @@ export function ActiveFilterBadges({
                 type="button"
                 onClick={() => handleRemoveUser(user.id)}
                 className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                aria-label="Remove user from filter"
               >
                 <X className="h-3 w-3" />
               </button>

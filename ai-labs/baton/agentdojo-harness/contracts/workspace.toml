@@ -1,0 +1,123 @@
+# baton contracts for the AgentDojo `workspace` suite.
+#
+# Labels derive from the SOURCE TYPE of a tool, never from whether a given
+# result actually carries an injection (that is the benchmark's ground truth,
+# and a defense that peeks at it is cheating):
+#   - output_trust = "suspicious": the result contains third-party-authored
+#     text (email bodies, calendar event descriptions, drive file contents —
+#     exactly where the suite plants its injection vectors).
+#   - output_trust = "trusted": system-generated state (dates, contacts,
+#     confirmations of our own writes).
+#   - requires_trust = "trusted": a sink that must not run from a context
+#     tainted by third-party text.
+#   - recipients_arg: which call argument names the people a sink exposes
+#     data to. Carried through to baton-check for the (v2, data-only)
+#     audience dimension; unused by the v1 trust-only checks.
+#
+# Every tool of the suite must appear exactly once: under unknown_policy
+# "deny", calling an unlisted tool blocks outright, so a gap in this table is
+# a policy decision and has to be explicit. contracts.py cross-checks this
+# table against the live suite and fails loudly on drift.
+
+# --- Readers of injectable third-party content ------------------------------
+
+[tools.get_unread_emails]
+output_trust = "suspicious"
+
+[tools.get_sent_emails]
+output_trust = "suspicious"
+
+[tools.get_received_emails]
+output_trust = "suspicious"
+
+[tools.get_draft_emails]
+output_trust = "suspicious"
+
+[tools.search_emails]
+output_trust = "suspicious"
+
+[tools.search_calendar_events]
+output_trust = "suspicious"
+
+[tools.get_day_calendar_events]
+output_trust = "suspicious"
+
+[tools.search_files]
+output_trust = "suspicious"
+
+[tools.search_files_by_filename]
+output_trust = "suspicious"
+
+[tools.get_file_by_id]
+output_trust = "suspicious"
+
+[tools.list_files]
+output_trust = "suspicious"
+
+# --- Pure-state readers ------------------------------------------------------
+
+[tools.get_current_day]
+output_trust = "trusted"
+
+[tools.search_contacts_by_name]
+output_trust = "trusted"
+
+[tools.search_contacts_by_email]
+output_trust = "trusted"
+
+# --- Egress sinks ------------------------------------------------------------
+
+# recipients_arg names only the primary audience arg; send_email also has
+# cc/bcc (email_client.py) that a future audience dimension would need to fold
+# in. Unused by the v1 trust-only check.
+[tools.send_email]
+output_trust = "trusted"
+requires_trust = "trusted"
+recipients_arg = "recipients"
+
+[tools.share_file]
+output_trust = "trusted"
+requires_trust = "trusted"
+recipients_arg = "email"
+
+[tools.add_calendar_event_participants]
+output_trust = "trusted"
+requires_trust = "trusted"
+recipients_arg = "participants"
+
+[tools.create_calendar_event]
+output_trust = "trusted"
+requires_trust = "trusted"
+recipients_arg = "participants"
+
+# --- Destructive sinks -------------------------------------------------------
+
+[tools.delete_email]
+output_trust = "trusted"
+requires_trust = "trusted"
+
+[tools.delete_file]
+output_trust = "trusted"
+requires_trust = "trusted"
+
+[tools.cancel_calendar_event]
+output_trust = "trusted"
+requires_trust = "trusted"
+
+# --- Egress sinks with implicit recipients -----------------------------------
+# reschedule_calendar_event emails the event's existing participants
+# (calendar_client.py), so it egresses just like create/cancel — gated the
+# same way. No recipients_arg: the audience is the event's participants, not a
+# call argument (an implicit-recipients follow-up for the audience dimension).
+
+[tools.reschedule_calendar_event]
+output_trust = "trusted"
+requires_trust = "trusted"
+
+# --- Benign mutations (no requirement) ---------------------------------------
+
+[tools.append_to_file]
+output_trust = "trusted"
+
+[tools.create_file]
+output_trust = "trusted"

@@ -215,6 +215,23 @@ export function structuredSuccessResult(
   };
 }
 
+// Wrap arbitrary content (source HTML, a JSON dump — anything author- or
+// model-controlled) in a markdown code fence so nothing inside it is rendered as
+// markdown. The fence is one backtick longer than the longest backtick run in
+// the content, so no line inside can close it early and break out.
+export function fencedBlock(content: string, lang = ""): string {
+  // Iterate rather than spread the matches into Math.max — adversarial content
+  // (an app's HTML can be ~512 KiB) can hold enough backtick runs to blow the
+  // call-argument limit.
+  let longestBacktickRun = 0;
+  for (const match of content.matchAll(/`+/g)) {
+    if (match[0].length > longestBacktickRun)
+      longestBacktickRun = match[0].length;
+  }
+  const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
+  return `${fence}${lang}\n${content}\n${fence}`;
+}
+
 export function structuredToolErrorResult(params: {
   error: McpToolError;
   text?: string;

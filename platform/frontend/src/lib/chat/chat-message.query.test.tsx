@@ -4,11 +4,15 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleApiError } from "@/lib/utils";
-import { useUpdateChatMessage } from "./chat-message.query";
+import {
+  useSetChatMessageFeedback,
+  useUpdateChatMessage,
+} from "./chat-message.query";
 
 vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     updateChatMessage: vi.fn(),
+    setChatMessageFeedback: vi.fn(),
   },
 }));
 
@@ -85,5 +89,69 @@ describe("useUpdateChatMessage", () => {
 
     expect(value).toBeNull();
     await waitFor(() => expect(mockedHandleApiError).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("useSetChatMessageFeedback", () => {
+  const feedbackArgs = {
+    messageId: "m1",
+    conversationId: "c1",
+    feedback: "up",
+  } as const;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns data and invalidates the conversation query on success", async () => {
+    vi.mocked(archestraApiSdk.setChatMessageFeedback).mockResolvedValue({
+      data: { id: "m1", feedback: "up" },
+      error: undefined,
+    } as unknown as Awaited<
+      ReturnType<typeof archestraApiSdk.setChatMessageFeedback>
+    >);
+
+    const { queryClient, wrapper } = createWrapper();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useSetChatMessageFeedback(), {
+      wrapper,
+    });
+
+    const value = await result.current.mutateAsync(feedbackArgs);
+
+    expect(value).toEqual({ id: "m1", feedback: "up" });
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["conversation", "c1"],
+      }),
+    );
+    expect(mockedHandleApiError).not.toHaveBeenCalled();
+  });
+
+  it("rejects on API error so callers can roll back optimistic state", async () => {
+    vi.mocked(archestraApiSdk.setChatMessageFeedback).mockResolvedValue({
+      data: undefined,
+      error: { error: { message: "boom", type: "api_internal_server_error" } },
+      response: { status: 500 },
+    } as unknown as Awaited<
+      ReturnType<typeof archestraApiSdk.setChatMessageFeedback>
+    >);
+
+    const { queryClient, wrapper } = createWrapper();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useSetChatMessageFeedback(), {
+      wrapper,
+    });
+
+    await expect(result.current.mutateAsync(feedbackArgs)).rejects.toThrow();
+    await waitFor(() => expect(mockedHandleApiError).toHaveBeenCalledTimes(1));
+    // onSettled still refetches the conversation after a failure
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ["conversation", "c1"],
+      }),
+    );
   });
 });

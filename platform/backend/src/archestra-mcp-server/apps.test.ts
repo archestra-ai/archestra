@@ -96,9 +96,13 @@ describe("app tool execution", () => {
     expect(structured(created).latestVersion).toBe(1);
     // The model hands this link to the user. The scaffolded template is not
     // rendered inline (only the first edit_app is); the standalone page stays
-    // reachable via the returned /a/<id> link.
+    // reachable via the returned link. It is a name-labeled markdown link to the
+    // absolute /a/<id> path — never a bare path the model turns into a raw-UUID
+    // label or a leading-slash-dropped relative href.
     expect(structured(created).id).toMatch(/^[0-9a-f-]{36}$/);
-    expect((created.content[0] as any).text).toContain(`/a/${appId}`);
+    expect((created.content[0] as any).text).toContain(
+      `[Dashboard](/a/${appId})`,
+    );
 
     const listed = await executeArchestraTool(
       getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
@@ -929,9 +933,10 @@ describe("read_app / edit_app", () => {
     expect(Object.keys(schema.properties)).toEqual(
       expect.arrayContaining(["edits", "replacementHtml"]),
     );
-    expect(schema.required).toEqual(
-      expect.arrayContaining(["appId", "baseVersion"]),
-    );
+    expect(schema.required).toContain("appId");
+    // baseVersion defaults to the head, so it is an optional concurrency guard,
+    // not a required field; the two edit modes are runtime-exclusive optionals.
+    expect(schema.required).not.toContain("baseVersion");
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
 
@@ -1067,6 +1072,26 @@ describe("read_app / edit_app", () => {
     );
     expect(stale.isError).toBe(true);
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
+  });
+
+  test("edit_app without baseVersion applies to the current head", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+    // Advance the head so a default-to-head edit must target v2, not the v1 the
+    // scaffold produced — proving the default resolves the live head, not 1.
+    await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
+    const head = version + 1;
+
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, replacementHtml: "<h1>v3</h1>" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(structured(result).latestVersion).toBe(head + 1);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, head + 1))?.html,
+    ).toBe("<h1>v3</h1>");
   });
 
   test("success text excerpts each applied edit from the final document", async () => {
@@ -2567,7 +2592,12 @@ describe("publish_app", () => {
     const result = await publish({ appId: app.id, scope: "org" }, context);
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("org");
+    // Structured field stays a raw path for machine consumers…
     expect(structured(result).runUrl).toBe(`/a/${app.id}`);
+    // …while the model-facing text carries a name-labeled markdown link.
+    expect((result.content[0] as any).text).toContain(
+      `[${app.name}](/a/${app.id})`,
+    );
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
   });
 
@@ -2923,6 +2953,10 @@ describe("scaffoldPartialToolFailureResult", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).id).toBe(app.id);
     expect(structured(result).status).toBe("partial");
+    // Even on partial failure the user still gets the working app link.
+    expect((result.content[0] as any).text).toContain(
+      `[${app.name}](/a/${app.id})`,
+    );
   });
 });
 

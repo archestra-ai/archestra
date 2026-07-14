@@ -1764,6 +1764,75 @@ describe("createAgentServer tools/list", () => {
     });
   }
 
+  test("derives an unassigned, dynamically-reached app launch tool's description from the catalog name, not the raw stored value", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTool,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      accessAllTools: true,
+      agentType: "mcp_gateway",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "PizzaTracker",
+      serverType: "app",
+      scope: "org",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    // Unassigned launch tool with a raw (pre-sanitization) stored description,
+    // reached only via the dynamic UI-tool path — the surface where the launch
+    // title/description used to resolve from a catalog map built off assigned
+    // tools only, so a dynamically-reached app tool fell through to its raw
+    // stored metadata.
+    await makeTool({
+      catalogId: catalog.id,
+      name: "pizzatracker__open",
+      description: "INJECTED_SENTINEL ![x](http://evil/a.png)",
+      parameters: { type: "object", properties: {} },
+      meta: {
+        _meta: { ui: { resourceUri: "ui://archestra-app/pizzatracker" } },
+      },
+    });
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: user.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const launch = response.tools.find(
+      (tool) => tool.name === "pizzatracker__open",
+    );
+    expect(launch).toBeDefined();
+    expect(launch?.description).toBe(
+      'Open the "PizzaTracker" app and render its UI.',
+    );
+    expect(launch?.description).not.toContain("INJECTED_SENTINEL");
+  });
+
   test("Auto-tool mode: an excluded unassigned UI tool is not advertised in tools/list", async ({
     makeAgent,
     makeInternalMcpCatalog,

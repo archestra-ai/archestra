@@ -274,6 +274,91 @@ describe("chat model routes", () => {
     });
   });
 
+  test("GET /api/llm-models only attaches keys visible to the caller", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeUser,
+    makeMember,
+    makeOrganization,
+  }) => {
+    // Per-user providers give every member an identically-named personal key
+    // linked to the same global model row — without visibility filtering the
+    // Models page showed them all as indistinguishable duplicates.
+    const model = await ModelModel.create({
+      externalId: "microsoft-365-copilot/microsoft-365-copilot",
+      provider: "microsoft-365-copilot",
+      modelId: "microsoft-365-copilot",
+      description: "Microsoft 365 Copilot",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+    const ownSecret = await makeSecret({ secret: { apiKey: "own-token" } });
+    const ownKey = await makeLlmProviderApiKey(organizationId, ownSecret.id, {
+      provider: "microsoft-365-copilot",
+      scope: "personal",
+      userId: user.id,
+      name: "Microsoft 365 Copilot",
+    });
+
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
+    const otherSecret = await makeSecret({ secret: { apiKey: "other-token" } });
+    const otherUsersKey = await makeLlmProviderApiKey(
+      organizationId,
+      otherSecret.id,
+      {
+        provider: "microsoft-365-copilot",
+        scope: "personal",
+        userId: otherUser.id,
+        name: "Microsoft 365 Copilot",
+      },
+    );
+
+    const foreignOrg = await makeOrganization();
+    const foreignSecret = await makeSecret({
+      secret: { apiKey: "foreign-token" },
+    });
+    const foreignOrgKey = await makeLlmProviderApiKey(
+      foreignOrg.id,
+      foreignSecret.id,
+      {
+        provider: "microsoft-365-copilot",
+        scope: "org",
+        name: "Microsoft 365 Copilot",
+      },
+    );
+
+    for (const key of [ownKey, otherUsersKey, foreignOrgKey]) {
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        key.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "microsoft-365-copilot",
+      );
+    }
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-models",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const copilotModel = response
+      .json()
+      .find((m: { id: string }) => m.id === model.id);
+    // Only the caller's own personal key — the other member's personal key
+    // and the other organization's key must not leak into the response.
+    expect(copilotModel.apiKeys.map((k: { id: string }) => k.id)).toEqual([
+      ownKey.id,
+    ]);
+  });
+
   test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({
     makeSecret,
   }) => {

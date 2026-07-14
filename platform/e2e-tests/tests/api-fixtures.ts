@@ -48,6 +48,8 @@ export interface TestFixtures {
   deleteTrustedDataPolicy: typeof deleteTrustedDataPolicy;
   createMcpCatalogItem: typeof createMcpCatalogItem;
   deleteMcpCatalogItem: typeof deleteMcpCatalogItem;
+  createEnvironment: typeof createEnvironment;
+  deleteEnvironment: typeof deleteEnvironment;
   installMcpServer: typeof installMcpServer;
   uninstallMcpServer: typeof uninstallMcpServer;
   createRole: typeof createRole;
@@ -504,6 +506,9 @@ const createMcpCatalogItem = async (
     serverUrl?: string;
     authFields?: unknown;
     labels?: Array<{ key: string; value: string }>;
+    // Bind the catalog item to an environment so its deployed pod inherits that
+    // environment's egress policy (e.g. a restricted allowlist).
+    environmentId?: string;
   },
 ) =>
   makeApiRequest({
@@ -525,6 +530,44 @@ const deleteMcpCatalogItem = async (
     request,
     method: "delete",
     urlSuffix: `/api/internal_mcp_catalog/${catalogId}`,
+  });
+
+/**
+ * Create an environment (with an optional egress network policy).
+ * (authnz is handled by the authenticated session)
+ */
+const createEnvironment = async (
+  request: APIRequestContext,
+  data: {
+    name: string;
+    namespace?: string | null;
+    networkPolicy?: {
+      egressMode?: "off" | "restricted" | "unrestricted";
+      domainPreset?: "none" | "common_dependencies" | "package_managers";
+      allowedDomains?: string[];
+      allowedCidrs?: string[];
+    } | null;
+  },
+) =>
+  makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: "/api/environments",
+    data,
+  });
+
+/**
+ * Delete an environment
+ * (authnz is handled by the authenticated session)
+ */
+const deleteEnvironment = async (
+  request: APIRequestContext,
+  environmentId: string,
+) =>
+  makeApiRequest({
+    request,
+    method: "delete",
+    urlSuffix: `/api/environments/${environmentId}`,
   });
 
 /**
@@ -1285,6 +1328,12 @@ export const test = base.extend<TestFixtures>({
   },
   deleteMcpCatalogItem: async ({}, use) => {
     await use(deleteMcpCatalogItem);
+  },
+  createEnvironment: async ({}, use) => {
+    await use(createEnvironment);
+  },
+  deleteEnvironment: async ({}, use) => {
+    await use(deleteEnvironment);
   },
   installMcpServer: async ({}, use) => {
     await use(installMcpServer);

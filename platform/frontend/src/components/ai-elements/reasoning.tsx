@@ -16,7 +16,10 @@ type ReasoningContextValue = {
   isStreaming: boolean;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  duration: number;
+  // Undefined until a live block measures its own duration (or a caller passes
+  // one); a persisted block never has it. `getThinkingMessage` distinguishes the
+  // two, so the type must admit undefined.
+  duration: number | undefined;
 };
 
 const ReasoningContext = createContext<ReasoningContextValue | null>(null);
@@ -58,7 +61,12 @@ export const Reasoning = memo(
     });
     const [duration, setDuration] = useControllableState({
       prop: durationProp,
-      defaultProp: 0,
+      // Undefined, not 0: a reasoning block that never streamed (a persisted
+      // conversation reopened, or a surface that passes no `isStreaming`) has no
+      // measured duration and must read "Thought for a few seconds", not stay
+      // pinned on "Thinking…". A live block still gets a real duration from the
+      // streaming-end effect below.
+      defaultProp: undefined,
     });
 
     const [hasAutoClosed, setHasAutoClosed] = useState(false);

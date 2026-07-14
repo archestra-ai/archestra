@@ -7,8 +7,8 @@ import {
 } from "./models-page-utils";
 
 const availableApiKeys = [
-  ["openrouter-key", { provider: "openrouter" }],
-  ["openai-key", { provider: "openai" }],
+  { id: "openrouter-key", provider: "openrouter" },
+  { id: "openai-key", provider: "openai" },
 ] as const satisfies readonly ModelsPageAvailableApiKey[];
 
 const models = [

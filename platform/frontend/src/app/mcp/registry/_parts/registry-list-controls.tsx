@@ -163,6 +163,7 @@ function FilterOptionList({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Search ${searchLabel}`}
+          aria-label={`Search ${searchLabel}`}
           className="mb-1.5 h-8"
         />
       )}

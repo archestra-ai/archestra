@@ -73,6 +73,38 @@ describe("resolveConnectorCredentials", () => {
     expect(credentials.githubApp).toBeUndefined();
   });
 
+  test("passes the stored admin API key through to runtime credentials", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await secretManager().createSecret(
+      {
+        email: "user@example.com",
+        apiToken: "user-token",
+        adminApiKey: "org-admin-key",
+      },
+      "jira-secret",
+    );
+
+    const config: ConnectorConfig = {
+      type: "jira",
+      jiraBaseUrl: "https://test.atlassian.net",
+      isCloud: true,
+      projectKey: "TEST",
+    };
+
+    const credentials = await resolveConnectorCredentials({
+      config,
+      organizationId: org.id,
+      secretId: secret.id,
+    });
+
+    // Dropping this field silently downgrades the admin email resolver to the
+    // user API token, which Atlassian's admin APIs reject.
+    expect(credentials.adminApiKey).toBe("org-admin-key");
+    expect(credentials.apiToken).toBe("user-token");
+  });
+
   test("throws when the referenced App config is missing", async ({
     makeOrganization,
   }) => {

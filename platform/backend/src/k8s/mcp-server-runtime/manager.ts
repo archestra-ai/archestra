@@ -22,6 +22,7 @@ import type {
   K8sNetworkPolicyCapabilities,
   McpServer,
 } from "@/types";
+import { ensureEgressBaselineNetworkPolicy } from "./egress-baseline";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -60,6 +61,9 @@ export class McpServerRuntimeManager {
   private k8sExec?: k8s.Exec;
   private namespace: string = "default";
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
+  // Per-namespace in-flight ensure of the egress default-deny baseline, so
+  // concurrent deploys share one call; cleared on start() to re-assert on re-init.
+  private egressBaselineByNamespace: Map<string, Promise<void>> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
   // Callbacks for initialization events
@@ -136,6 +140,7 @@ export class McpServerRuntimeManager {
 
     try {
       this.status = "initializing";
+      this.egressBaselineByNamespace.clear();
       logger.info("Initializing Kubernetes MCP Server Runtime...");
 
       // Verify K8s connectivity
@@ -203,6 +208,17 @@ export class McpServerRuntimeManager {
         logger.info(`${successes.length} MCP server(s) started successfully`);
       }
 
+      // Re-assert every server's egress policy so a restart reconciles floors for
+      // already-running servers, not only newly-created ones. Without this a
+      // server whose deploy path didn't (re)apply its floor stays under the
+      // namespace deny-all baseline — no egress — until a manual policy change.
+      await this.reconcileEgressPolicies({
+        localServers,
+        localCatalogItems,
+        capabilities: networkPolicyCapabilities,
+        cache: networkPolicyResolutionCache,
+      });
+
       logger.info("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
 
@@ -223,6 +239,107 @@ export class McpServerRuntimeManager {
       this.status = "error";
       this.onRuntimeStartupError(new Error(errorMsg));
       throw error;
+    }
+  }
+
+  private ensureEgressBaseline(
+    namespace: string,
+    capabilities: K8sNetworkPolicyCapabilities,
+  ): Promise<void> {
+    let ensured = this.egressBaselineByNamespace.get(namespace);
+    if (!ensured) {
+      const networkingApi = this.k8sNetworkingApi;
+      const customObjectsApi = this.k8sCustomObjectsApi;
+      if (!networkingApi || !customObjectsApi) return Promise.resolve();
+      ensured = ensureEgressBaselineNetworkPolicy({
+        networkingApi,
+        customObjectsApi,
+        namespace,
+        capabilities,
+      }).then((succeeded) => {
+        // Don't cache a failed attempt as done — drop it so the next deploy in
+        // this namespace retries rather than leaving pods without the baseline.
+        if (!succeeded) this.egressBaselineByNamespace.delete(namespace);
+      });
+      this.egressBaselineByNamespace.set(namespace, ensured);
+    }
+    return ensured;
+  }
+
+  /**
+   * Re-assert every local MCP server's egress policy (baseline + per-pod floor /
+   * off / restricted), policy-only — no pod redeploy. Runs at the end of start()
+   * so a restart re-applies the per-pod policy to servers that were already
+   * running (or whose deploy path skipped it), instead of leaving them under the
+   * namespace deny-all baseline with no floor — no egress — until a manual policy
+   * change. Per-server failures are logged and skipped so one server can't abort
+   * the sweep.
+   */
+  private async reconcileEgressPolicies(params: {
+    localServers: McpServer[];
+    localCatalogItems: CatalogItem[];
+    capabilities: K8sNetworkPolicyCapabilities;
+    cache: NetworkPolicyResolutionCache;
+  }): Promise<void> {
+    const {
+      k8sApi,
+      k8sAppsApi,
+      k8sNetworkingApi,
+      k8sCustomObjectsApi,
+      k8sAttach,
+      k8sLog,
+      k8sExec,
+    } = this;
+    if (
+      !k8sApi ||
+      !k8sAppsApi ||
+      !k8sNetworkingApi ||
+      !k8sCustomObjectsApi ||
+      !k8sAttach ||
+      !k8sLog ||
+      !k8sExec
+    ) {
+      return;
+    }
+
+    logger.info(
+      `Reconciling egress policies for ${params.localServers.length} MCP server(s)`,
+    );
+
+    for (let i = 0; i < params.localServers.length; i++) {
+      const mcpServer = params.localServers[i];
+      const catalogItem = params.localCatalogItems[i];
+      try {
+        const namespace = await this.resolveNamespaceForCatalog(
+          catalogItem,
+          params.cache,
+        );
+        await this.ensureEgressBaseline(namespace, params.capabilities);
+        const k8sDeployment = new K8sDeployment({
+          mcpServer,
+          k8sApi,
+          k8sAppsApi,
+          k8sNetworkingApi,
+          k8sCustomObjectsApi,
+          k8sAttach,
+          k8sLog,
+          k8sExec,
+          namespace,
+          catalogItem,
+          effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+            mcpServer,
+            catalogItem,
+            cache: params.cache,
+          }),
+          networkPolicyCapabilities: params.capabilities,
+        });
+        await k8sDeployment.applyK8sNetworkPolicy();
+      } catch (err) {
+        logger.warn(
+          { err, mcpServerId: mcpServer.id },
+          "Failed to reconcile egress policy for MCP server on startup",
+        );
+      }
     }
   }
 
@@ -453,6 +570,22 @@ export class McpServerRuntimeManager {
         }
       }
 
+      const deploymentNamespace = await this.resolveNamespaceForCatalog(
+        catalogItem,
+        options?.networkPolicyResolutionCache,
+      );
+      const networkPolicyCapabilities =
+        options?.networkPolicyCapabilities ??
+        (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
+          .networkPolicy;
+
+      // Ensure the namespace default-deny baseline before the pod exists, so an
+      // un-reconciled or apply-failed pod is denied by default rather than open.
+      await this.ensureEgressBaseline(
+        deploymentNamespace,
+        networkPolicyCapabilities,
+      );
+
       const k8sDeployment = new K8sDeployment({
         mcpServer,
         k8sApi: this.k8sApi,
@@ -461,10 +594,7 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(
-          catalogItem,
-          options?.networkPolicyResolutionCache,
-        ),
+        namespace: deploymentNamespace,
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
@@ -473,10 +603,7 @@ export class McpServerRuntimeManager {
           catalogItem,
           cache: options?.networkPolicyResolutionCache,
         }),
-        networkPolicyCapabilities:
-          options?.networkPolicyCapabilities ??
-          (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
-            .networkPolicy,
+        networkPolicyCapabilities,
         k8sExec: this.k8sExec,
       });
 

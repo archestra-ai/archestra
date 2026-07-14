@@ -10,7 +10,6 @@ import config from "@/config";
 import db, { schema as dbSchema } from "@/database";
 import { AgentModel } from "@/models";
 import { APP_CONNECTOR_PATH_PREFIX } from "@/services/apps/app-connector-resource";
-import { ApiError } from "@/types";
 import { getPublicRequestOrigin } from "./request-origin";
 
 /**

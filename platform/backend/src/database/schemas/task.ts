@@ -28,6 +28,11 @@ const tasksTable = pgTable(
       .notNull()
       .defaultNow(),
     startedAt: timestamp("started_at", { mode: "date" }),
+    // Liveness of the executing worker, renewed every poll tick while the task
+    // is in flight. The stuck sweep keys off this (falling back to started_at
+    // for rows claimed before the column existed): a stale heartbeat means the
+    // worker died — started_at age alone cannot tell a crash from a long task.
+    heartbeatAt: timestamp("heartbeat_at", { mode: "date" }),
     completedAt: timestamp("completed_at", { mode: "date" }),
     lastError: text("last_error"),
     periodic: boolean("periodic").notNull().default(false),

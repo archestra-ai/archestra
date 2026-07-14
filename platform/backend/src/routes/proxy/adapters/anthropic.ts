@@ -40,6 +40,10 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import {
+  type SamplingParam,
+  withSamplingParamFallback,
+} from "./sampling-param-fallback";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1283,10 +1287,37 @@ export const anthropicAdapterFactory: LLMProvider<
     request: AnthropicRequest,
   ): Promise<AnthropicResponse> {
     const anthropicClient = client as AnthropicProvider;
-    return anthropicClient.messages.create({
-      ...request,
-      stream: false,
-    } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming);
+    return withSamplingParamFallback({
+      input: request,
+      strip: stripAnthropicSamplingParams,
+      logContext: { provider: "anthropic", model: request.model },
+      run: (req) => {
+        const params = {
+          ...req,
+          stream: false,
+        } as AnthropicProvider.Messages.MessageCreateParamsNonStreaming;
+
+        // A non-streaming request whose `max_tokens` implies a completion that
+        // could exceed ~10 minutes can't be served reliably: our client is
+        // built with an explicit timeout, so the SDK skips its own "streaming
+        // required" guard and instead sends the request and lets it hit that
+        // timeout, and networks may drop the idle connection before the single
+        // response arrives. The SSE body of a *streaming* request is not bounded
+        // by the client timeout (only its initial connection is), so — per
+        // Anthropic's guidance — consume such requests over the streaming
+        // Messages API and return the accumulated final Message, which is
+        // identical in shape to a non-streaming response.
+        // https://platform.claude.com/docs/en/api/errors#long-requests
+        if (exceedsNonStreamingLimit(anthropicClient, req.max_tokens)) {
+          return anthropicClient.messages
+            .stream(
+              params as unknown as AnthropicProvider.Messages.MessageStreamParams,
+            )
+            .finalMessage();
+        }
+        return anthropicClient.messages.create(params);
+      },
+    });
   },
 
   async executeStream(
@@ -1294,15 +1325,22 @@ export const anthropicAdapterFactory: LLMProvider<
     request: AnthropicRequest,
   ): Promise<AsyncIterable<AnthropicStreamChunk>> {
     const anthropicClient = client as AnthropicProvider;
-    // use the raw create() stream rather than the messages.stream() helper: the
-    // helper eagerly partial-parses accumulated input_json_delta fragments and
-    // throws (unguarded) when a non-conformant upstream emits deltas that
-    // concatenate into more than one JSON value. we do our own guarded tool-call
-    // accumulation in processChunk, so the raw event stream is all we need.
-    return anthropicClient.messages.create({
-      ...request,
-      stream: true,
-    } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
+    return withSamplingParamFallback({
+      input: request,
+      strip: stripAnthropicSamplingParams,
+      logContext: { provider: "anthropic", model: request.model },
+      // use the raw create() stream rather than the messages.stream() helper:
+      // the helper eagerly partial-parses accumulated input_json_delta fragments
+      // and throws (unguarded) when a non-conformant upstream emits deltas that
+      // concatenate into more than one JSON value. we do our own guarded
+      // tool-call accumulation in processChunk, so the raw event stream is all
+      // we need.
+      run: (req) =>
+        anthropicClient.messages.create({
+          ...req,
+          stream: true,
+        } as AnthropicProvider.Messages.MessageCreateParamsStreaming),
+    });
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
@@ -1336,6 +1374,49 @@ export const anthropicAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/**
+ * Whether a non-streaming request with this `max_tokens` would exceed the SDK's
+ * ~10-minute non-streaming limit (i.e. should be served over the streaming API
+ * instead). Delegates to the SDK's own estimate — which throws exactly when
+ * streaming is required — so the threshold stays in sync with the SDK rather
+ * than being duplicated here. `maxNonstreamingTokens` is left unset so only the
+ * general 10-minute estimate applies, not any per-model cap.
+ * https://platform.claude.com/docs/en/api/errors#long-requests
+ */
+function exceedsNonStreamingLimit(
+  client: AnthropicProvider,
+  maxTokens: number,
+): boolean {
+  // Defensive: a real AnthropicProvider always exposes this, but partial/mock
+  // clients may not. If we can't obtain the estimate, don't force streaming.
+  if (typeof client.calculateNonstreamingTimeout !== "function") {
+    return false;
+  }
+  try {
+    client.calculateNonstreamingTimeout(maxTokens);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Strip the rejected sampling params from an Anthropic request (they live at the
+ * top level, so the canonical param names match directly). Returns null when
+ * none were set. Passed to the shared {@link withSamplingParamFallback}.
+ */
+function stripAnthropicSamplingParams(
+  request: AnthropicRequest,
+  rejected: SamplingParam[],
+): AnthropicRequest | null {
+  const record = request as Record<string, unknown>;
+  const present = rejected.filter((p) => record[p] !== undefined);
+  if (present.length === 0) return null;
+  const next: Record<string, unknown> = { ...record };
+  for (const p of present) delete next[p];
+  return next as AnthropicRequest;
+}
 
 /** The SDK nests the provider body as `error.error.{type,message}`. */
 function isAnthropicBalanceTooLow(error: unknown): boolean {

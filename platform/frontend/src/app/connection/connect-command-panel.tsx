@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type CreateConnectionSetupBody,
@@ -54,7 +55,6 @@ import {
 } from "./platform.utils";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
-import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;

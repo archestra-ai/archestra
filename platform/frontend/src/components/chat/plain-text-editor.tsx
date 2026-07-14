@@ -39,6 +39,7 @@ export function PlainTextEditor({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        aria-label={placeholder || "Text editor"}
         className="min-h-40 flex-1 resize-none font-mono text-xs"
         autoFocus
       />

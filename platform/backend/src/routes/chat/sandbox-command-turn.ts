@@ -160,6 +160,7 @@ export async function runSandboxCommandTurn(params: {
           writer.write({
             type: "data-heartbeat",
             data: { timestamp: Date.now() },
+            transient: true,
           });
         } catch {
           clearInterval(heartbeatInterval);

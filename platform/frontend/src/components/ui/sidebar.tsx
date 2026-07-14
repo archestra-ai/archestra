@@ -13,6 +13,7 @@ import * as React from "react";
 import { OnboardingDot } from "@/components/onboarding-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -301,16 +302,16 @@ function SidebarTrigger({
       </TooltipTrigger>
       <TooltipContent side="right">
         {isCollapsed ? (
-          <span>
+          <span className="flex items-center gap-1.5">
             Toggle Sidebar{" "}
-            <kbd className="ml-1 rounded border bg-muted px-1 py-0.5 text-[11px] font-mono">
+            <Kbd>
               {modLabel} + {SHORTCUT_SIDEBAR.label}
-            </kbd>
+            </Kbd>
           </span>
         ) : (
-          <span className="text-[11px] font-mono">
+          <Kbd>
             {modLabel} + {SHORTCUT_SIDEBAR.label}
-          </span>
+          </Kbd>
         )}
       </TooltipContent>
     </Tooltip>
@@ -389,9 +390,9 @@ function SidebarCircleToggle({
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">
-        <span className="text-[11px] font-mono">
+        <Kbd>
           {modLabel} + {SHORTCUT_SIDEBAR.label}
-        </span>
+        </Kbd>
       </TooltipContent>
     </Tooltip>
   );

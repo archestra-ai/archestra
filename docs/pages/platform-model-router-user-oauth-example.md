@@ -3,7 +3,7 @@ title: Model Router User OAuth
 category: Examples
 order: 1
 description: Build a custom OAuth app that calls the OpenAI-compatible Model Router as the signed-in user
-lastUpdated: 2026-05-04
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,7 +23,7 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 3. Uses PKCE for the authorization-code exchange
 4. Sends the OAuth access token to `/v1/model-router/{proxyId}/chat/completions`
 
-User OAuth tokens do not use **LLM Proxies > Credentials > OAuth Clients**. That page creates confidential clients for the client credentials flow. User OAuth apps are public authorization-code clients, and provider keys are resolved from the signed-in user's accessible Model Provider keys.
+User OAuth tokens do not use the registered clients under **Credentials > OAuth Clients**. That page creates confidential clients for the client credentials flow. User OAuth apps are public authorization-code clients, and provider keys are resolved from the signed-in user's accessible Model Provider keys.
 
 ## Run the Example
 

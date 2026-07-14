@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -39,7 +39,7 @@ Virtual API keys are platform-managed bearer tokens that map to one or more prov
 
 ### Creating Virtual Keys
 
-1. Go to **LLM Proxies > Credentials > Virtual Keys**
+1. Go to **Credentials > Virtual Keys**
 2. Create a virtual key
 3. Map at least one provider API key
 4. Copy the generated token (shown only once)
@@ -90,7 +90,7 @@ Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough key is a 
 
 ### Creating Passthrough Virtual Keys
 
-1. Go to **LLM Proxies > Credentials > Virtual Keys**
+1. Go to **Credentials > Virtual Keys**
 2. Create a virtual key and choose the **Passthrough** type
 3. As an admin, optionally pick the owner
 4. Copy the generated token (shown only once)
@@ -140,8 +140,8 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 
 ### Managing OAuth Clients
 
-1. Go to **LLM Proxies > Credentials > OAuth Clients**
-2. Create an OAuth client and choose its grant type
+1. Go to **Credentials > OAuth Clients**
+2. Create an OAuth client, choose the **For LLM proxies** type, then its grant type
 3. For an application (client credentials): select the LLM proxies it can access and map the provider API keys it can use
 4. For acting on behalf of users (authorization code): add the application's redirect URIs
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)

@@ -59,6 +59,9 @@ import { SkillEditorDialog } from "./_parts/skill-editor-dialog";
 
 type SkillItem = archestraApiTypes.GetSkillsResponses["200"]["data"][number];
 
+const SKILLS_DESCRIPTION =
+  "Skills teach your agents reusable expertise — a SKILL.md instruction set plus optional resource files, loaded on demand and invocable in chat as slash commands.";
+
 export default function SkillsPage() {
   return (
     <div className="h-full w-full">
@@ -304,7 +307,7 @@ function SkillsList() {
 
   if (isSkillsLoadError) {
     return (
-      <PageLayout title="Skills" description="">
+      <PageLayout title="Skills" description={SKILLS_DESCRIPTION}>
         <QueryLoadError
           title="Couldn't load your skills"
           onRetry={() => refetchSkills()}
@@ -320,7 +323,7 @@ function SkillsList() {
     >
       <PageLayout
         title="Skills"
-        description=""
+        description={SKILLS_DESCRIPTION}
         actionButton={
           !showEmptyState && (
             <PermissionButton permissions={{ skill: ["create"] }} asChild>

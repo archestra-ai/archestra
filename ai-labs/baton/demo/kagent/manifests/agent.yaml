@@ -54,6 +54,9 @@ spec:
         - name: baton-proxy
           image: baton-proxy:poc
           imagePullPolicy: IfNotPresent
+          env:
+            - name: RUST_LOG
+              value: info
           args:
             - --policy
             - /etc/baton/policy.toml

@@ -27,7 +27,7 @@
 //! without control-release competence can clear it). Acceptable for a benchmark
 //! substrate; a faithful gate needs the model's real argument provenance.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use baton_core::{
     ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, Blocked, Decision, ExecutionToken,
@@ -184,7 +184,7 @@ impl BatonGate {
     /// be released). Recipients (if any) sit under the recipient key.
     fn build_request(&mut self, tool: &str, args: &serde_json::Value) -> ToolRequest {
         let body: Vec<ArgumentTree<ValueId>> = self.context.iter().copied().map(ArgumentTree::Value).collect();
-        let mut fields = BTreeMap::from([(ArgumentName::new(BODY_ARG), ArgumentTree::List(body))]);
+        let mut fields = vec![(ArgumentName::new(BODY_ARG), ArgumentTree::List(body))];
         if let Some(recipients) = self.recipients.get(tool).map(|extract| extract(args)) {
             let leaves = recipients
                 .into_iter()
@@ -197,9 +197,9 @@ impl BatonGate {
                     ArgumentTree::Value(id)
                 })
                 .collect();
-            fields.insert(ArgumentName::new(RECIPIENT_ARG), ArgumentTree::List(leaves));
+            fields.push((ArgumentName::new(RECIPIENT_ARG), ArgumentTree::List(leaves)));
         }
-        ToolRequest::new(ToolName::new(tool), ArgumentTree::Object(fields), BTreeSet::new())
+        ToolRequest::new(ToolName::new(tool), ArgumentTree::object(fields), [])
     }
 }
 
@@ -293,6 +293,8 @@ impl BatonGateBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use baton_core::{
         Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Effect, Effects,
         ProposedGrant, Requirements, Ruling, ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel,

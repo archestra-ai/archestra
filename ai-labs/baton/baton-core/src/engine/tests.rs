@@ -535,6 +535,30 @@ fn canonical_request_renders_the_checked_tree() {
 }
 
 #[test]
+fn object_built_request_checks_and_renders_like_the_literal_tree() {
+    let engine = engine_with([email_contract()]);
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
+    let to = identity_ingress(&mut trajectory, "bob");
+    // `object` + leaf coercion + iterator control set: duplicates dedup into
+    // the same mandatory set a literal `BTreeSet` would carry.
+    let request = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::object([("to", to), ("body", body)]),
+        [body, body],
+    );
+    assert_eq!(request.control, BTreeSet::from([body]));
+
+    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected permit");
+    };
+    let (canonical, receipt) = trajectory.release(token).unwrap();
+    assert_eq!(canonical.rendered, r#"{"body":"the doc","to":"bob"}"#);
+    trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+}
+
+#[test]
 fn stale_receipt_is_rejected_after_any_mutation() {
     let engine = engine_with([email_contract()]);
     let mut trajectory = Trajectory::new();

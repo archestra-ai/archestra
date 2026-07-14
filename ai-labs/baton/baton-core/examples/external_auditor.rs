@@ -11,7 +11,7 @@
 //!
 //! Run with `cargo run --example external_auditor`.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use baton_core::{
     ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
@@ -95,11 +95,7 @@ fn main() {
     );
 
     // Read the invoices; the output wears the finance team's audience.
-    let list = ToolRequest::new(
-        ToolName::new("invoices.list"),
-        ArgumentTree::Object(BTreeMap::new()),
-        BTreeSet::new(),
-    );
+    let list = ToolRequest::new(ToolName::new("invoices.list"), ArgumentTree::empty(), []);
     let report = match engine.evaluate(&mut trajectory, list) {
         Decision::Permitted(token) => {
             let (_canonical, receipt) = trajectory.release(token).unwrap();
@@ -141,11 +137,8 @@ fn email(trajectory: &mut Trajectory, report: ValueId, recipient: &str) -> ToolR
     );
     ToolRequest::new(
         ToolName::new("email.send"),
-        ArgumentTree::Object(BTreeMap::from([
-            (ArgumentName::new("to"), ArgumentTree::Value(to)),
-            (ArgumentName::new("body"), ArgumentTree::Value(report)),
-        ])),
-        BTreeSet::new(),
+        ArgumentTree::object([("to", to), ("body", report)]),
+        [],
     )
 }
 

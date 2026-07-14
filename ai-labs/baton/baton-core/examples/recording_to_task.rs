@@ -10,8 +10,6 @@
 //!
 //! Run with `cargo run --example recording_to_task`.
 
-use std::collections::{BTreeMap, BTreeSet};
-
 use baton_core::{
     ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Blocked, Decision, Effect, Effects,
     OpaqueValue, PolicyEngine, Requirements, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust, UserId,
@@ -68,11 +66,7 @@ fn main() {
     );
 
     // Fetch the recording; the output wears the internal team's audience.
-    let fetch = ToolRequest::new(
-        ToolName::new("grain.fetch"),
-        ArgumentTree::Object(BTreeMap::new()),
-        BTreeSet::new(),
-    );
+    let fetch = ToolRequest::new(ToolName::new("grain.fetch"), ArgumentTree::empty(), []);
     let recording = match engine.evaluate(&mut trajectory, fetch) {
         Decision::Permitted(token) => {
             let (_canonical, receipt) = trajectory.release(token).unwrap();
@@ -120,10 +114,7 @@ fn open_issue(trajectory: &mut Trajectory, recording: ValueId, recipient: &str) 
     );
     ToolRequest::new(
         ToolName::new("github.open_issue"),
-        ArgumentTree::Object(BTreeMap::from([
-            (ArgumentName::new("to"), ArgumentTree::Value(to)),
-            (ArgumentName::new("body"), ArgumentTree::Value(recording)),
-        ])),
-        BTreeSet::new(),
+        ArgumentTree::object([("to", to), ("body", recording)]),
+        [],
     )
 }

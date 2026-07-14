@@ -62,7 +62,7 @@ const GRANT_TYPE_OPTIONS: {
     value: "client_credentials",
     label: "Application (client credentials)",
     description:
-      "A backend service or bot calls gateways as itself, with no acting user. Scope it to specific gateways.",
+      "A backend service or bot calls gateways or agents as itself, with no acting user. Scope it to specific gateways or agents.",
   },
   {
     value: "authorization_code",
@@ -241,7 +241,7 @@ export default function OAuthClientsPage() {
           columns={columns}
           data={oauthClients}
           isLoading={isPending}
-          emptyMessage="No OAuth clients registered. Create one for an application that calls MCP gateways."
+          emptyMessage="No OAuth clients registered. Create one for an application that calls MCP gateways or agents."
           hasActiveFilters={Boolean(search)}
           filteredEmptyMessage="No OAuth clients match your filters. Try adjusting your search."
           onClearFilters={() =>
@@ -406,7 +406,7 @@ function CreateOAuthClientDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Create OAuth Client"
-      description="Register an application that authenticates to MCP gateways with OAuth."
+      description="Register an application that authenticates to MCP gateways or agents with OAuth."
     >
       <DialogForm
         onSubmit={async (event) => {

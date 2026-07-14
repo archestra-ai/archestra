@@ -32,6 +32,7 @@ export function KnowledgePageLayout({
       <PageLayout
         title={title}
         description={description}
+        tabs={KNOWLEDGE_TABS}
         actionButton={
           <PermissionButton
             permissions={createPermissions}
@@ -52,3 +53,11 @@ export function KnowledgePageLayout({
     </LoadingWrapper>
   );
 }
+
+// Connectors come first: they are the prerequisite (a knowledge base is empty
+// until a connector syncs data), so they are also the landing tab (see the
+// bare /knowledge redirect page).
+const KNOWLEDGE_TABS = [
+  { label: "Connectors", href: "/knowledge/connectors" },
+  { label: "Knowledge Bases", href: "/knowledge/knowledge-bases" },
+];

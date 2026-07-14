@@ -346,19 +346,9 @@ const contentNavGroups: NavGroup[] = [
     items: [
       {
         title: "Knowledge",
-        url: "/knowledge/knowledge-bases",
+        url: "/knowledge/connectors",
         icon: Database,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/knowledge") &&
-          !pathname.startsWith("/knowledge/connectors"),
-        subItems: [
-          {
-            title: "Connectors",
-            url: "/knowledge/connectors",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/knowledge/connectors"),
-          },
-        ],
+        customIsActive: (pathname: string) => pathname.startsWith("/knowledge"),
       },
       {
         title: "Logs",

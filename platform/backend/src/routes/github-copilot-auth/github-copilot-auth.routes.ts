@@ -1,11 +1,11 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { ApiError, constructResponseSchema } from "@/types";
+import { isRateLimited } from "@/utils/rate-limit";
 
 /**
  * GitHub OAuth device flow for GitHub Copilot (RFC 8628), proxied through the

@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isRateLimited } from "@/agents/utils";
 import { userHasPermission } from "@/auth";
 import { CacheKey } from "@/cache-manager";
 import config, { getConnectionBaseUrlSources } from "@/config";
@@ -46,6 +45,7 @@ import {
   constructResponseSchema,
   type Organization,
 } from "@/types";
+import { isRateLimited } from "@/utils/rate-limit";
 import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,

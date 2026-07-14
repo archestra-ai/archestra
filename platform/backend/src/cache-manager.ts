@@ -40,6 +40,8 @@ export const CacheKey = {
   SlackUserEmail: "slack-user-email",
   /** Virtual API key brute-force rate limiting per IP */
   VirtualKeyRateLimit: "virtual-key-rate-limit",
+  /** A2A failed-authentication (token brute-force) rate limiting per IP */
+  A2AAuthFailureRateLimit: "a2a-auth-failure-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */

@@ -17,6 +17,10 @@ import {
 import config from "@/config";
 import { AgentModel } from "@/models";
 import {
+  assertA2AAuthNotRateLimited,
+  recordA2AAuthFailure,
+} from "@/routes/a2a-auth-throttle";
+import {
   extractBearerToken,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway.utils";
@@ -98,6 +102,26 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId } = request.params;
+      await assertA2AAuthNotRateLimited(request.ip);
+
+      // Validate token authentication (reuse MCP Gateway utilities) BEFORE the
+      // agent lookup, so unauthenticated callers can't probe which agent IDs
+      // exist (401 vs 404).
+      const token = extractBearerToken(request);
+      if (!token) {
+        await recordA2AAuthFailure(request.ip);
+        throw new ApiError(
+          401,
+          "Authorization header required. Use: Bearer <platform_token>",
+        );
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(agentId, token);
+      if (!tokenAuth) {
+        await recordA2AAuthFailure(request.ip);
+        throw new ApiError(401, "Invalid or unauthorized token");
+      }
+
       const agent = await AgentModel.findById(agentId);
 
       if (!agent) {
@@ -110,20 +134,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "Agent is not an internal agent (A2A requires agents with agentType='agent')",
         );
-      }
-
-      // Validate token authentication (reuse MCP Gateway utilities)
-      const token = extractBearerToken(request);
-      if (!token) {
-        throw new ApiError(
-          401,
-          "Authorization header required. Use: Bearer <platform_token>",
-        );
-      }
-
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
-      if (!tokenAuth) {
-        throw new ApiError(401, "Invalid or unauthorized token");
       }
 
       // Construct base URL from request
@@ -188,10 +198,12 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.body;
       const { agentId } = request.params;
+      await assertA2AAuthNotRateLimited(request.ip);
 
       // Validate token authentication (reuse MCP Gateway utilities)
       const token = extractBearerToken(request);
       if (!token) {
+        await recordA2AAuthFailure(request.ip);
         return reply.send({
           jsonrpc: "2.0" as const,
           id,
@@ -212,6 +224,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           router,
           agentId,
           token,
+          clientIp: request.ip,
           body: request.body,
           reply,
         });
@@ -225,6 +238,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           result,
         });
       } catch (error) {
+        await recordA2AAuthFailureIfActorUnresolved(error, request.ip);
         return reply.send(buildJsonRpcErrorEnvelope(id, error));
       }
     },
@@ -254,10 +268,11 @@ async function streamA2AResponse(params: {
   router: A2AV2Router;
   agentId: string;
   token: string;
+  clientIp: string;
   body: { id: A2AJsonRpcId };
   reply: FastifyReply;
 }): Promise<FastifyReply | undefined> {
-  const { router, agentId, token, body, reply } = params;
+  const { router, agentId, token, clientIp, body, reply } = params;
   const { id } = body;
 
   // Pre-flight: validate the method/params and resolve the agent + actor before
@@ -271,6 +286,7 @@ async function streamA2AResponse(params: {
   try {
     prepared = await router.prepareStreamingRequest(agentId, token, body);
   } catch (error) {
+    await recordA2AAuthFailureIfActorUnresolved(error, clientIp);
     return reply.send(buildJsonRpcErrorEnvelope(id, error));
   }
 
@@ -487,16 +503,35 @@ const A2A_V2_ROUTER_ERRORS = {
 };
 
 class A2AV2RouterError extends Error {
+  public readonly kind: A2AV2RouterErrorKind;
   public readonly code: number;
   public readonly message: string;
 
   constructor(kind: A2AV2RouterErrorKind, details?: string) {
     const baseError = A2A_V2_ROUTER_ERRORS[kind];
     super(details ? `${baseError.message}: ${details}` : baseError.message);
+    this.kind = kind;
     this.code = baseError.code;
     this.message = details
       ? `${baseError.message}: ${details}`
       : baseError.message;
+  }
+}
+
+/**
+ * Count a failed-authentication attempt when a router error means the bearer
+ * token could not be resolved to an actor — the v2 equivalent of the explicit
+ * 401 branches, feeding the same per-IP brute-force throttle.
+ */
+async function recordA2AAuthFailureIfActorUnresolved(
+  error: unknown,
+  clientIp: string,
+): Promise<void> {
+  if (
+    error instanceof A2AV2RouterError &&
+    error.kind === A2AV2RouterErrorKind.FailedToResolveActor
+  ) {
+    await recordA2AAuthFailure(clientIp);
   }
 }
 
@@ -515,8 +550,10 @@ class A2AV2Router {
 
   async request(agentId: string, token: string, request: unknown) {
     const { method, params } = A2AJsonRpcRequestSchema.parse(request);
-    const agent = await this.getAgentById(agentId);
+    // Resolve the actor (token auth) BEFORE the agent lookup, so callers
+    // without a valid token can't probe which agent IDs exist.
     const actor = await this.resolveActor(agentId, token);
+    const agent = await this.getAgentById(agentId);
     const { func, schema } = this.getRouteForMethod(method);
 
     // Throws ZodError if request schema is invalid
@@ -544,8 +581,9 @@ class A2AV2Router {
     if (method !== STREAMING_METHOD) {
       throw new A2AV2RouterError(A2AV2RouterErrorKind.MethodNotFound);
     }
-    const agent = await this.getAgentById(agentId);
+    // Actor resolution (token auth) before the agent lookup — see request().
     const actor = await this.resolveActor(agentId, token);
+    const agent = await this.getAgentById(agentId);
     const parsed = A2AProtocolSendMessageRequestSchema.parse(params);
     return { actor, agentId: agent.id, request: parsed };
   }

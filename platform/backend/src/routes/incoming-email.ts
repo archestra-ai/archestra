@@ -7,7 +7,6 @@ import {
   type OutlookEmailProvider,
   processIncomingEmail,
 } from "@/agents/incoming-email";
-import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey } from "@/cache-manager";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
@@ -16,6 +15,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
 } from "@/types";
+import { isRateLimited } from "@/utils/rate-limit";
 import { INCOMING_EMAIL_WEBHOOK_PREFIX } from "./route-paths";
 
 /**

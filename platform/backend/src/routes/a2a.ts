@@ -6,6 +6,10 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
 import { AgentModel, AgentTeamModel, TeamModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import {
+  assertA2AAuthNotRateLimited,
+  recordA2AAuthFailure,
+} from "@/routes/a2a-auth-throttle";
 import { ProviderError } from "@/routes/chat/errors";
 import {
   extractBearerToken,
@@ -107,6 +111,26 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { agentId } = request.params;
+      await assertA2AAuthNotRateLimited(request.ip);
+
+      // Validate token authentication (reuse MCP Gateway utilities) BEFORE the
+      // agent lookup, so unauthenticated callers can't probe which agent IDs
+      // exist (401 vs 404).
+      const token = extractBearerToken(request);
+      if (!token) {
+        await recordA2AAuthFailure(request.ip);
+        throw new ApiError(
+          401,
+          "Authorization header required. Use: Bearer <platform_token>",
+        );
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(agentId, token);
+      if (!tokenAuth) {
+        await recordA2AAuthFailure(request.ip);
+        throw new ApiError(401, "Invalid or unauthorized token");
+      }
+
       const agent = await AgentModel.findById(agentId);
 
       if (!agent) {
@@ -119,20 +143,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "Agent is not an internal agent (A2A requires agents with agentType='agent')",
         );
-      }
-
-      // Validate token authentication (reuse MCP Gateway utilities)
-      const token = extractBearerToken(request);
-      if (!token) {
-        throw new ApiError(
-          401,
-          "Authorization header required. Use: Bearer <platform_token>",
-        );
-      }
-
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
-      if (!tokenAuth) {
-        throw new ApiError(401, "Invalid or unauthorized token");
       }
 
       // Construct base URL from request
@@ -200,6 +210,38 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const id: string | number = isJsonRpc ? envelopeParse.data.id : 1;
       const params = isJsonRpc ? envelopeParse.data.params : {};
 
+      await assertA2AAuthNotRateLimited(request.ip);
+
+      // Validate token authentication (reuse MCP Gateway utilities) BEFORE the
+      // agent lookup, so unauthenticated callers can't probe which agent IDs
+      // exist (auth error vs "Agent not found").
+      const token = extractBearerToken(request);
+      if (!token) {
+        await recordA2AAuthFailure(request.ip);
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32600,
+            message:
+              "Authorization header required. Use: Bearer <platform_token>",
+          },
+        });
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(agentId, token);
+      if (!tokenAuth) {
+        await recordA2AAuthFailure(request.ip);
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32600,
+            message: "Invalid or unauthorized token",
+          },
+        });
+      }
+
       // Fetch the internal agent
       const agent = await AgentModel.findById(agentId);
 
@@ -223,32 +265,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
             code: -32602,
             message:
               "Agent is not an internal agent (A2A requires agents with agentType='agent')",
-          },
-        });
-      }
-
-      // Validate token authentication (reuse MCP Gateway utilities)
-      const token = extractBearerToken(request);
-      if (!token) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32600,
-            message:
-              "Authorization header required. Use: Bearer <platform_token>",
-          },
-        });
-      }
-
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
-      if (!tokenAuth) {
-        return reply.send({
-          jsonrpc: "2.0" as const,
-          id,
-          error: {
-            code: -32600,
-            message: "Invalid or unauthorized token",
           },
         });
       }

@@ -32,7 +32,6 @@ import {
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
-import { isRateLimited } from "@/agents/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -62,6 +61,7 @@ import {
   ChatOpsChannelBindingResponseSchema,
   UpdateChatOpsChannelBindingSchema,
 } from "@/types/chatops-channel-binding";
+import { isRateLimited } from "@/utils/rate-limit";
 import { isUuid } from "@/utils/uuid";
 
 /**

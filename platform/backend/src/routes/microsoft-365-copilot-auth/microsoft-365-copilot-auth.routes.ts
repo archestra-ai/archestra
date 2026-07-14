@@ -1,7 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -11,6 +10,7 @@ import {
   microsoft365CopilotOauthBaseUrl,
 } from "@/services/microsoft-365-copilot-token";
 import { ApiError, constructResponseSchema } from "@/types";
+import { isRateLimited } from "@/utils/rate-limit";
 
 const DEVICE_AUTH_START_RATE_LIMIT = {
   windowMs: 10 * 60_000,

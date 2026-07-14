@@ -38,6 +38,10 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
 }));
 
+// Map-backed fake from src/__mocks__/cache-manager.ts, needed by the per-IP
+// failed-auth throttle (the real cacheManager is never start()ed in tests).
+vi.mock("@/cache-manager");
+
 vi.mock("@/services/jwks-validator", () => ({
   jwksValidator: {
     validateJwt: (...args: unknown[]) => mockValidateJwt(...args),
@@ -465,5 +469,143 @@ describe("a2a route-level authentication", () => {
 
     expect(res.json().error).toBeDefined();
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+
+  // === No agent-existence oracle: token auth runs before the agent lookup ===
+  // Each test uses a distinct remoteAddress so the per-IP failed-auth throttle
+  // (shared cacheManager state) never crosses between tests.
+
+  test("v2 agent-card GET returns 401 (not 404) for an unknown agent without a valid token", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/v2/a2a/${crypto.randomUUID()}/.well-known/agent-card.json`,
+      headers: bearer("not-a-real-token"),
+      remoteAddress: "10.99.0.1",
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  test("v2 agent-card GET returns 404 for an unknown agent WITH a valid org token", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const { value } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/v2/a2a/${crypto.randomUUID()}/.well-known/agent-card.json`,
+      headers: bearer(value),
+      remoteAddress: "10.99.0.2",
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  test("v2 SendMessage returns the auth error (not 'Agent not found') for an unknown agent without a valid token", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${crypto.randomUUID()}`,
+      headers: bearer("not-a-real-token"),
+      payload: v2Payload(),
+      remoteAddress: "10.99.0.3",
+    });
+
+    expect(res.json().error.message).not.toContain("Agent not found");
+    expect(res.json().error.message).toContain(
+      "Failed to resolve actor from token",
+    );
+  });
+
+  // === Failed-auth rate limiting (per IP) ===
+
+  test("blocks an IP with 429 after repeated failed auth attempts, without affecting other IPs", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const { value } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const attackerIp = "10.99.1.1";
+
+    // 10 failures fill the window; each still gets a JSON-RPC auth error.
+    for (let i = 0; i < 10; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agent.id}`,
+        headers: bearer(`guess-${i}`),
+        payload: v2Payload(),
+        remoteAddress: attackerIp,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().error).toBeDefined();
+    }
+
+    // The 11th attempt is cut off before token validation — even with a VALID token.
+    const blockedInvalid = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${agent.id}`,
+      headers: bearer("guess-11"),
+      payload: v2Payload(),
+      remoteAddress: attackerIp,
+    });
+    expect(blockedInvalid.statusCode).toBe(429);
+
+    const blockedValid = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${agent.id}`,
+      headers: bearer(value),
+      payload: v2Payload(),
+      remoteAddress: attackerIp,
+    });
+    expect(blockedValid.statusCode).toBe(429);
+
+    // A different IP with a valid token is unaffected.
+    const otherIp = await app.inject({
+      method: "POST",
+      url: `/v2/a2a/${agent.id}`,
+      headers: bearer(value),
+      payload: v2Payload(),
+      remoteAddress: "10.99.1.2",
+    });
+    expect(otherIp.statusCode).toBe(200);
+    expect(otherIp.json().error).toBeUndefined();
+  });
+
+  test("successful requests are never counted toward the failed-auth limit", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const { value } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    // More successful requests than the failure limit, all from one IP.
+    for (let i = 0; i < 12; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agent.id}`,
+        headers: bearer(value),
+        payload: v2Payload(),
+        remoteAddress: "10.99.2.1",
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().error).toBeUndefined();
+    }
   });
 });

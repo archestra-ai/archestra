@@ -48,6 +48,12 @@ exists. Per-turn decisions:
 kubectl -n kagent logs deploy/ops-agent -c baton-proxy
 ```
 
+Tear it all down (deletes the kind cluster; `--image` also drops the built image):
+
+```sh
+./teardown.sh
+```
+
 ## Files
 
 - `policy.toml` — the proxy's contracts (mounted into the sidecar as a ConfigMap).
@@ -56,4 +62,5 @@ kubectl -n kagent logs deploy/ops-agent -c baton-proxy
 - `manifests/agent.yaml` — the `ModelConfig` and the `Agent`, whose
   `deployment.extraContainers` runs the baton-proxy sidecar.
 - `run-demo.sh` / `invoke-agent.sh` — one-command runner and the A2A invoke helper.
+- `teardown.sh` — delete the kind cluster (and, with `--image`, the built image).
 - `NOTES.md` — the verified kagent wiring facts (chart version, CRD fields, tool names).

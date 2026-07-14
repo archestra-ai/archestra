@@ -91,7 +91,13 @@ const captureSlackRawBody = async (
  */
 const slackWebhookDedup = new EventDedupMap();
 
-const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+/**
+ * MS Teams incoming webhook, split out into its own plugin so the optional
+ * standalone MS Teams webhook listener (ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT)
+ * can serve exactly this endpoint and nothing else. It is also registered by
+ * chatopsRoutes below, so the main API port always serves it too.
+ */
+export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * MS Teams webhook endpoint
    *
@@ -631,6 +637,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
     },
   );
+};
+
+const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(msTeamsWebhookRoutes);
 
   /**
    * Slack webhook endpoint

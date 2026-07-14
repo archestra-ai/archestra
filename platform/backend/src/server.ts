@@ -33,6 +33,7 @@ import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   createJsonSchemaTransformObject,
+  type FastifyPluginAsyncZod,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
@@ -102,6 +103,7 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+import { msTeamsWebhookRoutes } from "./routes/chatops";
 import { publicConfigRoutes } from "./routes/config";
 import { createOAuthAwareCorsDelegate } from "./routes/oauth-cors";
 import {
@@ -781,6 +783,65 @@ const startMetricsServer = async () => {
   );
 };
 
+// ============ Standalone public-endpoint listeners ============
+
+/**
+ * Optional dedicated Fastify listeners that alias a subset of the main API on
+ * their own ports:
+ *   - ARCHESTRA_A2A_PORT — the A2A endpoints (v1 + v2)
+ *   - ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT — the MS Teams incoming webhook
+ *
+ * They register the exact same route handlers as the main server, and the main
+ * API port keeps serving these endpoints in every configuration. The dedicated
+ * ports exist so a firewall can expose only the endpoints that must be
+ * publicly reachable without exposing the whole API.
+ *
+ * As on the main port, these routes authenticate in-route (A2A bearer tokens /
+ * Bot Framework JWT validation), so the auth plugin is not registered here.
+ */
+const standaloneEndpointServers: FastifyInstanceWithZod[] = [];
+
+const startStandaloneEndpointServers = async () => {
+  const { standalonePort: a2aPort } = config.a2aGateway;
+  if (a2aPort) {
+    await startStandaloneEndpointServer({
+      serverName: "A2A",
+      port: a2aPort,
+      routePlugins: [routes.a2aRoutes, routes.a2aV2Routes],
+    });
+  }
+
+  const { msTeamsWebhookPort } = config.chatops;
+  if (msTeamsWebhookPort) {
+    await startStandaloneEndpointServer({
+      serverName: "MS Teams webhook",
+      port: msTeamsWebhookPort,
+      routePlugins: [msTeamsWebhookRoutes],
+    });
+  }
+};
+
+const startStandaloneEndpointServer = async (params: {
+  serverName: string;
+  port: number;
+  routePlugins: FastifyPluginAsyncZod[];
+}) => {
+  const { serverName, port: serverPort, routePlugins } = params;
+  const server = createFastifyInstance();
+  standaloneEndpointServers.push(server);
+
+  server.get(HEALTH_PATH, () => ({ status: "ok" }));
+
+  for (const routePlugin of routePlugins) {
+    await server.register(routePlugin);
+  }
+
+  await server.listen({ port: serverPort, host });
+  server.log.info(
+    `${serverName} listener started on port ${serverPort} (aliasing the main API port's endpoints)`,
+  );
+};
+
 // ============ MCP Sandbox Server ============
 
 /**
@@ -1311,6 +1372,10 @@ const startWebServer = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
+    // Optional dedicated listeners aliasing the A2A endpoints and the MS Teams
+    // webhook on their own ports (see startStandaloneEndpointServers).
+    await startStandaloneEndpointServers();
+
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
     fastify.log.info("WebSocket service started");
@@ -1380,6 +1445,13 @@ function registerWebServerShutdown(
       if (metricsServerInstance) {
         await metricsServerInstance.close();
         fastify.log.info("Metrics server closed");
+      }
+
+      for (const standaloneServer of standaloneEndpointServers) {
+        await standaloneServer.close();
+      }
+      if (standaloneEndpointServers.length > 0) {
+        fastify.log.info("Standalone endpoint listeners closed");
       }
 
       await fastify.close();

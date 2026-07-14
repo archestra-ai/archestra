@@ -76,6 +76,24 @@ spec:
       {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.frontend }}
       nodePort: {{ .Values.archestra.service.nodePorts.frontend }}
       {{- end }}
+    {{- if .Values.archestra.standaloneEndpoints.a2aPort }}
+    - port: {{ .Values.archestra.standaloneEndpoints.a2aPort }}
+      targetPort: a2a
+      protocol: TCP
+      name: a2a
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.a2a }}
+      nodePort: {{ .Values.archestra.service.nodePorts.a2a }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.archestra.standaloneEndpoints.msTeamsWebhookPort }}
+    - port: {{ .Values.archestra.standaloneEndpoints.msTeamsWebhookPort }}
+      targetPort: ms-teams-hook
+      protocol: TCP
+      name: ms-teams-hook
+      {{- if and (eq (.Values.archestra.service.type | default "ClusterIP") "NodePort") .Values.archestra.service.nodePorts.msTeamsWebhook }}
+      nodePort: {{ .Values.archestra.service.nodePorts.msTeamsWebhook }}
+      {{- end }}
+    {{- end }}
   selector:
     {{- include "archestra-platform.selectorLabels" . | nindent 4 }}
 ---
@@ -132,11 +150,29 @@ spec:
             - name: frontend
               containerPort: 3000
               protocol: TCP
+            {{- if .Values.archestra.standaloneEndpoints.a2aPort }}
+            - name: a2a
+              containerPort: {{ .Values.archestra.standaloneEndpoints.a2aPort }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.archestra.standaloneEndpoints.msTeamsWebhookPort }}
+            - name: ms-teams-hook
+              containerPort: {{ .Values.archestra.standaloneEndpoints.msTeamsWebhookPort }}
+              protocol: TCP
+            {{- end }}
           env:
             {{- include "archestra-platform.env" . | nindent 12 }}
             {{- if .Values.archestra.worker.enabled }}
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
+            {{- end }}
+            {{- if .Values.archestra.standaloneEndpoints.a2aPort }}
+            - name: ARCHESTRA_A2A_PORT
+              value: {{ .Values.archestra.standaloneEndpoints.a2aPort | quote }}
+            {{- end }}
+            {{- if .Values.archestra.standaloneEndpoints.msTeamsWebhookPort }}
+            - name: ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT
+              value: {{ .Values.archestra.standaloneEndpoints.msTeamsWebhookPort | quote }}
             {{- end }}
           {{- with .Values.archestra.envFrom }}
           envFrom:

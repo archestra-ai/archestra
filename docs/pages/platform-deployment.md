@@ -702,6 +702,13 @@ The following environment variables can be used to configure Archestra Platform.
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
+- **`ARCHESTRA_A2A_PORT`** - Dedicated TCP port for the A2A endpoints (`/v1/a2a` and `/v2/a2a`).
+  - Default: Not set (A2A is served on the main API port only)
+  - When set, a second listener serves the A2A endpoints on this port. The main API port keeps serving them too — the dedicated port is an alias.
+  - Use case: expose only A2A to the Internet in a firewall or load balancer, without exposing the whole API
+  - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
+  - Helm: set `archestra.standaloneEndpoints.a2aPort` to inject this variable and expose the port on the Service
+
 - **`ARCHESTRA_TRUST_PROXY`** - Set this when Archestra runs behind a TLS-terminating reverse proxy (e.g. AWS ALB, nginx, Cloudflare) so that generated OAuth metadata and auth URLs use the external `https://` scheme rather than the internal `http://` scheme seen by the backend.
   - Default: `false` (no proxy trust)
   - Values: `true`, `false`, or a comma-separated list of trusted proxy IPs/CIDRs (e.g. `10.0.0.0/8,172.16.0.0/12`)
@@ -1336,6 +1343,13 @@ These environment variables configure the ChatOps feature, which allows users to
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Azure AD application client secret for Graph API.
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
+
+- **`ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT`** - Dedicated TCP port for the MS Teams incoming webhook (`/api/webhooks/chatops/ms-teams`).
+  - Default: Not set (the webhook is served on the main API port only)
+  - When set, a second listener serves only the webhook on this port. The main API port keeps serving it too — the dedicated port is an alias.
+  - Use case: expose only the webhook to the Internet in a firewall or load balancer, without exposing the whole API
+  - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
+  - Helm: set `archestra.standaloneEndpoints.msTeamsWebhookPort` to inject this variable and expose the port on the Service
 
 #### Public URL (ngrok)
 

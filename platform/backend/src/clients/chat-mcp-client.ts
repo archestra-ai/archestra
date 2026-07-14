@@ -12,6 +12,7 @@ import type {
 } from "@modelcontextprotocol/ext-apps";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Tool } from "ai";
 import { archestraMcpBranding, getAgentTools } from "@/archestra-mcp-server";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
@@ -46,6 +47,34 @@ import { buildMcpClientInfo } from "@/utils/mcp-client-info";
  * Derives from the configured API port to work in multi-pod deployments.
  */
 const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
+
+/**
+ * Custom fetch for the loopback MCP Gateway transport.
+ *
+ * The MCP SDK opens an optional standalone GET SSE stream (per spec) to receive
+ * server-initiated messages. Our gateway runs stateless (`enableJsonResponse`,
+ * no session id) and never pushes on that stream. Worse, the gateway's GET route
+ * answers the SDK's poll with finite discovery JSON (`200`), which the SDK reads
+ * as an empty SSE stream and immediately reconnects — ~once per second per
+ * client, each GET running DB-backed profile and auth work. Under many cached
+ * clients this alone can saturate the connection pool.
+ *
+ * Answering the GET with `405` tells the SDK the server offers no GET SSE stream,
+ * so it stops polling (the SDK treats 405 as an expected, terminal response).
+ * Doing it in the client's fetch — rather than the shared route — keeps the
+ * public JSON discovery route unchanged. POST/DELETE, the only requests carrying
+ * real JSON-RPC and the Bearer token, pass through to the network unchanged.
+ *
+ * @public — exercised by chat-mcp-client.loopback-fetch integration test
+ */
+export const loopbackGatewayFetch: FetchLike = (url, init) => {
+  if ((init?.method ?? "GET").toUpperCase() === "GET") {
+    return Promise.resolve(
+      new Response(null, { status: 405, statusText: "Method Not Allowed" }),
+    );
+  }
+  return fetch(url, init);
+};
 
 /**
  * Raised when the agent's MCP tool set could not be fetched (no gateway token,
@@ -580,6 +609,7 @@ export async function getChatMcpClient(
     const transport = new StreamableHTTPClientTransport(
       new URL(mcpGatewayUrl),
       {
+        fetch: loopbackGatewayFetch,
         requestInit: {
           headers: new Headers({
             Authorization: `Bearer ${authToken}`,

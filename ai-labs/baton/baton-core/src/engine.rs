@@ -5,12 +5,14 @@
 //! `L_flow = combine(L_args, L_control)` — the fold of the values rendered
 //! into the request plus the values that *selected* it — never against the
 //! whole trajectory. Effects are checked against the trajectory's monotone
-//! past. A raw value elsewhere in the conversation no longer taints an
+//! past. A raw value elsewhere in the conversation does not taint an
 //! unrelated sink, but it still taints any action whose data or control
 //! provenance depends on it.
 //!
-//! Remedy machinery (typed transitions, plans, waivers, external approval)
-//! arrives in later stages; until then every escalation is an explicit
+//! The remedy machinery lives here too: a blocked flow enumerates typed
+//! remedy plans (transform, constrain, endorse, accept, waive/acknowledge),
+//! and each applied step is competence-routed to an authority, audited, and
+//! rechecked fail-closed. An escalation nothing can clear is an explicit
 //! terminal block.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -3023,10 +3025,9 @@ mod tests {
 
     /// A granted Endorse mints a durable relabel: the source keeps its narrow
     /// label, a new value carries the raise under `Provenance::Endorsed`, the
-    /// authority is audited, and the re-evaluated flow is permitted. (S9 has no
-    /// enumerator for Endorse yet, so the grant is delivered through the
-    /// external approval path an out-of-process authority re-enters — the same
-    /// route S10 will reach from `enumerate_plans`.)
+    /// authority is audited, and the re-evaluated flow is permitted. (The
+    /// grant is delivered through the external approval path an
+    /// out-of-process authority re-enters.)
     #[test]
     fn a_granted_endorse_durably_relabels_the_source_and_permits() {
         let mut engine = engine_with([email_contract()]);

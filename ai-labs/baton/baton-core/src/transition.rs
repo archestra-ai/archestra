@@ -199,8 +199,8 @@ impl AuthorityMandate {
 /// The confidentiality raise an Endorse grant asks an authority to vouch: a
 /// trust attestation and/or an audience it admits. Unlike a [`TransientWaiver`]
 /// this is not a check-transient lift — it is the durable ΔL minted onto a new
-/// value (see [`ProposedGrant::Endorse`]). A mandate bounds it exactly as it
-/// bounded the transient trust/audience lift this replaces.
+/// value (see [`ProposedGrant::Endorse`]). A mandate bounds it: the trust
+/// ceiling and the admissible readers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct EndorseDelta {
     /// Raise the endorsed value's trust to at least this.

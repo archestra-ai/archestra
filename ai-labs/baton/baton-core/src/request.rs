@@ -146,8 +146,7 @@ impl ArgumentSchema {
     /// Resolve the recipient set from a request's argument tree: the leaves
     /// under the recipients role, each read as a [`UserId`] from its stored
     /// bytes. Empty when the role is absent from the schema or the tree —
-    /// an audience-guarded sink then breaches as `UndeclaredRecipients`,
-    /// exactly like the old detached recipient set.
+    /// an audience-guarded sink then breaches as `UndeclaredRecipients`.
     pub fn resolve_recipients(
         &self,
         arguments: &ArgumentTree<ValueId>,

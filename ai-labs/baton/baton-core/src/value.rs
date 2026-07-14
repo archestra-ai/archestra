@@ -1,13 +1,12 @@
 //! Immutable labeled values: the trajectory-local store, provenance, and the
 //! per-value label.
 //!
-//! This is the value-granular core of the B2 ("sanitize after a raw read")
-//! upgrade: instead of one label folded over every turn, each value carries
-//! its own [`ValueLabel`] and [`Provenance`]. A flow is checked against the
-//! fold of exactly the values it depends on — explicitly (arguments) and via
-//! control (whatever selected the invocation) — so a raw value elsewhere in
-//! the trajectory no longer taints an unrelated sink, but still taints any
-//! action derived from it.
+//! This is the value-granular core: each value carries its own [`ValueLabel`]
+//! and [`Provenance`]. A flow is checked against the fold of exactly the
+//! values it depends on — explicitly (arguments) and via control (whatever
+//! selected the invocation) — so a raw value elsewhere in the trajectory does
+//! not taint an unrelated sink, but still taints any action derived from it
+//! (the "sanitize after a raw read" property).
 //!
 //! All values are immutable. A transformer creates a new value with new
 //! identity and provenance; it never mutates or relabels its source.

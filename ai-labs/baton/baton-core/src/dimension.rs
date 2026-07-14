@@ -2,7 +2,7 @@
 //! [`crate::preset`] algebras, plus their value types.
 //!
 //! Each dimension is a newtype over its preset and delegates its `combine` (the
-//! taint fold) and adequacy relation to it; [`crate::label::Label::combine`]
+//! taint fold) and adequacy relation to it; [`crate::value::ValueLabel::combine`]
 //! applies the per-dimension combine, and nothing else in the crate invents
 //! merge semantics.
 //!
@@ -78,9 +78,9 @@ impl Audience {
         self.0.covers(recipients)
     }
 
-    /// Waiver application (check-transient): admit `vouched` into the
-    /// readers. `Public` stays public; `Unknown` becomes exactly the vouched
-    /// readers. Monotone in the adequacy order.
+    /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
+    /// admit `vouched` into the readers. `Public` stays public; `Unknown`
+    /// becomes exactly the vouched readers. Monotone in the adequacy order.
     pub(crate) fn admitting(&self, vouched: &BTreeSet<UserId>) -> Self {
         match &self.0 {
             MeetSet::All => Self(MeetSet::All),
@@ -165,10 +165,10 @@ impl Trust {
         self.0.at_least(floor)
     }
 
-    /// Waiver application (check-transient): raise trust to at least
-    /// `attested`. A join (`max`), never a demotion — a `Trusted` flow is
-    /// never lowered by a weaker attestation, and an `Unknown` one becomes
-    /// the attested judgement.
+    /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
+    /// raise trust to at least `attested`. A join (`max`), never a demotion —
+    /// a `Trusted` flow is never lowered by a weaker attestation, and an
+    /// `Unknown` one becomes the attested judgement.
     pub(crate) fn raised_to(&self, attested: KnownTrust) -> Self {
         match self.0 {
             MinLevel::Known(actual) => Self(MinLevel::Known(actual.max(attested))),

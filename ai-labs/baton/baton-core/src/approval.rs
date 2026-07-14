@@ -7,9 +7,9 @@
 //!   engine runs synchronously during waiver application. A Rust type cannot
 //!   prove purity, so an inline fn means "allowed to run inline", not
 //!   "formally established pure".
-//! - **External** authorities carry no code. The engine plans an `ApplyWaiver`
-//!   step routed to one, but never invokes the human, webhook, or judge model
-//!   itself: the ruling re-enters through
+//! - **External** authorities carry no code. The engine routes a grant-bearing
+//!   step (waiver, accept, endorse) to one, but never invokes the human,
+//!   webhook, or judge model itself: the ruling re-enters through
 //!   [`crate::engine::PolicyEngine::apply_approval`] with a [`PendingApproval`]
 //!   the engine issued.
 //!

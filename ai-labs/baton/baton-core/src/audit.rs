@@ -1,6 +1,6 @@
 //! Audit as control-plane history, and the monotone trajectory state.
 //!
-//! Audit no longer lives inside a label: at value granularity, referencing a
+//! Audit lives outside labels: at value granularity, referencing a
 //! value twice would duplicate its history, and a *failed* transition has no
 //! output label to record its failure on. Instead every transition attempt —
 //! applied or failed — appends one [`AuditEvent`] to append-only trajectory
@@ -136,8 +136,8 @@ pub enum AuditEvent {
         step: u64,
         failure: TransitionFailure,
     },
-    /// An `ApplyWaiver` step reached an external authority: the ruling is
-    /// pending re-entry.
+    /// A grant-bearing step (waiver, acknowledgment, accept, or endorse)
+    /// reached an external authority: the ruling is pending re-entry.
     ApprovalRequested {
         plan: PlanId,
         authority: AuthorityName,

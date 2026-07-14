@@ -1,9 +1,8 @@
 //! Benchmark: `evaluate` cost as the trajectory grows.
 //!
-//! The old whole-trajectory fold made `evaluate` O(turn count); the
-//! value-granular engine folds only a request's own argument and control
-//! dependencies, so the turn-count axis is kept precisely to show that the
-//! cost no longer scales with it.
+//! The engine folds only a request's own argument and control dependencies,
+//! so the turn-count axis exists precisely to show that evaluation cost does
+//! not scale with trajectory length.
 
 use std::collections::{BTreeMap, BTreeSet};
 

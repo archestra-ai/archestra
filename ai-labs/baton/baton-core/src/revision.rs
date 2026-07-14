@@ -3,8 +3,7 @@
 //! A [`Revision`] covers *all* trajectory state — values, actions, effects,
 //! audit, and turns. Every mutation advances it, so any capability bound to a
 //! revision is invalidated by any concurrent state change, not merely by an
-//! appended turn (the old `basis: usize` head-position check covered only
-//! turns).
+//! appended turn.
 //!
 //! The identifiers are plain data, not capabilities: forging one buys nothing,
 //! because every use goes through the trajectory-owned store or an unforgeable

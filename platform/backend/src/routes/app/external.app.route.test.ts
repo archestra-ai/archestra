@@ -71,12 +71,13 @@ describe("GET /api/apps/external/:catalogId", () => {
         (i: { mcpServerId: string }) => i.mcpServerId === server.id,
       ),
     ).toBe(true);
-    // Single UI tool → one resource, labelled "<server> / <tool>".
+    // Single UI tool → one resource, labelled by the server name alone (the
+    // "/ <tool>" suffix only disambiguates multi-tool servers).
     expect(body.resources).toEqual([
       {
         resourceUri: "ui://gt/app.html",
         toolName: "get-time",
-        name: "Get Time / get-time",
+        name: "Get Time",
         requiresInput: false,
       },
     ]);

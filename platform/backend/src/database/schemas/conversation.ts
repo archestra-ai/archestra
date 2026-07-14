@@ -67,7 +67,11 @@ const conversationsTable = pgTable(
     projectId: uuid("project_id").references(() => projectsTable.id, {
       onDelete: "set null",
     }),
-    /** How the chat was started; `schedule_trigger` marks a scheduled run's chat. */
+    /**
+     * How the chat was started; `schedule_trigger` marks a scheduled run's
+     * chat, `app_open` a chat seeded by opening an app (a draft until the user
+     * writes into it).
+     */
     origin: text("origin")
       .$type<ConversationOrigin>()
       .notNull()

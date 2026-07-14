@@ -69,3 +69,9 @@ README.
 agent as a pod sidecar: the agent is prompt-injected by a crashlooping pod's
 logs and baton blocks the injected `kubectl delete`, with no changes to the
 agent. `./demo/kagent/run-demo.sh` runs it end-to-end on kind.
+
+`baton-approver-demo/` is the earlier human-in-the-loop variant (a blocked call
+becomes an approval request a person rules on over MCP). **Currently broken /
+parked**: it uses the pre-#6525 baton-core API and the old approval-rewriting
+proxy behavior, so it does not build against current baton-core. It returns
+once the approval flow is ported to External authorities. See its README.

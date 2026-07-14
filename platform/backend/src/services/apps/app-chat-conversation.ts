@@ -19,6 +19,7 @@ import {
 } from "@/services/apps/app-render-result";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
 import { ApiError } from "@/types";
+import { externalAppLabel } from "@/utils/external-app-label";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { toolRequiresInputs } from "@/utils/tool-inputs";
 
@@ -120,9 +121,10 @@ export async function createSeededExternalAppConversation(params: {
     throw new ApiError(404, "No runnable app found for this install.");
   }
 
-  // The card title: "<server> / <tool>" — also the seeded part's tool name, so
-  // the chat's `mcpToolLabel` derives the same label.
-  const label = `${uiResource.serverName} / ${uiResource.toolName}`;
+  // The apps-page card title: the server name, "/ <tool>"-suffixed only when
+  // the server exposes several UI tools. Reused as the conversation title and
+  // the rendered app's display label so all three surfaces agree.
+  const label = externalAppLabel(uiResource);
 
   if (toolRequiresInputs(uiResource.toolParameters)) {
     const { conversationId } = await createAppChatConversation({
@@ -201,6 +203,10 @@ async function createAppChatConversation(params: {
     title,
     modelId: llmSelection.modelId,
     chatApiKeyId: llmSelection.chatApiKeyId,
+    // App-opened chats are drafts: the conversations list hides them until the
+    // user writes a message (see ConversationModel.findAll), so clicking
+    // through apps doesn't pile unused chats into the sidebar.
+    origin: "app_open",
   });
 
   return { conversationId: conversation.id };

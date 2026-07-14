@@ -94,6 +94,15 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
     // as untrusted external tool output (which would flip the whole new
     // conversation to sensitive context before the user ever sends a message).
     expect(part.output._meta[SEEDED_APP_RENDER_META_KEY]).toBe(true);
+
+    // Seeded as an `app_open` draft: hidden from the conversations list until
+    // the user writes into it (ConversationModel.findAll).
+    const conversation = await ConversationModel.findById({
+      id: conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    expect(conversation?.origin).toBe("app_open");
   });
 
   test("returns prompt mode (empty conversation) when the tool has required inputs", async ({
@@ -136,8 +145,12 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
     expect(res.statusCode).toBe(200);
     const { conversationId, mode, prompt } = res.json();
     expect(mode).toBe("prompt");
-    // The opening prompt names the app so the agent can find and call the tool.
-    expect(prompt).toContain("Atlassian / createjiraissue");
+    // The opening prompt names the app (a single-UI-tool server labels as the
+    // bare server name) plus the tool, so the agent can find and call it.
+    expect(prompt).toContain("Open the Atlassian app.");
+    expect(prompt).toContain(
+      "call the createjiraissue tool on the Atlassian MCP server",
+    );
 
     // No seeded render: the client sends `prompt` as the first user message,
     // which triggers the model turn.
@@ -150,7 +163,49 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       userId: user.id,
       organizationId,
     });
-    expect(conversation?.title).toBe("Atlassian / createjiraissue");
+    expect(conversation?.title).toBe("Atlassian");
+  });
+
+  test("titles the conversation '<server> / <tool>' when the server has several UI tools", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Archestra PM",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+      scope: "org",
+    });
+    const install = await makeMcpServer({
+      catalogId: catalog.id,
+      scope: "org",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/board.html" } } },
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_backlog",
+      meta: { _meta: { ui: { resourceUri: "ui://pm/backlog.html" } } },
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/external/${install.id}/open-in-chat`,
+      payload: { resourceUri: "ui://pm/board.html" },
+    });
+    expect(res.statusCode).toBe(200);
+    const conversation = await ConversationModel.findById({
+      id: res.json().conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    // Multi-UI-tool server → the suffix disambiguates which app this chat is.
+    expect(conversation?.title).toBe("Archestra PM / show_board");
   });
 
   test("seeds the render when the tool's inputs are all optional", async ({

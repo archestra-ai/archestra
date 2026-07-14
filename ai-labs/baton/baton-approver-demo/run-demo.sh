@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Run the whole baton-proxy demo: approver + proxy + demo agent.
 #
+# PARKED: this crate does not build against current baton-core, and it expects
+# the approval-rewriting `baton-proxy` behavior that no longer exists. Kept for
+# the External-authority port; see README.md. It will not run as-is.
+#
 # Works from any checkout or git worktree — all paths derive from this script's
 # location. Extra args are forwarded to the demo agent (e.g. --task "...",
 # --model ...). Ctrl-C or the demo finishing stops the background servers.

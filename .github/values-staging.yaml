@@ -145,35 +145,12 @@ archestra:
         secretName: archestra-sandbox-wildcard-tls
 
 postgresql:
-  # Staging still uses the bundled PostgreSQL chart. This is not HA, but these
-  # settings keep routine app deploys and voluntary node disruptions from
-  # bouncing the only database pod.
-  primary:
-    priorityClassName: platform-default
-    terminationGracePeriodSeconds: 120
-    pdb:
-      create: true
-      maxUnavailable: 0
-    startupProbe:
-      enabled: true
-      initialDelaySeconds: 10
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 30
-    livenessProbe:
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 5
-      failureThreshold: 12
-    readinessProbe:
-      initialDelaySeconds: 5
-      periodSeconds: 5
-      timeoutSeconds: 5
-      failureThreshold: 12
-    resources:
-      requests:
-        cpu: "1000m"
-        memory: "1Gi"
-      limits:
-        cpu: "1000m"
-        memory: "2Gi"
+  # Staging's database is Cloud SQL for PostgreSQL 18 (private IP, no public
+  # endpoint), not the bundled chart, so the database's durability no longer
+  # depends on the GKE node lifecycle — replacing a node used to take the only
+  # database pod down with it, which is what kept staging dying at random.
+  #
+  # The connection string is injected by the deploy workflow from the
+  # ARCHESTRA_STAGING_DATABASE_URL repo secret, so it is not in this file.
+  # The chart hard-fails if external_database_url is set while this is true.
+  enabled: false

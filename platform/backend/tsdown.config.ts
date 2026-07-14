@@ -33,6 +33,13 @@ type DevServerState = {
    * the server is never left stranded down.
    */
   latestRestartId: number;
+  /**
+   * Bumped once per module load. A config self-reload (editing this file /
+   * tsconfig / package.json) loads a fresh module and runs rmSync(dist), so a
+   * restart still queued under the older generation must bail before it stops
+   * the server or spawns against the wiped dist — the fresh module owns it.
+   */
+  generation: number;
 };
 
 /**
@@ -51,9 +58,14 @@ if (!globalStore.__archestraDevServer__) {
     current: null,
     restartQueue: Promise.resolve(),
     latestRestartId: 0,
+    generation: 0,
   };
 }
 const devServer = globalStore.__archestraDevServer__;
+
+// Identify this module load; a later config self-reload gets a higher generation.
+devServer.generation += 1;
+const configGeneration = devServer.generation;
 
 /**
  * Terminate a server process and resolve once it has exited. Always resolves
@@ -98,10 +110,14 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
   const restartId = ++devServer.latestRestartId;
   devServer.restartQueue = devServer.restartQueue
     .then(async () => {
-      // A newer build already queued its own restart: leave the running server
-      // up and let that restart own the swap. Skipping the kill keeps the old
-      // server serving until the winning build is ready to spawn.
-      if (restartId !== devServer.latestRestartId) {
+      // Skip if a newer build already queued its own restart, or a config
+      // self-reload superseded this module. Either way, leave the running server
+      // up and let the winner own the swap — the old server keeps serving until
+      // the winning build is ready to spawn.
+      if (
+        restartId !== devServer.latestRestartId ||
+        configGeneration !== devServer.generation
+      ) {
         return;
       }
 
@@ -115,9 +131,13 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
         );
       }
 
-      // Re-check: a newer build may have landed while we were stopping the old
-      // server. Don't spawn a stale build over it.
-      if (restartId !== devServer.latestRestartId) {
+      // Re-check: a newer build or a config reload may have landed while we were
+      // stopping the old server. Don't spawn a stale build (or one whose dist the
+      // reload wiped) over it.
+      if (
+        restartId !== devServer.latestRestartId ||
+        configGeneration !== devServer.generation
+      ) {
         return;
       }
 

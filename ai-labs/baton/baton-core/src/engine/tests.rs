@@ -3807,21 +3807,26 @@ fn rescue_external_approval_resolves_the_projected_residual() {
     assert!(matches!(decision, Decision::Blocked(Blocked::Remediable { .. })));
 }
 
-/// Past the exhaustive-search bound the rescue refuses outright: fail-closed
-/// terminal, never a partial search that inherits the non-monotone blindness.
+/// Past the exhaustive-search bound the rescue refuses outright — even when
+/// a release-all-anchored search would have found a plan (endorser and
+/// releaser both present, release-all viable). Fail-closed terminal, never a
+/// partial search that inherits the non-monotone blindness.
 #[test]
 fn rescue_refuses_past_the_exhaustive_bound() {
     let mut engine = engine_with([masked_contract()]);
+    engine
+        .register_authority(inline_authority("endorser", endorser_mandate(), approve_all))
+        .unwrap();
     engine
         .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
         .unwrap();
     let mut trajectory = Trajectory::new();
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
-    let (_, mut request) = subset_release_flow(&mut trajectory);
-    // Pad with neutral identity-label controls until the control set exceeds
-    // the bound; they change no fold, so {gate} would still be the clean
-    // release if the solver searched.
-    for i in 0..11 {
+    let (_, _, mut request) = masked_flow(&mut trajectory);
+    // Under the bound this exact flow is rescued (the composition test
+    // above); pad with neutral identity-label controls until the control set
+    // exceeds the bound and the same flow must refuse instead.
+    for i in 0..12 {
         request
             .control
             .insert(identity_ingress(&mut trajectory, &format!("noise-{i}")));
@@ -3834,9 +3839,62 @@ fn rescue_refuses_past_the_exhaustive_bound() {
     assert_eq!(block.reason, BlockReason::NoRemedy);
 }
 
+/// One raise to the bottom trust bar re-masks the remaining Unknown leaves in
+/// the min-fold: the rescue re-derives per peel and must emit exactly one
+/// endorse, never a batch vouching every initially-deficient leaf.
+#[test]
+fn rescue_does_not_over_endorse_re_masked_leaves() {
+    let mut engine = engine_with([masked_contract()]);
+    engine
+        .register_authority(inline_authority("endorser", endorser_mandate(), approve_all))
+        .unwrap();
+    engine
+        .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let first = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "summary");
+    let second = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "appendix");
+    let mask = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "mask");
+    let to = identity_ingress(&mut trajectory, "bob");
+    let request = ToolRequest::new(
+        ToolName::new("post.publish"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("to"), ArgumentTree::Value(to)),
+            (
+                ArgumentName::new("body"),
+                ArgumentTree::List(vec![ArgumentTree::Value(first), ArgumentTree::Value(second)]),
+            ),
+        ])),
+        BTreeSet::from([mask]),
+    );
+
+    let plans = remediable(&engine, &mut trajectory, request.clone());
+    let steps = &plans.first().steps;
+    assert_eq!(steps.len(), 2);
+    assert!(matches!(
+        &steps.first().kind,
+        TransitionKind::EndorseValue { source, .. } if *source == first
+    ));
+    assert!(matches!(
+        &steps.get(1).unwrap().kind,
+        TransitionKind::ApplyWaiver { .. }
+    ));
+    let endorsed = |t: &Trajectory| {
+        t.state()
+            .audit()
+            .iter()
+            .filter(|e| matches!(e, AuditEvent::EndorseApplied { .. }))
+            .count()
+    };
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "published").unwrap();
+    assert_eq!(endorsed(&trajectory), 1);
+}
+
 /// Each rescue endorse step targets the projected residual at its own peel:
-/// once the first raise clears the audience deficit, the second authority is
-/// shown only the remaining trust gap.
+/// once the first raise clears the trust gap (and first's own audience
+/// deficit), the second authority is shown only second's audience deficit.
 #[test]
 fn rescue_endorse_targets_shrink_per_peel() {
     let mut engine = engine_with([masked_contract()]);

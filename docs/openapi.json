@@ -183826,27 +183826,34 @@
                         "type": "string"
                       },
                       "provider": {
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure",
-                          "github-copilot",
-                          "microsoft-365-copilot"
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
                         ]
                       },
                       "secretId": {
@@ -184721,27 +184728,34 @@
                         "type": "string"
                       },
                       "provider": {
-                        "type": "string",
-                        "enum": [
-                          "openai",
-                          "gemini",
-                          "anthropic",
-                          "bedrock",
-                          "cohere",
-                          "cerebras",
-                          "mistral",
-                          "perplexity",
-                          "groq",
-                          "xai",
-                          "openrouter",
-                          "vllm",
-                          "ollama",
-                          "zhipuai",
-                          "deepseek",
-                          "minimax",
-                          "azure",
-                          "github-copilot",
-                          "microsoft-365-copilot"
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot"
+                            ]
+                          },
+                          {
+                            "type": "string"
+                          }
                         ]
                       },
                       "secretId": {
@@ -185127,27 +185141,34 @@
                       "type": "string"
                     },
                     "provider": {
-                      "type": "string",
-                      "enum": [
-                        "openai",
-                        "gemini",
-                        "anthropic",
-                        "bedrock",
-                        "cohere",
-                        "cerebras",
-                        "mistral",
-                        "perplexity",
-                        "groq",
-                        "xai",
-                        "openrouter",
-                        "vllm",
-                        "ollama",
-                        "zhipuai",
-                        "deepseek",
-                        "minimax",
-                        "azure",
-                        "github-copilot",
-                        "microsoft-365-copilot"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "azure",
+                            "github-copilot",
+                            "microsoft-365-copilot"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "secretId": {

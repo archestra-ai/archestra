@@ -77,3 +77,26 @@ export const LlmProviderApiKeyWithScopeInfoSchema =
 export type LlmProviderApiKeyWithScopeInfo = z.infer<
   typeof LlmProviderApiKeyWithScopeInfoSchema
 >;
+
+/**
+ * Response-only variant of {@link LlmProviderApiKeyWithScopeInfoSchema} for the
+ * read endpoints (list / available / get), which serialize whatever is stored.
+ *
+ * The `provider` column is unconstrained `text` (only compile-time typed as
+ * SupportedProvider), so a stored row can hold a value the running instance's
+ * enum doesn't list — e.g. a key created on a newer pod during a rolling deploy,
+ * read back by an older pod whose enum predates that provider. A strict enum in
+ * the response schema would make Fastify serialization throw on that one row
+ * and, because the list response is a `z.array(...)` (all-or-nothing), 500 the
+ * entire endpoint. The union keeps the known providers declared while accepting
+ * any other string.
+ *
+ * This tolerance lives ONLY on the wire schema so the domain types
+ * (`LlmProviderApiKey`, `LlmProviderApiKeyWithScopeInfo`) stay strictly
+ * `SupportedProvider` for backend logic; writes remain validated by the
+ * Insert/Update schemas and the route request bodies.
+ */
+export const LlmProviderApiKeyWithScopeInfoResponseSchema =
+  LlmProviderApiKeyWithScopeInfoSchema.extend({
+    provider: SupportedProvidersSchema.or(z.string()),
+  });

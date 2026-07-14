@@ -992,7 +992,8 @@ export function AgentDialog({
         setLlmModel(bestModelId);
       } else if (currentLlmProvider !== key.provider) {
         // Only fall back to first model when switching providers (no bestModelId available)
-        const providerModels = modelsByProvider[key.provider];
+        const providerModels =
+          modelsByProvider[key.provider as SupportedProvider];
         if (providerModels?.length) {
           setLlmModel(providerModels[0].dbId);
         }

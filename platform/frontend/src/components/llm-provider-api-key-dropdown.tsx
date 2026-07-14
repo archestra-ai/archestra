@@ -133,7 +133,9 @@ export function LlmProviderApiKeyDropdown({
             <span className="flex min-w-0 items-center gap-1.5">
               {selectedKey ? (
                 <>
-                  <ProviderIcon provider={selectedKey.provider} />
+                  <ProviderIcon
+                    provider={selectedKey.provider as SupportedProvider}
+                  />
                   <span className="truncate font-medium">
                     {selectedKey.name}
                   </span>
@@ -264,7 +266,10 @@ export function LlmProviderApiKeyDropdown({
 }
 
 function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
-  const grouped = {} as Record<SupportedProvider, DropdownLlmProviderApiKey[]>;
+  // Keyed by the raw provider string: a stored provider may not be in the known
+  // enum, so an unknown one simply becomes its own group (rendered gracefully by
+  // ProviderGroupHeading/ProviderIcon) instead of breaking the lookup.
+  const grouped = {} as Record<string, DropdownLlmProviderApiKey[]>;
 
   for (const key of availableKeys) {
     if (!grouped[key.provider]) {

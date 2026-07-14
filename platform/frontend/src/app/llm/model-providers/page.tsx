@@ -6,12 +6,14 @@ import {
   formatSecretStorageType,
   isProviderApiKeyOptional,
   type ResourceVisibilityScope,
+  type SupportedProvider,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   Building2,
   CheckCircle2,
+  Key,
   Loader2,
   Pencil,
   Plus,
@@ -116,7 +118,7 @@ export default function ApiKeysPage() {
     provider:
       providerFilter === "all"
         ? undefined
-        : (providerFilter as LlmProviderApiKeyResponse["provider"]),
+        : (providerFilter as SupportedProvider),
     enabled: apiKeyQueriesEnabled,
   });
   const { data: organization } = useOrganization();
@@ -171,7 +173,7 @@ export default function ApiKeysPage() {
     if (isEditDialogOpen && selectedApiKey) {
       editForm.reset({
         name: selectedApiKey.name,
-        provider: selectedApiKey.provider,
+        provider: selectedApiKey.provider as SupportedProvider,
         apiKey: selectedApiKey.secretId ? LLM_PROVIDER_API_KEY_PLACEHOLDER : "",
         baseUrl: selectedApiKey.baseUrl ?? null,
         inferenceBaseUrl: selectedApiKey.inferenceBaseUrl ?? null,
@@ -308,13 +310,20 @@ export default function ApiKeysPage() {
         seen.add(apiKey.provider);
         return true;
       })
-      .map((apiKey) => {
-        const config = PROVIDER_CONFIG[apiKey.provider];
-        return {
-          value: apiKey.provider,
-          icon: config.icon,
-          name: config.name,
-        };
+      .flatMap((apiKey) => {
+        // A stored provider may not be in the known enum (see the union on the
+        // provider-keys read schema). Such providers have no icon/label config,
+        // so they're omitted from the filter dropdown; the key itself still
+        // renders in the table below with a generic-icon fallback.
+        const config = PROVIDER_CONFIG[apiKey.provider as SupportedProvider];
+        if (!config) return [];
+        return [
+          {
+            value: apiKey.provider,
+            icon: config.icon,
+            name: config.name,
+          },
+        ];
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allApiKeys]);
@@ -342,17 +351,24 @@ export default function ApiKeysPage() {
         accessorKey: "provider",
         header: "Provider",
         cell: ({ row }) => {
-          const config = PROVIDER_CONFIG[row.original.provider];
+          // Unknown providers (not in the known enum) have no icon/label config;
+          // fall back to a generic icon and the raw provider string.
+          const config =
+            PROVIDER_CONFIG[row.original.provider as SupportedProvider];
           return (
             <div className="flex items-center gap-2">
-              <Image
-                src={config.icon}
-                alt={config.name}
-                width={20}
-                height={20}
-                className="rounded dark:invert"
-              />
-              <span>{config.name}</span>
+              {config?.icon ? (
+                <Image
+                  src={config.icon}
+                  alt={config.name}
+                  width={20}
+                  height={20}
+                  className="rounded dark:invert"
+                />
+              ) : (
+                <Key className="h-5 w-5 shrink-0 text-muted-foreground" />
+              )}
+              <span>{config?.name ?? row.original.provider}</span>
             </div>
           );
         },
@@ -412,7 +428,7 @@ export default function ApiKeysPage() {
             {row.original.isSystem ||
             row.original.secretId ||
             isProviderApiKeyOptional({
-              provider: row.original.provider,
+              provider: row.original.provider as SupportedProvider,
               azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
               anthropicWifEnabled: anthropicWifEnabled === true,
             }) ? (

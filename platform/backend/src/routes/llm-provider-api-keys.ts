@@ -40,7 +40,7 @@ import {
   ApiError,
   constructResponseSchema,
   type LlmProviderApiKey,
-  LlmProviderApiKeyWithScopeInfoSchema,
+  LlmProviderApiKeyWithScopeInfoResponseSchema,
   type ResourceVisibilityScope,
   ResourceVisibilityScopeSchema,
   SelectLlmProviderApiKeySchema,
@@ -170,7 +170,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           provider: SupportedProvidersSchema.optional(),
         }),
         response: constructResponseSchema(
-          z.array(LlmProviderApiKeyWithScopeInfoSchema),
+          z.array(LlmProviderApiKeyWithScopeInfoResponseSchema),
         ),
       },
     },
@@ -214,7 +214,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           includeKeyId: z.string().uuid().optional(),
         }),
         response: constructResponseSchema(
-          z.array(LlmProviderApiKeyWithScopeInfoSchema),
+          z.array(LlmProviderApiKeyWithScopeInfoResponseSchema),
         ),
       },
     },
@@ -600,7 +600,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        response: constructResponseSchema(LlmProviderApiKeyWithScopeInfoSchema),
+        response: constructResponseSchema(
+          LlmProviderApiKeyWithScopeInfoResponseSchema,
+        ),
       },
     },
     async ({ params, organizationId, user }, reply) => {

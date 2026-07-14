@@ -189,7 +189,7 @@ export function LlmProviderApiKeySelector({
       // For existing conversations, let onProviderChange handle both the API key
       // update and model selection in a single mutation to avoid race conditions.
       if (selectedKeyProvider && onProviderChange) {
-        onProviderChange(selectedKeyProvider, keyId);
+        onProviderChange(selectedKeyProvider as SupportedProvider, keyId);
       } else {
         updateConversationMutation.mutate({
           id: conversationId,
@@ -202,7 +202,7 @@ export function LlmProviderApiKeySelector({
         onApiKeyChange(keyId);
       }
       if (selectedKeyProvider && onProviderChange) {
-        onProviderChange(selectedKeyProvider, keyId);
+        onProviderChange(selectedKeyProvider as SupportedProvider, keyId);
       }
     }
   };

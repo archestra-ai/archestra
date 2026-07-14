@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
@@ -246,6 +247,39 @@ describe("LLM Provider API Keys CRUD", () => {
 
     expect(response.statusCode).toBe(200);
     expect(Array.isArray(response.json())).toBe(true);
+  });
+
+  test("lists a stored provider value outside the known enum without a 500", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The provider column is free text, so a stored row can hold a value the
+    // running instance's enum doesn't list — legacy data, or (more commonly) a
+    // key created on a newer pod during a rolling deploy while an older pod,
+    // whose enum predates that provider, serves the list. The read schema must
+    // serialize such a row instead of throwing a ResponseSerializationError,
+    // which (because the list is a z.array) would 500 the entire endpoint for
+    // every key. Insert via the fixture to bypass the route's strict write-time
+    // enum validation and reproduce that stored state.
+    const unknownProvider = "acme-next-gen-provider" as SupportedProvider;
+    const secret = await makeSecret();
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: unknownProvider,
+      scope: "personal",
+      userId: user.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/llm-provider-api-keys",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const returned = response
+      .json()
+      .find((key: { id: string }) => key.id === apiKey.id);
+    expect(returned).toBeDefined();
+    expect(returned.provider).toBe("acme-next-gen-provider");
   });
 
   test("should create a personal LLM provider API key", async () => {

@@ -1,10 +1,8 @@
 "use client";
 
+import type { SupportedProvider } from "@archestra/shared";
 import Image from "next/image";
-import {
-  type LlmProviderApiKeyResponse,
-  PROVIDER_CONFIG,
-} from "@/components/llm-provider-api-key-form";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 
@@ -38,10 +36,7 @@ function VirtualKeyOptionLabel({ option }: { option: VirtualKeyApiItem }) {
     <div className="flex min-w-0 items-center gap-2">
       <div className="flex shrink-0 gap-1">
         {providerApiKeys.map((pk) => {
-          const config =
-            PROVIDER_CONFIG[
-              pk.provider as LlmProviderApiKeyResponse["provider"]
-            ];
+          const config = PROVIDER_CONFIG[pk.provider as SupportedProvider];
           if (!config?.icon) return null;
           return (
             <Image
@@ -71,9 +66,7 @@ function VirtualKeySelectedValue({ option }: { option: VirtualKeyApiItem }) {
   const providerApiKeys = option.providerApiKeys ?? [];
   const firstProvider = providerApiKeys[0];
   const config = firstProvider
-    ? PROVIDER_CONFIG[
-        firstProvider.provider as LlmProviderApiKeyResponse["provider"]
-      ]
+    ? PROVIDER_CONFIG[firstProvider.provider as SupportedProvider]
     : null;
 
   return (

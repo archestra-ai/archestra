@@ -32,8 +32,9 @@ pub enum Pursuit {
     /// The flow is authorized; release the token to dispatch.
     Permitted(ExecutionToken),
     /// Nothing can clear the flow. The engine cleared this request's pending
-    /// slot — except `ActionAlreadyPending`, which refuses a *different*
-    /// proposal precisely without touching the action already in flight.
+    /// slot — except `ActionAlreadyPending`, which refuses while another
+    /// action (or this one's released dispatch) is still in flight, precisely
+    /// without touching it.
     Terminal(TerminalBlock),
     /// A step routed to an external authority; the pending action is kept so
     /// the ruling can re-enter.

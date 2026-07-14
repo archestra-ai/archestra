@@ -95,6 +95,14 @@ impl BatonGate {
     /// On a permit the token is stashed and the caller must execute the tool and
     /// then call [`commit`](BatonGate::commit).
     pub(crate) fn check(&mut self, tool: &str, args: &serde_json::Value) -> GateVerdict {
+        // Refuse before touching the trajectory: building a request ingresses
+        // recipient values, which advances the revision and would stale the
+        // stashed token — the previous permit must be committed first.
+        if self.pending.is_some() {
+            return GateVerdict::Block {
+                reason: "a permitted call is awaiting commit".to_owned(),
+            };
+        }
         let request = self.build_request(tool, args);
         // A plan needs at most one Endorse per audience-failing context leaf,
         // plus an Accept and a waiver. Bound the walk on the context, not a
@@ -106,9 +114,7 @@ impl BatonGate {
                 self.pending = Some(token);
                 GateVerdict::Allow
             }
-            // The engine cleared this request's slot on a terminal block —
-            // except ActionAlreadyPending, which deliberately leaves the
-            // in-flight action (and its stashed token) untouched.
+            // The engine cleared this request's slot on a terminal block.
             Pursuit::Terminal(block) => GateVerdict::Block {
                 reason: block.reason.to_string(),
             },
@@ -386,6 +392,21 @@ mod tests {
             })
             .build()
             .unwrap()
+    }
+
+    #[test]
+    fn a_check_before_commit_blocks_without_staling_the_stashed_token() {
+        let mut gate = auditor_gate();
+        gate.begin("email the report to the auditor");
+        allow(gate.check("list_invoices", &json!({})));
+        // A second check — on the recipient-bearing tool — is refused before
+        // recipient ingress can advance the revision, so the stashed permit
+        // still commits.
+        assert!(matches!(
+            gate.check("send_email", &json!({ "to": AUDITOR })),
+            GateVerdict::Block { .. }
+        ));
+        gate.commit("<invoices>").unwrap();
     }
 
     #[test]

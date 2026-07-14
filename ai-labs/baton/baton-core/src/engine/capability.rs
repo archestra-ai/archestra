@@ -40,9 +40,9 @@ pub struct ToolContract {
 }
 
 impl ToolContract {
-    /// A pure read: no requirements, no effects, opaque arguments. An
-    /// argument-free call's output wears exactly `output_label`; arguments,
-    /// when present, fold in and can only worsen it.
+    /// A pure read: no requirements, no effects, opaque arguments. A
+    /// dependency-free call's output wears exactly `output_label`; argument
+    /// and control dependencies fold in and can only worsen it.
     pub fn source(name: impl Into<String>, output_label: ValueLabel) -> Self {
         Self {
             name: ToolName::new(name),

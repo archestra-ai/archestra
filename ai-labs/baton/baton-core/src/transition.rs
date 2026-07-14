@@ -512,60 +512,86 @@ mod tests {
         );
     }
 
-    /// Each builder combinator grants exactly its named power, verified
-    /// through `covers` on a grant demanding that power alone.
+    /// Each builder combinator grants exactly its named power: the mandate it
+    /// builds covers the grant demanding that power and none of the grants
+    /// demanding another (the full covers matrix is diagonal).
     #[test]
-    fn combinators_grant_exactly_their_named_power() {
-        let endorse_trust_grant = ProposedGrant::Endorse {
+    fn combinators_grant_their_named_power_and_nothing_else() {
+        let endorse = |delta| ProposedGrant::Endorse {
             source: ValueId::new(0),
-            delta: EndorseDelta {
-                trust: Some(KnownTrust::Trusted),
-                audience: None,
-            },
+            delta,
         };
-        assert!(!AuthorityMandate::none().covers(&endorse_trust_grant));
-        assert!(
-            AuthorityMandate::none()
-                .endorse_trust(KnownTrust::Trusted)
-                .covers(&endorse_trust_grant)
-        );
-        // A ceiling below the asked raise does not cover it.
-        assert!(
-            !AuthorityMandate::none()
-                .endorse_trust(KnownTrust::Suspicious)
-                .covers(&endorse_trust_grant)
-        );
-
         let waive = |waiver| ProposedGrant::Waive {
             waiver,
             acknowledged: Vec::new(),
         };
-        let prior = waive(TransientWaiver {
-            prior_effects: Some(std::collections::BTreeSet::from([Effect::Egress])),
-            ..TransientWaiver::empty()
-        });
-        assert!(!AuthorityMandate::none().covers(&prior));
-        assert!(AuthorityMandate::none().waive_prior_effects().covers(&prior));
-
-        let confirm = waive(TransientWaiver {
-            confirms: true,
-            ..TransientWaiver::empty()
-        });
-        assert!(!AuthorityMandate::none().covers(&confirm));
-        assert!(AuthorityMandate::none().confirms().covers(&confirm));
-
-        let release = waive(TransientWaiver {
-            control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
-            ..TransientWaiver::empty()
-        });
-        assert!(!AuthorityMandate::none().covers(&release));
-        assert!(AuthorityMandate::none().release_control().covers(&release));
-
-        let ack = ProposedGrant::Acknowledge {
-            facts: vec![Unprovable::EffectsUnknown],
-        };
-        assert!(!AuthorityMandate::none().covers(&ack));
-        assert!(AuthorityMandate::none().acknowledge_unknown().covers(&ack));
+        let cases: Vec<(AuthorityMandate, ProposedGrant)> = vec![
+            (
+                AuthorityMandate::none().endorse_trust(KnownTrust::Trusted),
+                endorse(EndorseDelta {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: None,
+                }),
+            ),
+            (
+                AuthorityMandate::none().vouch_audience([UserId::new("bob")]),
+                endorse(EndorseDelta {
+                    trust: None,
+                    audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
+                }),
+            ),
+            (
+                AuthorityMandate::none().waive_prior_effects(),
+                waive(TransientWaiver {
+                    prior_effects: Some(std::collections::BTreeSet::from([Effect::Egress])),
+                    ..TransientWaiver::empty()
+                }),
+            ),
+            (
+                AuthorityMandate::none().confirms(),
+                waive(TransientWaiver {
+                    confirms: true,
+                    ..TransientWaiver::empty()
+                }),
+            ),
+            (
+                AuthorityMandate::none().release_control(),
+                waive(TransientWaiver {
+                    control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
+                    ..TransientWaiver::empty()
+                }),
+            ),
+            (
+                AuthorityMandate::none().acknowledge_unknown(),
+                ProposedGrant::Acknowledge {
+                    facts: vec![Unprovable::EffectsUnknown],
+                },
+            ),
+            (
+                AuthorityMandate::none().acquire_effects(),
+                ProposedGrant::Accept {
+                    effects: Effects::declared([Effect::Egress]),
+                },
+            ),
+        ];
+        for (i, (mandate, _)) in cases.iter().enumerate() {
+            for (j, (_, grant)) in cases.iter().enumerate() {
+                assert_eq!(mandate.covers(grant), i == j, "mandate {i} vs grant {j}");
+            }
+        }
+        // The identity mandate covers none of them, and a trust ceiling below
+        // the asked raise does not cover it.
+        for (_, grant) in &cases {
+            assert!(!AuthorityMandate::none().covers(grant));
+        }
+        assert!(
+            !AuthorityMandate::none()
+                .endorse_trust(KnownTrust::Suspicious)
+                .covers(&endorse(EndorseDelta {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: None,
+                }))
+        );
     }
 
     #[test]

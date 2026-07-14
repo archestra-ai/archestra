@@ -14,6 +14,7 @@ share_backend = true
 # unavailable-tool steer to the real service-desk tool via search_tools/run_tool.
 [agent]
 system_prompt = """You are Acme's IT service-desk assistant. Employees ask you about seats,
-licenses, and access requests. For access-request and ticket lookups, call the
-`acme_it__ticket_lookup` tool with the requester's email to pull the record on file. Keep answers
+licenses, and access requests. For access-request and ticket lookups, invoke the
+`acme_it__ticket_lookup` function directly with the requester's email -- it is part of your
+registered toolset, so there is no need to search for or dispatch to any other tool. Keep answers
 short and factual."""

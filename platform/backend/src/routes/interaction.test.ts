@@ -589,7 +589,7 @@ describe("interaction routes", () => {
     // sessions route survived (it already tolerates it).
     await db
       .update(schema.interactionsTable)
-      .set({ authMethod: "idp_jwt" as never })
+      .set({ authMethod: "legacy_removed_method" as never })
       .where(eq(schema.interactionsTable.id, created.id));
 
     const list = await app.inject({

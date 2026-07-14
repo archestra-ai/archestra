@@ -35,21 +35,9 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Queue,
-  QueueItem,
-  QueueItemAction,
-  QueueItemActions,
-  QueueItemContent,
-  QueueItemIndicator,
-  QueueList,
-  QueueSection,
-  QueueSectionContent,
-  QueueSectionLabel,
-  QueueSectionTrigger,
-} from "@/components/ai-elements/queue";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
   Tooltip,
@@ -737,48 +725,36 @@ const PromptInputContent = ({
   return (
     <div className="relative">
       {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
-        <Queue className="mb-2" data-testid={E2eTestId.ChatMessageQueue}>
-          <QueueSection>
-            <QueueSectionTrigger>
-              <QueueSectionLabel
-                count={queuedMessages.length}
-                label={
-                  queuedMessages.length === 1
-                    ? "queued message"
-                    : "queued messages"
+        <div
+          className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
+          data-testid={E2eTestId.ChatMessageQueue}
+        >
+          {queuedMessages.map((queued) => (
+            <div
+              key={queued.id}
+              className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
+              data-testid={E2eTestId.ChatMessageQueueItem}
+            >
+              <span className="min-w-0 grow truncate">
+                {queued.skill ? `/${queued.skill.name} ` : ""}
+                {queued.text}
+              </span>
+              <Button
+                aria-label="Remove queued message"
+                className="size-auto shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                data-testid={E2eTestId.ChatMessageQueueRemoveButton}
+                onClick={() =>
+                  chatMessageQueue.remove(conversationId, queued.id)
                 }
-              />
-            </QueueSectionTrigger>
-            <QueueSectionContent>
-              <QueueList>
-                {queuedMessages.map((queued) => (
-                  <QueueItem
-                    key={queued.id}
-                    className="flex-row items-start gap-2"
-                    data-testid={E2eTestId.ChatMessageQueueItem}
-                  >
-                    <QueueItemIndicator className="mt-1.5 shrink-0" />
-                    <QueueItemContent>
-                      {queued.skill ? `/${queued.skill.name} ` : ""}
-                      {queued.text}
-                    </QueueItemContent>
-                    <QueueItemActions className="shrink-0">
-                      <QueueItemAction
-                        aria-label="Remove queued message"
-                        data-testid={E2eTestId.ChatMessageQueueRemoveButton}
-                        onClick={() =>
-                          chatMessageQueue.remove(conversationId, queued.id)
-                        }
-                      >
-                        <XIcon className="size-3.5" />
-                      </QueueItemAction>
-                    </QueueItemActions>
-                  </QueueItem>
-                ))}
-              </QueueList>
-            </QueueSectionContent>
-          </QueueSection>
-        </Queue>
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
       )}
       {isSandboxCommandHintVisible && (
         <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">

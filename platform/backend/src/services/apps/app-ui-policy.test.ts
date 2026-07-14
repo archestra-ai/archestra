@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
 import { getAppTemplates } from "@/app-templates";
+import OrganizationModel from "@/models/organization";
+import { describe, expect, test } from "@/test";
 import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
   APP_PLATFORM_CSP,
@@ -325,20 +326,37 @@ describe("validateAppHtmlStatic", () => {
 });
 
 describe("starter templates pass the save gate", () => {
-  test.each(
-    getAppTemplates().map((t) => [t.id, t.html] as const),
-  )("%s validates with no warnings (vars resolve against the base sheet)", async (_id, html) => {
-    const { warnings } = await buildValidatedVersionPayload({ html });
-    expect(warnings).toEqual([]);
+  test("every template validates with no warnings (vars resolve against the base sheet)", async () => {
+    for (const { id, html } of await getAppTemplates()) {
+      const { warnings } = await buildValidatedVersionPayload({ html });
+      expect(warnings, `${id} should validate with no warnings`).toEqual([]);
+    }
   });
 
-  test("every CSS variable a template references is defined in the base sheet", () => {
+  test("a template seeded with a white-label logo still validates cleanly", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      iconLogo:
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==",
+    });
+    for (const { id, html } of await getAppTemplates()) {
+      expect(html, `${id} should embed the configured logo`).toContain(
+        '<img src="data:image/png;base64,',
+      );
+      const { warnings } = await buildValidatedVersionPayload({ html });
+      expect(warnings, `${id} should validate with no warnings`).toEqual([]);
+    }
+  });
+
+  test("every CSS variable a template references is defined in the base sheet", async () => {
     const baseCss = readFileSync(
       join(__dirname, "../../static/archestra-app-base.css"),
       "utf-8",
     );
     const defined = new Set(baseCss.match(/--[\w-]+(?=\s*:)/g) ?? []);
-    for (const { id, html } of getAppTemplates()) {
+    for (const { id, html } of await getAppTemplates()) {
       for (const ref of html.match(/var\(\s*(--[\w-]+)/g) ?? []) {
         const name = ref.replace(/var\(\s*/, "");
         expect(defined, `${id} references undefined ${name}`).toContain(name);

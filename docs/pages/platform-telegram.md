@@ -38,13 +38,9 @@ Every message in a DM gets a reply. On first contact the bot asks which agent sh
 
 ### Group chats
 
-Add the bot to a group. It replies when addressed:
+Add the bot to a group. It replies when addressed: an `@botname` mention, a reply to one of its messages, or a `/command`.
 
-- `@botname` mention
-- a reply to one of its messages
-- a `/command`
-
-By default Telegram's privacy mode means the bot only receives these messages anyway. To let an agent observe all group messages (and decide when to chime in), disable Group Privacy for the bot in BotFather, then remove and re-add the bot to the group — Telegram caches the setting.
+One Telegram quirk matters here: bots have Group Privacy on by default, and with it on Telegram delivers only `/commands` and replies — plain `@botname` mentions never reach the bot. For group use, disable Group Privacy for the bot in BotFather, then remove and re-add the bot to the group (Telegram caches the setting). Making the bot a group admin also works, and additionally lets the agent observe all group messages.
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
 
@@ -83,8 +79,8 @@ Photos and documents sent to the bot are downloaded and passed to the agent, sub
 - Check the integration is enabled and the token is valid (the status shows "configured")
 - Make sure your Telegram account is linked — send `/start` to the bot to check
 
-**Bot not responding in a group**
-- Address it explicitly (@mention, reply, or command), or disable Group Privacy in BotFather and re-add the bot to the group
+**Bot not responding to @mentions in a group**
+- Group Privacy is on (the default): Telegram only delivers `/commands` and replies to the bot's messages. Send `/select-agent` to confirm the bot is alive, then disable Group Privacy in BotFather and remove and re-add the bot to the group
 
 **"This Telegram account isn't linked" reply**
 - Send `/start` to the bot and follow the sign-in link it replies with

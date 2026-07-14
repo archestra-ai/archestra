@@ -44,7 +44,7 @@ import {
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetCredentialsAction } from "../layout";
 
-type McpOauthClient =
+export type McpOauthClient =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number];
 type GrantType = McpOauthClient["grantType"];
 type CreatedCredentials = {
@@ -359,7 +359,7 @@ export default function OAuthClientsPage() {
   );
 }
 
-function CreateOAuthClientDialog({
+export function CreateOAuthClientDialog({
   open,
   onOpenChange,
   gateways,
@@ -451,7 +451,6 @@ function CreateOAuthClientDialog({
               <Label>Allowed gateways &amp; agents</Label>
               <AgentSelector
                 mode="multiple"
-                flat
                 agents={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
@@ -487,7 +486,7 @@ function CreateOAuthClientDialog({
   );
 }
 
-function EditOAuthClientDialog({
+export function EditOAuthClientDialog({
   oauthClient,
   onOpenChange,
   gateways,
@@ -582,7 +581,6 @@ function EditOAuthClientDialog({
               <Label>Allowed gateways &amp; agents</Label>
               <AgentSelector
                 mode="multiple"
-                flat
                 agents={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
@@ -717,7 +715,7 @@ function GatewayGrantField({
   );
 }
 
-function CredentialsDialog({
+export function CredentialsDialog({
   open,
   onOpenChange,
   title,

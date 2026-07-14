@@ -1,8 +1,15 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  CredentialsActionContext,
+  useSetCredentialsAction,
+} from "@/components/credentials-action-context";
 import { PageLayout } from "@/components/page-layout";
+
+// Re-exported so existing importers (`../layout`) keep working.
+export { useSetCredentialsAction };
 
 const TABS = [
   {
@@ -28,18 +35,6 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   },
 };
 
-type CredentialsLayoutContextType = {
-  setActionButton: (button: React.ReactNode) => void;
-};
-
-const CredentialsLayoutContext = createContext<CredentialsLayoutContextType>({
-  setActionButton: () => {},
-});
-
-export function useSetCredentialsAction() {
-  return useContext(CredentialsLayoutContext).setActionButton;
-}
-
 export default function CredentialsLayout({
   children,
 }: {
@@ -56,7 +51,7 @@ export default function CredentialsLayout({
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
   return (
-    <CredentialsLayoutContext.Provider value={contextValue}>
+    <CredentialsActionContext.Provider value={contextValue}>
       <PageLayout
         title={config.title}
         description={config.description}
@@ -65,6 +60,6 @@ export default function CredentialsLayout({
       >
         {children}
       </PageLayout>
-    </CredentialsLayoutContext.Provider>
+    </CredentialsActionContext.Provider>
   );
 }

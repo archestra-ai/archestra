@@ -20,6 +20,7 @@ import {
   FolderKanban,
   Github,
   Inbox,
+  KeyRound,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -238,17 +239,7 @@ const contentNavGroups: NavGroup[] = [
         title: "Agents",
         url: "/agents",
         icon: Bot,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/agents") &&
-          !pathname.startsWith("/agents/credentials"),
-        subItems: [
-          {
-            title: "Credentials",
-            url: "/agents/credentials/oauth-clients",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/agents/credentials"),
-          },
-        ],
+        customIsActive: (pathname: string) => pathname.startsWith("/agents"),
       },
       {
         title: "Skills",
@@ -291,14 +282,6 @@ const contentNavGroups: NavGroup[] = [
         icon: Waypoints,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/mcp/gateways"),
-        subItems: [
-          {
-            title: "Credentials",
-            url: "/mcp/credentials/oauth-clients",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/mcp/credentials"),
-          },
-        ],
       },
     ],
   },
@@ -310,14 +293,6 @@ const contentNavGroups: NavGroup[] = [
         url: "/llm/proxies",
         icon: Network,
         customIsActive: (pathname: string) => pathname === "/llm/proxies",
-        subItems: [
-          {
-            title: "Credentials",
-            url: "/llm/credentials/virtual-keys",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/llm/credentials"),
-          },
-        ],
       },
       {
         title: "Model Providers",
@@ -327,6 +302,13 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/model-providers") ||
           pathname.startsWith("/llm/models"),
         dotKey: "nav:model-providers",
+      },
+      {
+        title: "Credentials",
+        url: "/credentials/oauth-clients",
+        icon: KeyRound,
+        customIsActive: (pathname: string) =>
+          pathname.startsWith("/credentials"),
       },
       {
         title: "Costs & Limits",

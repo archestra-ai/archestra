@@ -1542,6 +1542,13 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/credentials/oauth-clients": { mcpOauthClient: ["read"] },
+
+  // Credentials (unified — OAuth clients across agents/gateways/proxies +
+  // LLM virtual keys). The predefined member/admin roles grant
+  // mcpOauthClient:read, so this gates the shared Credentials nav item; the
+  // page itself only lists the client types the caller can read.
+  "/credentials/oauth-clients": { mcpOauthClient: ["read"] },
+  "/credentials/virtual-keys": { llmVirtualKey: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {

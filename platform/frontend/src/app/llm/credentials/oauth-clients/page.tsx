@@ -53,7 +53,7 @@ import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { useSetCredentialsAction } from "../layout";
 
-type LlmOauthClient =
+export type LlmOauthClient =
   archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
 type GrantType = LlmOauthClient["grantType"];
 type CreatedCredentials = {
@@ -414,7 +414,7 @@ export default function OAuthClientsPage() {
   );
 }
 
-function CreateOAuthClientDialog({
+export function CreateOAuthClientDialog({
   open,
   onOpenChange,
   llmProxies,
@@ -559,7 +559,7 @@ function CreateOAuthClientDialog({
   );
 }
 
-function EditOAuthClientDialog({
+export function EditOAuthClientDialog({
   oauthClient,
   onOpenChange,
   llmProxies,

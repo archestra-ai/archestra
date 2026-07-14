@@ -78,6 +78,7 @@ export * from "./team";
 export * from "./team-role";
 export * from "./team-token";
 export * from "./tool";
+export * from "./tool-execution";
 export * from "./tool-owner";
 export * from "./tool-result-compression";
 export * from "./user";

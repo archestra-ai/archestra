@@ -123,6 +123,11 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ToolInvocationPolicyModel,
   },
+  toolExecutionsTable: {
+    audited: false,
+    reason:
+      "at-most-once execution ledger; runtime dispatch state, surfaced via /mcp/logs",
+  },
   trustedDataPoliciesTable: { audited: true, model: TrustedDataPolicyModel },
   userTokensTable: { audited: true, model: UserTokenModel },
   virtualApiKeysTable: { audited: true, model: VirtualApiKeyModel },

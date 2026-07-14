@@ -40,7 +40,12 @@ import type {
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
-import { AgentTeamModel, ToolModel, TrustedDataPolicyModel } from "@/models";
+import {
+  AgentTeamModel,
+  ToolExecutionModel,
+  ToolModel,
+  TrustedDataPolicyModel,
+} from "@/models";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import {
@@ -272,20 +277,34 @@ export function buildMcpGatewayTool(params: {
               }),
             });
           } else {
+            // Approval-gated tools must execute at most once per approval: two
+            // tabs approving the same pending turn each fire an independent
+            // execute with the same toolCallId, and without a shared gate both
+            // dispatch to the MCP server (double external write). Claim the call
+            // first so only one request reaches executeMcpTool; read-only tools
+            // stay ungated (running twice is harmless).
+            const requiresApproval =
+              !ctx.blockOnApprovalRequired &&
+              (await isApprovalRequiredForCall(mcpTool.name, args));
             // Execute non-Archestra tools via shared helper with browser sync
-            toolResult = await executeMcpTool({
-              toolName: mcpTool.name,
-              toolArguments,
-              agentId: ctx.agentId,
-              agentName: ctx.agentName,
-              userId: ctx.userId,
-              organizationId: ctx.organizationId,
-              isolationKey: ctx.scopeKey,
-              mcpGwToken: ctx.mcpGwToken,
-              considerContextUntrusted: ctx.considerContextUntrusted,
-              abortSignal: ctx.abortSignal,
-              elicitation: ctx.elicitation,
-              isUiProvidingTool,
+            toolResult = await executeAtMostOnce({
+              toolCallId: options.toolCallId,
+              enabled: requiresApproval,
+              dispatch: () =>
+                executeMcpTool({
+                  toolName: mcpTool.name,
+                  toolArguments,
+                  agentId: ctx.agentId,
+                  agentName: ctx.agentName,
+                  userId: ctx.userId,
+                  organizationId: ctx.organizationId,
+                  isolationKey: ctx.scopeKey,
+                  mcpGwToken: ctx.mcpGwToken,
+                  considerContextUntrusted: ctx.considerContextUntrusted,
+                  abortSignal: ctx.abortSignal,
+                  elicitation: ctx.elicitation,
+                  isUiProvidingTool,
+                }),
             });
           }
 
@@ -665,6 +684,8 @@ export async function buildArchestraToolOutput(params: {
 export const __test = {
   normalizeJsonSchema,
   executeMcpTool,
+  executeAtMostOnce,
+  isApprovalRequiredForCall,
   resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
   // Hook helpers — exposed for focused unit tests
@@ -700,18 +721,103 @@ function needsApprovalProps(params: {
     return {};
   }
   return {
-    needsApproval: async (args: unknown) => {
-      const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
-      return ToolInvocationPolicyModel.checkApprovalRequired(
-        approvalTarget.toolName,
-        approvalTarget.toolInput,
-        {
-          teamIds: [],
-          externalAgentId: getChatExternalAgentId(),
-        },
-      );
-    },
+    needsApproval: async (args: unknown) =>
+      isApprovalRequiredForCall(toolName, args),
   };
+}
+
+/**
+ * Whether the tool invocation policy requires human approval for this call.
+ * Shared by the AI SDK `needsApproval` gate and the at-most-once execution
+ * guard so both decide against the same policy target.
+ */
+async function isApprovalRequiredForCall(
+  toolName: string,
+  args: unknown,
+): Promise<boolean> {
+  const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
+  return ToolInvocationPolicyModel.checkApprovalRequired(
+    approvalTarget.toolName,
+    approvalTarget.toolInput,
+    {
+      teamIds: [],
+      externalAgentId: getChatExternalAgentId(),
+    },
+  );
+}
+
+// The request that loses an execution claim polls for the winner's recorded
+// result rather than dispatching a second external write. Bounds cover a slow
+// upstream MCP call without hanging the losing request indefinitely.
+const DEDUP_POLL_INTERVAL_MS = 100;
+const DEDUP_MAX_WAIT_MS = 60_000;
+
+async function waitForRecordedResult(
+  toolCallId: string,
+): Promise<unknown | undefined> {
+  const deadline = Date.now() + DEDUP_MAX_WAIT_MS;
+  for (;;) {
+    const row = await ToolExecutionModel.getByToolCallId(toolCallId);
+    if (row && row.state !== "executing") {
+      return row.result;
+    }
+    if (Date.now() >= deadline) {
+      return undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, DEDUP_POLL_INTERVAL_MS));
+  }
+}
+
+/**
+ * At-most-once execution guard for approval-gated tools. Concurrent approvals
+ * of the same tool call (e.g. the same pending turn approved in two tabs) each
+ * invoke `execute`; with no shared gate both dispatch to the MCP server and
+ * double-write externally. The first request to atomically claim `toolCallId`
+ * runs `dispatch`; the losers read back the recorded result instead of
+ * executing. Read-only tools are never gated (running twice is harmless), so
+ * callers pass `enabled` only when approval is required.
+ */
+async function executeAtMostOnce<R>(params: {
+  toolCallId: string | undefined;
+  enabled: boolean;
+  dispatch: () => Promise<R>;
+}): Promise<R> {
+  const { toolCallId, enabled, dispatch } = params;
+  if (!enabled || !toolCallId) {
+    return dispatch();
+  }
+
+  const claim = await ToolExecutionModel.claim(toolCallId);
+  if (claim) {
+    // We won the claim — the only request that dispatches to the MCP server.
+    try {
+      const result = await dispatch();
+      await ToolExecutionModel.complete(toolCallId, result);
+      return result;
+    } catch (error) {
+      await ToolExecutionModel.fail(toolCallId, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  // Lost the claim: another request already dispatched (or is dispatching) this
+  // exact tool call. Return its recorded result rather than executing again.
+  logger.warn(
+    { toolCallId },
+    "Duplicate approval-gated tool execution suppressed; returning recorded result",
+  );
+  const recorded = await waitForRecordedResult(toolCallId);
+  if (recorded !== undefined) {
+    return recorded as R;
+  }
+  // Winner still running past the wait budget. Fail closed: surface a
+  // non-executing result rather than dispatching a second external write.
+  return {
+    content:
+      "This action was already approved and is being executed. Its result will appear once it completes.",
+  } as R;
 }
 
 /**

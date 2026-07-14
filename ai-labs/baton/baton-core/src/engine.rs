@@ -2741,8 +2741,14 @@ mod tests {
             panic!("expected block");
         };
         // The response sink is strict emit-or-terminal (D1): an unprovable
-        // response with no policy has no remedy.
+        // response with no policy has no remedy. The vector is exactly the
+        // unprovable call against the reserved sink — the response check has
+        // no surface-growth arm.
         assert_eq!(block.reason, BlockReason::NoRemedy);
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Unprovable(Unprovable::NoContract { tool })] if *tool == ToolName::new(RESPONSE_SINK)
+        ));
     }
 
     #[test]
@@ -3575,6 +3581,15 @@ mod tests {
             panic!("expected terminal block");
         };
         assert_eq!(block.reason, BlockReason::NoRemedy);
+        // The full emission order: the sink's trust breach first, then the
+        // first-egress growth appended by the criterion-(1) check.
+        assert!(matches!(
+            block.violations.as_slice(),
+            [
+                Violation::Breach(crate::contract::Breach::TrustBelow { .. }),
+                Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }),
+            ] if *growth == Effects::declared([Effect::Egress])
+        ));
         assert!(trajectory.pending_action().is_none());
     }
 
@@ -3841,6 +3856,15 @@ mod tests {
             panic!("a denial must terminate, not fall through to the approver");
         };
         assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
+        // The audience-breach route is an Endorse, so the denial is attributed
+        // as one.
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::EndorseDenied { .. }))
+        );
     }
 
     /// An authority that may only release control cannot acknowledge an
@@ -4965,6 +4989,15 @@ mod tests {
             panic!("expected terminal block");
         };
         assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
+        // The audience-breach route is an Endorse, so the external denial is
+        // attributed as one.
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::EndorseDenied { .. }))
+        );
         assert!(trajectory.pending_action().is_none());
 
         // The same flow escalates again from scratch: the denial loosened
@@ -5485,5 +5518,345 @@ mod tests {
             panic!("expected a remediable block on re-entry");
         };
         assert_eq!(waiver_audits(&trajectory), 0);
+    }
+
+    // ---- Denial audit attribution per grant kind ----
+
+    fn deny_all(
+        _: &crate::transition::ProposedGrant,
+        _: &[Violation],
+        _: &crate::approval::TrajectoryView,
+    ) -> Option<crate::approval::Ruling> {
+        Some(crate::approval::Ruling::Deny {
+            reason: "denied".to_owned(),
+        })
+    }
+
+    fn acquirer_mandate() -> crate::transition::AuthorityMandate {
+        crate::transition::AuthorityMandate {
+            acquire_effects: true,
+            ..crate::transition::AuthorityMandate::none()
+        }
+    }
+
+    fn releaser_mandate() -> crate::transition::AuthorityMandate {
+        crate::transition::AuthorityMandate {
+            may_release_control: true,
+            ..crate::transition::AuthorityMandate::none()
+        }
+    }
+
+    /// A control-tainted flow whose only route is a control-release waiver:
+    /// clean payload, one masking control dep, prior egress already committed.
+    fn control_release_scenario(trajectory: &mut Trajectory) -> ToolRequest {
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+        let secret = ingress(trajectory, &["alice"], Trust::TRUSTED, "secret");
+        let body = ingress(trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
+        let to = trajectory.ingress(
+            Speaker::user(user("alice")),
+            ValueLabel::identity(),
+            OpaqueValue::new("bob"),
+        );
+        ToolRequest::new(
+            ToolName::new("email.send"),
+            ArgumentTree::Object(std::collections::BTreeMap::from([
+                (ArgumentName::new("to"), ArgumentTree::Value(to)),
+                (ArgumentName::new("body"), ArgumentTree::Value(body)),
+            ])),
+            BTreeSet::from([secret]),
+        )
+    }
+
+    /// Denying an Accept step inline audits `AcceptDenied`, not a generic
+    /// waiver denial.
+    #[test]
+    fn an_inline_accept_denial_audits_accept_denied() {
+        let mut engine = engine_with([egress_tool()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("growth-denier"),
+                mandate: acquirer_mandate(),
+                mode: crate::approval::AuthorityMode::Inline(deny_all),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
+        else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
+            engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected terminal denial");
+        };
+        assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::AcceptDenied { .. }))
+        );
+        assert!(
+            !trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::WaiverDenied { .. }))
+        );
+    }
+
+    /// Denying an Accept through the external approval path audits
+    /// `AcceptDenied` too — the attribution match is shared by both paths.
+    #[test]
+    fn an_external_accept_denial_audits_accept_denied() {
+        let mut engine = engine_with([egress_tool()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("remote-acquirer"),
+                mandate: acquirer_mandate(),
+                mode: crate::approval::AuthorityMode::External,
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
+        else {
+            panic!("expected remediable block");
+        };
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Deny {
+                    reason: "denied".to_owned(),
+                },
+            )
+            .unwrap();
+        assert!(matches!(decision, Decision::Blocked(Blocked::Terminal(_))));
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::AcceptDenied { .. }))
+        );
+    }
+
+    /// Denying a control-release waiver inline audits `WaiverDenied`.
+    #[test]
+    fn an_inline_control_release_denial_audits_waiver_denied() {
+        let mut engine = engine_with([email_contract()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("release-denier"),
+                mandate: releaser_mandate(),
+                mode: crate::approval::AuthorityMode::Inline(deny_all),
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let request = control_release_scenario(&mut trajectory);
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let plan = plans
+            .iter()
+            .find(|p| matches!(p.steps.first().kind, TransitionKind::ApplyWaiver { .. }))
+            .expect("a control-release route");
+        let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
+        let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
+            engine.apply_step(&mut trajectory, capability).unwrap()
+        else {
+            panic!("expected terminal denial");
+        };
+        assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::WaiverDenied { .. }))
+        );
+    }
+
+    /// Denying a control-release waiver through the external approval path
+    /// audits `WaiverDenied` as well.
+    #[test]
+    fn an_external_control_release_denial_audits_waiver_denied() {
+        let mut engine = engine_with([email_contract()]);
+        engine
+            .register_authority(crate::approval::Authority {
+                name: crate::audit::AuthorityName::new("remote-releaser"),
+                mandate: releaser_mandate(),
+                mode: crate::approval::AuthorityMode::External,
+            })
+            .unwrap();
+        let mut trajectory = Trajectory::new();
+        let request = control_release_scenario(&mut trajectory);
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected remediable block");
+        };
+        let plan = plans
+            .iter()
+            .find(|p| matches!(p.steps.first().kind, TransitionKind::ApplyWaiver { .. }))
+            .expect("a control-release route");
+        let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected pending approval");
+        };
+        let decision = engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Deny {
+                    reason: "denied".to_owned(),
+                },
+            )
+            .unwrap();
+        assert!(matches!(decision, Decision::Blocked(Blocked::Terminal(_))));
+        assert!(
+            trajectory
+                .state()
+                .audit()
+                .iter()
+                .any(|e| matches!(e, AuditEvent::WaiverDenied { .. }))
+        );
+    }
+
+    // ---- Exact violation vectors ----
+
+    /// A missing contract reports the unprovable call and the Unknown-effects
+    /// growth, in emission order.
+    #[test]
+    fn a_missing_contract_reports_no_contract_then_unknown_growth() {
+        let engine = engine_with([]);
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
+        let request = ToolRequest::new(
+            ToolName::new("mystery.tool"),
+            ArgumentTree::Value(body),
+            BTreeSet::new(),
+        );
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected terminal block");
+        };
+        assert!(matches!(
+            block.violations.as_slice(),
+            [
+                Violation::Unprovable(Unprovable::NoContract { tool }),
+                Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }),
+            ] if *tool == ToolName::new("mystery.tool") && *growth == Effects::UNKNOWN
+        ));
+    }
+
+    // ---- Response sink parameters ----
+
+    /// The response check runs with the pending tool action out of scope: an
+    /// accepted-but-undispatched egress neither blocks nor taints an
+    /// unrelated response.
+    #[test]
+    fn a_response_is_independent_of_the_pending_tool_action() {
+        let mut engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::RecipientsWithinContext,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("alice")]),
+        });
+        engine.register_authority(inline_acquirer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
+        let request = email_request(&mut trajectory, body, "bob");
+        let _token = walk_to_permit(&engine, &mut trajectory, request);
+        assert!(trajectory.pending_action().is_some());
+
+        let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "sending it now");
+        let response = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+        let ResponseDecision::Emitted { .. } = engine.evaluate_response(&mut trajectory, response) else {
+            panic!("expected emission despite the pending accepted egress");
+        };
+    }
+
+    /// A pending user confirmation never satisfies response attention: the
+    /// response check consults no confirmation at all.
+    #[test]
+    fn a_pending_confirmation_never_satisfies_response_attention() {
+        let engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                attention: crate::contract::AttentionRule::ExplicitConfirmation,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("alice")]),
+        });
+        let mut trajectory = Trajectory::new();
+        let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "hi");
+        trajectory.ingress(
+            Speaker::confirming(user("alice"), ToolName::new(RESPONSE_SINK)),
+            ValueLabel::identity(),
+            OpaqueValue::new("yes"),
+        );
+        assert!(trajectory.pending_confirmation().is_some());
+
+        let response = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+        let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, response)
+        else {
+            panic!("expected block");
+        };
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::ConfirmationMissing { tool })]
+                if *tool == ToolName::new(RESPONSE_SINK)
+        ));
+    }
+
+    /// The response check consumes committed past effects.
+    #[test]
+    fn a_response_checks_committed_past_effects() {
+        let engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("alice")]),
+        });
+        let mut trajectory = Trajectory::new();
+        let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "quiet so far");
+        let response = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+        let ResponseDecision::Emitted { .. } = engine.evaluate_response(&mut trajectory, response) else {
+            panic!("expected emission before any egress");
+        };
+
+        trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+        let response = ResponseRequest {
+            body: ArgumentTree::Value(note),
+            control: BTreeSet::new(),
+            basis: trajectory.revision(),
+        };
+        let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, response)
+        else {
+            panic!("expected block after the committed egress");
+        };
+        assert!(matches!(
+            block.violations.as_slice(),
+            [Violation::Breach(crate::contract::Breach::ForbiddenPriorEffects { .. })]
+        ));
     }
 }

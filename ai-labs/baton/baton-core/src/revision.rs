@@ -30,6 +30,13 @@ impl Revision {
         // capability alias a fresh revision.
         Self(self.0.checked_add(1).expect("revision space exhausted"))
     }
+
+    /// Test setup: a revision at an arbitrary position, so exhaustion is
+    /// reachable without `u64::MAX` mutations.
+    #[cfg(test)]
+    pub(crate) const fn at(revision: u64) -> Self {
+        Self(revision)
+    }
 }
 
 impl fmt::Display for Revision {
@@ -96,3 +103,24 @@ sequential_id!(
     pub TransitionId,
     "transition"
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_strictly_increases_from_any_reached_revision() {
+        let mut revision = Revision::INITIAL;
+        for _ in 0..64 {
+            let advanced = revision.next();
+            assert!(advanced > revision);
+            revision = advanced;
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn next_at_the_maximum_revision_panics_instead_of_wrapping() {
+        let _ = Revision::at(u64::MAX).next();
+    }
+}

@@ -271,3 +271,83 @@ impl fmt::Display for PendingApproval {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use crate::dimension::{Audience, Trust, UserId};
+    use crate::turn::{Speaker, Trajectory};
+    use crate::value::OpaqueValue;
+
+    fn suspicious_for(reader: &str) -> ValueLabel {
+        ValueLabel {
+            audience: Audience::readers([UserId::new(reader)]),
+            trust: Trust::SUSPICIOUS,
+        }
+    }
+
+    fn ingress(trajectory: &mut Trajectory, label: ValueLabel, body: &str) -> ValueId {
+        trajectory.ingress(Speaker::user(UserId::new("alice")), label, OpaqueValue::new(body))
+    }
+
+    #[test]
+    fn ancestry_snapshot_walks_the_transitive_closure_including_the_seed() {
+        let mut trajectory = Trajectory::new();
+        let root = ingress(&mut trajectory, suspicious_for("alice"), "raw");
+        let mid = trajectory.seed_transformed(root, ValueLabel::identity());
+        let leaf = trajectory.seed_transformed(mid, ValueLabel::identity());
+
+        let snapshot = AncestrySnapshot::of(trajectory.store(), [leaf]);
+
+        let ids: BTreeSet<ValueId> = snapshot.iter().map(|(id, _)| id).collect();
+        assert_eq!(ids, BTreeSet::from([root, mid, leaf]));
+    }
+
+    #[test]
+    fn ancestry_snapshot_deduplicates_a_diamond_ancestor() {
+        let mut trajectory = Trajectory::new();
+        let root = ingress(&mut trajectory, suspicious_for("alice"), "raw");
+        let left = trajectory.seed_transformed(root, ValueLabel::identity());
+        let right = trajectory.seed_transformed(root, ValueLabel::identity());
+        let joined = trajectory
+            .admit_model_output(
+                OpaqueValue::new("merged"),
+                BTreeSet::from([left, right]),
+                BTreeSet::new(),
+            )
+            .unwrap();
+
+        let snapshot = AncestrySnapshot::of(trajectory.store(), [joined]);
+
+        assert_eq!(snapshot.iter().filter(|(id, _)| *id == root).count(), 1);
+        assert_eq!(snapshot.iter().count(), 4);
+    }
+
+    #[test]
+    fn ancestry_snapshot_skips_ids_the_store_never_admitted() {
+        let mut trajectory = Trajectory::new();
+        let known = ingress(&mut trajectory, ValueLabel::identity(), "hi");
+        let missing = ValueId::new(u64::MAX);
+
+        let snapshot = AncestrySnapshot::of(trajectory.store(), [known, missing]);
+
+        assert!(snapshot.get(known).is_some());
+        assert_eq!(snapshot.get(missing), None);
+        assert_eq!(snapshot.iter().count(), 1);
+    }
+
+    #[test]
+    fn value_view_carries_the_stored_label_and_provenance() {
+        let mut trajectory = Trajectory::new();
+        let value = ingress(&mut trajectory, suspicious_for("bob"), "secret");
+
+        let snapshot = AncestrySnapshot::of(trajectory.store(), [value]);
+        let view = snapshot.get(value).unwrap();
+        let stored = trajectory.store().get(value).unwrap();
+
+        assert_eq!(&view.label, stored.label());
+        assert_eq!(&view.provenance, stored.provenance());
+    }
+}

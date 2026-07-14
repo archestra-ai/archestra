@@ -93,7 +93,7 @@ beforeEach(() => {
 });
 
 describe("static-token copy", () => {
-  it("copies the real personal token, not the masked preview", async () => {
+  it("copies the real personal token only via the explicit menu action", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
     renderInstructions();
@@ -101,13 +101,35 @@ describe("static-token copy", () => {
     await user.click(screen.getByRole("tab", { name: "Static token" }));
     const row = getTokenRow("Bearer archestra_abc***");
 
-    await user.click(row.getByRole("button", { name: "Copy to clipboard" }));
+    await user.click(row.getByRole("button", { name: "Copy" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Copy with real token" }),
+    );
 
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith("Bearer archestra_personal_real"),
     );
     // Copying must not reveal the token on screen.
     expect(screen.getByText("Bearer archestra_abc***")).toBeInTheDocument();
+  });
+
+  it("copies an obviously-fake placeholder via the placeholder action", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    renderInstructions();
+
+    await user.click(screen.getByRole("tab", { name: "Static token" }));
+    const row = getTokenRow("Bearer archestra_abc***");
+
+    await user.click(row.getByRole("button", { name: "Copy" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Copy with placeholder" }),
+    );
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("Bearer archestra_TOKEN"),
+    );
+    expect(fetchUserTokenValueMock).not.toHaveBeenCalled();
   });
 
   it("copies the real team/org token when no personal token exists", async () => {
@@ -137,7 +159,10 @@ describe("static-token copy", () => {
     await user.click(screen.getByRole("tab", { name: "Static token" }));
     const row = getTokenRow("Bearer archestra_org***");
 
-    await user.click(row.getByRole("button", { name: "Copy to clipboard" }));
+    await user.click(row.getByRole("button", { name: "Copy" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Copy with real token" }),
+    );
 
     await waitFor(() =>
       expect(fetchTeamTokenValueMock).toHaveBeenCalledWith("tok-org"),
@@ -154,7 +179,10 @@ describe("static-token copy", () => {
     await user.click(screen.getByRole("tab", { name: "Static token" }));
     const row = getTokenRow("Bearer archestra_abc***");
 
-    await user.click(row.getByRole("button", { name: "Copy to clipboard" }));
+    await user.click(row.getByRole("button", { name: "Copy" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Copy with real token" }),
+    );
 
     await waitFor(() => expect(fetchUserTokenValueMock).toHaveBeenCalled());
     expect(writeText).not.toHaveBeenCalled();

@@ -529,6 +529,7 @@ function ExclusionPill({
             size="sm"
             className="h-6 w-6 p-0 shrink-0"
             onClick={() => setOpen(false)}
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </Button>

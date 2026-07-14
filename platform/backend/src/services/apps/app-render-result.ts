@@ -1,6 +1,10 @@
 import { SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { structuredSuccessResult } from "@/archestra-mcp-server/helpers";
+import {
+  fencedBlock,
+  structuredSuccessResult,
+} from "@/archestra-mcp-server/helpers";
+import { appRunLink } from "@/services/apps/app-run-link";
 import type { App } from "@/types";
 
 /**
@@ -20,7 +24,7 @@ export function buildAppRenderResult(app: App): CallToolResult {
   };
   return structuredSuccessResult(
     summary,
-    `${JSON.stringify(summary, null, 2)}\nWill render inline when opened in chat; standalone page: /a/${app.id}`,
+    `${fencedBlock(JSON.stringify(summary, null, 2), "json")}\nWill render inline when opened in chat; standalone page: ${appRunLink(app.name, app.id)}`,
   );
 }
 

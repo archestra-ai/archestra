@@ -8,6 +8,27 @@ export ARCHESTRA_ANALYTICS=disabled
 
 backend_pid=""
 
+# The node server is a grandchild of $backend_pid (pnpm → tsdown --watch →
+# node), so the TERM to $backend_pid and its direct children can miss it. A
+# survivor keeps 9000/9050 bound and the next serve dies with EADDRINUSE, which
+# is why `tilt trigger pnpm-dev-backend` used to leave the old server running.
+# Sweep the dev ports on both stop and start.
+free_backend_ports() {
+  for port in 9000 "${ARCHESTRA_METRICS_PORT:-9050}"; do
+    pids="$(lsof -t -i "tcp:$port" -s tcp:LISTEN 2>/dev/null || true)"
+    [ -n "$pids" ] || continue
+    echo "killing stale backend listener(s) on port $port: $pids" >&2
+    kill -TERM $pids 2>/dev/null || true
+    i=0
+    while [ -n "$(lsof -t -i "tcp:$port" -s tcp:LISTEN 2>/dev/null || true)" ] && [ "$i" -lt 20 ]; do
+      i=$((i + 1))
+      sleep 0.25
+    done
+    pids="$(lsof -t -i "tcp:$port" -s tcp:LISTEN 2>/dev/null || true)"
+    [ -n "$pids" ] && kill -KILL $pids 2>/dev/null || true
+  done
+}
+
 stop_backend() {
   if [ -n "$backend_pid" ] && kill -0 "$backend_pid" 2>/dev/null; then
     kill -TERM "$backend_pid" 2>/dev/null || true
@@ -15,9 +36,11 @@ stop_backend() {
     wait "$backend_pid" 2>/dev/null || true
   fi
   backend_pid=""
+  free_backend_ports
 }
 
 start_backend() {
+  free_backend_ports
   pnpm dev --filter @backend &
   backend_pid=$!
 }

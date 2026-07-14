@@ -68,6 +68,9 @@ archestra:
     ARCHESTRA_DEEPSEEK_BASE_URL: "http://e2e-tests-wiremock:8080/deepseek"
     ARCHESTRA_GITHUB_COPILOT_BASE_URL: "http://e2e-tests-wiremock:8080/github-copilot"
     ARCHESTRA_GITHUB_COPILOT_TOKEN_EXCHANGE_URL: "http://e2e-tests-wiremock:8080/github/copilot_internal/v2/token"
+    ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL: "http://e2e-tests-wiremock:8080/microsoft-365-copilot"
+    ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL: "http://e2e-tests-wiremock:8080/microsoft-login"
+    ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID: "e2e-test-client-id"
     ARCHESTRA_MINIMAX_BASE_URL: "http://e2e-tests-wiremock:8080/minimax/v1"
     ARCHESTRA_AZURE_OPENAI_BASE_URL: "http://e2e-tests-wiremock:8080/azure/openai/deployments/test-deployment"
     ARCHESTRA_AZURE_OPENAI_API_VERSION: "2024-02-01"
@@ -97,6 +100,9 @@ archestra:
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED: "true"
+    # BETA: auto-sync-permissions connectors — required by the
+    # knowledge-permission-sync e2e spec (off by default).
+    ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests

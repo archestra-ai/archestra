@@ -11,13 +11,16 @@ const setSpy = vi.spyOn(cacheManager, "set");
 import {
   claimThreadMuteHint,
   clearChannelThreadActive,
+  getThreadMuteMarker,
   isChannelThreadActive,
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
   mightBeAddressedMuteCommand,
+  muteChannelThread,
   resolveChannelGateAction,
 } from "./channel-activation";
+import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   buildThreadMutedNotice,
   CHATOPS_CHANNEL_AUTO_REPLY,
@@ -107,6 +110,65 @@ describe("channel-activation (sticky channel auto-reply)", () => {
     expect(await clearChannelThreadActive(TEAMS)).toBe(true);
     // Second clear (e.g. a redelivered event) is a no-op transition.
     expect(await clearChannelThreadActive(TEAMS)).toBe(false);
+  });
+});
+
+describe("muteChannelThread (mute side-effects)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("returns the active→muted transition, like clearChannelThreadActive", async () => {
+    await markChannelThreadActive(TEAMS);
+    expect(await muteChannelThread(TEAMS)).toBe(true);
+    expect(await isChannelThreadActive(TEAMS)).toBe(false);
+    // A repeat mute (redelivered event) is a no-op transition.
+    expect(await muteChannelThread(TEAMS)).toBe(false);
+  });
+
+  test("records a mute marker so in-flight runs can detect the mute", async () => {
+    expect(await getThreadMuteMarker(TEAMS)).toBeNull();
+
+    await muteChannelThread(TEAMS);
+
+    expect(await getThreadMuteMarker(TEAMS)).not.toBeNull();
+  });
+
+  test("rewrites the marker with a fresh token on every mute", async () => {
+    await muteChannelThread(TEAMS);
+    const first = await getThreadMuteMarker(TEAMS);
+
+    await muteChannelThread(TEAMS);
+    const second = await getThreadMuteMarker(TEAMS);
+
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    // A different token each time is what lets a run tell "muted since I
+    // started" apart from a stale marker left by an earlier mute.
+    expect(second).not.toBe(first);
+  });
+
+  test("aborts in-flight runs registered for the thread", async () => {
+    const run = chatOpsRunRegistry.register(TEAMS);
+    expect(run.signal.aborted).toBe(false);
+
+    await muteChannelThread(TEAMS);
+
+    expect(run.signal.aborted).toBe(true);
+    run.unregister();
+  });
+
+  test("the marker is scoped per (provider, channel, thread)", async () => {
+    await muteChannelThread(TEAMS);
+
+    // Same channel, different thread — its own marker is still unset.
+    expect(
+      await getThreadMuteMarker({ ...TEAMS, threadId: "other-thread" }),
+    ).toBeNull();
+    // Different provider, same ids — isolated too.
+    expect(
+      await getThreadMuteMarker({ ...TEAMS, provider: "slack" }),
+    ).toBeNull();
   });
 });
 

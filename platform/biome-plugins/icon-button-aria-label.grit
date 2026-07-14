@@ -1,0 +1,60 @@
+// Project-specific Biome (GritQL) lint plugin — accessibility regression guard.
+//
+// Flags icon-only buttons that have no accessible name. Icon-only buttons
+// render no readable text, so without a name they are invisible to
+// screen-reader and voice-control users — a WCAG 2.2 SC 4.1.2 (Name, Role,
+// Value) / 1.1.1 (Non-text Content) failure. These were the most common gaps
+// found in the WCAG 2.2 A/AA audit, and Biome's built-in a11y rules cannot
+// detect them (they can't reason about an element's computed accessible name),
+// so this plugin guards against the pattern regressing. It is enforced by the
+// existing `biome ci` step.
+//
+// Two shapes are covered:
+//   1. The shadcn `<Button>` at an icon size (`icon`, `icon-sm`, `icon-lg`)
+//      whose content includes an icon (a self-closing JSX element).
+//   2. A native `<button>` whose SOLE child is an icon (a self-closing JSX
+//      element). The single-child requirement is deliberate: a native
+//      `<button>` with an icon AND visible text (e.g. `<button><Plus/> Add
+//      </button>`) is named by its text and is correctly NOT flagged.
+//
+// A button is considered named — and NOT flagged — when it carries
+// `aria-label`, `aria-labelledby`, or `title`, contains a visually-hidden
+// `className="sr-only"` text child (the other convention used in this
+// codebase), or (shadcn only) uses `asChild` to delegate rendering to a child
+// that carries the name. Buttons whose content is visible text are not flagged,
+// because that text is itself the accessible name.
+//
+// If an icon button is genuinely named some other way this plugin can't see,
+// give it an explicit `aria-label` (plugin diagnostics are not suppressible via
+// biome-ignore).
+language js
+
+or {
+  `<Button $props>$children</Button>` where {
+    $props <: or {
+      contains `size="icon"`,
+      contains `size="icon-sm"`,
+      contains `size="icon-lg"`
+    },
+    $props <: not contains `asChild`,
+    $props <: not contains `aria-label`,
+    $props <: not contains `aria-labelledby`,
+    $props <: not contains `title`,
+    $children <: contains jsx_self_closing_element(),
+    $children <: not contains `className="sr-only"`,
+    register_diagnostic(
+      span = $props,
+      message = "Icon-only <Button> needs an accessible name: add aria-label or a visually-hidden sr-only text child (WCAG 2.2 SC 4.1.2 Name, Role, Value)."
+    )
+  },
+  `<button $props>$child</button>` where {
+    $props <: not contains `aria-label`,
+    $props <: not contains `aria-labelledby`,
+    $props <: not contains `title`,
+    $child <: jsx_self_closing_element(),
+    register_diagnostic(
+      span = $props,
+      message = "Icon-only <button> needs an accessible name: add aria-label or a visually-hidden sr-only text child (WCAG 2.2 SC 4.1.2 Name, Role, Value)."
+    )
+  }
+}

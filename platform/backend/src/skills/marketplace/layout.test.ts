@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { parseSkillManifest } from "@/skills/parser";
 import type { SkillFile } from "@/types";
 import { computeLayout, type MaterializeSkillInput } from "./layout";
 
@@ -14,7 +15,10 @@ function makeResourceFile(path: string): SkillFile {
   };
 }
 
-function makeSkill(files: SkillFile[]): MaterializeSkillInput {
+function makeSkill(
+  files: SkillFile[],
+  overrides: Partial<MaterializeSkillInput> = {},
+): MaterializeSkillInput {
   return {
     id: "11111111-2222-3333-4444-555555555555",
     name: "PDF Helper",
@@ -27,6 +31,7 @@ function makeSkill(files: SkillFile[]): MaterializeSkillInput {
     metadata: {},
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     files,
+    ...overrides,
   };
 }
 
@@ -106,5 +111,69 @@ describe("computeLayout", () => {
     // materialize.ts re-splits stored paths, so a backslash ".." segment must
     // be rejected too, not just POSIX "../".
     expect(files.some((f) => /evil\.md$/.test(f.path))).toBe(false);
+  });
+
+  test("preserves the display name in metadata, letting an author-provided displayName win", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [
+        makeSkill([], { id: "a1", name: "PDF Helper" }),
+        makeSkill([], {
+          id: "a2",
+          name: "Build App",
+          metadata: { displayName: "Custom Label" },
+        }),
+      ],
+    });
+
+    const byDir = new Map(
+      files
+        .filter((f) => f.path.endsWith("/SKILL.md"))
+        .map((f) => [f.path.split("/").at(-2), parseSkillManifest(f.content)]),
+    );
+    expect(byDir.get("pdf-helper")?.metadata.displayName).toBe("PDF Helper");
+    expect(byDir.get("build-app")?.metadata.displayName).toBe("Custom Label");
+  });
+
+  test("every SKILL.md frontmatter name equals its directory, matches the Agent Skills spec, and is unique", () => {
+    const files = computeLayout({
+      linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+      marketplaceName: "org-abcd1234-skills",
+      ownerName: "Acme Corp",
+      displayName: "Acme Skills",
+      skills: [
+        makeSkill([], { id: "a1", name: "Archestra Platform Operations" }),
+        makeSkill([], { id: "a2", name: "Build App" }),
+        makeSkill([], { id: "a3", name: "PDF Helper" }),
+        // collides with the previous slug → disambiguated with -2
+        makeSkill([], { id: "a4", name: "PDF HELPER" }),
+        // slugifies to empty → id-derived fallback
+        makeSkill([], {
+          id: "eeeeeeee-1111-2222-3333-444444444444",
+          name: "🎉🎉",
+        }),
+        // longer than the spec's 64-char cap
+        makeSkill([], { id: "a5", name: "x".repeat(80) }),
+      ],
+    });
+
+    const skillMds = files.filter((f) =>
+      /^plugins\/[^/]+\/skills\/[^/]+\/SKILL\.md$/.test(f.path),
+    );
+    expect(skillMds).toHaveLength(6);
+
+    const seen = new Set<string>();
+    for (const file of skillMds) {
+      const dir = file.path.split("/").at(-2);
+      const parsed = parseSkillManifest(file.content);
+      expect(parsed.name).toBe(dir);
+      expect(parsed.name).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+      expect(parsed.name.length).toBeLessThanOrEqual(64);
+      seen.add(parsed.name);
+    }
+    expect(seen.size).toBe(skillMds.length);
   });
 });

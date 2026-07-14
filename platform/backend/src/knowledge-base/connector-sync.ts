@@ -27,6 +27,7 @@ import {
 } from "./connectors/base-connector";
 import { getConnector } from "./connectors/registry";
 import { resolveEmbeddingConfig } from "./kb-llm-client";
+import { enqueuePermissionSyncAfterContentSync } from "./permission-sync-trigger";
 import { knowledgeSourceAccessControlService } from "./source-access-control";
 
 /**
@@ -149,11 +150,12 @@ class ConnectorSyncService {
     const { connector, run, epoch, runLog, options } = params;
     const connectorId = connector.id;
 
-    // Load credentials from secrets manager
-    const [credentials, documentAcl] = await Promise.all([
-      resolveConnectorCredentials(connector),
-      this.buildDocumentAccessControlList(connector),
-    ]);
+    // Load credentials from secrets manager. The document ACL is intentionally
+    // NOT computed once here: visibility/teamIds can change after a run starts,
+    // and no ACL writer may trust a start-of-run snapshot. The current ownership
+    // rule is re-read from the connector row at each batch boundary (ACL-write
+    // time) — see the batch loop below.
+    const credentials = await resolveConnectorCredentials(connector);
 
     // Get the connector implementation
     const connectorImpl = getConnector(connector.connectorType);
@@ -251,6 +253,22 @@ class ConnectorSyncService {
           return { runId: run.id, status: "superseded" };
         }
 
+        // Re-read the connector's CURRENT visibility/teamIds at ACL-write time.
+        // A visibility/teamIds change after the run started must take effect for
+        // THIS batch's writes rather than a stale start-of-run snapshot; the row
+        // is the source of truth and its `aclConfigEpoch` is bumped on any such
+        // change. Ownership is applied per the current mode: content-sync authors
+        // org-wide/team-scoped ACLs, while the permission-sync pass owns auto-sync
+        // ACLs (content-sync becomes a no-op author for them). This closes the
+        // TOCTOU window to at most one batch.
+        const currentConnector =
+          (await KnowledgeBaseConnectorModel.findById(connectorId)) ??
+          connector;
+        const documentAcl =
+          this.buildDocumentAccessControlList(currentConnector);
+        const isAutoSync =
+          currentConnector.visibility === "auto-sync-permissions";
+
         const ingestedDocumentIds: string[] = [];
         for (const doc of batch.documents) {
           documentsProcessed++;
@@ -261,6 +279,10 @@ class ConnectorSyncService {
               connectorType: connector.connectorType,
               organizationId: connector.organizationId,
               acl: documentAcl,
+              // Auto-sync connectors: the permission-sync pass owns per-doc ACLs.
+              // Content-sync must never author them — create fail-closed ([]) and
+              // leave the existing ACL untouched on re-ingest.
+              isAutoSync,
               log: runLog,
             });
             if (result.ingested) {
@@ -293,9 +315,16 @@ class ConnectorSyncService {
           });
         }
 
-        // Track item-level failures from this batch
+        // Sub-resource fallbacks (safeItemFetch): the item itself was still
+        // produced and ingested, possibly degraded — a warning in the run
+        // logs (each is logged at fetch time), NOT an error that flips the
+        // run to completed_with_errors. Only documents that actually failed
+        // to ingest leave data missing and deserve that status.
         if (batch.failures?.length) {
-          itemErrors += batch.failures.length;
+          runLog.warn(
+            { failures: batch.failures.length },
+            "Batch completed with sub-resource fallbacks (see item warnings above)",
+          );
         }
 
         // Track skipped items from this batch
@@ -438,6 +467,14 @@ class ConnectorSyncService {
             lastSyncAt: now,
             lastSyncError: null,
           });
+          // Even an ingest-free sync triggers a (deduped, cheap-delta)
+          // permission pass: it may follow an interrupted run whose own
+          // trigger was lost, and in follow-documents mode it is the only
+          // automatic pass.
+          await enqueuePermissionSyncAfterContentSync({
+            connector,
+            documentsIngested,
+          });
         }
       } else {
         // Batches were enqueued — update progress but leave status as "running";
@@ -465,6 +502,12 @@ class ConnectorSyncService {
           await KnowledgeBaseConnectorModel.update(connectorId, {
             lastSyncStatus: finalizedRun.status,
             lastSyncAt: finalizedRun.completedAt ?? new Date(),
+          });
+          // Content trigger (all batches drained synchronously here rather
+          // than in the batch-embedding handler).
+          await enqueuePermissionSyncAfterContentSync({
+            connector,
+            documentsIngested,
           });
         }
       }
@@ -541,10 +584,18 @@ class ConnectorSyncService {
     connectorType: string;
     organizationId: string;
     acl: AclEntry[];
+    isAutoSync: boolean;
     log: pino.Logger;
   }): Promise<{ ingested: boolean; documentId: string | null }> {
-    const { doc, connectorId, connectorType, organizationId, acl, log } =
-      params;
+    const {
+      doc,
+      connectorId,
+      connectorType,
+      organizationId,
+      acl,
+      isAutoSync,
+      log,
+    } = params;
 
     // Extracted text (PDF/OOXML, or a plain-text file mis-decoded as UTF-8) can
     // contain NUL bytes, which Postgres text columns reject — the whole document
@@ -575,6 +626,14 @@ class ConnectorSyncService {
     });
 
     if (existing) {
+      // Auto-sync connectors: the permission-sync pass is the SOLE author of
+      // kb_documents.acl. Content-sync must not write it on re-ingest — doing so
+      // would clobber a concurrent pass's fresh ACL (a lost update). So the doc
+      // row's acl is left untouched for auto-sync (see the content-changed branch
+      // below), and re-created chunks inherit the doc's CURRENT acl. Other
+      // visibilities keep authoring the connector-level ACL.
+      const effectiveAcl = isAutoSync ? (existing.acl as AclEntry[]) : acl;
+
       // Same content hash → skip (unchanged)
       if (existing.contentHash === contentHash) {
         const existingChunkCount = await KbChunkModel.countByDocument(
@@ -589,7 +648,7 @@ class ConnectorSyncService {
             mediaContent: doc.mediaContent,
             metadata: doc.metadata,
             connectorType,
-            acl,
+            acl: effectiveAcl,
             log,
           });
 
@@ -617,16 +676,23 @@ class ConnectorSyncService {
         return { ingested: false, documentId: null };
       }
 
-      // Content has changed — update existing document
-      await KbDocumentModel.update(existing.id, {
+      // Content has changed — update existing document. For auto-sync connectors
+      // omit `acl` from the update so the permission-pass-owned value is never
+      // clobbered; the returned row then carries the doc's current (fresh) acl,
+      // which the re-created chunks inherit so a re-chunk never drops the doc to
+      // fail-closed. Non-auto-sync writes the connector-level acl as before.
+      const updated = await KbDocumentModel.update(existing.id, {
         title,
         content,
         contentHash,
         sourceUrl: doc.sourceUrl ?? null,
-        acl,
+        ...(isAutoSync ? {} : { acl }),
         metadata: doc.metadata,
         embeddingStatus: "pending",
       });
+      const chunkAcl = isAutoSync
+        ? ((updated?.acl as AclEntry[] | undefined) ?? effectiveAcl)
+        : acl;
 
       // Re-chunk: content changed, so replace stale chunks
       await KbChunkModel.deleteByDocument(existing.id);
@@ -637,7 +703,7 @@ class ConnectorSyncService {
         mediaContent: doc.mediaContent,
         metadata: doc.metadata,
         connectorType,
-        acl,
+        acl: chunkAcl,
         log,
       });
 

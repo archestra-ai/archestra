@@ -5,7 +5,11 @@ import type { A2AAttachment } from "@/agents/a2a-executor";
  * ChatOps provider types enum
  * Used for PG ENUM in database schema
  */
-export const ChatOpsProviderTypeSchema = z.enum(["ms-teams", "slack"]);
+export const ChatOpsProviderTypeSchema = z.enum([
+  "ms-teams",
+  "slack",
+  "telegram",
+]);
 export type ChatOpsProviderType = z.infer<typeof ChatOpsProviderTypeSchema>;
 
 export const ChatOpsConnectionModeSchema = z.enum(["webhook", "socket"]);
@@ -33,6 +37,8 @@ export const ChatOpsDmInfoSchema = z
     botUserId: z.string().optional(),
     teamId: z.string().optional(),
     appId: z.string().optional(),
+    /** Telegram bot username, used to build t.me deep links */
+    botUsername: z.string().optional(),
   })
   .optional();
 
@@ -437,6 +443,13 @@ export interface ChatOpsProvider {
   getUserEmail(userId: string): Promise<string | null>;
 
   /**
+   * Provider-specific guidance shown when the sender's identity cannot be
+   * resolved. Providers with no email concept (e.g. Telegram, where users must
+   * link their account first) override the generic manager message.
+   */
+  identityVerificationFailureText?(): string;
+
+  /**
    * Get user's display name from their provider-specific ID.
    * Used for auto-provisioning to set a meaningful user name.
    * @param userId - The user's ID in the provider's system
@@ -466,6 +479,12 @@ export interface ChatOpsProvider {
     userId: string;
     userName: string;
     responseUrl: string;
+    /**
+     * Whether the selection happened in a DM. Providers whose channel IDs
+     * don't encode this (e.g. Telegram's numeric chat IDs) set it explicitly;
+     * when absent the manager falls back to Slack's "D"-prefix convention.
+     */
+    isDm?: boolean;
   } | null;
 
   /**
@@ -593,6 +612,13 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
+}
+
+/** Telegram config stored as a DB secret */
+export interface TelegramDbConfig {
+  enabled: boolean;
+  /** Bot token from @BotFather */
+  botToken: string;
 }
 
 /** ngrok tunnel config stored as a DB secret */

@@ -77,6 +77,78 @@ export function isCatalogInEnvironment(
 }
 
 /**
+ * Whether a catalog item may be assigned to an agent in the tools picker, and
+ * how it should read when it is.
+ *
+ * A catalog item is assignable when it has at least one **discovered** tool; an
+ * install the assigning caller can resolve is NOT required. A discovered tool
+ * with no resolvable install stays assignable as a dynamic assignment — its
+ * connection resolved per caller at call time — and is surfaced as `unavailable`,
+ * prompting install/reconnect when invoked. A catalog item with no discovered
+ * tool has nothing to assign. Environment incompatibility is a separate,
+ * orthogonal gate.
+ */
+export function getCatalogAssignmentGate(params: {
+  hasDiscoveredTools: boolean;
+  hasResolvableInstall: boolean;
+  isEnvIncompatible: boolean;
+  environmentName?: string | null;
+}): { disabled: boolean; disabledReason?: string; unavailable: boolean } {
+  const { hasDiscoveredTools, hasResolvableInstall, isEnvIncompatible } =
+    params;
+
+  if (isEnvIncompatible) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: `Not in ${
+        params.environmentName
+          ? `the "${params.environmentName}" environment`
+          : "the Default environment"
+      }`,
+    };
+  }
+
+  if (!hasDiscoveredTools) {
+    return {
+      disabled: true,
+      unavailable: false,
+      disabledReason: "Not installed",
+    };
+  }
+
+  return { disabled: false, unavailable: !hasResolvableInstall };
+}
+
+/**
+ * Whether the tools picker should drop a per-server credential pin back to
+ * resolve-at-call-time.
+ *
+ * Only a genuinely stale pin — one absent from a non-empty set of connections
+ * that resolve for the caller — is reset. When no connection resolves at all,
+ * the pin is preserved: the assignment persists independently of install state,
+ * so coercing it here would register a pending change and silently rewrite the
+ * pin to dynamic on the next save. A dynamic/unset selection has nothing to
+ * reset.
+ */
+export function shouldResetCredentialPin(params: {
+  credentialsLoaded: boolean;
+  selectionIsDynamic: boolean;
+  pinnedServerId: string | null;
+  resolvableServerIds: readonly string[];
+}): boolean {
+  const { credentialsLoaded, selectionIsDynamic, pinnedServerId } = params;
+
+  if (!credentialsLoaded || selectionIsDynamic || pinnedServerId === null) {
+    return false;
+  }
+  if (params.resolvableServerIds.includes(pinnedServerId)) {
+    return false;
+  }
+  return params.resolvableServerIds.length > 0;
+}
+
+/**
  * The selected catalogs that don't belong to the agent's environment (builtins
  * are always compatible). Drives the save-blocking conflict alert. Unknown
  * catalog ids are skipped.

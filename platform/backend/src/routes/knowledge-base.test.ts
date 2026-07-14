@@ -1,13 +1,23 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
+} from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import config from "@/config";
+import db from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
+import { buildGroupToken } from "@/knowledge-base/acl-tokens";
 import {
+  ConnectorRunModel,
   GithubAppConfigModel,
   KbChunkModel,
+  KbContainerAclModel,
   KbDocumentModel,
+  KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -21,6 +31,9 @@ describe("knowledge base routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
+    // The auto-sync-permissions routes are beta-gated; the suite runs with the
+    // gate open, and the dedicated flag-off tests close it per test.
+    config.kb.autoSyncPermissionsEnabled = true;
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -258,6 +271,86 @@ describe("knowledge base routes", () => {
       };
       expect(body.pagination.total).toBe(1);
       expect(body.data.map((doc) => doc.title)).toEqual(["Roadmap Planning"]);
+    });
+
+    test("filters connector documents by upstream group across both ACL forms", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Group Filter Docs",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://connector-group.atlassian.net",
+          isCloud: true,
+          projectKey: "GF",
+        },
+      });
+      const token = buildGroupToken({
+        connectorType: "jira",
+        groupId: "eng",
+      });
+
+      // Container-indirected form: the group grant lives on the container row.
+      await KbContainerAclModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          containerKey: "project:GF",
+          acl: [token],
+        },
+        {
+          organizationId,
+          connectorId: connector.id,
+          containerKey: "project:OTHER",
+          acl: ["org:*"],
+        },
+      ]);
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "group-doc-1",
+        connectorId: connector.id,
+        title: "Granted via container",
+        content: "a",
+        contentHash: "hash-group-1",
+        acl: [`container:${connector.id}:project:GF`],
+        containerKey: "project:GF",
+      });
+      // Legacy materialized form: the group token sits on the document ACL.
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "group-doc-2",
+        connectorId: connector.id,
+        title: "Granted directly",
+        content: "b",
+        contentHash: "hash-group-2",
+        acl: [token],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "group-doc-3",
+        connectorId: connector.id,
+        title: "Not granted",
+        content: "c",
+        contentHash: "hash-group-3",
+        acl: [`container:${connector.id}:project:OTHER`],
+        containerKey: "project:OTHER",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/documents?limit=20&offset=0&group=eng`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ title: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(2);
+      expect(body.data.map((doc) => doc.title).sort()).toEqual([
+        "Granted directly",
+        "Granted via container",
+      ]);
     });
   });
 
@@ -722,6 +815,168 @@ describe("knowledge base routes", () => {
       }
     });
 
+    test("rejects auto-sync-permissions connector creation without enterprise license", async () => {
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(9999);
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Auto-sync Connector",
+            connectorType: "jira",
+            visibility: "auto-sync-permissions",
+            teamIds: [],
+            config: {
+              type: "jira",
+              jiraBaseUrl: "https://test.atlassian.net",
+              isCloud: true,
+              projectKey: "TEST",
+            },
+            credentials: { email: "user@example.com", apiToken: "token" },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "Auto-sync-permissions connectors require an enterprise license",
+        );
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      }
+    });
+
+    test("rejects auto-sync-permissions for a supported connector type when the knowledge-base tier is inactive", async () => {
+      // github IS a permission-sync connector, so the 403 here proves the tier
+      // gate (not the connector-type gate) is what blocks the request.
+      const original = config.enterpriseFeatures.knowledgeBase;
+      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(9999);
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/connectors",
+          payload: {
+            name: "Auto-sync GitHub Connector",
+            connectorType: "github",
+            visibility: "auto-sync-permissions",
+            teamIds: [],
+            config: {
+              type: "github",
+              githubUrl: "https://api.github.com",
+              owner: "test-org",
+              authMethod: "pat",
+            },
+            credentials: { apiToken: "ghp_token" },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error.message).toContain(
+          "Auto-sync-permissions connectors require an enterprise license",
+        );
+      } finally {
+        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      }
+    });
+
+    test("rejects auto-sync-permissions for a connector type that does not support it", async () => {
+      // notion is not a permission-sync connector (Stage 1: jira/confluence/github;
+      // Stage 2: gdrive/salesforce/sharepoint) — so this must 400.
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Auto-sync Notion",
+          connectorType: "notion",
+          visibility: "auto-sync-permissions",
+          teamIds: [],
+          config: { type: "notion" },
+          credentials: { apiToken: "token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Auto-sync permissions is not supported for notion connectors",
+      );
+    });
+
+    test("rejects auto-sync-permissions creation for a member without the dedicated permission", async ({
+      makeMember,
+    }) => {
+      // Default member role: knowledgeSource create, but no
+      // knowledgeSourceAutoSync grants.
+      await makeMember(user.id, organizationId);
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Member Auto-sync",
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+          teamIds: [],
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+          credentials: { apiToken: "ghp_token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        '"create" permission for auto-sync-permissions connectors',
+      );
+    });
+
+    test("allows an admin to create an auto-sync-permissions connector", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Admin Auto-sync",
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+          teamIds: [],
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+          credentials: { apiToken: "ghp_token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().visibility).toBe("auto-sync-permissions");
+    });
+
     test("creates a perforce connector and normalizes depot paths", async () => {
       const response = await app.inject({
         method: "POST",
@@ -757,6 +1012,89 @@ describe("knowledge base routes", () => {
       });
     });
 
+    test("persists an explicit permission-sync interval and defaults it otherwise", async () => {
+      const withInterval = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Interval Depot",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            serverUrl: "https://perforce.example.com:8080",
+            depotPaths: ["//depot/docs"],
+          },
+          credentials: { email: "svc-knowledge", apiToken: "ticket" },
+          permissionSyncIntervalSeconds: 6 * 60 * 60,
+        },
+      });
+      expect(withInterval.statusCode).toBe(200);
+      expect(withInterval.json().permissionSyncIntervalSeconds).toBe(
+        6 * 60 * 60,
+      );
+
+      const withoutInterval = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Default Interval Depot",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            serverUrl: "https://perforce.example.com:8080",
+            depotPaths: ["//depot/specs"],
+          },
+          credentials: { email: "svc-knowledge", apiToken: "ticket" },
+        },
+      });
+      expect(withoutInterval.statusCode).toBe(200);
+      expect(withoutInterval.json().permissionSyncIntervalSeconds).toBe(
+        30 * 60,
+      );
+    });
+
+    test("rejects a permission-sync interval below the 15-minute floor", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Too Frequent",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            serverUrl: "https://perforce.example.com:8080",
+            depotPaths: ["//depot/docs"],
+          },
+          credentials: { email: "svc-knowledge", apiToken: "ticket" },
+          permissionSyncIntervalSeconds: 60,
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("accepts interval 0 — follow the documents sync schedule", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Follows Documents Schedule",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            serverUrl: "https://perforce.example.com:8080",
+            depotPaths: ["//depot/docs"],
+          },
+          credentials: { email: "svc-knowledge", apiToken: "ticket" },
+          permissionSyncIntervalSeconds:
+            PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().permissionSyncIntervalSeconds).toBe(
+        PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
+      );
+    });
+
     test("rejects perforce depot paths containing revision metacharacters", async () => {
       const response = await app.inject({
         method: "POST",
@@ -781,6 +1119,76 @@ describe("knowledge base routes", () => {
   });
 
   describe("GET /api/connectors", () => {
+    test("hides auto-sync-permissions connectors from non-admin members", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId);
+      const kb = await makeKnowledgeBase(organizationId);
+      const autoSync = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+        connectorType: "github",
+        visibility: "auto-sync-permissions",
+      });
+      const orgWide = await makeKnowledgeBaseConnector(kb.id, organizationId);
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0",
+      });
+      expect(list.statusCode).toBe(200);
+      const listedIds = list.json().data.map((c: { id: string }) => c.id);
+      expect(listedIds).toContain(orgWide.id);
+      expect(listedIds).not.toContain(autoSync.id);
+
+      // The detail surfaces must read as "not found", not just be filtered
+      // from lists.
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${autoSync.id}`,
+      });
+      expect(detail.statusCode).toBe(404);
+      const documents = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${autoSync.id}/documents`,
+      });
+      expect(documents.statusCode).toBe(404);
+      const update = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${autoSync.id}`,
+        payload: { name: "renamed" },
+      });
+      expect(update.statusCode).toBe(404);
+    });
+
+    test("shows auto-sync-permissions connectors to knowledgeSource admins", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const kb = await makeKnowledgeBase(organizationId);
+      const autoSync = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+        connectorType: "github",
+        visibility: "auto-sync-permissions",
+      });
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/connectors?limit=50&offset=0",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().data.map((c: { id: string }) => c.id)).toContain(
+        autoSync.id,
+      );
+
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${autoSync.id}`,
+      });
+      expect(detail.statusCode).toBe(200);
+    });
+
     test("lists connectors for the organization", async () => {
       await KnowledgeBaseConnectorModel.create({
         organizationId,
@@ -904,6 +1312,45 @@ describe("knowledge base routes", () => {
       });
     });
 
+    test("adds an admin API key without re-entering the API token", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Admin Key Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+      const secret = await secretManager().createSecret(
+        { email: "user@example.com", apiToken: "user-token" },
+        "connector-admin-key",
+      );
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        secretId: secret.id,
+      });
+
+      // The edit dialog sends only the fields the admin typed — here just
+      // the new admin API key, with the token field left blank.
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          credentials: { adminApiKey: "org-admin-key" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updatedSecret = await secretManager().getSecret(secret.id);
+      expect(updatedSecret?.secret).toMatchObject({
+        email: "user@example.com",
+        apiToken: "user-token",
+        adminApiKey: "org-admin-key",
+      });
+    });
+
     test("updates a connector name and schedule", async () => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,
@@ -933,6 +1380,120 @@ describe("knowledge base routes", () => {
       expect(body.name).toBe("Updated Connector");
       expect(body.enabled).toBe(false);
       expect(body.schedule).toBe("0 0 * * *");
+    });
+
+    test("updates the permission-sync interval", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Interval Connector",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://test.atlassian.net",
+          isCloud: true,
+          projectKey: "TEST",
+        },
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { permissionSyncIntervalSeconds: 60 * 60 },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().permissionSyncIntervalSeconds).toBe(60 * 60);
+
+      const belowFloor = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { permissionSyncIntervalSeconds: 60 },
+      });
+      expect(belowFloor.statusCode).toBe(400);
+
+      // An effectively-infinite interval would silently disable the
+      // scheduled pass; follow-documents mode is the way to opt out.
+      const aboveCeiling = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { permissionSyncIntervalSeconds: 30 * 24 * 60 * 60 },
+      });
+      expect(aboveCeiling.statusCode).toBe(400);
+    });
+
+    test("switching a connector to auto-sync-permissions enqueues an immediate deduped permission sync", async ({
+      makeMember,
+    }) => {
+      // Switching into auto-sync (and touching the connector afterwards)
+      // requires the knowledgeSourceAutoSync permission (admin role here).
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Switch Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "pat",
+        },
+        visibility: "org-wide",
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { visibility: "auto-sync-permissions" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(
+        await TaskModel.hasPendingOrProcessing("permission_sync", connector.id),
+      ).toBe(true);
+
+      // A second no-op-ish update (visibility unchanged) must not enqueue more.
+      const again = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { visibility: "auto-sync-permissions", teamIds: ["team-x"] },
+      });
+      expect(again.statusCode).toBe(200);
+      const { rows } = await db.execute<{ count: number }>(sql`
+        SELECT COUNT(*)::int AS count
+        FROM tasks
+        WHERE task_type = 'permission_sync'
+          AND payload->>'connectorId' = ${connector.id}
+      `);
+      expect(rows[0]?.count).toBe(1);
+    });
+
+    test("rejects switching to auto-sync-permissions for a member without the dedicated permission", async ({
+      makeMember,
+    }) => {
+      // Default member role: knowledgeSource update, but no
+      // knowledgeSourceAutoSync grants.
+      await makeMember(user.id, organizationId);
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Member Switch Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "pat",
+        },
+        visibility: "org-wide",
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { visibility: "auto-sync-permissions" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain(
+        '"update" permission for auto-sync-permissions connectors',
+      );
     });
 
     test("persists connector updates across reads", async () => {
@@ -1266,54 +1827,6 @@ describe("knowledge base routes", () => {
 
       expect(response.statusCode).toBe(200);
       expect(refreshSpy).not.toHaveBeenCalled();
-    });
-
-    test("refreshes ACLs when visibility inputs change", async () => {
-      const connector = await KnowledgeBaseConnectorModel.create({
-        organizationId,
-        name: "Refresh ACL Connector",
-        connectorType: "jira",
-        visibility: "org-wide",
-        teamIds: [],
-        config: {
-          type: "jira",
-          jiraBaseUrl: "https://test.atlassian.net",
-          isCloud: true,
-          projectKey: "TEST",
-        },
-      });
-
-      const refreshSpy = vi.spyOn(
-        knowledgeSourceAccessControlService,
-        "refreshConnectorDocumentAccessControlLists",
-      );
-
-      const original = config.enterpriseFeatures.knowledgeBase;
-      Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
-        value: true,
-        writable: true,
-        configurable: true,
-      });
-      try {
-        const response = await app.inject({
-          method: "PUT",
-          url: `/api/connectors/${connector.id}`,
-          payload: {
-            visibility: "team-scoped",
-            teamIds: [crypto.randomUUID()],
-          },
-        });
-
-        expect(response.statusCode).toBe(200);
-        expect(refreshSpy).toHaveBeenCalledWith(connector.id);
-      } finally {
-        Object.defineProperty(config.enterpriseFeatures, "knowledgeBase", {
-          value: original,
-          writable: true,
-          configurable: true,
-        });
-        enterpriseTier.setUserCountForTesting(0);
-      }
     });
 
     test("returns 404 for non-existent connector", async () => {
@@ -1699,6 +2212,136 @@ describe("knowledge base routes", () => {
       expect(body.pagination.total).toBe(2);
     });
 
+    test("flags a queued sync while its task is unclaimed, and clears it once a run is running", async ({
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Queued Runs KB",
+      });
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+
+      // Enqueued but unclaimed: no run row exists yet — the endpoint must
+      // surface the gap so the UI can render a synthetic Queued row instead
+      // of showing nothing.
+      await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: connector.id },
+      });
+      let response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/runs?limit=10&offset=0`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().queued).toEqual({
+        content: true,
+        permission: false,
+      });
+
+      // Claimed: the task stays pending/processing for the whole run, so a
+      // running run row must flip the flag back off.
+      await makeConnectorRun(connector.id, { status: "running" });
+      response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/runs?limit=10&offset=0`,
+      });
+      expect(response.json().queued).toEqual({
+        content: false,
+        permission: false,
+      });
+    });
+
+    test("filters connector runs by status", async ({
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Runs Status KB",
+      });
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      await makeConnectorRun(connector.id, { status: "success" });
+      await makeConnectorRun(connector.id, { status: "failed" });
+      await makeConnectorRun(connector.id, { status: "failed" });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/runs?limit=10&offset=0&status=failed`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        data: Array<{ status: string }>;
+        pagination: { total: number };
+      };
+      expect(body.pagination.total).toBe(2);
+      expect(body.data.every((run) => run.status === "failed")).toBe(true);
+    });
+
+    test("filters connector runs by result across both run families", async ({
+      makeKnowledgeBaseConnector,
+      makeConnectorRun,
+    }) => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Runs Result KB",
+      });
+      const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+      // Documents run that ingested nothing vs one that ingested.
+      await makeConnectorRun(connector.id, {
+        runType: "content",
+        documentsIngested: 0,
+      });
+      await makeConnectorRun(connector.id, {
+        runType: "content",
+        documentsIngested: 5,
+      });
+      // Clean delta pass vs a pass that updated permissions.
+      await makeConnectorRun(connector.id, {
+        runType: "permission",
+        stats: {
+          mode: "delta",
+          totalDocs: 10,
+          docsScanned: 10,
+          aclsChanged: 0,
+          chunksRewritten: 0,
+          failClosed: 0,
+          groupsSynced: 2,
+          membershipsUpserted: 0,
+          contentSyncActiveDuringRun: false,
+        },
+      });
+      await makeConnectorRun(connector.id, {
+        runType: "permission",
+        stats: {
+          mode: "delta",
+          totalDocs: 10,
+          docsScanned: 10,
+          aclsChanged: 3,
+          chunksRewritten: 3,
+          failClosed: 0,
+          groupsSynced: 2,
+          membershipsUpserted: 0,
+          contentSyncActiveDuringRun: false,
+        },
+      });
+
+      const withChanges = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/runs?limit=10&offset=0&result=changes`,
+      });
+      expect(withChanges.statusCode).toBe(200);
+      expect(withChanges.json().pagination.total).toBe(2);
+
+      const noChanges = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/runs?limit=10&offset=0&result=no-changes`,
+      });
+      expect(noChanges.statusCode).toBe(200);
+      expect(noChanges.json().pagination.total).toBe(2);
+    });
+
     test("returns 404 for runs of non-existent connector", async () => {
       const response = await app.inject({
         method: "GET",
@@ -1843,6 +2486,754 @@ describe("knowledge base routes", () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("POST /api/connectors/:id/permission-sync", () => {
+    // Auto-sync connector surfaces need the knowledgeSourceAutoSync
+    // permission (admin role here); everyone else gets 404/403.
+    beforeEach(async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    });
+
+    test("enqueues a permission_sync task for an auto-sync github connector", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        },
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/permission-sync`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status).toBe("enqueued");
+      expect(
+        await TaskModel.hasPendingOrProcessing("permission_sync", connector.id),
+      ).toBe(true);
+    });
+
+    test("rejects a non-auto-sync connector with 400", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "org-wide",
+        },
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/permission-sync`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "auto-sync-permissions connectors",
+      );
+    });
+
+    test("rejects a connector type that does not support permission sync", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      // notion is not a permission-sync connector, but a stored row can still
+      // carry the auto-sync visibility; the trigger must reject it.
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "notion",
+          visibility: "auto-sync-permissions",
+        },
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/permission-sync`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("not supported");
+    });
+  });
+
+  describe("GET /api/connectors/:id/permission-coverage", () => {
+    beforeEach(async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    });
+
+    test("reports total vs fail-closed documents for an auto-sync connector", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        },
+      );
+      // One tagged doc + one still fail-closed (awaiting a pass).
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "tagged",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h1",
+        acl: ["user_email:alice@example.com"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "pending",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h2",
+        acl: [],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/permission-coverage`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.totalDocuments).toBe(2);
+      expect(body.failClosedDocuments).toBe(1);
+      expect(body.permissionSyncRunning).toBe(false);
+      // Effective global schedule always yields a next run in tests.
+      expect(typeof body.nextScheduledAt).toBe("string");
+    });
+
+    test("flags a running permission sync", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        },
+      );
+      await ConnectorRunModel.claim({
+        connectorId: connector.id,
+        owner: "w",
+        leaseTtlSeconds: 300,
+        runType: "permission",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/permission-coverage`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().permissionSyncRunning).toBe(true);
+    });
+
+    test("flags a queued permission sync before the worker claims a run", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        },
+      );
+      // A manual trigger enqueues a task; the run row appears only when the
+      // worker claims it. The gap must still read as "running" in the UI.
+      await TaskModel.create({
+        taskType: "permission_sync",
+        payload: { connectorId: connector.id },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/permission-coverage`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().permissionSyncRunning).toBe(true);
+    });
+
+    test("rejects a non-auto-sync connector with 400", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "github", visibility: "org-wide" },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/permission-coverage`,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("GET /api/connectors/:id/user-groups", () => {
+    beforeEach(async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    });
+
+    test("aggregates the membership snapshot and resolves members to org users", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        },
+      );
+
+      // alice is an org member (resolves); bob has no account (resolves to
+      // nobody); dave's email is hidden upstream (recorded, fail-closed).
+      const alice = await makeUser({ email: "Alice@Example.com" });
+      await makeMember(alice.id, organizationId);
+      await KbExternalUserGroupModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "github",
+          groupId: "engineers",
+          externalAccountId: "alice",
+          displayName: "Alice A",
+          memberEmail: "alice@example.com",
+        },
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "github",
+          groupId: "engineers",
+          externalAccountId: "bob",
+          displayName: "Bob B",
+          memberEmail: "bob@example.com",
+        },
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "github",
+          groupId: "engineers",
+          externalAccountId: "dave",
+          displayName: "Dave D",
+          memberEmail: null,
+        },
+      ]);
+      // Two docs grant the group, one grants only an unknown group.
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "d1",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h1",
+        acl: ["group:github_engineers"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "d2",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h2",
+        acl: ["group:github_engineers", "user_email:alice@example.com"],
+      });
+      await KbDocumentModel.create({
+        organizationId,
+        sourceId: "d3",
+        connectorId: connector.id,
+        title: "t",
+        content: "c",
+        contentHash: "h3",
+        acl: ["group:github_ghosts"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { groups } = response.json();
+      expect(groups).toHaveLength(2);
+
+      const engineers = groups.find(
+        (g: { groupId: string }) => g.groupId === "engineers",
+      );
+      expect(engineers.token).toBe("group:github_engineers");
+      expect(engineers.documentCount).toBe(2);
+      expect(engineers.lastSyncedAt).toEqual(expect.any(String));
+      expect(engineers.members).toEqual([
+        {
+          accountId: "alice",
+          displayName: "Alice A",
+          email: "alice@example.com",
+          accountType: null,
+          user: { id: alice.id, name: alice.name },
+          resolvedVia: "email",
+        },
+        {
+          accountId: "bob",
+          displayName: "Bob B",
+          email: "bob@example.com",
+          accountType: null,
+          user: null,
+          resolvedVia: null,
+        },
+        // Hidden email: recorded and visible to admins, resolves to nobody.
+        {
+          accountId: "dave",
+          displayName: "Dave D",
+          email: null,
+          accountType: null,
+          user: null,
+          resolvedVia: null,
+        },
+      ]);
+
+      // Granted on a document but absent from the snapshot: visible, no members.
+      const ghosts = groups.find(
+        (g: { groupId: string }) => g.groupId === "ghosts",
+      );
+      expect(ghosts).toEqual({
+        groupId: "ghosts",
+        token: "group:github_ghosts",
+        documentCount: 1,
+        lastSyncedAt: null,
+        members: [],
+      });
+    });
+
+    test("does not resolve a user from another organization's membership", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        {
+          connectorType: "github",
+          visibility: "auto-sync-permissions",
+        },
+      );
+      // carol exists but is a member of a DIFFERENT org — must not resolve.
+      const carol = await makeUser({ email: "carol@example.com" });
+      const otherOrg = await makeOrganization();
+      await makeMember(carol.id, otherOrg.id);
+      await KbExternalUserGroupModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "github",
+          groupId: "engineers",
+          externalAccountId: "carol@example.com",
+          memberEmail: "carol@example.com",
+        },
+      ]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { groups } = response.json();
+      expect(groups[0].members).toEqual([
+        {
+          accountId: "carol@example.com",
+          displayName: null,
+          email: "carol@example.com",
+          accountType: null,
+          user: null,
+          resolvedVia: null,
+        },
+      ]);
+    });
+
+    test("rejects a non-auto-sync connector with 400", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "github", visibility: "org-wide" },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe("PUT/DELETE /api/connectors/:id/member-overrides", () => {
+    beforeEach(async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    });
+
+    /** Auto-sync connector with one hidden-email membership. */
+    async function makeConnectorWithHiddenMember(fixtures: {
+      makeKnowledgeBase: (orgId: string) => Promise<{ id: string }>;
+      makeKnowledgeBaseConnector: (
+        kbId: string,
+        orgId: string,
+        overrides: Record<string, unknown>,
+      ) => Promise<{ id: string }>;
+    }) {
+      const kb = await fixtures.makeKnowledgeBase(organizationId);
+      const connector = await fixtures.makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "jira", visibility: "auto-sync-permissions" },
+      );
+      await KbExternalUserGroupModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "jira",
+          groupId: "eng",
+          externalAccountId: "acc-hidden",
+          displayName: "Hidden H",
+          memberEmail: null,
+        },
+      ]);
+      return connector;
+    }
+
+    test("maps a hidden-email member to an org user; user-groups reports it as an override", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+
+      const putResponse = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+      expect(putResponse.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+      expect(response.json().groups[0].members).toEqual([
+        {
+          accountId: "acc-hidden",
+          displayName: "Hidden H",
+          email: null,
+          accountType: null,
+          user: { id: alice.id, name: alice.name },
+          resolvedVia: "override",
+        },
+      ]);
+    });
+
+    test("automatic email matching takes precedence over an override", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "jira", visibility: "auto-sync-permissions" },
+      );
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+      const bob = await makeUser({ email: "bob@example.com" });
+      await makeMember(bob.id, organizationId);
+      // Membership matches alice by email; an admin override pointing at bob
+      // is inert while the automatic match holds (by definition of
+      // auto-sync permissions — the source's identity wins).
+      await KbExternalUserGroupModel.upsertMany([
+        {
+          organizationId,
+          connectorId: connector.id,
+          connectorType: "jira",
+          groupId: "eng",
+          externalAccountId: "acc-1",
+          memberEmail: "alice@example.com",
+        },
+      ]);
+      await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-1", userId: bob.id },
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+      expect(response.json().groups[0].members[0]).toMatchObject({
+        user: { id: alice.id, name: alice.name },
+        resolvedVia: "email",
+      });
+    });
+
+    test("rejects mapping to a user outside the organization with 404", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      // Exists as a user, but is not a member of this org.
+      const outsider = await makeUser({ email: "outsider@example.com" });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: outsider.id },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("rejects a non-auto-sync connector with 400", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "jira", visibility: "org-wide" },
+      );
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-1", userId: alice.id },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("deleting a mapping falls back to email resolution (nobody for a hidden email)", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+      await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}/user-groups`,
+      });
+      expect(response.json().groups[0].members[0]).toMatchObject({
+        user: null,
+        resolvedVia: null,
+      });
+
+      // Deleting again: nothing to remove.
+      const repeat = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
+      });
+      expect(repeat.statusCode).toBe(404);
+    });
+
+    test("saving and removing a mapping each enqueue a forced audience-refresh pass", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+      makeUser,
+      makeMember,
+    }) => {
+      const connector = await makeConnectorWithHiddenMember({
+        makeKnowledgeBase,
+        makeKnowledgeBaseConnector,
+      });
+      const alice = await makeUser({ email: "alice@example.com" });
+      await makeMember(alice.id, organizationId);
+
+      const refreshTasks = async () =>
+        (
+          await db.execute<{ payload: Record<string, unknown> }>(sql`
+            SELECT payload FROM tasks
+            WHERE task_type = 'permission_sync'
+              AND payload->>'connectorId' = ${connector.id}
+              AND payload->>'refreshAudiences' = 'true'
+          `)
+        ).rows;
+
+      const putResponse = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-hidden", userId: alice.id },
+      });
+      expect(putResponse.statusCode).toBe(200);
+      // A DIRECT grant to the mapped account only materializes when container
+      // audiences are re-resolved — the save must schedule that itself.
+      expect(await refreshTasks()).toHaveLength(1);
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/connectors/${connector.id}/member-overrides/acc-hidden`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(await refreshTasks()).toHaveLength(2);
+    });
+  });
+
+  describe("auto-sync permissions beta gate", () => {
+    beforeEach(async ({ makeMember }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    });
+
+    test("selecting the visibility and the permission-family routes are rejected when the flag is off", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      // Pre-existing auto-sync connector (e.g. created while the beta was on).
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "jira", visibility: "auto-sync-permissions" },
+      );
+      config.kb.autoSyncPermissionsEnabled = false;
+
+      const create = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Auto-sync Connector",
+          connectorType: "jira",
+          visibility: "auto-sync-permissions",
+          teamIds: [],
+          config: {
+            type: "jira",
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+          credentials: { email: "user@example.com", apiToken: "token" },
+        },
+      });
+      expect(create.statusCode).toBe(403);
+      expect(create.json().error.message).toContain("beta feature");
+
+      for (const [method, url] of [
+        ["POST", `/api/connectors/${connector.id}/permission-sync`],
+        ["GET", `/api/connectors/${connector.id}/permission-coverage`],
+        ["GET", `/api/connectors/${connector.id}/user-groups`],
+        ["DELETE", `/api/connectors/${connector.id}/member-overrides/acc-1`],
+      ] as const) {
+        const response = await app.inject({ method, url });
+        expect(response.statusCode, `${method} ${url}`).toBe(403);
+      }
+      const upsert = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}/member-overrides`,
+        payload: { externalAccountId: "acc-1", userId: user.id },
+      });
+      expect(upsert.statusCode).toBe(403);
+    });
+
+    test("an existing auto-sync connector still reads and updates normally with the flag off", async ({
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const kb = await makeKnowledgeBase(organizationId);
+      const connector = await makeKnowledgeBaseConnector(
+        kb.id,
+        organizationId,
+        { connectorType: "jira", visibility: "auto-sync-permissions" },
+      );
+      config.kb.autoSyncPermissionsEnabled = false;
+
+      const get = await app.inject({
+        method: "GET",
+        url: `/api/connectors/${connector.id}`,
+      });
+      expect(get.statusCode).toBe(200);
+
+      // Updating without switching INTO auto-sync stays allowed (including
+      // switching away from it).
+      const update = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { name: "renamed" },
+      });
+      expect(update.statusCode).toBe(200);
     });
   });
 });

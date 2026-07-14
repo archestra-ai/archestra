@@ -111,6 +111,7 @@ export function AssignmentCombobox({
       >
         <div className="px-2 py-1.5">
           <Input
+            aria-label={placeholder || "Search"}
             placeholder={placeholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}

@@ -404,6 +404,61 @@ describe("ChatProvider retries", () => {
     });
   });
 
+  it("separates transport heartbeats from substantive response progress", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+    const initialTransportSequence =
+      latestSessionRef.current?.transportActivitySequence ?? 0;
+    const initialProgressSequence =
+      latestSessionRef.current?.responseProgressSequence ?? 0;
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-heartbeat",
+        data: { timestamp: Date.now() },
+      });
+    });
+
+    await waitFor(() => {
+      expect(latestSessionRef.current?.transportActivitySequence).toBe(
+        initialTransportSequence + 1,
+      );
+      expect(latestSessionRef.current?.responseProgressSequence).toBe(
+        initialProgressSequence,
+      );
+    });
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-token-usage",
+        data: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+      });
+    });
+
+    await waitFor(() => {
+      expect(latestSessionRef.current?.transportActivitySequence).toBe(
+        initialTransportSequence + 2,
+      );
+      expect(latestSessionRef.current?.responseProgressSequence).toBe(
+        initialProgressSequence + 1,
+      );
+    });
+  });
+
   it("updates live context token estimate from usage and compaction data", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

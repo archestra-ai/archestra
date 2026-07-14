@@ -20,6 +20,19 @@ describe("chunkDocument", () => {
     expect(chunks[0].content).toContain("This is a short document.");
   });
 
+  test("content quoting tokenizer special tokens chunks as plain text", async () => {
+    // tiktoken's bare encode() THROWS on special-token literals; a real GitHub
+    // issue quoting "<|endoftext|>" permanently failed ingestion this way.
+    const chunks = await chunkDocument({
+      title: "Discussing <|endoftext|> handling",
+      content:
+        "The model emits <|endoftext|> at the end of a completion. <|fim_prefix|> is another special token.",
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].content).toContain("<|endoftext|>");
+  });
+
   test("long document returns multiple chunks each within token limit", async () => {
     const sentences = Array.from(
       { length: 200 },

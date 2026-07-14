@@ -31,8 +31,16 @@ vi.mock("@/components/ai-elements/message", () => ({
 }));
 
 vi.mock("@/components/ai-elements/reasoning", () => ({
-  Reasoning: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  Reasoning: ({
+    children,
+    isStreaming,
+  }: {
+    children: React.ReactNode;
+    isStreaming?: boolean;
+  }) => (
+    <div data-testid="reasoning" data-streaming={String(Boolean(isStreaming))}>
+      {children}
+    </div>
   ),
   ReasoningContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
@@ -283,6 +291,107 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Switched to GitHub Agent")).toBeInTheDocument();
+  });
+
+  it("does not render an accordion for an empty reasoning part", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "" },
+          { type: "reasoning", text: "   " },
+          { type: "text", text: "the answer" },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.queryByTestId("reasoning")).not.toBeInTheDocument();
+    expect(screen.getByText("the answer")).toBeInTheDocument();
+  });
+
+  it("renders an accordion only for reasoning parts with real text", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "" },
+          { type: "reasoning", text: "weighing the options" },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByTestId("reasoning")).toHaveLength(1);
+    expect(screen.getByText("weighing the options")).toBeInTheDocument();
+  });
+
+  it("marks the last reasoning part of the last message as streaming", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "reasoning", text: "earlier thought" }],
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [{ type: "reasoning", text: "current thought" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    const accordions = screen.getAllByTestId("reasoning");
+    expect(accordions).toHaveLength(2);
+    // Only the last part of the last message streams; earlier blocks are done.
+    expect(accordions[0]).toHaveAttribute("data-streaming", "false");
+    expect(accordions[1]).toHaveAttribute("data-streaming", "true");
+  });
+
+  it("marks no reasoning as streaming once the response is ready", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "reasoning", text: "settled thought" }],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning")).toHaveAttribute(
+      "data-streaming",
+      "false",
+    );
   });
 
   it("keeps the loading logo visible for the whole streaming response", () => {

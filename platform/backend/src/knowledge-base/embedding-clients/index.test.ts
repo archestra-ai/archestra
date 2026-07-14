@@ -24,7 +24,7 @@ function encodeEmbedding(values: number[]): string {
 describe("callEmbedding dimensions handling", () => {
   const BASE_URL = "https://embed.example.com/v1";
   const captured: Array<{ dimensions?: number }> = [];
-  const server = useMswServer(
+  useMswServer(
     http.post(`${BASE_URL}/embeddings`, async ({ request }) => {
       const body = (await request.json()) as { dimensions?: number };
       captured.push({ dimensions: body.dimensions });

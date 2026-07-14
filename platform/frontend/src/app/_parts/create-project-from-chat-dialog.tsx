@@ -109,6 +109,7 @@ export function CreateProjectFromChatDialog({
           <Input
             autoFocus
             placeholder="Project name"
+            aria-label="Project name"
             maxLength={PROJECT_NAME_MAX_LENGTH}
             aria-invalid={!!form.formState.errors.name}
             {...form.register("name", {
@@ -126,6 +127,7 @@ export function CreateProjectFromChatDialog({
           )}
           <Textarea
             placeholder="Description (optional)"
+            aria-label="Project description"
             rows={3}
             maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
             aria-invalid={!!form.formState.errors.description}

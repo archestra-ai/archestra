@@ -609,6 +609,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
       {tools.length > 5 && (
         <Input
           placeholder="Filter tools by name"
+          aria-label="Filter tools"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="max-w-xs"

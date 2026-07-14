@@ -252,7 +252,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(getAppTemplates());
+      return reply.send(await getAppTemplates());
     },
   );
 
@@ -288,7 +288,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         environmentId: body.environmentId ?? null,
       });
-      const { html, seededFromTemplate } = resolveCreateAppHtml({
+      const { html, seededFromTemplate } = await resolveCreateAppHtml({
         html: body.html,
         name: body.name,
       });

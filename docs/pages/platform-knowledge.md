@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-07-09
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -65,11 +65,30 @@ Each connector has a visibility setting that determines which users can retrieve
 | ------------------------- | --------------------------------------------------------------------------------- |
 | **Org-wide**              | All documents accessible to every user in the organization.                       |
 | **Team-scoped**           | Documents accessible only to members of the assigned teams.                       |
-| **Auto-sync permissions** | ACL entries synced from the source system (user emails, groups). Coming soon — see [#3218](https://github.com/archestra-ai/archestra/issues/3218). |
+| **Auto-sync permissions** | Per-document ACLs synced from the source system, so each user sees only what they can see upstream. See [Auto-Sync Permissions](#auto-sync-permissions). |
 
-Users with the `knowledgeSource:admin` role can view and query every connector regardless of visibility.
+Users with the `knowledgeSource:admin` permission can view and query every connector regardless of visibility.
+
+Auto-sync connectors are gated by the dedicated `knowledgeSourceAutoSync` permissions. They control who can create, update, and see these connectors. By default only the Admin role has them; grant them to other users through a [custom role](/docs/platform-access-control). Users without them still query the connector's documents — their results follow the synced ACLs.
 
 > **Enterprise feature** (team-scoped visibility and auto-synced ACLs) — see the [Pricing Model](/docs/platform-pricing-model).
+
+### Auto-Sync Permissions
+
+> **Beta feature** — off by default. Set `ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED=true` (or the `ARCHESTRA_BETA` master switch) to show the visibility option and its Users and Groups tabs. See [Deployment](/docs/platform-deployment).
+
+Auto-sync permissions mirrors the data source system's access control into Archestra. When a user queries the knowledge base, they get back only the content they are allowed to see in the source system. A user with the `knowledgeSource:admin` role bypasses the ACL and sees everything.
+
+Supported connectors: **GitHub**, **Confluence**, and **Jira**. Support for Google Drive, Salesforce, and SharePoint is planned.
+
+**Upstream email visibility.** Each source hides emails behind its own rule, and a credential that can't see them produces a snapshot full of unresolvable (fail-closed) members:
+
+- **Jira and Confluence Cloud** only return another user's email through the product REST API when that user's Atlassian profile has email visibility set to **"Anyone"**. Add an Atlassian **organization admin API key** to the connector credentials to read managed accounts' emails.
+- **GitHub** only exposes an email the user has made **public on their profile**; no token scope reveals a private email.
+
+**Permission-read access.** The credential must also be able to read the source's permission settings — Jira permission schemes, Confluence space permissions, GitHub repository collaborators. A credential that cannot read them hides that project or space from everyone, because Archestra never assumes an audience it could not verify. Each sync run reports how many it could not read, so a project nobody can find is easy to tell apart from a project nobody is granted.
+
+**Manual user assignment.** When an account's email stays hidden, assign it to an Archestra user from the Users tab.
 
 ## Supported Connectors
 
@@ -81,7 +100,7 @@ Sync issues and discussions from Atlassian Jira.
 
 **Indexed:** issue descriptions, comments, and metadata from Jira Cloud or Server.
 
-**Authentication:** an Atlassian account email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens).
+**Authentication:** an Atlassian account email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens). For auto-sync permissions on Cloud, also add an [organization admin API key](https://support.atlassian.com/organization-administration/docs/manage-an-organization-with-the-admin-apis/) in the **Organization admin API key** field — it lets permission sync read managed accounts' hidden emails. Create the key without scopes. The API token is still required: Atlassian does not accept admin API keys on the Jira or Confluence APIs.
 
 | Field                   | Description                                                        |
 | ----------------------- | ------------------------------------------------------------------ |
@@ -98,7 +117,7 @@ Sync wiki pages from Atlassian Confluence.
 
 **Indexed:** pages from Confluence Cloud or Server.
 
-**Authentication:** the same Atlassian email and API token used for Jira.
+**Authentication:** the same Atlassian email and API token used for Jira, with the same optional organization admin API key for auto-sync permissions.
 
 | Field          | Description                                                                   |
 | -------------- | ----------------------------------------------------------------------------- |

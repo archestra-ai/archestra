@@ -89,6 +89,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
+              chatopsTelegramEnabled: z.boolean(),
+              /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
+              kbAutoSyncPermissionsEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -138,6 +141,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           agentHooksEnabled: config.hooks.enabled,
+          chatopsTelegramEnabled: config.chatops.telegramEnabled,
+          kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,
@@ -157,6 +162,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
           "github-copilot": config.llm["github-copilot"].baseUrl || null,
+          "microsoft-365-copilot":
+            config.llm["microsoft-365-copilot"].baseUrl || null,
           azure: config.llm.azure.baseUrl || null,
         },
       });

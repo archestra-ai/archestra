@@ -40,7 +40,7 @@ import {
   useCloneAgent,
   useDeleteProfile,
   useExportAgent,
-  useProfiles,
+  useProfile,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
@@ -516,8 +516,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isCreateDialogOpen}
               onOpenChange={setIsCreateDialogOpen}
               agentType="agent"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                // Land the user on "how do I use this?" instead of a closed
+                // dialog: open the connect dialog for the new agent.
+                setConnectingAgent({ ...created, agentType: "agent" });
               }}
             />
 
@@ -573,9 +576,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
 function AgentConnectionColumns({ agentId }: { agentId: string }) {
   const appName = useAppName();
-  // Fetch agent data for A2A connection instructions
-  const { data: profiles, isPending } = useProfiles();
-  const agent = profiles?.find((p) => p.id === agentId);
+  // Fetch by id so a just-created agent resolves without waiting for the
+  // paginated list cache to refresh.
+  const { data: agent, isPending } = useProfile(agentId);
 
   if (isPending || !agent) {
     return (

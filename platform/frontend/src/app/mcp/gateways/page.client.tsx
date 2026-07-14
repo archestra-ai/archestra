@@ -20,6 +20,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -201,6 +202,10 @@ function McpGateways({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
     searchParams.get("create") === "true",
   );
+  const [postCreateGateway, setPostCreateGateway] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const openToolsFromUrl = searchParams.get("openTools") === "true";
   const navigateToConnection = useCallback(
     (agentId: string) => {
@@ -583,8 +588,17 @@ function McpGateways({
               onOpenChange={setIsCreateDialogOpen}
               agentType="mcp_gateway"
               defaultIconType="mcp_gateway"
-              onCreated={() => {
+              onCreated={(created) => {
                 setIsCreateDialogOpen(false);
+                setPostCreateGateway(created);
+              }}
+            />
+
+            <PostCreateConnectDialog
+              created={postCreateGateway}
+              agentType="mcp_gateway"
+              onOpenChange={(open) => {
+                if (!open) setPostCreateGateway(null);
               }}
             />
 

@@ -1,0 +1,15 @@
+[package]
+name = "baton-check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Stateless JSON policy check over baton-core: replay an episode, check one proposed tool call"
+
+# Standalone on purpose, like baton-core: a harness sidecar for the
+# agentdojo-harness prototype, not part of the archestra-bench workspace.
+[workspace]
+
+[dependencies]
+baton-core = { path = "../baton-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

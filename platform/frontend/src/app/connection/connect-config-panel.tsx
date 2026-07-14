@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useCreateConnectionPassthroughKey,
@@ -53,7 +54,6 @@ import {
   toPlatformOption,
 } from "./platform.utils";
 import { type ConnectSkill, useAllSkills } from "./skills-marketplace-step";
-import { WizardStep } from "./wizard-step";
 
 /** Clients whose setup is delivered as a downloadable Archestra config profile. */
 export function isConfigClient(clientId: string | null): boolean {
@@ -551,7 +551,7 @@ function ConfigDownloadStep({
         You don't have permission to create virtual keys. Ask an admin to
         generate a configuration profile, or create the keys on the{" "}
         <Link
-          href="/llm/credentials/virtual-keys"
+          href="/credentials/virtual-keys"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Virtual API Keys

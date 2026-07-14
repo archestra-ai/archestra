@@ -2,20 +2,51 @@
 import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
+  MAX_PERMISSION_SYNC_INTERVAL_SECONDS,
+  MIN_PERMISSION_SYNC_INTERVAL_SECONDS,
   PaginationQuerySchema,
+  PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+
+// 0 = follow the documents sync schedule (no interval-scheduled passes);
+// anything else must clear the interval floor.
+const PermissionSyncIntervalSchema = z
+  .number()
+  .int()
+  .min(PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE)
+  .refine(
+    (value) =>
+      value === PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE ||
+      (value >= MIN_PERMISSION_SYNC_INTERVAL_SECONDS &&
+        value <= MAX_PERMISSION_SYNC_INTERVAL_SECONDS),
+    {
+      message: `Permission sync interval must be ${PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE} (follow the documents sync schedule) or between ${MIN_PERMISSION_SYNC_INTERVAL_SECONDS} and ${MAX_PERMISSION_SYNC_INTERVAL_SECONDS} seconds`,
+    },
+  );
+
 import { userHasPermission } from "@/auth/utils";
+import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
+  AUTO_SYNC_PERMISSIONS_DISABLED_ERROR,
+  checkAutoSyncPermissionSyncSupported,
+  checkCanSetAutoSyncPermissionsVisibility,
+  checkHasAutoSyncConnectorPermission,
   didKnowledgeSourceAclInputsChange,
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
+import {
+  buildContainerToken,
+  buildGroupToken,
+} from "@/knowledge-base/acl-tokens";
 import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
 import { getConnector } from "@/knowledge-base/connectors/registry";
+import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
+import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -23,9 +54,13 @@ import {
   AgentModel,
   ConnectorRunModel,
   GithubAppConfigModel,
+  KbContainerAclModel,
   KbDocumentModel,
+  KbExternalUserGroupModel,
+  KbMemberOverrideModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  MemberModel,
   TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
@@ -36,6 +71,8 @@ import {
   type ConnectorConfig,
   ConnectorConfigSchema,
   ConnectorCredentialsSchema,
+  ConnectorRunTypeSchema,
+  ConnectorSyncStatusSchema,
   type ConnectorType,
   ConnectorTypeSchema,
   constructResponseSchema,
@@ -66,13 +103,23 @@ const KnowledgeBaseWithConnectorsSchema = SelectKnowledgeBaseSchema.extend({
   assignedAgents: z.array(AssignedAgentSummarySchema),
 });
 
+// `permissionSyncState` (probe cursors/fingerprints) is internal permission-
+// sync bookkeeping — never part of the API surface.
+const KnowledgeBaseConnectorResponseSchema =
+  SelectKnowledgeBaseConnectorSchema.omit({ permissionSyncState: true });
+
+// `containerKey` is internal permission-sync bookkeeping; API consumers see
+// the document's EFFECTIVE audience (container tokens expanded server-side).
 const KnowledgeBaseDocumentListItemSchema = SelectKbDocumentSchema.omit({
   content: true,
+  containerKey: true,
 }).extend({
   connectorType: ConnectorTypeSchema,
 });
 
-const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.extend({
+const KnowledgeBaseDocumentDetailSchema = SelectKbDocumentSchema.omit({
+  containerKey: true,
+}).extend({
   connectorType: ConnectorTypeSchema,
 });
 
@@ -335,7 +382,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(
-            SelectKnowledgeBaseConnectorSchema.extend({
+            KnowledgeBaseConnectorResponseSchema.extend({
               assignedAgents: z.array(AssignedAgentSummarySchema),
             }),
           ),
@@ -482,11 +529,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // github_app_configs row instead of an inline secret
           credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
+          permissionSyncIntervalSeconds:
+            PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
           environmentId: z.string().uuid().nullable().optional(),
         }),
-        response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
+        response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
     },
     async ({ body, organizationId, user }, reply) => {
@@ -516,6 +565,19 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           403,
           "Team-scoped connectors require an enterprise license",
         );
+      }
+      if (visibility === "auto-sync-permissions") {
+        // beta flag + enterprise license + connector-type support +
+        // knowledgeSourceAutoSync:create (admin-only by default)
+        const violation = await checkCanSetAutoSyncPermissionsVisibility({
+          userId: user.id,
+          organizationId,
+          connectorType: body.connectorType,
+          action: "create",
+        });
+        if (violation) {
+          throw violation;
+        }
       }
       // SPDX-SnippetEnd
 
@@ -591,6 +653,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         secretId,
         environmentId: body.environmentId ?? null,
         schedule: body.schedule,
+        permissionSyncIntervalSeconds: body.permissionSyncIntervalSeconds,
         enabled: body.enabled,
       });
 
@@ -604,14 +667,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Auto-trigger initial sync
+      // Auto-trigger initial sync. "queued" (not "running"): the worker
+      // stamps "running" when it actually claims the task.
       await taskQueueService.enqueue({
         taskType: "connector_sync",
         payload: { connectorId: connector.id },
       });
       const updatedConnector = await KnowledgeBaseConnectorModel.update(
         connector.id,
-        { lastSyncStatus: "running" },
+        { lastSyncStatus: "queued" },
       );
 
       return reply.send(updatedConnector ?? connector);
@@ -627,7 +691,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Connectors"],
         params: z.object({ id: z.uuid() }),
         response: constructResponseSchema(
-          SelectKnowledgeBaseConnectorSchema.extend({
+          KnowledgeBaseConnectorResponseSchema.extend({
             totalDocsIngested: z.number(),
           }),
         ),
@@ -654,6 +718,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: z.uuid() }),
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
+          group: z
+            .string()
+            .describe(
+              "Only documents whose effective audience grants this upstream group (auto-sync-permissions connectors)",
+            )
+            .optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseDocumentListItemSchema),
@@ -663,17 +733,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        query: { limit, offset, search },
+        query: { limit, offset, search, group },
         organizationId,
         user,
       },
       reply,
     ) => {
-      await findConnectorOrThrow({
+      const connector = await findConnectorOrThrow({
         id,
         organizationId,
         userId: user.id,
       });
+      const groupToken = group
+        ? buildGroupToken({
+            connectorType: connector.connectorType,
+            groupId: group,
+          })
+        : undefined;
 
       const [data, total] = await Promise.all([
         KbDocumentModel.findListItemsByConnector({
@@ -682,16 +758,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           search,
+          groupToken,
         }),
         KbDocumentModel.countByConnectorWithSearch({
           connectorId: id,
           organizationId,
           search,
+          groupToken,
         }),
       ]);
 
       return reply.send({
-        data,
+        data: await expandContainerAcls({ connectorId: id, documents: data }),
         pagination: calculatePaginationMeta(total, { limit, offset }),
       });
     },
@@ -724,7 +802,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Document not found");
       }
 
-      return reply.send(existing);
+      const [expanded] = await expandContainerAcls({
+        connectorId: id,
+        documents: [existing],
+      });
+      return reply.send(expanded);
     },
   );
 
@@ -774,12 +856,20 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           visibility: KnowledgeSourceVisibilitySchema.optional(),
           teamIds: z.array(z.string()).optional(),
           config: ConnectorConfigSchema.optional(),
-          credentials: ConnectorCredentialsSchema.optional(),
+          // Partial on purpose: the edit dialog sends only the credential
+          // fields the admin re-entered, and they merge over the stored
+          // secret — so an admin API key can be added without retyping the
+          // API token.
+          credentials: ConnectorCredentialsSchema.partial({
+            apiToken: true,
+          }).optional(),
           schedule: z.string().optional(),
+          permissionSyncIntervalSeconds:
+            PermissionSyncIntervalSchema.optional(),
           enabled: z.boolean().optional(),
           environmentId: z.string().uuid().nullable().optional(),
         }),
-        response: constructResponseSchema(SelectKnowledgeBaseConnectorSchema),
+        response: constructResponseSchema(KnowledgeBaseConnectorResponseSchema),
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
@@ -843,6 +933,46 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
+      if (
+        connector.visibility !== "auto-sync-permissions" &&
+        nextVisibility === "auto-sync-permissions"
+      ) {
+        // Transition INTO auto-sync: beta flag + enterprise license +
+        // connector-type support + knowledgeSourceAutoSync:update. An
+        // existing auto-sync connector is exempt from the transition-only
+        // gates (mirrors team-scoped); its mutations are covered by the
+        // dedicated permission check below.
+        const violation = await checkCanSetAutoSyncPermissionsVisibility({
+          userId: user.id,
+          organizationId,
+          connectorType: connector.connectorType,
+          action: "update",
+        });
+        if (violation) {
+          throw violation;
+        }
+      } else if (connector.visibility === "auto-sync-permissions") {
+        // Mutating a connector that already carries the auto-sync visibility
+        // (settings, credentials, or switching AWAY from it): viewing rights
+        // (findConnectorOrThrow above) are not enough — require the dedicated
+        // update permission.
+        const violation = await checkHasAutoSyncConnectorPermission({
+          userId: user.id,
+          organizationId,
+          action: "update",
+        });
+        if (violation) {
+          throw violation;
+        }
+        if (nextVisibility === "auto-sync-permissions") {
+          const unsupported = checkAutoSyncPermissionSyncSupported(
+            connector.connectorType,
+          );
+          if (unsupported) {
+            throw unsupported;
+          }
+        }
+      }
       // SPDX-SnippetEnd
       if (usesGithubAppConfig && body.credentials) {
         throw new ApiError(
@@ -885,25 +1015,36 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else if (body.credentials) {
         if (connector.secretId) {
           // The edit dialog promises "leave empty to keep existing
-          // credentials" and omits the email/username field when blank, but
-          // updateSecret replaces the whole value — preserve the stored email
-          // so rotating only the token doesn't drop the username.
-          let credentials = body.credentials;
-          if (!credentials.email) {
-            const existing = await secretManager().getSecret(
-              connector.secretId,
+          // credentials" per field and omits blank fields, but updateSecret
+          // replaces the whole value — merge over the stored secret so
+          // rotating only the token keeps the email, and adding only the
+          // admin API key keeps the token.
+          const existing = await secretManager().getSecret(connector.secretId);
+          const stored = (existing?.secret ?? {}) as Record<string, unknown>;
+          const merged = ConnectorCredentialsSchema.safeParse({
+            ...stored,
+            ...body.credentials,
+          });
+          if (!merged.success) {
+            throw new ApiError(
+              400,
+              "The stored credentials are incomplete — re-enter the API token",
             );
-            const storedEmail = (
-              existing?.secret as Record<string, unknown> | undefined
-            )?.email;
-            if (typeof storedEmail === "string" && storedEmail) {
-              credentials = { ...credentials, email: storedEmail };
-            }
           }
-          await secretManager().updateSecret(connector.secretId, credentials);
+          await secretManager().updateSecret(connector.secretId, merged.data);
         } else {
-          const secret = await secretManager().createSecret(
+          const created = ConnectorCredentialsSchema.safeParse(
             body.credentials,
+          );
+          if (!created.success) {
+            // no stored secret to merge over (e.g. leaving GitHub App auth)
+            throw new ApiError(
+              400,
+              "An API token is required when setting credentials for the first time",
+            );
+          }
+          const secret = await secretManager().createSecret(
+            created.data,
             `connector-${body.name ?? connector.name}`,
           );
           nextSecretId = secret.id;
@@ -934,11 +1075,40 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
         })
       ) {
-        // This rewrites ACLs across every document and chunk for the connector,
-        // so only run it when the connector's actual ACL inputs changed.
+        // Bump the ACL fencing epoch so any in-flight ACL write computed against
+        // the old visibility/teamIds no-ops (the newest config change wins). For
+        // org-wide/team-scoped this then runs the authoritative bulk refresh; for
+        // auto-sync-permissions the refresh is a no-op and the (epoch-fenced)
+        // permission pass enqueued below is the authoritative writer — existing
+        // docs stay fail-closed until it runs.
+        await KnowledgeBaseConnectorModel.bumpAclConfigEpoch(id);
         await knowledgeSourceAccessControlService.refreshConnectorDocumentAccessControlLists(
           id,
         );
+
+        if (
+          nextVisibility === "auto-sync-permissions" &&
+          connector.visibility !== "auto-sync-permissions"
+        ) {
+          // Switching TO auto-sync fail-closes the whole corpus; run the first
+          // pass now instead of leaving everything invisible until the next
+          // content ingest or interval tick. De-duplicated like every other
+          // permission-sync trigger.
+          const alreadyQueued = await TaskModel.hasPendingOrProcessing(
+            "permission_sync",
+            id,
+          );
+          if (!alreadyQueued) {
+            await taskQueueService.enqueue({
+              taskType: "permission_sync",
+              payload: { connectorId: id },
+            });
+            logger.info(
+              { connectorId: id },
+              "Enqueued permission sync after visibility switch to auto-sync-permissions",
+            );
+          }
+        }
       }
 
       return reply.send(updated);
@@ -962,6 +1132,21 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         userId: user.id,
       });
+
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (connector.visibility === "auto-sync-permissions") {
+        const violation = await checkHasAutoSyncConnectorPermission({
+          userId: user.id,
+          organizationId,
+          action: "delete",
+        });
+        if (violation) {
+          throw violation;
+        }
+      }
+      // SPDX-SnippetEnd
 
       // Delete the secret
       if (connector.secretId) {
@@ -1026,14 +1211,413 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         payload: { connectorId: id },
       });
 
-      // Set status immediately so the UI can react before the worker picks up the task
+      // Stamp "queued" immediately so the UI can react before the worker
+      // picks up the task; the worker stamps "running" when it claims it.
       await KnowledgeBaseConnectorModel.update(id, {
-        lastSyncStatus: "running",
+        lastSyncStatus: "queued",
       });
 
       return reply.send({ taskId, status: "enqueued" });
     },
   );
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  fastify.post(
+    "/api/connectors/:id/permission-sync",
+    {
+      schema: {
+        operationId: RouteId.TriggerPermissionSync,
+        description:
+          "Manually trigger a permission-sync pass for an auto-sync-permissions connector",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            taskId: z.string(),
+            status: z.string(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "Permission sync only applies to auto-sync-permissions connectors",
+        );
+      }
+      if (!getConnector(connector.connectorType).supportsPermissionSync) {
+        throw new ApiError(
+          400,
+          `Permission sync is not supported for ${connector.connectorType} connectors`,
+        );
+      }
+
+      const hasPendingOrProcessing = await TaskModel.hasPendingOrProcessing(
+        "permission_sync",
+        id,
+      );
+      if (hasPendingOrProcessing) {
+        throw new ApiError(
+          409,
+          "A permission sync is already in progress for this connector",
+        );
+      }
+
+      const taskId = await taskQueueService.enqueue({
+        taskType: "permission_sync",
+        // Manual sync is the operator's "reconcile everything NOW" — always a
+        // full pass, never a probe-scoped delta.
+        payload: { connectorId: id, mode: "full" },
+      });
+
+      await KnowledgeBaseConnectorModel.update(id, {
+        lastPermissionSyncStatus: "queued",
+      });
+
+      return reply.send({ taskId, status: "enqueued" });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/permission-coverage",
+    {
+      schema: {
+        operationId: RouteId.GetPermissionSyncCoverage,
+        description:
+          "Live ACL coverage for an auto-sync-permissions connector: how many ingested documents are tagged vs still fail-closed (awaiting a permission-sync pass)",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            totalDocuments: z.number(),
+            failClosedDocuments: z.number(),
+            /** A permission-sync pass is currently running. */
+            permissionSyncRunning: z.boolean(),
+            /** Next scheduled pass: one interval after the last pass. */
+            nextScheduledAt: z.string().nullable(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "Permission coverage only applies to auto-sync-permissions connectors",
+        );
+      }
+
+      // "Running" includes a queued (pending/processing) task: a manual
+      // trigger enqueues first and the run row only appears once the worker
+      // claims it, so the task check keeps the UI live through that gap.
+      const [coverage, hasRunningRun, hasQueuedTask] = await Promise.all([
+        KbDocumentModel.getAclCoverageByConnector(id),
+        ConnectorRunModel.hasRunningRun({
+          connectorId: id,
+          runType: "permission",
+        }),
+        TaskModel.hasPendingOrProcessing("permission_sync", id),
+      ]);
+      const permissionSyncRunning = hasRunningRun || hasQueuedTask;
+
+      // Cadence semantics (one interval after the last pass), matching the
+      // scheduler. Follow mode has no scheduled pass — the next one comes
+      // from the documents-sync trigger.
+      const nextScheduledAt =
+        connector.permissionSyncIntervalSeconds ===
+        PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE
+          ? null
+          : nextPermissionSyncDueAt({
+              intervalSeconds: connector.permissionSyncIntervalSeconds,
+              lastPermissionSyncAt: connector.lastPermissionSyncAt,
+            }).toISOString();
+
+      return reply.send({
+        totalDocuments: coverage.totalDocuments,
+        failClosedDocuments: coverage.failClosedDocuments,
+        permissionSyncRunning,
+        nextScheduledAt,
+      });
+    },
+  );
+
+  fastify.get(
+    "/api/connectors/:id/user-groups",
+    {
+      schema: {
+        operationId: RouteId.GetConnectorUserGroups,
+        description:
+          "Synced external user groups for an auto-sync-permissions connector: each group's member emails, the Archestra org users they resolve to, and how many documents grant the group",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            /**
+             * The snapshot holds more memberships than this endpoint returns, so
+             * the `members` lists below are partial. The document counts are not.
+             */
+            truncated: z.boolean(),
+            /** Membership rows (group x account) stored for this connector. */
+            totalMemberships: z.number(),
+            groups: z.array(
+              z.object({
+                /** Upstream group identifier as the source system names it. */
+                groupId: z.string(),
+                /** The exact `group:` ACL token written on documents. */
+                token: z.string(),
+                /** Documents on this connector whose ACL grants the group. */
+                documentCount: z.number(),
+                /** Most recent membership snapshot update, if any members. */
+                lastSyncedAt: z.string().nullable(),
+                members: z.array(
+                  z.object({
+                    /** Stable upstream principal id (accountId / login). */
+                    accountId: z.string(),
+                    /** Upstream display name, if the source exposes one. */
+                    displayName: z.string().nullable(),
+                    /** Null when the upstream hides the member's email — the member is fail-closed. */
+                    email: z.string().nullable(),
+                    /** Upstream account classification ("app" = add-on/bot); null when the source has no notion of it. */
+                    accountType: z.string().nullable(),
+                    /** Org user this member resolves to; null = grant currently resolves to nobody. */
+                    user: z
+                      .object({ id: z.string(), name: z.string() })
+                      .nullable(),
+                    /** How `user` resolved: a manual admin mapping or the email join; null when unresolved. */
+                    resolvedVia: z.enum(["override", "email"]).nullable(),
+                  }),
+                ),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "User groups only apply to auto-sync-permissions connectors",
+        );
+      }
+
+      const [{ memberships, truncated }, totalMemberships, documentCounts] =
+        await Promise.all([
+          KbExternalUserGroupModel.findMembershipsWithUsersByConnector({
+            connectorId: id,
+            organizationId,
+            limit: MAX_USER_GROUP_MEMBERSHIPS,
+          }),
+          KbExternalUserGroupModel.countByConnector(id),
+          KbDocumentModel.getGroupTokenDocumentCounts(id),
+        ]);
+
+      const groups = new Map<
+        string,
+        {
+          groupId: string;
+          token: string;
+          documentCount: number;
+          lastSyncedAt: string | null;
+          members: {
+            accountId: string;
+            displayName: string | null;
+            email: string | null;
+            accountType: string | null;
+            user: { id: string; name: string } | null;
+            resolvedVia: "override" | "email" | null;
+          }[];
+        }
+      >();
+
+      for (const membership of memberships) {
+        const token = buildGroupToken({
+          connectorType: connector.connectorType,
+          groupId: membership.groupId,
+        });
+        let group = groups.get(token);
+        if (!group) {
+          group = {
+            groupId: membership.groupId,
+            token,
+            documentCount: 0,
+            lastSyncedAt: null,
+            members: [],
+          };
+          groups.set(token, group);
+        }
+        group.members.push({
+          accountId: membership.externalAccountId,
+          displayName: membership.displayName,
+          email: membership.memberEmail,
+          accountType: membership.accountType,
+          user: membership.user,
+          resolvedVia: membership.resolvedVia,
+        });
+        const syncedAt = membership.updatedAt.toISOString();
+        if (group.lastSyncedAt === null || syncedAt > group.lastSyncedAt) {
+          group.lastSyncedAt = syncedAt;
+        }
+      }
+
+      // Groups granted on documents but absent from the membership snapshot
+      // still show up (with no members) — those grants resolve to nobody.
+      const tokenPrefix = `group:${connector.connectorType}_`;
+      for (const [token, documentCount] of documentCounts) {
+        const group = groups.get(token);
+        if (group) {
+          group.documentCount = documentCount;
+        } else {
+          groups.set(token, {
+            groupId: token.startsWith(tokenPrefix)
+              ? token.slice(tokenPrefix.length)
+              : token,
+            token,
+            documentCount,
+            lastSyncedAt: null,
+            members: [],
+          });
+        }
+      }
+
+      return reply.send({
+        truncated,
+        totalMemberships,
+        groups: [...groups.values()].sort((a, b) =>
+          a.groupId.localeCompare(b.groupId),
+        ),
+      });
+    },
+  );
+
+  fastify.put(
+    "/api/connectors/:id/member-overrides",
+    {
+      schema: {
+        operationId: RouteId.UpsertConnectorMemberOverride,
+        description:
+          "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector — the admin escape hatch when the upstream hides the member's email from every credential",
+        tags: ["Connectors"],
+        params: z.object({ id: z.uuid() }),
+        body: z.object({
+          /** Stable upstream principal id (accountId / login) as reported in user-groups. */
+          externalAccountId: z.string().min(1),
+          /** The Archestra org user the account should resolve to. */
+          userId: z.string().min(1),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }, reply) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      const connector = await findConnectorOrThrow({
+        id,
+        organizationId,
+        userId: user.id,
+      });
+
+      if (connector.visibility !== "auto-sync-permissions") {
+        throw new ApiError(
+          400,
+          "Member overrides only apply to auto-sync-permissions connectors",
+        );
+      }
+
+      const member = await MemberModel.getByUserId(body.userId, organizationId);
+      if (!member) {
+        throw new ApiError(404, "User is not a member of this organization");
+      }
+
+      await KbMemberOverrideModel.upsert({
+        organizationId,
+        connectorId: id,
+        externalAccountId: body.externalAccountId,
+        userId: body.userId,
+      });
+      // Overrides feed the query-time group-token join; drop the cache so the
+      // mapping takes effect on the next query, not after the TTL.
+      await invalidateGroupTokenCache();
+      // DIRECT grants (role actors, user grants) only pick the mapping up when
+      // container audiences are re-resolved — enqueue a (deduped) pass with a
+      // forced audience refresh so it lands in seconds, not at the next full
+      // reconcile.
+      await enqueueAudienceRefreshPass(id);
+
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.delete(
+    "/api/connectors/:id/member-overrides/:externalAccountId",
+    {
+      schema: {
+        operationId: RouteId.DeleteConnectorMemberOverride,
+        description:
+          "Remove a manual member mapping; the member falls back to email-based resolution (fail-closed when the upstream hides their email)",
+        tags: ["Connectors"],
+        params: z.object({
+          id: z.uuid(),
+          // Path-segment assumption: every supported connector's account ids
+          // are URL-safe (Atlassian accountId `557058:<uuid>`, GitHub login).
+          // A future connector whose ids can contain `/` or percent-encoded
+          // sequences must move this to a query/body parameter instead.
+          externalAccountId: z.string().min(1),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (
+      { params: { id, externalAccountId }, organizationId, user },
+      reply,
+    ) => {
+      assertAutoSyncPermissionsFeatureEnabled();
+
+      await findConnectorOrThrow({ id, organizationId, userId: user.id });
+
+      const deleted = await KbMemberOverrideModel.deleteByConnectorAndAccount({
+        connectorId: id,
+        externalAccountId,
+      });
+      if (!deleted) {
+        throw new ApiError(404, "Member override not found");
+      }
+      await invalidateGroupTokenCache();
+      // Un-materialize the mapped email from any direct grants promptly (see
+      // the upsert route).
+      await enqueueAudienceRefreshPass(id);
+
+      return reply.send({ success: true });
+    },
+  );
+  // SPDX-SnippetEnd
 
   fastify.post(
     "/api/connectors/:id/force-resync",
@@ -1074,10 +1658,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await KbDocumentModel.deleteByConnector(id);
       await ConnectorRunModel.deleteByConnector(id);
 
-      // Reset connector checkpoint and sync status
+      // Reset connector checkpoint and sync status ("queued" until the
+      // worker claims the fresh sync).
       await KnowledgeBaseConnectorModel.update(id, {
         checkpoint: null,
-        lastSyncStatus: "running",
+        lastSyncStatus: "queued",
         lastSyncAt: null,
       });
 
@@ -1252,14 +1837,37 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List connector runs",
         tags: ["Connectors"],
         params: z.object({ id: z.uuid() }),
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          runType: ConnectorRunTypeSchema.optional(),
+          status: ConnectorSyncStatusSchema.optional(),
+          result: z
+            .enum(["changes", "no-changes"])
+            .describe("Only runs that changed something (or nothing)")
+            .optional(),
+        }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectConnectorRunListSchema),
+          createPaginatedResponseSchema(SelectConnectorRunListSchema).extend({
+            /**
+             * Per job family: a sync task is enqueued but no worker has
+             * claimed it yet (no run row exists to list). Derived from the
+             * task queue, so it can never go stale the way a status stamp
+             * can — the UI renders these as synthetic "Queued" rows.
+             */
+            queued: z.object({
+              content: z.boolean(),
+              permission: z.boolean(),
+            }),
+          }),
         ),
       },
     },
     async (
-      { params: { id }, query: { limit, offset }, organizationId, user },
+      {
+        params: { id },
+        query: { limit, offset, runType, status, result },
+        organizationId,
+        user,
+      },
       reply,
     ) => {
       await findConnectorOrThrow({
@@ -1268,13 +1876,40 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const [data, total] = await Promise.all([
+      // A claimed task stays pending/processing for the whole run, so
+      // "queued" is task-present AND no running run row yet.
+      const [
+        data,
+        total,
+        contentTaskActive,
+        permissionTaskActive,
+        contentRunning,
+        permissionRunning,
+      ] = await Promise.all([
         ConnectorRunModel.findByConnectorList({
           connectorId: id,
           limit,
           offset,
+          runType,
+          status,
+          result,
         }),
-        ConnectorRunModel.countByConnector(id),
+        ConnectorRunModel.countByConnector({
+          connectorId: id,
+          runType,
+          status,
+          result,
+        }),
+        TaskModel.hasPendingOrProcessing("connector_sync", id),
+        TaskModel.hasPendingOrProcessing("permission_sync", id),
+        ConnectorRunModel.hasRunningRun({
+          connectorId: id,
+          runType: "content",
+        }),
+        ConnectorRunModel.hasRunningRun({
+          connectorId: id,
+          runType: "permission",
+        }),
       ]);
 
       const currentPage = Math.floor(offset / limit) + 1;
@@ -1282,6 +1917,10 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         data,
+        queued: {
+          content: contentTaskActive && !contentRunning,
+          permission: permissionTaskActive && !permissionRunning,
+        },
         pagination: {
           currentPage,
           limit,
@@ -1330,6 +1969,60 @@ export default knowledgeBaseRoutes;
 // ===== Internal Helpers =====
 
 /**
+ * Membership rows the user-groups endpoint will return. The snapshot is group ×
+ * account, so an instance where most people belong to most groups has far more
+ * of them than it has users — and this endpoint nests every one of them into a
+ * single JSON document that the browser then renders in one client-side table.
+ * Past this many the response says `truncated` and the UI says so too; nobody
+ * reads the two-hundred-thousandth row of an audit table, and the counts (which
+ * come from aggregates, not from these rows) stay exact either way.
+ */
+const MAX_USER_GROUP_MEMBERSHIPS = 20_000;
+
+/**
+ * Replace a document's `container:` token with its container's materialized
+ * audience so API consumers (ACL badges) always see effective principals. A
+ * missing or empty container row expands to nothing — the document reads as
+ * fail-closed, which is exactly what it is. Legacy materialized ACLs (no
+ * container token) pass through unchanged.
+ */
+async function expandContainerAcls<
+  T extends { acl: string[]; containerKey: string | null },
+>(params: { connectorId: string; documents: T[] }): Promise<T[]> {
+  const containerKeys = [
+    ...new Set(
+      params.documents
+        .map((doc) => doc.containerKey)
+        .filter((key): key is string => Boolean(key)),
+    ),
+  ];
+  if (containerKeys.length === 0) return params.documents;
+
+  const audiences = await KbContainerAclModel.findAudiencesByKeys({
+    connectorId: params.connectorId,
+    containerKeys,
+  });
+  return params.documents.map((doc) => {
+    if (!doc.containerKey) return doc;
+    const token = buildContainerToken({
+      connectorId: params.connectorId,
+      containerKey: doc.containerKey,
+    });
+    if (!doc.acl.includes(token)) return doc;
+    const audience = audiences.get(doc.containerKey) ?? [];
+    return {
+      ...doc,
+      acl: [
+        ...new Set([
+          ...doc.acl.filter((entry) => entry !== token),
+          ...audience,
+        ]),
+      ],
+    };
+  });
+}
+
+/**
  * Gate assigning a knowledge base / connector to an environment. Mirrors the
  * agent + MCP-catalog write paths: a restricted environment (or a restricted
  * org default when environmentId is null/omitted) requires
@@ -1356,6 +2049,44 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
   });
+}
+
+/**
+ * BETA gate for everything auto-sync-permissions: selecting the visibility on
+ * create/update and the permission-family endpoints (trigger, coverage,
+ * user-groups, member overrides). Off by default; staging enables it
+ * explicitly and ARCHESTRA_BETA turns it on with every other beta gate.
+ */
+/**
+ * Enqueue a permission pass with a forced audience refresh — the follow-up to
+ * a member-mapping change, whose effect on DIRECT grants (role actors, user
+ * grants) only materializes when container audiences are re-resolved.
+ * Deliberately NOT deduped against queued passes: an in-flight pass may
+ * already be past its refresh point and a queued one lacks the flag, so
+ * either could silently drop the intent; the handler defers to task backoff
+ * when it loses the claim, and mapping edits are rare admin actions.
+ */
+async function enqueueAudienceRefreshPass(connectorId: string): Promise<void> {
+  await taskQueueService.enqueue({
+    taskType: "permission_sync",
+    payload: { connectorId, refreshAudiences: true },
+  });
+}
+
+function assertAutoSyncPermissionsFeatureEnabled(): void {
+  if (!config.kb.autoSyncPermissionsEnabled) {
+    throw new ApiError(403, AUTO_SYNC_PERMISSIONS_DISABLED_ERROR);
+  }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (!enterpriseTier.isKnowledgeBaseActive()) {
+    throw new ApiError(
+      403,
+      "Auto-sync permissions requires an enterprise license",
+    );
+  }
+  // SPDX-SnippetEnd
 }
 
 async function findKnowledgeBaseOrThrow(params: {

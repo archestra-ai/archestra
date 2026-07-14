@@ -190,6 +190,11 @@ export function TeamManagementExternalSyncSection({
                   : "Group Extraction Source"}
               </Label>
               <Input
+                aria-label={
+                  selectedGroupsExpression
+                    ? "Group Extraction Template"
+                    : "Group Extraction Source"
+                }
                 readOnly
                 className="font-mono text-sm"
                 value={
@@ -235,6 +240,7 @@ export function TeamManagementExternalSyncSection({
           <Label>Add External Group Mapping</Label>
           <div className="flex gap-2">
             <Input
+              aria-label="Group identifier"
               placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
               value={newGroupIdentifier}
               onChange={(event) => setNewGroupIdentifier(event.target.value)}

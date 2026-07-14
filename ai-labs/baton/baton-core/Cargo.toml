@@ -15,6 +15,7 @@ criterion = "0.5"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 proptest = "1"
 clap = { version = "4", features = ["derive"] }
+toml = "0.8"
 
 [lints]
 workspace = true

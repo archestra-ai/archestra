@@ -5,17 +5,22 @@ import { SKILL_SHARE_LINK_TOKEN_PREFIX } from "@/models/skill-share-link";
 import { describe, expect, test } from "@/test";
 import { deriveSkillShareLinkStatus, type SkillShareLink } from "@/types";
 
-async function seedSkill(params: { organizationId: string; name: string }) {
+async function seedSkill(params: {
+  organizationId: string;
+  name: string;
+  authorId?: string | null;
+  scope?: "personal" | "org";
+}) {
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId: params.organizationId,
-      authorId: null,
+      authorId: params.authorId ?? null,
       name: params.name,
       description: `${params.name} description`,
       content: `# ${params.name}`,
       metadata: {},
       sourceType: "manual",
-      scope: "org",
+      scope: params.scope ?? "org",
     },
     files: [],
   });
@@ -121,6 +126,40 @@ describe("SkillShareLinkModel.validate", () => {
     const result = await SkillShareLinkModel.validate({ rawToken });
     expect(result).not.toBeNull();
     expect(result?.skills.map((s) => s.id)).toEqual([skill.id]);
+  });
+
+  test("orders same-named skills deterministically by id", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const authorA = await makeUser();
+    const authorB = await makeUser();
+    await makeMember(user.id, org.id);
+    const a = await seedSkill({
+      organizationId: org.id,
+      name: "Duplicate Name",
+      authorId: authorA.id,
+      scope: "personal",
+    });
+    const b = await seedSkill({
+      organizationId: org.id,
+      name: "Duplicate Name",
+      authorId: authorB.id,
+      scope: "personal",
+    });
+
+    const { rawToken } = await SkillShareLinkModel.create({
+      organizationId: org.id,
+      createdByUserId: user.id,
+      skillIds: [a.id, b.id],
+      marketplaceName: "org-12345678-skills",
+    });
+
+    const result = await SkillShareLinkModel.validate({ rawToken });
+    expect(result?.skills.map((s) => s.id)).toEqual([a.id, b.id].sort());
   });
 
   test("returns null for an unknown token", async () => {

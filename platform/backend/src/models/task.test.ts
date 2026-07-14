@@ -1,7 +1,12 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import { TaskTypeSchema } from "@/types";
 import TaskModel from "./task";
+
+// Every task type, so `dequeue` behaves like the pre-lane global FIFO for these
+// tests (lane isolation is covered separately).
+const ALL_LANES = TaskTypeSchema.options;
 
 describe("TaskModel", () => {
   describe("create", () => {
@@ -31,17 +36,20 @@ describe("TaskModel", () => {
         payload: { connectorId: "conn-1" },
       });
 
-      const dequeued = await TaskModel.dequeue();
+      const dequeued = await TaskModel.dequeue(ALL_LANES);
 
       expect(dequeued).not.toBeNull();
       expect(dequeued?.id).toBe(created.id);
       expect(dequeued?.status).toBe("processing");
       expect(dequeued?.attempt).toBe(1);
       expect(dequeued?.startedAt).not.toBeNull();
+      // The claim stamps the first heartbeat so the stuck sweep has a fresh
+      // liveness baseline from second zero.
+      expect(dequeued?.heartbeatAt).not.toBeNull();
     });
 
     test("returns null when no tasks are pending", async () => {
-      const result = await TaskModel.dequeue();
+      const result = await TaskModel.dequeue(ALL_LANES);
       expect(result).toBeNull();
     });
 
@@ -53,7 +61,7 @@ describe("TaskModel", () => {
         scheduledFor: futureDate,
       });
 
-      const result = await TaskModel.dequeue();
+      const result = await TaskModel.dequeue(ALL_LANES);
       expect(result).toBeNull();
     });
   });
@@ -147,7 +155,9 @@ describe("TaskModel", () => {
         .from(schema.tasksTable)
         .where(eq(schema.tasksTable.id, task.id));
       expect(updated.status).toBe("pending");
-      expect(updated.lastError).toBe("Task timed out (stuck in processing)");
+      expect(updated.lastError).toBe(
+        "Task timed out (worker stopped heartbeating)",
+      );
       expect(updated.scheduledFor.getTime()).toBeGreaterThan(Date.now());
     });
 
@@ -170,7 +180,9 @@ describe("TaskModel", () => {
         .from(schema.tasksTable)
         .where(eq(schema.tasksTable.id, task.id));
       expect(updated.status).toBe("dead");
-      expect(updated.lastError).toBe("Task timed out (stuck in processing)");
+      expect(updated.lastError).toBe(
+        "Task timed out (worker stopped heartbeating)",
+      );
       expect(updated.completedAt).toBeInstanceOf(Date);
     });
 
@@ -209,6 +221,111 @@ describe("TaskModel", () => {
         .where(eq(schema.tasksTable.id, task.id));
       expect(updated.status).toBe("processing");
     });
+
+    test("does not sweep a long-running task whose heartbeat is fresh", async () => {
+      // A healthy task's duration is unbounded — its worker renews
+      // heartbeat_at every poll tick. Only a stale heartbeat (dead worker)
+      // makes a task stuck; started_at age alone means nothing.
+      const task = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      await db.execute(sql`
+        UPDATE tasks SET status = 'processing', attempt = 1,
+          started_at = NOW() - INTERVAL '2 hours',
+          heartbeat_at = NOW()
+        WHERE id = ${task.id}
+      `);
+
+      const transitions = await TaskModel.resetStuckTasks(60_000);
+
+      expect(transitions).toEqual([]);
+      const [row] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, task.id));
+      expect(row.status).toBe("processing");
+      expect(row.lastError).toBeNull();
+    });
+
+    test("compares started_at against the DB clock, not the host clock", async () => {
+      // started_at is stamped with the DB clock, so both rows anchor to it via
+      // NOW(). This pins the sweep to a server-side cutoff: the old
+      // client-computed Date cutoff was serialized in the host timezone, which
+      // on a UTC+2+ host shifted the window enough to flag EVERY in-flight
+      // task (each ended up with a bogus "stuck" error and a duplicate
+      // dequeue) — while a US-timezone host would recover real zombies hours
+      // late.
+      const fresh = await TaskModel.create({
+        taskType: "permission_sync",
+        payload: { connectorId: "conn-fresh" },
+      });
+      const stale = await TaskModel.create({
+        taskType: "permission_sync",
+        payload: { connectorId: "conn-stale" },
+      });
+      await db.execute(sql`
+        UPDATE tasks SET status = 'processing', attempt = 1,
+          started_at = NOW() - INTERVAL '5 minutes'
+        WHERE id = ${fresh.id}
+      `);
+      await db.execute(sql`
+        UPDATE tasks SET status = 'processing', attempt = 1,
+          started_at = NOW() - INTERVAL '2 hours'
+        WHERE id = ${stale.id}
+      `);
+
+      const transitions = await TaskModel.resetStuckTasks(60 * 60 * 1000);
+
+      expect(transitions).toEqual([
+        { taskType: "permission_sync", periodic: false, status: "pending" },
+      ]);
+      const [freshRow] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, fresh.id));
+      expect(freshRow.status).toBe("processing");
+      expect(freshRow.lastError).toBeNull();
+      const [staleRow] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, stale.id));
+      expect(staleRow.status).toBe("pending");
+    });
+  });
+
+  describe("renewHeartbeats", () => {
+    test("refreshes processing tasks and leaves other statuses untouched", async () => {
+      const inFlight = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-1" },
+      });
+      const queued = await TaskModel.create({
+        taskType: "connector_sync",
+        payload: { connectorId: "conn-2" },
+      });
+      // A heartbeat aged past any sweep timeout, as if the row sat untouched.
+      await db.execute(sql`
+        UPDATE tasks SET status = 'processing', attempt = 1,
+          heartbeat_at = NOW() - INTERVAL '10 minutes'
+        WHERE id = ${inFlight.id}
+      `);
+
+      await TaskModel.renewHeartbeats([inFlight.id, queued.id]);
+
+      // DB-clock-safe assertion: a renewed heartbeat no longer looks stuck.
+      expect(await TaskModel.resetStuckTasks(60_000)).toEqual([]);
+      const [inFlightRow] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, inFlight.id));
+      expect(inFlightRow.status).toBe("processing");
+      const [queuedRow] = await db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.id, queued.id));
+      expect(queuedRow.heartbeatAt).toBeNull();
+    });
   });
 
   describe("findActivePayloadValues", () => {
@@ -218,7 +335,7 @@ describe("TaskModel", () => {
         taskType: "connector_sync",
         payload: { connectorId: "conn-processing" },
       });
-      await TaskModel.dequeue();
+      await TaskModel.dequeue(ALL_LANES);
 
       await TaskModel.create({
         taskType: "connector_sync",
@@ -269,7 +386,7 @@ describe("TaskModel", () => {
       });
 
       // Simulate dequeue (sets status to processing, attempt to 1)
-      const dequeued = await TaskModel.dequeue();
+      const dequeued = await TaskModel.dequeue(ALL_LANES);
       expect(dequeued).not.toBeNull();
       expect(dequeued?.status).toBe("processing");
       expect(dequeued?.attempt).toBe(1);
@@ -330,8 +447,8 @@ describe("TaskModel", () => {
       });
 
       // Dequeue both
-      await TaskModel.dequeue();
-      await TaskModel.dequeue();
+      await TaskModel.dequeue(ALL_LANES);
+      await TaskModel.dequeue(ALL_LANES);
 
       const released = await TaskModel.releaseToQueue([task1.id, task2.id]);
       expect(released).toBe(2);
@@ -356,8 +473,8 @@ describe("TaskModel", () => {
         payload: { documentIds: ["d1"] },
       });
 
-      await TaskModel.dequeue();
-      await TaskModel.dequeue();
+      await TaskModel.dequeue(ALL_LANES);
+      await TaskModel.dequeue(ALL_LANES);
       // Simulate a task on a later retry so batch rows carry different attempts
       await db
         .update(schema.tasksTable)
@@ -381,7 +498,7 @@ describe("TaskModel", () => {
         taskType: "connector_sync",
         payload: { connectorId: "conn-1" },
       });
-      await TaskModel.dequeue();
+      await TaskModel.dequeue(ALL_LANES);
       // Force the edge: a processing task whose attempt is already 0
       await db
         .update(schema.tasksTable)

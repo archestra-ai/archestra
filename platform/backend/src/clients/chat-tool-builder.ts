@@ -608,6 +608,15 @@ export async function buildArchestraToolOutput(params: {
       "Failed to fetch dispatched tool definition meta",
     );
   }
+  // Drop the resource when its upstream server can't actually serve it (e.g.
+  // -32601), so the dispatch falls through to the plain-result handling below
+  // instead of registering an app that renders nothing. See uiResourceIsReadable.
+  if (
+    resourceUri &&
+    !(await uiResourceIsReadable({ uri: resourceUri, agentId, tokenAuth }))
+  ) {
+    resourceUri = undefined;
+  }
   if (!resourceUri) {
     // A dispatched third-party tool with no MCP-App UI. If it returned a
     // structured Archestra error (e.g. the expired-auth re-auth payload),
@@ -915,20 +924,24 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     }
   }
 
+  // Caller auth for install resolution (own→team→org), reused below to verify a
+  // declared UI resource is readable with the exact same scoping the execution used.
+  const tokenAuthContext = mcpGwToken
+    ? {
+        tokenId: mcpGwToken.tokenId,
+        teamId: mcpGwToken.teamId,
+        isOrganizationToken: mcpGwToken.isOrganizationToken,
+        organizationId,
+        userId,
+      }
+    : undefined;
+
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
   try {
     result = await mcpClient.executeToolCallForOwner(
       toolCall,
       agentOwner(agentId),
-      mcpGwToken
-        ? {
-            tokenId: mcpGwToken.tokenId,
-            teamId: mcpGwToken.teamId,
-            isOrganizationToken: mcpGwToken.isOrganizationToken,
-            organizationId,
-            userId,
-          }
-        : undefined,
+      tokenAuthContext,
       {
         ...(availableTool ? { availableTool } : {}),
         // mcp-client scopes per-conversation sessions by this key; in UI chat it
@@ -1077,6 +1090,27 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     );
   }
 
+  // A tool definition can declare a `ui://` MCP App resource its upstream server
+  // never actually serves (e.g. resources/read → -32601 Method not found).
+  // Keeping it would register an app that renders nothing — an empty pill and an
+  // auto-opened, blank right panel — so drop the declared resource when it can't
+  // be read, letting the tool render as a plain call. An embedded inline resource
+  // (below) is self-contained and re-synthesizes the ui after this check.
+  const declaredUiResourceUri = toolDefinitionMeta?.ui?.resourceUri;
+  if (
+    declaredUiResourceUri &&
+    toolDefinitionMeta?.ui &&
+    !(await uiResourceIsReadable({
+      uri: declaredUiResourceUri,
+      agentId,
+      tokenAuth: tokenAuthContext,
+    }))
+  ) {
+    const { resourceUri: _unreadable, ...uiWithoutResource } =
+      toolDefinitionMeta.ui;
+    toolDefinitionMeta = { ...toolDefinitionMeta, ui: uiWithoutResource };
+  }
+
   // Check for embedded resources (type: "resource" content items with UI resources)
   // MCP servers can return UI resources inline in tool results as an alternative to
   // declaring _meta.ui.resourceUri in tool definitions. Both patterns are standard MCP.
@@ -1163,6 +1197,34 @@ function metaProvidesUiResource(
   const isUiUri = (value: unknown): boolean =>
     typeof value === "string" && value.startsWith("ui://");
   return isUiUri(meta?.ui?.resourceUri) || isUiUri(meta?.["ui/resourceUri"]);
+}
+
+/**
+ * Whether an MCP App `ui://` UI resource can actually be read from its upstream
+ * server. A tool may advertise a resource its server never implements
+ * (`resources/read` → -32601 Method not found) or otherwise can't serve;
+ * attaching such a resource to a tool result makes chat register an app that
+ * renders nothing — an empty pill plus an auto-opened, blank right panel. Both
+ * enrichment paths (executeMcpTool and buildArchestraToolOutput) gate the
+ * attachment on this, mirroring the SSE prefetch's own readability gate
+ * (tool-ui-stream). A successful read is cached, so the frontend's later render
+ * reuses it rather than re-reading.
+ */
+async function uiResourceIsReadable(params: {
+  uri: string;
+  agentId: string;
+  tokenAuth?: TokenAuthContext;
+}): Promise<boolean> {
+  try {
+    await mcpClient.readResource(params.uri, params.agentId, params.tokenAuth);
+    return true;
+  } catch (error) {
+    logger.debug(
+      { error, uri: params.uri, agentId: params.agentId },
+      "MCP App UI resource unreadable; rendering as a plain tool call",
+    );
+    return false;
+  }
 }
 
 // The resolved catalog tool nests its MCP `_meta` one level down under `meta`.

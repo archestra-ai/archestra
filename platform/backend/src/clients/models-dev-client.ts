@@ -490,6 +490,8 @@ export class ModelsDevClient {
       azure: ["azure/"],
       // Not synced via models.dev (subscription-dependent /models endpoint)
       "github-copilot": [],
+      // Not synced via models.dev (single static pseudo-model)
+      "microsoft-365-copilot": [],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

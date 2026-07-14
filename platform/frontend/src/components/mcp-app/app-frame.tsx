@@ -46,7 +46,7 @@ export function AppFrame({
   } = useAppRuntimeControls();
 
   const appId = endpoint.kind === "app" ? endpoint.appId : null;
-  const { data: app } = useApp(appId);
+  const { data: app } = useApp(appId, { toastOnError: false });
   const resolvedResourceUri = appId
     ? getArchestraAppResourceUri(appId)
     : resourceUri;

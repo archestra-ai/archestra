@@ -433,6 +433,7 @@ function RoleMappingRuleRow({
       </div>
       <Button
         type="button"
+        aria-label="Remove role mapping"
         variant="ghost"
         size="icon"
         className="shrink-0 mt-6 text-destructive hover:text-destructive"

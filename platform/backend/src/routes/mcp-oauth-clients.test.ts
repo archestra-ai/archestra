@@ -130,7 +130,7 @@ describe("mcpOauthClientsRoutes", () => {
     ).toEqual(["Searchable Service"]);
   });
 
-  test("rejects a non-gateway agent as an allowed gateway", async ({
+  test("rejects an llm_proxy agent as an allowed gateway", async ({
     makeAgent,
   }) => {
     const llmProxy = await makeAgent({
@@ -149,7 +149,30 @@ describe("mcpOauthClientsRoutes", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("MCP gateway not found");
+    expect(response.json().error.message).toContain(
+      "MCP gateway or agent not found",
+    );
+  });
+
+  test("accepts an A2A agent (agentType='agent') as an allowed gateway", async ({
+    makeInternalAgent,
+  }) => {
+    const a2aAgent = await makeInternalAgent({
+      organizationId,
+      name: "A2A Agent",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp-oauth-clients",
+      payload: {
+        name: "A2A OAuth Client",
+        allowedGatewayIds: [a2aAgent.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().allowedGatewayIds).toContain(a2aAgent.id);
   });
 
   test("rejects a gateway from another organization", async ({
@@ -173,7 +196,9 @@ describe("mcpOauthClientsRoutes", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("MCP gateway not found");
+    expect(response.json().error.message).toContain(
+      "MCP gateway or agent not found",
+    );
   });
 
   test("creates an authorization_code client registered as a confidential, PKCE client", async () => {
@@ -344,6 +369,8 @@ describe("mcpOauthClientsRoutes", () => {
     });
 
     expect(response.statusCode).toBe(404);
-    expect(response.json().error.message).toContain("MCP gateway not found");
+    expect(response.json().error.message).toContain(
+      "MCP gateway or agent not found",
+    );
   });
 });

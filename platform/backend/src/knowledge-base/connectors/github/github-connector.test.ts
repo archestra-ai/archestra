@@ -13,7 +13,14 @@ const mockGetRef = vi.fn();
 const mockGetTree = vi.fn();
 const mockGetContent = vi.fn();
 const mockReposGet = vi.fn();
+const mockListCollaborators = vi.fn();
+const mockReposListTeams = vi.fn();
+const mockTeamsList = vi.fn();
+const mockListMembersInOrg = vi.fn();
+const mockGetByUsername = vi.fn();
 const capturedOctokitOptions: Record<string, unknown>[] = [];
+
+vi.mock("@/cache-manager");
 
 vi.mock("@octokit/rest", () => ({
   Octokit: class MockOctokit {
@@ -22,7 +29,10 @@ vi.mock("@octokit/rest", () => ({
     }
 
     rest = {
-      users: { getAuthenticated: mockGetAuthenticated },
+      users: {
+        getAuthenticated: mockGetAuthenticated,
+        getByUsername: mockGetByUsername,
+      },
       apps: {
         listReposAccessibleToInstallation:
           mockListReposAccessibleToInstallation,
@@ -31,10 +41,16 @@ vi.mock("@octokit/rest", () => ({
         listForOrg: mockListForOrg,
         getContent: mockGetContent,
         get: mockReposGet,
+        listCollaborators: mockListCollaborators,
+        listTeams: mockReposListTeams,
       },
       issues: {
         listForRepo: mockListForRepo,
         listComments: mockListComments,
+      },
+      teams: {
+        list: mockTeamsList,
+        listMembersInOrg: mockListMembersInOrg,
       },
       git: { getRef: mockGetRef, getTree: mockGetTree },
     };
@@ -1209,6 +1225,331 @@ describe("GithubConnector", () => {
         owner: "test-org",
       });
       expect(result).toEqual({ valid: true });
+    });
+  });
+
+  describe("permission sync", () => {
+    async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+      const out: T[] = [];
+      for await (const item of gen) out.push(item);
+      return out;
+    }
+
+    test("supportsPermissionSync is true", () => {
+      expect(connector.supportsPermissionSync).toBe(true);
+    });
+
+    // Pins the metadata-field contract with content-sync: documents are
+    // written with `repo` = `<owner>/<name>` (matching the container key), and
+    // the delta pass's local-adoption scoping depends on exactly that field.
+    test("scopeKeyForDocument maps content-sync document metadata to the repo scope key", () => {
+      expect(
+        connector.scopeKeyForDocument({ repo: "o/r", filePath: "a.md" }),
+      ).toBe("repo:o/r");
+      expect(connector.scopeKeyForDocument({})).toBeNull();
+      expect(connector.scopeKeyForDocument({ repo: "" })).toBeNull();
+    });
+
+    test("syncPermissionSnapshot yields the repo container then every repo doc's assignment", async () => {
+      mockReposGet.mockResolvedValue({
+        data: { default_branch: "main", private: true },
+      });
+      mockListCollaborators.mockResolvedValue({ data: [{ login: "alice" }] });
+      mockReposListTeams.mockResolvedValue({ data: [{ slug: "eng" }] });
+      mockGetByUsername.mockImplementation(
+        async ({ username }: { username: string }) => ({
+          data: { email: `${username}@example.com` },
+        }),
+      );
+
+      const readIngestedDocuments = vi.fn().mockResolvedValue({
+        documents: [
+          { sourceId: "my-repo#1", metadata: { repo: "test-org/my-repo" } },
+          {
+            sourceId: "my-repo#file:README.md",
+            metadata: { repo: "test-org/my-repo" },
+          },
+        ],
+        nextAfterId: null,
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+        }) ?? (async function* () {})(),
+      );
+
+      expect(readIngestedDocuments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadataFilter: { repo: "test-org/my-repo" },
+        }),
+      );
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+          permissions: {
+            isPublic: false,
+            users: ["alice@example.com"],
+            groups: ["test-org/eng"],
+          },
+          audienceResolutionFailed: false,
+        },
+        {
+          kind: "document",
+          sourceId: "my-repo#1",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+        },
+        {
+          kind: "document",
+          sourceId: "my-repo#file:README.md",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+        },
+      ]);
+    });
+
+    test("a mapped collaborator materializes via the injected mapping — even with a private GitHub email", async () => {
+      mockReposGet.mockResolvedValue({
+        data: { default_branch: "main", private: true },
+      });
+      mockListCollaborators.mockResolvedValue({
+        data: [{ login: "hidden" }, { login: "alice" }],
+      });
+      mockReposListTeams.mockResolvedValue({ data: [] });
+      // `hidden` keeps their email private; `alice` is public. The mapping
+      // must take precedence for `hidden` (and only `hidden`).
+      mockGetByUsername.mockImplementation(
+        async ({ username }: { username: string }) => ({
+          data: {
+            email: username === "alice" ? "alice@example.com" : null,
+          },
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi
+            .fn()
+            .mockResolvedValue({ documents: [], nextAfterId: null }),
+          resolveMappedEmail: (accountId) =>
+            accountId === "hidden" ? "mapped@example.com" : null,
+        }) ?? (async function* () {})(),
+      );
+
+      expect(yields[0]).toMatchObject({
+        kind: "container",
+        permissions: {
+          isPublic: false,
+          users: ["mapped@example.com", "alice@example.com"],
+        },
+      });
+    });
+
+    test("a mapped collaborator with a public email materializes the upstream email — auto matching wins", async () => {
+      mockReposGet.mockResolvedValue({
+        data: { default_branch: "main", private: true },
+      });
+      mockListCollaborators.mockResolvedValue({ data: [{ login: "alice" }] });
+      mockReposListTeams.mockResolvedValue({ data: [] });
+      mockGetByUsername.mockResolvedValue({
+        data: { email: "alice@example.com" },
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi
+            .fn()
+            .mockResolvedValue({ documents: [], nextAfterId: null }),
+          // A stale admin mapping must NOT displace the source's identity.
+          resolveMappedEmail: () => "someone-else@example.com",
+        }) ?? (async function* () {})(),
+      );
+
+      expect(yields[0]).toMatchObject({
+        kind: "container",
+        permissions: { isPublic: false, users: ["alice@example.com"] },
+      });
+    });
+
+    test("a public repo's container is isPublic and drops collaborators without a public email", async () => {
+      mockReposGet.mockResolvedValue({
+        data: { default_branch: "main", private: false },
+      });
+      mockListCollaborators.mockResolvedValue({ data: [{ login: "carol" }] });
+      mockReposListTeams.mockResolvedValue({ data: [] });
+      mockGetByUsername.mockResolvedValue({ data: { email: null } });
+
+      const readIngestedDocuments = vi.fn().mockResolvedValue({
+        documents: [{ sourceId: "my-repo#1", metadata: {} }],
+        nextAfterId: null,
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+        }) ?? (async function* () {})(),
+      );
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+          permissions: { isPublic: true, users: [], groups: [] },
+          audienceResolutionFailed: false,
+        },
+        {
+          kind: "document",
+          sourceId: "my-repo#1",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+        },
+      ]);
+    });
+
+    test("a failing repo metadata fetch fail-closes the repo instead of failing the pass", async () => {
+      // Regression: a transient 429/5xx on repos.get propagated up and failed
+      // the whole snapshot, unlike Jira/Confluence which fail-close the one
+      // container and keep enumerating.
+      mockReposGet.mockRejectedValue(new Error("boom (503)"));
+
+      const readIngestedDocuments = vi.fn().mockResolvedValue({
+        documents: [{ sourceId: "my-repo#1", metadata: {} }],
+        nextAfterId: null,
+      });
+
+      const yields = await collect(
+        connector.syncPermissionSnapshot?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments,
+        }) ?? (async function* () {})(),
+      );
+
+      expect(yields).toEqual([
+        {
+          kind: "container",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+          permissions: { isPublic: false, users: [], groups: [] },
+          // The empty audience here means "we could not read it", not "nobody
+          // has access" — the pass counts it so the repo going dark is
+          // attributable instead of looking like an ordinary empty audience.
+          audienceResolutionFailed: true,
+        },
+        {
+          kind: "document",
+          sourceId: "my-repo#1",
+          containerKey: "repo:test-org/my-repo",
+          cursor: "repo:test-org/my-repo",
+        },
+      ]);
+    });
+
+    test("syncGroups expands org teams to members (email null when private)", async () => {
+      mockReposGet.mockResolvedValue({
+        data: { default_branch: "main" },
+      });
+      mockTeamsList.mockResolvedValue({ data: [{ slug: "eng" }] });
+      mockListMembersInOrg.mockResolvedValue({
+        data: [{ login: "alice" }, { login: "bob" }],
+      });
+      mockGetByUsername.mockImplementation(
+        async ({ username }: { username: string }) => ({
+          data: {
+            email: username === "alice" ? "alice@example.com" : null,
+          },
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+        }) ?? (async function* () {})(),
+      );
+
+      expect(yields).toEqual([
+        {
+          groupId: "test-org/eng",
+          members: [
+            {
+              accountId: "alice",
+              displayName: null,
+              email: "alice@example.com",
+            },
+            // bob's email is private — recorded fail-closed, not dropped.
+            { accountId: "bob", displayName: null, email: null },
+          ],
+          cursor: "test-org/eng",
+        },
+      ]);
+    });
+
+    test("a full pass bypasses the cached negative and sees a newly public email", async () => {
+      mockReposGet.mockResolvedValue({ data: { default_branch: "main" } });
+      mockTeamsList.mockResolvedValue({ data: [{ slug: "eng" }] });
+      mockListMembersInOrg.mockResolvedValue({ data: [{ login: "bob" }] });
+
+      // Pass 1: bob's email is private — the cross-pass cache stores the
+      // negative.
+      mockGetByUsername.mockResolvedValue({ data: { email: null } });
+      await collect(
+        connector.syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+        }) ?? (async function* () {})(),
+      );
+
+      // bob makes the email public upstream.
+      mockGetByUsername.mockResolvedValue({
+        data: { email: "bob@example.com" },
+      });
+
+      // A delta pass serves the cached negative (fresh instance drops the
+      // per-pass cache; the cross-pass one persists).
+      const deltaYields = await collect(
+        new GithubConnector().syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+        }) ?? (async function* () {})(),
+      );
+      expect(deltaYields[0].members[0].email).toBeNull();
+
+      // A full pass must re-resolve live — an admin's manual sync has to
+      // observe the change immediately, not after the cache TTL.
+      const fullYields = await collect(
+        new GithubConnector().syncGroups?.({
+          config: validConfig,
+          credentials,
+          cursor: null,
+          readIngestedDocuments: vi.fn(),
+          refreshIdentities: true,
+        }) ?? (async function* () {})(),
+      );
+      expect(fullYields[0].members[0].email).toBe("bob@example.com");
     });
   });
 });

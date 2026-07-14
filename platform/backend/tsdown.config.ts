@@ -8,104 +8,113 @@ import { defineConfig, type UserConfig } from "tsdown";
 /** Max time to wait for the server process to exit gracefully before force killing */
 const PROCESS_EXIT_TIMEOUT_MS = 5000;
 
-/** Delay after SIGKILL to allow the process to fully terminate */
+/** Grace period after SIGKILL so stopServer still resolves if no exit event arrives */
 const POST_KILL_DELAY_MS = 100;
 
 /** Delay after process exit to ensure OS releases the ports */
 const PORT_RELEASE_DELAY_MS = 250;
 
-/**
- * Track the current server process so we can properly terminate it before starting a new one.
- * This prevents EADDRINUSE errors by ensuring the old process fully exits before the new one starts.
- */
 let currentServerProcess: ChildProcess | null = null;
 
 /**
- * Wait for the current server process to exit, with a timeout.
- * Returns a promise that resolves when the process exits or times out.
+ * Serializes server restarts. tsdown does not await onSuccess and debounces
+ * rebuilds with a bare setTimeout, so a burst of saves can invoke the handler
+ * re-entrantly. Chaining every invocation through one queue keeps kill→spawn
+ * atomic, so a later rebuild can never overwrite currentServerProcess while an
+ * earlier restart is mid-flight and orphan a server that keeps holding 9000/9050.
  */
-const waitForProcessExit = (
-  proc: ChildProcess,
-  timeoutMs = PROCESS_EXIT_TIMEOUT_MS,
-): Promise<void> => {
+let restartQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Terminate a server process and resolve once it has exited. Always resolves
+ * (via the exit event, or a bounded SIGKILL fallback) so a hung or already-dead
+ * child can never wedge restartQueue and strand the dev server.
+ */
+const stopServer = (proc: ChildProcess): Promise<void> => {
   return new Promise((resolve) => {
-    // If process already exited, resolve immediately
-    if (proc.exitCode !== null || proc.killed) {
+    // A child is already gone once exitCode (normal exit) OR signalCode (signal
+    // death, e.g. an OOM SIGKILL) is set. Node leaves exitCode null for a
+    // signal-terminated child, so checking exitCode alone would miss those and
+    // wait on an `exit` event that has already fired — hanging forever.
+    if (proc.exitCode !== null || proc.signalCode !== null) {
       resolve();
       return;
     }
-
-    const timeout = setTimeout(() => {
-      // Force kill if still running after timeout
-      if (proc.exitCode === null && !proc.killed) {
-        console.log("Server process did not exit in time, force killing...");
+    const forceKill = setTimeout(() => {
+      if (proc.exitCode === null && proc.signalCode === null) {
+        console.log("Server did not exit after SIGTERM, sending SIGKILL...");
         proc.kill("SIGKILL");
       }
-      // Give it a moment to die
+      // Resolve even if the exit event never arrives, so the queue can't wedge.
       setTimeout(resolve, POST_KILL_DELAY_MS);
-    }, timeoutMs);
-
+    }, PROCESS_EXIT_TIMEOUT_MS);
     proc.once("exit", () => {
-      clearTimeout(timeout);
+      clearTimeout(forceKill);
       resolve();
     });
+    proc.kill("SIGTERM");
   });
 };
 
 /**
- * Properly manage server process lifecycle.
- * Before starting a new server, we terminate and wait for the old one to fully exit.
- * This prevents EADDRINUSE errors on the metrics port (9050) and main port (9000).
+ * Restart the dev server: stop the previous one, wait for its ports to release,
+ * then spawn the freshly built server. Runs one-at-a-time via restartQueue.
  *
  * Set DEBUG=1 to enable Node.js inspector (e.g., DEBUG=1 pnpm dev)
  *
  * @see https://tsdown.dev/advanced/hooks
  */
-const onSuccessHandler: UserConfig["onSuccess"] = async () => {
-  // Kill and wait for the previous server to fully exit before starting a new one
-  if (currentServerProcess && currentServerProcess.exitCode === null) {
-    console.log("Stopping previous server...");
-    currentServerProcess.kill("SIGTERM");
-    await waitForProcessExit(currentServerProcess);
-
-    // Add a small delay to ensure OS releases the ports (EADDRINUSE prevention)
-    await new Promise((resolve) => setTimeout(resolve, PORT_RELEASE_DELAY_MS));
-
-    console.log("Previous server stopped");
-  }
-
-  const args = ["--enable-source-maps"];
-
-  if (process.env.DEBUG) {
-    args.push("--inspect");
-  }
-
-  args.push("dist/server.mjs");
-
-  // Use process.execPath (absolute path to Node.js binary) instead of "node" string
-  // for cross-platform compatibility. On Windows, spawn("node", ...) can fail if
-  // Node.js isn't in PATH or PATH resolution behaves differently. Using the absolute
-  // path bypasses PATH resolution entirely.
-  // Note: We intentionally avoid shell: true to prevent orphaned processes on Windows
-  // (shell creates cmd.exe as parent, making kill() ineffective on the actual server).
-  currentServerProcess = spawn(process.execPath, args, {
-    stdio: "inherit",
-  });
-
-  currentServerProcess.on("error", (err) => {
-    console.error("Server process error:", err);
-  });
-
-  currentServerProcess.on("exit", (code, signal) => {
-    if (signal) {
-      console.log(`Server process terminated by signal: ${signal}`);
-    } else if (code !== 0) {
-      console.error(`Server process exited with code: ${code}`);
+const onSuccessHandler: UserConfig["onSuccess"] = (_config, signal) => {
+  restartQueue = restartQueue.then(async () => {
+    if (currentServerProcess) {
+      console.log("Stopping previous server...");
+      await stopServer(currentServerProcess);
+      currentServerProcess = null;
+      // Give the OS a moment to release the listen sockets before rebinding.
+      await new Promise((resolve) =>
+        setTimeout(resolve, PORT_RELEASE_DELAY_MS),
+      );
     }
+
+    // tsdown aborts this build's signal when a newer rebuild starts; don't spawn
+    // a superseded server (the next queued restart owns the current build).
+    if (signal.aborted) {
+      return;
+    }
+
+    const args = ["--enable-source-maps"];
+
+    if (process.env.DEBUG) {
+      args.push("--inspect");
+    }
+
+    args.push("dist/server.mjs");
+
+    // Use process.execPath (absolute path to Node.js binary) instead of "node" string
+    // for cross-platform compatibility. On Windows, spawn("node", ...) can fail if
+    // Node.js isn't in PATH or PATH resolution behaves differently. Using the absolute
+    // path bypasses PATH resolution entirely.
+    // Note: We intentionally avoid shell: true to prevent orphaned processes on Windows
+    // (shell creates cmd.exe as parent, making kill() ineffective on the actual server).
+    const child = spawn(process.execPath, args, {
+      stdio: "inherit",
+    });
+    currentServerProcess = child;
+
+    child.on("error", (err) => {
+      console.error("Server process error:", err);
+    });
+
+    child.on("exit", (code, exitSignal) => {
+      if (exitSignal) {
+        console.log(`Server process terminated by signal: ${exitSignal}`);
+      } else if (code !== 0) {
+        console.error(`Server process exited with code: ${code}`);
+      }
+    });
   });
 
-  // Return immediately so tsdown can continue watching for changes
-  // The server runs in the background
+  return restartQueue;
 };
 
 export default defineConfig((options: UserConfig) => {

@@ -103,6 +103,7 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { parseMcpServerConfigJson } from "./mcp-config-parser";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -324,6 +325,102 @@ export function McpCatalogForm({
   const authMethod = form.watch("authMethod");
   const instructions = form.watch("instructions");
   const currentServerType = form.watch("serverType");
+
+  /**
+   * Handles paste events on the Arguments textarea. If the pasted text is a
+   * recognised MCP server config (Claude Desktop JSON, VS Code with inputs,
+   * bare server object, or JSON array), auto-fills the form fields and
+   * prevents the default paste. Otherwise, lets the browser paste normally.
+   */
+  const handleConfigPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData("text");
+    const parsed = parseMcpServerConfigJson(pastedText);
+    if (!parsed) return; // not a recognised config — fall through to default
+
+    // Respect the orchestratorK8sRuntime feature gate: if local MCP is
+    // disabled in this environment, don't intercept pastes for local configs.
+    // Let the browser handle the paste normally instead.
+    if (parsed.serverType === "local" && !isLocalMcpEnabled) return;
+
+    e.preventDefault();
+
+    // Remote server — switch type and fill URL + headers
+    if (
+      parsed.serverType === "remote" &&
+      (parsed.serverUrl || parsed.headers)
+    ) {
+      form.setValue("serverType", "remote", { shouldDirty: true });
+
+      if (parsed.serverUrl) {
+        form.setValue("serverUrl", parsed.serverUrl, { shouldDirty: true });
+      }
+
+      if (parsed.headers && parsed.headers.length > 0) {
+        form.setValue(
+          "additionalHeaders",
+          parsed.headers.map((h) => ({
+            fieldName: "",
+            headerName: h.headerName,
+            promptOnInstallation: h.promptOnInstallation,
+            required: h.required,
+            value: h.value,
+            description: h.description ?? "",
+            includeBearerPrefix: false,
+            sensitive: h.sensitive ?? false,
+          })),
+          { shouldDirty: true },
+        );
+      }
+
+      return;
+    }
+
+    // Local server — fill command, arguments, env, docker, transport.
+    // (Runtime gate already checked above — isLocalMcpEnabled is true here.)
+    if (parsed.command) {
+      form.setValue("localConfig.command", parsed.command, {
+        shouldDirty: true,
+      });
+    }
+
+    if (parsed.arguments !== undefined) {
+      form.setValue("localConfig.arguments", parsed.arguments, {
+        shouldDirty: true,
+      });
+    }
+
+    // Always set dockerImage — clears stale value when pasting a non-Docker config
+    form.setValue("localConfig.dockerImage", parsed.dockerImage ?? "", {
+      shouldDirty: true,
+    });
+
+    if (parsed.transportType) {
+      form.setValue("localConfig.transportType", parsed.transportType, {
+        shouldDirty: true,
+      });
+    }
+
+    if (parsed.httpPort) {
+      form.setValue("localConfig.httpPort", parsed.httpPort, {
+        shouldDirty: true,
+      });
+    }
+
+    if (parsed.environment && parsed.environment.length > 0) {
+      form.setValue(
+        "localConfig.environment",
+        parsed.environment.map((env) => ({
+          key: env.key,
+          type: env.type,
+          value: env.value,
+          promptOnInstallation: env.promptOnInstallation,
+          required: env.required ?? false,
+          description: env.description ?? "",
+        })),
+        { shouldDirty: true },
+      );
+    }
+  };
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));
   const isTenancyLocked = Boolean(initialValues);
@@ -1415,13 +1512,14 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or paste JSON config)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n\n—or paste a full MCP server JSON config`}
                             className="font-mono min-h-20"
+                            onPaste={handleConfigPaste}
                             {...field}
                           />
                         </FormControl>

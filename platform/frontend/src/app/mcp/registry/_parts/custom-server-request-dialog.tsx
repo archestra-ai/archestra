@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateMcpServerInstallationRequest } from "@/lib/mcp/mcp-server-installation-request.query";
+import { parseMcpServerConfigJson } from "./mcp-config-parser";
 
 const customServerRequestSchema = z
   .object({
@@ -92,6 +93,50 @@ export function CustomServerRequestDialog({
     control: form.control,
     name: "environment",
   });
+
+  /**
+   * Handles paste events on the Arguments textarea. If the pasted text is a
+   * recognised MCP server config, auto-fills command, arguments, and env vars.
+   * Otherwise, lets the browser paste normally.
+   */
+  const handleConfigPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData("text");
+    const parsed = parseMcpServerConfigJson(pastedText);
+    if (!parsed) return;
+
+    e.preventDefault();
+
+    // Remote server — switch type and fill URL
+    if (parsed.serverType === "remote" && parsed.serverUrl) {
+      form.setValue("serverType", "remote", { shouldDirty: true });
+      form.setValue("serverUrl", parsed.serverUrl, { shouldDirty: true });
+      return;
+    }
+
+    // Local server — fill command, arguments, env
+    if (parsed.command) {
+      form.setValue("command", parsed.command, { shouldDirty: true });
+    }
+
+    if (parsed.arguments !== undefined) {
+      form.setValue("arguments", parsed.arguments, { shouldDirty: true });
+    }
+
+    if (parsed.environment && parsed.environment.length > 0) {
+      form.setValue(
+        "environment",
+        parsed.environment.map((env) => ({
+          key: env.key,
+          type: env.type,
+          value: env.value,
+          promptOnInstallation: env.promptOnInstallation,
+          required: env.required ?? false,
+          description: env.description ?? "",
+        })),
+        { shouldDirty: true },
+      );
+    }
+  };
 
   const createRequest = useCreateMcpServerInstallationRequest();
 
@@ -276,11 +321,14 @@ export function CustomServerRequestDialog({
                     name="arguments"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Arguments (one per line)</FormLabel>
+                        <FormLabel>
+                          Arguments (one per line or paste JSON config)
+                        </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`/path/to/server.js\n--verbose\n\n—or paste a full MCP server JSON config`}
                             rows={3}
+                            onPaste={handleConfigPaste}
                             {...field}
                           />
                         </FormControl>

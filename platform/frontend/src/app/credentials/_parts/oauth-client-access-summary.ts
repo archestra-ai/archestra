@@ -115,9 +115,12 @@ function resolveAgents(ids: string[], agents: NamedAgent[]): NamedAgent[] {
 /**
  * Up to MAX_NAMES resolved names, then "+N more" covering everything not
  * shown — including IDs that didn't resolve because the viewer can't see
- * those resources.
+ * those resources. When nothing resolved at all, falls back to a plain count.
  */
 function formatNames(resolved: NamedAgent[], totalCount: number): string {
+  if (resolved.length === 0) {
+    return pluralize(totalCount, "resource", "resources");
+  }
   const shown = resolved.slice(0, MAX_NAMES);
   const hiddenCount = totalCount - shown.length;
   const names = shown.map((agent) => agent.name).join(", ");

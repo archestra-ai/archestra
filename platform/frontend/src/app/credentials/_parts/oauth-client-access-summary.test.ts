@@ -94,6 +94,19 @@ describe("summarizeMcpClientAccess", () => {
       secondary: "+ grant: prod-gateway",
     });
   });
+
+  it("falls back to a plain count when no granted resource resolves", () => {
+    expect(
+      summarizeMcpClientAccess({
+        grantType: "authorization_code",
+        allowedGatewayIds: ["unknown-1", "unknown-2"],
+        agents: AGENTS,
+      }),
+    ).toEqual({
+      primary: "Each signed-in user's access",
+      secondary: "+ grant: 2 resources",
+    });
+  });
 });
 
 describe("summarizeLlmClientAccess", () => {

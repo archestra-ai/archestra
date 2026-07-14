@@ -108,7 +108,10 @@ function isNavItemPermitted(
   permissionMap: Record<string, boolean>,
 ): boolean {
   if (item.permissionUrls) {
-    return item.permissionUrls.some((url) => permissionMap[url] ?? true);
+    // No `?? true` fallback here: these URLs are asserted to be in
+    // requiredPagePermissionsMap, so a typo should hide the item, not
+    // silently show it to everyone.
+    return item.permissionUrls.some((url) => permissionMap[url] === true);
   }
   return permissionMap[item.url] ?? true;
 }

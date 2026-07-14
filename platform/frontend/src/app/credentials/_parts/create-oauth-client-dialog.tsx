@@ -143,7 +143,14 @@ export function CreateOAuthClientDialog({
             label="What will this client access?"
             options={CLIENT_TYPE_OPTIONS}
             value={clientType}
-            onChange={(next) => setClientType(next as OAuthClientType)}
+            onChange={(next) => {
+              setClientType(next as OAuthClientType);
+              // Visibility permissions are per-resource (mcpOauthClient vs
+              // llmOauthClient), so a scope picked under one type may be
+              // forbidden under the other.
+              setScope("personal");
+              setTeamIds([]);
+            }}
           />
 
           <div className="space-y-2">

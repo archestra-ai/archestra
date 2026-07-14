@@ -584,19 +584,14 @@ archestra:
     # If not set, inherits from archestra.tolerations
     tolerations: []
 
-  # Optional dedicated listeners that alias a subset of the backend API on
-  # their own ports, so a firewall / load balancer can expose only the
-  # endpoints that must be publicly reachable without exposing the whole API.
-  # The main backend port (9000) keeps serving these endpoints either way.
-  # Setting a port injects the matching env var (ARCHESTRA_A2A_PORT /
-  # ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT) into the backend container and
-  # adds a named container port + Service port.
-  standaloneEndpoints:
-    # Dedicated port for the A2A endpoints (/v1/a2a and /v2/a2a)
-    a2aPort: null
-    # Dedicated port for the MS Teams incoming webhook
-    # (/api/webhooks/chatops/ms-teams)
-    msTeamsWebhookPort: null
+  # Optional dedicated listener that aliases the publicly-exposable endpoints
+  # — A2A (/v1/a2a and /v2/a2a) and the MS Teams incoming webhook
+  # (/api/webhooks/chatops/ms-teams) — on their own port, so a firewall / load
+  # balancer can expose only these endpoints without exposing the whole API.
+  # The main backend port (9000) keeps serving them either way.
+  # Setting the port injects ARCHESTRA_PUBLIC_ENDPOINTS_PORT into the backend
+  # container and adds a named container port + Service port.
+  publicEndpointsPort: null
 
   # Service configuration
   service:
@@ -610,9 +605,8 @@ archestra:
       backend: null
       metrics: null
       frontend: null
-      # Only used when the matching archestra.standaloneEndpoints port is set
-      a2a: null
-      msTeamsWebhook: null
+      # Only used when archestra.publicEndpointsPort is set
+      publicEndpoints: null
 
   # Ingress configuration
   ingress:

@@ -33,7 +33,6 @@ import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {
   createJsonSchemaTransformObject,
-  type FastifyPluginAsyncZod,
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
   jsonSchemaTransform,
@@ -783,62 +782,42 @@ const startMetricsServer = async () => {
   );
 };
 
-// ============ Standalone public-endpoint listeners ============
+// ============ Public-endpoints listener ============
 
 /**
- * Optional dedicated Fastify listeners that alias a subset of the main API on
- * their own ports:
- *   - ARCHESTRA_A2A_PORT — the A2A endpoints (v1 + v2)
- *   - ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT — the MS Teams incoming webhook
+ * Optional dedicated Fastify listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) that
+ * aliases the publicly-exposable endpoints on their own port:
+ *   - the A2A endpoints (v1 + v2)
+ *   - the MS Teams incoming webhook
  *
- * They register the exact same route handlers as the main server, and the main
+ * It registers the exact same route handlers as the main server, and the main
  * API port keeps serving these endpoints in every configuration. The dedicated
- * ports exist so a firewall can expose only the endpoints that must be
+ * port exists so a firewall can expose only the endpoints that must be
  * publicly reachable without exposing the whole API.
  *
  * As on the main port, these routes authenticate in-route (A2A bearer tokens /
  * Bot Framework JWT validation), so the auth plugin is not registered here.
  */
-const standaloneEndpointServers: FastifyInstanceWithZod[] = [];
+let publicEndpointsServerInstance: FastifyInstanceWithZod | null = null;
 
-const startStandaloneEndpointServers = async () => {
-  const { standalonePort: a2aPort } = config.a2aGateway;
-  if (a2aPort) {
-    await startStandaloneEndpointServer({
-      serverName: "A2A",
-      port: a2aPort,
-      routePlugins: [routes.a2aRoutes, routes.a2aV2Routes],
-    });
+const startPublicEndpointsServer = async () => {
+  const { publicEndpointsPort } = config.api;
+  if (!publicEndpointsPort) {
+    return;
   }
 
-  const { msTeamsWebhookPort } = config.chatops;
-  if (msTeamsWebhookPort) {
-    await startStandaloneEndpointServer({
-      serverName: "MS Teams webhook",
-      port: msTeamsWebhookPort,
-      routePlugins: [msTeamsWebhookRoutes],
-    });
-  }
-};
-
-const startStandaloneEndpointServer = async (params: {
-  serverName: string;
-  port: number;
-  routePlugins: FastifyPluginAsyncZod[];
-}) => {
-  const { serverName, port: serverPort, routePlugins } = params;
   const server = createFastifyInstance();
-  standaloneEndpointServers.push(server);
+  publicEndpointsServerInstance = server;
 
   server.get(HEALTH_PATH, () => ({ status: "ok" }));
 
-  for (const routePlugin of routePlugins) {
-    await server.register(routePlugin);
-  }
+  await server.register(routes.a2aRoutes);
+  await server.register(routes.a2aV2Routes);
+  await server.register(msTeamsWebhookRoutes);
 
-  await server.listen({ port: serverPort, host });
+  await server.listen({ port: publicEndpointsPort, host });
   server.log.info(
-    `${serverName} listener started on port ${serverPort} (aliasing the main API port's endpoints)`,
+    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's A2A + MS Teams webhook endpoints)`,
   );
 };
 
@@ -1372,9 +1351,9 @@ const startWebServer = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
-    // Optional dedicated listeners aliasing the A2A endpoints and the MS Teams
-    // webhook on their own ports (see startStandaloneEndpointServers).
-    await startStandaloneEndpointServers();
+    // Optional dedicated listener aliasing the A2A endpoints and the MS Teams
+    // webhook on their own port (see startPublicEndpointsServer).
+    await startPublicEndpointsServer();
 
     // Start WebSocket server using the same HTTP server
     websocketService.start(fastify.server);
@@ -1447,11 +1426,9 @@ function registerWebServerShutdown(
         fastify.log.info("Metrics server closed");
       }
 
-      for (const standaloneServer of standaloneEndpointServers) {
-        await standaloneServer.close();
-      }
-      if (standaloneEndpointServers.length > 0) {
-        fastify.log.info("Standalone endpoint listeners closed");
+      if (publicEndpointsServerInstance) {
+        await publicEndpointsServerInstance.close();
+        fastify.log.info("Public-endpoints listener closed");
       }
 
       await fastify.close();

@@ -604,7 +604,7 @@ export const parseAnthropicWifConfig = (env: {
 };
 
 /**
- * Parse an optional dedicated-port env var (e.g. ARCHESTRA_A2A_PORT).
+ * Parse an optional dedicated-port env var (e.g. ARCHESTRA_PUBLIC_ENDPOINTS_PORT).
  * Unset/empty means the feature is disabled (returns undefined); an invalid
  * value also disables it (with a warning) rather than falling back to a
  * default, since accidentally listening on a wrong port would silently
@@ -1140,6 +1140,17 @@ const config = {
       DEFAULT_BODY_LIMIT,
     ),
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
+    /**
+     * When set, a dedicated Fastify listener additionally serves the
+     * publicly-exposable endpoints (A2A v1 + v2, MS Teams incoming webhook)
+     * on this port. Same handlers as the main API port — just an alias, so a
+     * firewall can expose only these endpoints publicly without exposing the
+     * whole API. The main API port keeps serving them either way.
+     */
+    publicEndpointsPort: parseOptionalPort({
+      envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+      envValue: process.env.ARCHESTRA_PUBLIC_ENDPOINTS_PORT,
+    }),
   },
   websocket: {
     path: "/ws",
@@ -1186,14 +1197,6 @@ const config = {
   },
   a2aGateway: {
     endpoint: "/v1/a2a",
-    // When set, the A2A endpoints (v1 AND v2) are additionally served by a
-    // dedicated Fastify listener on this port. Same handlers as the main API
-    // port — just an alias, so a firewall can expose only A2A publicly
-    // without exposing the whole API.
-    standalonePort: parseOptionalPort({
-      envVarName: "ARCHESTRA_A2A_PORT",
-      envValue: process.env.ARCHESTRA_A2A_PORT,
-    }),
   },
   a2aV2Gateway: {
     endpoint: "/v2/a2a",
@@ -1859,14 +1862,6 @@ const config = {
       process.env.ARCHESTRA_CHATOPS_MAX_CONCURRENT_FILE_TRANSFERS,
       4,
     ),
-    // When set, the MS Teams incoming webhook (POST /api/webhooks/chatops/ms-teams)
-    // is additionally served by a dedicated Fastify listener on this port. Same
-    // handler as the main API port — just an alias, so a firewall can expose
-    // only the webhook publicly without exposing the whole API.
-    msTeamsWebhookPort: parseOptionalPort({
-      envVarName: "ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT",
-      envValue: process.env.ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT,
-    }),
   },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,

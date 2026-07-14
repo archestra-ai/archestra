@@ -20,7 +20,7 @@ The AgentCard advertises the agent's name, description, and a single skill deriv
 
 ### Dedicated Port
 
-The A2A endpoints are served on the main API port. Set `ARCHESTRA_A2A_PORT` to also serve them on their own port — an alias with the same handlers, so the main port keeps working. This lets a firewall or load balancer expose only A2A to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#application--api-configuration) for details.
+The A2A endpoints are served on the main API port. Set `ARCHESTRA_PUBLIC_ENDPOINTS_PORT` to also serve them on a dedicated port, together with the MS Teams webhook — an alias with the same handlers, so the main port keeps working. This lets a firewall or load balancer expose only the publicly-exposable endpoints to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#application--api-configuration) for details.
 
 ## SDKs
 

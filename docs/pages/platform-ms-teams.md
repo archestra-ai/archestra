@@ -30,7 +30,7 @@ If your instance is not already publicly reachable (for example, running locally
 
 ### Dedicated Webhook Port
 
-Teams delivers messages to `POST /api/webhooks/chatops/ms-teams` on the main API port. Set `ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT` to also serve the webhook on its own port — an alias with the same handler, so the main port keeps working. This lets a firewall or load balancer expose only the webhook to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#microsoft-teams) for details.
+Teams delivers messages to `POST /api/webhooks/chatops/ms-teams` on the main API port. Set `ARCHESTRA_PUBLIC_ENDPOINTS_PORT` to also serve the webhook on a dedicated port, together with the A2A endpoints — an alias with the same handler, so the main port keeps working. This lets a firewall or load balancer expose only the publicly-exposable endpoints to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#application--api-configuration) for details.
 
 ## Usage
 

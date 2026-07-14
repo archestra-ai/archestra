@@ -1056,7 +1056,7 @@ describe("parseOptionalPort", () => {
   test("returns undefined (disabled) when no value provided", () => {
     expect(
       parseOptionalPort({
-        envVarName: "ARCHESTRA_A2A_PORT",
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
         envValue: undefined,
       }),
     ).toBeUndefined();
@@ -1064,32 +1064,44 @@ describe("parseOptionalPort", () => {
 
   test("returns undefined when empty or whitespace-only string provided", () => {
     expect(
-      parseOptionalPort({ envVarName: "ARCHESTRA_A2A_PORT", envValue: "" }),
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "",
+      }),
     ).toBeUndefined();
     expect(
-      parseOptionalPort({ envVarName: "ARCHESTRA_A2A_PORT", envValue: "   " }),
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "   ",
+      }),
     ).toBeUndefined();
   });
 
   test("parses valid port value", () => {
     expect(
-      parseOptionalPort({ envVarName: "ARCHESTRA_A2A_PORT", envValue: "9010" }),
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "9010",
+      }),
     ).toBe(9010);
   });
 
   test("accepts boundary ports and trims whitespace", () => {
     expect(
-      parseOptionalPort({ envVarName: "ARCHESTRA_A2A_PORT", envValue: "1" }),
+      parseOptionalPort({
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
+        envValue: "1",
+      }),
     ).toBe(1);
     expect(
       parseOptionalPort({
-        envVarName: "ARCHESTRA_A2A_PORT",
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
         envValue: "65535",
       }),
     ).toBe(65535);
     expect(
       parseOptionalPort({
-        envVarName: "ARCHESTRA_A2A_PORT",
+        envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
         envValue: "  9010  ",
       }),
     ).toBe(9010);
@@ -1099,12 +1111,12 @@ describe("parseOptionalPort", () => {
     for (const envValue of ["abc", "0", "65536", "-1"]) {
       expect(
         parseOptionalPort({
-          envVarName: "ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT",
+          envVarName: "ARCHESTRA_PUBLIC_ENDPOINTS_PORT",
           envValue,
         }),
       ).toBeUndefined();
       expect(logger.warn).toHaveBeenCalledWith(
-        `Invalid ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT value "${envValue}", the dedicated listener will not be started`,
+        `Invalid ARCHESTRA_PUBLIC_ENDPOINTS_PORT value "${envValue}", the dedicated listener will not be started`,
       );
     }
   });

@@ -4,10 +4,10 @@ import chatopsRoutes, { msTeamsWebhookRoutes } from "./chatops";
 
 /**
  * The MS Teams incoming webhook is exported as its own plugin so the optional
- * standalone listener (ARCHESTRA_CHATOPS_MS_TEAMS_WEBHOOK_PORT) can serve
- * exactly that endpoint. These tests pin both sides of that contract: the
- * standalone plugin serves the webhook (and nothing else), and the main
- * chatops plugin still serves it on the main API port.
+ * public-endpoints listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) can serve it
+ * without the rest of the chatops routes. These tests pin both sides of that
+ * contract: the standalone plugin serves the webhook (and no other chatops
+ * endpoint), and the main chatops plugin still serves it on the main API port.
  *
  * No chatops provider is configured in tests, so a request that reaches the
  * handler is answered with the handler's own 400 "provider not configured" —

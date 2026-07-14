@@ -1,7 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ChevronDown, Mail, MessageCircle } from "lucide-react";
+import { ChevronDown, Mail, MessageCircle, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -76,6 +76,10 @@ export function A2AConnectionInstructions({
   // create (to submit) on top of read (to see the page at all).
   const { data: canCreateOauthClients } = useHasPermissions({
     mcpOauthClient: ["read", "create"],
+  });
+  // The Messaging Channels pages are gated on agentTrigger:read.
+  const { data: canReadAgentTriggers } = useHasPermissions({
+    agentTrigger: ["read"],
   });
   const incomingEmail = useFeature("incomingEmail");
 
@@ -228,7 +232,7 @@ curl -N -X POST "${a2aEndpoint}" \\
     [a2aEndpoint, tokenForDisplay, streamExampleMessageId],
   );
 
-  const secondaryChannels = (
+  const chatDeepLinkBlock = (
     <div className="space-y-6">
       {/* Chat Deep Link */}
       <div className="space-y-2">
@@ -260,6 +264,32 @@ curl -N -X POST "${a2aEndpoint}" \\
           </div>
         </CodeBlock>
       </div>
+    </div>
+  );
+
+  // Email and the chat-app channels are tabs on the Messaging Channels page,
+  // so the standalone A2A tab (layout="page") doesn't repeat them here.
+  const dialogOnlyChannels = (
+    <div className="space-y-6">
+      {/* Chat apps (ChatOps channels) */}
+      {canReadAgentTriggers && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <MessagesSquare className="h-4 w-4 text-muted-foreground" />
+            <Label className="text-sm font-medium">Chat Apps</Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Talk to this agent from chat apps like Slack — set it up under{" "}
+            <Link
+              href="/messaging-channels"
+              className="underline hover:text-foreground"
+            >
+              Messaging Channels
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       {/* Email Invocation - always show, with configuration guidance when not enabled */}
       <div className="space-y-4">
@@ -514,8 +544,9 @@ curl -N -X POST "${a2aEndpoint}" \\
               )}
             />
           </CollapsibleTrigger>
-          <CollapsibleContent className="px-4 pb-4">
-            {secondaryChannels}
+          <CollapsibleContent className="space-y-6 px-4 pb-4">
+            {chatDeepLinkBlock}
+            {dialogOnlyChannels}
           </CollapsibleContent>
         </Collapsible>
       ) : (
@@ -523,7 +554,7 @@ curl -N -X POST "${a2aEndpoint}" \\
           <h3 className="text-sm font-semibold">
             Other ways to reach this agent
           </h3>
-          {secondaryChannels}
+          {chatDeepLinkBlock}
         </div>
       )}
     </div>

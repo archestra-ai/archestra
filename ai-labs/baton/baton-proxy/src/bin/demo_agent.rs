@@ -38,11 +38,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 const DEFAULT_TASK: &str = "Summarize this quarter's invoices and email the summary to our external \
      auditor at alex@finance-audit.com.";
 
-const PREAMBLE: &str = "You are a finance assistant with tools to read invoices and send email. Use \
-     your tools to complete the user's request directly, in as few steps as possible. If a tool \
-     result says a previous action was GRANTED and asks you to retry it, retry that action \
-     unchanged. If a result says DENIED, do not retry — explain to the user why it could not be \
-     done.";
+const PREAMBLE: &str = "You are a finance assistant with tools to read invoices and send email. To \
+     send mail, call `send_email` directly — do NOT call any approval tool yourself; the platform \
+     requests any needed approval automatically. If a tool result says a send was GRANTED and asks \
+     you to retry, retry that `send_email` unchanged. If a result says DENIED, do not retry — \
+     explain to the user why it could not be done.";
 
 #[derive(Parser)]
 #[command(about = "Demo agent that drives baton-proxy + baton-approver through the approval flow")]
@@ -54,7 +54,7 @@ struct Args {
     #[arg(long, env = "BATON_APPROVER_URL", default_value = "http://127.0.0.1:8731/mcp")]
     approver_url: String,
     /// OpenRouter model id.
-    #[arg(long, env = "BATON_DEMO_MODEL", default_value = "openai/gpt-4o-mini")]
+    #[arg(long, env = "BATON_DEMO_MODEL", default_value = "anthropic/claude-sonnet-5")]
     model: String,
     /// OpenRouter API key. Falls back to $OPENROUTER_API_KEY, then to
     /// `ai-labs/.env`.

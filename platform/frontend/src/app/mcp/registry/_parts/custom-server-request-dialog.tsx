@@ -113,7 +113,9 @@ export function CustomServerRequestDialog({
       return;
     }
 
-    // Local server — fill command, arguments, env
+    // Local server — switch type and fill command, arguments, env
+    form.setValue("serverType", "local", { shouldDirty: true });
+
     if (parsed.command) {
       form.setValue("command", parsed.command, { shouldDirty: true });
     }
@@ -122,20 +124,18 @@ export function CustomServerRequestDialog({
       form.setValue("arguments", parsed.arguments, { shouldDirty: true });
     }
 
-    if (parsed.environment && parsed.environment.length > 0) {
-      form.setValue(
-        "environment",
-        parsed.environment.map((env) => ({
-          key: env.key,
-          type: env.type,
-          value: env.value,
-          promptOnInstallation: env.promptOnInstallation,
-          required: env.required ?? false,
-          description: env.description ?? "",
-        })),
-        { shouldDirty: true },
-      );
-    }
+    form.setValue(
+      "environment",
+      (parsed.environment ?? []).map((env) => ({
+        key: env.key,
+        type: env.type,
+        value: env.value,
+        promptOnInstallation: env.promptOnInstallation,
+        required: env.required ?? false,
+        description: env.description ?? "",
+      })),
+      { shouldDirty: true },
+    );
   };
 
   const createRequest = useCreateMcpServerInstallationRequest();

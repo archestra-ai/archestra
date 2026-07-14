@@ -375,8 +375,10 @@ export function McpCatalogForm({
       return;
     }
 
-    // Local server — fill command, arguments, env, docker, transport.
+    // Local server — switch type and fill command, arguments, env, docker, transport.
     // (Runtime gate already checked above — isLocalMcpEnabled is true here.)
+    form.setValue("serverType", "local", { shouldDirty: true });
+
     if (parsed.command) {
       form.setValue("localConfig.command", parsed.command, {
         shouldDirty: true,
@@ -406,20 +408,18 @@ export function McpCatalogForm({
       });
     }
 
-    if (parsed.environment && parsed.environment.length > 0) {
-      form.setValue(
-        "localConfig.environment",
-        parsed.environment.map((env) => ({
-          key: env.key,
-          type: env.type,
-          value: env.value,
-          promptOnInstallation: env.promptOnInstallation,
-          required: env.required ?? false,
-          description: env.description ?? "",
-        })),
-        { shouldDirty: true },
-      );
-    }
+    form.setValue(
+      "localConfig.environment",
+      (parsed.environment ?? []).map((env) => ({
+        key: env.key,
+        type: env.type,
+        value: env.value,
+        promptOnInstallation: env.promptOnInstallation,
+        required: env.required ?? false,
+        description: env.description ?? "",
+      })),
+      { shouldDirty: true },
+    );
   };
   const currentTransportType = form.watch("localConfig.transportType");
   const isMultitenant = Boolean(form.watch("multitenant"));

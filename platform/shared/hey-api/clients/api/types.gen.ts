@@ -48344,6 +48344,13 @@ export type McpGatewayGetErrors = {
         error: string;
         message: string;
     };
+    /**
+     * Default Response
+     */
+    503: {
+        error: string;
+        message: string;
+    };
 };
 
 export type McpGatewayGetError = McpGatewayGetErrors[keyof McpGatewayGetErrors];

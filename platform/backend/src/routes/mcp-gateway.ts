@@ -44,6 +44,65 @@ function setWWWAuthenticateHeader(
 }
 
 /**
+ * Body message for the 503 the gateway returns when token validation itself
+ * failed (e.g. the database was unreachable during a pod restart). Worded so a
+ * client developer reading the error knows the token was not rejected.
+ *
+ * @public — asserted by mcp-gateway.token-validation-unavailable.test.ts (knip --production ignores tests)
+ */
+export const MCP_GATEWAY_TOKEN_VALIDATION_UNAVAILABLE_MESSAGE =
+  "Unable to verify the access token right now due to a temporary backend issue. Retry with the same token; it has not been rejected.";
+
+type GatewayAuthOutcome =
+  | { outcome: "unauthorized" }
+  | { outcome: "unavailable" }
+  | {
+      outcome: "ok";
+      profileId: string;
+      token: string;
+      tokenAuth: Awaited<ReturnType<typeof validateMCPGatewayToken>>;
+    };
+
+/**
+ * Resolve the profile and token auth for a gateway request, separating "the
+ * token is invalid" (401 territory) from "we could not check the token".
+ *
+ * The distinction is what keeps a pod restart from logging every MCP client
+ * out: a 401 (+ WWW-Authenticate) tells clients like Claude Code to discard
+ * their — perfectly valid, database-backed — tokens and re-run the OAuth flow,
+ * while a 503 makes them retry with the same token once the backend is
+ * reachable again. So transient validation failures must never surface as 401.
+ */
+async function resolveGatewayAuth(
+  fastify: FastifyInstance,
+  request: FastifyRequest,
+): Promise<GatewayAuthOutcome> {
+  try {
+    const extracted = await extractProfileIdAndTokenFromRequest(request);
+    if (!extracted) {
+      return { outcome: "unauthorized" };
+    }
+    const tokenAuth = await validateMCPGatewayToken(
+      extracted.profileId,
+      extracted.token,
+    );
+    return { outcome: "ok", ...extracted, tokenAuth };
+  } catch (error) {
+    fastify.log.error(
+      { err: error, url: request.url },
+      "MCP gateway token validation errored — answering 503 so the client retries with the same token instead of re-authenticating",
+    );
+    return { outcome: "unavailable" };
+  }
+}
+
+/** 503 + Retry-After, deliberately without WWW-Authenticate (see resolveGatewayAuth). */
+function setServiceUnavailableReply(reply: FastifyReply) {
+  reply.header("Retry-After", "5");
+  reply.status(503);
+}
+
+/**
  * Handle MCP POST requests in stateless mode
  * Creates a fresh Server and Transport for each request
  */
@@ -192,14 +251,25 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             error: z.string(),
             message: z.string(),
           }),
+          503: z.object({
+            error: z.string(),
+            message: z.string(),
+          }),
         },
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+      const auth = await resolveGatewayAuth(fastify, request);
 
-      if (!profileId || !token) {
+      if (auth.outcome === "unavailable") {
+        setServiceUnavailableReply(reply);
+        return {
+          error: "Service Unavailable",
+          message: MCP_GATEWAY_TOKEN_VALIDATION_UNAVAILABLE_MESSAGE,
+        };
+      }
+
+      if (auth.outcome === "unauthorized") {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
@@ -209,7 +279,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const { profileId, tokenAuth } = auth;
 
       reply.type("application/json");
       return {
@@ -248,10 +318,21 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { profileId, token } =
-        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+      const auth = await resolveGatewayAuth(fastify, request);
 
-      if (!profileId || !token) {
+      if (auth.outcome === "unavailable") {
+        setServiceUnavailableReply(reply);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: MCP_GATEWAY_TOKEN_VALIDATION_UNAVAILABLE_MESSAGE,
+          },
+          id: null,
+        };
+      }
+
+      if (auth.outcome === "unauthorized") {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);
         return {
@@ -265,7 +346,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const { profileId, tokenAuth } = auth;
       if (!tokenAuth) {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);

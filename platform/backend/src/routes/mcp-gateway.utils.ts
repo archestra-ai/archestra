@@ -1145,139 +1145,104 @@ export async function validateOAuthToken(
   return validateOAuthTokenByHash({ profileId, oauthTokenHash });
 }
 
+/**
+ * Returns null only when the token is affirmatively invalid (unknown, expired,
+ * revoked, or not authorized for this profile). Infrastructure failures (e.g.
+ * the database being unreachable around a restart) propagate as thrown errors:
+ * collapsing them into null would make the gateway answer 401, which tells MCP
+ * clients to discard a perfectly valid token and re-run the OAuth flow.
+ */
 async function validateOAuthTokenByHash(params: {
   profileId: string;
   oauthTokenHash: string;
   agentAccessContext?: AgentAccessContext | null;
 }): Promise<TokenAuthResult | null> {
-  try {
-    const agent =
-      params.agentAccessContext ??
-      (await findAgentAccessContextById(params.profileId));
-    if (!agent) {
-      return null;
-    }
+  const agent =
+    params.agentAccessContext ??
+    (await findAgentAccessContextById(params.profileId));
+  if (!agent) {
+    return null;
+  }
 
-    // Look up the hashed token via the model
-    const accessToken = await OAuthAccessTokenModel.getByTokenHash(
-      params.oauthTokenHash,
+  // Look up the hashed token via the model
+  const accessToken = await OAuthAccessTokenModel.getByTokenHash(
+    params.oauthTokenHash,
+  );
+
+  if (!accessToken) {
+    return null;
+  }
+
+  // Check if associated refresh token has been revoked
+  if (accessToken.refreshTokenRevoked) {
+    logger.debug(
+      { profileId: params.profileId },
+      "validateOAuthToken: associated refresh token is revoked",
     );
+    return null;
+  }
 
-    if (!accessToken) {
-      return null;
-    }
+  // Check token expiry
+  if (accessToken.expiresAt < new Date()) {
+    logger.debug(
+      { profileId: params.profileId },
+      "validateOAuthToken: token expired",
+    );
+    return null;
+  }
 
-    // Check if associated refresh token has been revoked
-    if (accessToken.refreshTokenRevoked) {
-      logger.debug(
-        { profileId: params.profileId },
-        "validateOAuthToken: associated refresh token is revoked",
-      );
-      return null;
-    }
-
-    // Check token expiry
-    if (accessToken.expiresAt < new Date()) {
-      logger.debug(
-        { profileId: params.profileId },
-        "validateOAuthToken: token expired",
-      );
-      return null;
-    }
-
-    if (
-      accessToken.referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX) &&
-      accessToken.referenceId !==
-        `${MCP_RESOURCE_REFERENCE_PREFIX}${params.profileId}`
-    ) {
-      logger.warn(
-        {
-          profileId: params.profileId,
-          tokenReferenceId: accessToken.referenceId,
-        },
-        "validateOAuthToken: token is bound to a different MCP resource",
-      );
-      return null;
-    }
-
-    // A token audience-bound to a shareable-App connector is valid only at that
-    // connector, never at the MCP gateway — reject it before the user-access
-    // branch would otherwise accept it on team membership alone.
-    if (isAppConnectorAudienceRef(accessToken.referenceId)) {
-      logger.warn(
-        { profileId: params.profileId },
-        "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
-      );
-      return null;
-    }
-
-    // Application (client_credentials) tokens minted for an MCP OAuth client
-    // carry no acting user. Authorize them against the client's allowed gateways
-    // instead of a user's team membership.
-    if (
-      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
-    ) {
-      return validateMcpOauthClientToken({
-        accessToken,
+  if (
+    accessToken.referenceId?.startsWith(MCP_RESOURCE_REFERENCE_PREFIX) &&
+    accessToken.referenceId !==
+      `${MCP_RESOURCE_REFERENCE_PREFIX}${params.profileId}`
+  ) {
+    logger.warn(
+      {
         profileId: params.profileId,
-        organizationId: agent.organizationId,
-      });
-    }
-
-    const userId = accessToken.userId;
-    if (!userId) {
-      return null;
-    }
-    const organizationId = agent.organizationId;
-
-    // Check if user has MCP gateway admin permission (can access all gateways)
-    const isGatewayAdmin = await userHasPermission(
-      userId,
-      organizationId,
-      "mcpGateway",
-      "admin",
+        tokenReferenceId: accessToken.referenceId,
+      },
+      "validateOAuthToken: token is bound to a different MCP resource",
     );
+    return null;
+  }
 
-    if (isGatewayAdmin) {
-      return {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId,
-        isUserToken: true,
-        userId,
-      };
-    }
-
-    // Non-admin access has two additive sources:
-    //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
-    //   2. an admin-controlled grant on the authorization_code MCP OAuth client
-    //      that minted this token — its allowedGatewayIds may grant access to
-    //      gateways the user could not otherwise reach (e.g. a gateway reachable
-    //      only through a specific pre-registered app).
-    const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
-      userId,
-      params.profileId,
-      false,
-      agent,
+  // A token audience-bound to a shareable-App connector is valid only at that
+  // connector, never at the MCP gateway — reject it before the user-access
+  // branch would otherwise accept it on team membership alone.
+  if (isAppConnectorAudienceRef(accessToken.referenceId)) {
+    logger.warn(
+      { profileId: params.profileId },
+      "validateOAuthToken: rejecting an app-connector-bound token at the MCP gateway",
     );
-    const hasClientGrant =
-      hasRbacAccess || !accessToken.clientId
-        ? false
-        : await mcpOauthClientGrantsGatewayAccess({
-            clientId: accessToken.clientId,
-            profileId: params.profileId,
-            organizationId,
-          });
+    return null;
+  }
 
-    if (!hasRbacAccess && !hasClientGrant) {
-      logger.warn(
-        { profileId: params.profileId, userId },
-        "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
-      );
-      return null;
-    }
+  // Application (client_credentials) tokens minted for an MCP OAuth client
+  // carry no acting user. Authorize them against the client's allowed gateways
+  // instead of a user's team membership.
+  if (accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)) {
+    return validateMcpOauthClientToken({
+      accessToken,
+      profileId: params.profileId,
+      organizationId: agent.organizationId,
+    });
+  }
 
+  const userId = accessToken.userId;
+  if (!userId) {
+    return null;
+  }
+  const organizationId = agent.organizationId;
+
+  // Check if user has MCP gateway admin permission (can access all gateways)
+  const isGatewayAdmin = await userHasPermission(
+    userId,
+    organizationId,
+    "mcpGateway",
+    "admin",
+  );
+
+  if (isGatewayAdmin) {
     return {
       tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
       teamId: null,
@@ -1286,16 +1251,45 @@ async function validateOAuthTokenByHash(params: {
       isUserToken: true,
       userId,
     };
-  } catch (error) {
-    logger.debug(
-      {
-        profileId: params.profileId,
-        error: error instanceof Error ? error.message : "unknown",
-      },
-      "validateOAuthToken: token validation failed",
+  }
+
+  // Non-admin access has two additive sources:
+  //   1. the user's own RBAC (profile is teamless/org-wide or shares a team), or
+  //   2. an admin-controlled grant on the authorization_code MCP OAuth client
+  //      that minted this token — its allowedGatewayIds may grant access to
+  //      gateways the user could not otherwise reach (e.g. a gateway reachable
+  //      only through a specific pre-registered app).
+  const hasRbacAccess = await AgentTeamModel.userHasAgentAccess(
+    userId,
+    params.profileId,
+    false,
+    agent,
+  );
+  const hasClientGrant =
+    hasRbacAccess || !accessToken.clientId
+      ? false
+      : await mcpOauthClientGrantsGatewayAccess({
+          clientId: accessToken.clientId,
+          profileId: params.profileId,
+          organizationId,
+        });
+
+  if (!hasRbacAccess && !hasClientGrant) {
+    logger.warn(
+      { profileId: params.profileId, userId },
+      "validateOAuthToken: profile not accessible via OAuth token (no RBAC access and no client grant)",
     );
     return null;
   }
+
+  return {
+    tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+    teamId: null,
+    isOrganizationToken: false,
+    organizationId,
+    isUserToken: true,
+    userId,
+  };
 }
 
 /**
@@ -1397,7 +1391,12 @@ async function mcpOauthClientGrantsGatewayAccess(params: {
 /**
  * Validate any token for a specific profile.
  * Tries external IdP JWKS first (if configured), then team/org tokens, user tokens, and OAuth tokens.
- * Returns token auth info if valid, null otherwise.
+ *
+ * Returns token auth info if valid, and null only when the token is
+ * affirmatively invalid or unauthorized for the profile. Throws when
+ * validation could not be completed (e.g. the database is unreachable during
+ * a restart) — callers must map that to a retryable 5xx, never to a 401,
+ * because a 401 makes MCP clients drop their tokens and re-run OAuth.
  */
 export async function validateMCPGatewayToken(
   profileId: string,
@@ -1494,146 +1493,127 @@ export async function validateMCPGatewayToken(
  * Validate a JWT from an external Identity Provider via JWKS.
  * Only attempted when the profile has an associated SSO provider with OIDC config.
  *
- * @returns TokenAuthResult with external identity info, or null if validation fails
+ * @returns TokenAuthResult with external identity info, or null if the token is
+ * invalid or the IdP cannot vouch for it (JWKS fetch/verify failures degrade to
+ * null inside jwksValidator/discoverOidcJwksUrl, letting other validators run).
+ * Database errors propagate so callers can answer "could not validate" instead
+ * of "invalid token".
  */
 export async function validateExternalIdpToken(
   profileId: string,
   tokenValue: string,
   permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
 ): Promise<TokenAuthResult | null> {
-  try {
-    // Look up the agent to check if it has an identity provider configured
-    const agent = await AgentModel.findGatewayAgentById(profileId);
-    if (!agent?.identityProviderId) {
-      return null;
-    }
+  // Look up the agent to check if it has an identity provider configured
+  const agent = await AgentModel.findGatewayAgentById(profileId);
+  if (!agent?.identityProviderId) {
+    return null;
+  }
 
-    // Look up the identity provider to get OIDC config
-    const idpProvider = await findExternalIdentityProviderById(
-      agent.identityProviderId,
+  // Look up the identity provider to get OIDC config
+  const idpProvider = await findExternalIdentityProviderById(
+    agent.identityProviderId,
+  );
+  if (!idpProvider) {
+    logger.warn(
+      { profileId, identityProviderId: agent.identityProviderId },
+      "validateExternalIdpToken: Identity provider not found",
     );
-    if (!idpProvider) {
-      logger.warn(
-        { profileId, identityProviderId: agent.identityProviderId },
-        "validateExternalIdpToken: Identity provider not found",
-      );
-      return null;
-    }
+    return null;
+  }
 
-    if (!idpProvider.oidcConfig) {
-      logger.warn(
-        { profileId, identityProviderId: agent.identityProviderId },
-        "validateExternalIdpToken: identity provider has no OIDC config",
-      );
-      return null;
-    }
-
-    const oidcConfig = idpProvider.oidcConfig;
-
-    if (!oidcConfig.clientId) {
-      logger.warn(
-        { profileId, identityProviderId: agent.identityProviderId },
-        "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
-      );
-      return null;
-    }
-
-    // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
-    // round-trip, and works when the issuer URL isn't reachable from the backend
-    // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
-    // Fall back to OIDC discovery from the issuer URL.
-    const jwksUrl =
-      oidcConfig.jwksEndpoint ??
-      (await discoverOidcJwksUrl(idpProvider.issuer));
-    if (!jwksUrl) {
-      logger.warn(
-        { profileId, issuer: idpProvider.issuer },
-        "validateExternalIdpToken: could not determine JWKS URL",
-      );
-      return null;
-    }
-
-    // Validate the JWT
-    const result = await jwksValidator.validateJwt({
-      token: tokenValue,
-      issuerUrl: idpProvider.issuer,
-      jwksUrl,
-      audience: oidcConfig.clientId,
-    });
-
-    if (!result) {
-      return null;
-    }
-
-    logger.info(
-      {
-        profileId,
-        identityProviderId: agent.identityProviderId,
-        sub: result.sub,
-        email: result.email,
-      },
-      "validateExternalIdpToken: JWT validated via external IdP JWKS",
+  if (!idpProvider.oidcConfig) {
+    logger.warn(
+      { profileId, identityProviderId: agent.identityProviderId },
+      "validateExternalIdpToken: identity provider has no OIDC config",
     );
+    return null;
+  }
 
-    // Match JWT email claim to an Archestra user for access control. Some IdPs
-    // use the subject as the user email and omit the email claim.
-    const userEmail = result.email ?? getEmailFromSubject(result.sub);
-    if (!userEmail) {
-      logger.warn(
-        { profileId, sub: result.sub },
-        "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
-      );
-      return null;
-    }
+  const oidcConfig = idpProvider.oidcConfig;
 
-    const user = await UserModel.findByEmail(userEmail);
-    if (!user) {
-      logger.warn(
-        { profileId, email: userEmail },
-        "validateExternalIdpToken: JWT email does not match any Archestra user",
-      );
-      return null;
-    }
-
-    const member = await MemberModel.getByUserId(user.id, agent.organizationId);
-    if (!member) {
-      logger.warn(
-        { profileId, userId: user.id, email: userEmail },
-        "validateExternalIdpToken: user is not a member of the gateway's organization",
-      );
-      return null;
-    }
-
-    // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
-    const isAdmin = await userHasPermission(
-      user.id,
-      agent.organizationId,
-      permissionResource,
-      "admin",
+  if (!oidcConfig.clientId) {
+    logger.warn(
+      { profileId, identityProviderId: agent.identityProviderId },
+      "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
     );
+    return null;
+  }
 
-    if (isAdmin) {
-      return {
-        tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: agent.organizationId,
-        isUserToken: true,
-        userId: user.id,
-        isExternalIdp: true,
-        rawToken: tokenValue,
-      };
-    }
+  // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
+  // round-trip, and works when the issuer URL isn't reachable from the backend
+  // e.g. in CI where the issuer is a NodePort URL but the backend runs in a pod).
+  // Fall back to OIDC discovery from the issuer URL.
+  const jwksUrl =
+    oidcConfig.jwksEndpoint ?? (await discoverOidcJwksUrl(idpProvider.issuer));
+  if (!jwksUrl) {
+    logger.warn(
+      { profileId, issuer: idpProvider.issuer },
+      "validateExternalIdpToken: could not determine JWKS URL",
+    );
+    return null;
+  }
 
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
-      logger.warn(
-        { profileId, userId: user.id },
-        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
-      );
-      return null;
-    }
+  // Validate the JWT
+  const result = await jwksValidator.validateJwt({
+    token: tokenValue,
+    issuerUrl: idpProvider.issuer,
+    jwksUrl,
+    audience: oidcConfig.clientId,
+  });
 
+  if (!result) {
+    return null;
+  }
+
+  logger.info(
+    {
+      profileId,
+      identityProviderId: agent.identityProviderId,
+      sub: result.sub,
+      email: result.email,
+    },
+    "validateExternalIdpToken: JWT validated via external IdP JWKS",
+  );
+
+  // Match JWT email claim to an Archestra user for access control. Some IdPs
+  // use the subject as the user email and omit the email claim.
+  const userEmail = result.email ?? getEmailFromSubject(result.sub);
+  if (!userEmail) {
+    logger.warn(
+      { profileId, sub: result.sub },
+      "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
+    );
+    return null;
+  }
+
+  const user = await UserModel.findByEmail(userEmail);
+  if (!user) {
+    logger.warn(
+      { profileId, email: userEmail },
+      "validateExternalIdpToken: JWT email does not match any Archestra user",
+    );
+    return null;
+  }
+
+  const member = await MemberModel.getByUserId(user.id, agent.organizationId);
+  if (!member) {
+    logger.warn(
+      { profileId, userId: user.id, email: userEmail },
+      "validateExternalIdpToken: user is not a member of the gateway's organization",
+    );
+    return null;
+  }
+
+  // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
+  const isAdmin = await userHasPermission(
+    user.id,
+    agent.organizationId,
+    permissionResource,
+    "admin",
+  );
+
+  if (isAdmin) {
     return {
       tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
       teamId: null,
@@ -1644,15 +1624,27 @@ export async function validateExternalIdpToken(
       isExternalIdp: true,
       rawToken: tokenValue,
     };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const stack = error instanceof Error ? error.stack : undefined;
+  }
+
+  // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+  if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
     logger.warn(
-      { profileId, error: message, stack },
-      "validateExternalIdpToken: unexpected error",
+      { profileId, userId: user.id },
+      "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
     );
     return null;
   }
+
+  return {
+    tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
+    teamId: null,
+    isOrganizationToken: false,
+    organizationId: agent.organizationId,
+    isUserToken: true,
+    userId: user.id,
+    isExternalIdp: true,
+    rawToken: tokenValue,
+  };
 }
 
 function getEmailFromSubject(subject: string | undefined): string | null {

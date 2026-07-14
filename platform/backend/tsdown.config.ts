@@ -26,6 +26,15 @@ let currentServerProcess: ChildProcess | null = null;
 let restartQueue: Promise<void> = Promise.resolve();
 
 /**
+ * Id of the most recent restart request. A queued restart only spawns while it
+ * is still the latest, so a burst of rebuilds collapses to a single spawn.
+ * tsdown calls onSuccess only for a build that succeeded, so a failed
+ * superseding build never bumps this — the last good build still spawns and the
+ * server is never left stranded down.
+ */
+let latestRestartId = 0;
+
+/**
  * Terminate a server process and resolve once it has exited. Always resolves
  * (via the exit event, or a bounded SIGKILL fallback) so a hung or already-dead
  * child can never wedge restartQueue and strand the dev server.
@@ -64,55 +73,69 @@ const stopServer = (proc: ChildProcess): Promise<void> => {
  *
  * @see https://tsdown.dev/advanced/hooks
  */
-const onSuccessHandler: UserConfig["onSuccess"] = (_config, signal) => {
-  restartQueue = restartQueue.then(async () => {
-    if (currentServerProcess) {
-      console.log("Stopping previous server...");
-      await stopServer(currentServerProcess);
-      currentServerProcess = null;
-      // Give the OS a moment to release the listen sockets before rebinding.
-      await new Promise((resolve) =>
-        setTimeout(resolve, PORT_RELEASE_DELAY_MS),
-      );
-    }
-
-    // tsdown aborts this build's signal when a newer rebuild starts; don't spawn
-    // a superseded server (the next queued restart owns the current build).
-    if (signal.aborted) {
-      return;
-    }
-
-    const args = ["--enable-source-maps"];
-
-    if (process.env.DEBUG) {
-      args.push("--inspect");
-    }
-
-    args.push("dist/server.mjs");
-
-    // Use process.execPath (absolute path to Node.js binary) instead of "node" string
-    // for cross-platform compatibility. On Windows, spawn("node", ...) can fail if
-    // Node.js isn't in PATH or PATH resolution behaves differently. Using the absolute
-    // path bypasses PATH resolution entirely.
-    // Note: We intentionally avoid shell: true to prevent orphaned processes on Windows
-    // (shell creates cmd.exe as parent, making kill() ineffective on the actual server).
-    const child = spawn(process.execPath, args, {
-      stdio: "inherit",
-    });
-    currentServerProcess = child;
-
-    child.on("error", (err) => {
-      console.error("Server process error:", err);
-    });
-
-    child.on("exit", (code, exitSignal) => {
-      if (exitSignal) {
-        console.log(`Server process terminated by signal: ${exitSignal}`);
-      } else if (code !== 0) {
-        console.error(`Server process exited with code: ${code}`);
+const onSuccessHandler: UserConfig["onSuccess"] = () => {
+  const restartId = ++latestRestartId;
+  restartQueue = restartQueue
+    .then(async () => {
+      // A newer build already queued its own restart: leave the running server
+      // up and let that restart own the swap. Skipping the kill keeps the old
+      // server serving until the winning build is ready to spawn.
+      if (restartId !== latestRestartId) {
+        return;
       }
+
+      if (currentServerProcess) {
+        console.log("Stopping previous server...");
+        await stopServer(currentServerProcess);
+        currentServerProcess = null;
+        // Give the OS a moment to release the listen sockets before rebinding.
+        await new Promise((resolve) =>
+          setTimeout(resolve, PORT_RELEASE_DELAY_MS),
+        );
+      }
+
+      // Re-check: a newer build may have landed while we were stopping the old
+      // server. Don't spawn a stale build over it.
+      if (restartId !== latestRestartId) {
+        return;
+      }
+
+      const args = ["--enable-source-maps"];
+
+      if (process.env.DEBUG) {
+        args.push("--inspect");
+      }
+
+      args.push("dist/server.mjs");
+
+      // Use process.execPath (absolute path to Node.js binary) instead of "node" string
+      // for cross-platform compatibility. On Windows, spawn("node", ...) can fail if
+      // Node.js isn't in PATH or PATH resolution behaves differently. Using the absolute
+      // path bypasses PATH resolution entirely.
+      // Note: We intentionally avoid shell: true to prevent orphaned processes on Windows
+      // (shell creates cmd.exe as parent, making kill() ineffective on the actual server).
+      const child = spawn(process.execPath, args, {
+        stdio: "inherit",
+      });
+      currentServerProcess = child;
+
+      child.on("error", (err) => {
+        console.error("Server process error:", err);
+      });
+
+      child.on("exit", (code, exitSignal) => {
+        if (exitSignal) {
+          console.log(`Server process terminated by signal: ${exitSignal}`);
+        } else if (code !== 0) {
+          console.error(`Server process exited with code: ${code}`);
+        }
+      });
+    })
+    .catch((error) => {
+      // A rejected restartQueue would skip every future rebuild's restart and
+      // strand the server, so a failed restart must not poison the chain.
+      console.error("Dev server restart failed:", error);
     });
-  });
 
   return restartQueue;
 };

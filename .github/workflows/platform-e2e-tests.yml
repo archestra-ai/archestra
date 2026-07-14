@@ -584,12 +584,17 @@ jobs:
 
       - name: Create e2e test env file
         run: |
-          # Use 127.0.0.1 instead of localhost to avoid IPv6 issues with Docker.
+          # UI/API must be "localhost", not 127.0.0.1: the SSO specs bounce the
+          # browser to Keycloak, which redirects back to the realm's registered
+          # http://localhost:3000 redirect URI — starting the flow on 127.0.0.1
+          # strands better-auth's state cookie on the other host and every SSO
+          # login fails with state_mismatch. (The K8s job's specs run on the
+          # same localhost defaults.)
           # The *_INTERNAL/BACKEND URLs are what the containerized backend must
           # resolve — the sidecars' docker network names (see e2e-lite.sh).
           {
-            echo "E2E_UI_BASE_URL=http://127.0.0.1:3000"
-            echo "E2E_API_BASE_URL=http://127.0.0.1:9000"
+            echo "E2E_UI_BASE_URL=http://localhost:3000"
+            echo "E2E_API_BASE_URL=http://localhost:9000"
             echo "E2E_WIREMOCK_BASE_URL=http://127.0.0.1:9092"
             echo "E2E_WIREMOCK_INTERNAL_URL=http://e2e-tests-wiremock:8080"
             echo "E2E_KEYCLOAK_BACKEND_URL=http://e2e-tests-keycloak:8080"

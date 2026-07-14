@@ -106,7 +106,9 @@ impl BatonGate {
                 self.pending = Some(token);
                 GateVerdict::Allow
             }
-            // The engine already cleared the pending slot on a terminal block.
+            // The engine cleared this request's slot on a terminal block —
+            // except ActionAlreadyPending, which deliberately leaves the
+            // in-flight action (and its stashed token) untouched.
             Pursuit::Terminal(block) => GateVerdict::Block {
                 reason: block.reason.to_string(),
             },
@@ -124,7 +126,9 @@ impl BatonGate {
             Pursuit::Stalled { violations, cause } => GateVerdict::Block {
                 reason: match cause {
                     StallCause::BoundExhausted => "remedy did not converge within the step bound".to_owned(),
-                    StallCause::Refused(_) => block_reason(&violations),
+                    StallCause::Refused(refused) => {
+                        format!("policy step refused: {refused:?}; {}", block_reason(&violations))
+                    }
                     StallCause::Failed(failure) => format!("remedy step failed: {failure:?}"),
                 },
             },
@@ -391,7 +395,7 @@ mod tests {
         allow(gate.check("list_invoices", &json!({})));
         gate.commit("<invoices>").unwrap();
         // The remediable walk reaches an external grant it cannot resolve
-        // in-process and blocks, leaving a pending action behind.
+        // in-process and blocks, discarding the approval and freeing the slot.
         assert!(matches!(
             gate.check("send_email", &json!({ "to": AUDITOR })),
             GateVerdict::Block { .. }

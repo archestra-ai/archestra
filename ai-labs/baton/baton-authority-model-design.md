@@ -305,10 +305,15 @@ Built as slices S5–S8 on this branch; 126 lib tests; external (Codex) + intern
 
 ### Build 3 — Endorse as relabel + robustness visibility (D3, done)
 Converted to §4-style slices S9–S12 on this branch. Ratified encoding choices:
-**OQ1** resolves to a *sibling* `TransitionKind::EndorseValue { source, delta }`
-beside the shipped `TransformValue` (merging both into one `Relabel { via }` is a
-behavior-preserving churn across the plan/apply/enumeration/tests for no semantic
-gain; shared minting lives in `turn.rs`/`value.rs` regardless). **`ExitKind`
+**OQ1** originally resolved to a *sibling* `TransitionKind::EndorseValue { source, delta }`
+beside the shipped `TransformValue` (merging both judged behavior-preserving churn
+for no semantic gain; shared minting lives in `turn.rs`/`value.rs` regardless).
+*Superseded 2026-07-14 (maintainer-ratified, surface-reduction branch):* the two
+variants merged into `Derive { source, justification: Content(..) | Fiat { .. } }` —
+the justification split materializes the "shared mint-and-substitute, different
+voucher" ontology in the type. Behavior (routing, byte rules, `ExitKind` ranking,
+audit wording) is unchanged; the serialized plan tag shape did change, accepted
+while plans have no out-of-process consumer. **`ExitKind`
 ordering:** Endorse is the top/max variant (`Sanitize < Constrain < Accept <
 WaiverOrAcknowledge < Endorse`) — taint erasure is the priciest elevation, so a
 composite route's decisive category is its Endorse step. **Canonical remedy

@@ -576,6 +576,39 @@ fn pursue_stall_abandons_the_pending_action() {
     dispatch(&mut trajectory, token, "pong").unwrap();
 }
 
+/// Pursuing a different proposal while an action is in flight is refused
+/// terminally WITHOUT touching the in-flight action: its token still
+/// releases — the one terminal where clearing the slot would be a bug.
+#[test]
+fn pursue_of_a_different_proposal_leaves_the_inflight_action_untouched() {
+    let engine = engine_with([email_contract()]);
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let to_bob = identity_ingress(&mut trajectory, "bob");
+    let to_alice = identity_ingress(&mut trajectory, "alice");
+    let first = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::object([("to", to_bob), ("body", body)]),
+        [],
+    );
+    let second = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::object([("to", to_alice), ("body", body)]),
+        [],
+    );
+
+    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, first) else {
+        panic!("expected a permit");
+    };
+    let Pursuit::Terminal(block) = engine.pursue(&mut trajectory, second, 8) else {
+        panic!("a different proposal while one is pending must refuse terminally");
+    };
+    assert!(matches!(block.reason, BlockReason::ActionAlreadyPending { .. }));
+    assert!(trajectory.pending_action().is_some());
+    dispatch(&mut trajectory, token, "sent").unwrap();
+}
+
 /// A pursuit deferring to an external authority keeps the pending action, so
 /// the held approval can re-enter through `apply_approval`.
 #[test]

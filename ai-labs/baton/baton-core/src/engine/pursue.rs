@@ -22,16 +22,18 @@ use crate::contract::Violation;
 use crate::request::ToolRequest;
 use crate::turn::Trajectory;
 
-/// How a pursuit settled. Terminal and stalled pursuits leave no pending
-/// action behind; a `NeedsApproval` pursuit deliberately keeps the slot —
-/// the held [`PendingApproval`] re-enters through
-/// [`PolicyEngine::apply_approval`], which requires that same action.
+/// How a pursuit settled. A stalled pursuit leaves no pending action behind;
+/// a `NeedsApproval` pursuit deliberately keeps the slot — the held
+/// [`PendingApproval`] re-enters through [`PolicyEngine::apply_approval`],
+/// which requires that same action.
 #[derive(Debug, PartialEq, Eq)]
 #[must_use = "a dropped Pursuit loses the execution token or the pending approval"]
 pub enum Pursuit {
     /// The flow is authorized; release the token to dispatch.
     Permitted(ExecutionToken),
-    /// Nothing can clear the flow.
+    /// Nothing can clear the flow. The engine cleared this request's pending
+    /// slot — except `ActionAlreadyPending`, which refuses a *different*
+    /// proposal precisely without touching the action already in flight.
     Terminal(TerminalBlock),
     /// A step routed to an external authority; the pending action is kept so
     /// the ruling can re-enter.

@@ -216,7 +216,9 @@ impl AuthorityMandate {
         self
     }
 
-    /// Competent to acquire a new effect for one action.
+    /// Competent to acquire a new effect for one action. A global capability:
+    /// `covers` does not scope it to particular effects, so an acquirer may
+    /// accept *any* surface growth its routing reaches, not just one kind.
     #[must_use]
     pub fn acquire_effects(mut self) -> Self {
         self.acquire_effects = true;
@@ -508,6 +510,62 @@ mod tests {
             wrong_tool.narrows(&pending("shell.run", Effects::UNKNOWN)),
             Err(TransitionFailure::PreconditionMismatch)
         );
+    }
+
+    /// Each builder combinator grants exactly its named power, verified
+    /// through `covers` on a grant demanding that power alone.
+    #[test]
+    fn combinators_grant_exactly_their_named_power() {
+        let endorse_trust_grant = ProposedGrant::Endorse {
+            source: ValueId::new(0),
+            delta: EndorseDelta {
+                trust: Some(KnownTrust::Trusted),
+                audience: None,
+            },
+        };
+        assert!(!AuthorityMandate::none().covers(&endorse_trust_grant));
+        assert!(
+            AuthorityMandate::none()
+                .endorse_trust(KnownTrust::Trusted)
+                .covers(&endorse_trust_grant)
+        );
+        // A ceiling below the asked raise does not cover it.
+        assert!(
+            !AuthorityMandate::none()
+                .endorse_trust(KnownTrust::Suspicious)
+                .covers(&endorse_trust_grant)
+        );
+
+        let waive = |waiver| ProposedGrant::Waive {
+            waiver,
+            acknowledged: Vec::new(),
+        };
+        let prior = waive(TransientWaiver {
+            prior_effects: Some(std::collections::BTreeSet::from([Effect::Egress])),
+            ..TransientWaiver::empty()
+        });
+        assert!(!AuthorityMandate::none().covers(&prior));
+        assert!(AuthorityMandate::none().waive_prior_effects().covers(&prior));
+
+        let confirm = waive(TransientWaiver {
+            confirms: true,
+            ..TransientWaiver::empty()
+        });
+        assert!(!AuthorityMandate::none().covers(&confirm));
+        assert!(AuthorityMandate::none().confirms().covers(&confirm));
+
+        let release = waive(TransientWaiver {
+            control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
+            ..TransientWaiver::empty()
+        });
+        assert!(!AuthorityMandate::none().covers(&release));
+        assert!(AuthorityMandate::none().release_control().covers(&release));
+
+        let ack = ProposedGrant::Acknowledge {
+            facts: vec![Unprovable::EffectsUnknown],
+        };
+        assert!(!AuthorityMandate::none().covers(&ack));
+        assert!(AuthorityMandate::none().acknowledge_unknown().covers(&ack));
     }
 
     #[test]

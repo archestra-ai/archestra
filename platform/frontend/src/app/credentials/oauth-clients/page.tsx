@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  LLM_PROXY_OAUTH_SCOPE,
+  MCP_GATEWAY_OAUTH_SCOPE,
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -7,13 +11,16 @@ import {
   CreateOAuthClientDialog as LlmCreateOAuthClientDialog,
   EditOAuthClientDialog as LlmEditOAuthClientDialog,
   type LlmOauthClient,
-} from "@/app/llm/credentials/oauth-clients/page";
+} from "@/app/credentials/_parts/llm-oauth-client-dialogs";
 import {
-  CredentialsDialog,
   CreateOAuthClientDialog as McpCreateOAuthClientDialog,
   EditOAuthClientDialog as McpEditOAuthClientDialog,
   type McpOauthClient,
-} from "@/app/mcp/credentials/oauth-clients/page";
+} from "@/app/credentials/_parts/mcp-oauth-client-dialogs";
+import {
+  type CreatedCredentials,
+  OAuthClientCreatedDialog,
+} from "@/app/credentials/_parts/oauth-client-created-dialog";
 import { useSetCredentialsAction } from "@/components/credentials-action-context";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
@@ -50,12 +57,6 @@ import {
   useUpdateMcpOauthClient,
 } from "@/lib/mcp-oauth-clients.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-
-type CreatedCredentials = {
-  clientId: string;
-  clientSecret: string;
-  grantType: McpOauthClient["grantType"];
-};
 
 const GRANT_TYPE_LABEL: Record<McpOauthClient["grantType"], string> = {
   client_credentials: "Application",
@@ -342,6 +343,7 @@ export default function UnifiedOAuthClientsPage() {
               clientId: result.clientId,
               clientSecret: result.clientSecret,
               grantType: result.grantType,
+              oauthScope: MCP_GATEWAY_OAUTH_SCOPE,
             });
             setMcpCreateOpen(false);
           }
@@ -361,6 +363,7 @@ export default function UnifiedOAuthClientsPage() {
               clientId: result.clientId,
               clientSecret: result.clientSecret,
               grantType: result.grantType,
+              oauthScope: LLM_PROXY_OAUTH_SCOPE,
             });
             setLlmCreateOpen(false);
           }
@@ -395,7 +398,7 @@ export default function UnifiedOAuthClientsPage() {
         isSubmitting={llmUpdate.isPending}
       />
 
-      <CredentialsDialog
+      <OAuthClientCreatedDialog
         open={!!createdCredentials}
         onOpenChange={(open) => {
           if (!open) setCreatedCredentials(null);
@@ -404,7 +407,7 @@ export default function UnifiedOAuthClientsPage() {
         credentials={createdCredentials}
       />
 
-      <CredentialsDialog
+      <OAuthClientCreatedDialog
         open={!!rotatedCredentials}
         onOpenChange={(open) => {
           if (!open) setRotatedCredentials(null);
@@ -435,6 +438,10 @@ export default function UnifiedOAuthClientsPage() {
               clientId: result.clientId,
               clientSecret: result.clientSecret,
               grantType: result.grantType,
+              oauthScope:
+                rotating.kind === "mcp"
+                  ? MCP_GATEWAY_OAUTH_SCOPE
+                  : LLM_PROXY_OAUTH_SCOPE,
             });
           }
           setRotating(null);

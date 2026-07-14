@@ -1529,11 +1529,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxies": { llmProxy: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
-  "/llm/credentials/virtual-keys": {
-    llmVirtualKey: ["read"],
-    llmProviderApiKey: ["read"],
-  },
-  "/llm/credentials/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },
@@ -1541,7 +1536,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
-  "/mcp/credentials/oauth-clients": { mcpOauthClient: ["read"] },
 
   // Credentials (unified — OAuth clients across agents/gateways/proxies +
   // LLM virtual keys). The predefined member/admin roles grant

@@ -59,6 +59,13 @@ prompt-injection benchmark (with `baton-check`, a stateless JSON oracle over
 baton-core); see its README.
 
 `baton-proxy/` is a prototype that puts the engine on the inference layer: an
-OpenAI-compatible HTTP proxy that, when a tool call would send data outside its
-audience, rewrites it into a call to a human-approval MCP server and lets the
-retry through once approved. See its README.
+OpenAI-compatible HTTP proxy that replays the conversation into a trajectory
+and blocks tool calls that fail their contract before the agent sees them. It
+loads its contracts from a TOML document via `baton-contracts/`, a small crate
+that translates the declarative policy into baton-core `ToolContract`s. See its
+README.
+
+`demo/kagent/` wires baton-proxy into a stock [kagent](https://kagent.dev)
+agent as a pod sidecar: the agent is prompt-injected by a crashlooping pod's
+logs and baton blocks the injected `kubectl delete`, with no changes to the
+agent. `./demo/kagent/run-demo.sh` runs it end-to-end on kind.

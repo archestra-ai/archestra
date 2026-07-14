@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import {
+  AdminApiKeyDescription,
   CONNECTOR_OPTIONS,
   ConnectorAdvancedConfigFields,
   ConnectorInlineConfigFields,
@@ -218,6 +219,8 @@ export function CreateConnectorDialog({
     mode: "create",
     authMethod,
   });
+  const permissionSyncCredentialNote =
+    getPermissionSyncCredentialNote(connectorType);
 
   useLayoutEffect(() => {
     if (open && step === "select") {
@@ -452,11 +455,12 @@ export function CreateConnectorDialog({
                           )}
                         </FormControl>
                         {apiTokenHelpText}
-                        {visibility === "auto-sync-permissions" && (
-                          <FormDescription>
-                            {getPermissionSyncCredentialNote(connectorType)}
-                          </FormDescription>
-                        )}
+                        {visibility === "auto-sync-permissions" &&
+                          permissionSyncCredentialNote && (
+                            <FormDescription>
+                              {permissionSyncCredentialNote}
+                            </FormDescription>
+                          )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -480,13 +484,7 @@ export function CreateConnectorDialog({
                             />
                           </FormControl>
                           <FormDescription>
-                            Lets permission sync resolve managed accounts&apos;
-                            hidden emails through the Atlassian admin APIs.
-                            Create a key <em>without scopes</em> in Atlassian
-                            administration under Settings → API keys. The API
-                            token above is still required — Atlassian does not
-                            accept admin API keys on the Jira/Confluence APIs
-                            themselves.
+                            <AdminApiKeyDescription type={connectorType} />
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

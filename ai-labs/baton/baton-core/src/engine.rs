@@ -884,27 +884,13 @@ impl PolicyEngine {
                     });
                     Ok(StepOutcome::Failed(failure))
                 };
-                if let Err(failure) = registered.narrows(pending) {
-                    return fail(trajectory, failure);
-                }
-                // The target contract must exist, declare exactly the
-                // effects the transition was validated against, and must not
-                // widen the resolved recipient set under its schema.
-                let Some(target) = self.contracts.get(&registered.to_tool) else {
-                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
-                };
-                if target.effects != registered.effects {
-                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
-                }
-                let Ok(recipients) = target
-                    .arguments
-                    .resolve_recipients(&checked.arguments, trajectory.store())
-                else {
-                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
-                };
-                if !recipients.is_subset(&sim.recipients) {
-                    return fail(trajectory, crate::audit::TransitionFailure::PreconditionMismatch);
-                }
+                // The same structural gate the planner filtered candidates
+                // with, rechecked live against the current registries.
+                let (target, recipients) =
+                    match self.constrain_gate(registered, pending, &checked, trajectory.store(), &sim.recipients) {
+                        Ok(gate) => gate,
+                        Err(failure) => return fail(trajectory, failure),
+                    };
                 // Pre-mutation postcondition validation, mirroring the
                 // planner's simulation exactly.
                 let mut after = sim.clone();
@@ -1293,32 +1279,26 @@ impl PolicyEngine {
         }
 
         // Candidate constrain steps: registered action transitions from this
-        // tool whose structural narrowing holds and whose target tool has a
-        // contract.
-        // A constrain candidate needs a registered target contract whose
-        // declared effects agree with the transition's (the narrowing baton
-        // validates must be what the target actually does) and whose argument
-        // schema does not widen the resolved recipient set.
-        let constrains: Vec<&ActionTransition> = self
+        // tool that pass the same structural gate the applier rechecks
+        // (`constrain_gate`), carried with their target contract and resolved
+        // recipients.
+        let constrains: Vec<(&ActionTransition, &ToolContract, BTreeSet<crate::dimension::UserId>)> = self
             .action_transitions
             .iter()
-            .filter(|t| {
-                t.narrows(pending).is_ok()
-                    && self.contracts.get(&t.to_tool).is_some_and(|target| {
-                        target.effects == t.effects
-                            && target
-                                .arguments
-                                .resolve_recipients(&checked.arguments, trajectory.store())
-                                .is_ok_and(|recipients| recipients.is_subset(&base.recipients))
-                    })
+            .filter_map(|t| {
+                self.constrain_gate(t, pending, checked, trajectory.store(), &base.recipients)
+                    .ok()
+                    .map(|(target, recipients)| (t, target, recipients))
             })
             .collect();
 
         let mut plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
         let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
             std::iter::once(None).chain(transforms.iter().map(Some)).collect();
-        let constrain_options: Vec<Option<&&ActionTransition>> =
-            std::iter::once(None).chain(constrains.iter().map(Some)).collect();
+        #[allow(clippy::type_complexity)]
+        let constrain_options: Vec<
+            Option<&(&ActionTransition, &ToolContract, BTreeSet<crate::dimension::UserId>)>,
+        > = std::iter::once(None).chain(constrains.iter().map(Some)).collect();
 
         // Generate the full candidate cartesian so `select_fair` sees every
         // applicable category before trimming to MAX_PLANS — any pre-trim cap
@@ -1348,24 +1328,13 @@ impl PolicyEngine {
                         },
                     });
                 }
-                if let Some(transition) = constrain {
-                    let target = self
-                        .contracts
-                        .get(&transition.to_tool)
-                        .expect("filtered on contract presence");
-                    let recipients = match target
-                        .arguments
-                        .resolve_recipients(&checked.arguments, trajectory.store())
-                    {
-                        Ok(recipients) => recipients,
-                        Err(_) => continue,
-                    };
+                if let Some((transition, target, recipients)) = constrain {
                     let precondition = Posture {
                         remaining: sim.violations(None),
                     };
                     sim.tool = transition.to_tool.clone();
                     sim.requires = target.requires.clone();
-                    sim.recipients = recipients;
+                    sim.recipients = recipients.clone();
                     // The constrain narrows the proposed effects, so any surface
                     // growth is recomputed against the reduced set — an Accept
                     // then authorizes only the residual growth (a full constrain
@@ -1391,7 +1360,7 @@ impl PolicyEngine {
                 // the authority must vouch. A control-borne residual is left to
                 // the control-release waiver below. All contributing leaves must
                 // be endorsable, else this branch cannot clear the breach.
-                let endorse = endorse_steps(&sim);
+                let endorse = endorse_steps(&sim, &remaining);
                 let endorsable = endorse.iter().all(|(leaf, delta)| {
                     self.can_authorize(&ProposedGrant::Endorse {
                         source: *leaf,
@@ -1476,6 +1445,34 @@ impl PolicyEngine {
             }
         }
         select_fair(plans, MAX_PLANS)
+    }
+
+    /// The structural gate a constrain must pass, identical at planning and
+    /// application: the narrowing holds, the target contract exists and
+    /// declares exactly the transition's effects, and its argument schema
+    /// does not widen the resolved recipient set.
+    fn constrain_gate<'a>(
+        &'a self,
+        transition: &ActionTransition,
+        pending: &crate::request::PendingAction,
+        checked: &ToolRequest,
+        store: &crate::value::ValueStore,
+        base_recipients: &BTreeSet<crate::dimension::UserId>,
+    ) -> Result<(&'a ToolContract, BTreeSet<crate::dimension::UserId>), crate::audit::TransitionFailure> {
+        transition.narrows(pending)?;
+        let Some(target) = self.contracts.get(&transition.to_tool) else {
+            return Err(crate::audit::TransitionFailure::PreconditionMismatch);
+        };
+        if target.effects != transition.effects {
+            return Err(crate::audit::TransitionFailure::PreconditionMismatch);
+        }
+        let Ok(recipients) = target.arguments.resolve_recipients(&checked.arguments, store) else {
+            return Err(crate::audit::TransitionFailure::PreconditionMismatch);
+        };
+        if !recipients.is_subset(base_recipients) {
+            return Err(crate::audit::TransitionFailure::PreconditionMismatch);
+        }
+        Ok((target, recipients))
     }
 
     /// Deterministic waiver candidates for a remaining violation set: the
@@ -1885,16 +1882,15 @@ fn needed_delta(violations: &[Violation]) -> TransientWaiver {
 /// control-release waiver's concern. Sufficient and minimal because the
 /// audience fold is intersection and the trust fold is meet, so once every
 /// contributing leaf passes, the fold passes.
-fn endorse_steps(sim: &SimFlow) -> Vec<(ValueId, EndorseDelta)> {
+fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, EndorseDelta)> {
     use crate::contract::Breach;
-    let violations = sim.violations(None);
     let trust_req: Option<KnownTrust> = violations.iter().find_map(|v| match v {
         Violation::Breach(Breach::TrustBelow { required, .. }) => Some(*required),
         Violation::Unprovable(Unprovable::TrustUnknown) => sim.requires.trust,
         _ => None,
     });
     let mut readers = BTreeSet::new();
-    for v in &violations {
+    for v in violations {
         match v {
             Violation::Breach(Breach::AudienceExceeds { outside }) => readers.extend(outside.iter().cloned()),
             Violation::Unprovable(Unprovable::AudienceUnknown) => readers.extend(sim.recipients.iter().cloned()),
@@ -1915,18 +1911,11 @@ fn endorse_steps(sim: &SimFlow) -> Vec<(ValueId, EndorseDelta)> {
         // fails, and for audience only the readers it does not already admit —
         // never the whole aggregate witness (a leaf that already admits some of
         // the required readers must not ask an authority to re-vouch them, which
-        // could inflate the grant past a competent mandate). Raising is monotone,
-        // so a reader that leaves the leaf's audience unchanged is already admitted.
-        let audience = full.audience.as_ref().map(|readers| {
-            readers
-                .iter()
-                .filter(|reader| {
-                    let one = BTreeSet::from([(*reader).clone()]);
-                    label.audience.admitting(&one) != label.audience
-                })
-                .cloned()
-                .collect::<BTreeSet<_>>()
-        });
+        // could inflate the grant past a competent mandate).
+        let audience = full
+            .audience
+            .as_ref()
+            .map(|readers| label.audience.missing_readers(readers));
         let delta = EndorseDelta {
             trust: full.trust.filter(|req| label.trust.raised_to(*req) != label.trust),
             audience: audience.filter(|deficit| !deficit.is_empty()),

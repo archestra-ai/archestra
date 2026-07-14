@@ -88,6 +88,17 @@ impl Audience {
             MeetSet::Unknown => Self(MeetSet::Only(vouched.clone())),
         }
     }
+
+    /// The members of `required` this audience does not already admit — the
+    /// per-leaf endorse deficit. Empty for `Public`; everything for `Unknown`
+    /// (it bounds nothing, so every reader needs the vouch).
+    pub(crate) fn missing_readers(&self, required: &BTreeSet<UserId>) -> BTreeSet<UserId> {
+        match &self.0 {
+            MeetSet::All => BTreeSet::new(),
+            MeetSet::Only(readers) => required.difference(readers).cloned().collect(),
+            MeetSet::Unknown => required.clone(),
+        }
+    }
 }
 
 impl fmt::Display for Audience {

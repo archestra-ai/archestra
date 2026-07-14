@@ -539,8 +539,15 @@ impl PolicyEngine {
             None => (request.clone(), None),
         };
 
-        let flow = match checked_request.flow_labels(trajectory.store()) {
-            Ok(labels) => labels,
+        // One source of truth for what the flow reports: the same `SimFlow`
+        // the planner predicts with and `apply_step` validates against.
+        // Construction happens only after the pending-slot gate above, so a
+        // pending action feeding it is always this very request's re-entry
+        // (its proposed/accepted effects reflect any constrain narrowing or
+        // prior Accept).
+        let contract = self.contracts.get(&checked_request.tool);
+        let sim = match SimFlow::of(trajectory, &checked_request, contract) {
+            Ok(sim) => sim,
             Err(unknown) => {
                 debug!(value = %unknown.id, "blocked (unknown value referenced)");
                 return self.terminal(
@@ -550,78 +557,12 @@ impl PolicyEngine {
                 );
             }
         };
-
-        let contract = self.contracts.get(&checked_request.tool);
-        let (verdict, intrinsic, proposed_effects) = match contract {
-            Some(c) => {
-                let recipients = match c
-                    .arguments
-                    .resolve_recipients(&checked_request.arguments, trajectory.store())
-                {
-                    Ok(recipients) => recipients,
-                    Err(unknown) => {
-                        return self.terminal(
-                            trajectory,
-                            Vec::new(),
-                            BlockReason::UnknownValueReferenced { value: unknown.id },
-                        );
-                    }
-                };
-                (
-                    c.requires.check_flow(
-                        &flow.flow(),
-                        trajectory.state().past_effects(),
-                        trajectory.pending_confirmation(),
-                        &checked_request.tool,
-                        &recipients,
-                    ),
-                    c.output_label.clone(),
-                    c.effects.clone(),
-                )
-            }
-            None => (
-                Verdict::Escalate(vec![Violation::Unprovable(Unprovable::NoContract {
-                    tool: checked_request.tool.clone(),
-                })]),
-                ValueLabel::unknown(),
-                Effects::UNKNOWN,
-            ),
-        };
-        debug!(has_contract = contract.is_some(), flow = %flow.flow(), "contract lookup");
-
-        // The constrained pending action's proposed effects are the single
-        // source of truth on re-entry: a ConstrainAction narrowed them, and
-        // the target contract's declaration must not overwrite the narrowing
-        // baton validated.
-        let proposed_effects = match existing_action {
-            Some(_) => trajectory
-                .pending_action()
-                .expect("re-entry implies a pending action")
-                .proposed_effects()
-                .clone(),
-            None => proposed_effects,
-        };
-
-        let mut violations = match verdict {
-            Verdict::Allow => Vec::new(),
-            Verdict::Escalate(violations) => violations,
-        };
-
-        // Criterion (1): the initial decision must see surface growth too — the
-        // sink `check_flow` above does not. Consult the same growth check the
-        // planner and apply-time rechecks use, so a clean-but-growing first call
-        // soft-bans instead of permitting.
-        let accepted = match existing_action {
-            Some(_) => trajectory
-                .pending_action()
-                .map(|pending| pending.accepted_effects().clone())
-                .unwrap_or_else(Effects::none),
-            None => Effects::none(),
-        };
-        let effective_past = trajectory.state().past_effects().clone().combine(accepted);
-        if let Some(growth) = proposed_effects.growth_over(&effective_past) {
-            violations.push(Violation::Breach(crate::contract::Breach::SurfaceGrowth { growth }));
-        }
+        debug!(has_contract = contract.is_some(), "contract lookup");
+        let intrinsic = contract
+            .map(|c| c.output_label.clone())
+            .unwrap_or_else(ValueLabel::unknown);
+        let proposed_effects = sim.proposed_effects.clone();
+        let violations = sim.violations(None);
 
         if violations.is_empty() {
             debug!("permitted (no violations)");

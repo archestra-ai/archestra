@@ -205,15 +205,6 @@ impl ToolRequest {
             control,
         }
     }
-
-    /// Fold the explicit and control labels of this request from the store.
-    pub(crate) fn flow_labels(&self, store: &ValueStore) -> Result<FlowLabels, UnknownValue> {
-        let leaves = self.arguments.leaves();
-        Ok(FlowLabels {
-            args: store.fold_labels(leaves.iter())?,
-            control: store.fold_labels(self.control.iter())?,
-        })
-    }
 }
 
 /// The final assistant response, mediated like any other sink: a
@@ -456,11 +447,11 @@ mod tests {
             OpaqueValue::new("raw page"),
         );
 
-        let request = ToolRequest::new(
-            ToolName::new("email.send"),
-            ArgumentTree::Value(clean),
-            BTreeSet::from([tainted]),
-        );
+        let request = ResponseRequest {
+            body: ArgumentTree::Value(clean),
+            control: BTreeSet::from([tainted]),
+            basis: crate::revision::Revision::INITIAL,
+        };
         let labels = request.flow_labels(&store).unwrap();
         assert_eq!(labels.args.trust, Trust::TRUSTED);
         assert_eq!(labels.control.trust, Trust::SUSPICIOUS);

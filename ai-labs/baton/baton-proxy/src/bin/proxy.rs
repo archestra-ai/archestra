@@ -3,8 +3,8 @@
 //! approval MCP server so the model can call `baton__request_approval`.
 
 use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{IsTerminal, Write};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,7 +17,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use baton_proxy::wire::{ChatResponse, RequestView};
 use baton_proxy::{Policy, Session, TurnDecision, rewrite_response};
-use clap::Parser;
+use clap::{Args as ClapArgs, Parser, Subcommand};
+use serde_json::Value;
 use tokio::net::TcpListener;
 
 /// Headers worth forwarding to OpenAI-compatible upstreams (esp. OpenRouter).
@@ -25,7 +26,22 @@ const FORWARD_HEADERS: &[&str] = &["http-referer", "x-title", "openai-organizati
 
 #[derive(Parser)]
 #[command(about = "Inference-layer proxy that gates out-of-audience tool calls on a human")]
-struct Args {
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+    #[command(flatten)]
+    serve: ServeArgs,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Pretty-print a wire log or trajectory log (defaults to the newest
+    /// wire-logs/model-wire-*.jsonl), highlighting the turns baton rewrote.
+    Render { file: Option<PathBuf> },
+}
+
+#[derive(ClapArgs)]
+struct ServeArgs {
     /// Path to the policy file.
     #[arg(long, env = "BATON_PROXY_POLICY", default_value = "policy.toml")]
     policy: PathBuf,
@@ -51,12 +67,16 @@ struct App {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    let args = match cli.command {
+        Some(Command::Render { file }) => return render_log(file.as_deref()),
+        None => cli.serve,
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
-
-    let args = Args::parse();
     let text =
         std::fs::read_to_string(&args.policy).map_err(|e| format!("reading policy {}: {e}", args.policy.display()))?;
     let policy = Policy::from_toml(&text)?;
@@ -267,4 +287,219 @@ fn error(status: StatusCode, message: String) -> Response {
     tracing::warn!(%status, message, "returning error");
     let body = serde_json::json!({ "error": { "message": message, "type": "baton_proxy_error" } });
     (status, [(header::CONTENT_TYPE, "application/json")], body.to_string()).into_response()
+}
+
+// ---- `render` subcommand: pretty-print a log ----------------------------------
+
+/// Pretty-print a wire log (per-turn request / model / proxy, rewritten turns
+/// flagged) or a trajectory decision log. Auto-detects which.
+fn render_log(file: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    let path = match file {
+        Some(p) => p.to_path_buf(),
+        None => newest_wire_log().ok_or("no file given and no wire-logs/model-wire-*.jsonl found")?,
+    };
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+    let rows: Vec<Value> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    let p = Paint {
+        on: std::io::stdout().is_terminal(),
+    };
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("log");
+    let is_wire = rows.first().is_some_and(|r| r.get("returned_response").is_some());
+    let kind = if is_wire { "turns" } else { "decisions" };
+    println!("{}", p.dim(&format!("── {name} · {} {kind} ──", rows.len())));
+    println!();
+    if is_wire {
+        for row in &rows {
+            render_turn(row, &p);
+        }
+    } else {
+        for (i, row) in rows.iter().enumerate() {
+            render_decision(i + 1, row, &p);
+        }
+    }
+    Ok(())
+}
+
+fn newest_wire_log() -> Option<PathBuf> {
+    let mut best: Option<(SystemTime, PathBuf)> = None;
+    for entry in std::fs::read_dir("wire-logs").ok()?.flatten() {
+        let named = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|n| n.starts_with("model-wire-") && n.ends_with(".jsonl"));
+        if !named {
+            continue;
+        }
+        if let Ok(modified) = entry.metadata().and_then(|m| m.modified())
+            && best.as_ref().is_none_or(|(t, _)| modified > *t)
+        {
+            best = Some((modified, entry.path()));
+        }
+    }
+    best.map(|(_, path)| path)
+}
+
+fn render_turn(row: &Value, p: &Paint) {
+    let turn = row.get("turn").and_then(Value::as_u64).unwrap_or(0);
+    println!("{}", p.cyan(&format!("─── turn {turn} {}", "─".repeat(44))));
+    let msgs = row
+        .pointer("/request/messages")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    println!(
+        "  {} {} msgs · last: {}",
+        p.dim("context in"),
+        msgs.len(),
+        last_ctx(&msgs)
+    );
+    let model = response_lines(row.get("model_response"));
+    let proxy = response_lines(row.get("returned_response"));
+    for (is_call, s) in &model {
+        let label = if *is_call { "model wants" } else { "model says " };
+        println!("  {} {s}", p.dim(label));
+    }
+    if model != proxy {
+        for (_, s) in &proxy {
+            println!(
+                "  {} {}  {}",
+                p.dim("proxy sends"),
+                p.yellow(s),
+                p.wrap("⟵ REWRITTEN by baton", "1;33")
+            );
+        }
+    } else {
+        println!("  {} {}", p.dim("proxy      "), p.green("unchanged — passed through"));
+    }
+    println!();
+}
+
+fn render_decision(i: usize, row: &Value, p: &Paint) {
+    let tool = row.get("tool").and_then(Value::as_str).unwrap_or("");
+    let recipients: Vec<&str> = row
+        .get("recipients")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let tool = if recipients.is_empty() {
+        tool.to_string()
+    } else {
+        format!("{tool} → {}", recipients.join(", "))
+    };
+    let outcome = row.get("outcome").and_then(Value::as_str).unwrap_or("");
+    let colored = match outcome {
+        "permitted" => p.green(outcome),
+        "needs_approval" => p.yellow(outcome),
+        "terminal" => p.red(outcome),
+        _ => outcome.to_string(),
+    };
+    println!("  {i}. {tool:44} {colored}");
+    if let Some(reason) = row.get("reason").and_then(Value::as_str) {
+        println!("     {}", p.dim(reason));
+    }
+}
+
+fn last_ctx(msgs: &[Value]) -> String {
+    let Some(m) = msgs.last() else {
+        return String::new();
+    };
+    let role = m.get("role").and_then(Value::as_str).unwrap_or("");
+    if role == "tool" {
+        return format!(
+            "tool-result: {}",
+            truncate(&m.get("content").map(value_text).unwrap_or_default(), 70)
+        );
+    }
+    if let Some(calls) = m.get("tool_calls").and_then(Value::as_array) {
+        let names: Vec<&str> = calls
+            .iter()
+            .filter_map(|c| c.pointer("/function/name").and_then(Value::as_str))
+            .collect();
+        return format!("{role}: →{}", names.join(", "));
+    }
+    format!(
+        "{role}: {}",
+        truncate(&m.get("content").map(value_text).unwrap_or_default(), 70)
+    )
+}
+
+fn response_lines(resp: Option<&Value>) -> Vec<(bool, String)> {
+    let Some(msg) = resp.and_then(|r| r.pointer("/choices/0/message")) else {
+        return Vec::new();
+    };
+    if let Some(calls) = msg.get("tool_calls").and_then(Value::as_array) {
+        return calls.iter().map(|c| (true, call_str(c))).collect();
+    }
+    vec![(
+        false,
+        msg.get("content")
+            .map(value_text)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    )]
+}
+
+fn call_str(tc: &Value) -> String {
+    let name = tc.pointer("/function/name").and_then(Value::as_str).unwrap_or("?");
+    let raw = tc.pointer("/function/arguments").and_then(Value::as_str).unwrap_or("");
+    let args = serde_json::from_str::<Value>(raw)
+        .map(|v| v.to_string())
+        .unwrap_or_else(|_| raw.to_string());
+    format!("{name}  {}", truncate(&args, 100))
+}
+
+fn value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|p| p.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join(""),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    let flat = s.replace('\n', " ");
+    if flat.chars().count() > max {
+        format!("{}…", flat.chars().take(max).collect::<String>())
+    } else {
+        flat
+    }
+}
+
+struct Paint {
+    on: bool,
+}
+
+impl Paint {
+    fn wrap(&self, s: &str, code: &str) -> String {
+        if self.on {
+            format!("\x1b[{code}m{s}\x1b[0m")
+        } else {
+            s.to_string()
+        }
+    }
+    fn dim(&self, s: &str) -> String {
+        self.wrap(s, "2")
+    }
+    fn cyan(&self, s: &str) -> String {
+        self.wrap(s, "36")
+    }
+    fn green(&self, s: &str) -> String {
+        self.wrap(s, "32")
+    }
+    fn yellow(&self, s: &str) -> String {
+        self.wrap(s, "33")
+    }
+    fn red(&self, s: &str) -> String {
+        self.wrap(s, "31")
+    }
 }

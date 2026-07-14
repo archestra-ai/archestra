@@ -111,6 +111,16 @@ It records the proxy's *decisions* (the durable trajectory record itself is the
 harness's message history). For the engine's step-by-step reasoning instead, run
 with `RUST_LOG=baton_core=debug` (to stderr).
 
+`--wire-log-dir <dir>` additionally writes the raw model traffic — one
+timestamped `model-wire-*.jsonl` per run, one line per turn (request, raw model
+response, returned response). Pretty-print either log with the built-in
+renderer, which flags the turns baton rewrote:
+
+```sh
+baton-proxy render                        # newest wire-logs/model-wire-*.jsonl
+baton-proxy render <file>                 # a specific wire or trajectory log
+```
+
 ## Wire your own harness
 
 Two changes, both mechanical:

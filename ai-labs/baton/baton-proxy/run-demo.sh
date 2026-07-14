@@ -75,25 +75,13 @@ echo "running demo — answer y/n when the approval prompt appears."
 echo
 ./target/debug/baton-demo-agent "$@"
 
-# --- per-turn decision log ------------------------------------------------------
+# --- pretty-print the run (proxy renders its own log) ---------------------------
 echo
-echo "── proxy decisions (each tool-call turn) ──────────────────"
-if command -v python3 >/dev/null 2>&1; then
-  python3 - "$TRAJECTORY_LOG" <<'PY'
-import json, sys
-for i, line in enumerate((l for l in open(sys.argv[1]) if l.strip()), 1):
-    d = json.loads(line)
-    tool = d["tool"] + (" → " + ", ".join(d["recipients"]) if d.get("recipients") else "")
-    print(f"  {i}. {tool:44} {d['outcome']}")
-    if d.get("reason"):
-        print(f"     {d['reason']}")
-PY
-else
-  cat "$TRAJECTORY_LOG"
-fi
-echo
+./target/debug/baton-proxy render "$WIRE_DIR"/$(ls -t "$WIRE_DIR" 2>/dev/null | head -1) || true
+
 wire_file="$(ls -t "$WIRE_DIR"/model-wire-*.jsonl 2>/dev/null | head -1)"
-echo "logs:"
+echo
+echo "logs (pretty-print any with: baton-proxy render <file>):"
 echo "  raw model wire (req/resp):  ${wire_file:-$WIRE_DIR/model-wire-<timestamp>.jsonl}"
 echo "  trajectory (per-turn JSON): $TRAJECTORY_LOG"
 echo "  proxy stderr:               $PROXY_LOG"

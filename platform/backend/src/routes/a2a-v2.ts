@@ -286,7 +286,13 @@ async function streamA2AResponse(params: {
     "Content-Encoding": "none",
   });
 
+  // The client can disconnect at any point mid-stream; writing to the destroyed
+  // socket then throws ERR_STREAM_DESTROYED. Skip the write instead — the run is
+  // already being aborted by the "close" handler below. This guards the initial
+  // and terminal frames written directly here; the per-delta writes are further
+  // shielded by the executor's own try/catch around onTextDelta.
   const writeEvent = (result: A2AProtocolStreamResponse) => {
+    if (raw.destroyed) return;
     raw.write(`data: ${JSON.stringify({ jsonrpc: "2.0", id, result })}\n\n`);
   };
 
@@ -298,6 +304,9 @@ async function streamA2AResponse(params: {
   // flowing bytes across those silent gaps. Comment lines (`:`-prefixed) are
   // ignored by SSE clients, so they never interleave with the JSON-RPC events.
   const heartbeat = setInterval(() => {
+    // A write here after the client disconnects would throw inside the timer
+    // callback and escape as an unhandled exception, so guard the socket.
+    if (raw.destroyed) return;
     raw.write(`: keep-alive\n\n`);
   }, SSE_HEARTBEAT_INTERVAL_MS);
   // Don't let the heartbeat timer hold the event loop open on its own.
@@ -383,14 +392,16 @@ async function streamA2AResponse(params: {
       });
     }
   } catch (error) {
-    const { code, message } = jsonRpcErrorParts(error);
-    raw.write(
-      `data: ${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n\n`,
-    );
+    if (!raw.destroyed) {
+      const { code, message } = jsonRpcErrorParts(error);
+      raw.write(
+        `data: ${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n\n`,
+      );
+    }
   } finally {
     finished = true;
     clearInterval(heartbeat);
-    raw.end();
+    if (!raw.destroyed) raw.end();
   }
 }
 

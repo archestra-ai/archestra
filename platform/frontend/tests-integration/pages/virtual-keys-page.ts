@@ -17,7 +17,7 @@ export class VirtualKeysPage {
   }
 
   async goto() {
-    await this.page.goto("/llm/credentials/virtual-keys");
+    await this.page.goto("/credentials/virtual-keys");
   }
 
   rowFor(name: string): Locator {

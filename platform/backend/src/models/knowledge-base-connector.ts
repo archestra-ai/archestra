@@ -20,6 +20,7 @@ class KnowledgeBaseConnectorModel {
     offset?: number;
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    visibilityScope?: ConnectorVisibilityScope;
     /**
      * When provided (including explicit `null` = Default), restrict to connectors
      * in that environment (environment isolation). Omit to return all
@@ -39,6 +40,7 @@ class KnowledgeBaseConnectorModel {
           buildVisibilityFilter({
             canReadAll: params.canReadAll,
             teamIds: params.viewerTeamIds,
+            scope: params.visibilityScope,
           }),
           params.environmentId !== undefined
             ? connectorInEnvironmentPredicate(params.environmentId)
@@ -78,6 +80,7 @@ class KnowledgeBaseConnectorModel {
     excludeConnectorTypes?: ConnectorType[];
     canReadAll?: boolean;
     viewerTeamIds?: string[];
+    visibilityScope?: ConnectorVisibilityScope;
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
       organizationId,
@@ -88,12 +91,17 @@ class KnowledgeBaseConnectorModel {
       excludeConnectorTypes,
       canReadAll,
       viewerTeamIds,
+      visibilityScope,
     } = params;
     const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
     const filters = [
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
-      buildVisibilityFilter({ canReadAll, teamIds: viewerTeamIds }),
+      buildVisibilityFilter({
+        canReadAll,
+        teamIds: viewerTeamIds,
+        scope: visibilityScope,
+      }),
       ...(connectorType
         ? [eq(schema.knowledgeBaseConnectorsTable.connectorType, connectorType)]
         : []),
@@ -140,6 +148,7 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      visibilityScope?: ConnectorVisibilityScope;
       /** When provided (incl. `null` = Default), restrict to this environment. */
       environmentId?: string | null;
     },
@@ -157,11 +166,20 @@ class KnowledgeBaseConnectorModel {
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
         environmentId: schema.knowledgeBaseConnectorsTable.environmentId,
         schedule: schema.knowledgeBaseConnectorsTable.schedule,
+        permissionSyncIntervalSeconds:
+          schema.knowledgeBaseConnectorsTable.permissionSyncIntervalSeconds,
         enabled: schema.knowledgeBaseConnectorsTable.enabled,
         lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
         lastSyncStatus: schema.knowledgeBaseConnectorsTable.lastSyncStatus,
         lastSyncError: schema.knowledgeBaseConnectorsTable.lastSyncError,
+        lastPermissionSyncAt:
+          schema.knowledgeBaseConnectorsTable.lastPermissionSyncAt,
+        lastPermissionSyncStatus:
+          schema.knowledgeBaseConnectorsTable.lastPermissionSyncStatus,
+        aclConfigEpoch: schema.knowledgeBaseConnectorsTable.aclConfigEpoch,
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
+        permissionSyncState:
+          schema.knowledgeBaseConnectorsTable.permissionSyncState,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
       })
@@ -182,6 +200,7 @@ class KnowledgeBaseConnectorModel {
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             teamIds: params?.viewerTeamIds,
+            scope: params?.visibilityScope,
           }),
           params?.environmentId !== undefined
             ? connectorInEnvironmentPredicate(params.environmentId)
@@ -196,6 +215,7 @@ class KnowledgeBaseConnectorModel {
     params?: {
       canReadAll?: boolean;
       viewerTeamIds?: string[];
+      visibilityScope?: ConnectorVisibilityScope;
     },
   ): Promise<(KnowledgeBaseConnector & { knowledgeBaseId: string })[]> {
     if (knowledgeBaseIds.length === 0) return [];
@@ -212,11 +232,20 @@ class KnowledgeBaseConnectorModel {
         secretId: schema.knowledgeBaseConnectorsTable.secretId,
         environmentId: schema.knowledgeBaseConnectorsTable.environmentId,
         schedule: schema.knowledgeBaseConnectorsTable.schedule,
+        permissionSyncIntervalSeconds:
+          schema.knowledgeBaseConnectorsTable.permissionSyncIntervalSeconds,
         enabled: schema.knowledgeBaseConnectorsTable.enabled,
         lastSyncAt: schema.knowledgeBaseConnectorsTable.lastSyncAt,
         lastSyncStatus: schema.knowledgeBaseConnectorsTable.lastSyncStatus,
         lastSyncError: schema.knowledgeBaseConnectorsTable.lastSyncError,
+        lastPermissionSyncAt:
+          schema.knowledgeBaseConnectorsTable.lastPermissionSyncAt,
+        lastPermissionSyncStatus:
+          schema.knowledgeBaseConnectorsTable.lastPermissionSyncStatus,
+        aclConfigEpoch: schema.knowledgeBaseConnectorsTable.aclConfigEpoch,
         checkpoint: schema.knowledgeBaseConnectorsTable.checkpoint,
+        permissionSyncState:
+          schema.knowledgeBaseConnectorsTable.permissionSyncState,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
         knowledgeBaseId:
@@ -239,6 +268,7 @@ class KnowledgeBaseConnectorModel {
           buildVisibilityFilter({
             canReadAll: params?.canReadAll,
             teamIds: params?.viewerTeamIds,
+            scope: params?.visibilityScope,
           }),
         ),
       );
@@ -292,6 +322,22 @@ class KnowledgeBaseConnectorModel {
    * the EXISTS guard fails and the stale checkpoint write is dropped — a newer
    * run's checkpoint can't be clobbered.
    */
+  /**
+   * Atomically bump the connector's ACL fencing epoch. Called whenever
+   * visibility or teamIds change so every ACL writer that read the old epoch
+   * (an in-flight content-sync or permission-sync write) no-ops — the newest
+   * config change always wins regardless of job ordering. Returns the new epoch.
+   */
+  static async bumpAclConfigEpoch(connectorId: string): Promise<number> {
+    const { rows } = await db.execute<{ acl_config_epoch: number }>(sql`
+      UPDATE knowledge_base_connectors
+      SET acl_config_epoch = acl_config_epoch + 1
+      WHERE id = ${connectorId}
+      RETURNING acl_config_epoch
+    `);
+    return Number(rows[0]?.acl_config_epoch ?? 0);
+  }
+
   static async setCheckpointIfRunActive(params: {
     connectorId: string;
     runId: string;
@@ -341,6 +387,14 @@ class KnowledgeBaseConnectorModel {
    * statement, replacing the old task-scanning cleanup loop. A connector whose
    * latest run is still `running` is skipped (it is genuinely in progress), so
    * this never races a live run. Returns the ids it corrected, for logging.
+   *
+   * Scoped to `content` runs only: `last_sync_status`/`last_sync_error` mirror
+   * the CONTENT run family, and (by Guarantee 2) a permission run can be
+   * `running` concurrently with a content run. Without this filter the latest
+   * run per connector could be a permission run, and mirroring its status into
+   * the content fields would clobber a live content run's status — the exact
+   * cross-lane leak the runtime-isolation split forbids. Permission-run status
+   * lives in `last_permission_sync_*` and is owned by the permission reaper.
    */
   static async reconcileOrphanedConnectorStatuses(): Promise<string[]> {
     const { rows } = await db.execute<{ id: string }>(sql`
@@ -351,6 +405,7 @@ class KnowledgeBaseConnectorModel {
         SELECT DISTINCT ON (connector_id)
           connector_id, status, error
         FROM connector_runs
+        WHERE run_type = 'content'
         ORDER BY connector_id, started_at DESC
       ) latest
       WHERE c.id = latest.connector_id
@@ -367,6 +422,36 @@ class KnowledgeBaseConnectorModel {
       .from(schema.knowledgeBaseConnectorsTable)
       .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Enabled `auto-sync-permissions` connectors of the given types — the
+   * permission-sync scheduler's due-loop input. Both predicates are pushed into
+   * SQL rather than filtered in the handler: the permission family covers a
+   * small slice of a deployment's connectors, so loading every enabled one to
+   * throw most of them away scales the scheduler's memory with the whole fleet
+   * instead of with the connectors it can actually schedule.
+   */
+  static async findEnabledAutoSyncPermissions(
+    connectorTypes: ConnectorType[],
+  ): Promise<KnowledgeBaseConnector[]> {
+    if (connectorTypes.length === 0) return [];
+
+    const t = schema.knowledgeBaseConnectorsTable;
+    return await db
+      .select()
+      .from(t)
+      .where(
+        and(
+          eq(t.enabled, true),
+          eq(t.visibility, "auto-sync-permissions"),
+          inArray(t.connectorType, connectorTypes),
+        ),
+      );
+  }
+  // SPDX-SnippetEnd
 
   static async delete(id: string): Promise<boolean> {
     const rows = await db
@@ -569,31 +654,56 @@ class KnowledgeBaseConnectorModel {
 
 export default KnowledgeBaseConnectorModel;
 
+/**
+ * Which access notion a visibility-filtered read serves.
+ * - `management` (default): the connector itself (lists, detail, config) —
+ *   auto-sync-permissions connectors are visible to knowledgeSource admins only.
+ * - `query`: which connectors a user's knowledge queries may span —
+ *   auto-sync-permissions connectors stay in scope for everyone; their
+ *   per-chunk ACLs enforce what the user actually retrieves.
+ */
+type ConnectorVisibilityScope = "management" | "query";
+
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 function buildVisibilityFilter(params: {
   canReadAll?: boolean;
   teamIds?: string[];
+  scope?: ConnectorVisibilityScope;
 }) {
   if (params.canReadAll) {
     return undefined;
   }
 
+  const conditions = [];
+  // Management surfaces (the default) hide auto-sync-permissions connectors
+  // from non-admins entirely; "query" scope keeps them in reach because their
+  // per-chunk ACLs — not connector visibility — decide what a user retrieves.
+  if (params.scope !== "query") {
+    conditions.push(
+      sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'auto-sync-permissions'`,
+    );
+  }
+
   // No access context means "org-wide only" by default; callers must opt into
   // team-scoped connectors by passing the viewer's team IDs or canReadAll.
   if (!params.teamIds || params.teamIds.length === 0) {
-    return sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'`;
+    conditions.push(
+      sql`${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'`,
+    );
+  } else {
+    const teamIds = sql.join(
+      params.teamIds.map((teamId) => sql`${teamId}`),
+      sql`, `,
+    );
+
+    conditions.push(sql`(
+      ${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'
+      OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
+    )`);
   }
 
-  const teamIds = sql.join(
-    params.teamIds.map((teamId) => sql`${teamId}`),
-    sql`, `,
-  );
-
-  return sql`(
-    ${schema.knowledgeBaseConnectorsTable.visibility} != 'team-scoped'
-    OR ${schema.knowledgeBaseConnectorsTable.teamIds} ?| ARRAY[${teamIds}]
-  )`;
+  return and(...conditions);
 }
 // SPDX-SnippetEnd

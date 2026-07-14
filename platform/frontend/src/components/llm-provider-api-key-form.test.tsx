@@ -13,6 +13,7 @@ import { useTeams } from "@/lib/teams/team.query";
 import {
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
+  type LlmProviderApiKeyResponse,
 } from "./llm-provider-api-key-form";
 
 const DEFAULTS: LlmProviderApiKeyFormValues = {
@@ -38,20 +39,29 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
 // (`form.setValue("provider", ...)`) without wrestling the Radix combobox.
 let form: UseFormReturn<LlmProviderApiKeyFormValues>;
 
-function Harness() {
+function Harness({
+  existingKeys,
+}: {
+  existingKeys?: LlmProviderApiKeyResponse[];
+}) {
   form = useForm<LlmProviderApiKeyFormValues>({ defaultValues: DEFAULTS });
   return (
-    <LlmProviderApiKeyForm form={form} mode="full" showConsoleLink={false} />
+    <LlmProviderApiKeyForm
+      form={form}
+      mode="full"
+      showConsoleLink={false}
+      existingKeys={existingKeys}
+    />
   );
 }
 
-function renderForm() {
+function renderForm(options?: { existingKeys?: LlmProviderApiKeyResponse[] }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <Harness />
+      <Harness existingKeys={options?.existingKeys} />
     </QueryClientProvider>,
   );
 }
@@ -126,6 +136,37 @@ describe("LlmProviderApiKeyForm", () => {
 
     await waitFor(() => {
       expect(form.getValues("bedrockAuthMethod")).toBe("api-key");
+    });
+  });
+
+  it("suffixes the auto-filled name when the provider default is taken", async () => {
+    // Two reconnects of a sign-in provider (e.g. Microsoft 365 Copilot) must
+    // not mint a third identically-named key — the auto-fill counts up past
+    // every taken default.
+    renderForm({
+      existingKeys: [
+        {
+          provider: "microsoft-365-copilot",
+          name: "Microsoft 365 Copilot",
+        } as LlmProviderApiKeyResponse,
+        {
+          provider: "microsoft-365-copilot",
+          name: "Microsoft 365 Copilot (2)",
+        } as LlmProviderApiKeyResponse,
+      ],
+    });
+
+    // The default provider (openai) has no name collision.
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("OpenAI");
+    });
+
+    act(() => {
+      form.setValue("provider", "microsoft-365-copilot");
+    });
+
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("Microsoft 365 Copilot (3)");
     });
   });
 

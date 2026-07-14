@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-10
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -128,25 +128,25 @@ For GKE deployments, we recommend using [Workload Identity](https://cloud.google
 
 1. **Create a GCP service account** with Vertex AI permissions:
 
-```bash
-gcloud iam service-accounts create archestra-vertex-ai \
-  --display-name="Archestra Vertex AI"
+    ```bash
+    gcloud iam service-accounts create archestra-vertex-ai \
+      --display-name="Archestra Vertex AI"
 
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/aiplatform.user"
-```
+    gcloud projects add-iam-policy-binding PROJECT_ID \
+      --member="serviceAccount:archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com" \
+      --role="roles/aiplatform.user"
+    ```
 
 2. **Bind the GCP service account to the Kubernetes service account**:
 
-```bash
-gcloud iam service-accounts add-iam-policy-binding \
-  archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
-```
+    ```bash
+    gcloud iam service-accounts add-iam-policy-binding \
+      archestra-vertex-ai@PROJECT_ID.iam.gserviceaccount.com \
+      --role="roles/iam.workloadIdentityUser" \
+      --member="serviceAccount:PROJECT_ID.svc.id.goog[NAMESPACE/KSA_NAME]"
+    ```
 
-Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
+    Replace `NAMESPACE` with your Helm release namespace and `KSA_NAME` with the Kubernetes service account name (defaults to `archestra-platform`).
 
 3. **Configure Helm values** to annotate the service account:
 
@@ -561,6 +561,61 @@ Obtain the token in either way:
 - **Chat-completions models only**: the `/models` listing is filtered to models reachable through `/chat/completions`. Copilot also serves Responses-API-only models (e.g. `gpt-5.3-codex`) and an Anthropic `/v1/messages` shim, which Archestra does not route to.
 - **GitHub Enterprise**: point the base, token-exchange, and device-auth URLs at your GHE host. Organizations with their own GitHub App can override the client id.
 
+## Microsoft 365 Copilot
+
+[Microsoft 365 Copilot](https://www.microsoft.com/en-us/microsoft-365/copilot) answers prompts grounded in the user's Microsoft 365 tenant data (mail, SharePoint, Teams) and the web. Archestra connects to it through the [Microsoft 365 Copilot Chat API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/overview) (Microsoft Graph, beta). Like GitHub Copilot, there are no static API keys: access is tied to an individual Microsoft work account with a Microsoft 365 Copilot license.
+
+### Supported Microsoft 365 Copilot APIs
+
+- **Chat API** (`/copilot/conversations/{id}/chat`) - synchronous answers
+- **Chat streaming API** (`/copilot/conversations/{id}/chatOverStream`) - streamed answers
+
+Archestra exposes both through its standard OpenAI-compatible `/chat/completions` proxy surface. Streaming requests (the built-in chat always streams) use `chatOverStream`; non-streaming requests use `chat`. The single model is `microsoft-365-copilot` — the Chat API has no model selection.
+
+### Microsoft 365 Copilot Connection Details
+
+- **Base URL**: `http://localhost:9000/v1/microsoft-365-copilot/{profile-id}`
+- **Authentication**: Pass the stored **Entra refresh token** (the credential below) in the `Authorization` header as `Bearer <token>`
+
+### Prerequisites: Entra App Registration
+
+The sign-in flow needs an [Entra ID app registration](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) owned by your organization:
+
+1. Register an application in the Microsoft Entra admin center. The device flow runs as a public client — skip the client secret and redirect URI.
+2. Enable **Allow public client flows** (Authentication → Advanced settings). Without it, sign-in fails after the code is entered.
+3. Add these **delegated** Microsoft Graph permissions and grant admin consent: `Sites.Read.All`, `Mail.Read`, `People.Read.All`, `OnlineMeetingTranscript.Read.All`, `Chat.Read`, `ChannelMessage.Read.All`, `ExternalItem.Read.All`. The Chat API requires all seven — one per data source Copilot searches.
+4. Set `ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID` to the Application (client) ID.
+5. For a **single-tenant** registration, also set `ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID` to your tenant ID. The default (`organizations`) only works for multi-tenant registrations.
+
+With a multi-tenant registration, users from another organization can sign in once their own tenant admin consents to the app.
+
+### Authentication
+
+A Microsoft 365 Copilot provider key stores a **long-lived Entra refresh token** for an account with a Microsoft 365 Copilot license. Archestra redeems it for a short-lived Graph access token on every request (cached and refreshed automatically). Entra rotates refresh tokens; Archestra persists the rotated token back to the key.
+
+To connect, use the **Sign in with Microsoft** button when adding a Microsoft 365 Copilot key. It runs Entra's OAuth device flow — you approve a one-time code on Microsoft's device sign-in page, and Archestra stores the resulting refresh token.
+
+### Environment Variables
+
+| Variable                                    | Required | Description                                                                              |
+| ------------------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID`     | Yes      | Application (client) ID of your Entra app registration (sign-in is unavailable without it) |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID`     | No       | Entra tenant of the OAuth endpoints (default: `organizations`; pin your tenant id to restrict sign-in) |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_BASE_URL`      | No       | Microsoft Graph base URL (default: `https://graph.microsoft.com/beta`)                   |
+| `ARCHESTRA_MICROSOFT_365_COPILOT_AUTH_BASE_URL` | No       | Entra host for device sign-in and token redemption (default: `https://login.microsoftonline.com`) |
+
+### Important Notes
+
+- **Preview API**: the Chat API is a Microsoft Graph **beta** endpoint. Microsoft does not support it for production use and may change it without notice.
+- **License required**: each user needs a Microsoft 365 Copilot add-on license, assigned in their own tenant. The seat license covers all Chat API usage. A missing license surfaces on the first chat request.
+- **Work accounts only**: the Chat API supports delegated work or school accounts.
+- **Per-user only**: keys are **personal scope only**, same as GitHub Copilot. Each user connects their own Microsoft account; an inline "Connect Microsoft 365 Copilot" card appears in chat when a key is missing. Every request runs as the signed-in user — Copilot only sees data that user can already access.
+- **Text-only, no tools**: the Chat API returns text answers only. It cannot run tools or Copilot actions such as creating files, sending emails, or scheduling meetings. In Archestra chat, an agent with tools runs without them on this model — a notice above the composer says so. Proxy requests that declare tools are rejected with a clear error.
+- **Conversational answers only**: prompts that trigger long-running work can hit Microsoft's gateway timeout. Keep requests to questions and answers.
+- **Estimated usage**: the Chat API reports no token counts, so usage and cost figures are tokenizer estimates.
+- **Stateless mapping**: each request creates a fresh Copilot conversation; prior turns ride along as context. If a streaming response has no recognizable text, Archestra retries through the synchronous endpoint in a second conversation, so one request can appear as two conversations in Microsoft 365 activity.
+- **Conversation cleanup**: the [Copilot conversation API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/resources/copilotconversation) currently documents no delete operation. If a chat request fails after its conversation is created, the abandoned conversation may remain visible in Microsoft 365 activity.
+
 ## Amazon Bedrock
 
 ### Supported Bedrock APIs
@@ -590,6 +645,7 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
 1. Create an IAM role with `AmazonBedrockFullAccess` or a scoped policy (see below)
 2. Create an [OIDC provider](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html) for your EKS cluster
 3. Configure the IAM role's trust policy to allow the Archestra service account:
+
    ```json
    {
      "Effect": "Allow",
@@ -604,11 +660,14 @@ To use IAM authentication on EKS with [IRSA](https://docs.aws.amazon.com/eks/lat
      }
    }
    ```
+
 4. Annotate the Archestra service account:
+
    ```bash
    kubectl annotate sa archestra-platform -n archestra \
      eks.amazonaws.com/role-arn=arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
    ```
+
 5. Set the environment variables below and restart the deployment
 
 #### Minimum IAM Policy

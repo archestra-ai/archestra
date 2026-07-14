@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronRight,
   Globe,
+  InfoIcon,
   Loader2,
   Plus,
   RotateCcw,
@@ -276,6 +277,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
           size="sm"
           className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
           onClick={() => onToggle(agent.id)}
+          aria-label="Remove agent"
         >
           <X className="h-3 w-3" />
         </Button>
@@ -303,6 +305,7 @@ function SubagentPill({ agent, isSelected, onToggle }: SubagentPillProps) {
             size="sm"
             className="h-6 w-6 p-0 shrink-0"
             onClick={() => setOpen(false)}
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -580,7 +583,10 @@ export function AgentDialog({
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
-    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
+    open &&
+    (agentType === "mcp_gateway" ||
+      agentType === "llm_proxy" ||
+      agentType === "agent");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -761,7 +767,9 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
-    agentType === "mcp_gateway" || agentType === "llm_proxy";
+    agentType === "mcp_gateway" ||
+    agentType === "llm_proxy" ||
+    agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -907,16 +915,27 @@ export function AgentDialog({
     [availableApiKeys, llmApiKeyId],
   );
 
-  // Derive provider from selected model (like prompt input's initialProvider/currentProvider)
-  const currentLlmProvider = useMemo((): SupportedProvider | null => {
+  // The selected model's row: source of the derived provider (like prompt
+  // input's initialProvider/currentProvider) and of the capability gating
+  // for the no-tools notice below.
+  const selectedLlmModelRow = useMemo(() => {
     if (!llmModel) return null;
-    for (const [provider, models] of Object.entries(modelsByProvider)) {
-      if (models?.some((m) => m.dbId === llmModel)) {
-        return provider as SupportedProvider;
-      }
+    for (const models of Object.values(modelsByProvider)) {
+      const match = models?.find((m) => m.dbId === llmModel);
+      if (match) return match;
     }
     return null;
   }, [llmModel, modelsByProvider]);
+
+  const currentLlmProvider: SupportedProvider | null =
+    selectedLlmModelRow?.provider ?? null;
+
+  // Pairing a no-tools model (e.g. Microsoft 365 Copilot) with a tooled
+  // agent is allowed — chat omits the tools for that model — but the user
+  // must learn that before the first message, not from a silent no-op.
+  const showNoToolsModelNotice =
+    selectedLlmModelRow?.capabilities?.supportsToolCalling === false &&
+    (accessAllTools || selectedToolsCount > 0);
 
   // Track the provider that was active when auto-selection last ran,
   // so we only auto-select when the provider actually changes (not when the user clears the key).
@@ -1596,6 +1615,7 @@ export function AgentDialog({
                                 variant="ghost"
                                 size="icon"
                                 className="absolute top-2 right-2 h-6 w-6"
+                                aria-label="Remove suggested prompt"
                                 onClick={() => {
                                   setSuggestedPrompts((prev) => {
                                     const next = prev.filter(
@@ -1627,6 +1647,7 @@ export function AgentDialog({
                                   }
                                   placeholder="e.g. Summarize recent changes"
                                   maxLength={MAX_SUGGESTED_PROMPT_TITLE_LENGTH}
+                                  aria-label="Button Label"
                                 />
                               </div>
                               <div className="space-y-1">
@@ -1645,6 +1666,7 @@ export function AgentDialog({
                                   placeholder="The full prompt sent when clicked"
                                   className="min-h-[60px]"
                                   maxLength={MAX_SUGGESTED_PROMPT_TEXT_LENGTH}
+                                  aria-label="Suggested prompt"
                                 />
                               </div>
                             </div>
@@ -2192,6 +2214,20 @@ export function AgentDialog({
                                 />
                               )}
                             </div>
+                            {showNoToolsModelNotice && (
+                              <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                                <InfoIcon
+                                  className="mt-0.5 size-3 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                <span>
+                                  This model doesn&apos;t support tools, so this{" "}
+                                  {agentTypeDisplayName[agentType] || "agent"}
+                                  &apos;s tools won&apos;t be used in its chats.
+                                  Pick a different model to use tools.
+                                </span>
+                              </p>
+                            )}
                           </>
                         )}
                       </div>
@@ -2273,6 +2309,7 @@ export function AgentDialog({
                                       variant="ghost"
                                       size="icon"
                                       className="h-4 w-4 p-0 hover:bg-transparent"
+                                      aria-label="Remove header"
                                       onClick={() =>
                                         setPassthroughHeaders((prev) =>
                                           prev.filter((h) => h !== header),
@@ -2288,6 +2325,7 @@ export function AgentDialog({
                                 MAX_PASSTHROUGH_HEADERS && (
                                 <Input
                                   placeholder="Type header name and press Enter"
+                                  aria-label="Add passthrough header"
                                   onKeyDown={(e) => {
                                     if (e.key !== "Enter") return;
                                     e.preventDefault();
@@ -2331,14 +2369,17 @@ export function AgentDialog({
                             identityProviders.length > 0 && (
                               <div className="space-y-2">
                                 <Label>
-                                  {agentType === "llm_proxy"
+                                  {agentType === "llm_proxy" ||
+                                  agentType === "agent"
                                     ? "Identity Provider (JWKS)"
                                     : "Identity Provider (Enterprise/JWKS)"}
                                 </Label>
                                 <p className="text-sm text-muted-foreground">
                                   {agentType === "llm_proxy"
                                     ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
-                                    : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
+                                    : agentType === "agent"
+                                      ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                                      : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                                   {mcpAuthDocsUrl ? (
                                     <>
                                       {" "}

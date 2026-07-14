@@ -128,6 +128,7 @@ export function SearchableMultiSelect({
                     {item.selectedContent ?? item.label}
                     <button
                       type="button"
+                      aria-label="Remove selected item"
                       className="ml-1 ring-offset-background rounded-full outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -176,6 +177,7 @@ export function SearchableMultiSelect({
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
           )}
           <input
+            aria-label={searchPlaceholder || "Search options"}
             placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

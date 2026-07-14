@@ -44,6 +44,15 @@ export const REQUEST_TIMEOUT_MS = 30000;
 export abstract class BaseConnector implements Connector {
   abstract type: ConnectorType;
 
+  /**
+   * Whether this connector implements the permission-sync hooks
+   * (`syncPermissionSnapshot` / `syncGroups`). Default off so existing
+   * connectors are untouched; Jira/Confluence/GitHub (and Stage-2 connectors)
+   * override this `true` and implement the two generators. Nothing else in the
+   * permission-sync core is per-connector.
+   */
+  supportsPermissionSync = false;
+
   protected log: pino.Logger = defaultLogger;
   private rateLimitDelayMs: number;
   private itemFailures: ConnectorItemFailure[] = [];
@@ -300,6 +309,38 @@ function calculateBackoffDelay(attempt: number): number {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Rewind an ISO timestamp a few minutes before using it as an upstream query
+ * cursor, so clock skew between this server and the upstream service cannot
+ * hide events stamped just before the cursor was taken. Re-reading the overlap
+ * is idempotent (permission probes only set dirty flags off what they read).
+ */
+export function isoCursorWithSkewBuffer(isoDate: string): string {
+  const d = new Date(isoDate);
+  d.setUTCMinutes(d.getUTCMinutes() - CURSOR_SKEW_BUFFER_MINUTES);
+  return d.toISOString();
+}
+
+const CURSOR_SKEW_BUFFER_MINUTES = 5;
+
+/**
+ * The audit cursor a probe stores for its successor. Atlassian audit
+ * pipelines ingest asynchronously — a record can become queryable minutes
+ * after its `created` stamp. A cursor taken at pass wall-clock slides past
+ * records still in flight (each pass, including manual re-triggers, advances
+ * it), permanently losing e.g. an access revocation until the daily full
+ * reconcile. Trailing the cursor keeps any record whose ingestion lag is
+ * under the allowance inside a later query window no matter how frequently
+ * passes run; re-read records only re-flag idempotent dirty bits.
+ */
+export function trailingAuditCursor(nowIso: string): string {
+  const d = new Date(nowIso);
+  d.setUTCMinutes(d.getUTCMinutes() - AUDIT_INGESTION_LAG_ALLOWANCE_MINUTES);
+  return d.toISOString();
+}
+
+const AUDIT_INGESTION_LAG_ALLOWANCE_MINUTES = 15;
 
 /**
  * Extract a meaningful error message from unknown errors.

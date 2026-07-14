@@ -270,6 +270,30 @@ describe("buildUserContent", () => {
     expect(note).not.toBe("");
   });
 
+  test("defaults a missing content type instead of crashing the classifier", async () => {
+    // An attachment can reach buildUserContent without a content type if an
+    // upstream ingestion path's `as string` cast is ever exercised with an
+    // undefined value. It must be normalized to a safe default rather than throw
+    // on the `image/` prefix check (or produce a `data:undefined;...` URL).
+    const attachments: A2AAttachment[] = [
+      {
+        contentType: undefined as unknown as string,
+        contentBase64: "QUJD",
+        name: "mystery.bin",
+      },
+    ];
+
+    const { content } = await buildUserContent(
+      "Inspect",
+      attachments,
+      // Make the defaulted octet-stream readable so the normalized attachment is
+      // kept and its resolved mediaType is observable.
+      geminiOpts(new Set(["application/octet-stream"])),
+    );
+
+    expect(fileMediaTypes(content)).toContain("application/octet-stream");
+  });
+
   test("filters out tiny image attachments below MIN_IMAGE_ATTACHMENT_SIZE", async () => {
     // ~988 decoded bytes (below the 2KB threshold), like broken inline refs.
     const tinyBase64 = "A".repeat(1317);

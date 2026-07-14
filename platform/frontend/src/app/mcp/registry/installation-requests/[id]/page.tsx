@@ -128,7 +128,11 @@ export default function InstallationRequestDetailPage({
     <div>
       <div className="flex items-center gap-4 mb-2">
         <Link href="/mcp/registry/installation-requests">
-          <Button variant="ghost" size="icon">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Back to installation requests"
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </Link>
@@ -389,6 +393,7 @@ export default function InstallationRequestDetailPage({
                     <div className="space-y-3">
                       <Textarea
                         placeholder="Optional message to the requester..."
+                        aria-label="Approval message"
                         value={adminResponse}
                         onChange={(e) => setAdminResponse(e.target.value)}
                         rows={3}
@@ -424,6 +429,7 @@ export default function InstallationRequestDetailPage({
                     <div className="space-y-3">
                       <Textarea
                         placeholder="Reason for declining (optional)..."
+                        aria-label="Decline reason"
                         value={adminResponse}
                         onChange={(e) => setAdminResponse(e.target.value)}
                         rows={3}
@@ -467,6 +473,7 @@ export default function InstallationRequestDetailPage({
                 <div className="space-y-2">
                   <Textarea
                     placeholder="Add a note or comment..."
+                    aria-label="Note"
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
                     rows={3}

@@ -9,6 +9,7 @@ import { fetchCohereModels } from "./cohere";
 import { fetchDeepSeekModels } from "./deepseek";
 import { fetchGeminiModels } from "./gemini";
 import { fetchGithubCopilotModels } from "./github-copilot";
+import { fetchMicrosoft365CopilotModels } from "./microsoft-365-copilot";
 import { fetchOllamaModels } from "./ollama";
 import { fetchOpenAiModels } from "./openai";
 import { fetchOpenrouterModels } from "./openrouter";
@@ -111,6 +112,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   gemini: fetchGeminiModels,
   "github-copilot": fetchGithubCopilotModels,
   groq: fetchGroqModels,
+  "microsoft-365-copilot": fetchMicrosoft365CopilotModels,
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,
   ollama: fetchOllamaModels,

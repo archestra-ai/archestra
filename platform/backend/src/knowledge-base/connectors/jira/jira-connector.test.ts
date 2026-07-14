@@ -1,7 +1,7 @@
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import type { ConnectorSyncBatch } from "@/types";
+import type { ConnectorSyncBatch, PermissionSnapshotYield } from "@/types";
 import {
   extractTextFromAdf,
   formatJiraLocalDate,
@@ -228,6 +228,33 @@ describe("JiraConnector", () => {
 
       const expected = `Basic ${Buffer.from("user@example.com:test-api-token").toString("base64")}`;
       expect(myselfHeaders[0].get("authorization")).toBe(expected);
+    });
+  });
+
+  describe("estimateTotalItems", () => {
+    test("uses the approximate-count endpoint on Cloud", async () => {
+      // Cloud removed the classic totals-bearing JQL search; estimating via
+      // it fails every run, which silently strips totals from all progress
+      // display. The approximate-count endpoint is the replacement.
+      let requestedJql: string | undefined;
+      server.use(
+        http.post(
+          `${CLOUD_HOST}/rest/api/3/search/approximate-count`,
+          async ({ request }) => {
+            requestedJql = ((await request.json()) as { jql?: string }).jql;
+            return HttpResponse.json({ count: 22917 });
+          },
+        ),
+      );
+
+      const total = await connector.estimateTotalItems({
+        config: validConfig,
+        credentials,
+        checkpoint: null,
+      });
+
+      expect(total).toBe(22917);
+      expect(requestedJql).toContain("project =");
     });
   });
 
@@ -888,6 +915,23 @@ describe("JiraConnector", () => {
     });
   });
 
+  describe("scopeKeyForDocument", () => {
+    // Pins the metadata-field contract with content-sync: documents are
+    // written with `project` = the Jira project key, and the delta pass's
+    // local-adoption scoping depends on reading exactly that field.
+    test("maps content-sync document metadata to the project scope key", () => {
+      expect(
+        connector.scopeKeyForDocument({ project: "ENG", issueKey: "ENG-1" }),
+      ).toBe("project:ENG");
+    });
+
+    test("returns null when the metadata cannot place the document", () => {
+      expect(connector.scopeKeyForDocument({})).toBeNull();
+      expect(connector.scopeKeyForDocument({ project: "" })).toBeNull();
+      expect(connector.scopeKeyForDocument({ project: 42 })).toBeNull();
+    });
+  });
+
   describe("formatJiraLocalDate", () => {
     test("extracts local date/time from timestamp with negative offset", () => {
       expect(formatJiraLocalDate("2026-03-09T11:05:52.774-0400")).toBe(
@@ -998,6 +1042,913 @@ describe("JiraConnector", () => {
     test("handles empty ADF content", () => {
       const adf = { type: "doc", content: [] };
       expect(extractTextFromAdf(adf)).toBe("");
+    });
+  });
+
+  describe("permission sync", () => {
+    async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+      const out: T[] = [];
+      for await (const item of gen) out.push(item);
+      return out;
+    }
+
+    /** Collect a permission snapshot into containers + document assignments. */
+    async function collectSnapshot(
+      gen: AsyncGenerator<PermissionSnapshotYield> | undefined,
+    ) {
+      const containers = new Map<string, unknown>();
+      /** The whole container yield, for assertions beyond its audience. */
+      const containerYields = new Map<
+        string,
+        Extract<PermissionSnapshotYield, { kind: "container" }>
+      >();
+      const documents: Extract<
+        PermissionSnapshotYield,
+        { kind: "document" }
+      >[] = [];
+      for await (const item of gen ??
+        ((async function* () {})() as AsyncGenerator<PermissionSnapshotYield>)) {
+        if (item.kind === "container") {
+          containers.set(item.containerKey, item.permissions);
+          containerYields.set(item.containerKey, item);
+        } else {
+          documents.push(item);
+        }
+      }
+      return { containers, containerYields, documents };
+    }
+
+    /** The audience of a single-document snapshot's one assignment. */
+    function audienceOfOnly(
+      snapshot: Awaited<ReturnType<typeof collectSnapshot>>,
+    ) {
+      if (snapshot.documents.length !== 1) {
+        throw new Error(
+          `Expected exactly one assignment, got ${snapshot.documents.length}`,
+        );
+      }
+      return snapshot.containers.get(snapshot.documents[0].containerKey);
+    }
+
+    /** The effective audience of one document: its container's permissions. */
+    function audienceOf(
+      snapshot: Awaited<ReturnType<typeof collectSnapshot>>,
+      sourceId: string,
+    ) {
+      const doc = snapshot.documents.find((d) => d.sourceId === sourceId);
+      if (!doc) throw new Error(`No assignment yielded for ${sourceId}`);
+      return snapshot.containers.get(doc.containerKey);
+    }
+
+    function searchHandler(issues: unknown[]) {
+      return http.post(`${CLOUD_HOST}/rest/api/3/search/jql`, () =>
+        HttpResponse.json({ issues, nextPageToken: undefined }),
+      );
+    }
+
+    const syncParams = {
+      config: validConfig,
+      credentials,
+      cursor: null,
+      readIngestedDocuments: async () => ({
+        documents: [],
+        nextAfterId: null,
+      }),
+    };
+
+    test("supportsPermissionSync is true", () => {
+      expect(connector.supportsPermissionSync).toBe(true);
+    });
+
+    test("snapshot enumeration sends well-formed JQL (WHERE clauses before ORDER BY)", async () => {
+      // Regression: the per-project clause was once appended AFTER buildJql's
+      // `ORDER BY updated ASC` suffix — Jira 400s every snapshot request and
+      // the pass can never enumerate a single document.
+      const bodies: Record<string, unknown>[] = [];
+      server.use(
+        http.post(
+          `${CLOUD_HOST}/rest/api/3/search/jql`,
+          async ({ request }) => {
+            bodies.push((await request.json()) as Record<string, unknown>);
+            return HttpResponse.json({ issues: [], nextPageToken: undefined });
+          },
+        ),
+      );
+
+      await collectSnapshot(connector.syncPermissionSnapshot?.(syncParams));
+
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        expect(body.jql).toBe('project = "PROJ" ORDER BY updated ASC');
+      }
+    });
+
+    test("project BROWSE_PROJECTS grants: anyone → public, group → group id", async () => {
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-1",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "group", value: "jira-users" },
+              },
+              { permission: "BROWSE_PROJECTS", holder: { type: "anyone" } },
+            ],
+          }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      expect(snapshot.documents).toEqual([
+        {
+          kind: "document",
+          sourceId: "PROJ-1",
+          containerKey: "project:PROJ",
+          cursor: "project:PROJ",
+        },
+      ]);
+      expect(audienceOf(snapshot, "PROJ-1")).toEqual({
+        isPublic: true,
+        users: [],
+        groups: ["jira-users"],
+      });
+    });
+
+    test("an applicationRole grant resolves to the role's site-access groups, NOT org-wide", async () => {
+      // "Any logged-in user" of the site is a specific, revocable set — the
+      // application's access groups — not the whole Archestra org. Mapping it
+      // to org:* would keep granting users removed from the site upstream.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-7",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "applicationRole", parameter: "jira-software" },
+              },
+            ],
+          }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/applicationrole/jira-software`, () =>
+          HttpResponse.json({
+            key: "jira-software",
+            groupDetails: [
+              { name: "jira-users-site", groupId: "uuid-1" },
+              { name: "jira-software-users", groupId: "uuid-2" },
+            ],
+          }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      expect(audienceOfOnly(snapshot)).toEqual({
+        isPublic: false,
+        users: [],
+        groups: ["jira-users-site", "jira-software-users"],
+      });
+    });
+
+    test("an applicationRole grant with no key unions ALL application roles' groups", async () => {
+      // An empty parameter means "any logged-in user" regardless of product.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-8",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "applicationRole" },
+              },
+            ],
+          }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/applicationrole`, () =>
+          HttpResponse.json([
+            {
+              key: "jira-software",
+              groupDetails: [{ name: "jira-users-site" }],
+            },
+            // Legacy `groups` (names) used when groupDetails is absent.
+            { key: "jira-core", groups: ["jira-core-users"] },
+          ]),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      expect(audienceOfOnly(snapshot)).toEqual({
+        isPublic: false,
+        users: [],
+        groups: ["jira-users-site", "jira-core-users"],
+      });
+    });
+
+    test("an applicationRole grant fail-closes when the role lookup fails", async () => {
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-6",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "applicationRole", parameter: "jira-software" },
+              },
+            ],
+          }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/applicationrole/jira-software`, () =>
+          HttpResponse.json({ errorMessages: ["forbidden"] }, { status: 500 }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      // Under-grant, never over-grant: no org:*, no groups.
+      expect(audienceOfOnly(snapshot)).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+    });
+
+    test("a permission scheme that yields no grants reports the container as unreadable, not as empty", async () => {
+      // The scheme call succeeds but carries no `permissions`, and the by-id
+      // fallback comes back empty too. The old code iterated `grants ?? []`,
+      // resolved an empty audience, and said nothing — so every issue in the
+      // project went dark and the run looked completely healthy. The empty
+      // audience is still the right (fail-closed) answer; being silent about it
+      // was not.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-9",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({ id: 10 }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/permissionscheme/10`, () =>
+          HttpResponse.json({ id: 10 }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      const container = snapshot.containerYields.get("project:PROJ");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(container?.audienceResolutionFailed).toBe(true);
+    });
+
+    test("a permission-scheme request that fails reports the container as unreadable", async () => {
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-10",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({ errorMessages: ["boom"] }, { status: 500 }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      const container = snapshot.containerYields.get("project:PROJ");
+      expect(container?.audienceResolutionFailed).toBe(true);
+    });
+
+    test("a resolvable scheme granting nobody is NOT reported as unreadable", async () => {
+      // The counterpart the flag exists to distinguish: we read the scheme fine,
+      // and it genuinely grants browse to nobody. Same empty audience, but
+      // nothing is wrong and nothing should be flagged.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-11",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({ id: 10, permissions: [] }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      const container = snapshot.containerYields.get("project:PROJ");
+      expect(container?.permissions).toEqual({
+        isPublic: false,
+        users: [],
+        groups: [],
+      });
+      expect(container?.audienceResolutionFailed).toBe(false);
+    });
+
+    test("a Cloud group grant uses the group NAME (parameter), not the UUID (value)", async () => {
+      // On Jira Cloud a group holder's `value` is the group UUID and
+      // `parameter` is the name; syncGroups keys membership by NAME, so the
+      // document token must be the name to byte-match — else group members are
+      // silently denied.
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-9",
+            fields: { project: { key: "PROJ" }, security: null },
+          },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: {
+                  type: "group",
+                  value: "5e8f1c2a-0000-0000-0000-abcdef012345",
+                  parameter: "engineering",
+                },
+              },
+            ],
+          }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      expect(audienceOfOnly(snapshot)).toEqual({
+        isPublic: false,
+        users: [],
+        groups: ["engineering"],
+      });
+    });
+
+    test("a user grant resolves to an email via getUser", async () => {
+      server.use(
+        searchHandler([
+          { key: "PROJ-3", fields: { project: { key: "PROJ" } } },
+        ]),
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "user", value: "acc-1" },
+              },
+            ],
+          }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/user`, () =>
+          HttpResponse.json({ emailAddress: "bob@example.com" }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      expect(audienceOfOnly(snapshot)).toEqual({
+        isPublic: false,
+        users: ["bob@example.com"],
+        groups: [],
+      });
+    });
+
+    test("an issue security level overrides the project browse audience", async () => {
+      server.use(
+        searchHandler([
+          {
+            key: "PROJ-2",
+            fields: { project: { key: "PROJ" }, security: { id: "100" } },
+          },
+        ]),
+        http.get(
+          `${CLOUD_HOST}/rest/api/3/project/PROJ/issuesecuritylevelscheme`,
+          () => HttpResponse.json({ id: 20 }),
+        ),
+        http.get(
+          `${CLOUD_HOST}/rest/api/3/issuesecurityschemes/20/members`,
+          () =>
+            HttpResponse.json({
+              values: [
+                {
+                  issueSecurityLevelId: "100",
+                  holder: { type: "group", value: "secret-team" },
+                },
+              ],
+              total: 1,
+            }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(syncParams),
+      );
+
+      expect(audienceOfOnly(snapshot)).toEqual({
+        isPublic: false,
+        users: [],
+        groups: ["secret-team"],
+      });
+    });
+
+    test("syncGroups expands groups to members, keeping hidden-email members with email null", async () => {
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/group/bulk`, () =>
+          HttpResponse.json({ values: [{ name: "devs" }], total: 1 }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/group/member`, () =>
+          HttpResponse.json({
+            values: [
+              {
+                accountId: "acc-alice",
+                displayName: "Alice",
+                emailAddress: "alice@example.com",
+              },
+              // Email hidden by Atlassian profile visibility — the member must
+              // still be recorded (fail-closed), not silently dropped.
+              { accountId: "acc-bob", displayName: "Bob" },
+              // Add-on/bot account — classification must travel with the
+              // member so admin stats can separate it from hidden humans.
+              {
+                accountId: "acc-bot",
+                displayName: "Automation for Jira",
+                accountType: "app",
+              },
+            ],
+            total: 3,
+          }),
+        ),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.(syncParams) ?? (async function* () {})(),
+      );
+
+      expect(yields).toEqual([
+        {
+          groupId: "devs",
+          members: [
+            {
+              accountId: "acc-alice",
+              displayName: "Alice",
+              email: "alice@example.com",
+              accountType: null,
+            },
+            {
+              accountId: "acc-bob",
+              displayName: "Bob",
+              email: null,
+              accountType: null,
+            },
+            {
+              accountId: "acc-bot",
+              displayName: "Automation for Jira",
+              email: null,
+              accountType: "app",
+            },
+          ],
+          cursor: "devs",
+        },
+      ]);
+    });
+
+    test("syncGroups keeps paginating members when the API omits total", async () => {
+      // Regression: `total ?? startAt` made the break condition always true
+      // on a missing `total`, silently truncating a group to its first page.
+      // Enumeration must instead run until an empty page.
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/group/bulk`, () =>
+          HttpResponse.json({ values: [{ name: "devs" }], total: 1 }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/group/member`, ({ request }) => {
+          const startAt = Number(
+            new URL(request.url).searchParams.get("startAt") ?? "0",
+          );
+          const pages: Record<number, unknown[]> = {
+            0: [{ accountId: "acc-alice", displayName: "Alice" }],
+            1: [{ accountId: "acc-bob", displayName: "Bob" }],
+          };
+          return HttpResponse.json({ values: pages[startAt] ?? [] });
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.(syncParams) ?? (async function* () {})(),
+      );
+
+      expect(yields).toHaveLength(1);
+      expect(yields[0].members.map((m) => m.accountId)).toEqual([
+        "acc-alice",
+        "acc-bob",
+      ]);
+    });
+
+    test("syncGroups resolves hidden emails through the Atlassian admin directory when the credential is an org-admin API key", async () => {
+      // The product API hides most emails (profile visibility, AX-207); an
+      // org-admin API key credential unlocks the Organizations directory,
+      // which returns managed accounts' emails regardless of visibility.
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/group/bulk`, () =>
+          HttpResponse.json({ values: [{ name: "devs" }], total: 1 }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/group/member`, () =>
+          HttpResponse.json({
+            values: [{ accountId: "acc-bob", displayName: "Bob" }],
+            total: 1,
+          }),
+        ),
+        http.get("https://api.atlassian.com/admin/v1/orgs", () =>
+          HttpResponse.json({ data: [{ id: "org-1" }], links: {} }),
+        ),
+        http.get(
+          "https://api.atlassian.com/admin/v2/orgs/org-1/directories",
+          () =>
+            HttpResponse.json({ data: [{ directoryId: "dir-1" }], links: {} }),
+        ),
+        http.post(
+          "https://api.atlassian.com/admin/v2/orgs/org-1/directories/dir-1/users/search",
+          () =>
+            HttpResponse.json({
+              data: [{ accountId: "acc-bob", email: "bob@example.com" }],
+              links: {},
+            }),
+        ),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.(syncParams) ?? (async function* () {})(),
+      );
+
+      expect(yields[0].members).toEqual([
+        {
+          accountId: "acc-bob",
+          displayName: "Bob",
+          email: "bob@example.com",
+          accountType: null,
+        },
+      ]);
+    });
+
+    test("syncGroups prefers the dedicated admin API key as the admin-API bearer", async () => {
+      // The product apiToken and the org-admin API key are different
+      // Atlassian credential kinds (each API family rejects the other), so
+      // when a dedicated key is configured the admin APIs must be called
+      // with it — not with the product token.
+      let adminAuthHeader: string | null = null;
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/group/bulk`, () =>
+          HttpResponse.json({ values: [{ name: "devs" }], total: 1 }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/group/member`, () =>
+          HttpResponse.json({
+            values: [{ accountId: "acc-bob", displayName: "Bob" }],
+            total: 1,
+          }),
+        ),
+        http.get("https://api.atlassian.com/admin/v1/orgs", ({ request }) => {
+          adminAuthHeader = request.headers.get("authorization");
+          return HttpResponse.json({ data: [{ id: "org-1" }], links: {} });
+        }),
+        http.get(
+          "https://api.atlassian.com/admin/v2/orgs/org-1/directories",
+          () =>
+            HttpResponse.json({ data: [{ directoryId: "dir-1" }], links: {} }),
+        ),
+        http.post(
+          "https://api.atlassian.com/admin/v2/orgs/org-1/directories/dir-1/users/search",
+          () =>
+            HttpResponse.json({
+              data: [{ accountId: "acc-bob", email: "bob@example.com" }],
+              links: {},
+            }),
+        ),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.({
+          ...syncParams,
+          credentials: { ...credentials, adminApiKey: "org-admin-key" },
+        }) ?? (async function* () {})(),
+      );
+
+      expect(adminAuthHeader).toBe("Bearer org-admin-key");
+      expect(yields[0].members[0].email).toBe("bob@example.com");
+    });
+
+    test("syncGroups uses groupId for the member lookup and keeps NAME as the token key", async () => {
+      // The member lookup must go by immutable groupId (some names 404), but
+      // the yielded groupId — the token / snapshot key — must stay the NAME to
+      // byte-match document group tokens.
+      let memberQuery: URLSearchParams | undefined;
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/group/bulk`, () =>
+          HttpResponse.json({
+            values: [{ name: "devs", groupId: "uuid-123" }],
+            total: 1,
+          }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/group/member`, ({ request }) => {
+          memberQuery = new URL(request.url).searchParams;
+          return HttpResponse.json({
+            values: [{ emailAddress: "alice@example.com" }],
+            total: 1,
+          });
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.(syncParams) ?? (async function* () {})(),
+      );
+
+      expect(memberQuery?.get("groupId")).toBe("uuid-123");
+      expect(memberQuery?.get("groupname")).toBeNull();
+      expect(yields[0].groupId).toBe("devs");
+    });
+
+    test("syncGroups skips a group whose member lookup fails instead of aborting the enumeration", async () => {
+      // Hidden system groups (`atlassian-addons`) are listed by group/bulk but
+      // 404 on member lookup; one bad group must not leave the whole snapshot
+      // empty (which silently fail-closes every group grant).
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/group/bulk`, () =>
+          HttpResponse.json({
+            values: [{ name: "atlassian-addons" }, { name: "devs" }],
+            total: 2,
+          }),
+        ),
+        http.get(`${CLOUD_HOST}/rest/api/3/group/member`, ({ request }) => {
+          const groupname = new URL(request.url).searchParams.get("groupname");
+          if (groupname === "atlassian-addons") {
+            return HttpResponse.json(
+              {
+                errorMessages: [
+                  "The group named 'atlassian-addons' does not exist",
+                ],
+              },
+              { status: 404 },
+            );
+          }
+          return HttpResponse.json({
+            values: [{ emailAddress: "alice@example.com" }],
+            total: 1,
+          });
+        }),
+      );
+
+      const yields = await collect(
+        connector.syncGroups?.(syncParams) ?? (async function* () {})(),
+      );
+
+      // The failed group yields empty (fail-closed for it alone); the healthy
+      // group is still enumerated.
+      expect(yields).toEqual([
+        {
+          groupId: "atlassian-addons",
+          members: [],
+          cursor: "atlassian-addons",
+        },
+        {
+          groupId: "devs",
+          members: [
+            {
+              accountId: "alice@example.com",
+              displayName: null,
+              email: "alice@example.com",
+              accountType: null,
+            },
+          ],
+          cursor: "devs",
+        },
+      ]);
+    });
+
+    test("probePermissionChanges: first probe demands a full pass; the JQL window maps drift to projects", async () => {
+      // First probe (no state) → fullRequired, cursor established.
+      const first = await connector.probePermissionChanges?.({
+        config: validConfig,
+        credentials,
+        state: null,
+      });
+      expect(first?.fullRequired).toBe(true);
+      expect(typeof first?.nextState.jqlCursor).toBe("string");
+
+      // Cursored probe: two changed issues in different projects. NO audit
+      // endpoint handler is installed — the probe must not call it (audit
+      // inference was removed: a revocation ingested minutes late slid out
+      // of the cursor window, and its wording matched no grant keyword;
+      // audiences/memberships are verified directly every delta pass).
+      let probeJql: unknown;
+      server.use(
+        http.post(
+          `${CLOUD_HOST}/rest/api/3/search/jql`,
+          async ({ request }) => {
+            probeJql = ((await request.json()) as Record<string, unknown>).jql;
+            return HttpResponse.json({
+              issues: [{ key: "PROJ-3" }, { key: "OTHER-9" }],
+              nextPageToken: undefined,
+            });
+          },
+        ),
+      );
+      const probe = await connector.probePermissionChanges?.({
+        config: validConfig,
+        credentials,
+        state: { jqlCursor: "2026-07-01T00:00:00.000Z" },
+      });
+      expect(probe?.dirtyContainerKeys).toEqual([
+        "project:OTHER",
+        "project:PROJ",
+      ]);
+      expect(probe?.fullRequired).toBe(false);
+      expect(typeof probe?.nextState.jqlCursor).toBe("string");
+      // Well-formed JQL: the cursor clause sits BEFORE the ORDER BY suffix
+      // (string-appending it after once made Jira 400 every probe).
+      expect(probeJql).toBe(
+        'project = "PROJ" AND updated >= "2026/06/30 10:00" ORDER BY updated ASC',
+      );
+    });
+
+    test("refreshContainerAudiences re-resolves stored audiences with ZERO issue enumeration", async () => {
+      // No search handler is installed: if the refresh touched the issue
+      // search API, MSW would fail the test as an unhandled request.
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "group", value: "jira-users" },
+              },
+            ],
+          }),
+        ),
+      );
+
+      const out: unknown[] = [];
+      const generator = connector.refreshContainerAudiences?.({
+        config: validConfig,
+        credentials,
+        containerKeys: ["project:PROJ", "not-a-container-shape"],
+      });
+      if (!generator) throw new Error("hook missing");
+      for await (const item of generator) out.push(item);
+
+      // The unknown-shaped key is skipped (left for the full backstop), the
+      // project audience is re-resolved from the scheme grants.
+      expect(out).toEqual([
+        {
+          containerKey: "project:PROJ",
+          permissions: { isPublic: false, users: [], groups: ["jira-users"] },
+          audienceResolutionFailed: false,
+        },
+      ]);
+    });
+
+    test("a directly-granted account with a hidden upstream email materializes as its mapped user's email", async () => {
+      server.use(
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/permissionscheme`, () =>
+          HttpResponse.json({
+            id: 10,
+            permissions: [
+              {
+                permission: "BROWSE_PROJECTS",
+                holder: { type: "projectRole", value: "10001" },
+              },
+            ],
+          }),
+        ),
+        // The role actor's upstream email is hidden — no user-lookup handler
+        // is needed because the admin mapping resolves FIRST, without a call.
+        http.get(`${CLOUD_HOST}/rest/api/3/project/PROJ/role/10001`, () =>
+          HttpResponse.json({
+            actors: [{ actorUser: { accountId: "acc-hidden" } }],
+          }),
+        ),
+      );
+
+      const out: { permissions: { users: string[] } }[] = [];
+      const generator = connector.refreshContainerAudiences?.({
+        config: validConfig,
+        credentials,
+        containerKeys: ["project:PROJ"],
+        resolveMappedEmail: (externalAccountId) =>
+          externalAccountId === "acc-hidden" ? "mapped@example.com" : null,
+      });
+      if (!generator) throw new Error("hook missing");
+      for await (const item of generator) {
+        out.push(item as { permissions: { users: string[] } });
+      }
+
+      expect(out).toHaveLength(1);
+      expect(out[0].permissions.users).toEqual(["mapped@example.com"]);
+    });
+
+    test("server (isCloud=false) resolves issue audiences through the v2 API, paging by startAt", async () => {
+      const serverParams = {
+        ...syncParams,
+        config: {
+          jiraBaseUrl: SERVER_HOST,
+          isCloud: false,
+          projectKey: "PROJ",
+        },
+      };
+      server.use(
+        v2SearchHandler([
+          {
+            issues: [
+              {
+                key: "PROJ-1",
+                fields: { project: { key: "PROJ" }, security: null },
+              },
+            ],
+            total: 1,
+          },
+        ]),
+        http.get(
+          `${SERVER_HOST}/rest/api/2/project/PROJ/permissionscheme`,
+          () =>
+            HttpResponse.json({
+              id: 10,
+              permissions: [
+                {
+                  permission: "BROWSE_PROJECTS",
+                  holder: { type: "group", value: "jira-users" },
+                },
+              ],
+            }),
+        ),
+      );
+
+      const snapshot = await collectSnapshot(
+        connector.syncPermissionSnapshot?.(serverParams),
+      );
+
+      expect(snapshot.documents).toEqual([
+        {
+          kind: "document",
+          sourceId: "PROJ-1",
+          containerKey: "project:PROJ",
+          cursor: "project:PROJ",
+        },
+      ]);
+      expect(audienceOf(snapshot, "PROJ-1")).toEqual({
+        isPublic: false,
+        users: [],
+        groups: ["jira-users"],
+      });
+      expect(v2SearchBodies[0]).toMatchObject({ startAt: 0 });
     });
   });
 });

@@ -103,4 +103,62 @@ describe("useConnectorRuns", () => {
 
     expect(interval).toBe(false);
   });
+
+  it("keeps a slow poll alive briefly after a run completes, so a chained run (documents sync → permission pass) appears without a reload", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(["connectors", "connector-1"], {
+      id: "connector-1",
+      lastSyncStatus: "success",
+    });
+
+    const { result } = renderHook(
+      () => useConnectorRuns({ connectorId: "connector-1" }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    expect(result.current).toBeDefined();
+    const options = mockUseQuery.mock.calls[0][0] as {
+      refetchInterval: (query: {
+        state: {
+          data: {
+            data: Array<{ id: string; status: string; completedAt?: string }>;
+          };
+        };
+      }) => number | false;
+    };
+
+    // The chained run is created seconds AFTER the last poll that saw
+    // "running" — a just-completed run must keep the query polling.
+    const withinGrace = options.refetchInterval({
+      state: {
+        data: {
+          data: [
+            {
+              id: "run-1",
+              status: "success",
+              completedAt: new Date(Date.now() - 5_000).toISOString(),
+            },
+          ],
+        },
+      },
+    });
+    expect(withinGrace).toBe(5000);
+
+    const afterGrace = options.refetchInterval({
+      state: {
+        data: {
+          data: [
+            {
+              id: "run-1",
+              status: "success",
+              completedAt: new Date(Date.now() - 120_000).toISOString(),
+            },
+          ],
+        },
+      },
+    });
+    expect(afterGrace).toBe(false);
+  });
 });

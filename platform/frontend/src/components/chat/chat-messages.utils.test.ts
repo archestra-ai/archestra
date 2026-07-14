@@ -14,6 +14,7 @@ import {
   hasTextPart,
   identifyCompactToolGroups,
   isBlankAssistantTextPart,
+  isBlankReasoningPart,
   mcpToolLabel,
 } from "./chat-messages.utils";
 
@@ -1242,5 +1243,32 @@ describe("isBlankAssistantTextPart", () => {
         "assistant",
       ),
     ).toBe(false);
+  });
+});
+
+describe("isBlankReasoningPart", () => {
+  const reasoningPart = (text?: string) => ({ type: "reasoning", text });
+
+  it.each([
+    "",
+    " ",
+    "   ",
+    "\n\n",
+    "\t",
+    "\n  \t ",
+  ])("suppresses a reasoning part with no readable text %j", (text) => {
+    expect(isBlankReasoningPart(reasoningPart(text))).toBe(true);
+  });
+
+  it("suppresses a reasoning part with undefined text (redacted thinking)", () => {
+    expect(isBlankReasoningPart(reasoningPart(undefined))).toBe(true);
+  });
+
+  it("keeps a reasoning part that has real content", () => {
+    expect(isBlankReasoningPart(reasoningPart("  because X  "))).toBe(false);
+  });
+
+  it("ignores non-reasoning parts", () => {
+    expect(isBlankReasoningPart({ type: "text", text: "" })).toBe(false);
   });
 });

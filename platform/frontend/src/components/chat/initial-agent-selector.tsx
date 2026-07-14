@@ -308,6 +308,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <Input
                 placeholder="Search..."
+                aria-label="Search agents"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="h-8 pl-8 text-sm rounded-lg border-0 bg-muted/50 focus-visible:ring-1"
@@ -742,6 +743,7 @@ function AgentSettingsView({
           ) : (
             <button
               type="button"
+              aria-label="Edit agent icon"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted cursor-pointer"
               onDoubleClick={() => setIsEditingIcon(true)}
             >
@@ -752,6 +754,7 @@ function AgentSettingsView({
             {isEditingName ? (
               <Input
                 ref={nameInputRef}
+                aria-label="Agent name"
                 value={editedName}
                 onChange={(e) => setEditedName(e.target.value)}
                 onBlur={() => saveName(editedName)}
@@ -1262,6 +1265,7 @@ function AddToolView({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search MCP servers..."
+            aria-label="Search MCP servers"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -1690,6 +1694,7 @@ function AddDelegationView({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search agents..."
+            aria-label="Search agents"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -1895,6 +1900,7 @@ function EditKnowledgeSourcesView({
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search knowledge sources..."
+                aria-label="Search knowledge sources"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"

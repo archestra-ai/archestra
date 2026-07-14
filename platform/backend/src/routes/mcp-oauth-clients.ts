@@ -328,12 +328,15 @@ async function validateMcpOauthClientConfig(params: {
 }) {
   for (const gatewayId of params.allowedGatewayIds) {
     const agent = await AgentModel.findById(gatewayId);
+    // An OAuth client may be scoped to MCP gateways and/or A2A agents (both are
+    // reached by id through validateMCPGatewayToken). llm_proxy agents have
+    // their own OAuth clients (allowedLlmProxyIds) and are not eligible here.
     if (
       !agent ||
       agent.organizationId !== params.organizationId ||
-      agent.agentType !== "mcp_gateway"
+      (agent.agentType !== "mcp_gateway" && agent.agentType !== "agent")
     ) {
-      throw new ApiError(404, "MCP gateway not found");
+      throw new ApiError(404, "MCP gateway or agent not found");
     }
   }
 }

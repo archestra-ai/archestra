@@ -7,10 +7,8 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import {
-  evaluateSingleMcpToolInvocationPolicy,
-  policyBlockToToolError,
-} from "@/guardrails/tool-invocation";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import { ConversationEnabledToolModel } from "@/models";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -456,12 +454,16 @@ async function dispatchTool({
   });
   if (policyBlock) {
     // Attach the structured policy_denied error (in _meta + structuredContent)
-    // so clients parse the block without scraping the prose.
+    // so clients parse the block without scraping the prose. A caller who can
+    // edit guardrails also gets a deep link to this tool's policy editor.
+    const { error, text } = await buildPolicyBlockedToolResult({
+      policyBlock,
+      userId: context.userId,
+      organizationId: context.organizationId,
+      textPrefix: "Error: ",
+    });
     return appendEnvelopeRepairNote(
-      structuredToolErrorResult({
-        error: policyBlockToToolError(policyBlock),
-        text: `Error: ${policyBlock.refusalMessage}`,
-      }),
+      structuredToolErrorResult({ error, text }),
       repairedParams,
     );
   }

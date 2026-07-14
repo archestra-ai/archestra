@@ -198,6 +198,7 @@ export function ChannelsSection({
     : false;
   // Show virtual DM only when: no DM binding exists globally, first page, no search/workspace filter
   const showVirtualDmRow =
+    (providerConfig.showVirtualDmRow ?? true) &&
     !hasDmBinding &&
     providerConfigured &&
     pageIndex === 0 &&
@@ -692,7 +693,7 @@ function ChannelRows({
           : undefined;
         const deepLink = binding.isDm
           ? providerStatus
-            ? providerConfig.getDmDeepLink?.(providerStatus)
+            ? providerConfig.getDmDeepLink?.(providerStatus, binding)
             : null
           : providerConfig.buildDeepLink(binding);
 

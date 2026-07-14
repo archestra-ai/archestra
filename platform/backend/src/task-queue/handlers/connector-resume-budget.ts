@@ -1,5 +1,6 @@
 import config from "@/config";
 import { ConnectorRunModel } from "@/models";
+import type { ConnectorRunType } from "@/types";
 
 // Window over which the connector "runaway" circuit breaker counts a connector's
 // runs. A time-budget chunk continuation and a reaper-driven resume are both just
@@ -8,19 +9,23 @@ import { ConnectorRunModel } from "@/models";
 const RESUME_WINDOW_SECONDS = 60 * 60; // 1 hour
 
 /**
- * Whether a connector may start another run now, or has produced so many runs
- * within RESUME_WINDOW_SECONDS that it looks like a runaway (a crash loop, or
- * pathological re-chunking) and should be left alone until its next scheduled
- * cron. Counting actual runs (not a payload counter) means a chunk continuation
- * and a reaper resume share the same budget by construction.
+ * Whether a connector may start another run of this family now, or has
+ * produced so many runs within RESUME_WINDOW_SECONDS that it looks like a
+ * runaway (a crash loop, or pathological re-chunking) and should be left alone
+ * until its next scheduled cron. Counting actual runs (not a payload counter)
+ * means a chunk continuation and a reaper resume share the same budget by
+ * construction. The budget is per run family (`runType`): a connector's
+ * scheduled permission cadence and its content syncs never charge each other.
  */
-export async function withinResumeBudget(
-  connectorId: string,
-): Promise<boolean> {
-  const recentRuns = await ConnectorRunModel.countRunsSince(
-    connectorId,
-    RESUME_WINDOW_SECONDS,
-  );
+export async function withinResumeBudget(params: {
+  connectorId: string;
+  runType: ConnectorRunType;
+}): Promise<boolean> {
+  const recentRuns = await ConnectorRunModel.countRunsSince({
+    connectorId: params.connectorId,
+    seconds: RESUME_WINDOW_SECONDS,
+    runType: params.runType,
+  });
   return recentRuns <= maxRunsPerResumeWindow();
 }
 

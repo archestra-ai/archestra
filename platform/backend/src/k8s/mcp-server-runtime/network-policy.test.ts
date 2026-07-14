@@ -1,11 +1,17 @@
+import { sanitizeMetadataLabels } from "@/k8s/shared";
 import { describe, expect, test } from "@/test";
 import type { EffectiveNetworkPolicy } from "@/types";
 import {
+  buildEgressBaselineAwsApplicationNetworkPolicy,
+  buildEgressBaselineNetworkPolicy,
   buildManagedAwsApplicationNetworkPolicy,
   buildManagedCiliumNetworkPolicy,
   buildManagedGkeFqdnNetworkPolicy,
   buildManagedNetworkPolicy,
+  buildUnrestrictedFloorAwsApplicationNetworkPolicy,
+  buildUnrestrictedFloorPolicy,
   constructManagedNetworkPolicyName,
+  isAwsApplicationNetworkPolicyProvider,
   shouldManageK8sNetworkPolicy,
   shouldUseAwsApplicationNetworkPolicy,
   shouldUseCiliumNetworkPolicy,
@@ -441,6 +447,32 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
     ).toBe(false);
   });
 
+  test("uses AWS ApplicationNetworkPolicy for off too, since a plain NetworkPolicy is unenforced on AWS", () => {
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: true,
+      provider: "aws-application-network-policy" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+    expect(
+      shouldUseAwsApplicationNetworkPolicy({
+        effectivePolicy: makeEffectivePolicy({ egressMode: "off" }),
+        capabilities,
+      }),
+    ).toBe(true);
+    // unrestricted is handled by the floor branch, not this predicate.
+    expect(
+      shouldUseAwsApplicationNetworkPolicy({
+        effectivePolicy: makeEffectivePolicy({ egressMode: "unrestricted" }),
+        capabilities,
+      }),
+    ).toBe(false);
+  });
+
   test("does not manage a Kubernetes NetworkPolicy for unrestricted or built-in policy", () => {
     expect(
       shouldManageK8sNetworkPolicy(makeEffectivePolicy({ egressMode: "off" })),
@@ -468,6 +500,255 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
 
   test("constructs a non-empty managed policy name for punctuation-only input", () => {
     expect(constructManagedNetworkPolicyName("...")).toBe("mcp-egress");
+  });
+});
+
+describe("MCP egress floor and default-deny baseline builders", () => {
+  const MANAGED_LABELS = {
+    app: "mcp-server",
+    "app.kubernetes.io/managed-by": "archestra",
+    "archestra.io/resource": "mcp-network-policy",
+  };
+  const BASELINE_LABELS = {
+    "app.kubernetes.io/managed-by": "archestra",
+    "archestra.io/resource": "mcp-egress-baseline",
+  };
+  const podSelectorLabels = { app: "mcp-server", "mcp-server-id": "server-id" };
+
+  const SELECTOR_DNS_RULE = {
+    to: [
+      {
+        namespaceSelector: {
+          matchLabels: { "kubernetes.io/metadata.name": "kube-system" },
+        },
+        podSelector: { matchLabels: { "k8s-app": "kube-dns" } },
+      },
+    ],
+    ports: [
+      { protocol: "UDP", port: 53 },
+      { protocol: "TCP", port: 53 },
+    ],
+  };
+
+  test("builds a plain NetworkPolicy floor: selector-based DNS + public egress, reserved ranges blocked", () => {
+    const manifest = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+    });
+
+    expect(manifest).toMatchObject({
+      apiVersion: "networking.k8s.io/v1",
+      kind: "NetworkPolicy",
+      metadata: {
+        name: "mcp-egress-test",
+        labels: sanitizeMetadataLabels(MANAGED_LABELS),
+      },
+      spec: {
+        podSelector: { matchLabels: podSelectorLabels },
+        policyTypes: ["Egress"],
+        egress: [
+          SELECTOR_DNS_RULE,
+          {
+            to: [
+              {
+                ipBlock: {
+                  cidr: "0.0.0.0/0",
+                  except: [
+                    "10.0.0.0/8",
+                    "172.16.0.0/12",
+                    "192.168.0.0/16",
+                    "169.254.0.0/16",
+                    "100.64.0.0/10",
+                    "127.0.0.0/8",
+                    "0.0.0.0/8",
+                    "168.63.129.16/32",
+                  ],
+                },
+              },
+            ],
+          },
+          {
+            to: [
+              {
+                ipBlock: {
+                  cidr: "::/0",
+                  except: ["::1/128", "fc00::/7", "fe80::/10", "64:ff9b::/96"],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    // DNS targets the kube-dns pods by label, not the resolver ClusterIP:
+    // kube-proxy DNATs the ClusterIP to a pod IP the public rule would block.
+    expect(manifest.spec?.egress?.[0]?.to?.[0]).not.toHaveProperty("ipBlock");
+    expect(manifest.spec?.egress?.[1]).not.toHaveProperty("ports");
+  });
+
+  test("AWS ANP floor pins DNS to the cluster resolver IPs; the plain floor stays selector-based", () => {
+    const clusterDnsIps = ["10.100.0.10", "fd00:ec2::10"];
+    const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      clusterDnsIps,
+    });
+    const anpEgress = (anp.spec as { egress: Array<Record<string, unknown>> })
+      .egress;
+
+    // ApplicationNetworkPolicy cannot express a selector peer, so DNS is pinned to
+    // the resolver IPs explicitly on :53 (family-aware CIDR).
+    expect(anpEgress[0]).toEqual({
+      to: [
+        { ipBlock: { cidr: "10.100.0.10/32" } },
+        { ipBlock: { cidr: "fd00:ec2::10/128" } },
+      ],
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    });
+
+    // The plain floor ignores resolver IPs entirely and uses selector-based DNS.
+    const plain = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+    });
+    expect(plain.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
+
+    // Both variants share the identical public-egress rules.
+    expect(anpEgress.slice(1)).toEqual(plain.spec?.egress?.slice(1));
+  });
+
+  test("plain floor adds a resolver-IP DNS allow alongside the selector rule (NodeLocal DNSCache / custom DNS)", () => {
+    const plain = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      clusterDnsIps: ["169.254.20.10", "fd00::10"],
+    });
+
+    // Selector rule first (DNAT-proof standard kube-dns path)...
+    expect(plain.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
+    // ...then an explicit :53 allow to the resolved nameserver IPs, so a
+    // link-local/private resolver the public rule would block stays reachable.
+    expect(plain.spec?.egress?.[1]).toEqual({
+      to: [
+        { ipBlock: { cidr: "169.254.20.10/32" } },
+        { ipBlock: { cidr: "fd00::10/128" } },
+      ],
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    });
+    expect(plain.spec?.egress?.[2]?.to?.[0]?.ipBlock?.cidr).toBe("0.0.0.0/0");
+    expect(plain.spec?.egress?.[3]?.to?.[0]?.ipBlock?.cidr).toBe("::/0");
+
+    // With no resolved resolver IP the supplementary rule is omitted; the
+    // selector rule alone covers the standard kube-dns case.
+    const noResolver = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+    });
+    expect(noResolver.spec?.egress).toHaveLength(3);
+    expect(noResolver.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
+  });
+
+  test("AWS ANP floor falls back to any-IP :53 when the resolver is unknown", () => {
+    const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+    });
+
+    expect(anp).toMatchObject({
+      apiVersion: "networking.k8s.aws/v1alpha1",
+      kind: "ApplicationNetworkPolicy",
+      metadata: {
+        name: "mcp-egress-test",
+        labels: sanitizeMetadataLabels(MANAGED_LABELS),
+      },
+      spec: {
+        podSelector: { matchLabels: podSelectorLabels },
+        policyTypes: ["Egress"],
+      },
+    });
+    // A ports-only rule is not honored by the ANP agent, so without a resolved
+    // ClusterIP the DNS rule allows :53 to any IP rather than dropping lookups.
+    expect(
+      (anp.spec as { egress: Array<Record<string, unknown>> }).egress[0],
+    ).toEqual({
+      to: [{ ipBlock: { cidr: "0.0.0.0/0" } }],
+      ports: [
+        { protocol: "UDP", port: 53 },
+        { protocol: "TCP", port: 53 },
+      ],
+    });
+  });
+
+  test("builds a plain default-deny baseline over all app=mcp-server pods", () => {
+    expect(
+      buildEgressBaselineNetworkPolicy({
+        name: "mcp-server-egress-baseline",
+        labels: BASELINE_LABELS,
+      }),
+    ).toMatchObject({
+      apiVersion: "networking.k8s.io/v1",
+      kind: "NetworkPolicy",
+      metadata: {
+        name: "mcp-server-egress-baseline",
+        labels: sanitizeMetadataLabels(BASELINE_LABELS),
+      },
+      spec: {
+        podSelector: { matchLabels: { app: "mcp-server" } },
+        policyTypes: ["Egress"],
+        egress: [],
+      },
+    });
+  });
+
+  test("builds an AWS ApplicationNetworkPolicy default-deny baseline", () => {
+    expect(
+      buildEgressBaselineAwsApplicationNetworkPolicy({
+        name: "mcp-server-egress-baseline",
+        labels: BASELINE_LABELS,
+      }),
+    ).toMatchObject({
+      apiVersion: "networking.k8s.aws/v1alpha1",
+      kind: "ApplicationNetworkPolicy",
+      metadata: {
+        name: "mcp-server-egress-baseline",
+        labels: sanitizeMetadataLabels(BASELINE_LABELS),
+      },
+      spec: {
+        podSelector: { matchLabels: { app: "mcp-server" } },
+        policyTypes: ["Egress"],
+        egress: [],
+      },
+    });
+  });
+
+  test("isAwsApplicationNetworkPolicyProvider only matches the AWS provider", () => {
+    const caps = (provider: string) =>
+      ({ provider }) as unknown as Parameters<
+        typeof isAwsApplicationNetworkPolicyProvider
+      >[0];
+    expect(
+      isAwsApplicationNetworkPolicyProvider(
+        caps("aws-application-network-policy"),
+      ),
+    ).toBe(true);
+    expect(isAwsApplicationNetworkPolicyProvider(caps("cilium"))).toBe(false);
+    expect(isAwsApplicationNetworkPolicyProvider(caps("kubernetes"))).toBe(
+      false,
+    );
+    expect(isAwsApplicationNetworkPolicyProvider(caps("none"))).toBe(false);
+    expect(isAwsApplicationNetworkPolicyProvider(null)).toBe(false);
   });
 });
 

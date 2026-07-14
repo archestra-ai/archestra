@@ -112,6 +112,73 @@ export function useDisconnectNgrok() {
   });
 }
 
+export function useUpdateTelegramChatOpsConfig() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: NonNullable<
+        archestraApiTypes.UpdateTelegramChatOpsConfigData["body"]
+      >,
+    ) => {
+      const { data, error } = await archestraApiSdk.updateTelegramChatOpsConfig(
+        { body },
+      );
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success("Telegram configuration updated");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+    onError: (error) => {
+      console.error("Telegram config update error:", error);
+      toast.error("Failed to update Telegram configuration");
+    },
+  });
+}
+
+export function useGenerateTelegramLinkCode() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.generateTelegramLinkCode();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+  });
+}
+
+export function useLinkTelegramAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const { data, error } = await archestraApiSdk.linkTelegramChatOpsAccount({
+        body: { code },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 

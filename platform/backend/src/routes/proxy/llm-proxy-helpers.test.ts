@@ -593,4 +593,59 @@ describe("handleError", () => {
     );
     expect(payload.error.message).toBe("empty upstream response");
   });
+
+  // Transient upstream connection failures carry no HTTP status, so they used to
+  // fall through as a generic 500 and get captured as a server exception. They're
+  // reclassified to 502/504 so the central handler keeps them out of error
+  // tracking (it already excludes 502/504) while the client still sees a 5xx.
+  function throwStatusFor(error: unknown): number | undefined {
+    const { reply } = makeReply(false);
+    try {
+      handleError(error, reply, extractMessage, false, () => undefined);
+    } catch (thrown) {
+      return (thrown as ApiError).statusCode;
+    }
+    return undefined;
+  }
+
+  test("classifies an SDK connection error as 502", () => {
+    // OpenAI/Anthropic SDK APIConnectionError message, no HTTP status.
+    expect(throwStatusFor(new Error("Connection error."))).toBe(502);
+  });
+
+  test("classifies an SDK request timeout as 504", () => {
+    // OpenAI/Anthropic SDK APIConnectionTimeoutError message, no HTTP status.
+    expect(throwStatusFor(new Error("Request timed out."))).toBe(504);
+  });
+
+  test("classifies a wrapped network errno cause as an upstream gateway error", () => {
+    const connReset = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("read ECONNRESET"), {
+        code: "ECONNRESET",
+      }),
+    });
+    expect(throwStatusFor(connReset)).toBe(502);
+
+    const timedOut = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("connect ETIMEDOUT"), {
+        code: "ETIMEDOUT",
+      }),
+    });
+    expect(throwStatusFor(timedOut)).toBe(504);
+  });
+
+  test("leaves an error that carries an explicit HTTP status untouched", () => {
+    // A real upstream 500 response must not be reclassified away from capture.
+    expect(throwStatusFor(new ApiError(500, "Connection error."))).toBe(500);
+    expect(
+      throwStatusFor(Object.assign(new Error("boom"), { status: 500 })),
+    ).toBe(500);
+  });
+
+  test("leaves a generic internal error as a 500", () => {
+    // No connection/timeout signal → stays a 500 and remains captured.
+    expect(throwStatusFor(new TypeError("cannot read x of undefined"))).toBe(
+      500,
+    );
+  });
 });

@@ -35,21 +35,15 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Queue,
-  QueueItem,
-  QueueItemAction,
-  QueueItemActions,
-  QueueItemContent,
-  QueueItemIndicator,
-  QueueList,
-  QueueSection,
-  QueueSectionContent,
-  QueueSectionLabel,
-  QueueSectionTrigger,
-} from "@/components/ai-elements/queue";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
@@ -200,6 +194,7 @@ const PromptInputContent = ({
   selectorAgentName,
   onAgentChange,
   modelSource,
+  toolsUnavailable,
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
@@ -464,53 +459,6 @@ const PromptInputContent = ({
     [controller.textInput, runCompactCommand, runDebugCommand, textareaRef],
   );
 
-  const handleTextareaKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
-        return;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setActiveCommandIndex(
-          (current) => (current + 1) % visibleSlashCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setActiveCommandIndex(
-          (current) =>
-            (current - 1 + visibleSlashCommands.length) %
-            visibleSlashCommands.length,
-        );
-        return;
-      }
-
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        const command = visibleSlashCommands[selectedCommandIndex];
-        if (command) {
-          selectSlashCommand(command);
-        }
-        return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setDismissedSlashCommandValue(controller.textInput.value);
-      }
-    },
-    [
-      controller.textInput.value,
-      isSlashCommandOpen,
-      selectSlashCommand,
-      selectedCommandIndex,
-      visibleSlashCommands,
-    ],
-  );
-
   const sensitiveDataDetectionEnabled =
     useFeature("chatSecretScanEnabled") ?? false;
   const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
@@ -678,51 +626,135 @@ const PromptInputContent = ({
     isMessageQueueEnabled ? conversationId : undefined,
   );
 
+  // Composer keyboard shortcuts layered on top of the primitive textarea:
+  //   • Esc — stop the in-flight response (mirrors the Stop button).
+  //   • ArrowUp on an empty composer — pop the most recently queued message
+  //     back into the input to edit / resend (like shell history recall).
+  // Both defer to the slash-command menu when it is open: Esc dismisses that
+  // menu and ArrowUp navigates it (handled further down).
+  const handleTextareaKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        event.key === "Escape" &&
+        !isSlashCommandOpen &&
+        isResponseInFlight &&
+        onStop
+      ) {
+        event.preventDefault();
+        onStop();
+        return;
+      }
+
+      if (
+        event.key === "ArrowUp" &&
+        !isSlashCommandOpen &&
+        isMessageQueueEnabled &&
+        conversationId &&
+        controller.textInput.value === "" &&
+        queuedMessages.length > 0
+      ) {
+        event.preventDefault();
+        const mostRecent = queuedMessages[queuedMessages.length - 1];
+        if (mostRecent) {
+          chatMessageQueue.remove(conversationId, mostRecent.id);
+          const restored = `${
+            mostRecent.skill ? `/${mostRecent.skill.name} ` : ""
+          }${mostRecent.text}`;
+          controller.textInput.setInput(restored);
+          // Caret to the end so the user can append / edit immediately.
+          requestAnimationFrame(() => {
+            const element = textareaRef.current;
+            element?.focus();
+            element?.setSelectionRange(restored.length, restored.length);
+          });
+        }
+        return;
+      }
+
+      if (!isSlashCommandOpen || visibleSlashCommands.length === 0) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) => (current + 1) % visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveCommandIndex(
+          (current) =>
+            (current - 1 + visibleSlashCommands.length) %
+            visibleSlashCommands.length,
+        );
+        return;
+      }
+
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        const command = visibleSlashCommands[selectedCommandIndex];
+        if (command) {
+          selectSlashCommand(command);
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedSlashCommandValue(controller.textInput.value);
+      }
+    },
+    [
+      conversationId,
+      controller.textInput,
+      isMessageQueueEnabled,
+      isResponseInFlight,
+      isSlashCommandOpen,
+      onStop,
+      queuedMessages,
+      selectSlashCommand,
+      selectedCommandIndex,
+      textareaRef,
+      visibleSlashCommands,
+    ],
+  );
+
   return (
     <div className="relative">
       {isMessageQueueEnabled && conversationId && queuedMessages.length > 0 && (
-        <Queue className="mb-2" data-testid={E2eTestId.ChatMessageQueue}>
-          <QueueSection>
-            <QueueSectionTrigger>
-              <QueueSectionLabel
-                count={queuedMessages.length}
-                label={
-                  queuedMessages.length === 1
-                    ? "queued message"
-                    : "queued messages"
+        <div
+          className="mb-2 flex max-h-40 flex-col gap-1 overflow-y-auto"
+          data-testid={E2eTestId.ChatMessageQueue}
+        >
+          {queuedMessages.map((queued) => (
+            <div
+              key={queued.id}
+              className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
+              data-testid={E2eTestId.ChatMessageQueueItem}
+            >
+              <span className="min-w-0 grow truncate">
+                {queued.skill ? `/${queued.skill.name} ` : ""}
+                {queued.text}
+              </span>
+              <Button
+                aria-label="Remove queued message"
+                className="size-auto shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                data-testid={E2eTestId.ChatMessageQueueRemoveButton}
+                onClick={() =>
+                  chatMessageQueue.remove(conversationId, queued.id)
                 }
-              />
-            </QueueSectionTrigger>
-            <QueueSectionContent>
-              <QueueList>
-                {queuedMessages.map((queued) => (
-                  <QueueItem
-                    key={queued.id}
-                    className="flex-row items-start gap-2"
-                    data-testid={E2eTestId.ChatMessageQueueItem}
-                  >
-                    <QueueItemIndicator className="mt-1.5 shrink-0" />
-                    <QueueItemContent>
-                      {queued.skill ? `/${queued.skill.name} ` : ""}
-                      {queued.text}
-                    </QueueItemContent>
-                    <QueueItemActions className="shrink-0">
-                      <QueueItemAction
-                        aria-label="Remove queued message"
-                        data-testid={E2eTestId.ChatMessageQueueRemoveButton}
-                        onClick={() =>
-                          chatMessageQueue.remove(conversationId, queued.id)
-                        }
-                      >
-                        <XIcon className="size-3.5" />
-                      </QueueItemAction>
-                    </QueueItemActions>
-                  </QueueItem>
-                ))}
-              </QueueList>
-            </QueueSectionContent>
-          </QueueSection>
-        </Queue>
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
       )}
       {isSandboxCommandHintVisible && (
         <div className="absolute inset-x-0 bottom-full mb-2 px-3 text-xs text-muted-foreground">
@@ -847,6 +879,7 @@ const PromptInputContent = ({
             selectorAgentName={selectorAgentName}
             onAgentChange={onAgentChange}
             modelSource={modelSource}
+            toolsUnavailable={toolsUnavailable}
             onResetModelOverride={onResetModelOverride}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             agentModelDisplayName={agentModelDisplayName}
@@ -859,22 +892,38 @@ const PromptInputContent = ({
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
             />
-            <PromptInputSubmit
-              className="!h-8"
-              status={submitStatus}
-              disabled={submitDisabled || isContextCompacting}
-              onClick={(event) => {
-                // While a response is in-flight the button shows Stop; a
-                // click stops the stream instead of submitting the form
-                // (which would queue the typed text — see onStop docs). With
-                // queueing off, the click falls through to the form submit,
-                // whose handler stops the stream (the pre-queue behavior).
-                if (isMessageQueueEnabled && onStop && isResponseInFlight) {
-                  event.preventDefault();
-                  onStop();
-                }
-              }}
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PromptInputSubmit
+                  className="!h-8"
+                  status={submitStatus}
+                  disabled={submitDisabled || isContextCompacting}
+                  onClick={(event) => {
+                    // While a response is in-flight the button shows Stop; a
+                    // click stops the stream instead of submitting the form
+                    // (which would queue the typed text — see onStop docs).
+                    // With queueing off, the click falls through to the form
+                    // submit, whose handler stops the stream (pre-queue
+                    // behavior).
+                    if (isMessageQueueEnabled && onStop && isResponseInFlight) {
+                      event.preventDefault();
+                      onStop();
+                    }
+                  }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isResponseInFlight && onStop ? (
+                  <span className="flex items-center gap-1.5">
+                    Stop <Kbd>Esc</Kbd>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    Send <Kbd>Enter</Kbd>
+                  </span>
+                )}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </PromptInputFooter>
       </PromptInput>
@@ -918,6 +967,7 @@ const ArchestraPromptInput = ({
   selectorAgentName,
   onAgentChange,
   modelSource,
+  toolsUnavailable,
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
@@ -1012,6 +1062,7 @@ const ArchestraPromptInput = ({
           selectorAgentName={selectorAgentName}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
+          toolsUnavailable={toolsUnavailable}
           onResetModelOverride={onResetModelOverride}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}

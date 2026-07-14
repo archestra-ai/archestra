@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-03
+lastUpdated: 2026-07-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -97,4 +97,4 @@ A shared (team or org) app is author-written HTML executing in a viewer's browse
 
 ## Templates
 
-A single `default` starter seeds a new app's HTML when no explicit HTML is given on create: a themed empty state that centers the app's name, a prompt-only call to action, and a short list of what an app can build on (assigned MCP tools, the per-user and shared data store, built-in AI). It leans on the injected baseline stylesheet, so it looks themed with no full theme of its own. Resolution is server-side — `POST /api/apps` (with an optional `templateId`) or `scaffold_app` seeds the starter's HTML as version 1, substituting the app's name (the id is kept as provenance). Explicit HTML always wins over the template.
+A single `default` starter seeds a new app's HTML when no explicit HTML is given on create: a themed empty state that centers the app's name, a prompt-only call to action, and a short list of what an app can build on (assigned MCP tools, the per-user and shared data store, built-in AI). It leans on the injected baseline stylesheet, so it looks themed with no full theme of its own. Resolution is server-side — `POST /api/apps` (with an optional `templateId`) or `scaffold_app` seeds the starter's HTML as version 1, substituting the app's name (the id is kept as provenance). The starter's mark follows your branding: when the organization has a logo configured in appearance settings, new apps seed with that logo instead of the Archestra mark. Explicit HTML always wins over the template.

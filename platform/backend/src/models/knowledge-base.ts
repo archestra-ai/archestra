@@ -156,9 +156,13 @@ class KnowledgeBaseModel {
 
     if (!row) return null;
 
-    // Fetch connectors to include in the audit snapshot
-    const connectors =
-      await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(id);
+    // Fetch connectors to include in the audit snapshot. The snapshot is a
+    // system-level record, not a viewer surface, so it bypasses visibility
+    // filtering and lists every assigned connector.
+    const connectors = await KnowledgeBaseConnectorModel.findByKnowledgeBaseId(
+      id,
+      { canReadAll: true },
+    );
 
     return {
       id: row.id,

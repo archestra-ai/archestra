@@ -332,6 +332,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                 value={toolSearch}
                 onChange={(e) => setToolSearch(e.target.value)}
                 placeholder="Search tools"
+                aria-label="Search tools"
                 className="h-7 pl-7 font-mono text-xs"
               />
             </div>
@@ -445,6 +446,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                             </Label>
                             <Input
                               placeholder={prop.description || `Enter ${name}`}
+                              aria-label={name}
                               value={paramValues[name] ?? ""}
                               onChange={(e) =>
                                 setParamValues((prev) => ({

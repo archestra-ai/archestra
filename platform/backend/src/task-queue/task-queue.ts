@@ -2,13 +2,23 @@ import config from "@/config";
 import logger from "@/logging";
 import { TaskModel } from "@/models";
 import * as metrics from "@/observability/metrics";
-import type { InsertTask, Task, TaskHandler } from "@/types";
+import type { InsertTask, Task, TaskHandler, TaskLane } from "@/types";
+import { TASK_LANES } from "@/types";
 import PERIODIC_TASK_DEFINITIONS from "./periodic-tasks";
 
 export class TaskQueueService {
   private handlers = new Map<string, TaskHandler>();
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
+  // Global in-flight set (used for shutdown drain, lane-agnostic).
   private activeTaskIds = new Set<string>();
+  // Per-lane accounting so each lane's concurrency cap is independent — a
+  // saturated content lane cannot consume permission-lane slots, or vice-versa.
+  private laneCounts: Record<TaskLane, number> = {
+    content: 0,
+    permission: 0,
+    system: 0,
+  };
+  private taskLane = new Map<string, TaskLane>();
   private stopping = false;
   private pollInFlight: Promise<void> | null = null;
   private lastStuckSweepAt = 0;
@@ -104,7 +114,10 @@ export class TaskQueueService {
     logger.info(
       {
         pollIntervalMs,
-        maxConcurrent: config.kb.taskWorkerMaxConcurrent,
+        contentLaneMaxConcurrent: config.kb.taskWorkerMaxConcurrent,
+        permissionLaneMaxConcurrent:
+          config.kb.permissionSyncWorkerMaxConcurrent,
+        systemLaneMaxConcurrent: SYSTEM_LANE_MAX_CONCURRENT,
       },
       "[TaskQueue] Worker started",
     );
@@ -149,7 +162,12 @@ export class TaskQueueService {
 
     if (result === "timeout") {
       const remainingIds = [...this.activeTaskIds];
-      this.activeTaskIds.clear();
+      // Fully untrack (not just clear the id set): the abandoned tasks'
+      // processTask callbacks never run their untrack, so their lane slots
+      // would stay occupied forever and starve the lanes after a restart.
+      for (const id of remainingIds) {
+        this.untrackTask(id);
+      }
       logger.warn(
         { taskIds: remainingIds },
         "[TaskQueue] Drain timed out, releasing tasks back to queue",
@@ -183,9 +201,13 @@ export class TaskQueueService {
   private async doPoll(): Promise<void> {
     if (this.stopping) return;
 
+    // Renew this worker's in-flight heartbeats BEFORE the stuck sweep so its
+    // own healthy tasks can never look stale to its own sweep.
+    await TaskModel.renewHeartbeats([...this.activeTaskIds]);
+
     if (Date.now() - this.lastStuckSweepAt >= STUCK_SWEEP_INTERVAL_MS) {
       this.lastStuckSweepAt = Date.now();
-      // Reset stuck tasks (processing for more than 1 hour)
+      // Reset tasks whose worker stopped heartbeating
       const swept = await TaskModel.resetStuckTasks(STUCK_TASK_TIMEOUT_MS);
       if (swept.length > 0) {
         metrics.taskQueue.reportStuckTasksReset(swept.length);
@@ -204,41 +226,59 @@ export class TaskQueueService {
       if (this.stopping) return;
     }
 
-    // Dequeue and process until the concurrency cap is filled
-    while (
-      !this.stopping &&
-      this.activeTaskIds.size < config.kb.taskWorkerMaxConcurrent
-    ) {
-      const task = await TaskModel.dequeue();
-      if (!task) return;
+    // Fill each lane up to its own concurrency cap. Lanes are drained
+    // independently so no lane can head-of-line-block or starve another.
+    for (const lane of LANES) {
+      const cap = this.laneCap(lane);
+      while (!this.stopping && this.laneCounts[lane] < cap) {
+        const task = await TaskModel.dequeue(TASK_LANES[lane]);
+        if (!task) break; // lane empty — move on to the next lane
 
-      // Track immediately so a concurrent stopWorker sees this task.
-      this.activeTaskIds.add(task.id);
+        // Track immediately so a concurrent stopWorker sees this task.
+        this.trackTask(task.id, lane);
 
-      if (this.stopping) {
-        // stopWorker may have snapshotted an empty set while the dequeue
-        // was in flight; hand the task back instead of processing it
-        // outside the drain. Release before untracking so shutdown cannot
-        // proceed past the drain while the row is still marked processing.
-        await TaskModel.releaseToQueue([task.id]);
-        this.untrackTask(task.id);
-        return;
-      }
-
-      this.processTask(task)
-        .catch((error) => {
-          logger.error(
-            {
-              taskId: task.id,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[TaskQueue] Unhandled error in processTask",
-          );
-        })
-        .finally(() => {
+        if (this.stopping) {
+          // stopWorker may have snapshotted an empty set while the dequeue
+          // was in flight; hand the task back instead of processing it
+          // outside the drain. Release before untracking so shutdown cannot
+          // proceed past the drain while the row is still marked processing.
+          await TaskModel.releaseToQueue([task.id]);
           this.untrackTask(task.id);
-        });
+          return;
+        }
+
+        this.processTask(task)
+          .catch((error) => {
+            logger.error(
+              {
+                taskId: task.id,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "[TaskQueue] Unhandled error in processTask",
+            );
+          })
+          .finally(() => {
+            this.untrackTask(task.id);
+          });
+      }
     }
+  }
+
+  private laneCap(lane: TaskLane): number {
+    switch (lane) {
+      case "content":
+        return config.kb.taskWorkerMaxConcurrent;
+      case "permission":
+        return config.kb.permissionSyncWorkerMaxConcurrent;
+      case "system":
+        return SYSTEM_LANE_MAX_CONCURRENT;
+    }
+  }
+
+  private trackTask(taskId: string, lane: TaskLane): void {
+    this.activeTaskIds.add(taskId);
+    this.taskLane.set(taskId, lane);
+    this.laneCounts[lane] += 1;
   }
 
   private async raceWithDeadline<T>(
@@ -261,6 +301,11 @@ export class TaskQueueService {
 
   private untrackTask(taskId: string): void {
     this.activeTaskIds.delete(taskId);
+    const lane = this.taskLane.get(taskId);
+    if (lane) {
+      this.taskLane.delete(taskId);
+      this.laneCounts[lane] = Math.max(this.laneCounts[lane] - 1, 0);
+    }
     if (this.activeTaskIds.size === 0 && this.drainResolve) {
       this.drainResolve();
       this.drainResolve = null;
@@ -395,7 +440,19 @@ export const taskQueueService = new TaskQueueService();
 // ===== Internal helpers =====
 
 const STUCK_SWEEP_INTERVAL_MS = 60_000;
-const STUCK_TASK_TIMEOUT_MS = 60 * 60 * 1000;
+// A task is stuck when its worker has not heartbeated for this long. Workers
+// renew every poll tick (seconds), so 5 minutes is dozens of missed beats —
+// a dead worker, not a long task (a healthy multi-hour task stays fresh
+// forever). Before heartbeats this was 60 minutes to over-approximate the
+// longest legitimate task; that meant a crashed worker's tasks blocked
+// dependents (e.g. the connector-run reaper waits on live batch_embedding
+// tasks) for up to an hour.
+const STUCK_TASK_TIMEOUT_MS = 5 * 60 * 1000;
+// Concurrency cap for the `system` lane (periodic check/cleanup tasks). These
+// are lightweight and infrequent; content and permission ingestion have their
+// own configurable caps (config.kb.*).
+const SYSTEM_LANE_MAX_CONCURRENT = 4;
+const LANES = Object.keys(TASK_LANES) as TaskLane[];
 
 function isUniqueViolation(error: unknown): boolean {
   return (

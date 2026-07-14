@@ -95,7 +95,10 @@ export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
 export { default as invitationsTable } from "./invitation";
 export { default as jwksTable } from "./jwks";
 export { default as kbChunksTable } from "./kb-chunk";
+export { default as kbContainerAclsTable } from "./kb-container-acl";
 export { default as kbDocumentsTable } from "./kb-document";
+export { default as kbExternalUserGroupsTable } from "./kb-external-user-group";
+export { default as kbMemberOverridesTable } from "./kb-member-override";
 export { default as knowledgeBasesTable } from "./knowledge-base";
 export {
   default as knowledgeBaseConnectorsTable,

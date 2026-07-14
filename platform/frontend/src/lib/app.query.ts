@@ -24,6 +24,7 @@ const {
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
 type AppsParams = Pick<AppsQuery, "limit" | "offset" | "search">;
+type AppDetailQueryOptions = { toastOnError?: boolean };
 
 // ===== Query hooks =====
 
@@ -46,7 +47,11 @@ export function useApps(
 
 // Resolves an external UI-providing app by catalog id: its UI resource plus the
 // caller's accessible installs and default install for the run-page selector.
-export function useExternalApp(catalogId: string | null) {
+export function useExternalApp(
+  catalogId: string | null,
+  options?: AppDetailQueryOptions,
+) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["apps", "external", catalogId],
     enabled: !!catalogId,
@@ -54,13 +59,14 @@ export function useExternalApp(catalogId: string | null) {
       const { data, error } = await getExternalApp({
         path: { catalogId: catalogId as string },
       });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, { allowNotFound: true, toastOnError });
       return data ?? null;
     },
   });
 }
 
-export function useApp(appId: string | null) {
+export function useApp(appId: string | null, options?: AppDetailQueryOptions) {
+  const toastOnError = options?.toastOnError;
   return useQuery({
     queryKey: ["apps", appId],
     enabled: !!appId,
@@ -68,7 +74,7 @@ export function useApp(appId: string | null) {
       const { data, error } = await getApp({
         path: { appId: appId as string },
       });
-      throwOnApiError(error, { allowNotFound: true });
+      throwOnApiError(error, { allowNotFound: true, toastOnError });
       return data ?? null;
     },
   });

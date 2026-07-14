@@ -355,6 +355,7 @@ function StepBotSettings({
             <span className="pt-0.5 flex-1">
               Copy the <strong>Microsoft App ID</strong>
               <Input
+                aria-label="Microsoft App ID"
                 value={appId}
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your Microsoft App ID"
@@ -374,6 +375,7 @@ function StepBotSettings({
               <span className="text-muted-foreground">(optional)</span> — for
               single-tenant bots
               <Input
+                aria-label="Microsoft Tenant ID"
                 value={showTenantMask ? savedTenantIdMask : tenantId}
                 onChange={(e) => onTenantIdChange(e.target.value)}
                 onFocus={() => setTenantFocused(true)}

@@ -75,6 +75,7 @@ export function CallPolicyToggle({
               size="sm"
               variant="ghost"
               className={getButtonClassName("allow_when_context_is_untrusted")}
+              aria-label="Allow always"
               disabled={disabled}
               onClick={(e) => {
                 e.stopPropagation();
@@ -96,6 +97,7 @@ export function CallPolicyToggle({
               size="sm"
               variant="ghost"
               className={getButtonClassName("block_when_context_is_untrusted")}
+              aria-label="Block in sensitive context"
               disabled={disabled}
               onClick={(e) => {
                 e.stopPropagation();
@@ -117,6 +119,7 @@ export function CallPolicyToggle({
               size="sm"
               variant="ghost"
               className={getButtonClassName("require_approval")}
+              aria-label="Require approval"
               disabled={disabled}
               onClick={(e) => {
                 e.stopPropagation();
@@ -141,6 +144,7 @@ export function CallPolicyToggle({
               size="sm"
               variant="ghost"
               className={getButtonClassName("block_always")}
+              aria-label="Block always"
               disabled={disabled}
               onClick={(e) => {
                 e.stopPropagation();

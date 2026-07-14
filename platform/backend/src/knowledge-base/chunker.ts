@@ -1,7 +1,7 @@
 import { RecursiveChunker, Tokenizer } from "@chonkiejs/core";
 import type { Tiktoken } from "tiktoken";
 import { buildMetadataSuffixes } from "./metadata-suffix";
-import { countTokens, getEncoding } from "./tokenizer";
+import { countTokens, encodeText, getEncoding } from "./tokenizer";
 
 interface Chunk {
   content: string;
@@ -95,7 +95,7 @@ function truncateTitlePrefix(encoding: Tiktoken, title: string): string {
   const overhead = countTokens(encoding, prefix + suffix);
   const titleBudget = Math.max(budget - overhead, 1);
 
-  const tokens = encoding.encode(title);
+  const tokens = encodeText(encoding, title);
   const truncatedTokens = tokens.slice(0, titleBudget);
   const truncatedTitle = new TextDecoder().decode(
     encoding.decode(truncatedTokens),
@@ -105,8 +105,8 @@ function truncateTitlePrefix(encoding: Tiktoken, title: string): string {
 
 function createTiktokenAdapter(encoding: Tiktoken): Tokenizer {
   const adapter = new Tokenizer();
-  adapter.countTokens = (text: string) => encoding.encode(text).length;
-  adapter.encode = (text: string) => Array.from(encoding.encode(text));
+  adapter.countTokens = (text: string) => encodeText(encoding, text).length;
+  adapter.encode = (text: string) => Array.from(encodeText(encoding, text));
   adapter.decode = (tokens: number[]) =>
     new TextDecoder().decode(encoding.decode(new Uint32Array(tokens)));
   adapter.decodeBatch = (tokensBatch: number[][]) =>

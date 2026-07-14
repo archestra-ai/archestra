@@ -99,6 +99,7 @@ export function Condition({
         <Input
           type="number"
           name="maxTokens"
+          aria-label="Count"
           value={maxLength}
           placeholder="count"
           className="px-2 h-7 w-20 bg-background"

@@ -19,6 +19,11 @@ const {
   testConnectorConnection,
   getConnectorRuns,
   getConnectorRun,
+  getConnectorUserGroups,
+  upsertConnectorMemberOverride,
+  deleteConnectorMemberOverride,
+  triggerPermissionSync,
+  getPermissionSyncCoverage,
   assignConnectorToKnowledgeBases,
   unassignConnectorFromKnowledgeBase,
   getConnectorKnowledgeBases,
@@ -37,6 +42,11 @@ type ConnectorsPaginatedParams = Pick<
   ConnectorsQuery,
   "limit" | "offset" | "search" | "connectorType"
 >;
+
+/** One synced upstream group, as `useConnectorUserGroups` returns it. */
+export type ConnectorUserGroup =
+  archestraApiTypes.GetConnectorUserGroupsResponses["200"]["groups"][number];
+export type ConnectorUserGroupMember = ConnectorUserGroup["members"][number];
 
 // ===== Query hooks =====
 
@@ -93,7 +103,22 @@ export function useConnector(id: string) {
     },
     enabled: !!id,
     refetchInterval: (query) => {
-      return query.state.data?.lastSyncStatus === "running" ? 3000 : false;
+      const connector = query.state.data;
+      if (
+        connector?.lastSyncStatus === "running" ||
+        connector?.lastPermissionSyncStatus === "running"
+      ) {
+        return 3000;
+      }
+      // Chained-run grace: a completed documents sync spawns a permission
+      // pass seconds LATER, after the poll that observed the terminal status
+      // — stopping immediately strands the new run until a manual reload.
+      return withinRunChainGrace(
+        connector?.lastSyncAt,
+        connector?.lastPermissionSyncAt,
+      )
+        ? RUN_CHAIN_GRACE_POLL_MS
+        : false;
     },
   });
 }
@@ -273,19 +298,178 @@ export function useTestConnectorConnection() {
   });
 }
 
+export function useTriggerPermissionSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (connectorId: string) => {
+      const { data, error } = await triggerPermissionSync({
+        path: { id: connectorId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, connectorId) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "runs"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "permission-coverage"],
+      });
+      toast.success("Permission sync started");
+    },
+  });
+}
+
+/**
+ * Live ACL coverage for an auto-sync-permissions connector: how many ingested
+ * documents are tagged vs still fail-closed. Polls while a pass is running or
+ * documents are still awaiting one, so the header stat converges on its own.
+ */
+export function useConnectorPermissionCoverage(params: {
+  connectorId: string;
+  enabled: boolean;
+}) {
+  const { connectorId, enabled } = params;
+  return useQuery({
+    queryKey: ["connectors", connectorId, "permission-coverage"],
+    queryFn: async () => {
+      const { data, error } = await getPermissionSyncCoverage({
+        path: { id: connectorId },
+      });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: enabled && !!connectorId,
+    refetchInterval: (query) => {
+      const coverage = query.state.data;
+      return coverage?.permissionSyncRunning ||
+        (coverage?.failClosedDocuments ?? 0) > 0
+        ? 5000
+        : false;
+    },
+  });
+}
+
+/**
+ * Synced external user groups for an auto-sync-permissions connector: member
+ * emails, the org users they resolve to, and per-group document grant counts.
+ */
+export function useConnectorUserGroups(params: {
+  connectorId: string;
+  enabled: boolean;
+}) {
+  const { connectorId, enabled } = params;
+  return useQuery({
+    queryKey: ["connectors", connectorId, "user-groups"],
+    queryFn: async () => {
+      const { data, error } = await getConnectorUserGroups({
+        path: { id: connectorId },
+      });
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
+      return data ?? null;
+    },
+    enabled: enabled && !!connectorId,
+  });
+}
+
+/**
+ * Manually map an upstream member account to an org user (the admin escape
+ * hatch for members whose email the upstream hides from every credential).
+ */
+export function useUpsertConnectorMemberOverride(connectorId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { externalAccountId: string; userId: string }) => {
+      const { data, error } = await upsertConnectorMemberOverride({
+        path: { id: connectorId },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "user-groups"],
+      });
+      toast.success("Member mapped — access applies on the next query");
+    },
+  });
+}
+
+/** Remove a manual member mapping; resolution falls back to the email match. */
+export function useDeleteConnectorMemberOverride(connectorId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (externalAccountId: string) => {
+      const { data, error } = await deleteConnectorMemberOverride({
+        path: { id: connectorId, externalAccountId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({
+        queryKey: ["connectors", connectorId, "user-groups"],
+      });
+      toast.success("Member mapping removed");
+    },
+  });
+}
+
 export function useConnectorRuns(params: {
   connectorId: string;
   limit?: number;
   offset?: number;
+  /** Scope to one job family: "content" (Sync Runs) or "permission" (Permission Sync Runs). */
+  runType?: "content" | "permission";
+  status?: NonNullable<
+    archestraApiTypes.GetConnectorRunsData["query"]
+  >["status"];
+  result?: NonNullable<
+    archestraApiTypes.GetConnectorRunsData["query"]
+  >["result"];
 }) {
   const queryClient = useQueryClient();
-  const { connectorId, limit = 10, offset = 0 } = params;
+  const {
+    connectorId,
+    limit = 10,
+    offset = 0,
+    runType,
+    status,
+    result,
+  } = params;
   return useQuery({
-    queryKey: ["connectors", connectorId, "runs", { limit, offset }],
+    queryKey: [
+      "connectors",
+      connectorId,
+      "runs",
+      { limit, offset, runType, status, result },
+    ],
     queryFn: async () => {
       const { data, error } = await getConnectorRuns({
         path: { id: connectorId },
-        query: { limit, offset },
+        query: {
+          limit,
+          offset,
+          ...(runType ? { runType } : {}),
+          ...(status ? { status } : {}),
+          ...(result ? { result } : {}),
+        },
       });
       // A deleted/missing connector 404s here; degrade to a null result rather
       // than an error. Return null (not bare data) so react-query doesn't throw
@@ -301,8 +485,35 @@ export function useConnectorRuns(params: {
       const connector = queryClient.getQueryData<
         archestraApiTypes.GetConnectorResponses["200"]
       >(["connectors", connectorId]);
-      const connectorIsRunning = connector?.lastSyncStatus === "running";
-      return hasRunning || connectorIsRunning ? 3000 : false;
+      // A just-triggered sync flips the connector status (to "queued", then
+      // "running" once a worker claims it) before the run row exists — poll
+      // off the status AND the task-derived queued flags so the queued row
+      // and then the new run show up without a reload. Scope to the tab's
+      // run family.
+      const queued = query.state.data?.queued;
+      const contentRunning =
+        connector?.lastSyncStatus === "running" ||
+        connector?.lastSyncStatus === "queued" ||
+        !!queued?.content;
+      const permissionRunning =
+        connector?.lastPermissionSyncStatus === "running" ||
+        connector?.lastPermissionSyncStatus === "queued" ||
+        !!queued?.permission;
+      const connectorIsRunning =
+        runType === "permission"
+          ? permissionRunning
+          : runType === "content"
+            ? contentRunning
+            : contentRunning || permissionRunning;
+      if (hasRunning || connectorIsRunning) return 3000;
+      // Chained-run grace: a completed documents sync spawns a permission
+      // pass seconds LATER, after the poll that observed the terminal status
+      // — stopping immediately strands the new run until a manual reload.
+      return withinRunChainGrace(
+        ...(query.state.data?.data?.map((r) => r.completedAt) ?? []),
+      )
+        ? RUN_CHAIN_GRACE_POLL_MS
+        : false;
     },
   });
 }
@@ -382,5 +593,27 @@ export function useUnassignConnectorFromKnowledgeBase() {
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Connector unassigned successfully");
     },
+  });
+}
+
+// === Internal helpers ===
+
+/**
+ * How long after a run finishes the run/connector queries keep a slow poll
+ * alive, so runs CHAINED onto a completion (a documents sync enqueues a
+ * permission pass; a reaped run enqueues its continuation) appear without a
+ * manual reload. Covers the task-queue dequeue latency with wide margin.
+ */
+const RUN_CHAIN_GRACE_MS = 60_000;
+const RUN_CHAIN_GRACE_POLL_MS = 5000;
+
+function withinRunChainGrace(
+  ...timestamps: (string | Date | null | undefined)[]
+): boolean {
+  const now = Date.now();
+  return timestamps.some((ts) => {
+    if (!ts) return false;
+    const time = new Date(ts).getTime();
+    return Number.isFinite(time) && now - time < RUN_CHAIN_GRACE_MS;
   });
 }

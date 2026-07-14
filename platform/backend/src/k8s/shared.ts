@@ -146,6 +146,32 @@ export function getK8sNamespace(): string {
 }
 
 /**
+ * Type guard to check if an error is a Kubernetes 409 (Conflict) error —
+ * e.g. a create that raced another writer; retry as a replace/patch.
+ * K8s client errors can have `statusCode`, `code`, or `response.statusCode` set.
+ */
+export function isK8sConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  if ("statusCode" in error && error.statusCode === 409) {
+    return true;
+  }
+
+  if ("code" in error && error.code === 409) {
+    return true;
+  }
+
+  if (
+    "response" in error &&
+    (error as { response: { statusCode: number } }).response?.statusCode === 409
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Type guard to check if an error is a Kubernetes 404 (Not Found) error.
  * K8s client errors can have `statusCode`, `code`, or `response.statusCode` set to 404.
  */

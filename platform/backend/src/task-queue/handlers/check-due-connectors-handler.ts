@@ -92,7 +92,12 @@ async function reapExpiredRuns(): Promise<void> {
       error: null,
     });
 
-    if (!(await withinResumeBudget(run.connectorId))) {
+    if (
+      !(await withinResumeBudget({
+        connectorId: run.connectorId,
+        runType: "content",
+      }))
+    ) {
       // Runaway: stop auto-resuming. A scheduled connector retries on its next
       // cron; a scheduleless one stays `partial` (checkpoint preserved) until
       // manually re-triggered — it needs a look.

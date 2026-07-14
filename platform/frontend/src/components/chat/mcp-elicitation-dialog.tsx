@@ -152,6 +152,7 @@ export function McpElicitationDialog({
               }))
             }
             placeholder="Response"
+            aria-label="Response"
             className="min-h-24"
           />
         ) : (

@@ -629,6 +629,7 @@ function TokenSection({ token }: { token?: TeamToken }) {
         <Label>Token</Label>
         <div className="flex gap-2">
           <Input
+            aria-label="Token"
             readOnly
             value={
               showValue && displayedValue

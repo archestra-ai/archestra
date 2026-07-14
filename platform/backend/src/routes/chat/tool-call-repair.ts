@@ -40,3 +40,80 @@ export function repairHarmonyToolName(
   }
   return null;
 }
+
+/**
+ * Best-effort, dependency-free repair for malformed tool-call argument JSON.
+ *
+ * Models sometimes emit otherwise-valid tool arguments with a stray trailing
+ * token — an extra closing brace on a new line, trailing prose, a duplicated
+ * value — which makes a strict `JSON.parse` reject the whole payload (e.g.
+ * "Unexpected non-whitespace character after JSON"). In that case the intended
+ * object is fully recoverable: it is the first complete, balanced JSON value in
+ * the string, and everything after it is garbage.
+ *
+ * Returns a valid JSON string when the input already parses, or when the first
+ * complete JSON value can be isolated and parses cleanly. Returns null when the
+ * input can't be safely recovered this way (an unterminated string, a missing
+ * brace, no JSON at all), leaving the caller to fall back to a heavier repair.
+ */
+export function repairMalformedToolInput(input: string): string | null {
+  if (isParseableJson(input)) {
+    return input;
+  }
+  const candidate = extractFirstJsonValue(input);
+  if (candidate === null || candidate === input) {
+    return null;
+  }
+  return isParseableJson(candidate) ? candidate : null;
+}
+
+function isParseableJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Scan from the first `{`/`[` and return the substring spanning the first
+ * balanced, complete JSON value. String literals (and their escapes) are
+ * tracked so structural characters inside string values don't affect nesting
+ * depth. Returns null when no balanced value is found before the string ends.
+ */
+function extractFirstJsonValue(text: string): string | null {
+  const start = text.search(/[{[]/);
+  if (start === -1) {
+    return null;
+  }
+  const open = text[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === open) {
+      depth++;
+    } else if (char === close) {
+      depth--;
+      if (depth === 0) {
+        return text.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
+}

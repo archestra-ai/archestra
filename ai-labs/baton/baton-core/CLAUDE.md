@@ -1,87 +1,135 @@
 # baton-core
 
-Prototype IFC policy engine (edition 2024, `publish = false`). Dependencies:
-`tracing` (facade), `serde` (derive), `thiserror` (the two error types).
+Prototype value-granular IFC policy engine (edition 2024, `publish = false`).
+Dependencies: `tracing` (facade), `serde` (derive), `thiserror` (error types).
 Dev-only: `tracing-subscriber`, `criterion`, `proptest`, `clap`. Concepts and
-semantics live in `src/lib.rs`; this file is the invariants an edit must not
-silently break.
+semantics live in `src/lib.rs`; the plan-of-record in
+`../baton-authority-model-design.md` (with `../baton-declassifier-design.md`
+as the foundation rationale it builds on); this file is the invariants an edit
+must not silently break.
 
 ## Two structures — never conflate them
 
-- **Taint fold** — `dimension.rs::combine` and `Label::combine`: how
-  provenance combines as turns meet. Per data dimension a commutative,
-  idempotent semilattice where `Unknown` has a *definite* position (absorbing
-  for audience/effects; between Trusted and Suspicious for trust). The whole
-  `Label` is a **monoid** = (semilattice product) × (append-only `audit` Writer
-  log), **not** a join-semilattice. The operation is `combine`; do not call it
-  a join.
+- **Taint fold** — `dimension.rs::combine` and `ValueLabel::combine`: how
+  provenance combines. Per dimension a commutative, idempotent semilattice
+  where `Unknown` has a *definite* position (absorbing for audience/effects;
+  between Trusted and Suspicious for trust). The operation is `combine`; do
+  not call it a join.
 - **Adequacy relation** — `dimension.rs::{covers, at_least, avoids}` returning
   `Adequacy<W>` (`Holds` / `Fails(witness)` / `Unprovable`): the sink-side
   proof. Here `Unknown` is **incomparable / bottom → `Unprovable`**, the
   opposite of its fold position. Trust is the only dimension where the two
   orders disagree on `Unknown`.
 
-`Requirements::check` is a thin *ordered* composition over the adequacy
-relations — no `match` on label values, no set-difference. The emission order
-(trust, audience, attention, effects) is observable; preserve it.
+`Requirements::check_flow` is a thin *ordered* composition over the adequacy
+relations — the emission order (trust, audience, attention, effects) is
+observable; preserve it (there is a typed-order test).
 
-## Grants, lift, authorities
+## Values, flows, admission
 
-- `Grant` is **proposal data, not a capability**: public fields, harness-trusted
-  like `Label`. Authority comes only from engine routing + fail-closed recheck,
-  never from the type. Do not add authority-only constructors or treat a `Grant`
-  as evidence.
-- `Label::lift` is **check-transient** (never store a lifted label) and
-  **monotone/inflationary in the adequacy order** (Unknown = bottom in every
-  dimension). Trust-lift is a **join (max), not a replace** — it must never
-  demote a Trusted context. Unknown effects stay Unknown (which is why
-  `EffectsUnknown` is acknowledge-only, not grant-fixable). `confirms` is check
-  *input*, not applied by `lift`.
-- Authorities implement one method:
-  `Authority::rule(needed, request, context, violations) -> Option<(AuthorityName, Ruling)>`.
-  Name and ruling come from a **single traversal** — attribution is consistent
-  by construction. A non-covering member must return `None` **before** running
-  its judgement, so coverage stays decidable from the declared mandate and an
-  uncovered flow blocks without consulting anyone. Compose with tuples
-  (`impl Authority for (A, B)`, first-success `or_else`): **no `dyn`/`Box`**,
-  `PolicyEngine<A: Authority>` stays generic.
+- Values are **immutable**: body, label, and provenance fixed at admission. A
+  transformer derives a *new* value; nothing mutates or relabels a source.
+- Checks fold **exactly a flow's dependencies**:
+  `L_flow = combine(L_args, L_control)` from the request's argument-tree
+  leaves plus its mandatory control set — never the whole trajectory.
+  Requests carry control *dependency sets*, never a caller-supplied control
+  label (that would be a relabeling hole).
+- **Admission is engine-owned.** `Trajectory::ingress` is the only
+  caller-labeled path (the explicit trust boundary). Model outputs fold their
+  mandatory read+control sets; tool outputs fold
+  `combine(intrinsic, args, control)` where the contract's intrinsic label can
+  only worsen the fold; only a validated transformer admission may sit below
+  the conservative fold, and only under its *declared* output label.
+  `ValueStore` mutators stay `pub(crate)` — never add a public
+  `insert(bytes, label)`.
+- Effects are **monotone trajectory state** (`TrajectoryState::past_effects`),
+  committed at release (may-effects: failure removes nothing). Audit is
+  **control-plane history** (`AuditEvent`), never a label field; failed
+  transitions audit an event and create no value or action.
 
-## Engine invariants (`engine.rs`)
+## Revisions and linear capabilities
 
-- Two orthogonal axes on a violation. **Fixability** (`Violation::fixability`):
-  `Structural` blocks first without consulting; `GrantFixable` derives a grant;
-  `AcknowledgeOnly` rides through as an acknowledgment. **Provability** (breach
-  vs unprovable) drives `UnknownPolicy`, unchanged: `Deny` fails closed,
-  `AllowWithAudit` audits through (`by: None`), `Escalate` routes.
-- Approval = derive `needed_grant` → route by mandate → apply grant →
-  **recheck fail-closed** → record. The recheck verifies **only the targeted
-  grant-fixable set**; policy-audited unknowns and acknowledge-only violations
-  are expected to remain — do not fail on them. A failure is
-  `InternalInvariantFailed` (a control-flow check, never a `debug_assert`).
-- `evaluate` never mutates the trajectory; an approval is one-shot on the
-  `Permit`. Permits are linear (not `Clone`), bound to trajectory id + head;
-  `Trajectory::record_result` enforces freshness. Confirmations are structural
-  on user turns, never label state.
-- **serde capability line**: pure data (`Label`, `Grant`, `AuditEntry`,
-  contracts, dimensions and their preset algebras, violations) derives
-  `Serialize + Deserialize`; `Decision`/`Permit`/`BlockReason`/`TrajectoryId`
-  are `Serialize`-only. Never add `Deserialize` to `Permit` (or
-  `Decision`/`TrajectoryId`): a permit has no public constructor by design, so
-  deserializing one forges the linear capability, and a deserialized
-  `TrajectoryId` could alias a live trajectory. `Trajectory` itself is not serde
-  at all.
-- `register` fails on a duplicate contract (contracts are the policy boundary);
-  never silently overwrite.
+- Every public `Trajectory` mutation advances `Revision` exactly once, as one
+  transaction. Overflow fails loudly (no wrap).
+- Capabilities — `ExecutionToken`, `DispatchReceipt`, `StepCapability`,
+  `PendingApproval` — are **non-`Clone`, `Serialize`-only, no public
+  constructor**, bound to trajectory + revision (+ action/plan/step), spent on
+  use. Plans, step capabilities, and pending approvals additionally bind the
+  `EngineId` whose registries produced them — a capability never resolves
+  against another engine's registries. Never add `Deserialize`: deserializing
+  one forges the linearity. `Trajectory` itself is not serde at all.
+- Two-phase dispatch: `release` commits may-effects, spends any pending
+  confirmation, renders the **one** canonical request from the exact checked
+  tree, and mints the receipt; `record_output`/`record_failure` consume the
+  receipt and close the action. There is deliberately no one-call shortcut
+  that skips the canonical request — do not add one. Binding failures
+  (stale/foreign) refuse *without* touching state; the capability is consumed
+  either way. The pending action's (possibly constrained) proposed effects
+  are the single source of truth for what release commits.
+- Confirmation stays structural on user turns; it survives remedy steps on
+  the confirmed action and is spent atomically at release (the
+  spent-confirmation marker exists so a receipt-declared failure cannot
+  resurrect it).
+
+## Pending action, plans, remedies
+
+- At most one `PendingAction`; it keeps the **immutable original** proposal
+  (identity basis for idempotent re-entry) and the **current** constrained
+  form (what is checked and dispatched). A different proposal while one is
+  pending is refused, never queued. Terminal blocks clear the slot;
+  remediable blocks keep it.
+- `Blocked::Terminal` is an explicit type; `Blocked::Remediable` carries a
+  `NonEmptyVec<RemedyPlan>` — "remediable with zero plans" is
+  unrepresentable. Plans are predictions, not permits: plain serializable
+  data, revision-bound, recomputed after every applied step.
+- The closed `TransitionKind` variants enforce conservation laws: transforms
+  cannot touch actions or past effects; constraints go only through
+  registered tool-identity mappings verified never wider
+  (`ActionTransition::narrows` — subset or unknown-confinement; the target
+  contract must declare exactly the transition's effects and must not widen
+  the resolved recipient set — the PoC's structural relation covers tool
+  identity, effects, and recipient roles; egress-destination and
+  runtime-capability sets are not modeled); a **transient waiver** changes no
+  stored state — a check-transient lift (`waiving` a prior effect, standing in
+  for a confirmation, excluding a control dep) plus an audit record. A
+  **fiat relabel** (`TransitionKind::Derive` with `Justification::Fiat`, the
+  Endorse), by contrast, mints a *durable* value like a
+  transform: an authority raises `source`'s label with the raise helpers
+  (`raised_to`/`admitting`, never `combine`), and a new value carries the raised
+  label under `Provenance::Endorsed` — the source is untouched. So raising trust
+  or audience is a relabel, not a waiver; a waiver never raises trust or
+  audience. A `TransientWaiver` is proposal data, not a capability; the
+  `ProposedGrant` an authority rules on carries both the lift and any
+  acknowledge-only facts it clears, so `AuthorityMandate::covers` requires
+  `acknowledge_unknown` to clear an unknown even when the lift dimensions alone
+  are covered. Authority comes from competence routing + the fail-closed recheck
+  (`PostconditionFailed`, or a re-evaluation that re-routes the residual, blocks
+  rather than permitting an under-covered flow).
+- Registration is an operator trust decision, not content correctness: audit
+  wording says "admitted under the transition declared by registered
+  transformer X", never "verified as clean". Registries are populated at
+  construction, duplicates refused, never silently replaced. Authorities
+  (`Authority { name, mandate, mode: Inline(fn) | External }`) share one
+  registry and name space; a grant routes to competent authorities inline-first
+  then external, each in registration order, and an inline abstention (`None`)
+  falls through to the next competent authority. Routing is resolved **live at
+  application** against the current registry (a minted plan no longer pins its
+  authority), so the construction-time-only rule is load-bearing for *safety*,
+  not merely determinism: registering an authority between minting a plan and
+  applying its step would change which authority rules it. Do not mutate the
+  registry after the first evaluation.
+- Transformers are plain `fn` pointers (`TransformerFn`) beside a
+  serializable descriptor. No capturing closures, no `dyn`/`Box` in engine
+  state.
 
 ## Conventions
 
-- no `dyn`/`Box`; prefer newtypes over primitives; prefer pattern matching over
-  `if`-chains. Core ops emit `tracing` events (decision path at `debug!`,
-  algebra at `trace!`) — borrow-only, never behavior-changing; `demo -- -v`/`-vv`
+- No `dyn`/`Box`; newtypes over primitives; pattern matching over if-chains.
+  Core ops emit `tracing` events (decision path at `debug!`, algebra at
+  `trace!`) — borrow-only, never behavior-changing; `demo -- -v`/`-vv`
   selects the level.
 - Validate every change: `cargo test`, `cargo clippy --all-targets -- -D warnings`,
   `cargo fmt --check`, `cargo run --example demo`.
-- The algebra **laws** are real `proptest` properties (`combine`/`lift`/`covers`
-  over generated inputs, in `src/test_strategies.rs`), not fixture loops.
-  Commutativity/idempotence hold on the data dimensions only — the `audit`
-  Writer log appends. Do not assert on `Display` output or doc text.
+- The algebra **laws** are real `proptest` properties
+  (`src/test_strategies.rs`), not fixture loops. Do not assert on `Display`
+  output or doc text; behavior tests assert typed values.

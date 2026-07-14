@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
+import { WizardStep } from "@/components/wizard-step";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
@@ -27,7 +28,6 @@ import {
   useSkillsMarketplaceVisible,
 } from "./skills-marketplace-step";
 import { useUpdateUrlParams } from "./use-update-url-params";
-import { WizardStep } from "./wizard-step";
 
 interface ConnectionFlowProps {
   defaultMcpGatewayId?: string;
@@ -57,7 +57,11 @@ export function ConnectionFlow({
   const urlGatewayId = searchParams.get("gatewayId");
   const urlProxyId = searchParams.get("proxyId");
   const urlClientId = searchParams.get("clientId");
-  const fromTable = searchParams.get("from") === "table";
+  // "table" = row Connect action; "create" = post-creation handoff dialog.
+  // Both pin one slot's ID in the URL and want identical pre-selection.
+  const fromTable = ["table", "create"].includes(
+    searchParams.get("from") ?? "",
+  );
 
   const updateUrlParams = useUpdateUrlParams();
 

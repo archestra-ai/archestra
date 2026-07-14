@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/microsoft-365-copilot/copilot/conversations",
+    "headers": {
+      "Authorization": {
+        "matches": "Bearer .*"
+      }
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "conv-e2e",
+      "createdDateTime": "2026-01-01T00:00:00.0000000Z",
+      "displayName": "",
+      "status": "active",
+      "turnCount": 0
+    }
+  }
+}

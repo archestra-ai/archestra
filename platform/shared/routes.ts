@@ -301,6 +301,20 @@ export const RouteId = {
   GithubCopilotDeviceAuthStart: "githubCopilotDeviceAuthStart",
   GithubCopilotDeviceAuthPoll: "githubCopilotDeviceAuthPoll",
 
+  // Proxy Routes - Microsoft 365 Copilot
+  Microsoft365CopilotChatCompletionsWithDefaultAgent:
+    "microsoft365CopilotChatCompletionsWithDefaultAgent",
+  Microsoft365CopilotChatCompletionsWithAgent:
+    "microsoft365CopilotChatCompletionsWithAgent",
+  Microsoft365CopilotListModelsWithDefaultAgent:
+    "microsoft365CopilotListModelsWithDefaultAgent",
+  Microsoft365CopilotListModelsWithAgent:
+    "microsoft365CopilotListModelsWithAgent",
+
+  // Microsoft 365 Copilot device-flow sign-in (creates personal provider keys)
+  Microsoft365CopilotDeviceAuthStart: "microsoft365CopilotDeviceAuthStart",
+  Microsoft365CopilotDeviceAuthPoll: "microsoft365CopilotDeviceAuthPoll",
+
   // Proxy Routes - Azure AI Foundry
   AzureChatCompletionsWithDefaultAgent: "azureChatCompletionsWithDefaultAgent",
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
@@ -329,6 +343,7 @@ export const RouteId = {
   GenerateChatConversationTitle: "generateChatConversationTitle",
   GetChatMcpTools: "getChatMcpTools",
   UpdateChatMessage: "updateChatMessage",
+  SetChatMessageFeedback: "setChatMessageFeedback",
   GetConversationEnabledTools: "getConversationEnabledTools",
   UpdateConversationEnabledTools: "updateConversationEnabledTools",
   DeleteConversationEnabledTools: "deleteConversationEnabledTools",
@@ -524,6 +539,9 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
+  LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
+  GenerateTelegramLinkCode: "generateTelegramLinkCode",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",
   GetNgrokConfig: "getNgrokConfig",
@@ -547,6 +565,11 @@ export const RouteId = {
   DeleteConnector: "deleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
+  TriggerPermissionSync: "triggerPermissionSync",
+  GetPermissionSyncCoverage: "getPermissionSyncCoverage",
+  GetConnectorUserGroups: "getConnectorUserGroups",
+  UpsertConnectorMemberOverride: "upsertConnectorMemberOverride",
+  DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
 

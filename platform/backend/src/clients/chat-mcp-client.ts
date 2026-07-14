@@ -49,25 +49,51 @@ import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 const MCP_GATEWAY_BASE_URL = `http://localhost:${config.api.port}/v1/mcp`;
 
 /**
+ * Build the MCP client transport for the loopback gateway.
+ *
+ * Shared by `getChatMcpClient` and the loopback-fetch integration test so the
+ * test drives the exact production construction — most importantly the
+ * `loopbackGatewayFetch` wiring below, which is the whole fix.
+ *
+ * @public — used by getChatMcpClient and the loopback-fetch integration test
+ */
+export function createLoopbackGatewayTransport(
+  mcpGatewayUrl: string,
+  authToken: string,
+): StreamableHTTPClientTransport {
+  return new StreamableHTTPClientTransport(new URL(mcpGatewayUrl), {
+    fetch: loopbackGatewayFetch,
+    requestInit: {
+      headers: new Headers({
+        Authorization: `Bearer ${authToken}`,
+        Accept: "application/json, text/event-stream",
+      }),
+    },
+  });
+}
+
+/**
  * Custom fetch for the loopback MCP Gateway transport.
  *
  * The MCP SDK opens an optional standalone GET SSE stream (per spec) to receive
  * server-initiated messages. Our gateway runs stateless (`enableJsonResponse`,
- * no session id) and never pushes on that stream. Worse, the gateway's GET route
- * answers the SDK's poll with finite discovery JSON (`200`), which the SDK reads
- * as an empty SSE stream and immediately reconnects — ~once per second per
- * client, each GET running DB-backed profile and auth work. Under many cached
- * clients this alone can saturate the connection pool.
+ * no session id) and never pushes on that stream, and its transport is built
+ * without an `authProvider`, so the standalone GET SSE stream is the only GET
+ * the SDK issues. Worse, the gateway's GET route answers that poll with finite
+ * discovery JSON (`200`), which the SDK reads as an empty SSE stream and
+ * immediately reconnects — ~once per second per client, each GET running
+ * DB-backed profile and auth work. Under many cached clients this alone can
+ * saturate the connection pool.
  *
  * Answering the GET with `405` tells the SDK the server offers no GET SSE stream,
  * so it stops polling (the SDK treats 405 as an expected, terminal response).
  * Doing it in the client's fetch — rather than the shared route — keeps the
  * public JSON discovery route unchanged. POST/DELETE, the only requests carrying
  * real JSON-RPC and the Bearer token, pass through to the network unchanged.
- *
- * @public — exercised by chat-mcp-client.loopback-fetch integration test
+ * (If an `authProvider` is ever added here, OAuth metadata is fetched with GET
+ * too, so this would need to key on the request URL rather than the method.)
  */
-export const loopbackGatewayFetch: FetchLike = (url, init) => {
+const loopbackGatewayFetch: FetchLike = (url, init) => {
   if ((init?.method ?? "GET").toUpperCase() === "GET") {
     return Promise.resolve(
       new Response(null, { status: 405, statusText: "Method Not Allowed" }),
@@ -606,18 +632,7 @@ export async function getChatMcpClient(
 
   const connectWithToken = async (authToken: string) => {
     // Create StreamableHTTP transport with profile token authentication
-    const transport = new StreamableHTTPClientTransport(
-      new URL(mcpGatewayUrl),
-      {
-        fetch: loopbackGatewayFetch,
-        requestInit: {
-          headers: new Headers({
-            Authorization: `Bearer ${authToken}`,
-            Accept: "application/json, text/event-stream",
-          }),
-        },
-      },
-    );
+    const transport = createLoopbackGatewayTransport(mcpGatewayUrl, authToken);
 
     const capabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },

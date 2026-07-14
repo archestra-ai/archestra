@@ -14,25 +14,46 @@ const POST_KILL_DELAY_MS = 100;
 /** Delay after process exit to ensure OS releases the ports */
 const PORT_RELEASE_DELAY_MS = 250;
 
-let currentServerProcess: ChildProcess | null = null;
+type DevServerState = {
+  /** The running server child, or null when none is up. */
+  current: ChildProcess | null;
+  /**
+   * Serializes restarts. tsdown does not await onSuccess and debounces rebuilds
+   * with a bare setTimeout, so a burst of saves can invoke the handler
+   * re-entrantly. Chaining every invocation through one queue keeps kill→spawn
+   * atomic, so a later rebuild can never overwrite `current` while an earlier
+   * restart is mid-flight and orphan a server that keeps holding 9000/9050.
+   */
+  restartQueue: Promise<void>;
+  /**
+   * Id of the most recent restart request. A queued restart only spawns while it
+   * is still the latest, so a burst of rebuilds collapses to a single spawn.
+   * tsdown calls onSuccess only for a build that succeeded, so a failed
+   * superseding build never bumps this — the last good build still spawns and
+   * the server is never left stranded down.
+   */
+  latestRestartId: number;
+};
 
 /**
- * Serializes server restarts. tsdown does not await onSuccess and debounces
- * rebuilds with a bare setTimeout, so a burst of saves can invoke the handler
- * re-entrantly. Chaining every invocation through one queue keeps kill→spawn
- * atomic, so a later rebuild can never overwrite currentServerProcess while an
- * earlier restart is mid-flight and orphan a server that keeps holding 9000/9050.
+ * Restart state is kept on globalThis so it survives a tsdown config self-reload:
+ * editing this file, tsconfig, or package.json makes tsdown clear the require
+ * cache and load a fresh copy of this module in the same process. A module-local
+ * handle would be lost on reload — orphaning the running server, then hitting
+ * EADDRINUSE on the next spawn. The process-global handle lets the reloaded
+ * module find and replace the server it inherited.
  */
-let restartQueue: Promise<void> = Promise.resolve();
-
-/**
- * Id of the most recent restart request. A queued restart only spawns while it
- * is still the latest, so a burst of rebuilds collapses to a single spawn.
- * tsdown calls onSuccess only for a build that succeeded, so a failed
- * superseding build never bumps this — the last good build still spawns and the
- * server is never left stranded down.
- */
-let latestRestartId = 0;
+const globalStore = globalThis as typeof globalThis & {
+  __archestraDevServer__?: DevServerState;
+};
+if (!globalStore.__archestraDevServer__) {
+  globalStore.__archestraDevServer__ = {
+    current: null,
+    restartQueue: Promise.resolve(),
+    latestRestartId: 0,
+  };
+}
+const devServer = globalStore.__archestraDevServer__;
 
 /**
  * Terminate a server process and resolve once it has exited. Always resolves
@@ -74,20 +95,20 @@ const stopServer = (proc: ChildProcess): Promise<void> => {
  * @see https://tsdown.dev/advanced/hooks
  */
 const onSuccessHandler: UserConfig["onSuccess"] = () => {
-  const restartId = ++latestRestartId;
-  restartQueue = restartQueue
+  const restartId = ++devServer.latestRestartId;
+  devServer.restartQueue = devServer.restartQueue
     .then(async () => {
       // A newer build already queued its own restart: leave the running server
       // up and let that restart own the swap. Skipping the kill keeps the old
       // server serving until the winning build is ready to spawn.
-      if (restartId !== latestRestartId) {
+      if (restartId !== devServer.latestRestartId) {
         return;
       }
 
-      if (currentServerProcess) {
+      if (devServer.current) {
         console.log("Stopping previous server...");
-        await stopServer(currentServerProcess);
-        currentServerProcess = null;
+        await stopServer(devServer.current);
+        devServer.current = null;
         // Give the OS a moment to release the listen sockets before rebinding.
         await new Promise((resolve) =>
           setTimeout(resolve, PORT_RELEASE_DELAY_MS),
@@ -96,7 +117,7 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
 
       // Re-check: a newer build may have landed while we were stopping the old
       // server. Don't spawn a stale build over it.
-      if (restartId !== latestRestartId) {
+      if (restartId !== devServer.latestRestartId) {
         return;
       }
 
@@ -117,7 +138,7 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
       const child = spawn(process.execPath, args, {
         stdio: "inherit",
       });
-      currentServerProcess = child;
+      devServer.current = child;
 
       child.on("error", (err) => {
         console.error("Server process error:", err);
@@ -137,7 +158,7 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
       console.error("Dev server restart failed:", error);
     });
 
-  return restartQueue;
+  return devServer.restartQueue;
 };
 
 export default defineConfig((options: UserConfig) => {

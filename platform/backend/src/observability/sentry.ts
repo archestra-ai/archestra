@@ -153,6 +153,13 @@ export function filterErrorEvent(
     ) {
       return null;
     }
+    // 502/504 report an upstream's failure — a user-configured provider or an
+    // external/self-hosted MCP server that is unreachable, misconfigured, or
+    // timed out — not a crash of ours. The request-error handler already keeps
+    // these out of exception tracking; mirror that here so the two sinks agree.
+    if (error.statusCode === 502 || error.statusCode === 504) {
+      return null;
+    }
   }
 
   // Also check for statusCode property on generic errors (e.g., from Fastify

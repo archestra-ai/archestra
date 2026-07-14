@@ -78,6 +78,27 @@ describe("filterErrorEvent", () => {
     );
   });
 
+  test("drops upstream-gateway failures surfaced as 502/504 ApiErrors", () => {
+    // 502/504 mean a user-configured provider or an external/self-hosted MCP
+    // server failed (unreachable, misconfigured, timed out) — not our code.
+    // Mirror the request-error handler's exclusion so both sinks agree.
+    for (const statusCode of [502, 504]) {
+      expect(
+        filterErrorEvent(
+          makeEvent(),
+          hintFor(new ApiError(statusCode, `upstream ${statusCode}`)),
+        ),
+      ).toBeNull();
+    }
+  });
+
+  test("keeps a 503 ApiError, which signals our own overload/outage", () => {
+    const event = makeEvent();
+    expect(filterErrorEvent(event, hintFor(new ApiError(503, "busy")))).toBe(
+      event,
+    );
+  });
+
   test("groups transient DB connectivity failures by root cause", () => {
     // A DNS lookup failure the ORM wrapped per-query: fingerprint by the
     // root cause so an outage groups into one issue, not one per statement.

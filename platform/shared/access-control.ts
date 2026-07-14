@@ -1529,6 +1529,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/llm/proxies": { llmProxy: ["read"] },
   "/llm/model-providers": { llmProviderApiKey: ["read"] },
   "/llm/models": { llmModel: ["read"] },
+  "/llm/credentials/virtual-keys": {
+    llmVirtualKey: ["read"],
+    llmProviderApiKey: ["read"],
+  },
+  "/llm/credentials/oauth-clients": { llmOauthClient: ["read"] },
   "/llm/limits": { llmLimit: ["read"] },
   "/llm/costs": { llmCost: ["read"] },
   "/llm/optimization-rules": { optimizationRule: ["read"] },
@@ -1536,13 +1541,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // MCP
   "/mcp/registry": { mcpRegistry: ["read"] },
   "/mcp/gateways": { mcpGateway: ["read"] },
-
-  // Credentials (unified — OAuth clients across agents/gateways/proxies +
-  // LLM virtual keys). The predefined member/admin roles grant
-  // mcpOauthClient:read, so this gates the shared Credentials nav item; the
-  // page itself only lists the client types the caller can read.
-  "/credentials/oauth-clients": { mcpOauthClient: ["read"] },
-  "/credentials/virtual-keys": { llmVirtualKey: ["read"] },
+  "/mcp/credentials/oauth-clients": { mcpOauthClient: ["read"] },
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/mcp/registry/installation-requests": {

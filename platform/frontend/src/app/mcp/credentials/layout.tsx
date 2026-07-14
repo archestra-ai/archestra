@@ -1,33 +1,35 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
-import { CredentialsActionContext } from "@/components/credentials-action-context";
+import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 
 const TABS = [
   {
     label: "OAuth Clients",
-    href: "/credentials/oauth-clients",
-  },
-  {
-    label: "Virtual Keys",
-    href: "/credentials/virtual-keys",
+    href: "/mcp/credentials/oauth-clients",
   },
 ];
 
 const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
-  "/credentials/oauth-clients": {
+  "/mcp/credentials/oauth-clients": {
     title: "OAuth Clients",
     description:
-      "Register applications that authenticate to your agents, MCP gateways, and LLM proxies with OAuth — as an application (client credentials) or on behalf of users (authorization code)",
-  },
-  "/credentials/virtual-keys": {
-    title: "Virtual Keys",
-    description:
-      "Issue virtual API keys that authenticate to the LLM proxy and map to your provider credentials",
+      "Register applications that authenticate to MCP gateways with OAuth — as an application (client credentials) or on behalf of users (authorization code)",
   },
 };
+
+type CredentialsLayoutContextType = {
+  setActionButton: (button: React.ReactNode) => void;
+};
+
+const CredentialsLayoutContext = createContext<CredentialsLayoutContextType>({
+  setActionButton: () => {},
+});
+
+export function useSetCredentialsAction() {
+  return useContext(CredentialsLayoutContext).setActionButton;
+}
 
 export default function CredentialsLayout({
   children,
@@ -45,7 +47,7 @@ export default function CredentialsLayout({
   const contextValue = useMemo(() => ({ setActionButton }), []);
 
   return (
-    <CredentialsActionContext.Provider value={contextValue}>
+    <CredentialsLayoutContext.Provider value={contextValue}>
       <PageLayout
         title={config.title}
         description={config.description}
@@ -54,6 +56,6 @@ export default function CredentialsLayout({
       >
         {children}
       </PageLayout>
-    </CredentialsActionContext.Provider>
+    </CredentialsLayoutContext.Provider>
   );
 }

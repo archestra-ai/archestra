@@ -354,11 +354,13 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
-  it("navigates to the unified Credentials page when selecting Credentials", () => {
+  it("navigates to LLM credentials when selecting Credentials", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Credentials" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/credentials/oauth-clients");
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/llm/credentials/virtual-keys",
+    );
   });
 });

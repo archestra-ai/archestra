@@ -17,17 +17,12 @@ import {
   type McpOauthClient,
 } from "@/app/credentials/_parts/mcp-oauth-client-dialogs";
 import {
-  summarizeLlmClientAccess,
-  summarizeMcpClientAccess,
-} from "@/app/credentials/_parts/oauth-client-access-summary";
-import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/app/credentials/_parts/oauth-client-created-dialog";
 import { useSetCredentialsAction } from "@/components/credentials-action-context";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
-import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -189,39 +184,6 @@ export default function UnifiedOAuthClientsPage() {
         ),
       },
       {
-        id: "access",
-        header: "Access",
-        cell: ({ row }) => {
-          const r = row.original;
-          const summary =
-            r.kind === "mcp"
-              ? summarizeMcpClientAccess({
-                  grantType: r.grantType,
-                  allowedGatewayIds: r.allowedGatewayIds,
-                  agents: gateways,
-                })
-              : summarizeLlmClientAccess({
-                  grantType: r.grantType,
-                  allowedLlmProxyIds: r.allowedLlmProxyIds,
-                  proxies: llmProxies,
-                  providerKeySummary:
-                    r.providerApiKeys.length > 0
-                      ? formatProviderKeySummary(r.providerApiKeys)
-                      : null,
-                });
-          return (
-            <div className="text-sm text-muted-foreground">
-              <div>{summary.primary}</div>
-              {summary.secondary && (
-                <div className="max-w-[280px] truncate text-xs">
-                  {summary.secondary}
-                </div>
-              )}
-            </div>
-          );
-        },
-      },
-      {
         id: "visibility",
         header: "Accessible to",
         cell: ({ row }) => (
@@ -270,7 +232,7 @@ export default function UnifiedOAuthClientsPage() {
         ),
       },
     ],
-    [currentUserId, gateways, llmProxies],
+    [currentUserId],
   );
 
   return (

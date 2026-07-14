@@ -26,7 +26,7 @@ vi.mock("@/observability/metrics", () => ({
 }));
 
 // Import after mocks are set up
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import db, { schema } from "@/database";
 import { TaskModel } from "@/models";
@@ -261,7 +261,8 @@ describe("TaskQueueService", () => {
 
   describe("poll", () => {
     test("resets stuck tasks before dequeuing", async () => {
-      // A task stuck in processing for over an hour.
+      // A processing task whose worker never heartbeated (heartbeat_at NULL
+      // falls back to started_at, hours past the timeout).
       const stuck = await seedTask({
         status: "processing",
         startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
@@ -270,8 +271,38 @@ describe("TaskQueueService", () => {
       taskQueueService.startWorker();
       await vi.advanceTimersByTimeAsync(1000);
 
-      // resetStuckTasks (1h threshold) recovered it back to pending.
+      // resetStuckTasks (heartbeat timeout) recovered it back to pending.
       expect((await getTask(stuck.id))?.status).toBe("pending");
+    });
+
+    test("renews in-flight heartbeats each tick so a long task never looks stuck", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      taskQueueService.registerHandler(
+        "connector_sync",
+        vi.fn().mockReturnValue(gate),
+      );
+      const task = await seedTask();
+
+      taskQueueService.startWorker();
+      await vi.advanceTimersByTimeAsync(1000); // dequeued, handler in flight
+
+      // Age the heartbeat past any sweep timeout, as if the row sat untouched.
+      await db.execute(sql`
+        UPDATE tasks SET heartbeat_at = NOW() - INTERVAL '10 minutes'
+        WHERE id = ${task.id}
+      `);
+      await vi.advanceTimersByTimeAsync(1000); // next tick renews it
+
+      // DB-clock-safe assertion: the renewed task no longer looks stuck.
+      expect(await TaskModel.resetStuckTasks(60_000)).toEqual([]);
+      expect((await getTask(task.id))?.status).toBe("processing");
+
+      release();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect((await getTask(task.id))?.status).toBe("completed");
     });
 
     test("does nothing when no tasks are available", async () => {

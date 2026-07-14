@@ -724,13 +724,16 @@ export function parseActiveChatRunPollIntervalMs(params: {
  */
 /**
  * Raw URL sources a /connection setup baseUrl may come from: the frontend
- * origin plus every URL in `ARCHESTRA_API_BASE_URL` (the same list the
- * frontend's connection page derives its endpoint candidates from). Returned
- * unparsed; callers normalize and compare full URLs, not just hosts.
+ * origin, every URL in `ARCHESTRA_API_BASE_URL`, and the in-cluster
+ * `ARCHESTRA_INTERNAL_API_BASE_URL` (the connection page falls back to the
+ * internal URL when every external URL is hidden). Returned unparsed; callers
+ * normalize and compare full URLs, not just hosts.
  * @public — exported for testability
  */
 export const getConnectionBaseUrlSources = (): string[] => {
   const sources = [frontendBaseUrl];
+  const internalUrl = process.env.ARCHESTRA_INTERNAL_API_BASE_URL?.trim();
+  if (internalUrl) sources.push(internalUrl);
   const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
   if (externalUrls) {
     for (const url of externalUrls.split(",")) {
@@ -1726,6 +1729,13 @@ const config = {
       : undefined,
   },
   kb: {
+    // BETA gate for the auto-sync-permissions connector visibility: the
+    // permission-sync passes, the connector Permissions tab APIs, and manual
+    // member overrides. Off by default; a blank value falls back to the
+    // ARCHESTRA_BETA master switch (see betaFeatureEnabled).
+    autoSyncPermissionsEnabled: betaFeatureEnabled(
+      process.env.ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED,
+    ),
     hybridSearchEnabled:
       process.env.ARCHESTRA_KNOWLEDGE_BASE_HYBRID_SEARCH_ENABLED !== "false",
     taskWorkerPollIntervalSeconds: parsePositiveInt(
@@ -1735,6 +1745,14 @@ const config = {
     taskWorkerMaxConcurrent: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT,
       2,
+    ),
+    // Concurrency cap for the runtime-isolated permission-sync lane. Separate
+    // from the content lane so permission passes can neither starve nor be
+    // starved by content ingestion.
+    permissionSyncWorkerMaxConcurrent: parsePositiveInt(
+      process.env
+        .ARCHESTRA_KNOWLEDGE_BASE_PERMISSION_SYNC_WORKER_MAX_CONCURRENT,
+      1,
     ),
     taskWorkerShutdownTimeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_SHUTDOWN_TIMEOUT_SECONDS,

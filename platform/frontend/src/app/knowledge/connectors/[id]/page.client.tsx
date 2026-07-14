@@ -1,6 +1,7 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
+import { PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
@@ -11,15 +12,20 @@ import {
   Play,
   Plug,
   Plus,
+  RefreshCw,
   RotateCcw,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
+import { ConnectorMembersTable } from "@/app/knowledge/connectors/_parts/connector-members-table";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
+import { ConnectorUnassignedUsersAlert } from "@/app/knowledge/connectors/_parts/connector-unassigned-users-alert";
+import { ConnectorUserGroupsTable } from "@/app/knowledge/connectors/_parts/connector-user-groups-table";
+import { contentRunPhase } from "@/app/knowledge/connectors/_parts/content-run-phase";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
@@ -29,6 +35,7 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataItem } from "@/components/metadata-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { TableFilters } from "@/components/table-filters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
@@ -49,6 +56,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -61,14 +69,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useFeature } from "@/lib/config/config.query";
 import {
   useAssignConnectorToKnowledgeBases,
   useConnector,
   useConnectorKnowledgeBases,
+  useConnectorPermissionCoverage,
   useConnectorRuns,
   useForceResyncConnector,
   useSyncConnector,
   useTestConnectorConnection,
+  useTriggerPermissionSync,
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -77,6 +88,24 @@ import { formatCronSchedule } from "@/lib/utils/format-cron";
 
 type ConnectorRunItem =
   archestraApiTypes.GetConnectorRunsResponses["200"]["data"][number];
+
+const QUEUED_ROW_ID_PREFIX = "queued-";
+
+/**
+ * Synthetic table row for a sync that is enqueued but not yet claimed by a
+ * worker — there is no run row in the database to show yet. Lifecycle cells
+ * (started/completed/result/logs) all guard on the "queued" status, so only
+ * the fields they read are populated.
+ */
+function makeQueuedRow(runType: "content" | "permission"): ConnectorRunItem {
+  return {
+    id: `${QUEUED_ROW_ID_PREFIX}${runType}`,
+    status: "queued",
+    runType,
+    startedAt: null,
+    completedAt: null,
+  } as unknown as ConnectorRunItem;
+}
 
 export default function ConnectorDetailPage({
   connectorId,
@@ -103,15 +132,21 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     from === "knowledge-bases"
       ? "Back to Knowledge Bases"
       : "Back to Connectors";
+  const tabParam = searchParams.get("tab");
+  // "permission-runs" is a legacy deep link from when permission runs had
+  // their own tab (lands on the merged Sync Runs tab pre-filtered);
+  // "permissions" and "user-groups" are deep links from when Users and
+  // Groups shared one Permissions tab (land on Users, where the fixes live).
   const currentTab =
-    searchParams.get("tab") === "documents" ? "documents" : "runs";
-  const tabs = [
-    { label: "Sync Runs", href: `/knowledge/connectors/${connectorId}` },
-    {
-      label: "Documents",
-      href: `/knowledge/connectors/${connectorId}?tab=documents`,
-    },
-  ];
+    tabParam === "documents"
+      ? "documents"
+      : tabParam === "users" ||
+          tabParam === "permissions" ||
+          tabParam === "user-groups"
+        ? "users"
+        : tabParam === "groups"
+          ? "groups"
+          : "runs";
 
   const {
     data: connector,
@@ -119,21 +154,112 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     isLoadingError,
     refetch,
   } = useConnector(connectorId);
+
+  // BETA: every permission-family surface on this page (Users/Groups tabs,
+  // coverage, sync action, runs filter) keys off isAutoSync, so gating it on
+  // the flag hides them all at once when the beta is off.
+  const autoSyncBeta = useFeature("kbAutoSyncPermissionsEnabled") ?? false;
+  // Content and permission runs share the one Sync Runs tab (a Type column
+  // tells them apart, a filter narrows to one family); permission-only views
+  // live behind the in-tab filter rather than a separate tab.
+  const isAutoSync =
+    connector?.visibility === "auto-sync-permissions" && autoSyncBeta;
+  const tabs = [
+    { label: "Sync Runs", href: `/knowledge/connectors/${connectorId}` },
+    {
+      label: "Documents",
+      href: `/knowledge/connectors/${connectorId}?tab=documents`,
+    },
+    ...(isAutoSync
+      ? [
+          {
+            label: "Users",
+            href: `/knowledge/connectors/${connectorId}?tab=users`,
+          },
+          {
+            label: "Groups",
+            href: `/knowledge/connectors/${connectorId}?tab=groups`,
+          },
+        ]
+      : []),
+  ];
   const syncConnector = useSyncConnector();
   const forceResync = useForceResyncConnector();
   const testConnection = useTestConnectorConnection();
+  // Coverage feeds the Permissions metadata items and the Sync Permissions
+  // menu item; the query polls while a pass runs so both stay live.
+  const { data: coverage } = useConnectorPermissionCoverage({
+    connectorId,
+    enabled: isAutoSync,
+  });
+  const triggerPermissionSync = useTriggerPermissionSync();
+  const permissionSyncRunning = coverage?.permissionSyncRunning ?? false;
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isForceResyncOpen, setIsForceResyncOpen] = useState(false);
 
   const [pageIndex, setPageIndex] = useState(0);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runTypeFilter, setRunTypeFilter] = useState<
+    "all" | "content" | "permission"
+  >(tabParam === "permission-runs" ? "permission" : "all");
+  const [runStatusFilter, setRunStatusFilter] = useState<
+    "all" | NonNullable<ConnectorRunItem["status"]>
+  >("all");
+  const [runResultFilter, setRunResultFilter] = useState<
+    "all" | "changes" | "no-changes"
+  >("all");
 
   const { data: runsData, isPending: isRunsPending } = useConnectorRuns({
     connectorId,
     limit: pageSize,
     offset: pageIndex * pageSize,
+    // Non-auto-sync connectors only ever have content runs; auto-sync ones
+    // default to the interleaved view and can narrow to one family.
+    runType: !isAutoSync
+      ? "content"
+      : runTypeFilter === "all"
+        ? undefined
+        : runTypeFilter,
+    status: runStatusFilter === "all" ? undefined : runStatusFilter,
+    result: runResultFilter === "all" ? undefined : runResultFilter,
   });
+
+  // Task-derived queued state (a sync is enqueued, no worker claimed it yet).
+  // Rendered as synthetic pinned rows so a just-triggered sync is visible in
+  // the table immediately — before any run row exists.
+  const contentQueued = runsData?.queued?.content ?? false;
+  const permissionQueued = runsData?.queued?.permission ?? false;
+  const runRows = useMemo(() => {
+    const runs = runsData?.data ?? [];
+    // Queued rows only make sense on an unfiltered first page: they are not
+    // real runs, so they must never satisfy a status/result filter or repeat
+    // on later pages.
+    if (
+      pageIndex !== 0 ||
+      runStatusFilter !== "all" ||
+      runResultFilter !== "all"
+    ) {
+      return runs;
+    }
+    const synthetic: ConnectorRunItem[] = [];
+    if (contentQueued && runTypeFilter !== "permission") {
+      synthetic.push(makeQueuedRow("content"));
+    }
+    if (permissionQueued && isAutoSync && runTypeFilter !== "content") {
+      synthetic.push(makeQueuedRow("permission"));
+    }
+    return [...synthetic, ...runs];
+  }, [
+    runsData,
+    contentQueued,
+    permissionQueued,
+    pageIndex,
+    runStatusFilter,
+    runResultFilter,
+    runTypeFilter,
+    isAutoSync,
+  ]);
 
   const handleSync = useCallback(async () => {
     await syncConnector.mutateAsync(connectorId);
@@ -146,87 +272,110 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
       setPageIndex(newPagination.pageIndex);
+      setPageSize(newPagination.pageSize);
     },
     [],
   );
 
-  const columns: ColumnDef<ConnectorRunItem>[] = [
-    {
-      id: "status",
-      accessorKey: "status",
-      header: "Status",
-      cell: ({ row }) => {
-        return <ConnectorStatusBadge status={row.original.status} />;
+  // One table for both run families. Shared lifecycle columns (Status,
+  // Started, Completed) line up across rows; the family-specific counters
+  // collapse into a compact Results summary (the details dialog has the full
+  // numbers), and a Type badge tells the families apart when interleaved.
+  // The shared Table is `table-fixed`, so every column needs an explicit
+  // size — otherwise all columns get equal widths and the long Results
+  // summary renders under the Logs column.
+  const columns: ColumnDef<ConnectorRunItem>[] = useMemo(
+    () => [
+      ...(isAutoSync
+        ? [
+            {
+              id: "runType",
+              header: "Type",
+              size: 100,
+              cell: ({ row }) => (
+                <Badge variant="outline" className="text-xs font-normal">
+                  {row.original.runType === "permission"
+                    ? "Permissions"
+                    : "Documents"}
+                </Badge>
+              ),
+            } satisfies ColumnDef<ConnectorRunItem>,
+          ]
+        : []),
+      {
+        id: "status",
+        accessorKey: "status",
+        header: "Status",
+        size: 130,
+        // Badge only — in-flight progress lives in the Result column, where
+        // there is room for it.
+        cell: ({ row }) => (
+          <ConnectorStatusBadge status={row.original.status} />
+        ),
       },
-    },
-    {
-      id: "startedAt",
-      accessorKey: "startedAt",
-      header: "Started",
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {formatDate({ date: row.original.startedAt })}
-        </div>
-      ),
-    },
-    {
-      id: "completedAt",
-      header: "Completed",
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">
-          {row.original.completedAt
-            ? formatDate({ date: row.original.completedAt })
-            : "-"}
-        </div>
-      ),
-    },
-    {
-      id: "documentsProcessed",
-      header: "Processed",
-      cell: ({ row }) => {
-        const processed = row.original.documentsProcessed ?? 0;
-        // totalItems will be available after codegen
-        const total = (row.original as Record<string, unknown>).totalItems as
-          | number
-          | null;
-        return (
-          <div>
-            {processed}
-            {total != null && total > 0 && (
-              <span className="text-muted-foreground"> / {total}</span>
-            )}
+      {
+        id: "startedAt",
+        accessorKey: "startedAt",
+        header: "Started",
+        size: 150,
+        cell: ({ row }) => (
+          <div className="font-mono text-xs">
+            {row.original.startedAt
+              ? formatDate({ date: row.original.startedAt })
+              : "-"}
           </div>
-        );
+        ),
       },
-    },
-    {
-      id: "documentsIngested",
-      header: "Ingested",
-      cell: ({ row }) => <div>{row.original.documentsIngested ?? 0}</div>,
-    },
-    {
-      id: "logs",
-      header: "Logs",
-      cell: ({ row }) => {
-        return (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground"
-                onClick={() => setSelectedRunId(row.original.id)}
-                aria-label="View run logs"
-              >
-                <Logs className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>View logs</TooltipContent>
-          </Tooltip>
-        );
+      {
+        id: "completedAt",
+        header: "Completed",
+        size: 150,
+        cell: ({ row }) => (
+          <div className="font-mono text-xs">
+            {row.original.completedAt
+              ? formatDate({ date: row.original.completedAt })
+              : "-"}
+          </div>
+        ),
       },
-    },
-  ];
+      {
+        id: "results",
+        header: "Result",
+        // Deliberately the widest declared size: leftover table width lands
+        // here (the one cell with real content) instead of stretching the
+        // compact Status/Type columns.
+        size: 520,
+        minSize: 220,
+        cell: ({ row }) => <RunResultsSummary run={row.original} />,
+      },
+      {
+        id: "logs",
+        header: "Logs",
+        size: 60,
+        cell: ({ row }) => {
+          // A queued row has no run (and no logs) behind it yet.
+          if (row.original.status === "queued") return null;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={() => setSelectedRunId(row.original.id)}
+                  aria-label="View run logs"
+                >
+                  <Logs className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>View logs</TooltipContent>
+            </Tooltip>
+          );
+        },
+      },
+    ],
+    [isAutoSync],
+  );
 
   if (isPending) {
     return <LoadingSpinner />;
@@ -294,21 +443,28 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                   onClick={handleSync}
                   disabled={
                     syncConnector.isPending ||
+                    contentQueued ||
                     connector.lastSyncStatus === "running"
                   }
                 >
                   <Play className="h-4 w-4" />
                   {syncConnector.isPending
                     ? "Starting..."
-                    : connector.lastSyncStatus === "running"
-                      ? "Syncing..."
-                      : "Sync Now"}
+                    : contentQueued
+                      ? "Queued..."
+                      : connector.lastSyncStatus === "running"
+                        ? "Syncing..."
+                        : "Sync Now"}
                 </Button>
               </span>
             </TooltipTrigger>
-            {connector.lastSyncStatus === "running" && (
+            {contentQueued ? (
+              <TooltipContent>
+                Sync enqueued — waiting for a worker
+              </TooltipContent>
+            ) : connector.lastSyncStatus === "running" ? (
               <TooltipContent>Sync run in progress</TooltipContent>
-            )}
+            ) : null}
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -322,6 +478,23 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {isAutoSync && (
+                <DropdownMenuItem
+                  onClick={() => triggerPermissionSync.mutate(connectorId)}
+                  disabled={
+                    triggerPermissionSync.isPending || permissionSyncRunning
+                  }
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {permissionQueued
+                    ? "Permissions sync queued…"
+                    : permissionSyncRunning
+                      ? "Permissions syncing…"
+                      : triggerPermissionSync.isPending
+                        ? "Starting..."
+                        : "Sync Permissions Now"}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={handleTestConnection}
                 disabled={testConnection.isPending}
@@ -386,50 +559,178 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         </Button>
 
         <div className="rounded-lg border p-4">
+          {/* Two symmetric rows on wide screens: the documents family (Last
+              Documents Sync / Documents Sync Schedule) sits directly above
+              its permissions counterpart (Last Permissions Sync / Permissions
+              Sync Frequency). */}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
-            <MetadataItem label="Last Sync">
+            <MetadataItem label="Last Documents Sync">
               <div>
                 {connector.lastSyncAt
                   ? formatDate({ date: connector.lastSyncAt })
                   : "Never"}
               </div>
             </MetadataItem>
-            <MetadataItem label="Documents">
-              <div>{connector.totalDocsIngested}</div>
-            </MetadataItem>
-            <MetadataItem label="Schedule">
+            <MetadataItem label="Documents Sync Schedule">
               <div>{formatCronSchedule(connector.schedule)}</div>
             </MetadataItem>
+            <MetadataItem label="Documents">
+              <div>{connector.totalDocsIngested.toLocaleString()}</div>
+            </MetadataItem>
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
+            {isAutoSync && (
+              <>
+                <MetadataItem label="Last Permissions Sync">
+                  <div>
+                    {permissionSyncRunning
+                      ? "Syncing now…"
+                      : connector.lastPermissionSyncAt
+                        ? formatDate({ date: connector.lastPermissionSyncAt })
+                        : "Never"}
+                  </div>
+                </MetadataItem>
+                <MetadataItem label="Permissions Sync Frequency">
+                  <div>
+                    {formatSyncFrequency(
+                      connector.permissionSyncIntervalSeconds,
+                    )}
+                  </div>
+                </MetadataItem>
+                {/* Exception-only: full coverage is the unremarkable steady
+                    state (the system self-heals transient gaps), so the item
+                    exists only while documents are actually unreachable. */}
+                {coverage && coverage.failClosedDocuments > 0 && (
+                  <MetadataItem label="Permissions Coverage">
+                    <div
+                      className="text-amber-600"
+                      title="Access-restricted until a permission sync tags them with their source permissions"
+                    >
+                      {coverage.failClosedDocuments.toLocaleString()} document
+                      {coverage.failClosedDocuments === 1 ? "" : "s"} awaiting
+                      permission sync
+                    </div>
+                  </MetadataItem>
+                )}
+              </>
+            )}
           </div>
         </div>
 
+        {/* Visible on EVERY tab: an admin landing anywhere on the page
+            learns about unassigned users without drilling into the Users
+            table. Renders nothing while everyone resolves. */}
+        {isAutoSync && (
+          <ConnectorUnassignedUsersAlert
+            connectorId={connectorId}
+            connectorType={connector.connectorType}
+          />
+        )}
+
         {currentTab === "documents" ? (
-          <ConnectorDocumentsTable connectorId={connectorId} />
+          <ConnectorDocumentsTable
+            connectorId={connectorId}
+            showGroupFilter={isAutoSync}
+          />
+        ) : currentTab === "users" && isAutoSync ? (
+          <ConnectorMembersTable connectorId={connectorId} />
+        ) : currentTab === "groups" && isAutoSync ? (
+          <ConnectorUserGroupsTable connectorId={connectorId} />
         ) : (
-          <LoadingWrapper
-            isPending={isRunsPending}
-            loadingFallback={<LoadingSpinner />}
-          >
-            {(runsData?.data ?? []).length === 0 ? (
-              <div className="text-muted-foreground">
-                No sync runs yet. Trigger a manual sync or wait for the
-                scheduled sync.
-              </div>
-            ) : (
-              <DataTable
-                columns={columns}
-                data={runsData?.data ?? []}
-                manualPagination={true}
-                pagination={{
-                  pageIndex,
-                  pageSize,
-                  total: runsData?.pagination?.total ?? 0,
+          <div>
+            <TableFilters>
+              {isAutoSync && (
+                <Select
+                  value={runTypeFilter}
+                  onValueChange={(value) => {
+                    setRunTypeFilter(value as typeof runTypeFilter);
+                    setPageIndex(0);
+                  }}
+                >
+                  <SelectTrigger
+                    className="h-9 w-full text-sm sm:w-[200px]"
+                    aria-label="Filter runs"
+                  >
+                    <SelectValue placeholder="All runs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All runs</SelectItem>
+                    <SelectItem value="content">Documents</SelectItem>
+                    <SelectItem value="permission">Permissions</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Select
+                value={runStatusFilter}
+                onValueChange={(value) => {
+                  setRunStatusFilter(value as typeof runStatusFilter);
+                  setPageIndex(0);
                 }}
-                onPaginationChange={handlePaginationChange}
-              />
-            )}
-          </LoadingWrapper>
+              >
+                <SelectTrigger
+                  className="h-9 w-full text-sm sm:w-[200px]"
+                  aria-label="Filter by status"
+                >
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="running">Running</SelectItem>
+                  <SelectItem value="success">Success</SelectItem>
+                  <SelectItem value="completed_with_errors">
+                    Completed with errors
+                  </SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                  <SelectItem value="superseded">Superseded</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={runResultFilter}
+                onValueChange={(value) => {
+                  setRunResultFilter(value as typeof runResultFilter);
+                  setPageIndex(0);
+                }}
+              >
+                <SelectTrigger
+                  className="h-9 w-full text-sm sm:w-[200px]"
+                  aria-label="Filter by result"
+                >
+                  <SelectValue placeholder="All results" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All results</SelectItem>
+                  <SelectItem value="changes">With changes</SelectItem>
+                  <SelectItem value="no-changes">No changes</SelectItem>
+                </SelectContent>
+              </Select>
+            </TableFilters>
+            <LoadingWrapper
+              isPending={isRunsPending}
+              loadingFallback={<LoadingSpinner />}
+            >
+              {runRows.length === 0 ? (
+                <div className="text-muted-foreground">
+                  {runStatusFilter !== "all" || runResultFilter !== "all"
+                    ? "No runs match the selected filters."
+                    : runTypeFilter === "permission"
+                      ? "No permission sync runs yet. The first run tags this connector's documents with their upstream access."
+                      : "No sync runs yet. Trigger a manual sync or wait for the scheduled sync."}
+                </div>
+              ) : (
+                <DataTable
+                  columns={columns}
+                  data={runRows}
+                  manualPagination={true}
+                  pagination={{
+                    pageIndex,
+                    pageSize,
+                    total: runsData?.pagination?.total ?? 0,
+                  }}
+                  onPaginationChange={handlePaginationChange}
+                />
+              )}
+            </LoadingWrapper>
+          </div>
         )}
 
         <ConnectorRunDetailsDialog
@@ -446,6 +747,209 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       </div>
     </PageLayout>
   );
+}
+
+/**
+ * Compact family-aware run outcome for the merged Sync Runs table. Completed
+ * runs read as outcomes: only what changed, or "No changes". A RUNNING
+ * content run reads as its current step — "Ingesting documents 14/23", then
+ * "Embedding batch 80/459" — one step at a time; failed runs and in-flight
+ * permission passes keep the counter set, counting up from zero. A full
+ * permission reconcile keeps the complete listing on success — that listing
+ * is what visually identifies it; there is no mode label. Full numbers live
+ * in the run details dialog.
+ */
+function RunResultsSummary({ run }: { run: ConnectorRunItem }) {
+  if (run.status === "queued") {
+    return (
+      <div className="text-sm text-muted-foreground">Waiting for a worker…</div>
+    );
+  }
+  if (run.runType === "permission") {
+    const stats = run.stats;
+    if (!stats) return <div className="text-muted-foreground">-</div>;
+
+    const accessListsUpdated = stats.containersChanged ?? 0;
+    const membersRemoved = stats.membershipsRemoved ?? 0;
+    const permissionsItem = countedItem(
+      stats.aclsChanged,
+      "permission updated",
+      "permissions updated",
+    );
+    const accessListsItem = countedItem(
+      accessListsUpdated,
+      "access list updated",
+      "access lists updated",
+    );
+    const memberItems: RunStatItem[] = [
+      ...(stats.membershipsUpserted > 0
+        ? [
+            countedItem(
+              stats.membershipsUpserted,
+              "group member updated",
+              "group members updated",
+            ),
+          ]
+        : []),
+      ...(membersRemoved > 0
+        ? [
+            countedItem(
+              membersRemoved,
+              "group member removed",
+              "group members removed",
+            ),
+          ]
+        : []),
+    ];
+    const lockedItem: RunStatItem = {
+      ...countedItem(stats.failClosed, "doc locked", "docs locked"),
+      warn: stats.failClosed > 0,
+    };
+    const groupsItem: RunStatItem = stats.groupSyncFailed
+      ? { label: "group sync failed", warn: true }
+      : countedItem(stats.groupsSynced, "group checked", "groups checked");
+    // A pass that could not READ a project's permissions hid everything in it.
+    // It must never settle as "no changes" — from the outside that is
+    // indistinguishable from a pass that found nothing to do.
+    const unreadable = stats.containerAudienceFailures ?? 0;
+    const unreadableItem: RunStatItem = {
+      ...countedItem(
+        unreadable,
+        "access list unreadable",
+        "access lists unreadable",
+      ),
+      warn: true,
+    };
+
+    if (run.status === "success" && stats.mode === "delta") {
+      const changes = [
+        ...(stats.aclsChanged > 0 ? [permissionsItem] : []),
+        ...(accessListsUpdated > 0 ? [accessListsItem] : []),
+        ...memberItems,
+        ...(stats.failClosed > 0 ? [lockedItem] : []),
+        ...(unreadable > 0 ? [unreadableItem] : []),
+        ...(stats.groupSyncFailed ? [groupsItem] : []),
+      ];
+      if (changes.length === 0) {
+        return noChangesVerdict;
+      }
+      return <RunStatLine items={changes} />;
+    }
+
+    const checked =
+      run.status !== "success" && stats.totalDocs > 0
+        ? `${stats.docsScanned.toLocaleString()} / ${stats.totalDocs.toLocaleString()}`
+        : stats.docsScanned;
+    return (
+      <RunStatLine
+        items={[
+          { value: checked, label: "docs checked" },
+          permissionsItem,
+          accessListsItem,
+          ...(unreadable > 0 ? [unreadableItem] : []),
+          lockedItem,
+          groupsItem,
+          ...memberItems,
+        ]}
+      />
+    );
+  }
+
+  const phase = contentRunPhase(run);
+  if (phase) {
+    return (
+      <div className="flex items-center gap-2">
+        {phase.progress !== null && (
+          <Progress value={phase.progress} className="h-1 w-16 shrink-0" />
+        )}
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {phase.label}
+        </span>
+      </div>
+    );
+  }
+  const ingested = run.documentsIngested ?? 0;
+  if (run.status === "success") {
+    if (ingested === 0) {
+      return noChangesVerdict;
+    }
+    return <RunStatLine items={[{ value: ingested, label: "ingested" }]} />;
+  }
+  const processed = run.documentsProcessed ?? 0;
+  const total = run.totalItems;
+  return (
+    <RunStatLine
+      items={[
+        {
+          value:
+            total != null && total > 0
+              ? `${processed.toLocaleString()} / ${total.toLocaleString()}`
+              : processed,
+          label: "processed",
+        },
+        { value: ingested, label: "ingested" },
+      ]}
+    />
+  );
+}
+
+/** The settled-run outcome shared by both run families. */
+const noChangesVerdict = (
+  <div className="text-sm text-muted-foreground">No changes</div>
+);
+
+type RunStatItem = { value?: number | string; label: string; warn?: boolean };
+
+/** `1 access list updated` / `3 access lists updated`. */
+function countedItem(
+  value: number,
+  singularLabel: string,
+  pluralLabel: string,
+): RunStatItem {
+  return { value, label: value === 1 ? singularLabel : pluralLabel };
+}
+
+/** One results line: `<value> <muted label>` items joined by muted dots. */
+function RunStatLine({ items }: { items: RunStatItem[] }) {
+  return (
+    <div className="text-sm">
+      {items.map((item, index) => {
+        const value =
+          typeof item.value === "number"
+            ? item.value.toLocaleString()
+            : item.value;
+        return (
+          <Fragment key={item.label}>
+            {index > 0 && <span className="text-muted-foreground"> · </span>}
+            {item.warn ? (
+              <span className="text-amber-600">
+                {value != null ? `${value} ` : ""}
+                {item.label}
+              </span>
+            ) : (
+              <>
+                {value != null && `${value} `}
+                <span className="text-muted-foreground">{item.label}</span>
+              </>
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** "Every 30 minutes" / "Every 6 hours" from an interval in seconds. */
+function formatSyncFrequency(intervalSeconds: number): string {
+  if (intervalSeconds === PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE) {
+    return "Follows the documents sync schedule";
+  }
+  const minutes = Math.round(intervalSeconds / 60);
+  if (minutes < 60 || minutes % 60 !== 0) {
+    return `Every ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  const hours = minutes / 60;
+  return `Every ${hours} hour${hours === 1 ? "" : "s"}`;
 }
 
 function KnowledgeBasesMetadataItem({ connectorId }: { connectorId: string }) {

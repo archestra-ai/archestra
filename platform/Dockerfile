@@ -320,6 +320,12 @@ COPY docker/certs/aws-rds-global-bundle.pem /tmp/aws-rds-ca.pem
 COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
+    # CVE-2026-6276, CVE-2026-5773: curl/libcurl vulnerabilities (HIGH) fixed in 8.20.0-r0.
+    # The pinned node:24-alpine3.23 base ships curl 8.19.0-r0. The bare `apk upgrade` above
+    # would pick up the fix, but this RUN layer is Docker-cached on its instruction text and
+    # never re-ran against the newer index — pin curl/libcurl explicitly so the fixed version
+    # is guaranteed (and adding this line busts the stale cache).
+    apk add --no-cache --upgrade "curl>=8.20.0-r0" "libcurl>=8.20.0-r0" && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
     # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
     # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.

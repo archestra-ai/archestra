@@ -47,6 +47,7 @@ export function makeConfig(
       chatSecretScanEnabled: true,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
+      kbAutoSyncPermissionsEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

@@ -65,6 +65,7 @@ const uiTestMatch = [
 const apiTestMatch = [
   "**/built-in-agents.spec.ts",
   "**/chat-api.spec.ts",
+  "**/knowledge-permission-sync.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",
   "**/mcp-gateway-jwks.ee.spec.ts",

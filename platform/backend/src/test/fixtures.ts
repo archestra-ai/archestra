@@ -1227,9 +1227,12 @@ async function makeConnectorRun(
       | "status"
       | "startedAt"
       | "documentsProcessed"
+      | "documentsIngested"
+      | "stats"
       | "leaseOwner"
       | "leaseExpiresAt"
       | "leaseEpoch"
+      | "runType"
     >
   > = {},
 ): Promise<ConnectorRun> {

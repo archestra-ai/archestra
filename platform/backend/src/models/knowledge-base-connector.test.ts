@@ -1,3 +1,4 @@
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 
@@ -149,6 +150,56 @@ describe("KnowledgeBaseConnectorModel", () => {
 
       expect(results.map((connector) => connector.name)).toEqual([
         "Restricted",
+      ]);
+    });
+
+    test("hides auto-sync-permissions connectors from non-admins on management reads, keeps them on query reads", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      await makeKnowledgeBaseConnector(kb.id, org.id, { name: "Org Wide" });
+      await makeKnowledgeBaseConnector(kb.id, org.id, {
+        name: "Auto Sync",
+        connectorType: "github",
+        visibility: "auto-sync-permissions",
+      });
+
+      // Management scope (the default): admin-only.
+      const managementResults =
+        await KnowledgeBaseConnectorModel.findByOrganization({
+          organizationId: org.id,
+          viewerTeamIds: [],
+        });
+      expect(managementResults.map((connector) => connector.name)).toEqual([
+        "Org Wide",
+      ]);
+
+      // Query scope: everyone — the per-chunk ACL is the enforcement.
+      const queryResults = await KnowledgeBaseConnectorModel.findByOrganization(
+        {
+          organizationId: org.id,
+          viewerTeamIds: [],
+          visibilityScope: "query",
+        },
+      );
+      expect(queryResults.map((connector) => connector.name).sort()).toEqual([
+        "Auto Sync",
+        "Org Wide",
+      ]);
+
+      // Admins see auto-sync connectors on management reads too.
+      const adminResults = await KnowledgeBaseConnectorModel.findByOrganization(
+        {
+          organizationId: org.id,
+          canReadAll: true,
+        },
+      );
+      expect(adminResults.map((connector) => connector.name).sort()).toEqual([
+        "Auto Sync",
+        "Org Wide",
       ]);
     });
   });
@@ -1140,6 +1191,38 @@ describe("KnowledgeBaseConnectorModel", () => {
         lastSyncStatus: "running",
       });
       await makeConnectorRun(connector.id, { status: "running" });
+
+      const corrected =
+        await KnowledgeBaseConnectorModel.reconcileOrphanedConnectorStatuses();
+
+      expect(corrected).not.toContain(connector.id);
+      expect(
+        (await KnowledgeBaseConnectorModel.findById(connector.id))
+          ?.lastSyncStatus,
+      ).toBe("running");
+    });
+
+    test("does not mirror a finished permission run into a live content status", async ({
+      makeOrganization,
+      makeKnowledgeBase,
+      makeKnowledgeBaseConnector,
+    }) => {
+      const org = await makeOrganization();
+      const kb = await makeKnowledgeBase(org.id);
+      const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+      // The connector is mid-flight on a CONTENT sync.
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "running",
+      });
+      // A PERMISSION run finished successfully, newer than any content run.
+      // The reconcile subquery filters run_type = 'content', so this finished
+      // permission run must never mirror into the content sync status.
+      await db.insert(schema.connectorRunsTable).values({
+        connectorId: connector.id,
+        runType: "permission",
+        status: "success",
+        startedAt: new Date(),
+      });
 
       const corrected =
         await KnowledgeBaseConnectorModel.reconcileOrphanedConnectorStatuses();

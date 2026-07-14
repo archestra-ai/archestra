@@ -482,10 +482,11 @@ describe("KbChunkModel", () => {
         },
       ]);
 
-      const updatedCount = await KbChunkModel.updateAclByConnector(
-        targetConnector.id,
-        ["team:alpha"],
-      );
+      const updatedCount = await KbChunkModel.updateAclByConnector({
+        connectorId: targetConnector.id,
+        acl: ["team:alpha"],
+        aclConfigEpoch: targetConnector.aclConfigEpoch,
+      });
 
       expect(updatedCount).toBe(1);
 
@@ -533,10 +534,11 @@ describe("KbChunkModel", () => {
         },
       ]);
 
-      const updatedCount = await KbChunkModel.updateAclByConnector(
-        targetConnector.id,
-        ["team:alpha"],
-      );
+      const updatedCount = await KbChunkModel.updateAclByConnector({
+        connectorId: targetConnector.id,
+        acl: ["team:alpha"],
+        aclConfigEpoch: targetConnector.aclConfigEpoch,
+      });
 
       expect(updatedCount).toBe(1);
 

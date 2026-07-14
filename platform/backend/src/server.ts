@@ -68,6 +68,7 @@ import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
+import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
 import {
@@ -95,7 +96,6 @@ import {
   OpenAi,
   Openrouter,
   Perplexity,
-  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
   Vllm,
   Xai,
   Zhipuai,
@@ -377,6 +377,14 @@ function captureServerException(
   error: unknown,
   extraProperties?: Record<string, unknown>,
 ): void {
+  // Same drop/keep-and-group policy the Sentry filter uses, so the two sinks
+  // agree: expected client/upstream errors are skipped, and availability
+  // incidents (transient DB, secrets-backend outage) get a stable fingerprint.
+  const decision = classifyErrorForTracking(error);
+  if (!decision.report) {
+    return;
+  }
+
   const { distinctId, sessionId } = getPostHogTraceContext(request);
   posthogErrorTrackingService.captureException({
     error,
@@ -391,6 +399,10 @@ function captureServerException(
       // deployment hit the error, used by the PostHog Slack alert template.
       hostname: request.host,
       reqId: request.id,
+      ...(decision.fingerprint && {
+        $exception_fingerprint: decision.fingerprint.join("/"),
+      }),
+      ...decision.tags,
       ...extraProperties,
     },
   });
@@ -584,7 +596,6 @@ export const createFastifyInstance = () =>
           error_type: "db_unavailable",
           db_error_code: transientDbErrorCode,
           status_code: 503,
-          $exception_fingerprint: `db-transient/${transientDbErrorCode}`,
         });
 
         return reply.status(503).send({
@@ -607,23 +618,14 @@ export const createFastifyInstance = () =>
 
         if (statusCode >= 500) {
           this.log.error(logPayload, "HTTP 50x request error occurred");
-          // 502/504 report an upstream's failure (a user-configured provider
-          // or external server), not a crash of ours — log them, but keep
-          // them out of exception tracking.
-          if (statusCode !== 502 && statusCode !== 504) {
-            captureServerException(request, error, {
-              error_type: "api_error",
-              status_code: statusCode,
-              ...(internalCode && { internal_code: internalCode }),
-              // A secrets-backend outage fails every route that reads
-              // secrets — group by the root condition, not per endpoint.
-              ...(internalCode ===
-                SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE && {
-                $exception_fingerprint:
-                  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
-              }),
-            });
-          }
+          // Capture is centrally filtered and grouped by
+          // classifyErrorForTracking: 502/504 upstream failures are dropped as
+          // noise, and a secrets-backend outage is grouped by root cause.
+          captureServerException(request, error, {
+            error_type: "api_error",
+            status_code: statusCode,
+            ...(internalCode && { internal_code: internalCode }),
+          });
         } else if (statusCode >= 400) {
           this.log.info(logPayload, "HTTP 40x request error occurred");
         } else {
@@ -1585,9 +1587,22 @@ const startWorker = async () => {
 // This handler logs those leaks and keeps the server alive.
 process.on("unhandledRejection", (reason) => {
   logger.error({ err: reason }, "Unhandled promise rejection");
+  // Apply the shared tracking policy on this non-request capture path too, so a
+  // rejected transient-DB query groups by root cause and expected client/
+  // upstream errors are skipped, matching the request-error handler.
+  const decision = classifyErrorForTracking(reason);
+  if (!decision.report) {
+    return;
+  }
   posthogErrorTrackingService.captureException({
     error: reason,
-    properties: { error_type: "unhandled_rejection" },
+    properties: {
+      ...(decision.fingerprint && {
+        $exception_fingerprint: decision.fingerprint.join("/"),
+      }),
+      ...decision.tags,
+      error_type: "unhandled_rejection",
+    },
   });
 });
 

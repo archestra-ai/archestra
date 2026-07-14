@@ -51,6 +51,10 @@ export const CacheKey = {
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** Per-user group-token resolution for auto-sync-permissions KB connectors */
+  KbGroupTokens: "kb-group-tokens",
+  /** Cross-pass upstream identity lookups (account id → email/profile) for KB permission sync */
+  KbConnectorIdentity: "kb-connector-identity",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
   /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */

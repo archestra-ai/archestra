@@ -820,7 +820,7 @@ function KnowledgeSettingsContent() {
 export default function KnowledgeSettingsPage() {
   return (
     <ErrorBoundary>
-      <SmallTeamTierBanner featureName="Knowledge Base with access control" />
+      <SmallTeamTierBanner featureName="Knowledge" />
       <KnowledgeSettingsContent />
     </ErrorBoundary>
   );

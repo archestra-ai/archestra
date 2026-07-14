@@ -42,3 +42,20 @@ export function getConnector(type: string): Connector {
   }
   return factory();
 }
+
+/**
+ * The connector types that implement permission sync, so the scheduler can ask
+ * the database for exactly the connectors it could schedule instead of loading
+ * the fleet and filtering in memory. Memoized: the answer is a property of the
+ * registry, and the due-loop asks on every tick.
+ */
+export function getPermissionSyncConnectorTypes(): ConnectorType[] {
+  if (permissionSyncConnectorTypes === null) {
+    permissionSyncConnectorTypes = (
+      Object.keys(connectorRegistry) as ConnectorType[]
+    ).filter((type) => connectorRegistry[type]().supportsPermissionSync);
+  }
+  return permissionSyncConnectorTypes;
+}
+
+let permissionSyncConnectorTypes: ConnectorType[] | null = null;

@@ -43,6 +43,10 @@ export const E2eTestId = {
   TokenSelect: "token-select",
   ProfileTokenManagerTeamsSelect: "profile-token-manager-teams-select",
   ConnectAgentButton: "connect-agent-button",
+  PostCreateConnectDialog: "post-create-connect-dialog",
+  PostCreateOpenConnectionGuideButton:
+    "post-create-open-connection-guide-button",
+  PostCreateConnectDoneButton: "post-create-connect-done-button",
   ConnectCatalogItemButton: "connect-catalog-item-button",
   SelectCredentialTypePersonal: "select-credential-type-personal",
   CredentialsCount: "credentials-count",

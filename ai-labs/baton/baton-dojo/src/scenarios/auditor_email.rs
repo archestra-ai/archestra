@@ -6,8 +6,8 @@
 //! legitimate, authorized flow through.
 
 use baton_core::{
-    Audience, AudienceRule, Authority, AuthorityName, Effect, Effects, Grant, Label, Requirements, Ruling,
-    ToolContract, ToolName, ToolRequest, Trust, UnknownPolicy, UserId, Violation,
+    ArgumentSchema, AudienceRule, Authority, AuthorityMandate, Effect, Effects, ProposedGrant, Requirements, Ruling,
+    ToolContract, ToolName, TrajectoryView, UserId, ValueLabel, Violation,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -42,24 +42,26 @@ pub struct Invoices {
     sent: Vec<Email>,
 }
 
-/// Vouches in exactly the external auditor, and no one else.
-struct FinanceApprover;
+/// Approves any grant routed here. Competence is gated by the mandate below —
+/// the engine only routes a grant to this authority when its mandate covers it —
+/// so an unconditional approval vouches in exactly the external auditor (and
+/// accepts the send's first egress), and nothing else.
+fn approve_auditor(_: &ProposedGrant, _: &[Violation], _: &TrajectoryView<'_>) -> Option<Ruling> {
+    Some(Ruling::Approve {
+        reason: "approved sending financials to the external auditor".to_owned(),
+    })
+}
 
-impl Authority for FinanceApprover {
-    fn rule(&self, needed: &Grant, _: &ToolRequest, _: &Label, _: &[Violation]) -> Option<(AuthorityName, Ruling)> {
-        let mandate = Grant {
-            audience: Some([UserId::new(AUDITOR)].into_iter().collect()),
-            ..Grant::empty()
-        };
-        mandate.covers(needed).then(|| {
-            (
-                AuthorityName::new("finance-approver"),
-                Ruling::Approve {
-                    reason: "approved sending financials to the external auditor".to_owned(),
-                },
-            )
-        })
-    }
+/// Vouches in exactly the external auditor (audience) and accepts the resulting
+/// first egress (`acquire_effects`); competent for nothing else.
+fn finance_approver() -> Authority {
+    Authority::inline(
+        "finance-approver",
+        AuthorityMandate::none()
+            .vouch_audience([UserId::new(AUDITOR)])
+            .acquire_effects(),
+        approve_auditor,
+    )
 }
 
 fn seed() -> Invoices {
@@ -81,27 +83,21 @@ fn seed() -> Invoices {
 }
 
 fn gate() -> Result<BatonGate, DojoError> {
-    BatonGate::builder(UnknownPolicy::Escalate)
-        .authority(FinanceApprover)
-        .contract(ToolContract {
-            name: ToolName::new("list_invoices"),
-            requires: Requirements::default(),
-            output_label: Label {
-                audience: Audience::readers([UserId::new(ALICE), UserId::new(BOB)]),
-                trust: Trust::TRUSTED,
-                ..Label::identity()
-            },
-        })
+    BatonGate::builder()
+        .authority(finance_approver())
+        .contract(ToolContract::source(
+            "list_invoices",
+            ValueLabel::trusted_readers([UserId::new(ALICE), UserId::new(BOB)]),
+        ))
         .contract(ToolContract {
             name: ToolName::new("send_email"),
             requires: Requirements {
                 audience: AudienceRule::RecipientsWithinContext,
                 ..Requirements::default()
             },
-            output_label: Label {
-                effects: Effects::declared([Effect::Egress]),
-                ..Label::identity()
-            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
         })
         .recipients_for("send_email", |a| {
             a.get("to")

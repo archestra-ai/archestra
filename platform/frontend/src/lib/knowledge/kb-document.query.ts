@@ -36,6 +36,7 @@ export function useConnectorDocuments(params: ConnectorDocumentsParams) {
       query.limit ?? "",
       query.offset ?? "",
       query.search ?? "",
+      query.group ?? "",
     ],
     placeholderData: (previousData) => previousData,
     queryFn: async () => {

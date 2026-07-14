@@ -479,9 +479,24 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of knowledge base; parent audited",
   },
+  kbContainerAclsTable: {
+    audited: false,
+    reason:
+      "permission-sync container-audience snapshot; derived upstream data, not config",
+  },
   kbDocumentsTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
+  },
+  kbExternalUserGroupsTable: {
+    audited: false,
+    reason:
+      "permission-sync group-membership snapshot; derived upstream data, not config",
+  },
+  kbMemberOverridesTable: {
+    audited: false,
+    reason:
+      "admin member mapping mutated only via /api/connectors/:id/member-overrides, audited at the route level as connector.updated",
   },
   llmProviderApiKeyModelsTable: {
     audited: false,

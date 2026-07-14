@@ -1562,7 +1562,7 @@ Required RBAC permission: `knowledgeSource:create`
 | `connector_type` | `string` | Yes | Type of the knowledge connector (for example jira, confluence, or google_drive). |
 | `config` | `object` | Yes | Provider-specific configuration object. |
 | `description` | `string \| null` | No | Description of the knowledge connector. |
-| `visibility` | `"org-wide" \| "team-scoped"` | No | Visibility for the knowledge connector. |
+| `visibility` | `"org-wide" \| "team-scoped" \| "auto-sync-permissions"` | No | Visibility for the knowledge connector. |
 | `team_ids` | `string[]` | No | Team IDs allowed to access a team-scoped connector. |
 
 ##### Output
@@ -1635,7 +1635,7 @@ Required RBAC permission: `knowledgeSource:update`
 | `name` | `string` | No | New connector name. |
 | `description` | `string \| null` | No | New connector description. |
 | `enabled` | `boolean` | No | Whether the connector is enabled. |
-| `visibility` | `"org-wide" \| "team-scoped"` | No | Updated visibility for the connector. |
+| `visibility` | `"org-wide" \| "team-scoped" \| "auto-sync-permissions"` | No | Updated visibility for the connector. |
 | `team_ids` | `string[]` | No | Updated team IDs for a team-scoped connector. |
 | `config` | `object` | No | Updated connector configuration (provider-specific settings). |
 

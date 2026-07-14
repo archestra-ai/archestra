@@ -7,7 +7,7 @@
 //! so nothing leaks but the bug isn't filed either.
 
 use baton_core::{
-    Audience, AudienceRule, Effect, Effects, Label, Requirements, ToolContract, ToolName, Trust, UnknownPolicy, UserId,
+    ArgumentSchema, AudienceRule, Effect, Effects, Requirements, ToolContract, ToolName, UserId, ValueLabel,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -55,26 +55,22 @@ fn seed() -> Recordings {
 }
 
 fn gate() -> Result<BatonGate, DojoError> {
-    BatonGate::builder(UnknownPolicy::AllowWithAudit)
-        .contract(ToolContract {
-            name: ToolName::new("fetch_recording"),
-            requires: Requirements::default(),
-            output_label: Label {
-                audience: Audience::readers([UserId::new(ALICE), UserId::new(BOB)]),
-                trust: Trust::TRUSTED,
-                ..Label::identity()
-            },
-        })
+    // No authority is registered: the gate is fully fail-closed, so the public
+    // issue's audience breach is terminal — nothing declassifies it.
+    BatonGate::builder()
+        .contract(ToolContract::source(
+            "fetch_recording",
+            ValueLabel::trusted_readers([UserId::new(ALICE), UserId::new(BOB)]),
+        ))
         .contract(ToolContract {
             name: ToolName::new("open_issue"),
             requires: Requirements {
                 audience: AudienceRule::RecipientsWithinContext,
                 ..Requirements::default()
             },
-            output_label: Label {
-                effects: Effects::declared([Effect::Egress]),
-                ..Label::identity()
-            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::opaque(),
         })
         .recipients_for("open_issue", |_args| vec![UserId::new(WORLD)])
         .build()

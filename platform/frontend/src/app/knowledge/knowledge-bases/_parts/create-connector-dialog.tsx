@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
   getConnectorNamePlaceholder,
 } from "@archestra/shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
@@ -45,13 +46,17 @@ import {
   ConnectorInlineConfigFields,
   type ConnectorType,
   connectorNeedsEmail,
+  connectorSupportsAdminApiKey,
+  connectorSupportsAutoSync,
   getConnectorCredentialConfig,
   getConnectorDocsUrl,
   getConnectorTypeLabel,
   getConnectorUrlConfig,
   getDefaultConnectorConfig,
+  getPermissionSyncCredentialNote,
 } from "./connector-dialog-config";
 import { ConnectorTypeIcon } from "./connector-icons";
+import { PermissionSyncIntervalPicker } from "./permission-sync-interval-picker";
 import { SchedulePicker } from "./schedule-picker";
 import { transformConfigArrayFields } from "./transform-config-array-fields";
 
@@ -62,7 +67,9 @@ type CreateConnectorFormValues = {
   config: Record<string, unknown>;
   email: string;
   apiToken: string;
+  adminApiKey: string;
   schedule: string;
+  permissionSyncIntervalSeconds: number;
   environmentId: string | null;
 };
 
@@ -101,7 +108,9 @@ export function CreateConnectorDialog({
       config: { type: "jira", isCloud: true },
       email: "",
       apiToken: "",
+      adminApiKey: "",
       schedule: "0 */6 * * *",
+      permissionSyncIntervalSeconds: DEFAULT_PERMISSION_SYNC_INTERVAL_SECONDS,
       environmentId: null,
     },
   });
@@ -112,6 +121,13 @@ export function CreateConnectorDialog({
     setSelectedType(type);
     form.setValue("connectorType", type);
     form.setValue("config", getDefaultConnectorConfig(type));
+    // Reset an auto-sync selection when switching to a type that can't support it.
+    if (
+      visibility === "auto-sync-permissions" &&
+      !connectorSupportsAutoSync(type)
+    ) {
+      setVisibility("org-wide");
+    }
     setStep("configure");
   };
 
@@ -148,9 +164,13 @@ export function CreateConnectorDialog({
             credentials: {
               ...(values.email && { email: values.email }),
               apiToken: values.apiToken,
+              ...(values.adminApiKey && { adminApiKey: values.adminApiKey }),
             },
           }),
       schedule: values.schedule,
+      ...(visibility === "auto-sync-permissions" && {
+        permissionSyncIntervalSeconds: values.permissionSyncIntervalSeconds,
+      }),
       ...(knowledgeBaseId && { knowledgeBaseIds: [knowledgeBaseId] }),
     });
     if (result) {
@@ -370,6 +390,8 @@ export function CreateConnectorDialog({
                   teamIds={teamIds}
                   onTeamIdsChange={setTeamIds}
                   showTeamRequired
+                  supportsAutoSync={connectorSupportsAutoSync(connectorType)}
+                  autoSyncPermissionAction="create"
                 />
 
                 <div className="border-t" />
@@ -430,11 +452,47 @@ export function CreateConnectorDialog({
                           )}
                         </FormControl>
                         {apiTokenHelpText}
+                        {visibility === "auto-sync-permissions" && (
+                          <FormDescription>
+                            {getPermissionSyncCredentialNote(connectorType)}
+                          </FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 )}
+
+                {visibility === "auto-sync-permissions" &&
+                  connectorSupportsAdminApiKey(connectorType) && (
+                    <FormField
+                      control={form.control}
+                      name="adminApiKey"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Organization admin API key (optional)
+                          </FormLabel>
+                          <FormControl>
+                            <SecretInput
+                              placeholder="Atlassian organization admin API key"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Lets permission sync resolve managed accounts&apos;
+                            hidden emails through the Atlassian admin APIs.
+                            Create a key <em>without scopes</em> in Atlassian
+                            administration under Settings → API keys. The API
+                            token above is still required — Atlassian does not
+                            accept admin API keys on the Jira/Confluence APIs
+                            themselves.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                 <Collapsible>
                   <CollapsibleTrigger className="flex w-full items-center justify-between cursor-pointer group border-t pt-3">
@@ -442,7 +500,20 @@ export function CreateConnectorDialog({
                     <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-4 space-y-4">
-                    <SchedulePicker form={form} name="schedule" />
+                    <SchedulePicker
+                      form={form}
+                      name="schedule"
+                      connectorTypeLabel={getConnectorTypeLabel(connectorType)}
+                    />
+                    {visibility === "auto-sync-permissions" && (
+                      <PermissionSyncIntervalPicker
+                        form={form}
+                        name="permissionSyncIntervalSeconds"
+                        connectorTypeLabel={getConnectorTypeLabel(
+                          connectorType,
+                        )}
+                      />
+                    )}
                     <ConnectorAdvancedConfigFields
                       connectorType={connectorType}
                       form={form}

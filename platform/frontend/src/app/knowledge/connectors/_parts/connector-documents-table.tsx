@@ -6,15 +6,25 @@ import { formatDistanceToNow } from "date-fns";
 import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { AclBadges } from "@/app/knowledge/connectors/_parts/acl-badges";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
+import { TableFilters } from "@/components/table-filters";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
+import { useConnectorUserGroups } from "@/lib/knowledge/connector.query";
 import {
   type KnowledgeBaseDocumentListItem,
   useConnectorDocument,
@@ -31,8 +41,11 @@ const MAX_PREVIEW_CHARS = 20_000;
 
 export function ConnectorDocumentsTable({
   connectorId,
+  showGroupFilter = false,
 }: {
   connectorId: string;
+  /** Auto-sync connectors only: filter documents by upstream group. */
+  showGroupFilter?: boolean;
 }) {
   const {
     searchParams,
@@ -43,6 +56,17 @@ export function ConnectorDocumentsTable({
     updateQueryParams,
   } = useDataTableQueryParams({ defaultPageSize: DEFAULT_DOCUMENT_PAGE_SIZE });
   const search = searchParams.get("search") ?? "";
+  const group = searchParams.get("group") ?? "";
+  // The group snapshot is known ahead of time, so the filter can offer
+  // every group that exists on the connector.
+  const { data: userGroups } = useConnectorUserGroups({
+    connectorId,
+    enabled: showGroupFilter,
+  });
+  const groupIds = useMemo(
+    () => [...new Set((userGroups?.groups ?? []).map((g) => g.groupId))].sort(),
+    [userGroups?.groups],
+  );
 
   const [selectedPreviewDoc, setSelectedPreviewDoc] =
     useState<KnowledgeBaseDocumentListItem | null>(null);
@@ -64,6 +88,7 @@ export function ConnectorDocumentsTable({
       limit: pageSize,
       offset,
       ...(search ? { search } : {}),
+      ...(group ? { group } : {}),
     },
   });
   const deleteDocumentMutation = useDeleteConnectorDocument();
@@ -75,12 +100,16 @@ export function ConnectorDocumentsTable({
     documentsResponse?.pagination ?? null;
   const totalDocuments = paginationMeta?.total ?? 0;
 
+  // The shared Table is `table-fixed`: without explicit sizes every column
+  // gets an equal width and the natural-width Access badges overflow under
+  // the Last Updated column.
   const columns = useMemo<ColumnDef<KnowledgeBaseDocumentListItem>[]>(
     () => [
       {
         id: "title",
         accessorKey: "title",
         header: "Title",
+        size: 280,
         cell: ({ row }) => (
           <div className="flex items-center gap-2 max-w-[400px]">
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -102,6 +131,7 @@ export function ConnectorDocumentsTable({
         id: "sourceUrl",
         accessorKey: "sourceUrl",
         header: "Source URL",
+        size: 240,
         cell: ({ row }) =>
           row.original.sourceUrl ? (
             <Link
@@ -122,9 +152,18 @@ export function ConnectorDocumentsTable({
           ),
       },
       {
+        id: "acl",
+        accessorKey: "acl",
+        header: "Access",
+        size: 340,
+        minSize: 240,
+        cell: ({ row }) => <AclBadges acl={row.original.acl} />,
+      },
+      {
         id: "updatedAt",
         accessorKey: "updatedAt",
         header: "Last Updated",
+        size: 160,
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -139,6 +178,7 @@ export function ConnectorDocumentsTable({
       {
         id: "actions",
         header: "Actions",
+        size: 90,
         cell: ({ row }) => {
           const actions: TableRowAction[] = [
             {
@@ -162,21 +202,45 @@ export function ConnectorDocumentsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-1 items-center gap-3 w-full max-w-lg">
-          <SearchInput
-            value={search}
-            syncQueryParams={false}
-            placeholder="Search documents by title..."
-            onSearchChange={(nextValue) =>
+      <TableFilters>
+        <SearchInput
+          value={search}
+          syncQueryParams={false}
+          placeholder="Search documents by title"
+          onSearchChange={(nextValue) =>
+            updateQueryParams({
+              search: nextValue || null,
+              page: "1",
+            })
+          }
+        />
+        {showGroupFilter && (
+          <Select
+            value={group || "all"}
+            onValueChange={(value) =>
               updateQueryParams({
-                search: nextValue || null,
+                group: value === "all" ? null : value,
                 page: "1",
               })
             }
-          />
-        </div>
-      </div>
+          >
+            <SelectTrigger
+              className="h-9 w-full text-sm sm:w-[200px]"
+              aria-label="Filter by group"
+            >
+              <SelectValue placeholder="All groups" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All groups</SelectItem>
+              {groupIds.map((groupId) => (
+                <SelectItem key={groupId} value={groupId}>
+                  {groupId}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </TableFilters>
 
       <DataTable
         columns={columns}
@@ -189,10 +253,11 @@ export function ConnectorDocumentsTable({
           total: totalDocuments,
         }}
         onPaginationChange={setPagination}
-        hasActiveFilters={Boolean(search)}
+        hasActiveFilters={Boolean(search) || Boolean(group)}
         onClearFilters={() =>
           updateQueryParams({
             search: null,
+            group: null,
             page: "1",
           })
         }

@@ -1,0 +1,33 @@
+# Example policy for the external-auditor demo (see README).
+#
+# Alice asks the agent to read finance-team invoices and email a summary to an
+# external auditor who is not a reader of that data. Reading is unguarded; the
+# email is audience-guarded, so sending outside {alice, bob} needs a human.
+
+upstream_base_url = "https://openrouter.ai/api/v1"
+approval_tool = "baton__request_approval"
+unknown_policy = "escalate"
+# `allow` keeps the demo focused on the audience decision. `escalate` also works
+# (the proxy auto-acknowledges the resulting taint entries), it just adds an
+# acknowledgment to every degrading flow.
+taint_policy = "allow"
+
+[user]
+id = "alice@archestra.ai"
+audience = ["alice@archestra.ai", "bob@archestra.ai"]
+trust = "trusted"
+
+# Reading the invoices: no requirements. Results are readable only by the
+# finance team and are trusted first-party data.
+[[tool]]
+name = "invoices_list"
+output.audience = ["alice@archestra.ai", "bob@archestra.ai"]
+output.trust = "trusted"
+
+# Sending email: every recipient must already be a reader of the context.
+# `to`, `cc`, and `bcc` all expose the data, so all three are recipients.
+[[tool]]
+name = "send_email"
+requires.audience = "recipients_within_context"
+recipients_args = ["to", "cc", "bcc"]
+output.effects = ["egress"]

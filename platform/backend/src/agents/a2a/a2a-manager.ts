@@ -95,9 +95,16 @@ export class A2AManager {
       chatOpsThreadId?: string;
     };
     /**
-     * Cancellation signal forwarded into the agent run. Used by chatops so a
-     * muted thread aborts its in-flight model requests instead of letting them
-     * finish and post a now-unwanted reply.
+     * When provided (SendStreamingMessage), forwarded to the executor so each
+     * incremental text delta is surfaced to the streaming caller. The buffered
+     * response returned here is unchanged and remains authoritative.
+     */
+    onTextDelta?: (delta: string) => void;
+    /**
+     * Cancellation signal forwarded into the agent run. SendStreamingMessage
+     * aborts when the SSE client disconnects; chatops aborts a muted thread's
+     * in-flight model requests instead of letting them finish and post a
+     * now-unwanted reply.
      */
     abortSignal?: AbortSignal;
   }): Promise<A2AProtocolSendMessageResponse> {
@@ -284,6 +291,7 @@ export class A2AManager {
             originalUiMessages: contextUiMessages,
             chatOpsBindingId: systemParams?.chatOpsBindingId,
             chatOpsThreadId: systemParams?.chatOpsThreadId,
+            onTextDelta: params.onTextDelta,
             abortSignal,
           });
         },

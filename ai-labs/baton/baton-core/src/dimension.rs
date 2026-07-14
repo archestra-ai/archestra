@@ -2,7 +2,7 @@
 //! [`crate::preset`] algebras, plus their value types.
 //!
 //! Each dimension is a newtype over its preset and delegates its `combine` (the
-//! taint fold) and adequacy relation to it; [`crate::label::Label::combine`]
+//! taint fold) and adequacy relation to it; [`crate::value::ValueLabel::combine`]
 //! applies the per-dimension combine, and nothing else in the crate invents
 //! merge semantics.
 //!
@@ -15,12 +15,12 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::preset::{Adequacy, HasBottom, JoinSet, MeetSet, MinLevel};
 
 /// A user known to the surrounding system (ACLs, directories, ...).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct UserId(String);
 
@@ -53,7 +53,7 @@ impl fmt::Display for UserId {
 ///
 /// [`PUBLIC`]: Audience::PUBLIC
 /// [`UNKNOWN`]: Audience::UNKNOWN
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Audience(MeetSet<UserId>);
 
@@ -78,9 +78,9 @@ impl Audience {
         self.0.covers(recipients)
     }
 
-    /// Grant application ([`Label::lift`](crate::label::Label::lift)): admit
-    /// `vouched` into the readers. `Public` stays public; `Unknown` becomes
-    /// exactly the vouched readers. Monotone in the adequacy order.
+    /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
+    /// admit `vouched` into the readers. `Public` stays public; `Unknown`
+    /// becomes exactly the vouched readers. Monotone in the adequacy order.
     pub(crate) fn admitting(&self, vouched: &BTreeSet<UserId>) -> Self {
         match &self.0 {
             MeetSet::All => Self(MeetSet::All),
@@ -89,15 +89,14 @@ impl Audience {
         }
     }
 
-    /// `self ⊑ other` in the adequacy (permissiveness) order: `Unknown` bottom,
-    /// `Public` top, `Readers` by inclusion.
-    #[cfg(test)]
-    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (MeetSet::Unknown, _) => true,
-            (_, MeetSet::All) => true,
-            (MeetSet::Only(a), MeetSet::Only(b)) => a.is_subset(b),
-            _ => false,
+    /// The members of `required` this audience does not already admit — the
+    /// per-leaf endorse deficit. Empty for `Public`; everything for `Unknown`
+    /// (it bounds nothing, so every reader needs the vouch).
+    pub(crate) fn missing_readers(&self, required: &BTreeSet<UserId>) -> BTreeSet<UserId> {
+        match &self.0 {
+            MeetSet::All => BTreeSet::new(),
+            MeetSet::Only(readers) => required.difference(readers).cloned().collect(),
+            MeetSet::Unknown => required.clone(),
         }
     }
 }
@@ -122,7 +121,7 @@ impl fmt::Display for Audience {
 }
 
 /// A trust judgement that has actually been made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum KnownTrust {
     Suspicious,
     Trusted,
@@ -151,13 +150,12 @@ impl fmt::Display for KnownTrust {
 /// `Unknown` is structurally separate from the known judgements so nothing
 /// can treat it as "probably fine" by accident: requirements are expressed
 /// over [`KnownTrust`] only, and unpacking `Unknown` into a judgement is
-/// always explicit — an [`crate::engine::UnknownPolicy`] choice or an
-/// [`crate::authority::Authority`] ruling, never a cast.
+/// always explicit — an [`crate::approval::Authority`] ruling, never a cast.
 ///
 /// The fold keeps the strongest bad evidence: definite suspicion dominates
 /// missing knowledge, which dominates trust
 /// (`Suspicious ∧ Unknown = Suspicious`, `Trusted ∧ Unknown = Unknown`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Trust(MinLevel<KnownTrust>);
 
@@ -178,29 +176,15 @@ impl Trust {
         self.0.at_least(floor)
     }
 
-    /// Grant application ([`Label::lift`](crate::label::Label::lift)): raise
-    /// trust to at least `attested`. A join (`max`), never a demotion — a
-    /// `Trusted` context is never lowered by a weaker attestation, and an
+    /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
+    /// raise trust to at least `attested`. A join (`max`), never a demotion —
+    /// a `Trusted` flow is never lowered by a weaker attestation, and an
     /// `Unknown` one becomes the attested judgement.
     pub(crate) fn raised_to(&self, attested: KnownTrust) -> Self {
         match self.0 {
             MinLevel::Known(actual) => Self(MinLevel::Known(actual.max(attested))),
             MinLevel::Unknown => Self(MinLevel::Known(attested)),
         }
-    }
-
-    /// `self ⊑ other` in the adequacy order: `Unknown` bottom, then
-    /// `Suspicious`, then `Trusted`.
-    #[cfg(test)]
-    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
-        fn rank(t: &MinLevel<KnownTrust>) -> u8 {
-            match t {
-                MinLevel::Unknown => 0,
-                MinLevel::Known(KnownTrust::Suspicious) => 1,
-                MinLevel::Known(KnownTrust::Trusted) => 2,
-            }
-        }
-        rank(&self.0) <= rank(&other.0)
     }
 }
 
@@ -214,7 +198,7 @@ impl fmt::Display for Trust {
 }
 
 /// A side effect a tool has on the world outside the trajectory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Effect {
     Mutation,
     Egress,
@@ -235,7 +219,7 @@ impl fmt::Display for Effect {
 /// Union fold; [`none`](Effects::none) (`Has(∅)`) is the identity, and
 /// [`UNKNOWN`](Effects::UNKNOWN) (an unannotated tool ran, so anything may have
 /// happened) is absorbing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct Effects(JoinSet<Effect>);
 
@@ -262,10 +246,19 @@ impl Effects {
         self.0.avoids(forbidden)
     }
 
-    /// Grant application ([`Label::lift`](crate::label::Label::lift)): waive
-    /// `waived` from the present effects. `Unknown` stays `Unknown` — one
-    /// cannot attest a negative over it, which is why unprovable effects are
-    /// acknowledge-only, never grant-fixable.
+    /// The declared effect set, or `None` for `Unknown`. Used by the
+    /// structural narrowing relation, which must distinguish "provably these
+    /// effects" from "anything may happen".
+    pub(crate) fn declared_set(&self) -> Option<BTreeSet<Effect>> {
+        match &self.0 {
+            JoinSet::Has(set) => Some(set.clone()),
+            JoinSet::Unknown => None,
+        }
+    }
+
+    /// Waiver application (check-transient): waive `waived` from the present
+    /// effects. `Unknown` stays `Unknown` — one cannot attest a negative over
+    /// it, which is why unprovable effects are acknowledge-only.
     pub(crate) fn waiving(&self, waived: &BTreeSet<Effect>) -> Self {
         match &self.0 {
             JoinSet::Has(present) => Self(JoinSet::Has(present.difference(waived).copied().collect())),
@@ -273,14 +266,23 @@ impl Effects {
         }
     }
 
-    /// `self ⊑ other` in the adequacy order: `Unknown` bottom, `none()` top,
-    /// fewer present effects is more adequate.
-    #[cfg(test)]
-    pub(crate) fn adequacy_le(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (JoinSet::Unknown, _) => true,
-            (JoinSet::Has(a), JoinSet::Has(b)) => b.is_subset(a),
-            (JoinSet::Has(_), JoinSet::Unknown) => false,
+    /// The effects `self` (a call's proposed effects) would *add* to the
+    /// already-committed `past` surface: `None` when the flow is downhill on
+    /// effects (`past.combine(self) == past`), else `Some(growth)` — the
+    /// minimal effects whose commit equals committing `self`. Growth to
+    /// `Unknown` (an unannotated tool over a knowable past) is a real,
+    /// representable growth, distinct from any declared set.
+    pub(crate) fn growth_over(&self, past: &Effects) -> Option<Effects> {
+        if past.clone().combine(self.clone()) == *past {
+            return None;
+        }
+        match (past.declared_set(), self.declared_set()) {
+            (Some(committed), Some(proposed)) => Some(Self::declared(proposed.difference(&committed).copied())),
+            // An `Unknown` proposal over a knowable past grows the surface to
+            // `Unknown`; a declared proposal over an `Unknown` past is absorbed
+            // above (that branch returns `None`).
+            (_, None) => Some(Self::UNKNOWN),
+            (None, Some(_)) => Some(self.clone()),
         }
     }
 }

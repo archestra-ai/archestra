@@ -1,0 +1,41 @@
+# baton-proxy policy for the kagent demo.
+#
+# The proxy forwards to OpenRouter and gates the agent's k8s tool calls. Only
+# the tools this scenario touches are annotated; every other kagent tool is
+# unregistered and passes through — gradual adoption, and with no authorities
+# registered an unprovable flow simply fails closed.
+
+upstream_base_url = "https://openrouter.ai/api/v1"
+
+[contracts.user]
+id = "operator"
+# The operator's request is trusted (default), so a clean investigation that
+# never touches suspicious content can still reach the guarded sinks.
+
+# --- Injection vector: pod logs are third-party text. --------------------------
+[[contracts.tool]]
+name = "k8s_get_pod_logs"
+output = { trust = "suspicious" }
+
+# --- Trusted readers: pure cluster state, no third-party text. -----------------
+[[contracts.tool]]
+name = "k8s_get_resources"
+output = { trust = "trusted" }
+
+[[contracts.tool]]
+name = "k8s_describe_resource"
+output = { trust = "trusted" }
+
+# --- Guarded sinks: a mutation may only run from a trusted flow. ---------------
+# A flow tainted by suspicious log output fails this bar and is blocked.
+[[contracts.tool]]
+name = "k8s_delete_resource"
+requires = { trust = "trusted" }
+
+[[contracts.tool]]
+name = "k8s_apply_manifest"
+requires = { trust = "trusted" }
+
+[[contracts.tool]]
+name = "k8s_patch_resource"
+requires = { trust = "trusted" }

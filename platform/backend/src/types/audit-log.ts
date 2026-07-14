@@ -36,6 +36,7 @@ export const AuditEventNameSchema = z.enum([
   "connector.created",
   "connector.updated",
   "connector.deleted",
+  "connector.permission_sync_triggered",
   "defaultUserLimit.created",
   "defaultUserLimit.updated",
   "defaultUserLimit.deleted",

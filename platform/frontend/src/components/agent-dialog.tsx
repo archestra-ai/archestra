@@ -583,7 +583,10 @@ export function AgentDialog({
   const appName = useAppName();
   const shouldLoadInternalAgents = open && agentType !== "llm_proxy";
   const shouldLoadIdentityProviders =
-    open && (agentType === "mcp_gateway" || agentType === "llm_proxy");
+    open &&
+    (agentType === "mcp_gateway" ||
+      agentType === "llm_proxy" ||
+      agentType === "agent");
   const shouldLoadKnowledgeSources = open;
   const shouldLoadLlmConfiguration = open && agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
@@ -764,7 +767,9 @@ export function AgentDialog({
     builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
-    agentType === "mcp_gateway" || agentType === "llm_proxy";
+    agentType === "mcp_gateway" ||
+    agentType === "llm_proxy" ||
+    agentType === "agent";
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
@@ -2364,14 +2369,17 @@ export function AgentDialog({
                             identityProviders.length > 0 && (
                               <div className="space-y-2">
                                 <Label>
-                                  {agentType === "llm_proxy"
+                                  {agentType === "llm_proxy" ||
+                                  agentType === "agent"
                                     ? "Identity Provider (JWKS)"
                                     : "Identity Provider (Enterprise/JWKS)"}
                                 </Label>
                                 <p className="text-sm text-muted-foreground">
                                   {agentType === "llm_proxy"
                                     ? `Select the OIDC identity provider this LLM Proxy should trust for JWKS JWT authentication. Leave this unset to keep using provider API keys and virtual keys without IdP JWT validation.`
-                                    : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
+                                    : agentType === "agent"
+                                      ? `Select the OIDC identity provider this agent should trust for direct JWKS JWT authentication over A2A (Webhook). Leave this unset to keep authenticating A2A requests with ${appName} platform tokens.`
+                                      : `Select the OIDC identity provider this MCP Gateway should trust for ID-JAG and direct JWKS JWT authentication. The same provider is also used when ${appName} needs to resolve enterprise-managed downstream credentials for tool calls. Leave this unset to keep using the other supported MCP Gateway authentication methods without IdP JWT validation.`}
                                   {mcpAuthDocsUrl ? (
                                     <>
                                       {" "}

@@ -173,7 +173,17 @@ function ActionButton({
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipTrigger asChild>
+        {action.disabled ? (
+          // A disabled button swallows pointer events, so the tooltip (the
+          // disabled reason) would never open. The span receives them
+          // instead — same trick as PermissionButton; ButtonGroup's `>*`
+          // selectors keep the grouped-border styling intact.
+          <span className="inline-flex cursor-not-allowed">{button}</span>
+        ) : (
+          button
+        )}
+      </TooltipTrigger>
       <TooltipContent>{tooltipText}</TooltipContent>
     </Tooltip>
   );

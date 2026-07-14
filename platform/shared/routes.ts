@@ -565,6 +565,11 @@ export const RouteId = {
   DeleteConnector: "deleteConnector",
   DeleteConnectorDocument: "deleteConnectorDocument",
   SyncConnector: "syncConnector",
+  TriggerPermissionSync: "triggerPermissionSync",
+  GetPermissionSyncCoverage: "getPermissionSyncCoverage",
+  GetConnectorUserGroups: "getConnectorUserGroups",
+  UpsertConnectorMemberOverride: "upsertConnectorMemberOverride",
+  DeleteConnectorMemberOverride: "deleteConnectorMemberOverride",
   ForceResyncConnector: "forceResyncConnector",
   TestConnectorConnection: "testConnectorConnection",
 

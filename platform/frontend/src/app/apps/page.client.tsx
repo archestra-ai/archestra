@@ -60,6 +60,10 @@ export default function AppsPage() {
   );
   const pinnedApps = filtered.filter((app) => app.pinnedAt);
   const unpinnedApps = filtered.filter((app) => !app.pinnedAt);
+  // Below "Pinned", owned and external apps are separate sections: apps you
+  // authored here vs UIs that came with installed MCP servers.
+  const ownedApps = unpinnedApps.filter((app) => app.source === "owned");
+  const externalApps = unpinnedApps.filter((app) => app.source === "external");
 
   const setParam = (name: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -141,12 +145,11 @@ export default function AppsPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {pinnedApps.length > 0 && (
-              <AppSection title="Pinned" apps={pinnedApps} />
-            )}
+            <AppSection title="Pinned" apps={pinnedApps} />
+            <AppSection title="Apps" apps={ownedApps} />
             <AppSection
-              title={pinnedApps.length > 0 ? "All apps" : undefined}
-              apps={unpinnedApps}
+              title="Apps from installed MCP servers"
+              apps={externalApps}
             />
           </div>
         )}
@@ -157,18 +160,17 @@ export default function AppsPage() {
   );
 }
 
-// Mirrors the Projects page's ProjectSection: an optional uppercase header over
-// the card grid, used to split "Pinned" from the rest.
-function AppSection({ title, apps }: { title?: string; apps: AppListItem[] }) {
+// Mirrors the Projects page's ProjectSection: an uppercase header over the
+// card grid. Renders nothing when the group is empty, so only sections with
+// cards appear.
+function AppSection({ title, apps }: { title: string; apps: AppListItem[] }) {
   if (apps.length === 0) return null;
 
   return (
     <section className="space-y-3">
-      {title ? (
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h2>
-      ) : null}
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {apps.map((app) => (
           <AppCard

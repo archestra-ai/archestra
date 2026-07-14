@@ -2,9 +2,7 @@
 
 import {
   AlertTriangle,
-  Check,
   ChevronDown,
-  Copy,
   ExternalLink,
   Eye,
   EyeOff,
@@ -13,8 +11,8 @@ import {
 import Link from "next/link";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { CopyableCode } from "@/components/copyable-code";
+import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -429,29 +427,14 @@ function GenericAuthRow({
 
   const hasAnyToken = !!userToken || tokens.length > 0;
   const headerValue = bare ? previewValue : `Bearer ${previewValue}`;
-  const [copied, setCopied] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
-  const handleCopy = async () => {
-    if (isCopying) return;
-    setIsCopying(true);
-    try {
-      // The on-screen value is masked once a token is selected, so resolve
-      // the real token for the clipboard instead of copying the mask.
-      const value =
-        exposedValue ??
-        (isPersonal || selectedTeamToken
-          ? await fetchTokenValue()
-          : placeholder);
-      if (!value) return; // fetch failed; the mutation already surfaced a toast
-      await navigator.clipboard.writeText(bare ? value : `Bearer ${value}`);
-      setCopied(true);
-      toast.success("Copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Failed to copy token");
-    } finally {
-      setIsCopying(false);
-    }
+  // The on-screen value is masked once a token is selected, so putting the
+  // real token on the clipboard is an explicit menu choice (SecretCopyButton).
+  const canResolveToken = isPersonal || !!selectedTeamToken;
+  const getSecretText = async (): Promise<string | null> => {
+    const value = exposedValue ?? (await fetchTokenValue());
+    if (!value) return null; // fetch failed; the mutation already surfaced a toast
+    return bare ? value : `Bearer ${value}`;
   };
 
   const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
@@ -491,21 +474,12 @@ function GenericAuthRow({
               <Eye className="size-3.5" strokeWidth={2} />
             )}
           </button>
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={isLoading || isCopying}
-            aria-label="Copy to clipboard"
-            className="flex size-7 items-center justify-center rounded border border-[#1f2937] bg-[#0d1117] text-[#9ca3af] transition-colors hover:text-white disabled:opacity-50"
-          >
-            {isCopying ? (
-              <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
-            ) : copied ? (
-              <Check className="size-3.5 text-[#4ade80]" strokeWidth={2.5} />
-            ) : (
-              <Copy className="size-3.5" strokeWidth={2} />
-            )}
-          </button>
+          <SecretCopyButton
+            variant="terminal"
+            getSecretText={canResolveToken ? getSecretText : null}
+            placeholderText={bare ? placeholder : `Bearer ${placeholder}`}
+            onBusyChange={setIsCopying}
+          />
           {/* Switching tokens mid-fetch would copy the old token while the
               row already shows the new one, so lock the switcher too. */}
           <DropdownMenuTrigger asChild>

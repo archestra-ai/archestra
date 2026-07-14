@@ -443,7 +443,7 @@ impl Trajectory {
         self.advance();
     }
 
-    /// Apply a validated `TransformValue` step as one transaction: admit the
+    /// Apply a validated content-justified `Derive` step as one transaction: admit the
     /// derived value under the declared output label, substitute it into the
     /// pending action's current argument tree, and audit the transition. The
     /// source keeps its own label and its slot in the immutable original
@@ -483,7 +483,7 @@ impl Trajectory {
         derived
     }
 
-    /// Audit a failed `TransformValue` step: an event, no derived value, and
+    /// Audit a failed content-justified `Derive` step: an event, no derived value, and
     /// a revision advance that stales every sibling capability and plan.
     pub(crate) fn fail_transform(
         &mut self,
@@ -548,7 +548,7 @@ impl Trajectory {
         self.advance();
     }
 
-    /// Apply a granted `EndorseValue` step as one transaction: admit a new
+    /// Apply a granted fiat `Derive` (Endorse) step as one transaction: admit a new
     /// value carrying `source`'s bytes under the authority-`raised` label,
     /// substitute it into the pending action's current argument tree, and audit
     /// the authority. The bytes are unchanged (a no-op relabel); the source

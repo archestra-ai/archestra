@@ -11,13 +11,9 @@
 //!
 //! Run with `cargo run --example external_auditor`.
 
-use std::collections::{BTreeMap, BTreeSet};
-
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
-    AuthorityName, Blocked, Decision, Effect, Effects, OpaqueValue, PolicyEngine, ProposedGrant, Requirements, Ruling,
-    Speaker, StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId,
-    ValueLabel, Violation,
+    ArgumentTree, Authority, AuthorityMandate, Decision, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Ruling,
+    Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, UserId, ValueId, ValueLabel, Violation,
 };
 
 /// The internal finance team with access to the invoicing system.
@@ -40,47 +36,22 @@ fn approve_auditor(_: &ProposedGrant, _: &[Violation], _: &TrajectoryView<'_>) -
 }
 
 fn finance_approver() -> Authority {
-    Authority {
-        name: AuthorityName::new("finance-approver"),
-        mandate: AuthorityMandate {
-            trust: None,
-            audience: Some(BTreeSet::from([u(AUDITOR)])),
-            waive_prior_effects: false,
-            confirms: false,
-            acknowledge_unknown: false,
-            may_release_control: false,
-            acquire_effects: true,
-        },
-        mode: AuthorityMode::Inline(approve_auditor),
-    }
+    Authority::inline(
+        "finance-approver",
+        AuthorityMandate::none().vouch_audience([u(AUDITOR)]).acquire_effects(),
+        approve_auditor,
+    )
 }
 
 fn build_engine() -> PolicyEngine {
     let mut engine = PolicyEngine::new();
     engine
-        .register(ToolContract {
-            name: ToolName::new("invoices.list"),
-            requires: Requirements::default(),
-            output_label: ValueLabel {
-                audience: Audience::readers([u(ALICE), u(BOB)]),
-                trust: Trust::TRUSTED,
-            },
-            effects: Effects::none(),
-            arguments: ArgumentSchema::opaque(),
-        })
+        .register(ToolContract::source(
+            "invoices.list",
+            ValueLabel::trusted_readers([u(ALICE), u(BOB)]),
+        ))
         .unwrap();
-    engine
-        .register(ToolContract {
-            name: ToolName::new("email.send"),
-            requires: Requirements {
-                audience: AudienceRule::RecipientsWithinContext,
-                ..Requirements::default()
-            },
-            output_label: ValueLabel::identity(),
-            effects: Effects::declared([Effect::Egress]),
-            arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
-        })
-        .unwrap();
+    engine.register(ToolContract::egress_sink("email.send", "to")).unwrap();
     engine.register_authority(finance_approver()).unwrap();
     engine
 }
@@ -95,11 +66,7 @@ fn main() {
     );
 
     // Read the invoices; the output wears the finance team's audience.
-    let list = ToolRequest::new(
-        ToolName::new("invoices.list"),
-        ArgumentTree::Object(BTreeMap::new()),
-        BTreeSet::new(),
-    );
+    let list = ToolRequest::new(ToolName::new("invoices.list"), ArgumentTree::empty(), []);
     let report = match engine.evaluate(&mut trajectory, list) {
         Decision::Permitted(token) => {
             let (_canonical, receipt) = trajectory.release(token).unwrap();
@@ -116,12 +83,19 @@ fn main() {
     );
 
     // E-mail the report to the auditor: an audience breach and the first egress,
-    // both cleared by the mandated finance approver.
+    // both cleared by the mandated finance approver as `pursue` walks the plan.
     let send = email(&mut trajectory, report, AUDITOR);
     print!("  email → {AUDITOR}: ");
-    match declassify_to_permit(&engine, &mut trajectory, send) {
-        Ok(()) => println!("PERMITTED (finance approver endorsed the auditor and accepted the egress)"),
-        Err(reason) => println!("BLOCKED — {reason}"),
+    match engine.pursue(&mut trajectory, send, 8) {
+        Pursuit::Permitted(token) => {
+            let (_canonical, receipt) = trajectory.release(token).unwrap();
+            trajectory
+                .record_output(receipt, OpaqueValue::new("message-id: 1"))
+                .unwrap();
+            println!("PERMITTED (finance approver endorsed the auditor and accepted the egress)");
+        }
+        Pursuit::Terminal(block) => println!("BLOCKED — {}", block.reason),
+        other => println!("BLOCKED — {other:?}"),
     }
 
     println!("\naudit trail:");
@@ -141,39 +115,7 @@ fn email(trajectory: &mut Trajectory, report: ValueId, recipient: &str) -> ToolR
     );
     ToolRequest::new(
         ToolName::new("email.send"),
-        ArgumentTree::Object(BTreeMap::from([
-            (ArgumentName::new("to"), ArgumentTree::Value(to)),
-            (ArgumentName::new("body"), ArgumentTree::Value(report)),
-        ])),
-        BTreeSet::new(),
+        ArgumentTree::object([("to", to), ("body", report)]),
+        [],
     )
-}
-
-/// Drive a blocked-but-remediable send through its first plan, letting the
-/// inline authorities rule, until it permits (then dispatch) or blocks.
-fn declassify_to_permit(
-    engine: &PolicyEngine,
-    trajectory: &mut Trajectory,
-    request: ToolRequest,
-) -> Result<(), String> {
-    let mut decision = engine.evaluate(trajectory, request);
-    loop {
-        match decision {
-            Decision::Permitted(token) => {
-                let (_canonical, receipt) = trajectory.release(token).unwrap();
-                trajectory
-                    .record_output(receipt, OpaqueValue::new("message-id: 1"))
-                    .unwrap();
-                return Ok(());
-            }
-            Decision::Blocked(Blocked::Terminal(block)) => return Err(block.reason.to_string()),
-            Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                let capability = engine.mint_step(trajectory, plans.first().id, 0).unwrap();
-                decision = match engine.apply_step(trajectory, capability).unwrap() {
-                    StepOutcome::Advanced(next) => next,
-                    other => return Err(format!("unexpected step outcome: {other:?}")),
-                };
-            }
-        }
-    }
 }

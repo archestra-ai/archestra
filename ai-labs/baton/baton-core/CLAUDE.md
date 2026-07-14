@@ -92,7 +92,8 @@ observable; preserve it (there is a typed-order test).
   runtime-capability sets are not modeled); a **transient waiver** changes no
   stored state — a check-transient lift (`waiving` a prior effect, standing in
   for a confirmation, excluding a control dep) plus an audit record. A
-  **fiat relabel** (`EndorseValue`), by contrast, mints a *durable* value like a
+  **fiat relabel** (`TransitionKind::Derive` with `Justification::Fiat`, the
+  Endorse), by contrast, mints a *durable* value like a
   transform: an authority raises `source`'s label with the raise helpers
   (`raised_to`/`admitting`, never `combine`), and a new value carries the raised
   label under `Provenance::Endorsed` — the source is untouched. So raising trust

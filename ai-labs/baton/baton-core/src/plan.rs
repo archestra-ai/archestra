@@ -74,9 +74,20 @@ impl<'a, T> IntoIterator for &'a NonEmptyVec<T> {
 /// bound check and appends audit history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum TransitionKind {
-    TransformValue {
+    /// Admit a derived value in `source`'s argument slot. Both justifications
+    /// mint a new value and substitute it into the flow; they differ in who
+    /// vouches for the new label (see [`Justification`]).
+    ///
+    /// A plan is a *prediction*: when a fiat step is predicted after a
+    /// content step in the same plan, `source` is the pre-transform leaf id
+    /// (the shared `SimFlow` swaps a leaf's label in place without
+    /// re-id-ing), but at application the transform mints a new id and
+    /// re-enumeration resolves the fiat step against the transformed
+    /// descendant. Revision-binding forces that re-enumeration, so a stale
+    /// downstream `source` is never applied.
+    Derive {
         source: ValueId,
-        transformer: TransformerRef,
+        justification: Justification,
     },
     ConstrainAction {
         transition: TransformerRef,
@@ -91,18 +102,20 @@ pub enum TransitionKind {
     AcceptGrowth {
         effects: Effects,
     },
-    /// An authority durably raises `source`'s label by `delta` (Endorse). Like
-    /// a transform it mints a derived value and substitutes it into the flow;
-    /// unlike one the raise is authority-justified, not content-justified.
-    ///
-    /// A plan is a *prediction*: when this step is predicted after a Transform in
-    /// the same plan, `source` is the pre-transform leaf id (the shared `SimFlow`
-    /// swaps a leaf's label in place without re-id-ing), but at application the
-    /// transform mints a new id and re-enumeration resolves the Endorse against
-    /// the transformed descendant. Revision-binding forces that re-enumeration, so
-    /// a stale downstream `source` is never applied.
-    EndorseValue {
-        source: ValueId,
+}
+
+/// Who vouches for a derived value's label. The two justifications share the
+/// mint-and-substitute machinery but answer to different registries: content
+/// to the transformer registry (never routed to an authority), fiat to a
+/// competent authority's mandate (always routed).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub enum Justification {
+    /// Content-justified: a registered transformer derives new bytes under
+    /// its declared output label.
+    Content(TransformerRef),
+    /// Authority fiat (Endorse): the same bytes, the label durably raised by
+    /// `delta` — taint erased by mandate, not by content.
+    Fiat {
         delta: EndorseDelta,
         /// The violations this endorse asks the authority to clear, as the
         /// authority should see them. For an ordinary enumerated step this is
@@ -140,11 +153,17 @@ pub enum ExitKind {
 impl ExitKind {
     fn of_step(kind: &TransitionKind) -> Self {
         match kind {
-            TransitionKind::TransformValue { .. } => Self::Sanitize,
+            TransitionKind::Derive {
+                justification: Justification::Content(_),
+                ..
+            } => Self::Sanitize,
             TransitionKind::ConstrainAction { .. } => Self::Constrain,
             TransitionKind::AcceptGrowth { .. } => Self::Accept,
             TransitionKind::ApplyWaiver { .. } => Self::WaiverOrAcknowledge,
-            TransitionKind::EndorseValue { .. } => Self::Endorse,
+            TransitionKind::Derive {
+                justification: Justification::Fiat { .. },
+                ..
+            } => Self::Endorse,
         }
     }
 

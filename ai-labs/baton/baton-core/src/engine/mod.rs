@@ -40,6 +40,7 @@ mod application;
 mod capability;
 mod evaluation;
 mod planning;
+mod pursue;
 
 #[cfg(test)]
 mod tests;
@@ -50,6 +51,7 @@ pub use capability::{
     RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused, TerminalBlock,
     ToolContract,
 };
+pub use pursue::{Pursuit, StallCause};
 
 /// Identity of one engine configuration, unique within the process. Plans,
 /// step capabilities, and pending approvals bind to it: registries are the

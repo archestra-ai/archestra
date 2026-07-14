@@ -6,7 +6,7 @@ use crate::approval::{AncestrySnapshot, AuthorityMode, PendingApproval, Ruling, 
 use crate::audit::{AuditEvent, AuthorityName};
 use crate::contract::{Fixability, Violation};
 use crate::dimension::Effects;
-use crate::plan::TransitionKind;
+use crate::plan::{Justification, TransitionKind};
 use crate::request::ToolRequest;
 use crate::revision::{ActionId, PlanId, ValueId};
 use crate::transition::{ActionTransition, ProposedGrant, TransientWaiver};
@@ -158,7 +158,10 @@ impl PolicyEngine {
         }
 
         match spec.kind.clone() {
-            TransitionKind::TransformValue { source, transformer } => {
+            TransitionKind::Derive {
+                source,
+                justification: Justification::Content(transformer),
+            } => {
                 let registered = self
                     .transformers
                     .iter()
@@ -282,7 +285,10 @@ impl PolicyEngine {
                     },
                 )
             }
-            TransitionKind::EndorseValue { source, delta, targets } => {
+            TransitionKind::Derive {
+                source,
+                justification: Justification::Fiat { delta, targets },
+            } => {
                 let grant = ProposedGrant::Endorse {
                     source,
                     delta: delta.clone(),

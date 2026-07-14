@@ -168,8 +168,61 @@ pub struct AuthorityMandate {
 
 impl AuthorityMandate {
     /// The identity mandate: competent for nothing but the empty ask.
+    /// Powers are granted one combinator at a time, so a mandate reads as
+    /// exactly what it may do.
     pub fn none() -> Self {
         Self::default()
+    }
+
+    /// Competent to endorse flow trust up to `ceiling`.
+    #[must_use]
+    pub fn endorse_trust(mut self, ceiling: KnownTrust) -> Self {
+        self.trust = Some(ceiling);
+        self
+    }
+
+    /// Competent to vouch exactly `readers` into a flow audience.
+    #[must_use]
+    pub fn vouch_audience(mut self, readers: impl IntoIterator<Item = UserId>) -> Self {
+        self.audience = Some(readers.into_iter().collect());
+        self
+    }
+
+    /// Competent to waive an already-committed prior effect for one check.
+    #[must_use]
+    pub fn waive_prior_effects(mut self) -> Self {
+        self.waive_prior_effects = true;
+        self
+    }
+
+    /// Competent to stand in for a user confirmation.
+    #[must_use]
+    pub fn confirms(mut self) -> Self {
+        self.confirms = true;
+        self
+    }
+
+    /// Competent to acknowledge unprovable facts.
+    #[must_use]
+    pub fn acknowledge_unknown(mut self) -> Self {
+        self.acknowledge_unknown = true;
+        self
+    }
+
+    /// Competent to release a control dependency for one flow.
+    #[must_use]
+    pub fn release_control(mut self) -> Self {
+        self.may_release_control = true;
+        self
+    }
+
+    /// Competent to acquire a new effect for one action. A global capability:
+    /// `covers` does not scope it to particular effects, so an acquirer may
+    /// accept *any* surface growth its routing reaches, not just one kind.
+    #[must_use]
+    pub fn acquire_effects(mut self) -> Self {
+        self.acquire_effects = true;
+        self
     }
 
     /// Is this mandate competent for `grant`? Endorse dimensions compare by
@@ -456,6 +509,88 @@ mod tests {
         assert_eq!(
             wrong_tool.narrows(&pending("shell.run", Effects::UNKNOWN)),
             Err(TransitionFailure::PreconditionMismatch)
+        );
+    }
+
+    /// Each builder combinator grants exactly its named power: the mandate it
+    /// builds covers the grant demanding that power and none of the grants
+    /// demanding another (the full covers matrix is diagonal).
+    #[test]
+    fn combinators_grant_their_named_power_and_nothing_else() {
+        let endorse = |delta| ProposedGrant::Endorse {
+            source: ValueId::new(0),
+            delta,
+        };
+        let waive = |waiver| ProposedGrant::Waive {
+            waiver,
+            acknowledged: Vec::new(),
+        };
+        let cases: Vec<(AuthorityMandate, ProposedGrant)> = vec![
+            (
+                AuthorityMandate::none().endorse_trust(KnownTrust::Trusted),
+                endorse(EndorseDelta {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: None,
+                }),
+            ),
+            (
+                AuthorityMandate::none().vouch_audience([UserId::new("bob")]),
+                endorse(EndorseDelta {
+                    trust: None,
+                    audience: Some(std::collections::BTreeSet::from([UserId::new("bob")])),
+                }),
+            ),
+            (
+                AuthorityMandate::none().waive_prior_effects(),
+                waive(TransientWaiver {
+                    prior_effects: Some(std::collections::BTreeSet::from([Effect::Egress])),
+                    ..TransientWaiver::empty()
+                }),
+            ),
+            (
+                AuthorityMandate::none().confirms(),
+                waive(TransientWaiver {
+                    confirms: true,
+                    ..TransientWaiver::empty()
+                }),
+            ),
+            (
+                AuthorityMandate::none().release_control(),
+                waive(TransientWaiver {
+                    control_release: std::collections::BTreeSet::from([ValueId::new(0)]),
+                    ..TransientWaiver::empty()
+                }),
+            ),
+            (
+                AuthorityMandate::none().acknowledge_unknown(),
+                ProposedGrant::Acknowledge {
+                    facts: vec![Unprovable::EffectsUnknown],
+                },
+            ),
+            (
+                AuthorityMandate::none().acquire_effects(),
+                ProposedGrant::Accept {
+                    effects: Effects::declared([Effect::Egress]),
+                },
+            ),
+        ];
+        for (i, (mandate, _)) in cases.iter().enumerate() {
+            for (j, (_, grant)) in cases.iter().enumerate() {
+                assert_eq!(mandate.covers(grant), i == j, "mandate {i} vs grant {j}");
+            }
+        }
+        // The identity mandate covers none of them, and a trust ceiling below
+        // the asked raise does not cover it.
+        for (_, grant) in &cases {
+            assert!(!AuthorityMandate::none().covers(grant));
+        }
+        assert!(
+            !AuthorityMandate::none()
+                .endorse_trust(KnownTrust::Suspicious)
+                .covers(&endorse(EndorseDelta {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: None,
+                }))
         );
     }
 

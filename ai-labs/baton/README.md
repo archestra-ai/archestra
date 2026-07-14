@@ -57,3 +57,8 @@ cargo test
 `agentdojo-harness/` evaluates the engine against the AgentDojo
 prompt-injection benchmark (with `baton-check`, a stateless JSON oracle over
 baton-core); see its README.
+
+`baton-proxy/` is a prototype that puts the engine on the inference layer: an
+OpenAI-compatible HTTP proxy that, when a tool call would send data outside its
+audience, rewrites it into a call to a human-approval MCP server and lets the
+retry through once approved. See its README.

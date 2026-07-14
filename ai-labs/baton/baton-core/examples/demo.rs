@@ -105,7 +105,15 @@ fn main() {
     println!("5. apply the transform step: a REGISTERED redactor derives a new value; the raw one keeps its label.");
     let transform_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, baton_core::TransitionKind::TransformValue { .. }))
+        .find(|p| {
+            matches!(
+                &p.steps.first().kind,
+                baton_core::TransitionKind::Derive {
+                    justification: baton_core::Justification::Content(_),
+                    ..
+                }
+            )
+        })
         .expect("a transform plan was enumerated");
     let capability = engine.mint_step(&trajectory, transform_plan.id, 0).unwrap();
     // The transform clears the trust breach, but the send still grows the

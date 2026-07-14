@@ -8,7 +8,7 @@ use crate::approval::{AuthorityMode, Ruling, TrajectoryView};
 use crate::audit::{AuditEvent, AuthorityName};
 use crate::contract::{Requirements, Unprovable, Violation};
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
-use crate::plan::{ExitKind, NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
+use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, RemedyPlan, TransitionKind, TransitionSpec};
 use crate::request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
 use crate::revision::{PlanId, ValueId};
 use crate::turn::{Speaker, Trajectory};
@@ -62,18 +62,9 @@ fn dispatch(trajectory: &mut Trajectory, token: ExecutionToken, body: &str) -> R
 /// for effect-axis tests that must genuinely acquire the growth (walk the
 /// Accept) rather than pre-seed a downhill past.
 fn walk_to_permit(engine: &PolicyEngine, trajectory: &mut Trajectory, request: ToolRequest) -> ExecutionToken {
-    let mut decision = engine.evaluate(trajectory, request);
-    loop {
-        match decision {
-            Decision::Permitted(token) => break token,
-            Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                decision = match apply_first_step(engine, trajectory, plans.first().id) {
-                    StepOutcome::Advanced(decision) => decision,
-                    other => panic!("unexpected step outcome: {other:?}"),
-                };
-            }
-            other => panic!("expected to reach a permit, got {other:?}"),
-        }
+    match engine.pursue(trajectory, request, 16) {
+        Pursuit::Permitted(token) => token,
+        other => panic!("expected to reach a permit, got {other:?}"),
     }
 }
 
@@ -322,7 +313,7 @@ fn unknown_trust_routes_as_an_endorse() {
     // the sink's requirement.
     assert!(matches!(
         &plans.first().steps.first().kind,
-        TransitionKind::EndorseValue { source, delta, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { delta, .. } }
             if *source == doc && delta.trust == Some(KnownTrust::Trusted)
     ));
     // ...routed to the trust-competent external human.
@@ -525,6 +516,225 @@ fn canonical_request_renders_the_checked_tree() {
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
     let request = email_request(&mut trajectory, body, "bob");
+
+    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected permit");
+    };
+    let (canonical, receipt) = trajectory.release(token).unwrap();
+    assert_eq!(canonical.rendered, r#"{"body":"the doc","to":"bob"}"#);
+    trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+}
+
+/// The bound is checked before a step, never after: with exactly enough
+/// budget for the one Accept step, the resulting permit is still returned.
+#[test]
+fn pursue_returns_a_permit_produced_by_the_final_allowed_step() {
+    let mut engine = engine_with([egress_tool()]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 1) else {
+        panic!("the final allowed step's permit must be returned");
+    };
+    dispatch(&mut trajectory, token, "pong").unwrap();
+}
+
+/// A permitted pursuit authorizes but commits nothing: effects land at
+/// release, not while walking — the two-phase boundary is untouched.
+#[test]
+fn pursue_permit_commits_nothing_before_release() {
+    let mut engine = engine_with([egress_tool()]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("expected a permit");
+    };
+    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+    let (_, receipt) = trajectory.release(token).unwrap();
+    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+    trajectory.record_output(receipt, OpaqueValue::new("pong")).unwrap();
+}
+
+/// A stalled pursuit abandons the pending action: the trajectory stays free
+/// for the next proposal instead of refusing it as already-pending.
+#[test]
+fn pursue_stall_abandons_the_pending_action() {
+    let mut engine = engine_with([egress_tool()]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::Stalled { violations, cause } = engine.pursue(&mut trajectory, ping_request(body), 0) else {
+        panic!("a zero bound must stall a remediable flow");
+    };
+    assert_eq!(cause, StallCause::BoundExhausted);
+    assert!(!violations.is_empty());
+    assert!(trajectory.pending_action().is_none());
+    let Pursuit::Permitted(token) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("the trajectory must be free after a stall");
+    };
+    dispatch(&mut trajectory, token, "pong").unwrap();
+}
+
+/// Pursuing a different proposal while an action is in flight is refused
+/// terminally WITHOUT touching the in-flight action: its token still
+/// releases — the one terminal where clearing the slot would be a bug.
+#[test]
+fn pursue_of_a_different_proposal_leaves_the_inflight_action_untouched() {
+    let engine = engine_with([email_contract()]);
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let to_bob = identity_ingress(&mut trajectory, "bob");
+    let to_alice = identity_ingress(&mut trajectory, "alice");
+    let first = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::object([("to", to_bob), ("body", body)]),
+        [],
+    );
+    let second = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::object([("to", to_alice), ("body", body)]),
+        [],
+    );
+
+    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, first) else {
+        panic!("expected a permit");
+    };
+    let Pursuit::Terminal(block) = engine.pursue(&mut trajectory, second, 8) else {
+        panic!("a different proposal while one is pending must refuse terminally");
+    };
+    assert!(matches!(block.reason, BlockReason::ActionAlreadyPending { .. }));
+    assert!(trajectory.pending_action().is_some());
+    dispatch(&mut trajectory, token, "sent").unwrap();
+}
+
+/// A pursuit deferring to an external authority keeps the pending action, so
+/// the held approval can re-enter through `apply_approval`.
+#[test]
+fn pursue_keeps_the_slot_for_an_external_ruling() {
+    let mut engine = engine_with([egress_tool()]);
+    engine
+        .register_authority(external_authority("effect-approver", acquirer_mandate()))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::NeedsApproval(pending) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("the external acquirer should defer");
+    };
+    assert!(trajectory.pending_action().is_some());
+    let Decision::Permitted(token) = engine
+        .apply_approval(
+            &mut trajectory,
+            pending,
+            crate::approval::Ruling::Approve {
+                reason: "acquired".to_owned(),
+            },
+        )
+        .unwrap()
+    else {
+        panic!("the approval should permit");
+    };
+    dispatch(&mut trajectory, token, "pong").unwrap();
+}
+
+/// A combinator-built inline authority routes and rules end-to-end: vouching
+/// carol in (Endorse) and acquiring the egress (Accept) walk the flow to a
+/// genuine permit — the combinators grant real, sufficient competence.
+#[test]
+fn combinator_built_inline_authority_endorses_to_a_permit() {
+    let mut engine = engine_with([email_contract()]);
+    engine
+        .register_authority(Authority::inline(
+            "approver",
+            crate::transition::AuthorityMandate::none()
+                .vouch_audience([user("carol")])
+                .acquire_effects(),
+            approve_all,
+        ))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "doc");
+    let request = email_request(&mut trajectory, body, "carol");
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "sent").unwrap();
+}
+
+/// A combinator-built external authority defers, and the pursuit names it.
+#[test]
+fn combinator_built_external_authority_defers_naming_it() {
+    let mut engine = engine_with([egress_tool()]);
+    engine
+        .register_authority(Authority::external(
+            "effect-approver",
+            crate::transition::AuthorityMandate::none().acquire_effects(),
+        ))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
+    let Pursuit::NeedsApproval(pending) = engine.pursue(&mut trajectory, ping_request(body), 8) else {
+        panic!("the external acquirer should defer");
+    };
+    assert_eq!(pending.authority(), &AuthorityName::new("effect-approver"));
+}
+
+/// A `source`-registered tool is a pure read whose recorded output wears the
+/// declared label after the admission fold.
+#[test]
+fn source_contract_output_wears_the_declared_label() {
+    let internal = || ValueLabel::trusted_readers([user("alice"), user("bob")]);
+    let engine = engine_with([ToolContract::source("invoices.list", internal())]);
+    let mut trajectory = Trajectory::new();
+    let request = ToolRequest::new(ToolName::new("invoices.list"), ArgumentTree::empty(), []);
+    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+        panic!("a pure read must permit");
+    };
+    let id = dispatch(&mut trajectory, token, "47 invoices").unwrap();
+    assert_eq!(trajectory.value(id).unwrap().label(), &internal());
+}
+
+/// An `egress_sink`-registered tool reads recipients from the named argument
+/// (walking the Accept for its declared egress), and blocks structurally when
+/// the recipients argument is missing.
+#[test]
+fn egress_sink_contract_resolves_recipients_and_blocks_undeclared() {
+    let mut engine = engine_with([ToolContract::egress_sink("email.send", "to")]);
+    engine.register_authority(inline_acquirer()).unwrap();
+    let mut trajectory = Trajectory::new();
+
+    let body = ingress(&mut trajectory, &["bob"], Trust::TRUSTED, "doc");
+    let request = email_request(&mut trajectory, body, "bob");
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "sent").unwrap();
+    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
+
+    let body = ingress(&mut trajectory, &["bob"], Trust::TRUSTED, "doc two");
+    let bare = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::object([("body", body)]), []);
+    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, bare) else {
+        panic!("an egress sink with no recipients argument must block terminally");
+    };
+    assert!(
+        block
+            .violations
+            .contains(&Violation::Breach(crate::contract::Breach::UndeclaredRecipients))
+    );
+}
+
+#[test]
+fn object_built_request_checks_and_renders_like_the_literal_tree() {
+    let engine = engine_with([email_contract()]);
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
+    let to = identity_ingress(&mut trajectory, "bob");
+    // `object` + leaf coercion + iterator control set: duplicates dedup into
+    // the same mandatory set a literal `BTreeSet` would carry.
+    let request = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::object([("to", to), ("body", body)]),
+        [body, body],
+    );
+    assert_eq!(request.control, BTreeSet::from([body]));
 
     let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
@@ -881,7 +1091,7 @@ fn tainted_payload_plans_a_transform() {
         .expect("single-step transform plan");
     assert!(matches!(
         &transform_plan.steps.first().kind,
-        TransitionKind::TransformValue { source, .. } if *source == raw
+        TransitionKind::Derive { source, justification: Justification::Content(_) } if *source == raw
     ));
     assert!(transform_plan.final_postcondition.is_clean());
     // Plans are stored on the trajectory, bound to its current revision,
@@ -908,7 +1118,7 @@ fn audience_breach_plans_an_endorse() {
     assert_eq!(endorse.steps.len(), 1);
     assert!(matches!(
         &endorse.steps.first().kind,
-        TransitionKind::EndorseValue { source, delta, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { delta, .. } }
             if *source == doc && delta.audience.as_ref().is_some_and(|r| r.contains(&user("charlie")))
     ));
     // Routing is live at application: the endorse step defers to the
@@ -958,7 +1168,10 @@ fn a_multi_source_audience_breach_endorses_every_contributing_leaf() {
         .steps
         .iter()
         .filter_map(|s| match &s.kind {
-            TransitionKind::EndorseValue { source, .. } => Some(*source),
+            TransitionKind::Derive {
+                source,
+                justification: Justification::Fiat { .. },
+            } => Some(*source),
             _ => None,
         })
         .collect();
@@ -1012,7 +1225,7 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
     let plans = remediable(&engine, &mut trajectory, request);
     let endorse_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, TransitionKind::EndorseValue { source, .. } if *source == doc))
+        .find(|p| matches!(&p.steps.first().kind, TransitionKind::Derive { source, justification: Justification::Fiat { .. } } if *source == doc))
         .expect("an endorse plan for the doc");
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse_plan.id) else {
         panic!("expected the external human to be consulted");
@@ -1107,7 +1320,7 @@ fn a_denied_endorse_is_terminal_and_mints_no_value() {
     let plans = remediable(&engine, &mut trajectory, request);
     let endorse_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, TransitionKind::EndorseValue { source, .. } if *source == doc))
+        .find(|p| matches!(&p.steps.first().kind, TransitionKind::Derive { source, justification: Justification::Fiat { .. } } if *source == doc))
         .expect("an endorse plan for the doc");
     let values_before = trajectory.store().len();
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse_plan.id) else {
@@ -1269,7 +1482,7 @@ fn control_release_and_endorse_compose_for_a_mixed_audience_breach() {
         let endorses_charlie = plan.steps.iter().any(|step| {
             matches!(
                 &step.kind,
-                TransitionKind::EndorseValue { source, delta, .. }
+                TransitionKind::Derive { source, justification: Justification::Fiat { delta, .. } }
                     if *source == body && delta.audience.as_ref().is_some_and(|r| r.contains(&user("charlie")))
             )
         });
@@ -1500,7 +1713,16 @@ fn transform_step_applies_and_flow_permits() {
     let plans = remediable(&engine, &mut trajectory, request);
     let plan = plans
         .iter()
-        .find(|p| p.steps.len() == 1 && matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
+        .find(|p| {
+            p.steps.len() == 1
+                && matches!(
+                    &p.steps.first().kind,
+                    TransitionKind::Derive {
+                        justification: Justification::Content(_),
+                        ..
+                    }
+                )
+        })
         .expect("transform plan");
 
     let outcome = apply_first_step(&engine, &mut trajectory, plan.id);
@@ -1538,7 +1760,10 @@ fn rule_approved_endorse_permits_inline() {
     let plans = remediable(&engine, &mut trajectory, request);
     assert!(matches!(
         &plans.first().steps.first().kind,
-        TransitionKind::EndorseValue { .. }
+        TransitionKind::Derive {
+            justification: Justification::Fiat { .. },
+            ..
+        }
     ));
     let outcome = apply_first_step(&engine, &mut trajectory, plans.first().id);
     let StepOutcome::Advanced(Decision::Permitted(_token)) = outcome else {
@@ -2037,9 +2262,9 @@ fn plan_steps(kinds: Vec<TransitionKind>) -> NonEmptyVec<TransitionSpec> {
 /// composite is categorized by that step, not its first.
 #[test]
 fn exit_kind_is_the_decisive_step() {
-    let transform = TransitionKind::TransformValue {
+    let transform = TransitionKind::Derive {
         source: ValueId::new(0),
-        transformer: tref("s"),
+        justification: Justification::Content(tref("s")),
     };
     let constrain = TransitionKind::ConstrainAction { transition: tref("c") };
     let accept = TransitionKind::AcceptGrowth {
@@ -2082,9 +2307,9 @@ fn cap_fairness_keeps_one_route_per_category() {
     let mut pool: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
     for i in 0..6u64 {
         pool.push((
-            plan_steps(vec![TransitionKind::TransformValue {
+            plan_steps(vec![TransitionKind::Derive {
                 source: ValueId::new(i),
-                transformer: tref("s"),
+                justification: Justification::Content(tref("s")),
             }]),
             clean.clone(),
         ));
@@ -2246,9 +2471,15 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
 /// The discriminant of a step's kind, for asserting the order steps ran.
 fn step_label(kind: &TransitionKind) -> &'static str {
     match kind {
-        TransitionKind::TransformValue { .. } => "sanitize",
+        TransitionKind::Derive {
+            justification: Justification::Content(_),
+            ..
+        } => "sanitize",
         TransitionKind::ConstrainAction { .. } => "constrain",
-        TransitionKind::EndorseValue { .. } => "endorse",
+        TransitionKind::Derive {
+            justification: Justification::Fiat { .. },
+            ..
+        } => "endorse",
         TransitionKind::AcceptGrowth { .. } => "accept",
         TransitionKind::ApplyWaiver { .. } => "waiver",
     }
@@ -2346,7 +2577,10 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
         .steps
         .iter()
         .find_map(|s| match &s.kind {
-            TransitionKind::EndorseValue { delta, .. } => Some(delta),
+            TransitionKind::Derive {
+                justification: Justification::Fiat { delta, .. },
+                ..
+            } => Some(delta),
             _ => None,
         })
         .expect("an endorse step");
@@ -2792,7 +3026,15 @@ fn multi_step_composition_transform_then_waiver() {
     // ...and application goes step by step, re-planning in between.
     let transform_plan = plans
         .iter()
-        .find(|p| matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
+        .find(|p| {
+            matches!(
+                &p.steps.first().kind,
+                TransitionKind::Derive {
+                    justification: Justification::Content(_),
+                    ..
+                }
+            )
+        })
         .expect("plan starting with a transform");
     let StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans, violations })) =
         apply_first_step(&engine, &mut trajectory, transform_plan.id)
@@ -3492,7 +3734,7 @@ fn rescue_composes_endorse_then_release_for_a_masked_flow() {
     let steps = &plans.first().steps;
     assert!(matches!(
         &steps.first().kind,
-        TransitionKind::EndorseValue { source, delta, targets }
+        TransitionKind::Derive { source, justification: Justification::Fiat { delta, targets } }
             if *source == body
                 && delta.trust == Some(KnownTrust::Suspicious)
                 && *targets == vec![Violation::Unprovable(Unprovable::TrustUnknown)]
@@ -3874,7 +4116,7 @@ fn rescue_does_not_over_endorse_re_masked_leaves() {
     assert_eq!(steps.len(), 2);
     assert!(matches!(
         &steps.first().kind,
-        TransitionKind::EndorseValue { source, .. } if *source == first
+        TransitionKind::Derive { source, justification: Justification::Fiat { .. } } if *source == first
     ));
     assert!(matches!(
         &steps.get(1).unwrap().kind,
@@ -3936,14 +4178,14 @@ fn rescue_endorse_targets_shrink_per_peel() {
     let steps = &plans.first().steps;
     assert!(matches!(
         &steps.first().kind,
-        TransitionKind::EndorseValue { source, targets, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { targets, .. } }
             if *source == first
                 && targets.iter().any(|v| matches!(v, Violation::Unprovable(Unprovable::TrustUnknown)))
                 && targets.iter().any(|v| matches!(v, Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })))
     ));
     assert!(matches!(
         &steps.get(1).unwrap().kind,
-        TransitionKind::EndorseValue { source, targets, .. }
+        TransitionKind::Derive { source, justification: Justification::Fiat { targets, .. } }
             if *source == second
                 && *targets == vec![Violation::Breach(crate::contract::Breach::AudienceExceeds {
                     outside: BTreeSet::from([user("bob")]),

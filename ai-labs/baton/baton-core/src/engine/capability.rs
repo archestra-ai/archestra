@@ -6,10 +6,10 @@ use serde::Serialize;
 use crate::ToolName;
 use crate::approval::PendingApproval;
 use crate::audit::AuthorityName;
-use crate::contract::{Requirements, Violation};
-use crate::dimension::Effects;
+use crate::contract::{AudienceRule, Requirements, Violation};
+use crate::dimension::{Effect, Effects};
 use crate::plan::{NonEmptyVec, RemedyPlan};
-use crate::request::ArgumentSchema;
+use crate::request::{ArgumentName, ArgumentSchema};
 use crate::revision::{ActionId, PlanId, Revision, ValueId};
 use crate::turn::TrajectoryId;
 use crate::value::ValueLabel;
@@ -37,6 +37,37 @@ pub struct ToolContract {
     /// past when dispatch begins.
     pub effects: Effects,
     pub arguments: ArgumentSchema,
+}
+
+impl ToolContract {
+    /// A pure read: no requirements, no effects, opaque arguments. A
+    /// dependency-free call's output wears exactly `output_label`; argument
+    /// and control dependencies fold in and can only worsen it.
+    pub fn source(name: impl Into<String>, output_label: ValueLabel) -> Self {
+        Self {
+            name: ToolName::new(name),
+            requires: Requirements::default(),
+            output_label,
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        }
+    }
+
+    /// An egress sink: recipients are read from the top-level argument
+    /// `recipients_arg` and must lie within the flow's audience; one dispatch
+    /// proposes an `Egress` effect. The output wears the identity label.
+    pub fn egress_sink(name: impl Into<String>, recipients_arg: impl Into<String>) -> Self {
+        Self {
+            name: ToolName::new(name),
+            requires: Requirements {
+                audience: AudienceRule::RecipientsWithinContext,
+                ..Requirements::default()
+            },
+            output_label: ValueLabel::identity(),
+            effects: Effects::declared([Effect::Egress]),
+            arguments: ArgumentSchema::with_recipients(ArgumentName::new(recipients_arg)),
+        }
+    }
 }
 
 /// Proof that the engine authorized one tool call — the only way to append a

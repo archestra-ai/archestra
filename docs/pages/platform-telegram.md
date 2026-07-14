@@ -44,9 +44,12 @@ Every message in a DM gets a reply. On first contact the bot asks which agent sh
 
 ### Group chats
 
-Add the bot to a group. It replies when addressed: an `@botname` mention, a reply to one of its messages, or a `/command`.
+Add the bot to a group. The bot's Group Privacy setting in BotFather decides what it hears:
 
-One Telegram quirk matters here: bots have Group Privacy on by default, and with it on Telegram delivers only `/commands` and replies — plain `@botname` mentions never reach the bot. For group use, disable Group Privacy for the bot in BotFather, then remove and re-add the bot to the group (Telegram caches the setting). Making the bot a group admin also works, and additionally lets the agent observe all group messages.
+- **Privacy on** (Telegram's default): the bot only receives `/commands` and replies to its own messages — plain `@botname` mentions never reach it.
+- **Privacy off** (or the bot is a group admin): the bot hears every message. The agent joins the conversation — it answers mentions and replies always, answers other messages when they're for it, and stays silent when people are clearly talking to each other.
+
+For group use, disable Group Privacy, then remove and re-add the bot to the group — Telegram caches the setting per membership.
 
 In supergroups with Topics enabled, each forum topic is a separate conversation for the agent.
 

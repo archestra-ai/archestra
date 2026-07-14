@@ -72,8 +72,10 @@ export function A2AConnectionInstructions({
   const { data: hasAdminPermission } = useHasPermissions({
     agent: ["admin"],
   });
-  const { data: canReadOauthClients } = useHasPermissions({
-    mcpOauthClient: ["read"],
+  // The link opens the create dialog on the OAuth clients page, so it needs
+  // create (to submit) on top of read (to see the page at all).
+  const { data: canCreateOauthClients } = useHasPermissions({
+    mcpOauthClient: ["read", "create"],
   });
   const incomingEmail = useFeature("incomingEmail");
 
@@ -443,15 +445,17 @@ curl -N -X POST "${a2aEndpoint}" \\
             >
               Manage your tokens
             </Link>
-            {canReadOauthClients && (
+            {canCreateOauthClients && (
               <>
                 {" "}
                 · For machine-to-machine or user-delegated OAuth,{" "}
                 <Link
-                  href="/credentials/oauth-clients"
+                  // Deep link: opens the create dialog with the client type
+                  // and this agent pre-selected.
+                  href={`/credentials/oauth-clients?create=true&clientType=mcp&gatewayId=${agent.id}`}
                   className="underline hover:text-foreground"
                 >
-                  create an OAuth client
+                  create an OAuth client for this agent
                 </Link>
               </>
             )}

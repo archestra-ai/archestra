@@ -22,6 +22,7 @@ demo = [
 
 [dependencies]
 baton-core = { path = "../baton-core" }
+baton-contracts = { path = "../baton-contracts" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std", "net"] }
 axum = "0.8"
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls", "json"] }
@@ -44,6 +45,7 @@ path = "src/bin/proxy.rs"
 [[bin]]
 name = "baton-approver"
 path = "src/bin/approver.rs"
+required-features = ["demo"]
 
 [[bin]]
 name = "baton-demo-agent"

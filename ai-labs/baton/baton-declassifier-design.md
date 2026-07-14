@@ -1,6 +1,9 @@
 # Transitions and declassifiers in baton: design note
 
-Status: draft. Algebra-focused PoC design; no engine changes yet.
+Status: foundation design — fully built, then extended by the authority model.
+Superseded in places (marked inline with `> **Superseded.**` blockquotes);
+`baton-authority-model-design.md` is the plan-of-record. The code sketches
+below are historical: the code is the reference.
 
 This revision follows source review of `baton-core`, the platform Dual LLM
 implementation, and recent agent IFC work. It makes three scope decisions explicit:
@@ -26,6 +29,12 @@ The previous design grouped too much under "declassification." There are three
 different state transitions:
 
 ### A. Waive a requirement
+
+> **Superseded.** Trust/audience loosening is no longer a transient waiver:
+> since Build 3, raising trust or audience is a *durable* fiat relabel
+> (`EndorseValue` minting a new value under endorsed provenance). A transient
+> waiver covers only prior effects, a confirmation stand-in, and named
+> control-dep release. See `baton-authority-model-design.md` §1.4/§5 Build 3.
 
 The recipient needs the original bytes. An authority accepts the risk for this flow.
 The value and its label do not change; the engine transiently loosens the sink check,
@@ -77,6 +86,11 @@ The common rule is:
 
 ## 2. Why B2 requires values, not supersession
 
+> **Superseded.** The pre-B2 code this opening describes
+> (`Trajectory::context_label` folding every turn) is gone; the value-granular
+> model this section motivates is what was built. The argument stands as
+> rationale only.
+
 baton currently checks a request against one label folded from every turn:
 
 - `ToolRequest` has only a tool name and recipients, with no arguments or per-value
@@ -95,6 +109,11 @@ the raw value may still influence future text, recipients, tool choice, or wheth
 action occurs.
 
 The B2 upgrade instead introduces immutable labeled values.
+
+> **Superseded.** Historical sketch. The shipped `Provenance` (`value.rs`)
+> differs: `ModelOutput`/`ToolOutput` carry `control` dependency sets,
+> `ToolOutput` names an `action`, and Build 3 added
+> `Endorsed { source, authority, delta }` for fiat relabels.
 
 ```rust
 struct ValueId(u64);
@@ -127,6 +146,11 @@ relabels its source.
 
 The request must contain the argument tree that will actually be rendered for the
 tool. A detached label sidecar is not sufficient.
+
+> **Superseded.** Historical sketch. The shipped `ToolRequest` (`request.rs`)
+> carries a control dependency *set* (`BTreeSet<ValueId>`), never a
+> caller-supplied `control: ValueLabel` — this sketch's shape is exactly the
+> relabeling hole `baton-core/CLAUDE.md` forbids.
 
 ```rust
 struct ToolRequest {
@@ -200,6 +224,11 @@ A useful sanitized action after raw access therefore needs at least one of:
 The final assistant response is also a completely mediated sink. Model-generated text
 is first admitted as a value with the model step's read/control dependencies. Emission
 requires a revision-bound request referencing immutable values:
+
+> **Superseded.** Historical sketch. The shipped `ResponseRequest`
+> (`request.rs`) carries a control dependency *set*, not a caller-supplied
+> `control: ValueLabel` (the same relabeling hole as the `ToolRequest`
+> sketch above).
 
 ```rust
 struct ResponseRequest {
@@ -314,6 +343,12 @@ evidence that arbitrary `Sensitive -> Public` prose is sound.
 
 The engine precomputes remedy plans when it has enough structural information.
 
+> **Superseded.** Historical sketch. The shipped `TransitionKind` (`plan.rs`)
+> has five variants — `TransformValue` / `ConstrainAction` / `ApplyWaiver` /
+> `AcceptGrowth` / `EndorseValue` — with inline fields, not `ValueTransition` /
+> `WaiverTransition` payloads, and there is no `TransitionSpec` envelope;
+> routes are categorized by `ExitKind`.
+
 ```rust
 struct RemedyPlan {
     id: PlanId,
@@ -346,6 +381,11 @@ closed variants enforce conservation laws:
 - `ApplyWaiver` changes no stored value or past-effect state. It appends audit history
   and transiently loosens only its bound check.
 
+> **Superseded.** The "policy/transformer version" binding below was not
+> built: authority routing is resolved *live at application* against the
+> current registry — a minted plan does not pin its authority (Build 1 S2).
+> Capabilities bind trajectory, revision, plan/step, and engine identity.
+
 A plan is a prediction, not a permit. Before each step, the engine mints an opaque,
 linear capability bound to:
 
@@ -377,6 +417,10 @@ It also supports two independent authorities without attributing their combined 
 to whichever happened to run last. Each step has its own competence check and audit
 record.
 
+> **Superseded.** `Grant` became the typed `ProposedGrant`
+> (Endorse / Waive / Accept / Acknowledge) an authority rules on, and the
+> step composition below exists.
+
 Current baton already product-composes multiple dimensions into one `Grant`; what it
 lacks is composition across independently authorized and state-changing steps.
 
@@ -400,6 +444,14 @@ not part of the PoC algebra.
 ---
 
 ## 7. Policy rules and external approval
+
+> **Superseded wholesale.** The policy-rule / external-adjudicator split below
+> was built, then replaced in Build 1 S2 by the unified
+> `Authority { name, mandate, mode: Inline(fn) | External }` registry: one
+> registry and name space, competence-routed on the `ProposedGrant`,
+> inline-first in registration order, abstain falls through. The
+> `PendingApproval` linearity guarantees at the end of this section survive
+> unchanged. See `baton-authority-model-design.md` §1.8/§4 S2.
 
 The current `Authority` trait combines mandate discovery, synchronous execution,
 attribution, and adjudication. It explicitly admits humans, webhooks, and LLM judges,
@@ -438,6 +490,11 @@ awkward: referencing the same value twice can duplicate its history, while a fai
 transition has no output label on which to record its failure.
 
 Move audit to append-only trajectory/control-plane state.
+
+> **Superseded.** Historical sketch. The shipped `AuditEvent` (`audit.rs`) is
+> larger — Accept and Endorse events among others, `BTreeSet` collections —
+> and its waiver event names the authority and the granted lift, not a
+> `NonEmptySet<WaiverKind>`.
 
 ```rust
 enum AuditEvent {
@@ -508,6 +565,9 @@ The precise PoC confidentiality claim is:
 
 ## 10. PoC implementation sequence
 
+> **Superseded.** All nine steps are done (and extended by the authority
+> model's Builds 1–3). Kept as the record of what the foundation pass built.
+
 1. Split `Label` into value dimensions, monotone trajectory effects, and audit events.
 2. Add the immutable trajectory-local value store and provenance graph.
 3. Replace free `String` turns and detached request metadata with `ValueId` references
@@ -539,6 +599,12 @@ These are concrete design details, not unresolved scope:
    add finer runtime tracking later?
 3. **Plan search.** Bound enumeration by step count and deterministic preference, or
    initially return only the first valid plan?
+   *Answered (Build 2 S7):* the full candidate cartesian is generated with no
+   pre-trim cap (a cap starves route categories), then `select_fair` keeps the
+   best route per applicable `ExitKind` before filling remaining slots.
+   Relatedly, control-release attribution — *which* control deps a release
+   must name — is answered by the inclusion-minimal fixpoint release solver
+   (Build 2 S5): never over- or under-releases.
 4. **Propagation precision.** The conservative output rule folds every dependency; which
    trusted tool contracts may later justify a more precise non-declassifying dependency
    projection?

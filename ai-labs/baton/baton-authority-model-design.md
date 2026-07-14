@@ -192,7 +192,9 @@ The type/authority/routing foundation done right — it absorbs **every** Codex
 round-2 blocker. Deliberately **not** in this pass (see §5): Endorse-as-relabel,
 Accept, scoped control release, criterion (1). Trust/audience endorsement keeps
 working as a *transient* waiver under the new types until Build 3 relocates it;
-`control_release` stays a bool until Build 2 scopes it.
+`control_release` stays a bool until Build 2 scopes it. *(Build-1-era framing,
+since superseded: both happened — Build 3 relocated endorsement into the
+durable relabel, Build 2 scoped `control_release` to a `ValueId` set.)*
 
 Each slice compiles all targets, migrating its own demo/bench so no slice leaves
 the crate red. Per slice: change · invariant · validation · escalation.
@@ -258,11 +260,12 @@ the crate red. Per slice: change · invariant · validation · escalation.
   the live-routing registry TOCTOU (accept + document, above) and approval
   re-entry idempotence (pre-existing revision-binding; follow-up ledger).
 
-## 5. Next steps — deferred, NOT this pass
+## 5. Builds 2–3 — were deferred past Build 1; both done
 
-Explicitly out of Build 1. The mechanics are fully specified in §3, so each block
-is pick-up-ready: when a pass starts, convert it into §4-style slices **in this
-same doc, on this same branch**.
+Originally the deferred queue (out of Build 1; mechanics fully specified in
+§3). Both builds below have since been executed as §4-style slices **in this
+same doc, on this same branch**, per the one-doc/one-branch rule; the blocks
+now read as the record of what shipped, deviations included.
 
 ### Build 2 — control-release scoping + criterion (1) + Accept (done)
 Built as slices S5–S8 on this branch; 126 lib tests; external (Codex) + internal

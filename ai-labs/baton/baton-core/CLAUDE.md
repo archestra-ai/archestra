@@ -3,9 +3,10 @@
 Prototype value-granular IFC policy engine (edition 2024, `publish = false`).
 Dependencies: `tracing` (facade), `serde` (derive), `thiserror` (error types).
 Dev-only: `tracing-subscriber`, `criterion`, `proptest`, `clap`. Concepts and
-semantics live in `src/lib.rs`; the design rationale in
-`../baton-declassifier-design.md`; this file is the invariants an edit must
-not silently break.
+semantics live in `src/lib.rs`; the plan-of-record in
+`../baton-authority-model-design.md` (with `../baton-declassifier-design.md`
+as the foundation rationale it builds on); this file is the invariants an edit
+must not silently break.
 
 ## Two structures — never conflate them
 
@@ -92,7 +93,7 @@ observable; preserve it (there is a typed-order test).
   stored state — a check-transient lift (`waiving` a prior effect, standing in
   for a confirmation, excluding a control dep) plus an audit record. A
   **fiat relabel** (`EndorseValue`), by contrast, mints a *durable* value like a
-  transform: an authority raises `source`'s label with the lift helpers
+  transform: an authority raises `source`'s label with the raise helpers
   (`raised_to`/`admitting`, never `combine`), and a new value carries the raised
   label under `Provenance::Endorsed` — the source is untouched. So raising trust
   or audience is a relabel, not a waiver; a waiver never raises trust or

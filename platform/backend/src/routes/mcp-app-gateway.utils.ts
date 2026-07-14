@@ -37,6 +37,11 @@ import {
 } from "@/models";
 import { appConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
+  appLaunchToolDescription,
+  appLaunchToolTitle,
+  escapeAppNameForModelText,
+} from "@/services/apps/app-run-link";
+import {
   type AppSdkTool,
   injectAppSdk,
 } from "@/services/apps/app-sdk-injection";
@@ -134,7 +139,12 @@ export async function createAppServer(
       // The synthetic launch tool just points the host at the app's UI resource.
       if (name === APP_LAUNCH_TOOL_NAME) {
         return {
-          content: [{ type: "text", text: `Opening ${app.name}.` }],
+          content: [
+            {
+              type: "text",
+              text: `Opening ${escapeAppNameForModelText(app.name)}.`,
+            },
+          ],
           _meta: { ui: { resourceUri: getArchestraAppResourceUri(appId) } },
         };
       }
@@ -406,8 +416,8 @@ async function buildAppSdkTools(
 function buildAppLaunchTool(appId: string, app: App): McpListTool {
   return {
     name: APP_LAUNCH_TOOL_NAME,
-    title: `Open ${app.name}`,
-    description: `Open the "${app.name}" app and render its UI.`,
+    title: appLaunchToolTitle(app.name),
+    description: appLaunchToolDescription(app.name),
     inputSchema: { type: "object", properties: {} },
     _meta: { ui: { resourceUri: getArchestraAppResourceUri(appId) } },
   };

@@ -146,7 +146,10 @@ WORKDIR /app
 
 # Copy package files for all workspaces
 # pnpm-workspace.yaml contains pnpm v11 project settings.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
+# turbo.json deliberately NOT copied here: `pnpm install` never reads it, and
+# including it made every turbo.json edit bust this stage's ~30s install layer.
+# The builder stage below copies it alongside the source files.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/

@@ -141,10 +141,14 @@ jobs:
           GIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          # git tree OID of the ./platform build context — identical iff the
-          # context bytes are identical (checkout is shallow but has the full
-          # tree of HEAD, which is all `rev-parse HEAD:platform` needs).
-          TREE_HASH=$(git rev-parse "HEAD:platform")
+          # Hash of what the image build actually consumes: the ./platform
+          # tree minus e2e-tests (tests run from the checkout, never from the
+          # image; nothing in the Dockerfile references that directory — keep
+          # it that way or remove this exclusion). Merges that only touch e2e
+          # tests then reuse the existing image instead of rebuilding an
+          # identical one. The derived hash is stable: ls-tree output is
+          # sorted and includes each entry's own tree OID.
+          TREE_HASH=$(git ls-tree "HEAD:platform" | grep -v $'\te2e-tests$' | git hash-object --stdin)
           TREE_TAG="${IMAGE_REPO}:tree-${TREE_HASH}"
           SLIM_TREE_TAG="${TREE_TAG}-slim"
           SHA_TAG="${IMAGE_REPO}:${GIT_SHA}"

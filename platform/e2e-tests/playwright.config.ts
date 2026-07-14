@@ -1,3 +1,7 @@
+// NOTE: nothing under e2e-tests/ is part of the platform Docker image — CI's
+// image-reuse key deliberately excludes this directory, so e2e-only changes
+// reuse the previously built image instead of rebuilding it (see the
+// "Resolve platform image reuse" step in .github/workflows/platform-e2e-tests.yml).
 import { defineConfig, devices } from "@playwright/test";
 import { adminAuthFile, IS_CI } from "./consts";
 

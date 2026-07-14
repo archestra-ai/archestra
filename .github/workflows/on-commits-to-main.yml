@@ -101,6 +101,7 @@ jobs:
           ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY: ${{ secrets.ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY }}
           ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID }}
           ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID: ${{ secrets.ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID }}
+          ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}
         run: |
           helm upgrade archestra-platform \
             ./platform/helm/archestra \
@@ -121,6 +122,7 @@ jobs:
             --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY}" \
             --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID=${ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID}" \
             --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID=${ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID}" \
+            --set-string "postgresql.external_database_url=${ARCHESTRA_STAGING_DATABASE_URL}" \
             --values .github/values-staging.yaml \
             --atomic \
             --timeout 15m

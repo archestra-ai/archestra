@@ -3776,6 +3776,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
   type CustomPolicyObject = {
     metadata?: {
       name?: string;
+      resourceVersion?: string;
       labels?: Record<string, string>;
       annotations?: Record<string, string>;
       finalizers?: string[];
@@ -3936,6 +3937,20 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
             name,
             applyJsonMergePatch(existing, body) as CustomPolicyObject,
           );
+          return {};
+        },
+      ),
+      getNamespacedCustomObject: vi.fn(async ({ name }: { name: string }) => {
+        const existing = policies.get(name);
+        if (!existing) throw { statusCode: 404 };
+        return structuredClone(existing);
+      }),
+      replaceNamespacedCustomObject: vi.fn(
+        async ({ name, body }: { name: string; body: CustomPolicyObject }) => {
+          if (!policies.has(name)) throw { statusCode: 404 };
+          // Full replace: store the body wholesale, so keys absent from it
+          // (a stale selector label) are dropped — unlike merge-patch.
+          policies.set(name, structuredClone(body));
           return {};
         },
       ),
@@ -4443,9 +4458,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     }).applyK8sNetworkPolicy();
 
     expect([...policies.keys()]).toEqual([policyName]);
-    expect(customObjectsApi.patchNamespacedCustomObject).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
     expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
       group: "networking.k8s.aws",
       version: "v1alpha1",
@@ -4525,9 +4541,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     }).applyK8sNetworkPolicy();
 
     expect([...policies.keys()]).toEqual([policyName]);
-    expect(customObjectsApi.patchNamespacedCustomObject).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
     expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
       group: "cilium.io",
       version: "v2",
@@ -4611,9 +4628,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     expect(networkingApi.replaceNamespacedNetworkPolicy).toHaveBeenCalledTimes(
       1,
     );
-    expect(customObjectsApi.patchNamespacedCustomObject).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
     expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
       name: "mcp-egress-generated-stale-k8s",
       namespace: "default",
@@ -4849,6 +4867,108 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       namespace: "default",
     });
     expect([...kubernetesPolicies.keys()]).not.toContain(POLICY_NAME);
+  });
+
+  test("full-replaces a custom policy on conflict, stripping a stale selector label a merge-patch would keep", async () => {
+    const staleAnp: CustomPolicyObject = {
+      metadata: {
+        name: POLICY_NAME,
+        resourceVersion: "42",
+        finalizers: ["some-controller/finalizer"],
+      },
+      spec: {
+        podSelector: {
+          matchLabels: {
+            app: "mcp-server",
+            "mcp-server-id": "test-server-id",
+            // A stale per-install label the full replace must strip.
+            "mcp-server-name": "stale-name",
+          },
+        },
+        policyTypes: ["Egress"],
+        egress: [],
+      },
+    };
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        plural: "applicationnetworkpolicies",
+      },
+      initialPolicies: [staleAnp],
+    });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    const selector = (
+      policies.get(POLICY_NAME)?.spec as
+        | { podSelector?: { matchLabels?: Record<string, string> } }
+        | undefined
+    )?.podSelector?.matchLabels;
+    // The full replace dropped the stale mcp-server-name a merge-patch would keep.
+    expect(selector).toEqual({
+      app: "mcp-server",
+      "mcp-server-id": "test-server-id",
+    });
+    expect(customObjectsApi.patchNamespacedCustomObject).not.toHaveBeenCalled();
+    // The replace carried the live resourceVersion + finalizers.
+    expect(customObjectsApi.replaceNamespacedCustomObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          metadata: expect.objectContaining({
+            resourceVersion: "42",
+            finalizers: ["some-controller/finalizer"],
+          }),
+        }),
+      }),
+    );
+  });
+
+  test("retries the custom-policy replace on a resourceVersion conflict (409) between GET and PUT", async () => {
+    const existingAnp: CustomPolicyObject = {
+      metadata: { name: POLICY_NAME, resourceVersion: "1" },
+      spec: {
+        podSelector: {
+          matchLabels: { app: "mcp-server", "mcp-server-id": "test-server-id" },
+        },
+        policyTypes: ["Egress"],
+        egress: [],
+      },
+    };
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "networking.k8s.aws",
+        version: "v1alpha1",
+        plural: "applicationnetworkpolicies",
+      },
+      initialPolicies: [existingAnp],
+    });
+    // First PUT loses the resourceVersion race (a controller bumped it); the
+    // retry re-reads and succeeds.
+    (
+      customObjectsApi.replaceNamespacedCustomObject as ReturnType<typeof vi.fn>
+    ).mockRejectedValueOnce({ statusCode: 409 });
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({ egressMode: "unrestricted" }),
+      networkPolicyCapabilities: AWS_CAPS,
+    }).applyK8sNetworkPolicy();
+
+    // Re-read then re-PUT on the conflict — 2 GETs, 2 replaces, no throw.
+    expect(customObjectsApi.getNamespacedCustomObject).toHaveBeenCalledTimes(2);
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(2);
+    expect(policies.get(POLICY_NAME)?.spec).toBeDefined();
   });
 
   test("emits a restricted CIDR-only allow-list as an ApplicationNetworkPolicy on AWS", async () => {

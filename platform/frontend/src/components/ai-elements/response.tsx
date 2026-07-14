@@ -1,12 +1,48 @@
 "use client";
 
 import { type ComponentProps, memo, useMemo } from "react";
-import { Streamdown } from "streamdown";
+import { defaultRemarkPlugins, Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;
 };
+
+// An app's standalone-page link with the leading slash dropped (`a/<uuid>`).
+// A weak model sometimes emits this instead of `/a/<uuid>`; left as-is it
+// resolves against the chat path (`/chat/<id>/a/...`) instead of the app page.
+const APP_LINK_WITHOUT_LEADING_SLASH =
+  /^a\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Repair that exact owned-app shape at the markdown (mdast) stage — before
+// rehype-harden, which without a base origin blocks a slash-less relative link
+// and renders it as `[blocked]`. Scoped to inline `link` nodes — the shape the
+// model actually produces; every other node (images, code, reference
+// definitions) is left untouched.
+function canonicalizeAppLinkNode(node: unknown): void {
+  if (node === null || typeof node !== "object") return;
+  const link = node as { type?: unknown; url?: unknown; children?: unknown };
+  if (
+    link.type === "link" &&
+    typeof link.url === "string" &&
+    APP_LINK_WITHOUT_LEADING_SLASH.test(link.url)
+  ) {
+    link.url = `/${link.url}`;
+  }
+  if (Array.isArray(link.children)) {
+    for (const child of link.children) canonicalizeAppLinkNode(child);
+  }
+}
+
+const remarkCanonicalizeAppLinks = () => (tree: unknown) =>
+  canonicalizeAppLinkNode(tree);
+
+// streamdown exports its defaults as a name-keyed record; passing remarkPlugins
+// replaces them, so re-include the defaults and append our repair.
+const REMARK_PLUGINS: ResponseProps["remarkPlugins"] = [
+  ...Object.values(defaultRemarkPlugins),
+  remarkCanonicalizeAppLinks,
+];
 
 /**
  * Check if a URL points to the same origin as the current page.
@@ -73,6 +109,7 @@ export const Response = memo(
           "group-[.is-assistant]:[&_[data-streamdown='link']]:text-secondary-foreground",
           className,
         )}
+        remarkPlugins={REMARK_PLUGINS}
         linkSafety={mergedLinkSafety}
         {...props}
       />

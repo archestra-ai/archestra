@@ -951,3 +951,79 @@ describe("anthropicAdapterFactory.execute - long-request routing", () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe("anthropicAdapterFactory - unsupported sampling params", () => {
+  const messages = [
+    { role: "user", content: "hi" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  // Shape of the Anthropic 400 for a model that rejects a sampling param.
+  function deprecatedTemperatureError() {
+    return new Error(
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"`temperature` is deprecated for this model."},"request_id":"req_x"}',
+    );
+  }
+
+  test("execute strips the rejected param and retries once, preserving others", async () => {
+    const response = createMockResponse([{ type: "text", text: "ok" }]);
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(deprecatedTemperatureError())
+      .mockResolvedValueOnce(response);
+    const client = { messages: { create } };
+
+    const result = await anthropicAdapterFactory.execute(
+      client,
+      createMockRequest(messages, { temperature: 0.7, top_p: 0.9 }),
+    );
+
+    expect(result).toBe(response);
+    expect(create).toHaveBeenCalledTimes(2);
+    // First attempt carried temperature; the retry dropped it.
+    expect(create.mock.calls[0][0]).toMatchObject({ temperature: 0.7 });
+    expect(create.mock.calls[1][0]).not.toHaveProperty("temperature");
+    // top_p wasn't named in the error, so it survives the retry.
+    expect(create.mock.calls[1][0]).toMatchObject({ top_p: 0.9 });
+  });
+
+  test("execute does not retry when the rejected param wasn't set", async () => {
+    const create = vi.fn().mockRejectedValue(deprecatedTemperatureError());
+    const client = { messages: { create } };
+
+    await expect(
+      anthropicAdapterFactory.execute(client, createMockRequest(messages)),
+    ).rejects.toThrow("temperature");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("execute rethrows unrelated errors without retrying", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("overloaded_error"));
+    const client = { messages: { create } };
+
+    await expect(
+      anthropicAdapterFactory.execute(
+        client,
+        createMockRequest(messages, { temperature: 0.5 }),
+      ),
+    ).rejects.toThrow("overloaded_error");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  test("executeStream applies the same fallback and keeps stream: true", async () => {
+    async function* emptyStream(): AsyncGenerator<never> {}
+    const create = vi
+      .fn()
+      .mockRejectedValueOnce(deprecatedTemperatureError())
+      .mockResolvedValueOnce(emptyStream());
+    const client = { messages: { create } };
+
+    await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest(messages, { temperature: 0.7 }),
+    );
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1][0]).not.toHaveProperty("temperature");
+    expect(create.mock.calls[1][0]).toMatchObject({ stream: true });
+  });
+});

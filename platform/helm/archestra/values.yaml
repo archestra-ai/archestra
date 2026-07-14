@@ -419,6 +419,25 @@ archestra:
     # If not set, defaults to "europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest"
     baseImage: ""
 
+    # Resource requests/limits applied to generated MCP server containers
+    # (Kubernetes quantities, e.g. "128Mi", "1Gi", "250m"). Ephemeral-storage
+    # governance keeps the scheduler disk-aware and prevents DiskPressure
+    # eviction cascades on over-packed nodes. Leave empty to use the platform
+    # defaults shown in the comments.
+    mcpServerResources:
+      requests:
+        cpu: "" # default: 50m
+        memory: "" # default: 128Mi
+        ephemeralStorage: "" # default: 256Mi
+      limits:
+        memory: "" # default: 512Mi
+        ephemeralStorage: "" # default: 1Gi
+
+    # How often (in seconds) the platform garbage-collects Failed/Evicted MCP
+    # server pods left behind by node-pressure eviction cascades.
+    # Leave empty for the default (600). Set to 0 to disable the reaper.
+    failedPodReapIntervalSeconds: ""
+
     # Kubernetes configuration for MCP Server Runtime
     # This controls how the Archestra platform connects to Kubernetes to manage MCP server pods
     kubernetes:

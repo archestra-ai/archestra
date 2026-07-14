@@ -1212,6 +1212,27 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - Can be overridden per individual MCP server.
 
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_CPU_REQUEST`** - CPU request for generated MCP server containers, as a Kubernetes quantity.
+  - Default: `50m`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_REQUEST`** - Memory request for generated MCP server containers.
+  - Default: `128Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_MEMORY_LIMIT`** - Memory limit for generated MCP server containers.
+  - Default: `512Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_REQUEST`** - Ephemeral-storage request for generated MCP server containers. Keeps the Kubernetes scheduler aware of disk usage so nodes are not over-packed into DiskPressure evictions.
+  - Default: `256Mi`
+
+- **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_EPHEMERAL_STORAGE_LIMIT`** - Ephemeral-storage limit for generated MCP server containers.
+  - Default: `1Gi`
+
+- **`ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS`** - How often the platform deletes Failed or Evicted MCP server pods left behind by node-pressure evictions.
+  - Default: `600`
+  - Set to `0` to disable.
+
+The Helm chart exposes the resource settings as `archestra.orchestrator.mcpServerResources` and the reap interval as `archestra.orchestrator.failedPodReapIntervalSeconds`. Per-server overrides are possible by editing the server's deployment YAML in the MCP Registry.
+
 - **`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`** - Use in-cluster config when running inside Kubernetes.
   - Default: `true`
   - Set to `false` when Archestra is deployed in the different cluster and specify the `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`.

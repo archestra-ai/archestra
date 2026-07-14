@@ -94,6 +94,13 @@ pub enum TransitionKind {
     /// An authority durably raises `source`'s label by `delta` (Endorse). Like
     /// a transform it mints a derived value and substitutes it into the flow;
     /// unlike one the raise is authority-justified, not content-justified.
+    ///
+    /// A plan is a *prediction*: when this step is predicted after a Transform in
+    /// the same plan, `source` is the pre-transform leaf id (the shared `SimFlow`
+    /// swaps a leaf's label in place without re-id-ing), but at application the
+    /// transform mints a new id and re-enumeration resolves the Endorse against
+    /// the transformed descendant. Revision-binding forces that re-enumeration, so
+    /// a stale downstream `source` is never applied.
     EndorseValue {
         source: ValueId,
         delta: EndorseDelta,

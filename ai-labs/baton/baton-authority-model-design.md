@@ -370,6 +370,24 @@ only; a confidentiality breach carried by a **control dependency** clears via
   demonstrated by the `endorse_authority_refuses_a_suspicious_transitive_ancestry` test*
   (acceptance criterion reads "demo/test"); the narrative `demo` keeps the Endorse
   happy-path, since a visible refusal there would need its own single-authority engine.
+- **Known fail-closed limitation (gate round 1, maintainer-accepted).** Endorse and
+  control-release do not *jointly* solve: enumeration peels Endorse before the
+  control-release waiver on the pre-release residual, and `minimal_control_release`
+  treats the release-all residual as the reduction optimum. Both assume releasing
+  control monotonically improves adequacy — false when a `Suspicious` control masks an
+  argument's `Unknown` trust (the trust fold and the adequacy order disagree on
+  `Unknown`). Such a flow — which has a valid *Endorse-then-release* plan — is
+  enumerated **terminal instead of remediable** (a Build-2 regression, since the removed
+  trust waiver used to clear it via release-all). Fail-closed: it withholds a remedy,
+  never permits an unsafe flow; the config is narrow (Unknown-trust arg, Suspicious
+  masking control, Suspicious-requiring sink). A correct fix needs a joint
+  Endorse×control-release solve — deferred to the follow-up ledger.
+- **Prediction artifact (not a defect).** A `Transform → Endorse` plan serializes the
+  Endorse step's `source` as the *pre-transform* leaf id, but the transform re-ids the
+  value at application and Endorse then targets the transformed descendant. A plan is a
+  prediction, re-enumerated after every applied step (revision-binding forces it), so a
+  stale downstream `source` is never applied; it is a display artifact of the shared
+  `SimFlow` (which swaps a leaf's label in place without re-id-ing), not an unsafe path.
 - **Deferred to the follow-up ledger (unchanged):** approval/acknowledgment re-entry
   idempotence and the enumeration O(leaves²) perf.
 

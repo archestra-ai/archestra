@@ -2297,9 +2297,10 @@ mod tests {
     }
 
     /// A grant-fixable unprovable (unknown trust at a Trusted-requiring sink)
-    /// routes through the chain as a waiver, exactly like a breach.
+    /// routes through the chain as a durable Endorse — trust is no longer
+    /// waivable, so an unknown-trust argument is raised by a relabel.
     #[test]
-    fn unknown_trust_routes_as_a_waiver() {
+    fn unknown_trust_routes_as_an_endorse() {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
@@ -2316,12 +2317,19 @@ mod tests {
                 .iter()
                 .any(|v| matches!(v, Violation::Unprovable(crate::contract::Unprovable::TrustUnknown)))
         );
-        // The waiver step routes to the trust-competent external human.
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        // The residual routes to a durable Endorse raising the doc's trust to
+        // the sink's requirement.
         assert!(matches!(
-            engine.apply_step(&mut trajectory, capability).unwrap(),
-            StepOutcome::NeedsApproval(_)
+            &plans.first().steps.first().kind,
+            TransitionKind::EndorseValue { source, delta }
+                if *source == doc && delta.trust == Some(KnownTrust::Trusted)
         ));
+        // ...routed to the trust-competent external human.
+        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+            panic!("expected the external human to be consulted");
+        };
+        assert_eq!(pending.authority().as_str(), "human");
     }
 
     #[test]
@@ -4877,16 +4885,24 @@ mod tests {
         assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
     }
 
-    /// An external pending approval carries an owned ancestry snapshot — the
-    /// labels and provenance of the values in scope — and the round-trip
-    /// completes on approval.
+    /// An external pending approval carries an owned *transitive* ancestry
+    /// snapshot — the labels and provenance of the values in scope and every
+    /// value they derive from, never bytes — and the round-trip completes on
+    /// approval. The endorsed value is laundered trusted, but its suspicious
+    /// root is two provenance edges back: only a transitive snapshot surfaces it.
     #[test]
-    fn external_pending_carries_an_ancestry_snapshot() {
+    fn external_pending_carries_a_transitive_ancestry_snapshot() {
         let mut engine = engine_with([email_contract()]);
         engine.register_authority(human()).unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
-        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let root = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
+        let trusted = ValueLabel {
+            audience: Audience::readers([user("alice")]),
+            trust: Trust::TRUSTED,
+        };
+        let mid = trajectory.seed_transformed(root, trusted.clone());
+        let doc = trajectory.seed_transformed(mid, trusted);
         let request = email_request(&mut trajectory, doc, "charlie");
 
         let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
@@ -4896,10 +4912,15 @@ mod tests {
         let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
             panic!("expected pending approval");
         };
-        // The snapshot carries the doc's label and provenance, never its bytes.
-        let doc_view = pending.ancestry().get(doc).expect("the doc is in the grant's scope");
+        // The direct endorsed value and its transitive root are both in scope.
+        let doc_view = pending.ancestry().get(doc).expect("the endorsed value is in scope");
         assert_eq!(doc_view.label.trust, Trust::TRUSTED);
-        assert!(matches!(doc_view.provenance, crate::value::Provenance::Ingress { .. }));
+        let root_view = pending
+            .ancestry()
+            .get(root)
+            .expect("the transitive root is in the snapshot");
+        assert_eq!(root_view.label.trust, Trust::SUSPICIOUS);
+        assert!(matches!(root_view.provenance, crate::value::Provenance::Ingress { .. }));
 
         let decision = engine
             .apply_approval(

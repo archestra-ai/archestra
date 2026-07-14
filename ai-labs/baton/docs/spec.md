@@ -70,7 +70,21 @@ flowchart LR
 
 # Spec
 
-## What X should implement to use Baton
+## How to integrate with your agent
+
+Baton runs inside a proxy between the agent and its inference provider. The agent talks to the proxy as if it were the inference API. No agent-side changes are required.
+
+On each inference round-trip, the proxy:
+
+1. **Admits the request.** Every turn not seen before is added to the Trajectory. External input (user messages, retrieved content) enters through ingress and MUST be labeled there. Tool results are recorded against the calls they answer.
+2. **Forwards the request** to the inference provider unchanged.
+3. **Checks the response.** Every tool call the model proposes is evaluated by the Engine before the agent sees it:
+   - **Allowed** — the call passes through; the agent executes it as usual.
+   - **Blocked, remediable** — the proxy MAY follow the Remedy plan (transform, constrain, waive, approve) and pass the call through once a step succeeds.
+   - **Blocked, terminal** — the proxy MUST NOT forward the call. It SHOULD return the block reason as a tool error, so the model can react.
+4. **Returns the response.** The proxy MAY also evaluate plain assistant text as a flow to the user.
+
+The agent executes only tool calls that arrive in an inference response. A blocked call never arrives, so it is never executed.
 
 ## How to implement Baton
 

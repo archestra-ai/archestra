@@ -473,6 +473,25 @@ export function normalizeInteractionResponse(
     : { error: "Malformed stored interaction response" };
 }
 
+/**
+ * Coerce a stored `authMethod` that is not a member of
+ * `InteractionAuthMethodSchema` to null on read. Older rows (and any writer
+ * whose value predates an enum addition) can hold an out-of-enum string; without
+ * this, one such row 500s the entire GET /api/interactions list and the detail
+ * route, because the read schema validates `authMethod` strictly with no
+ * fallback. The sessions endpoint already applies the equivalent tolerance via
+ * `parseInteractionAuthMethods`; this brings the list/detail read path in line.
+ */
+export function normalizeInteractionAuthMethod(
+  authMethod: string | null | undefined,
+): InteractionAuthMethod | null {
+  if (authMethod == null) {
+    return null;
+  }
+  const parsed = InteractionAuthMethodSchema.safeParse(authMethod);
+  return parsed.success ? parsed.data : null;
+}
+
 export const InsertInteractionSchema = createInsertSchema(
   schema.interactionsTable,
   {

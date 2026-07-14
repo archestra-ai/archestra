@@ -42,6 +42,7 @@ import type {
 } from "@/types";
 import {
   InteractionAuthMethodSchema,
+  normalizeInteractionAuthMethod,
   normalizeInteractionResponse,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -494,6 +495,9 @@ class InteractionModel {
           interaction.type,
           interaction.response,
         ),
+        // Coerce an out-of-enum stored authMethod to null so one legacy row
+        // can't 500 the whole list (the read schema validates it strictly).
+        authMethod: normalizeInteractionAuthMethod(interaction.authMethod),
         // computeRequestType must run on the reconstructed (full) request — it
         // inspects messages.length and the first/last message content.
         requestType: computeRequestType(
@@ -608,6 +612,9 @@ class InteractionModel {
         interaction.type,
         interaction.response,
       ),
+      // Coerce an out-of-enum stored authMethod to null so a legacy row can't
+      // 500 the detail route (the read schema validates it strictly).
+      authMethod: normalizeInteractionAuthMethod(interaction.authMethod),
       chatErrors: await findChatErrorsForSessionId(interaction.sessionId),
     } as Interaction;
   }

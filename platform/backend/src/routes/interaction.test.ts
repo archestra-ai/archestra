@@ -4,6 +4,8 @@ import {
   CLAUDE_CLIENT_ID,
   CLAUDE_DESKTOP_CLIENT_ID,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
@@ -553,5 +555,63 @@ describe("interaction routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toHaveLength(2);
     expect(response.json().pagination.total).toBe(4);
+  });
+
+  test("serializes an interaction whose stored authMethod is out of enum", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    const created = await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "auth-method-session",
+      request: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      response: {
+        id: "r",
+        object: "chat.completion",
+        created: Date.now(),
+        model: "gpt-4",
+        choices: [],
+      } as unknown as InteractionResponse,
+      type: "openai:chatCompletions",
+    });
+
+    // A legacy row (or a writer whose value predates an enum addition) can hold
+    // an auth_method outside InteractionAuthMethodSchema. Written directly since
+    // the model's insert type only permits current enum members. Before the read
+    // path coerced it, this row 500-ed the list and detail routes while the
+    // sessions route survived (it already tolerates it).
+    await db
+      .update(schema.interactionsTable)
+      .set({ authMethod: "idp_jwt" as never })
+      .where(eq(schema.interactionsTable.id, created.id));
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/interactions?limit=10&offset=0",
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toHaveLength(1);
+    // The unrecognized value serializes as null rather than 500-ing.
+    expect(list.json().data[0].authMethod).toBeNull();
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${created.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().authMethod).toBeNull();
+
+    const sessions = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10&offset=0",
+    });
+    expect(sessions.statusCode).toBe(200);
   });
 });

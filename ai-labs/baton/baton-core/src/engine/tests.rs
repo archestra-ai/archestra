@@ -3495,7 +3495,7 @@ fn rescue_composes_endorse_then_release_for_a_masked_flow() {
         TransitionKind::EndorseValue { source, delta, targets }
             if *source == body
                 && delta.trust == Some(KnownTrust::Suspicious)
-                && targets.iter().any(|v| matches!(v, Violation::Unprovable(Unprovable::TrustUnknown)))
+                && *targets == vec![Violation::Unprovable(Unprovable::TrustUnknown)]
     ));
     assert!(matches!(
         &steps.get(steps.len() - 1).unwrap().kind,
@@ -3680,13 +3680,129 @@ fn rescue_carries_acknowledge_only_facts() {
             .unwrap();
         let mut trajectory = Trajectory::new();
         // Unknown committed effects: the forbid check becomes an
-        // acknowledge-only `EffectsUnknown`, and the proposed egress no
-        // longer grows the (absorbing) surface.
+        // acknowledge-only `EffectsUnknown`, and the proposed egress cannot
+        // grow the (absorbing) surface.
         trajectory.seed_committed_effects(Effects::UNKNOWN);
         let (_, _, request) = masked_flow(&mut trajectory);
-        engine.evaluate(&mut trajectory, request)
+        (engine, trajectory, request)
     };
 
-    assert!(matches!(run(false), Decision::Blocked(Blocked::Terminal(_))));
-    assert!(matches!(run(true), Decision::Blocked(Blocked::Remediable { .. })));
+    let (engine, mut trajectory, request) = run(false);
+    assert!(matches!(
+        engine.evaluate(&mut trajectory, request),
+        Decision::Blocked(Blocked::Terminal(_))
+    ));
+
+    // With the competence, the rescue applies end-to-end and the waiver's
+    // audit shows the acknowledgment alongside the release.
+    let (engine, mut trajectory, request) = run(true);
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "published").unwrap();
+    assert!(trajectory.state().audit().iter().any(|e| matches!(
+        e,
+        AuditEvent::WaiverApplied { changes, .. }
+            if changes.contains(&crate::audit::WaiverKind::Acknowledgment)
+                && changes.contains(&crate::audit::WaiverKind::ControlRelease)
+    )));
+}
+
+/// The counterexample to a release-all-anchored search: control `mask` keeps
+/// the argument's Unknown trust masked, control `gate` alone restricts the
+/// audience. Releasing only `{gate}` is clean — no endorsement involved —
+/// while releasing everything would expose `TrustUnknown`.
+fn subset_release_flow(trajectory: &mut Trajectory) -> (ValueId, ToolRequest) {
+    let body = ingress(trajectory, &["alice", "bob"], Trust::UNKNOWN, "draft");
+    let mask = ingress(trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "mask");
+    let gate = ingress(trajectory, &["alice"], Trust::TRUSTED, "selection");
+    let to = identity_ingress(trajectory, "bob");
+    let request = ToolRequest::new(
+        ToolName::new("post.publish"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("to"), ArgumentTree::Value(to)),
+            (ArgumentName::new("body"), ArgumentTree::Value(body)),
+        ])),
+        BTreeSet::from([mask, gate]),
+    );
+    (gate, request)
+}
+
+#[test]
+fn rescue_finds_a_clean_subset_release_without_an_endorser() {
+    let mut engine = engine_with([masked_contract()]);
+    engine
+        .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let (gate, request) = subset_release_flow(&mut trajectory);
+
+    let plans = remediable(&engine, &mut trajectory, request.clone());
+    let steps = &plans.first().steps;
+    assert_eq!(steps.len(), 1);
+    assert!(matches!(
+        &steps.first().kind,
+        TransitionKind::ApplyWaiver { delta }
+            if delta.control_release == BTreeSet::from([gate])
+    ));
+
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "published").unwrap();
+}
+
+/// With an endorser available, the pure subset release still wins: the
+/// smallest clean candidate needs no durable relabel, so none is asked for.
+#[test]
+fn rescue_prefers_the_smallest_release_over_an_endorsement() {
+    let mut engine = engine_with([masked_contract()]);
+    engine
+        .register_authority(inline_authority("endorser", endorser_mandate(), approve_all))
+        .unwrap();
+    engine
+        .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let (gate, request) = subset_release_flow(&mut trajectory);
+
+    let plans = remediable(&engine, &mut trajectory, request);
+    let steps = &plans.first().steps;
+    assert_eq!(steps.len(), 1);
+    assert!(matches!(
+        &steps.first().kind,
+        TransitionKind::ApplyWaiver { delta }
+            if delta.control_release == BTreeSet::from([gate])
+    ));
+}
+
+/// An external endorse approval carries the projected residual — exactly the
+/// unprovable the mask hides — as what the grant resolves.
+#[test]
+fn rescue_external_approval_resolves_the_projected_residual() {
+    let mut engine = engine_with([masked_contract()]);
+    engine
+        .register_authority(external_authority("remote-endorser", endorser_mandate()))
+        .unwrap();
+    engine
+        .register_authority(inline_authority("releaser", releaser_mandate(), approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let (_, _, request) = masked_flow(&mut trajectory);
+
+    let plans = remediable(&engine, &mut trajectory, request);
+    let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+    let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        panic!("expected the external endorse to defer");
+    };
+    assert_eq!(pending.resolves(), &[Violation::Unprovable(Unprovable::TrustUnknown)]);
+    let decision = engine
+        .apply_approval(
+            &mut trajectory,
+            pending,
+            crate::approval::Ruling::Approve {
+                reason: "vouched".to_owned(),
+            },
+        )
+        .unwrap();
+    assert!(matches!(decision, Decision::Blocked(Blocked::Remediable { .. })));
 }

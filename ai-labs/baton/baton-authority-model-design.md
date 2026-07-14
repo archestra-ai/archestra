@@ -384,17 +384,22 @@ only; a confidentiality breach carried by a **control dependency** clears via
   enumeration yields no plan** (existing plan sets untouched), searches release
   candidates for *joint cleanability*: project the release, derive per-leaf Endorse
   deltas from the projected residual (`violations(None)`, so acknowledge-only facts and
-  growth survive the projection), compose an Accept for projected growth and the final
-  waiver (carrying acknowledged facts, so `acknowledge_unknown` competence is still
-  required), keep the candidate iff every grant is authorizable and the projection
-  clears, and minimize with the same drop-redundant fixpoint as
-  `minimal_control_release`. The Endorse step gained an explicit `targets` field — the
-  projected residual the authority is asked to clear — because the *actual* posture may
-  not mention trust at all while the mask holds; plan postures stay the actual vectors
-  (apply-time preconditions compare against reality). Regression matrix:
-  `rescue_*` tests (composition, projected-target visibility, least-privilege release,
-  Accept and acknowledge-only composition, and both missing-authority configs staying
-  terminal).
+  growth survive the projection; a candidate may need **no** endorse at all — a
+  non-monotone *subset* release can be clean on its own, which the release-all-anchored
+  ordinary solver misses), compose an Accept for projected growth and the final waiver
+  (carrying acknowledged facts, so `acknowledge_unknown` competence is still required),
+  and keep the candidate iff every grant is authorizable and the projection clears. The
+  search is an exhaustive size-ascending subset walk (deterministic; the first hit is
+  size-minimal, hence inclusion-minimal), bounded by the request's own control set and
+  capped at 12 deps, past which it degrades to a release-all-anchored greedy (sound,
+  possibly non-minimal). Each Endorse step carries an explicit `targets` field — the
+  projected residual *at its own peel* that the authority is asked to clear — because
+  the actual posture may not mention trust at all while the mask holds; plan postures
+  stay the actual vectors (apply-time preconditions compare against reality).
+  Regression matrix: `rescue_*` tests (composition, projected-target visibility inline
+  and via the external approval's `resolves`, subset-clean release with and without an
+  endorser, least-privilege, Accept and acknowledge-only composition walked to permit,
+  and both missing-authority configs staying terminal).
 - **Prediction artifact (not a defect).** A `Transform → Endorse` plan serializes the
   Endorse step's `source` as the *pre-transform* leaf id, but the transform re-ids the
   value at application and Endorse then targets the transformed descendant. A plan is a

@@ -374,7 +374,7 @@ fn run_tool(
                 }
                 let plan = plans
                     .iter()
-                    .min_by_key(|candidate| candidate.steps.len())
+                    .min_by_key(|candidate| (candidate.steps.len(), candidate.exit_kind()))
                     .expect("remediable decisions carry at least one plan");
                 println!("  apply: {:?}", plan.steps.first().kind);
                 let capability = engine.mint_step(trajectory, plan.id, 0)?;

@@ -11,7 +11,9 @@
 //!
 //! The remedy machinery lives here too: a blocked flow enumerates typed
 //! remedy plans (transform, constrain, endorse, accept, waive/acknowledge),
-//! and each applied step is competence-routed to an authority, audited, and
+//! grant-bearing steps (waive, accept, endorse) are competence-routed to an
+//! authority while transforms and constraints execute their registered
+//! implementations directly; every applied step is audited and
 //! rechecked fail-closed. An escalation nothing can clear is an explicit
 //! terminal block.
 //!

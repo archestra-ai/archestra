@@ -79,7 +79,7 @@ impl PolicyEngine {
                 );
             }
         };
-        debug!(has_contract = contract.is_some(), "contract lookup");
+        debug!(has_contract = contract.is_some(), flow = %sim.flow_label(), "contract lookup");
         let intrinsic = contract
             .map(|c| c.output_label.clone())
             .unwrap_or_else(ValueLabel::unknown);

@@ -346,8 +346,9 @@ The engine precomputes remedy plans when it has enough structural information.
 > **Superseded.** Historical sketch. The shipped `TransitionKind` (`plan.rs`)
 > has five variants — `TransformValue` / `ConstrainAction` / `ApplyWaiver` /
 > `AcceptGrowth` / `EndorseValue` — with inline fields, not `ValueTransition` /
-> `WaiverTransition` payloads, and there is no `TransitionSpec` envelope;
-> routes are categorized by `ExitKind`.
+> `WaiverTransition` payloads; the shipped `TransitionSpec` carries pre- and
+> postcondition postures but no `id` field, and routes are categorized by
+> `ExitKind`.
 
 ```rust
 struct RemedyPlan {

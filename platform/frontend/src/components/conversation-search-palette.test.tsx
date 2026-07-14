@@ -354,11 +354,11 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
-  it("navigates to the unified Credentials page when selecting Credentials", () => {
+  it("navigates to the Client Credentials landing page when selecting it", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Credentials" }));
+    fireEvent.click(screen.getByRole("button", { name: "Client Credentials" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/credentials/oauth-clients");
+    expect(mockRouterPush).toHaveBeenCalledWith("/credentials");
   });
 });

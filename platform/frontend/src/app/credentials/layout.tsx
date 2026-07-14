@@ -5,14 +5,16 @@ import { useMemo, useState } from "react";
 import { CredentialsActionContext } from "@/components/credentials-action-context";
 import { PageLayout } from "@/components/page-layout";
 
+// Virtual Keys is the more common credential, so it comes first and is the
+// landing tab (see the bare /credentials redirect page).
 const TABS = [
-  {
-    label: "OAuth Clients",
-    href: "/credentials/oauth-clients",
-  },
   {
     label: "Virtual Keys",
     href: "/credentials/virtual-keys",
+  },
+  {
+    label: "OAuth Clients",
+    href: "/credentials/oauth-clients",
   },
 ];
 
@@ -38,7 +40,7 @@ export default function CredentialsLayout({
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
 
   const config = PAGE_CONFIG[pathname] ?? {
-    title: "Credentials",
+    title: "Client Credentials",
     description: "",
   };
 

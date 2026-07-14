@@ -7,13 +7,12 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { CreateOAuthClientDialog } from "@/app/credentials/_parts/create-oauth-client-dialog";
 import {
-  CreateOAuthClientDialog as LlmCreateOAuthClientDialog,
   EditOAuthClientDialog as LlmEditOAuthClientDialog,
   type LlmOauthClient,
 } from "@/app/credentials/_parts/llm-oauth-client-dialogs";
 import {
-  CreateOAuthClientDialog as McpCreateOAuthClientDialog,
   EditOAuthClientDialog as McpEditOAuthClientDialog,
   type McpOauthClient,
 } from "@/app/credentials/_parts/mcp-oauth-client-dialogs";
@@ -24,7 +23,6 @@ import {
 import { useSetCredentialsAction } from "@/components/credentials-action-context";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
-import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
@@ -32,12 +30,6 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useProfiles } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -60,7 +52,14 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 const GRANT_TYPE_LABEL: Record<McpOauthClient["grantType"], string> = {
   client_credentials: "Application",
-  authorization_code: "User-delegated",
+  authorization_code: "On behalf of users",
+};
+
+// Matches the client-type wording in the create dialog, so users don't have
+// to decode the mcp_oauth_/llm_oauth_ client-ID prefixes.
+const CLIENT_KIND_LABEL: Record<UnifiedRow["kind"], string> = {
+  mcp: "Agents & MCP gateways",
+  llm: "LLM proxies",
 };
 
 // One row for either client type. Common fields (name, clientId, grantType,
@@ -120,8 +119,7 @@ export default function UnifiedOAuthClientsPage() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
-  const [mcpCreateOpen, setMcpCreateOpen] = useState(false);
-  const [llmCreateOpen, setLlmCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
     useState(false);
   const [editing, setEditing] = useState<UnifiedRow | null>(null);
@@ -132,27 +130,13 @@ export default function UnifiedOAuthClientsPage() {
   const [rotatedCredentials, setRotatedCredentials] =
     useState<CreatedCredentials | null>(null);
 
-  // A client is either an MCP/A2A client or an LLM client (they can't span
-  // both), so "Create" picks the target surface before showing the form.
   const setCredentialsAction = useSetCredentialsAction();
   useEffect(() => {
     setCredentialsAction(
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button>
-            <Plus className="h-4 w-4" />
-            Create OAuth Client
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setMcpCreateOpen(true)}>
-            For agents &amp; MCP gateways
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setLlmCreateOpen(true)}>
-            For LLM proxies
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>,
+      <Button onClick={() => setCreateOpen(true)}>
+        <Plus className="h-4 w-4" />
+        Create OAuth Client
+      </Button>,
     );
     return () => setCredentialsAction(null);
   }, [setCredentialsAction]);
@@ -173,7 +157,12 @@ export default function UnifiedOAuthClientsPage() {
         accessorKey: "name",
         header: "Name",
         cell: ({ row }) => (
-          <div className="font-medium">{row.original.name}</div>
+          <div>
+            <div className="font-medium">{row.original.name}</div>
+            <div className="text-xs text-muted-foreground">
+              {CLIENT_KIND_LABEL[row.original.kind]}
+            </div>
+          </div>
         ),
       },
       {
@@ -193,35 +182,6 @@ export default function UnifiedOAuthClientsPage() {
             {GRANT_TYPE_LABEL[row.original.grantType]}
           </Badge>
         ),
-      },
-      {
-        id: "access",
-        header: "Access",
-        cell: ({ row }) => {
-          const r = row.original;
-          if (r.grantType === "authorization_code") {
-            return (
-              <span className="text-sm text-muted-foreground">
-                User-delegated
-              </span>
-            );
-          }
-          if (r.kind === "mcp") {
-            return (
-              <span className="text-sm text-muted-foreground">
-                {r.allowedGatewayIds.length} gateway/agent(s)
-              </span>
-            );
-          }
-          return (
-            <span className="text-sm text-muted-foreground">
-              {r.allowedLlmProxyIds.length} LLM proxy(ies)
-              {r.providerApiKeys.length > 0
-                ? ` · ${formatProviderKeySummary(r.providerApiKeys)}`
-                : ""}
-            </span>
-          );
-        },
       },
       {
         id: "visibility",
@@ -332,43 +292,34 @@ export default function UnifiedOAuthClientsPage() {
         />
       )}
 
-      <McpCreateOAuthClientDialog
-        open={mcpCreateOpen}
-        onOpenChange={setMcpCreateOpen}
+      <CreateOAuthClientDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        // The provider-key filter deep-links from an LLM provider key, so a
+        // client created from that view is almost certainly an LLM one.
+        defaultClientType={providerKeyFilterActive ? "llm" : "mcp"}
         gateways={gateways}
-        onSubmit={async (values) => {
-          const result = await mcpCreate.mutateAsync(values);
-          if (result) {
-            setCreatedCredentials({
-              clientId: result.clientId,
-              clientSecret: result.clientSecret,
-              grantType: result.grantType,
-              oauthScope: MCP_GATEWAY_OAUTH_SCOPE,
-            });
-            setMcpCreateOpen(false);
-          }
-        }}
-        isSubmitting={mcpCreate.isPending}
-      />
-
-      <LlmCreateOAuthClientDialog
-        open={llmCreateOpen}
-        onOpenChange={setLlmCreateOpen}
         llmProxies={llmProxies}
         providerApiKeys={providerApiKeys}
         onSubmit={async (values) => {
-          const result = await llmCreate.mutateAsync(values);
+          const result =
+            values.kind === "mcp"
+              ? await mcpCreate.mutateAsync(values.body)
+              : await llmCreate.mutateAsync(values.body);
           if (result) {
             setCreatedCredentials({
               clientId: result.clientId,
               clientSecret: result.clientSecret,
               grantType: result.grantType,
-              oauthScope: LLM_PROXY_OAUTH_SCOPE,
+              oauthScope:
+                values.kind === "mcp"
+                  ? MCP_GATEWAY_OAUTH_SCOPE
+                  : LLM_PROXY_OAUTH_SCOPE,
             });
-            setLlmCreateOpen(false);
+            setCreateOpen(false);
           }
         }}
-        isSubmitting={llmCreate.isPending}
+        isSubmitting={mcpCreate.isPending || llmCreate.isPending}
       />
 
       <McpEditOAuthClientDialog

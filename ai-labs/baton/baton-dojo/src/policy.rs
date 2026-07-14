@@ -27,12 +27,12 @@
 //! without control-release competence can clear it). Acceptable for a benchmark
 //! substrate; a faithful gate needs the model's real argument provenance.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, Blocked, Decision, ExecutionToken,
-    OpaqueValue, PolicyEngine, Speaker, StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId,
-    ValueLabel, Violation,
+    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, ExecutionToken, OpaqueValue, PolicyEngine,
+    Pursuit, Speaker, StallCause, ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId, ValueLabel,
+    Violation,
 };
 
 use crate::error::DojoError;
@@ -95,66 +95,50 @@ impl BatonGate {
     /// On a permit the token is stashed and the caller must execute the tool and
     /// then call [`commit`](BatonGate::commit).
     pub(crate) fn check(&mut self, tool: &str, args: &serde_json::Value) -> GateVerdict {
-        let request = self.build_request(tool, args);
-        let mut decision = self.engine.evaluate(&mut self.trajectory, request);
-        // Each iteration applies one remedy step, resolving at least one
-        // violation; a plan needs at most one Endorse per audience-failing
-        // context leaf, plus an Accept and a waiver. Bound the walk on the
-        // context, not a fixed count, so a longer run still converges. The
-        // bound is a fail-closed backstop, not the expected path.
-        let max_steps = self.context.len() + 8;
-        let mut steps = 0;
-        loop {
-            match decision {
-                Decision::Permitted(token) => {
-                    self.pending = Some(token);
-                    return GateVerdict::Allow;
-                }
-                // The engine already cleared the pending slot on a terminal block.
-                Decision::Blocked(Blocked::Terminal(block)) => {
-                    return GateVerdict::Block {
-                        reason: block.reason.to_string(),
-                    };
-                }
-                Decision::Blocked(Blocked::Remediable { violations, plans }) => {
-                    // Guard the *next* step, so a permit produced by the last
-                    // allowed step is still inspected above before the bound bites.
-                    if steps >= max_steps {
-                        return self.block("remedy did not converge within the step bound".to_owned());
-                    }
-                    steps += 1;
-                    let plan = plans.first().id;
-                    let capability = match self.engine.mint_step(&self.trajectory, plan, 0) {
-                        Ok(capability) => capability,
-                        Err(_) => return self.block(block_reason(&violations)),
-                    };
-                    match self.engine.apply_step(&mut self.trajectory, capability) {
-                        Ok(StepOutcome::Advanced(next)) => decision = next,
-                        // Inline authorities resolve synchronously; a needs-approval
-                        // means only an out-of-process authority could clear it,
-                        // which this in-process gate cannot answer — fail closed.
-                        Ok(StepOutcome::NeedsApproval(pending)) => {
-                            return self.block(format!("needs external ruling from {}", pending.authority()));
-                        }
-                        // A precondition no longer held or a transformer failed:
-                        // audited, revision advanced, nothing changed — fail closed.
-                        Ok(StepOutcome::Failed(failure)) => {
-                            return self.block(format!("remedy step failed: {failure:?}"));
-                        }
-                        Err(refused) => return self.block(format!("policy step refused: {refused:?}")),
-                    }
-                }
-            }
+        // Refuse before touching the trajectory: building a request ingresses
+        // recipient values, which advances the revision and would stale the
+        // stashed token — the previous permit must be committed first.
+        if self.pending.is_some() {
+            return GateVerdict::Block {
+                reason: "a permitted call is awaiting commit".to_owned(),
+            };
         }
-    }
-
-    /// Fail closed on a remedy the walk could not complete: abandon any pending
-    /// action the partial walk left behind (a remediable block keeps the slot;
-    /// leaving it would refuse every later call with `ActionAlreadyPending`),
-    /// then report the block. Harmless when nothing is pending.
-    fn block(&mut self, reason: String) -> GateVerdict {
-        self.trajectory.abandon_pending();
-        GateVerdict::Block { reason }
+        let request = self.build_request(tool, args);
+        // A plan needs at most one Endorse per audience-failing context leaf,
+        // plus an Accept and a waiver. Bound the walk on the context, not a
+        // fixed count, so a longer run still converges; the bound is a
+        // fail-closed backstop, not the expected path.
+        let max_steps = self.context.len() + 8;
+        match self.engine.pursue(&mut self.trajectory, request, max_steps) {
+            Pursuit::Permitted(token) => {
+                self.pending = Some(token);
+                GateVerdict::Allow
+            }
+            // The engine cleared this request's slot on a terminal block.
+            Pursuit::Terminal(block) => GateVerdict::Block {
+                reason: block.reason.to_string(),
+            },
+            // Inline authorities resolve synchronously; a needs-approval means
+            // only an out-of-process authority could clear it, which this
+            // in-process gate cannot answer — fail closed, discarding the
+            // approval and freeing the slot the pursuit deliberately kept.
+            Pursuit::NeedsApproval(pending) => {
+                let reason = format!("needs external ruling from {}", pending.authority());
+                drop(pending);
+                self.trajectory.abandon_pending();
+                GateVerdict::Block { reason }
+            }
+            // A stalled pursuit already abandoned the pending action.
+            Pursuit::Stalled { violations, cause } => GateVerdict::Block {
+                reason: match cause {
+                    StallCause::BoundExhausted => "remedy did not converge within the step bound".to_owned(),
+                    StallCause::Refused(refused) => {
+                        format!("policy step refused: {refused:?}; {}", block_reason(&violations))
+                    }
+                    StallCause::Failed(failure) => format!("remedy step failed: {failure:?}"),
+                },
+            },
+        }
     }
 
     /// Fold an executed call's result into the trajectory, consuming the stashed
@@ -184,7 +168,7 @@ impl BatonGate {
     /// be released). Recipients (if any) sit under the recipient key.
     fn build_request(&mut self, tool: &str, args: &serde_json::Value) -> ToolRequest {
         let body: Vec<ArgumentTree<ValueId>> = self.context.iter().copied().map(ArgumentTree::Value).collect();
-        let mut fields = BTreeMap::from([(ArgumentName::new(BODY_ARG), ArgumentTree::List(body))]);
+        let mut fields = vec![(ArgumentName::new(BODY_ARG), ArgumentTree::List(body))];
         if let Some(recipients) = self.recipients.get(tool).map(|extract| extract(args)) {
             let leaves = recipients
                 .into_iter()
@@ -197,9 +181,9 @@ impl BatonGate {
                     ArgumentTree::Value(id)
                 })
                 .collect();
-            fields.insert(ArgumentName::new(RECIPIENT_ARG), ArgumentTree::List(leaves));
+            fields.push((ArgumentName::new(RECIPIENT_ARG), ArgumentTree::List(leaves)));
         }
-        ToolRequest::new(ToolName::new(tool), ArgumentTree::Object(fields), BTreeSet::new())
+        ToolRequest::new(ToolName::new(tool), ArgumentTree::object(fields), [])
     }
 }
 
@@ -294,9 +278,8 @@ impl BatonGateBuilder {
 #[cfg(test)]
 mod tests {
     use baton_core::{
-        Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode, AuthorityName, Effect, Effects,
-        ProposedGrant, Requirements, Ruling, ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel,
-        Violation,
+        Audience, AudienceRule, Authority, AuthorityMandate, Effect, Effects, ProposedGrant, Requirements, Ruling,
+        ToolContract, ToolName, TrajectoryView, Trust, UserId, ValueLabel, Violation,
     };
     use serde_json::json;
 
@@ -345,20 +328,14 @@ mod tests {
     }
 
     /// Vouches in exactly the auditor and accepts the resulting first egress.
+    fn auditor_mandate() -> AuthorityMandate {
+        AuthorityMandate::none()
+            .vouch_audience([UserId::new(AUDITOR)])
+            .acquire_effects()
+    }
+
     fn auditor_authority() -> Authority {
-        Authority {
-            name: AuthorityName::new("finance-approver"),
-            mandate: AuthorityMandate {
-                trust: None,
-                audience: Some(BTreeSet::from([UserId::new(AUDITOR)])),
-                waive_prior_effects: false,
-                confirms: false,
-                acknowledge_unknown: false,
-                may_release_control: false,
-                acquire_effects: true,
-            },
-            mode: AuthorityMode::Inline(approve),
-        }
+        Authority::inline("finance-approver", auditor_mandate(), approve)
     }
 
     fn auditor_gate() -> BatonGate {
@@ -404,19 +381,7 @@ mod tests {
     /// reaches its grant step blocks with `NeedsApproval` rather than permitting.
     fn external_auditor_gate() -> BatonGate {
         BatonGate::builder()
-            .authority(Authority {
-                name: AuthorityName::new("finance-approver"),
-                mandate: AuthorityMandate {
-                    trust: None,
-                    audience: Some(BTreeSet::from([UserId::new(AUDITOR)])),
-                    waive_prior_effects: false,
-                    confirms: false,
-                    acknowledge_unknown: false,
-                    may_release_control: false,
-                    acquire_effects: true,
-                },
-                mode: AuthorityMode::External,
-            })
+            .authority(Authority::external("finance-approver", auditor_mandate()))
             .contract(read_contract("list_invoices"))
             .contract(sink_contract("send_email"))
             .recipients_for("send_email", |a| {
@@ -430,13 +395,28 @@ mod tests {
     }
 
     #[test]
+    fn a_check_before_commit_blocks_without_staling_the_stashed_token() {
+        let mut gate = auditor_gate();
+        gate.begin("email the report to the auditor");
+        allow(gate.check("list_invoices", &json!({})));
+        // A second check — on the recipient-bearing tool — is refused before
+        // recipient ingress can advance the revision, so the stashed permit
+        // still commits.
+        assert!(matches!(
+            gate.check("send_email", &json!({ "to": AUDITOR })),
+            GateVerdict::Block { .. }
+        ));
+        gate.commit("<invoices>").unwrap();
+    }
+
+    #[test]
     fn a_walk_that_blocks_does_not_wedge_later_calls() {
         let mut gate = external_auditor_gate();
         gate.begin("email the report to the auditor");
         allow(gate.check("list_invoices", &json!({})));
         gate.commit("<invoices>").unwrap();
         // The remediable walk reaches an external grant it cannot resolve
-        // in-process and blocks, leaving a pending action behind.
+        // in-process and blocks, discarding the approval and freeing the slot.
         assert!(matches!(
             gate.check("send_email", &json!({ "to": AUDITOR })),
             GateVerdict::Block { .. }

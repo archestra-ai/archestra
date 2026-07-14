@@ -67,7 +67,7 @@ Admins can change this in **Settings > Organization > Auth**. The setting is org
 
 When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
 
-Create and manage these clients under **Credentials > OAuth Clients** (the *For agents & MCP gateways* type). Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+Create and manage these clients under **Client Credentials > OAuth Clients** (pick the *Agents & MCP gateways* client type). Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
 
 Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
 
@@ -85,7 +85,7 @@ Because there is no acting user, per-user dynamic credential resolution does not
 
 When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
 
-Create it under **Credentials > OAuth Clients** (the *For agents & MCP gateways* type), choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
+Create it under **Client Credentials > OAuth Clients** (pick the *Agents & MCP gateways* client type), choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
 
 The application runs the standard browser flow:
 

@@ -23,7 +23,7 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 3. Uses PKCE for the authorization-code exchange
 4. Sends the OAuth access token to `/v1/model-router/{proxyId}/chat/completions`
 
-User OAuth tokens do not use the registered clients under **Credentials > OAuth Clients**. That page creates confidential clients for the client credentials flow. User OAuth apps are public authorization-code clients, and provider keys are resolved from the signed-in user's accessible Model Provider keys.
+This example does not use the registered clients under **Client Credentials > OAuth Clients** — those are confidential clients (a `client_id` with a secret). The example app registers a public client dynamically, and provider keys are resolved from the signed-in user's accessible Model Provider keys.
 
 ## Run the Example
 

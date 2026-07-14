@@ -50,12 +50,52 @@ impl fmt::Display for ArgumentName {
     }
 }
 
+impl From<&str> for ArgumentName {
+    fn from(name: &str) -> Self {
+        Self::new(name)
+    }
+}
+
+impl From<String> for ArgumentName {
+    fn from(name: String) -> Self {
+        Self::new(name)
+    }
+}
+
 /// The executable argument structure: every leaf is a stored value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ArgumentTree<T> {
     Value(T),
     List(Vec<ArgumentTree<T>>),
     Object(BTreeMap<ArgumentName, ArgumentTree<T>>),
+}
+
+impl<T> From<T> for ArgumentTree<T> {
+    fn from(leaf: T) -> Self {
+        Self::Value(leaf)
+    }
+}
+
+impl<T> ArgumentTree<T> {
+    /// The empty argument object — a no-argument invocation.
+    pub fn empty() -> Self {
+        Self::Object(BTreeMap::new())
+    }
+
+    /// An object node from `(name, subtree)` pairs. Leaves coerce, so
+    /// `ArgumentTree::object([("to", to), ("body", report)])` reads plainly.
+    pub fn object<N, V>(fields: impl IntoIterator<Item = (N, V)>) -> Self
+    where
+        N: Into<ArgumentName>,
+        V: Into<Self>,
+    {
+        Self::Object(
+            fields
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect(),
+        )
+    }
 }
 
 impl<T: Copy + Ord> ArgumentTree<T> {
@@ -198,11 +238,11 @@ pub struct ToolRequest {
 }
 
 impl ToolRequest {
-    pub fn new(tool: ToolName, arguments: ArgumentTree<ValueId>, control: BTreeSet<ValueId>) -> Self {
+    pub fn new(tool: ToolName, arguments: ArgumentTree<ValueId>, control: impl IntoIterator<Item = ValueId>) -> Self {
         Self {
             tool,
             arguments,
-            control,
+            control: control.into_iter().collect(),
         }
     }
 }
@@ -295,7 +335,7 @@ impl PendingAction {
         self.state = ActionState::Released;
     }
 
-    /// A `TransformValue` step replaced `from` with the derived `to` in the
+    /// A content-justified `Derive` step replaced `from` with the derived `to` in the
     /// current argument tree. The original proposal is untouched — it is the
     /// identity basis, never dispatched.
     pub(crate) fn substitute_argument(&mut self, from: ValueId, to: ValueId) {

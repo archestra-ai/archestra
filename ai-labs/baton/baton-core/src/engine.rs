@@ -1984,8 +1984,7 @@ mod tests {
             match decision {
                 Decision::Permitted(token) => break token,
                 Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                    let capability = engine.mint_step(trajectory, plans.first().id, 0).unwrap();
-                    decision = match engine.apply_step(trajectory, capability).unwrap() {
+                    decision = match apply_first_step(engine, trajectory, plans.first().id) {
                         StepOutcome::Advanced(decision) => decision,
                         other => panic!("unexpected step outcome: {other:?}"),
                     };
@@ -1995,12 +1994,17 @@ mod tests {
         }
     }
 
-    fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) -> ToolRequest {
-        let to = trajectory.ingress(
+    /// Ingress a value at the identity label (e.g. a recipient name) spoken by alice.
+    fn identity_ingress(trajectory: &mut Trajectory, body: &str) -> ValueId {
+        trajectory.ingress(
             Speaker::user(user("alice")),
             ValueLabel::identity(),
-            OpaqueValue::new(recipient),
-        );
+            OpaqueValue::new(body),
+        )
+    }
+
+    fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) -> ToolRequest {
+        let to = identity_ingress(trajectory, recipient);
         ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -2009,6 +2013,58 @@ mod tests {
             ])),
             BTreeSet::new(),
         )
+    }
+
+    /// Evaluate a flow expected to block remediably and return its plans.
+    fn remediable(engine: &PolicyEngine, trajectory: &mut Trajectory, request: ToolRequest) -> NonEmptyVec<RemedyPlan> {
+        match engine.evaluate(trajectory, request) {
+            Decision::Blocked(Blocked::Remediable { plans, .. }) => plans,
+            other => panic!("expected a remediable block, got {other:?}"),
+        }
+    }
+
+    /// Mint and apply the first step of `plan`.
+    fn apply_first_step(engine: &PolicyEngine, trajectory: &mut Trajectory, plan: PlanId) -> StepOutcome {
+        let capability = engine.mint_step(trajectory, plan, 0).unwrap();
+        engine.apply_step(trajectory, capability).unwrap()
+    }
+
+    fn approve_all(
+        _: &crate::transition::ProposedGrant,
+        _: &[Violation],
+        _: &crate::approval::TrajectoryView,
+    ) -> Option<crate::approval::Ruling> {
+        Some(Ruling::Approve {
+            reason: "approved".to_owned(),
+        })
+    }
+
+    fn abstain_all(
+        _: &crate::transition::ProposedGrant,
+        _: &[Violation],
+        _: &crate::approval::TrajectoryView,
+    ) -> Option<crate::approval::Ruling> {
+        None
+    }
+
+    fn inline_authority(
+        name: &str,
+        mandate: crate::transition::AuthorityMandate,
+        decide: crate::approval::AuthorityFn,
+    ) -> Authority {
+        Authority {
+            name: AuthorityName::new(name),
+            mandate,
+            mode: AuthorityMode::Inline(decide),
+        }
+    }
+
+    fn external_authority(name: &str, mandate: crate::transition::AuthorityMandate) -> Authority {
+        Authority {
+            name: AuthorityName::new(name),
+            mandate,
+            mode: AuthorityMode::External,
+        }
     }
 
     #[test]
@@ -2071,11 +2127,7 @@ mod tests {
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
         let clean_body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
-        let to = trajectory.ingress(
-            Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let to = identity_ingress(&mut trajectory, "bob");
         // The invocation was selected by something that read the secret:
         // whether this email happens leaks a bit even though the payload is
         // clean.
@@ -2119,28 +2171,19 @@ mod tests {
 
     #[test]
     fn unregistered_tool_acknowledged_dispatches_with_unknown_output() {
-        fn accept_unknowns(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "operator accepts unknowns".to_owned(),
-            })
-        }
         // A no-contract call needs both competences: acquire its Unknown growth
         // and acknowledge the missing contract.
         let mut engine = engine_with([]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("accept-unknowns"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(inline_authority(
+                "accept-unknowns",
+                crate::transition::AuthorityMandate {
                     acknowledge_unknown: true,
                     acquire_effects: true,
                     ..crate::transition::AuthorityMandate::none()
                 },
-                mode: crate::approval::AuthorityMode::Inline(accept_unknowns),
-            })
+                approve_all,
+            ))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
@@ -2201,8 +2244,7 @@ mod tests {
                 if *source == doc && delta.trust == Some(KnownTrust::Trusted)
         ));
         // ...routed to the trust-competent external human.
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected the external human to be consulted");
         };
         assert_eq!(pending.authority().as_str(), "human");
@@ -2784,9 +2826,7 @@ mod tests {
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let endorse = plans.first();
         assert_eq!(endorse.steps.len(), 1);
         assert!(matches!(
@@ -2796,9 +2836,7 @@ mod tests {
         ));
         // Routing is live at application: the endorse step defers to the
         // competent external human.
-        let plan_id = endorse.id;
-        let capability = engine.mint_step(&trajectory, plan_id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse.id) else {
             panic!("expected the external human to be consulted");
         };
         assert_eq!(pending.authority().as_str(), "human");
@@ -2810,22 +2848,9 @@ mod tests {
     /// enough.
     #[test]
     fn a_multi_source_audience_breach_endorses_every_contributing_leaf() {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "auto".to_owned(),
-            })
-        }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("auto"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+            .register_authority(inline_authority("auto", human().mandate, approve_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
@@ -2833,11 +2858,7 @@ mod tests {
         // both, so both must be endorsed.
         let part1 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "part one");
         let part2 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "part two");
-        let to = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let to = identity_ingress(&mut trajectory, "bob");
         let request = ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -2853,9 +2874,7 @@ mod tests {
             BTreeSet::new(),
         );
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let plan_id = plans.first().id;
         let endorsed: BTreeSet<ValueId> = plans
             .first()
@@ -2873,8 +2892,7 @@ mod tests {
         );
 
         // Applying only the first endorse does not yet clear the breach.
-        let cap0 = engine.mint_step(&trajectory, plan_id, 0).unwrap();
-        let StepOutcome::Advanced(mut decision) = engine.apply_step(&mut trajectory, cap0).unwrap() else {
+        let StepOutcome::Advanced(mut decision) = apply_first_step(&engine, &mut trajectory, plan_id) else {
             panic!("expected the step to advance");
         };
         assert!(
@@ -2886,8 +2904,7 @@ mod tests {
             match decision {
                 Decision::Permitted(_) => break,
                 Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                    let cap = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-                    decision = match engine.apply_step(&mut trajectory, cap).unwrap() {
+                    decision = match apply_first_step(&engine, &mut trajectory, plans.first().id) {
                         StepOutcome::Advanced(d) => d,
                         other => panic!("unexpected outcome: {other:?}"),
                     };
@@ -2912,35 +2929,18 @@ mod tests {
         let doc_label = trajectory.store().get(doc).unwrap().label().clone();
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
-        else {
-            panic!("expected remediable block");
+        // The breach enumerates an Endorse route; applying its step defers to
+        // the external human, who vouches the doc for charlie by fiat — the
+        // durable analogue of the audience waiver.
+        let plans = remediable(&engine, &mut trajectory, request);
+        let endorse_plan = plans
+            .iter()
+            .find(|p| matches!(&p.steps.first().kind, TransitionKind::EndorseValue { source, .. } if *source == doc))
+            .expect("an endorse plan for the doc");
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse_plan.id) else {
+            panic!("expected the external human to be consulted");
         };
-        let action = trajectory.pending_action().unwrap().id();
-        let plan = plans.first().id;
-        let revision = trajectory.revision();
-
-        // The human vouches the doc for charlie by fiat — the durable analogue
-        // of the audience waiver.
-        let grant = crate::transition::ProposedGrant::Endorse {
-            source: doc,
-            delta: crate::transition::EndorseDelta {
-                trust: None,
-                audience: Some(BTreeSet::from([user("charlie")])),
-            },
-        };
-        let ancestry = crate::approval::AncestrySnapshot::of(trajectory.store(), [doc]);
-        let pending = crate::approval::PendingApproval::new(
-            plan,
-            action,
-            grant,
-            crate::audit::AuthorityName::new("human"),
-            violations,
-            ancestry,
-            trajectory.id(),
-            revision,
-            engine.id,
-        );
+        assert_eq!(pending.authority().as_str(), "human");
 
         let decision = engine
             .apply_approval(
@@ -3027,34 +3027,15 @@ mod tests {
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private doc");
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request)
-        else {
-            panic!("expected remediable block");
-        };
-        let action = trajectory.pending_action().unwrap().id();
-        let plan = plans.first().id;
-        let revision = trajectory.revision();
+        let plans = remediable(&engine, &mut trajectory, request);
+        let endorse_plan = plans
+            .iter()
+            .find(|p| matches!(&p.steps.first().kind, TransitionKind::EndorseValue { source, .. } if *source == doc))
+            .expect("an endorse plan for the doc");
         let values_before = trajectory.store().len();
-
-        let grant = crate::transition::ProposedGrant::Endorse {
-            source: doc,
-            delta: crate::transition::EndorseDelta {
-                trust: None,
-                audience: Some(BTreeSet::from([user("charlie")])),
-            },
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, endorse_plan.id) else {
+            panic!("expected the external human to be consulted");
         };
-        let ancestry = crate::approval::AncestrySnapshot::of(trajectory.store(), [doc]);
-        let pending = crate::approval::PendingApproval::new(
-            plan,
-            action,
-            grant,
-            crate::audit::AuthorityName::new("human"),
-            violations,
-            ancestry,
-            trajectory.id(),
-            revision,
-            engine.id,
-        );
 
         let decision = engine
             .apply_approval(
@@ -3107,11 +3088,7 @@ mod tests {
         }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("vetter"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(refuse_suspicious_ancestry),
-            })
+            .register_authority(inline_authority("vetter", human().mandate, refuse_suspicious_ancestry))
             .unwrap();
 
         // A body laundered twice below the fold: trusted itself, but its root
@@ -3131,12 +3108,9 @@ mod tests {
         tainted.seed_committed_effects(Effects::declared([Effect::Egress]));
         let body = laundered_body(&mut tainted, Trust::SUSPICIOUS);
         let request = email_request(&mut tainted, body, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut tainted, request) else {
-            panic!("expected remediable block");
-        };
-        let cap = engine.mint_step(&tainted, plans.first().id, 0).unwrap();
+        let plans = remediable(&engine, &mut tainted, request);
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-            engine.apply_step(&mut tainted, cap).unwrap()
+            apply_first_step(&engine, &mut tainted, plans.first().id)
         else {
             panic!("a suspicious transitive ancestor should be refused");
         };
@@ -3160,11 +3134,7 @@ mod tests {
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "secret");
         let clean = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
-        let to = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let to = identity_ingress(&mut trajectory, "bob");
         let request = ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -3174,9 +3144,7 @@ mod tests {
             BTreeSet::from([secret]),
         );
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         assert!(matches!(
             &plans.first().steps.first().kind,
             TransitionKind::ApplyWaiver {
@@ -3200,16 +3168,8 @@ mod tests {
         // The body admits alice and bob; a control selector restricts to alice.
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let control = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "selector");
-        let to_bob = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
-        let to_charlie = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("charlie"),
-        );
+        let to_bob = identity_ingress(&mut trajectory, "bob");
+        let to_charlie = identity_ingress(&mut trajectory, "charlie");
         // Sending to {bob, charlie}: with control folded the flow audience is
         // {alice}, so both are outside. Releasing control admits bob, leaving
         // only charlie exposed.
@@ -3227,9 +3187,7 @@ mod tests {
             ])),
             BTreeSet::from([control]),
         );
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected a remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let composes = plans.iter().any(|plan| {
             let endorses_charlie = plan.steps.iter().any(|step| {
                 matches!(
@@ -3271,16 +3229,8 @@ mod tests {
         let secret_a = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "sel-a");
         let secret_b = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "sel-b");
         // An unrelated control at the identity label carries nothing.
-        let noise = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("noise"),
-        );
-        let to_bob = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let noise = identity_ingress(&mut trajectory, "noise");
+        let to_bob = identity_ingress(&mut trajectory, "bob");
         let request = ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -3289,9 +3239,7 @@ mod tests {
             ])),
             BTreeSet::from([secret_a, secret_b, noise]),
         );
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected a remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let released = plans.iter().any(|plan| {
             matches!(
                 &plan.steps.first().kind,
@@ -3360,11 +3308,7 @@ mod tests {
             },
             OpaqueValue::new("susp"),
         );
-        let to_bob = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let to_bob = identity_ingress(&mut trajectory, "bob");
         let request = ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -3373,9 +3317,7 @@ mod tests {
             ])),
             BTreeSet::from([restrict, unknown, suspicious]),
         );
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected a remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let released_exactly_restrict = plans.iter().any(|plan| {
             matches!(
                 &plan.steps.first().kind,
@@ -3433,9 +3375,7 @@ mod tests {
         let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
         let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let constrain = plans
             .iter()
             .find(|p| matches!(&p.steps.first().kind, TransitionKind::ConstrainAction { .. }))
@@ -3480,16 +3420,13 @@ mod tests {
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw secrets");
         let request = email_request(&mut trajectory, raw, "bob");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let plan = plans
             .iter()
             .find(|p| p.steps.len() == 1 && matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
             .expect("transform plan");
 
-        let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
-        let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
+        let outcome = apply_first_step(&engine, &mut trajectory, plan.id);
         let StepOutcome::Advanced(Decision::Permitted(token)) = outcome else {
             panic!("expected the transform to advance to a permit, got {outcome:?}");
         };
@@ -3512,37 +3449,21 @@ mod tests {
     /// A rule-approved Endorse permits inline, with the application audited.
     #[test]
     fn rule_approved_endorse_permits_inline() {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "within policy".to_owned(),
-            })
-        }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("auto-approve"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+            .register_authority(inline_authority("auto-approve", human().mandate, approve_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         assert!(matches!(
             &plans.first().steps.first().kind,
             TransitionKind::EndorseValue { .. }
         ));
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
+        let outcome = apply_first_step(&engine, &mut trajectory, plans.first().id);
         let StepOutcome::Advanced(Decision::Permitted(_token)) = outcome else {
             panic!("expected inline endorse permit, got {outcome:?}");
         };
@@ -3559,46 +3480,20 @@ mod tests {
     /// authority rather than denying the flow.
     #[test]
     fn inline_abstention_falls_through_to_the_next_authority() {
-        fn abstain(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            None
-        }
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "second".to_owned(),
-            })
-        }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("first"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(abstain),
-            })
+            .register_authority(inline_authority("first", human().mandate, abstain_all))
             .unwrap();
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("second"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+            .register_authority(inline_authority("second", human().mandate, approve_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let plans = remediable(&engine, &mut trajectory, request);
+        let StepOutcome::Advanced(Decision::Permitted(_)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected the second authority to approve after the first abstained");
         };
@@ -3613,35 +3508,20 @@ mod tests {
     /// external authority was registered first.
     #[test]
     fn inline_authority_is_consulted_before_external() {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "inline".to_owned(),
-            })
-        }
         let mut engine = engine_with([email_contract()]);
         // External registered first; the inline authority must still win.
         engine.register_authority(human()).unwrap();
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("inline"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+            .register_authority(inline_authority("inline", human().mandate, approve_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let plans = remediable(&engine, &mut trajectory, request);
         // Inline resolves synchronously — no round-trip to the external human.
-        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let StepOutcome::Advanced(Decision::Permitted(_)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected the inline authority to decide before the external one");
         };
@@ -3651,30 +3531,16 @@ mod tests {
     /// fails closed with no ruling produced.
     #[test]
     fn all_inline_abstentions_block_with_no_ruling() {
-        fn abstain(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            None
-        }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("only"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(abstain),
-            })
+            .register_authority(inline_authority("only", human().mandate, abstain_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let plans = remediable(&engine, &mut trajectory, request);
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-            engine.apply_step(&mut trajectory, capability).unwrap()
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected a terminal block when every authority abstains");
         };
@@ -3685,48 +3551,19 @@ mod tests {
     /// through to a later would-approve authority.
     #[test]
     fn inline_denial_is_decisive_and_does_not_fall_through() {
-        fn deny(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Deny {
-                reason: "denied".to_owned(),
-            })
-        }
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "would approve".to_owned(),
-            })
-        }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("denier"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(deny),
-            })
+            .register_authority(inline_authority("denier", human().mandate, deny_all))
             .unwrap();
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("approver"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+            .register_authority(inline_authority("approver", human().mandate, approve_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let plans = remediable(&engine, &mut trajectory, request);
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-            engine.apply_step(&mut trajectory, capability).unwrap()
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("a denial must terminate, not fall through to the approver");
         };
@@ -3747,25 +3584,9 @@ mod tests {
     /// dimension. (Regression: the acknowledge bypass.)
     #[test]
     fn control_release_only_authority_cannot_acknowledge_an_unknown() {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "release".to_owned(),
-            })
-        }
         let mut engine = engine_with([]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("control-only"),
-                mandate: crate::transition::AuthorityMandate {
-                    may_release_control: true,
-                    ..crate::transition::AuthorityMandate::none()
-                },
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+            .register_authority(inline_authority("control-only", releaser_mandate(), approve_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "x");
@@ -3786,15 +3607,6 @@ mod tests {
     /// acknowledge bypass.)
     #[test]
     fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
-        fn attest(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "trust attested".to_owned(),
-            })
-        }
         let mut engine = engine_with([]);
         // A tool with unknown effects; dispatching it makes past-effects UNKNOWN.
         engine
@@ -3823,15 +3635,15 @@ mod tests {
             .unwrap();
         // Trust-competent, but NOT competent to acknowledge unknowns.
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("trust-only"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(inline_authority(
+                "trust-only",
+                crate::transition::AuthorityMandate {
                     trust: Some(KnownTrust::Trusted),
                     audience: Some(BTreeSet::from([user("alice"), user("bob")])),
                     ..crate::transition::AuthorityMandate::none()
                 },
-                mode: crate::approval::AuthorityMode::Inline(attest),
-            })
+                approve_all,
+            ))
             .unwrap();
 
         let mut trajectory = Trajectory::new();
@@ -3876,23 +3688,7 @@ mod tests {
 
     /// An inline authority competent to acquire effects, always approving.
     fn inline_acquirer() -> crate::approval::Authority {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "first egress this turn".to_owned(),
-            })
-        }
-        crate::approval::Authority {
-            name: crate::audit::AuthorityName::new("acquirer"),
-            mandate: crate::transition::AuthorityMandate {
-                acquire_effects: true,
-                ..crate::transition::AuthorityMandate::none()
-            },
-            mode: crate::approval::AuthorityMode::Inline(approve),
-        }
+        inline_authority("acquirer", acquirer_mandate(), approve_all)
     }
 
     /// The first egress grows the committed surface; with no `acquire_effects`
@@ -3922,16 +3718,13 @@ mod tests {
         engine.register_authority(inline_acquirer()).unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
-        else {
-            panic!("expected a remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, ping_request(body));
         assert!(matches!(
             &plans.first().steps.first().kind,
             TransitionKind::AcceptGrowth { effects } if *effects == Effects::declared([Effect::Egress])
         ));
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let StepOutcome::Advanced(Decision::Permitted(token)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("the acceptance should clear the flow and permit");
         };
@@ -3950,15 +3743,6 @@ mod tests {
     /// growth; only an authority competent for *both* clears it (blocker-2).
     #[test]
     fn no_contract_growth_needs_both_acknowledge_and_acquire() {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "ok".to_owned(),
-            })
-        }
         let mystery = |trajectory: &mut Trajectory| {
             let body = ingress(trajectory, &["alice"], Trust::TRUSTED, "x");
             ToolRequest::new(
@@ -3971,14 +3755,14 @@ mod tests {
         // Acknowledge-only: cannot acquire the unknown growth → terminal.
         let mut engine = engine_with([]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("ack-only"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(inline_authority(
+                "ack-only",
+                crate::transition::AuthorityMandate {
                     acknowledge_unknown: true,
                     ..crate::transition::AuthorityMandate::none()
                 },
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+                approve_all,
+            ))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let request = mystery(&mut trajectory);
@@ -3990,32 +3774,19 @@ mod tests {
         // missing contract) to a permit; dispatch drives past-effects to Unknown.
         let mut engine = engine_with([]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("both"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(inline_authority(
+                "both",
+                crate::transition::AuthorityMandate {
                     acknowledge_unknown: true,
                     acquire_effects: true,
                     ..crate::transition::AuthorityMandate::none()
                 },
-                mode: crate::approval::AuthorityMode::Inline(approve),
-            })
+                approve_all,
+            ))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let request = mystery(&mut trajectory);
-        let mut decision = engine.evaluate(&mut trajectory, request.clone());
-        let token = loop {
-            match decision {
-                Decision::Permitted(token) => break token,
-                Decision::Blocked(Blocked::Remediable { plans, .. }) => {
-                    let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-                    decision = match engine.apply_step(&mut trajectory, capability).unwrap() {
-                        StepOutcome::Advanced(decision) => decision,
-                        other => panic!("unexpected step outcome: {other:?}"),
-                    };
-                }
-                other => panic!("both competences should reach a permit, got {other:?}"),
-            }
-        };
+        let token = walk_to_permit(&engine, &mut trajectory, request);
         dispatch(&mut trajectory, token, "???").unwrap();
         assert_eq!(trajectory.state().past_effects(), &Effects::UNKNOWN);
     }
@@ -4026,23 +3797,12 @@ mod tests {
     fn external_accept_roundtrip() {
         let mut engine = engine_with([egress_tool()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("effect-approver"),
-                mandate: crate::transition::AuthorityMandate {
-                    acquire_effects: true,
-                    ..crate::transition::AuthorityMandate::none()
-                },
-                mode: crate::approval::AuthorityMode::External,
-            })
+            .register_authority(external_authority("effect-approver", acquirer_mandate()))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
-        else {
-            panic!("expected a remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trajectory, ping_request(body));
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("the external acquirer should defer to an out-of-process ruling");
         };
         assert!(matches!(
@@ -4073,12 +3833,9 @@ mod tests {
         engine.register_authority(inline_acquirer()).unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
-        else {
-            panic!("expected a remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let plans = remediable(&engine, &mut trajectory, ping_request(body));
+        let StepOutcome::Advanced(Decision::Permitted(token)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected a permit after acceptance");
         };
@@ -4108,12 +3865,9 @@ mod tests {
         engine.register_authority(inline_acquirer()).unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
-        else {
-            panic!("expected a remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let plans = remediable(&engine, &mut trajectory, ping_request(body));
+        let StepOutcome::Advanced(Decision::Permitted(token)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected a permit after acceptance");
         };
@@ -4132,9 +3886,9 @@ mod tests {
     fn acquire_incompetent_authority_gets_no_accept_route() {
         let mut engine = engine_with([egress_tool()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("no-acquire"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(external_authority(
+                "no-acquire",
+                crate::transition::AuthorityMandate {
                     trust: Some(KnownTrust::Trusted),
                     audience: Some(BTreeSet::from([user("alice")])),
                     waive_prior_effects: true,
@@ -4143,8 +3897,7 @@ mod tests {
                     may_release_control: true,
                     acquire_effects: false,
                 },
-                mode: crate::approval::AuthorityMode::External,
-            })
+            ))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
@@ -4163,12 +3916,9 @@ mod tests {
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
         let request = ping_request(body);
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request.clone())
-        else {
-            panic!("expected a remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let plans = remediable(&engine, &mut trajectory, request.clone());
+        let StepOutcome::Advanced(Decision::Permitted(_)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected a permit after acceptance");
         };
@@ -4358,10 +4108,7 @@ mod tests {
             ArgumentTree::Value(payload),
             BTreeSet::new(),
         );
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request.clone())
-        else {
-            panic!("expected a remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request.clone());
 
         // The readonly route constrains first, then accepts *only* {Egress}.
         let composite = plans
@@ -4403,8 +4150,7 @@ mod tests {
                         .iter()
                         .find(|p| !matches!(&p.steps.first().kind, TransitionKind::ConstrainAction { transition } if *transition == tref("noop")))
                         .expect("the readonly/accept continuation");
-                    let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
-                    decision = match engine.apply_step(&mut trajectory, capability).unwrap() {
+                    decision = match apply_first_step(&engine, &mut trajectory, plan.id) {
                         StepOutcome::Advanced(decision) => decision,
                         other => panic!("unexpected step outcome: {other:?}"),
                     };
@@ -4445,15 +4191,6 @@ mod tests {
     fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
         fn launder(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
             Ok(OpaqueValue::new("[laundered]"))
-        }
-        fn endorse_audience(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "vouched".to_owned(),
-            })
         }
         let dispatch_tool = ToolContract {
             name: ToolName::new("dispatch"),
@@ -4501,24 +4238,20 @@ mod tests {
         // The voucher may raise audience but not trust, so Sanitize is the only
         // way to clear the trust breach; the acquirer takes the residual growth.
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("voucher"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(inline_authority(
+                "voucher",
+                crate::transition::AuthorityMandate {
                     audience: Some(BTreeSet::from([user("alice"), user("charlie")])),
                     ..crate::transition::AuthorityMandate::none()
                 },
-                mode: crate::approval::AuthorityMode::Inline(endorse_audience),
-            })
+                approve_all,
+            ))
             .unwrap();
         engine.register_authority(inline_acquirer()).unwrap();
 
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
-        let to = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("charlie"),
-        );
+        let to = identity_ingress(&mut trajectory, "charlie");
         let request = ToolRequest::new(
             ToolName::new("dispatch"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -4528,9 +4261,7 @@ mod tests {
             BTreeSet::new(),
         );
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
 
         // The composite route is all four steps in canonical order, each
         // authority signing off only the reduced residual.
@@ -4566,9 +4297,7 @@ mod tests {
         let token = loop {
             let plan = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
             applied.push(step_label(&plan.steps.first().kind));
-            let id = plan.id;
-            let capability = engine.mint_step(&trajectory, id, 0).unwrap();
-            match engine.apply_step(&mut trajectory, capability).unwrap() {
+            match apply_first_step(&engine, &mut trajectory, plan.id) {
                 StepOutcome::Advanced(Decision::Permitted(token)) => break token,
                 StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans: next, .. })) => plans = next,
                 other => panic!("unexpected outcome: {other:?}"),
@@ -4645,9 +4374,7 @@ mod tests {
         let mut trajectory = Trajectory::new();
         let payload = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
         let request = ToolRequest::new(ToolName::new("sink"), ArgumentTree::Value(payload), BTreeSet::new());
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected a remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         assert!(plans.len() <= MAX_PLANS);
         assert!(
             plans.iter().any(|p| p.exit_kind() == ExitKind::Sanitize),
@@ -4670,11 +4397,7 @@ mod tests {
         // the residual is a control release rather than a value relabel.
         let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
         let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "selector");
-        let to = trajectory.ingress(
-            crate::turn::Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let to = identity_ingress(&mut trajectory, "bob");
         let request = ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -4684,11 +4407,8 @@ mod tests {
             BTreeSet::from([secret]),
         );
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trajectory, request);
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         assert_eq!(pending.authority().as_str(), "human");
@@ -4746,11 +4466,7 @@ mod tests {
         }
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("vouch"),
-                mandate: human().mandate,
-                mode: crate::approval::AuthorityMode::Inline(vouch_trusted_source),
-            })
+            .register_authority(inline_authority("vouch", human().mandate, vouch_trusted_source))
             .unwrap();
 
         // Trusted source (value#0): the view read passes, the authority approves.
@@ -4758,11 +4474,9 @@ mod tests {
         trusted.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut trusted, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trusted, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trusted, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trusted, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(_)) = engine.apply_step(&mut trusted, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trusted, request);
+        let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trusted, plans.first().id)
+        else {
             panic!("expected approval when the view shows a trusted source");
         };
 
@@ -4772,12 +4486,9 @@ mod tests {
         suspicious.seed_committed_effects(Effects::declared([Effect::Egress]));
         let doc = ingress(&mut suspicious, &["alice"], Trust::SUSPICIOUS, "private");
         let request = email_request(&mut suspicious, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut suspicious, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&suspicious, plans.first().id, 0).unwrap();
+        let plans = remediable(&engine, &mut suspicious, request);
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-            engine.apply_step(&mut suspicious, capability).unwrap()
+            apply_first_step(&engine, &mut suspicious, plans.first().id)
         else {
             panic!("expected abstention when the view shows a suspicious source");
         };
@@ -4804,11 +4515,8 @@ mod tests {
         let doc = trajectory.seed_transformed(mid, trusted);
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trajectory, request);
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         // The direct endorsed value and its transitive root are both in scope.
@@ -4843,12 +4551,8 @@ mod tests {
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request.clone())
-        else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trajectory, request.clone());
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         let decision = engine
@@ -4893,9 +4597,7 @@ mod tests {
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let plan = plans.first().id;
         let capability = engine.mint_step(&trajectory, plan, 0).unwrap();
 
@@ -4918,11 +4620,8 @@ mod tests {
         // A stale approval is likewise refused.
         trajectory.abandon_pending();
         let retry = email_request(&mut trajectory, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, retry) else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trajectory, retry);
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         trajectory
@@ -4958,13 +4657,10 @@ mod tests {
         let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw");
         let request = email_request(&mut trajectory, raw, "bob");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let values_before = trajectory.store().len();
         let revision_before = trajectory.revision();
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let outcome = engine.apply_step(&mut trajectory, capability).unwrap();
+        let outcome = apply_first_step(&engine, &mut trajectory, plans.first().id);
         assert!(matches!(
             outcome,
             StepOutcome::Failed(crate::audit::TransitionFailure::TransformerError { .. })
@@ -5018,9 +4714,7 @@ mod tests {
         let raw = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
         let request = email_request(&mut trajectory, raw, "charlie");
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         // A two-step plan predicting the full route exists...
         assert!(plans.iter().any(|p| p.steps.len() == 2));
         // ...and application goes step by step, re-planning in between.
@@ -5028,9 +4722,8 @@ mod tests {
             .iter()
             .find(|p| matches!(&p.steps.first().kind, TransitionKind::TransformValue { .. }))
             .expect("plan starting with a transform");
-        let capability = engine.mint_step(&trajectory, transform_plan.id, 0).unwrap();
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans, violations })) =
-            engine.apply_step(&mut trajectory, capability).unwrap()
+            apply_first_step(&engine, &mut trajectory, transform_plan.id)
         else {
             panic!("expected the transform to advance to a re-planned block");
         };
@@ -5039,8 +4732,7 @@ mod tests {
             violations.as_slice(),
             [Violation::Breach(crate::contract::Breach::AudienceExceeds { .. })]
         ));
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         let decision = engine
@@ -5096,8 +4788,8 @@ mod tests {
             violations.as_slice(),
             [Violation::Breach(crate::contract::Breach::TrustBelow { .. })]
         ));
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let StepOutcome::Advanced(Decision::Permitted(token)) =
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected permit — the confirmation must survive the transform");
         };
@@ -5110,35 +4802,18 @@ mod tests {
 
     #[test]
     fn authorities_share_one_name_space() {
-        fn approve(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "ok".to_owned(),
-            })
-        }
-        let gate = |mode| crate::approval::Authority {
-            name: crate::audit::AuthorityName::new("gate"),
-            mandate: crate::transition::AuthorityMandate::none(),
-            mode,
-        };
+        let none = crate::transition::AuthorityMandate::none;
         let mut engine = PolicyEngine::new();
         engine
-            .register_authority(gate(crate::approval::AuthorityMode::Inline(approve)))
+            .register_authority(inline_authority("gate", none(), approve_all))
             .unwrap();
         // The same name is refused regardless of mode.
         assert!(
             engine
-                .register_authority(gate(crate::approval::AuthorityMode::Inline(approve)))
+                .register_authority(inline_authority("gate", none(), approve_all))
                 .is_err()
         );
-        assert!(
-            engine
-                .register_authority(gate(crate::approval::AuthorityMode::External))
-                .is_err()
-        );
+        assert!(engine.register_authority(external_authority("gate", none())).is_err());
     }
 
     /// A capability minted under one engine's registries never resolves
@@ -5154,9 +4829,7 @@ mod tests {
         let mut trajectory = Trajectory::new();
         let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
         let request = email_request(&mut trajectory, doc, "charlie");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine_a.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine_a, &mut trajectory, request);
 
         // B can neither mint nor apply against A's stored plan.
         assert!(matches!(
@@ -5170,8 +4843,7 @@ mod tests {
         ));
 
         // Nor can B consume A's pending approval.
-        let capability = engine_a.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine_a.apply_step(&mut trajectory, capability).unwrap() else {
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine_a, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         assert!(matches!(
@@ -5279,15 +4951,13 @@ mod tests {
         let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
         let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
 
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let constrain = plans
             .iter()
             .find(|p| matches!(&p.steps.first().kind, TransitionKind::ConstrainAction { .. }))
             .expect("constrain plan");
-        let capability = engine.mint_step(&trajectory, constrain.id, 0).unwrap();
-        let StepOutcome::Advanced(Decision::Permitted(token)) = engine.apply_step(&mut trajectory, capability).unwrap()
+        let StepOutcome::Advanced(Decision::Permitted(token)) =
+            apply_first_step(&engine, &mut trajectory, constrain.id)
         else {
             panic!("expected the constraint to clear the flow");
         };
@@ -5346,25 +5016,16 @@ mod tests {
     /// or re-entrant — writes no acknowledgment audit.
     #[test]
     fn unprovable_re_entry_writes_no_audit() {
-        fn accept_unknowns(
-            _: &crate::transition::ProposedGrant,
-            _: &[Violation],
-            _: &crate::approval::TrajectoryView,
-        ) -> Option<crate::approval::Ruling> {
-            Some(crate::approval::Ruling::Approve {
-                reason: "operator accepts unknowns".to_owned(),
-            })
-        }
         let mut engine = engine_with([]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("accept-unknowns"),
-                mandate: crate::transition::AuthorityMandate {
+            .register_authority(inline_authority(
+                "accept-unknowns",
+                crate::transition::AuthorityMandate {
                     acknowledge_unknown: true,
                     ..crate::transition::AuthorityMandate::none()
                 },
-                mode: crate::approval::AuthorityMode::Inline(accept_unknowns),
-            })
+                approve_all,
+            ))
             .unwrap();
         let mut trajectory = Trajectory::new();
         trajectory.seed_committed_effects(Effects::UNKNOWN);
@@ -5427,11 +5088,7 @@ mod tests {
         trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
         let secret = ingress(trajectory, &["alice"], Trust::TRUSTED, "secret");
         let body = ingress(trajectory, &["alice", "bob"], Trust::TRUSTED, "harmless");
-        let to = trajectory.ingress(
-            Speaker::user(user("alice")),
-            ValueLabel::identity(),
-            OpaqueValue::new("bob"),
-        );
+        let to = identity_ingress(trajectory, "bob");
         ToolRequest::new(
             ToolName::new("email.send"),
             ArgumentTree::Object(std::collections::BTreeMap::from([
@@ -5448,21 +5105,13 @@ mod tests {
     fn an_inline_accept_denial_audits_accept_denied() {
         let mut engine = engine_with([egress_tool()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("growth-denier"),
-                mandate: acquirer_mandate(),
-                mode: crate::approval::AuthorityMode::Inline(deny_all),
-            })
+            .register_authority(inline_authority("growth-denier", acquirer_mandate(), deny_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
-        else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+        let plans = remediable(&engine, &mut trajectory, ping_request(body));
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-            engine.apply_step(&mut trajectory, capability).unwrap()
+            apply_first_step(&engine, &mut trajectory, plans.first().id)
         else {
             panic!("expected terminal denial");
         };
@@ -5489,20 +5138,12 @@ mod tests {
     fn an_external_accept_denial_audits_accept_denied() {
         let mut engine = engine_with([egress_tool()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("remote-acquirer"),
-                mandate: acquirer_mandate(),
-                mode: crate::approval::AuthorityMode::External,
-            })
+            .register_authority(external_authority("remote-acquirer", acquirer_mandate()))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, ping_request(body))
-        else {
-            panic!("expected remediable block");
-        };
-        let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let plans = remediable(&engine, &mut trajectory, ping_request(body));
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
             panic!("expected pending approval");
         };
         let decision = engine
@@ -5529,24 +5170,17 @@ mod tests {
     fn an_inline_control_release_denial_audits_waiver_denied() {
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("release-denier"),
-                mandate: releaser_mandate(),
-                mode: crate::approval::AuthorityMode::Inline(deny_all),
-            })
+            .register_authority(inline_authority("release-denier", releaser_mandate(), deny_all))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let request = control_release_scenario(&mut trajectory);
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let plan = plans
             .iter()
             .find(|p| matches!(p.steps.first().kind, TransitionKind::ApplyWaiver { .. }))
             .expect("a control-release route");
-        let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
         let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-            engine.apply_step(&mut trajectory, capability).unwrap()
+            apply_first_step(&engine, &mut trajectory, plan.id)
         else {
             panic!("expected terminal denial");
         };
@@ -5566,23 +5200,16 @@ mod tests {
     fn an_external_control_release_denial_audits_waiver_denied() {
         let mut engine = engine_with([email_contract()]);
         engine
-            .register_authority(crate::approval::Authority {
-                name: crate::audit::AuthorityName::new("remote-releaser"),
-                mandate: releaser_mandate(),
-                mode: crate::approval::AuthorityMode::External,
-            })
+            .register_authority(external_authority("remote-releaser", releaser_mandate()))
             .unwrap();
         let mut trajectory = Trajectory::new();
         let request = control_release_scenario(&mut trajectory);
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
-            panic!("expected remediable block");
-        };
+        let plans = remediable(&engine, &mut trajectory, request);
         let plan = plans
             .iter()
             .find(|p| matches!(p.steps.first().kind, TransitionKind::ApplyWaiver { .. }))
             .expect("a control-release route");
-        let capability = engine.mint_step(&trajectory, plan.id, 0).unwrap();
-        let StepOutcome::NeedsApproval(pending) = engine.apply_step(&mut trajectory, capability).unwrap() else {
+        let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plan.id) else {
             panic!("expected pending approval");
         };
         let decision = engine

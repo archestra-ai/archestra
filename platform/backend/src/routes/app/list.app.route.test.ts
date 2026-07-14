@@ -523,4 +523,12 @@ describe("GET /api/apps", () => {
     expect(ids).toContain(ownPersonal.id);
     expect(ids).not.toContain(foreignPersonal.id);
   });
+
+  test("responds with Cache-Control: no-store so intermediaries never cache per-user data", async () => {
+    // The list carries the caller's own pins; a CDN/reverse proxy caching it
+    // would replay stale pin state after a pin/unpin until a hard refresh.
+    const res = await app.inject({ method: "GET", url: "/api/apps" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
 });

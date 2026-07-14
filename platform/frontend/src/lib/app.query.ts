@@ -178,6 +178,40 @@ export type PinAppTarget =
   | { source: "owned"; appId: string }
   | { source: "external"; mcpServerId: string; resourceUri: string };
 
+type AppsListResponse = archestraApiTypes.GetAppsResponses["200"];
+type AppListItem = AppsListResponse["data"][number];
+
+function matchesPinTarget(app: AppListItem, target: PinAppTarget): boolean {
+  return target.source === "owned"
+    ? app.source === "owned" && app.id === target.appId
+    : app.source === "external" &&
+        app.mcpServerId === target.mcpServerId &&
+        app.resourceUri === target.resourceUri;
+}
+
+/**
+ * Flip `pinnedAt` for the target across every cached apps list (the Apps page
+ * and the sidebar Pinned section may hold separate entries, e.g. with a search
+ * active), so all surfaces reflect a pin/unpin together and immediately.
+ */
+function writePinToAppsLists(params: {
+  queryClient: ReturnType<typeof useQueryClient>;
+  target: PinAppTarget;
+  pinnedAt: string | null;
+}): void {
+  const { queryClient, target, pinnedAt } = params;
+  queryClient.setQueriesData<AppsListResponse>(
+    { queryKey: ["apps", "paginated"] },
+    (old) =>
+      old && {
+        ...old,
+        data: old.data.map((app) =>
+          matchesPinTarget(app, target) ? { ...app, pinnedAt } : app,
+        ),
+      },
+  );
+}
+
 /** Pin/unpin an app for the current user (personal — toggle by `pinned`). */
 export function usePinApp() {
   const queryClient = useQueryClient();
@@ -209,8 +243,29 @@ export function usePinApp() {
       }
       return true;
     },
-    onSuccess: (ok) => {
-      if (!ok) return;
+    // Optimistically flip the pin in every cached list so the card grid and
+    // the sidebar move together without waiting a full list round-trip.
+    onMutate: async ({ pinned, target }) => {
+      await queryClient.cancelQueries({ queryKey: ["apps", "paginated"] });
+      const previousLists = queryClient.getQueriesData<AppsListResponse>({
+        queryKey: ["apps", "paginated"],
+      });
+      writePinToAppsLists({
+        queryClient,
+        target,
+        pinnedAt: pinned ? new Date().toISOString() : null,
+      });
+      return { previousLists };
+    },
+    // mutationFn reports failures by resolving `null` (the error was already
+    // toasted), so the rollback lives here rather than in onError.
+    onSuccess: (ok, _variables, context) => {
+      if (!ok) {
+        for (const [queryKey, data] of context.previousLists) {
+          queryClient.setQueryData(queryKey, data);
+        }
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["apps"] });
     },
   });

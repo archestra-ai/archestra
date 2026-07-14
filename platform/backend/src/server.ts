@@ -453,6 +453,21 @@ export const createFastifyInstance = () =>
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
+    // REST API responses are per-user and must never be cached by
+    // intermediaries. Reverse proxies/CDNs in front of a deployment default to
+    // caching responses that carry no Cache-Control header, which replays one
+    // user's stale GET body after their own writes (e.g. an /api/apps list
+    // that keeps showing pre-pin state until a hard refresh). Routes that
+    // intentionally cache set their own header, which wins.
+    .addHook("onSend", (request, reply, _payload, done) => {
+      if (
+        request.url.startsWith("/api/") &&
+        !reply.hasHeader("cache-control")
+      ) {
+        void reply.header("Cache-Control", "no-store");
+      }
+      done();
+    })
     // https://fastify.dev/docs/latest/Reference/Server/#seterrorhandler
     .setErrorHandler<ApiError | Error>(function (error, request, reply) {
       const requestContext = buildRequestErrorContext(request);

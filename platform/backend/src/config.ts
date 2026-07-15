@@ -1142,7 +1142,7 @@ const config = {
     trustProxy: parseTrustProxy(process.env.ARCHESTRA_TRUST_PROXY),
     /**
      * When set, a dedicated Fastify listener additionally serves the
-     * publicly-exposable endpoints (A2A v1 + v2, MS Teams incoming webhook)
+     * publicly-exposable endpoints (currently the MS Teams incoming webhook)
      * on this port. Same handlers as the main API port — just an alias, so a
      * firewall can expose only these endpoints publicly without exposing the
      * whole API. The main API port keeps serving them either way.

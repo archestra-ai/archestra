@@ -18,10 +18,6 @@ Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent UR
 
 The AgentCard advertises the agent's name, description, and a single skill derived from the agent. A2A clients fetch it first to discover what the agent can do, then send messages to the POST endpoint.
 
-### Dedicated Port
-
-The A2A endpoints are served on the main API port. Set `ARCHESTRA_PUBLIC_ENDPOINTS_PORT` to also serve them on a dedicated port, together with the MS Teams webhook — an alias with the same handlers, so the main port keeps working. This lets a firewall or load balancer expose only the publicly-exposable endpoints to the Internet and keep the rest of the API internal. See [Deployment — Environment Variables](/docs/platform-deployment#application--api-configuration) for details.
-
 ## SDKs
 
 | SDK | A2A 1.0 support | Works with `/v2/a2a` |

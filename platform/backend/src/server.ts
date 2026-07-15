@@ -786,17 +786,17 @@ const startMetricsServer = async () => {
 
 /**
  * Optional dedicated Fastify listener (ARCHESTRA_PUBLIC_ENDPOINTS_PORT) that
- * aliases the publicly-exposable endpoints on their own port:
- *   - the A2A endpoints (v1 + v2)
- *   - the MS Teams incoming webhook
+ * aliases the publicly-exposable endpoints on their own port. Currently that
+ * is the MS Teams incoming webhook; other endpoints that must be reachable
+ * from the Internet may join it later.
  *
- * It registers the exact same route handlers as the main server, and the main
- * API port keeps serving these endpoints in every configuration. The dedicated
+ * It registers the exact same route handler as the main server, and the main
+ * API port keeps serving the endpoint in every configuration. The dedicated
  * port exists so a firewall can expose only the endpoints that must be
  * publicly reachable without exposing the whole API.
  *
- * As on the main port, these routes authenticate in-route (A2A bearer tokens /
- * Bot Framework JWT validation), so the auth plugin is not registered here.
+ * As on the main port, the webhook authenticates in-route (Bot Framework JWT
+ * validation), so the auth plugin is not registered here.
  */
 let publicEndpointsServerInstance: FastifyInstanceWithZod | null = null;
 
@@ -811,13 +811,11 @@ const startPublicEndpointsServer = async () => {
 
   server.get(HEALTH_PATH, () => ({ status: "ok" }));
 
-  await server.register(routes.a2aRoutes);
-  await server.register(routes.a2aV2Routes);
   await server.register(msTeamsWebhookRoutes);
 
   await server.listen({ port: publicEndpointsPort, host });
   server.log.info(
-    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's A2A + MS Teams webhook endpoints)`,
+    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's MS Teams webhook endpoint)`,
   );
 };
 
@@ -1351,8 +1349,8 @@ const startWebServer = async () => {
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
 
-    // Optional dedicated listener aliasing the A2A endpoints and the MS Teams
-    // webhook on their own port (see startPublicEndpointsServer).
+    // Optional dedicated listener aliasing the MS Teams webhook on its own
+    // port (see startPublicEndpointsServer).
     await startPublicEndpointsServer();
 
     // Start WebSocket server using the same HTTP server

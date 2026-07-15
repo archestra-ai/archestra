@@ -702,7 +702,7 @@ The following environment variables can be used to configure Archestra Platform.
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
-- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Dedicated TCP port for the publicly-exposable endpoints: A2A (`/v1/a2a` and `/v2/a2a`) and the MS Teams incoming webhook (`/api/webhooks/chatops/ms-teams`).
+- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Dedicated TCP port for the publicly-exposable endpoints — currently the MS Teams incoming webhook (`/api/webhooks/chatops/ms-teams`).
   - Default: Not set (these endpoints are served on the main API port only)
   - When set, a second listener serves these endpoints on this port. The main API port keeps serving them too — the dedicated port is an alias.
   - Use case: expose only these endpoints to the Internet in a firewall or load balancer, without exposing the whole API

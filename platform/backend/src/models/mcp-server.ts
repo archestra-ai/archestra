@@ -472,13 +472,16 @@ class McpServerModel {
    * resource. Backs external open-in-chat (a card's `(mcpServerId,
    * resourceUri)` must resolve to a real, accessible UI resource before a
    * conversation is seeded; the input schema decides render-vs-prompt mode).
-   * Returns null when the install is not accessible or exposes no such
-   * resource.
+   * Several tools of one server can share a resource; pass `toolName` to
+   * resolve one specific tool's entry (pinning), omit it to accept any
+   * (open-in-chat). Returns null when the install is not accessible or
+   * exposes no such resource.
    */
   static async findInstalledUiResourceForCaller(params: {
     userId: string;
     mcpServerId: string;
     resourceUri: string;
+    toolName?: string;
   }): Promise<{
     catalogId: string;
     serverName: string;
@@ -499,7 +502,11 @@ class McpServerModel {
     const uiApps = await McpServerModel.getUiApps({
       catalogIds: [server.catalogId],
     });
-    const match = uiApps.find((a) => a.resourceUri === params.resourceUri);
+    const match = uiApps.find(
+      (a) =>
+        a.resourceUri === params.resourceUri &&
+        (params.toolName === undefined || a.toolName === params.toolName),
+    );
     if (!match) return null;
 
     return {

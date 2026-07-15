@@ -324,6 +324,7 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
             source: "external",
             mcpServerId: app.mcpServerId,
             resourceUri: app.resourceUri,
+            toolName: app.toolName,
           }}
         />
         {/* A tool with required inputs only opens via the chat prompt flow —

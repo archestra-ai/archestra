@@ -746,7 +746,7 @@ export const unpinApp = <ThrowOnError extends boolean = false>(options: Options<
 export const pinApp = <ThrowOnError extends boolean = false>(options: Options<PinAppData, ThrowOnError>) => (options.client ?? client).put<PinAppResponses, PinAppErrors, ThrowOnError>({ url: '/api/apps/{appId}/pin', ...options });
 
 /**
- * Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` rides the query string (DELETE carries no body).
+ * Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` and `toolName` ride the query string (DELETE carries no body).
  *
  * Authentication:
  *
@@ -759,7 +759,7 @@ export const pinApp = <ThrowOnError extends boolean = false>(options: Options<Pi
 export const unpinExternalApp = <ThrowOnError extends boolean = false>(options: Options<UnpinExternalAppData, ThrowOnError>) => (options.client ?? client).delete<UnpinExternalAppResponses, UnpinExternalAppErrors, ThrowOnError>({ url: '/api/apps/external/{mcpServerId}/pin', ...options });
 
 /**
- * Pin an external (MCP-server) UI app for the current user, identified like open-in-chat by install + resource. Personal — does not affect other members.
+ * Pin an external (MCP-server) UI app for the current user, identified by install + resource + tool (several tools of one server can share a UI resource, so the tool name pins one tile, not the group). Personal — does not affect other members.
  *
  * Authentication:
  *

@@ -54497,6 +54497,9 @@
                               "resourceUri": {
                                 "type": "string"
                               },
+                              "toolName": {
+                                "type": "string"
+                              },
                               "icon": {
                                 "nullable": true,
                                 "type": "string"
@@ -54516,6 +54519,7 @@
                               "mcpServerId",
                               "scope",
                               "resourceUri",
+                              "toolName",
                               "icon",
                               "requiresInput"
                             ],
@@ -57065,7 +57069,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Pin an external (MCP-server) UI app for the current user, identified like open-in-chat by install + resource. Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
+        "description": "Pin an external (MCP-server) UI app for the current user, identified by install + resource + tool (several tools of one server can share a UI resource, so the tool name pins one tile, not the group). Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "requestBody": {
           "required": true,
           "content": {
@@ -57076,10 +57080,15 @@
                   "resourceUri": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "toolName": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
-                  "resourceUri"
+                  "resourceUri",
+                  "toolName"
                 ]
               }
             }
@@ -57361,7 +57370,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` rides the query string (DELETE carries no body).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
+        "description": "Remove the current user's pin on an external app. Idempotent; intentionally no access check, so a stale pin on an install the user lost access to can still be cleared. `resourceUri` and `toolName` ride the query string (DELETE carries no body).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
@@ -57370,6 +57379,15 @@
             },
             "in": "query",
             "name": "resourceUri",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "toolName",
             "required": true
           },
           {

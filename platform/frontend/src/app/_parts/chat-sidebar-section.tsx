@@ -307,6 +307,7 @@ export function ChatSidebarSection({
               source: "external",
               mcpServerId: appItem.mcpServerId,
               resourceUri: appItem.resourceUri,
+              toolName: appItem.toolName,
             },
     });
   };

@@ -172,11 +172,19 @@ export function useOpenExternalAppInChat() {
 
 /**
  * The identity of a pinnable Apps-surface item, matching the list's
- * discriminated union: owned apps by id, external apps by (install, resource).
+ * discriminated union: owned apps by id, external apps by (install, resource,
+ * tool). The tool name is part of the identity because several tools of one
+ * server can share a ui:// resource yet list as separate tiles — a pin must
+ * land on one tile, not the group.
  */
 export type PinAppTarget =
   | { source: "owned"; appId: string }
-  | { source: "external"; mcpServerId: string; resourceUri: string };
+  | {
+      source: "external";
+      mcpServerId: string;
+      resourceUri: string;
+      toolName: string;
+    };
 
 type AppsListResponse = archestraApiTypes.GetAppsResponses["200"];
 type AppListItem = AppsListResponse["data"][number];
@@ -186,7 +194,8 @@ function matchesPinTarget(app: AppListItem, target: PinAppTarget): boolean {
     ? app.source === "owned" && app.id === target.appId
     : app.source === "external" &&
         app.mcpServerId === target.mcpServerId &&
-        app.resourceUri === target.resourceUri;
+        app.resourceUri === target.resourceUri &&
+        app.toolName === target.toolName;
 }
 
 /**
@@ -231,11 +240,17 @@ export function usePinApp() {
           : pinned
             ? await pinExternalApp({
                 path: { mcpServerId: target.mcpServerId },
-                body: { resourceUri: target.resourceUri },
+                body: {
+                  resourceUri: target.resourceUri,
+                  toolName: target.toolName,
+                },
               })
             : await unpinExternalApp({
                 path: { mcpServerId: target.mcpServerId },
-                query: { resourceUri: target.resourceUri },
+                query: {
+                  resourceUri: target.resourceUri,
+                  toolName: target.toolName,
+                },
               });
       if (error) {
         handleApiError(error);

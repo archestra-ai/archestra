@@ -1,15 +1,21 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 
-/** The listing identity of an external app: one UI resource of one install. */
+/**
+ * The listing identity of an external app: one tool tile of one install. The
+ * tool name is part of the identity because several tools of one server can
+ * share a single ui:// resource yet list as separate tiles — a pin must land
+ * on one tile, not the whole group.
+ */
 interface ExternalAppPinRef {
   mcpServerId: string;
   resourceUri: string;
+  toolName: string;
 }
 
 /** Map key for an external pin, matching the Apps page's React key shape. */
 function externalKey(ref: ExternalAppPinRef): string {
-  return `${ref.mcpServerId}:${ref.resourceUri}`;
+  return `${ref.mcpServerId}:${ref.resourceUri}:${ref.toolName}`;
 }
 
 /**
@@ -44,12 +50,14 @@ class AppPinModel {
         userId: params.userId,
         mcpServerId: params.mcpServerId,
         resourceUri: params.resourceUri,
+        toolName: params.toolName,
       })
       .onConflictDoUpdate({
         target: [
           schema.appPinsTable.userId,
           schema.appPinsTable.mcpServerId,
           schema.appPinsTable.resourceUri,
+          schema.appPinsTable.toolName,
         ],
         targetWhere: isNotNull(schema.appPinsTable.mcpServerId),
         set: { pinnedAt: new Date() },
@@ -82,6 +90,7 @@ class AppPinModel {
           eq(schema.appPinsTable.userId, params.userId),
           eq(schema.appPinsTable.mcpServerId, params.mcpServerId),
           eq(schema.appPinsTable.resourceUri, params.resourceUri),
+          eq(schema.appPinsTable.toolName, params.toolName),
         ),
       );
   }
@@ -111,8 +120,9 @@ class AppPinModel {
 
   /**
    * `pinnedAt` per external app for one user, keyed
-   * `"<mcpServerId>:<resourceUri>"` (use {@link AppPinModel.externalPinKey}).
-   * One query over the user's external pins, filtered to the requested refs.
+   * `"<mcpServerId>:<resourceUri>:<toolName>"` (use
+   * {@link AppPinModel.externalPinKey}). One query over the user's external
+   * pins, filtered to the requested refs.
    */
   static async getPinnedAtForExternalApps(params: {
     userId: string;
@@ -123,6 +133,7 @@ class AppPinModel {
       .select({
         mcpServerId: schema.appPinsTable.mcpServerId,
         resourceUri: schema.appPinsTable.resourceUri,
+        toolName: schema.appPinsTable.toolName,
         pinnedAt: schema.appPinsTable.pinnedAt,
       })
       .from(schema.appPinsTable)
@@ -136,9 +147,13 @@ class AppPinModel {
     const map = new Map<string, Date>();
     for (const r of rows) {
       if (r.mcpServerId === null || r.resourceUri === null) continue;
+      // Legacy rows from before pins were tool-scoped carry no tool name and
+      // are cleared by migration; skip defensively regardless.
+      if (r.toolName === null) continue;
       const key = externalKey({
         mcpServerId: r.mcpServerId,
         resourceUri: r.resourceUri,
+        toolName: r.toolName,
       });
       if (wanted.has(key)) map.set(key, r.pinnedAt);
     }

@@ -28,6 +28,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   name: "Archestra PM / show_board",
   description: "Shows the project board",
   resourceUri: "ui://pm/board.html",
+  toolName: "show_board",
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
   pinnedAt: null,

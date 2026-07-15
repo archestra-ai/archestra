@@ -165,6 +165,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           refs: external.map((catalogApp) => ({
             mcpServerId: catalogApp.mcpServerId,
             resourceUri: catalogApp.resourceUri,
+            toolName: catalogApp.toolName,
           })),
         }),
       ]);
@@ -194,6 +195,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: externalAppLabel(catalogApp),
           description: catalogApp.toolDescription,
           resourceUri: catalogApp.resourceUri,
+          toolName: catalogApp.toolName,
           // The server's registry icon (emoji or data URL) so the card can
           // show which server the app comes from.
           icon: catalogApp.serverIcon,
@@ -205,6 +207,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
               AppPinModel.externalPinKey({
                 mcpServerId: catalogApp.mcpServerId,
                 resourceUri: catalogApp.resourceUri,
+                toolName: catalogApp.toolName,
               }),
             ) ?? null,
         })),
@@ -464,21 +467,30 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.PinExternalApp,
         description:
           "Pin an external (MCP-server) UI app for the current user, identified " +
-          "like open-in-chat by install + resource. Personal — does not affect " +
-          "other members.",
+          "by install + resource + tool (several tools of one server can share " +
+          "a UI resource, so the tool name pins one tile, not the group). " +
+          "Personal — does not affect other members.",
         tags: ["Apps"],
         params: z.object({ mcpServerId: UuidIdSchema }),
-        body: z.object({ resourceUri: z.string().min(1) }),
+        body: z.object({
+          resourceUri: z.string().min(1),
+          toolName: z.string().min(1),
+        }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
     },
-    async ({ params: { mcpServerId }, body: { resourceUri }, user }, reply) => {
+    async (
+      { params: { mcpServerId }, body: { resourceUri, toolName }, user },
+      reply,
+    ) => {
       // Same gate as external open-in-chat: the install must be accessible and
-      // actually expose this UI resource (404s otherwise, no existence leak).
+      // actually expose this UI resource for this tool (404s otherwise, no
+      // existence leak).
       const uiResource = await McpServerModel.findInstalledUiResourceForCaller({
         userId: user.id,
         mcpServerId,
         resourceUri,
+        toolName,
       });
       if (!uiResource) {
         throw new ApiError(404, "No runnable app found for this install.");
@@ -487,6 +499,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         mcpServerId,
         resourceUri,
+        toolName,
       });
       return reply.send({ ok: true as const });
     },
@@ -500,22 +513,26 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Remove the current user's pin on an external app. Idempotent; " +
           "intentionally no access check, so a stale pin on an install the " +
-          "user lost access to can still be cleared. `resourceUri` rides the " +
-          "query string (DELETE carries no body).",
+          "user lost access to can still be cleared. `resourceUri` and " +
+          "`toolName` ride the query string (DELETE carries no body).",
         tags: ["Apps"],
         params: z.object({ mcpServerId: UuidIdSchema }),
-        querystring: z.object({ resourceUri: z.string().min(1) }),
+        querystring: z.object({
+          resourceUri: z.string().min(1),
+          toolName: z.string().min(1),
+        }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
     },
     async (
-      { params: { mcpServerId }, query: { resourceUri }, user },
+      { params: { mcpServerId }, query: { resourceUri, toolName }, user },
       reply,
     ) => {
       await AppPinModel.unpinExternal({
         userId: user.id,
         mcpServerId,
         resourceUri,
+        toolName,
       });
       return reply.send({ ok: true as const });
     },

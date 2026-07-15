@@ -46,11 +46,16 @@ const ownedApp = (pinnedAt: string | null) => ({
   name: "Owned App",
   pinnedAt,
 });
-const externalApp = (pinnedAt: string | null, resourceUri = "ui://widget") => ({
+const externalApp = (
+  pinnedAt: string | null,
+  toolName = "create_ticket",
+  resourceUri = "ui://widget",
+) => ({
   source: "external",
   mcpServerId: "server-1",
   resourceUri,
-  name: "Server / tool",
+  toolName,
+  name: `Server / ${toolName}`,
   pinnedAt,
 });
 
@@ -114,18 +119,20 @@ describe("usePinApp", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 
-  it("pins every external tile sharing the install + resource identity, and only those", async () => {
+  it("pins exactly one external tool tile, even when other tools share its ui resource", async () => {
     vi.mocked(archestraApiSdk.pinExternalApp).mockResolvedValue({
       error: undefined,
     } as never);
 
     const { queryClient, result } = setup();
+    // Three tools of one server, two of them sharing "ui://widget" — the shape
+    // that previously made one pin fan out across the whole group.
     queryClient.setQueryData(
       plainKey,
       listResponse([
-        externalApp(null),
-        externalApp(null),
-        externalApp(null, "ui://other-widget"),
+        externalApp(null, "create_ticket"),
+        externalApp(null, "edit_ticket"),
+        externalApp(null, "search_tickets", "ui://other-widget"),
         ownedApp(null),
       ]),
     );
@@ -136,15 +143,20 @@ describe("usePinApp", () => {
         source: "external",
         mcpServerId: "server-1",
         resourceUri: "ui://widget",
+        toolName: "create_ticket",
       },
     });
 
     await waitFor(() => {
       const pins = pinnedOf(queryClient, plainKey);
       expect(pins[0]).not.toBeNull();
-      expect(pins[1]).not.toBeNull();
+      expect(pins[1]).toBeNull();
       expect(pins[2]).toBeNull();
       expect(pins[3]).toBeNull();
+    });
+    expect(vi.mocked(archestraApiSdk.pinExternalApp)).toHaveBeenCalledWith({
+      path: { mcpServerId: "server-1" },
+      body: { resourceUri: "ui://widget", toolName: "create_ticket" },
     });
   });
 

@@ -15712,6 +15712,7 @@ export type GetAppsResponses = {
             mcpServerId: string;
             scope: 'personal' | 'team' | 'org';
             resourceUri: string;
+            toolName: string;
             icon: string | null;
             requiresInput: boolean;
         }>;
@@ -16409,6 +16410,7 @@ export type UnpinExternalAppData = {
     };
     query: {
         resourceUri: string;
+        toolName: string;
     };
     url: '/api/apps/external/{mcpServerId}/pin';
 };
@@ -16492,6 +16494,7 @@ export type UnpinExternalAppResponse = UnpinExternalAppResponses[keyof UnpinExte
 export type PinExternalAppData = {
     body: {
         resourceUri: string;
+        toolName: string;
     };
     path: {
         mcpServerId: string;

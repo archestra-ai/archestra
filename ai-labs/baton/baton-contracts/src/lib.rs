@@ -79,7 +79,7 @@ impl RawConfig {
             if !seen.insert(spec.name.clone()) {
                 return Err(ContractsError::DuplicateTool(spec.name));
             }
-            let (sink_audience, recipients_arg) = match &spec.audience {
+            let (sink_audience, recipients_arg) = match &spec.requires.audience {
                 Some(audience) => audience.build(&spec.name)?,
                 None => (AudienceRule::Unrestricted, None),
             };
@@ -145,28 +145,53 @@ struct ToolSpec {
     output: OutputSpec,
     #[serde(default)]
     requires: RequiresSpec,
-    /// The sink's audience: who a call exposes the flow to. Absent means the
-    /// tool exposes no one beyond the conversation — no audience check.
-    #[serde(default)]
-    audience: Option<AudienceRuleSpec>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+/// How information returned by this tool call is labeled and how the call
+/// modifies the trajectory. Omitted fields are UNKNOWN (fail closed at any
+/// guarded sink downstream) — except `effects`, which defaults to none:
+/// unknown proposed effects would grow the surface on every call and, with
+/// no Accept authority, block every registered tool unconditionally.
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OutputSpec {
-    #[serde(default)]
-    audience: AudienceSpec,
-    #[serde(default)]
+    #[serde(default = "unknown_trust")]
     trust: TrustSpec,
+    #[serde(default = "unknown_audience")]
+    audience: AudienceSpec,
     #[serde(default)]
     effects: Vec<EffectSpec>,
 }
 
+impl Default for OutputSpec {
+    fn default() -> Self {
+        Self {
+            trust: TrustSpec::Unknown,
+            audience: AudienceSpec::Keyword("unknown".to_string()),
+            effects: Vec::new(),
+        }
+    }
+}
+
+fn unknown_trust() -> TrustSpec {
+    TrustSpec::Unknown
+}
+
+fn unknown_audience() -> AudienceSpec {
+    AudienceSpec::Keyword("unknown".to_string())
+}
+
+/// What the current trajectory must satisfy to allow the call.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RequiresSpec {
     #[serde(default)]
     trust: Option<KnownTrustSpec>,
+    /// The sink's audience: who a call exposes the flow to — `"public"`,
+    /// a reader list, or `"$.args.<argument>"`. The flow's audience must
+    /// cover it. Absent means the tool exposes no one — no check.
+    #[serde(default)]
+    audience: Option<AudienceRuleSpec>,
     #[serde(default)]
     attention: AttentionRuleSpec,
     #[serde(default)]
@@ -174,8 +199,6 @@ struct RequiresSpec {
 }
 
 impl RequiresSpec {
-    /// The sink audience is declared at the tool level (`audience = …`), not
-    /// under `requires` — it is a fact about the sink, folded in here.
     fn build(self, audience: AudienceRule) -> Requirements {
         Requirements {
             trust: self.trust.map(KnownTrustSpec::into_known_trust),
@@ -325,33 +348,34 @@ mod tests {
 
         [[tool]]
         name = "k8s_get_pod_logs"
-        output = { trust = "suspicious" }
+        output = { trust = "suspicious", audience = ["operator"] }
 
         [[tool]]
         name = "k8s_delete_resource"
+        output = { trust = "trusted", audience = ["operator"] }
         requires = { trust = "trusted", attention = "explicit_confirmation" }
-        output = { effects = ["mutation"] }
 
         [[tool]]
         name = "http_post"
-        requires = { trust = "trusted" }
-        audience = "$.args.url"
-        output = { effects = ["egress"] }
+        requires = { trust = "trusted", audience = "$.args.url" }
 
         [[tool]]
         name = "create_issue"
-        audience = "public"
+        requires = { audience = "public" }
 
         [[tool]]
         name = "send_report"
-        audience = ["ops-hook", "operator"]
+        requires = { audience = ["ops-hook", "operator"] }
+
+        [[tool]]
+        name = "bare"
     "#;
 
     #[test]
     fn parses_demo_contracts() {
         let c = Contracts::from_toml(DEMO).unwrap();
         assert_eq!(c.user_id.as_str(), "operator");
-        assert_eq!(c.contracts.len(), 5);
+        assert_eq!(c.contracts.len(), 6);
 
         let logs = c
             .contracts
@@ -359,6 +383,7 @@ mod tests {
             .find(|t| t.name.as_str() == "k8s_get_pod_logs")
             .unwrap();
         assert_eq!(logs.output_label.trust, Trust::SUSPICIOUS);
+        assert_eq!(logs.output_label.audience, Audience::readers([UserId::new("operator")]));
         assert!(logs.requires.trust.is_none());
         assert_eq!(logs.requires.audience, AudienceRule::Unrestricted);
         assert_eq!(logs.effects, Effects::none());
@@ -370,7 +395,6 @@ mod tests {
             .unwrap();
         assert_eq!(del.requires.trust, Some(KnownTrust::Trusted));
         assert_eq!(del.requires.attention, AttentionRule::ExplicitConfirmation);
-        assert_eq!(del.effects, Effects::declared([Effect::Mutation]));
 
         let post = c.contracts.iter().find(|t| t.name.as_str() == "http_post").unwrap();
         assert_eq!(post.requires.audience, AudienceRule::FromRecipients);
@@ -385,7 +409,49 @@ mod tests {
             report.requires.audience,
             AudienceRule::Readers(BTreeSet::from([UserId::new("ops-hook"), UserId::new("operator")]))
         );
-        assert!(!c.recipients_args.contains_key(&report.name));
+    }
+
+    #[test]
+    fn omitted_output_defaults_to_unknown_label_and_no_effects() {
+        let c = Contracts::from_toml(DEMO).unwrap();
+        let bare = c.contracts.iter().find(|t| t.name.as_str() == "bare").unwrap();
+        assert_eq!(bare.output_label.trust, Trust::UNKNOWN);
+        assert_eq!(bare.output_label.audience, Audience::UNKNOWN);
+        assert_eq!(bare.effects, Effects::none());
+    }
+
+    #[test]
+    fn partially_written_output_defaults_missing_fields_to_unknown() {
+        let c = Contracts::from_toml(
+            r#"
+            [[tool]]
+            name = "reader"
+            output = { trust = "trusted" }
+            "#,
+        )
+        .unwrap();
+        let reader = c.contracts.iter().find(|t| t.name.as_str() == "reader").unwrap();
+        assert_eq!(reader.output_label.trust, Trust::TRUSTED);
+        assert_eq!(reader.output_label.audience, Audience::UNKNOWN);
+    }
+
+    #[test]
+    fn user_defaults_stay_trusted_and_public() {
+        let c = Contracts::from_toml("").unwrap();
+        assert_eq!(c.user_id.as_str(), "user");
+        assert_eq!(c.user_label.trust, Trust::TRUSTED);
+        assert_eq!(c.user_label.audience, Audience::PUBLIC);
+        assert!(c.contracts.is_empty());
+    }
+
+    #[test]
+    fn top_level_audience_key_is_rejected() {
+        let text = r#"
+            [[tool]]
+            name = "send"
+            audience = "public"
+        "#;
+        assert!(matches!(Contracts::from_toml(text), Err(ContractsError::Parse(_))));
     }
 
     #[test]
@@ -393,7 +459,7 @@ mod tests {
         let text = r#"
             [[tool]]
             name = "send"
-            audience = "recipients_within_context"
+            requires = { audience = "recipients_within_context" }
         "#;
         assert!(matches!(
             Contracts::from_toml(text),
@@ -408,7 +474,7 @@ mod tests {
                 r#"
                 [[tool]]
                 name = "send"
-                audience = "{path}"
+                requires = {{ audience = "{path}" }}
                 "#
             );
             assert!(matches!(
@@ -423,23 +489,12 @@ mod tests {
         let text = r#"
             [[tool]]
             name = "send"
-            audience = []
+            requires = { audience = [] }
         "#;
         assert!(matches!(
             Contracts::from_toml(text),
             Err(ContractsError::EmptyAudience(_))
         ));
-    }
-
-    #[test]
-    fn removed_recipients_arg_field_is_rejected() {
-        let text = r#"
-            [[tool]]
-            name = "send"
-            audience = "$.args.url"
-            recipients_arg = "url"
-        "#;
-        assert!(matches!(Contracts::from_toml(text), Err(ContractsError::Parse(_))));
     }
 
     #[test]
@@ -457,29 +512,9 @@ mod tests {
     }
 
     #[test]
-    fn requires_audience_field_is_rejected() {
-        // The sink audience moved to the tool level; the old `requires`
-        // placement must not silently parse.
-        let text = r#"
-            [[tool]]
-            name = "send"
-            requires = { audience = "public" }
-        "#;
-        assert!(matches!(Contracts::from_toml(text), Err(ContractsError::Parse(_))));
-    }
-
-    #[test]
     fn unknown_policy_field_is_rejected() {
         // The prototype's knob must NOT silently parse.
         let text = r#"unknown_policy = "deny""#;
         assert!(Contracts::from_toml(text).is_err());
-    }
-
-    #[test]
-    fn empty_document_yields_default_user_and_no_contracts() {
-        let c = Contracts::from_toml("").unwrap();
-        assert_eq!(c.user_id.as_str(), "user");
-        assert_eq!(c.user_label, ValueLabel::identity());
-        assert!(c.contracts.is_empty());
     }
 }

@@ -1055,15 +1055,11 @@ function McpServerPill({
       {showCredentialSelector && (
         <div className="p-4 border-b space-y-2 shrink-0">
           <Label className="text-sm font-medium">Connect on behalf of</Label>
-          <p className="text-xs text-muted-foreground">
-            By default, credentials resolve at call time per the server's
-            default credential setting. Pin a specific connection to always use
-            it for these tools instead.
-          </p>
           <TokenSelect
             catalogId={catalogItem.id}
             assignmentScope={assignmentScope}
             assignmentTeamIds={assignmentTeamIds}
+            agentScope={assignmentScope}
             value={selectedCredential}
             onValueChange={setSelectedCredential}
             shouldSetDefaultValue={false}

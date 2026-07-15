@@ -1,8 +1,8 @@
 "use client";
 
 import { type AgentScope, E2eTestId } from "@archestra/shared";
-import { Zap } from "lucide-react";
-import { useEffect } from "react";
+import { RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -10,10 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSession } from "@/lib/auth/auth.query";
 import { useMcpServersGroupedByCatalog } from "@/lib/mcp/mcp-server.query";
 import { cn } from "@/lib/utils";
 import Divider from "./divider";
 import { LoadingSpinner } from "./loading";
+import { StaticCredentialConfirmDialog } from "./static-credential-confirm-dialog";
 
 // Special value for dynamic team credential option
 export const DYNAMIC_CREDENTIAL_VALUE = "__dynamic__";
@@ -29,6 +31,13 @@ interface TokenSelectProps {
   assignmentTeamIds?: string[];
   shouldSetDefaultValue: boolean;
   prefersEnterpriseManaged?: boolean;
+  /**
+   * Scope of the agent this credential is assigned to. Picking a personal-scope
+   * connection for a shared (team/org) agent makes every caller authenticate as
+   * that one owner, so it is confirmed on selection. A personal agent is
+   * single-user and skips the confirmation. Unknown scope falls to the safe side.
+   */
+  agentScope?: AgentScope;
 }
 
 /**
@@ -47,7 +56,11 @@ export function TokenSelect({
   assignmentTeamIds,
   shouldSetDefaultValue,
   prefersEnterpriseManaged = false,
+  agentScope,
 }: TokenSelectProps) {
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+
   const groupedCredentials = useMcpServersGroupedByCatalog({
     catalogId,
     assignmentScope,
@@ -84,6 +97,34 @@ export function TokenSelect({
     }
   }, []);
 
+  const [pendingPersonalPin, setPendingPersonalPin] = useState<{
+    id: string;
+    mcpName: string;
+    ownerEmail: string;
+    isCurrentUser: boolean;
+  } | null>(null);
+
+  // A personal connection pinned to a shared agent authenticates every caller
+  // as that one owner; confirm the pick before applying it. A personal agent is
+  // single-user, so it skips the gate; unknown scope falls to the safe side.
+  const isSharedAgent = agentScope !== "personal";
+
+  const handleSelect = (newValue: string | null) => {
+    if (isSharedAgent && newValue && newValue !== DYNAMIC_CREDENTIAL_VALUE) {
+      const server = mcpServers.find((s) => s.id === newValue);
+      if (server?.scope === "personal") {
+        setPendingPersonalPin({
+          id: server.id,
+          mcpName: server.catalogName ?? server.name,
+          ownerEmail: server.ownerEmail || "Deleted user",
+          isCurrentUser: !!currentUserId && server.ownerId === currentUserId,
+        });
+        return;
+      }
+    }
+    onValueChange(newValue);
+  };
+
   if (isLoading) {
     return <LoadingSpinner className="w-3 h-3 inline-block ml-2" />;
   }
@@ -97,108 +138,131 @@ export function TokenSelect({
   }
 
   return (
-    <Select
-      value={value ?? ""}
-      onValueChange={onValueChange}
-      disabled={disabled || isLoading}
-    >
-      <SelectTrigger
-        className={cn(
-          "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0! text-xs font-normal",
-          className,
-        )}
-        size="sm"
-        data-testid={E2eTestId.TokenSelect}
+    <>
+      <Select
+        value={value ?? ""}
+        onValueChange={handleSelect}
+        disabled={disabled || isLoading}
       >
-        <SelectValue placeholder="Select connection..." />
-      </SelectTrigger>
-      <SelectContent>
-        <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-          Dynamic
-        </div>
-        <SelectItem
-          value={DYNAMIC_CREDENTIAL_VALUE}
-          className="cursor-pointer"
-          description={
-            prefersEnterpriseManaged
-              ? "Ask your identity provider for a runtime credential for this server."
-              : "Follow the server's default credential setting — the caller's own connection, unless the server always uses one account."
-          }
+        <SelectTrigger
+          className={cn(
+            "h-fit! w-fit! bg-transparent! border-none! shadow-none! ring-0! outline-none! focus:ring-0! focus:outline-none! focus:border-none! p-0! text-xs font-normal",
+            className,
+          )}
+          size="sm"
+          data-testid={E2eTestId.TokenSelect}
         >
-          <div className="flex items-center gap-1">
-            <Zap className="h-3! w-3! text-amber-500" />
-            <span>Resolve at call time</span>
+          <SelectValue placeholder="Select connection..." />
+        </SelectTrigger>
+        <SelectContent>
+          <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+            Dynamic
           </div>
-        </SelectItem>
-        {mcpServers.length > 0 ? (
-          <>
-            {organizationCredentials.length > 0 && (
-              <>
-                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-                  Static - Organization Credentials
-                </div>
-                {organizationCredentials.map((server) => (
-                  <SelectItem
-                    key={server.id}
-                    value={server.id}
-                    className="cursor-pointer"
-                    data-testid={E2eTestId.StaticCredentialToUse}
-                    description="Available to the organization"
-                  >
-                    Organization
-                  </SelectItem>
-                ))}
-              </>
-            )}
-            <Divider className="my-2" />
-            {teamCredentials.length > 0 && (
-              <>
-                <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
-                  Static - Team Credentials
-                </div>
-                {teamCredentials.map((server) => (
-                  <SelectItem
-                    key={server.id}
-                    value={server.id}
-                    className="cursor-pointer"
-                    data-testid={E2eTestId.StaticCredentialToUse}
-                    description={`Shared with team ${server.teamDetails?.name ?? "Unknown team"}`}
-                  >
-                    {server.teamDetails?.name ?? "Unknown team"}
-                  </SelectItem>
-                ))}
-              </>
-            )}
-            {userCredentials.length > 0 && (
-              <>
-                <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-                  Static - User Credentials
-                </div>
-                {userCredentials.map((server) => (
-                  <SelectItem
-                    key={server.id}
-                    value={server.id}
-                    className="cursor-pointer"
-                    data-testid={E2eTestId.StaticCredentialToUse}
-                    description={`Owned by ${server.ownerEmail || "Deleted user"}`}
-                  >
-                    {server.ownerEmail || "Deleted user"}
-                  </SelectItem>
-                ))}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
-              Static
+          <SelectItem
+            value={DYNAMIC_CREDENTIAL_VALUE}
+            className="cursor-pointer"
+            description={
+              prefersEnterpriseManaged
+                ? "Ask your identity provider for a runtime credential for this server."
+                : "Follow the server's default credential setting — the caller's own connection, unless the server always uses one account."
+            }
+          >
+            <div className="flex items-center gap-1">
+              <RefreshCw className="h-3! w-3! text-muted-foreground" />
+              <span>Resolve at call time (Recommended)</span>
             </div>
-            <div className="px-2 pb-2 text-xs text-muted-foreground">
-              No saved credentials for this server.
-            </div>
-          </>
-        )}
-      </SelectContent>
-    </Select>
+          </SelectItem>
+          {mcpServers.length > 0 ? (
+            <>
+              {organizationCredentials.length > 0 && (
+                <>
+                  <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                    Static - Organization Credentials
+                  </div>
+                  {organizationCredentials.map((server) => (
+                    <SelectItem
+                      key={server.id}
+                      value={server.id}
+                      className="cursor-pointer"
+                      data-testid={E2eTestId.StaticCredentialToUse}
+                      description="Available to the organization"
+                    >
+                      Organization
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              <Divider className="my-2" />
+              {teamCredentials.length > 0 && (
+                <>
+                  <div className="px-2 pt-1 pb-1 text-xs text-muted-foreground">
+                    Static - Team Credentials
+                  </div>
+                  {teamCredentials.map((server) => (
+                    <SelectItem
+                      key={server.id}
+                      value={server.id}
+                      className="cursor-pointer"
+                      data-testid={E2eTestId.StaticCredentialToUse}
+                      description={`Shared with team ${server.teamDetails?.name ?? "Unknown team"}`}
+                    >
+                      {server.teamDetails?.name ?? "Unknown team"}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              {userCredentials.length > 0 && (
+                <>
+                  <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                    Static - User Credentials
+                  </div>
+                  {userCredentials.map((server) => (
+                    <SelectItem
+                      key={server.id}
+                      value={server.id}
+                      className="cursor-pointer"
+                      data-testid={E2eTestId.StaticCredentialToUse}
+                      description={`Owned by ${server.ownerEmail || "Deleted user"}`}
+                    >
+                      {server.ownerEmail || "Deleted user"}
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
+                Static
+              </div>
+              <div className="px-2 pb-2 text-xs text-muted-foreground">
+                No saved credentials for this server.
+              </div>
+            </>
+          )}
+        </SelectContent>
+      </Select>
+      <StaticCredentialConfirmDialog
+        open={pendingPersonalPin !== null}
+        pins={
+          pendingPersonalPin
+            ? [
+                {
+                  mcpName: pendingPersonalPin.mcpName,
+                  ownerEmail: pendingPersonalPin.ownerEmail,
+                  isCurrentUser: pendingPersonalPin.isCurrentUser,
+                },
+              ]
+            : []
+        }
+        onConfirm={() => {
+          if (pendingPersonalPin) {
+            onValueChange(pendingPersonalPin.id);
+          }
+          setPendingPersonalPin(null);
+        }}
+        onCancel={() => setPendingPersonalPin(null)}
+      />
+    </>
   );
 }

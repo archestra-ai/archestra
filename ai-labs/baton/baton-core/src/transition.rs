@@ -127,7 +127,7 @@ impl ActionTransition {
 }
 
 /// Is `new` verifiably no broader than `old`?
-fn effects_narrow(old: &Effects, new: &Effects) -> bool {
+pub(crate) fn effects_narrow(old: &Effects, new: &Effects) -> bool {
     match (old.declared_set(), new.declared_set()) {
         // Constraining an unknown-effect action to anything declared is the
         // sandbox case.

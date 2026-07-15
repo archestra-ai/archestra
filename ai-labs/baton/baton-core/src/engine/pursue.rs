@@ -1,12 +1,14 @@
 //! Drive one requested flow to a settled outcome: evaluate, then walk the
-//! engine's first remedy plan step by step until the flow is allowed, blocks
-//! terminally, needs an external ruling, or stalls.
+//! frontier's first remedy plan step by step until the flow is allowed,
+//! blocks terminally, needs an external ruling, or stalls.
 //!
 //! This is the common consumer loop, centralized. It encodes exactly one
-//! policy — **the first enumerated plan, one step at a time** — so callers
-//! wanting a different plan choice (shortest, least-authority) or an
-//! auto-approval loop keep driving [`PolicyEngine::mint_step`] /
-//! [`PolicyEngine::apply_step`] themselves.
+//! *consumer* policy — **the first plan in the frontier's deterministic
+//! serialization (fewest steps first, then generation order), one head step
+//! at a time** — never a core-semantics choice: the frontier retains every
+//! nondominated alternative, and callers wanting a different selection
+//! (least-authority, a particular route) keep driving
+//! [`PolicyEngine::mint_step`] / [`PolicyEngine::apply_step`] themselves.
 //!
 //! Two-phase dispatch is untouched: an allowed tool pursuit hands back the
 //! [`ExecutionToken`], and only [`crate::turn::Trajectory::release`] renders
@@ -152,9 +154,9 @@ impl PolicyEngine {
         }
     }
 
-    /// The shared walk: first enumerated plan, head step at a time, abandon
-    /// the pending flow (via `abandon`) on a stall so the trajectory is free
-    /// for the next proposal.
+    /// The shared walk: the frontier's first plan, head step at a time,
+    /// abandon the pending flow (via `abandon`) on a stall so the trajectory
+    /// is free for the next proposal.
     fn drive(
         &self,
         trajectory: &mut Trajectory,

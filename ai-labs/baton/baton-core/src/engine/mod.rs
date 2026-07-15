@@ -9,13 +9,13 @@
 //! unrelated sink, but it still taints any action whose data or control
 //! provenance depends on it.
 //!
-//! The remedy machinery lives here too: a blocked flow enumerates typed
-//! remedy plans (transform, constrain, endorse, accept, waive/acknowledge),
-//! grant-bearing steps (waive, accept, endorse) are competence-routed to an
-//! authority while transforms and constraints execute their registered
-//! implementations directly; every applied step is audited and
-//! rechecked fail-closed. An escalation nothing can clear is an explicit
-//! terminal block.
+//! The remedy machinery lives here too: a blocked flow returns the complete
+//! nondominated frontier of irreducible remedy plans — `Reduce` steps
+//! (derive a value, narrow the action) execute their registered
+//! implementations directly, `Authorize` steps are competence-routed to an
+//! authority; every applied step is audited and rechecked fail-closed. The
+//! search is uncapped, so a terminal block is a proven no-remedy claim over
+//! the registered capability space.
 //!
 //! ```
 //! use baton_core::engine::{
@@ -172,6 +172,3 @@ impl PolicyEngine {
         Ok(())
     }
 }
-
-/// Bound on enumerated plans returned per blocked flow.
-const MAX_PLANS: usize = 8;

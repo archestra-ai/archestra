@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::application::RoutedRuling;
 use super::capability::RESPONSE_SINK;
-use super::planning::select_fair;
+use super::planning::{AskVector, ask_cmp};
 use super::*;
 use crate::approval::{AuthorityMode, Ruling, TrajectoryView};
 use crate::audit::{AuditEvent, AuthorityName};
@@ -2446,65 +2446,217 @@ fn acknowledge_remedy() -> PlannedRemedy {
     )
 }
 
-/// A route's category is its decisive (most authority-dependent) step; a
-/// composite is categorized by that step, not its first.
+/// The dominance order over authorization asks: subset releases dominate
+/// supersets, lower raises dominate higher, absent coordinates dominate
+/// present ones; different coordinate kinds never compare.
 #[test]
-fn route_category_is_the_decisive_step() {
-    use super::planning::RouteCategory;
+fn ask_order_ranks_by_authorization_magnitude() {
+    use std::cmp::Ordering;
+    let release = |ids: &[u64]| {
+        plan_steps(vec![authorize_remedy(
+            DeltaCoordinate::ReleaseControl(ids.iter().copied().map(ValueId::new).collect()),
+            AuthorizationScope::PolicyCheck {
+                flow: crate::revision::FlowId::new(0),
+            },
+        )])
+    };
+    // A subset release asks strictly less.
     assert_eq!(
-        RouteCategory::decisive(&plan_steps(vec![derive_remedy(0)])),
-        RouteCategory::Sanitize
+        ask_cmp(&AskVector::of(&release(&[1])), &AskVector::of(&release(&[1, 2]))),
+        Some(Ordering::Less)
+    );
+    // Overlapping but non-nested sets are incomparable.
+    assert_eq!(
+        ask_cmp(&AskVector::of(&release(&[1])), &AskVector::of(&release(&[2]))),
+        None
+    );
+
+    let raise = |trust: KnownTrust| {
+        plan_steps(vec![authorize_remedy(
+            DeltaCoordinate::RaiseLabel(LabelRaise {
+                trust: Some(trust),
+                audience: None,
+            }),
+            AuthorizationScope::DerivedValue {
+                source: ValueId::new(0),
+            },
+        )])
+    };
+    // A raise to Suspicious asks less than a raise to Trusted.
+    assert_eq!(
+        ask_cmp(
+            &AskVector::of(&raise(KnownTrust::Suspicious)),
+            &AskVector::of(&raise(KnownTrust::Trusted))
+        ),
+        Some(Ordering::Less)
+    );
+    // A raise and a release are different kinds: incomparable.
+    assert_eq!(
+        ask_cmp(
+            &AskVector::of(&raise(KnownTrust::Suspicious)),
+            &AskVector::of(&release(&[1]))
+        ),
+        None
+    );
+
+    // Asking for nothing (a pure reduce plan) dominates any authorization —
+    // whether the reduce derives a value or narrows the action.
+    let reduce_only = plan_steps(vec![derive_remedy(0)]);
+    assert_eq!(
+        ask_cmp(&AskVector::of(&reduce_only), &AskVector::of(&release(&[1]))),
+        Some(Ordering::Less)
     );
     assert_eq!(
-        RouteCategory::decisive(&plan_steps(vec![narrow_remedy()])),
-        RouteCategory::Constrain
+        ask_cmp(
+            &AskVector::of(&plan_steps(vec![narrow_remedy()])),
+            &AskVector::of(&plan_steps(vec![narrow_remedy(), acquire_remedy()]))
+        ),
+        Some(Ordering::Less)
     );
+    // The acknowledge coordinate's presence asks for the competence even
+    // with no facts.
     assert_eq!(
-        RouteCategory::decisive(&plan_steps(vec![acquire_remedy()])),
-        RouteCategory::Accept
-    );
-    assert_eq!(
-        RouteCategory::decisive(&plan_steps(vec![acknowledge_remedy()])),
-        RouteCategory::LiftOrAcknowledge
-    );
-    // [narrow -> acquire] is decided by the acquisition.
-    assert_eq!(
-        RouteCategory::decisive(&plan_steps(vec![narrow_remedy(), acquire_remedy()])),
-        RouteCategory::Accept
-    );
-    // [derive -> acknowledge] is decided by the acknowledgment.
-    assert_eq!(
-        RouteCategory::decisive(&plan_steps(vec![derive_remedy(0), acknowledge_remedy()])),
-        RouteCategory::LiftOrAcknowledge
+        ask_cmp(
+            &AskVector::of(&reduce_only),
+            &AskVector::of(&plan_steps(vec![acknowledge_remedy()]))
+        ),
+        Some(Ordering::Less)
     );
 }
 
-/// With more routes than the cap but no more categories than the cap, fair
-/// selection keeps one route of every category — a flat truncation would
-/// let the many Sanitize routes starve the rest.
+/// Two tainted leaves each need their own derivation — a plan with two
+/// `Reduce` steps, which a single-transform-per-plan search could never
+/// find: the flow would have been falsely Terminal.
 #[test]
-fn cap_fairness_keeps_one_route_per_category() {
-    use super::planning::RouteCategory;
-    let mut pool: Vec<NonEmptyVec<PlannedRemedy>> = Vec::new();
-    for i in 0..6u64 {
-        pool.push(plan_steps(vec![derive_remedy(i)]));
-    }
-    pool.push(plan_steps(vec![narrow_remedy()]));
-    pool.push(plan_steps(vec![acquire_remedy()]));
-    pool.push(plan_steps(vec![acknowledge_remedy()]));
-    // 9 routes, 4 categories, cap 4.
-    let selected = select_fair(pool, 4);
-    assert_eq!(selected.len(), 4);
-    let categories: BTreeSet<RouteCategory> = selected.iter().map(RouteCategory::decisive).collect();
-    assert_eq!(
-        categories,
-        BTreeSet::from([
-            RouteCategory::Sanitize,
-            RouteCategory::Constrain,
-            RouteCategory::Accept,
-            RouteCategory::LiftOrAcknowledge,
-        ])
+fn two_tainted_leaves_each_get_their_own_transform() {
+    let sink = ToolContract {
+        name: ToolName::new("report.save"),
+        requires: Requirements {
+            trust: Some(KnownTrust::Trusted),
+            ..Requirements::default()
+        },
+        output_label: ValueLabel::identity(),
+        effects: Effects::none(),
+        arguments: ArgumentSchema::opaque(),
+    };
+    let mut engine = engine_with([sink]);
+    engine.register_transformer(redact_transformer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let notes = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "notes");
+    let draft = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "draft");
+    let request = ToolRequest::new(
+        ToolName::new("report.save"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("notes"), ArgumentTree::Value(notes)),
+            (ArgumentName::new("draft"), ArgumentTree::Value(draft)),
+        ])),
+        BTreeSet::new(),
     );
+
+    let plans = remediable(&engine, &mut trajectory, request.clone());
+    assert_eq!(plans.len(), 1);
+    let sources: Vec<ValueId> = plans.first().steps.iter().filter_map(derive_step).collect();
+    assert_eq!(sources, vec![notes, draft]);
+
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "saved").unwrap();
+}
+
+/// Only a two-hop chain of registered narrowings (A→B→C) reaches a contract
+/// whose effects propose no growth: a one-transition-per-plan search saw B
+/// still growing and falsely concluded Terminal.
+#[test]
+fn a_two_hop_transition_chain_unlocks() {
+    let contracts = export_chain_contracts(None);
+    let mut engine = engine_with(contracts);
+    register_export_chain(&mut engine);
+    let mut trajectory = Trajectory::new();
+    let payload = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "rows");
+    let request = ToolRequest::new(
+        ToolName::new("db.export"),
+        ArgumentTree::Value(payload),
+        BTreeSet::new(),
+    );
+
+    let plans = remediable(&engine, &mut trajectory, request.clone());
+    assert_eq!(plans.len(), 1);
+    let steps = &plans.first().steps;
+    assert_eq!(narrow_step(steps.first()), Some(&tref("to-readonly")));
+    assert_eq!(narrow_step(steps.get(1).unwrap()), Some(&tref("to-dryrun")));
+    assert_eq!(steps.len(), 2);
+
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "previewed").unwrap();
+    assert_eq!(trajectory.state().past_effects(), &Effects::none());
+}
+
+/// A derivation composes with the two-hop chain when every tool on the
+/// chain keeps the trust bar: three `Reduce` steps, irreducible as a whole.
+#[test]
+fn transform_plus_two_hop_chain_composes() {
+    let contracts = export_chain_contracts(Some(KnownTrust::Trusted));
+    let mut engine = engine_with(contracts);
+    register_export_chain(&mut engine);
+    engine.register_transformer(redact_transformer()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let payload = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "rows");
+    let request = ToolRequest::new(
+        ToolName::new("db.export"),
+        ArgumentTree::Value(payload),
+        BTreeSet::new(),
+    );
+
+    let plans = remediable(&engine, &mut trajectory, request.clone());
+    assert_eq!(plans.len(), 1);
+    let steps = &plans.first().steps;
+    assert_eq!(steps.len(), 3);
+    assert_eq!(derive_step(steps.first()), Some(payload));
+    assert_eq!(narrow_step(steps.get(1).unwrap()), Some(&tref("to-readonly")));
+    assert_eq!(narrow_step(steps.get(2).unwrap()), Some(&tref("to-dryrun")));
+
+    let token = walk_to_permit(&engine, &mut trajectory, request);
+    dispatch(&mut trajectory, token, "previewed").unwrap();
+}
+
+/// The A→B→C narrowing fixture: `db.export` proposes {Egress, Mutation},
+/// `readonly` narrows to {Egress}, `dryrun` to none. With no acquirer
+/// registered, only the full chain avoids surface growth. `trust` optionally
+/// keeps a bar on every hop so a derivation stays load-bearing.
+fn export_chain_contracts(trust: Option<KnownTrust>) -> Vec<ToolContract> {
+    let contract = |name: &str, effects: Effects| ToolContract {
+        name: ToolName::new(name),
+        requires: Requirements {
+            trust,
+            ..Requirements::default()
+        },
+        output_label: ValueLabel::identity(),
+        effects,
+        arguments: ArgumentSchema::opaque(),
+    };
+    vec![
+        contract("db.export", Effects::declared([Effect::Egress, Effect::Mutation])),
+        contract("db.export.readonly", Effects::declared([Effect::Egress])),
+        contract("db.export.dryrun", Effects::none()),
+    ]
+}
+
+fn register_export_chain(engine: &mut PolicyEngine) {
+    engine
+        .register_action_transition(ActionTransition {
+            id: tref("to-readonly"),
+            from_tool: ToolName::new("db.export"),
+            to_tool: ToolName::new("db.export.readonly"),
+            effects: Effects::declared([Effect::Egress]),
+        })
+        .unwrap();
+    engine
+        .register_action_transition(ActionTransition {
+            id: tref("to-dryrun"),
+            from_tool: ToolName::new("db.export.readonly"),
+            to_tool: ToolName::new("db.export.dryrun"),
+            effects: Effects::none(),
+        })
+        .unwrap();
 }
 
 // ---- S8: Constrain <-> Accept composition ----
@@ -2583,10 +2735,6 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
         .iter()
         .find(|p| narrow_step(p.steps.first()) == Some(&tref("readonly")))
         .expect("a constrain-to-readonly route");
-    assert_eq!(
-        super::planning::RouteCategory::decisive(&composite.steps),
-        super::planning::RouteCategory::Accept
-    );
     assert_eq!(composite.steps.len(), 2);
     assert!(
         acquire_step(composite.steps.get(1).unwrap())
@@ -2598,10 +2746,6 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
         .iter()
         .find(|p| narrow_step(p.steps.first()) == Some(&tref("noop")))
         .expect("a constrain-to-noop route");
-    assert_eq!(
-        super::planning::RouteCategory::decisive(&full.steps),
-        super::planning::RouteCategory::Constrain
-    );
     assert_eq!(full.steps.len(), 1);
 
     // Walking the composite commits exactly the reduced effect.
@@ -2737,10 +2881,6 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
     let composite = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
     let kinds: Vec<&str> = composite.steps.iter().map(step_label).collect();
     assert_eq!(kinds, ["sanitize", "constrain", "endorse", "accept"]);
-    assert_eq!(
-        super::planning::RouteCategory::decisive(&composite.steps),
-        super::planning::RouteCategory::Raise
-    );
     // Endorse signs off only the audience — trust was reduced by Sanitize.
     let endorse = composite
         .steps
@@ -2771,23 +2911,29 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
     assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
 }
 
-/// A pool already within the cap is returned unchanged (order preserved).
+/// The frontier is deterministic: the same engine and flow evaluated twice
+/// (fresh trajectories) yields the same plans in the same order.
 #[test]
-fn cap_fairness_is_a_noop_within_the_cap() {
-    let pool: Vec<NonEmptyVec<PlannedRemedy>> = vec![
-        plan_steps(vec![narrow_remedy()]),
-        plan_steps(vec![acknowledge_remedy()]),
-    ];
-    let selected = select_fair(pool.clone(), MAX_PLANS);
-    assert_eq!(selected, pool);
+fn frontier_is_deterministic() {
+    let run = || {
+        let mut engine = engine_with([email_contract()]);
+        engine.register_authority(human()).unwrap();
+        engine.register_transformer(redact_transformer()).unwrap();
+        let mut trajectory = Trajectory::new();
+        let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+        let request = email_request(&mut trajectory, doc, "charlie");
+        let plans = remediable(&engine, &mut trajectory, request);
+        plans.iter().map(|plan| plan.steps.clone()).collect::<Vec<_>>()
+    };
+    assert_eq!(run(), run());
 }
 
-/// End-to-end through `enumerate_plans`: many Constrain routes are generated
-/// before the single (late) Sanitize route, exceeding MAX_PLANS. Fair
-/// selection must still surface the Sanitize category — a flat truncation, or
-/// a generation cap that stopped before the sanitizer, would drop it.
+/// The frontier is uncapped and complete: every registered narrowing route
+/// and the sanitizer route all survive, while reducible composites (a derive
+/// stacked on an already-sufficient narrow, or vice versa) are filtered by
+/// the irreducibility replay.
 #[test]
-fn cap_fairness_rescues_a_late_category_end_to_end() {
+fn frontier_returns_every_route_uncapped() {
     let sink = ToolContract {
         name: ToolName::new("sink"),
         requires: Requirements {
@@ -2798,7 +2944,7 @@ fn cap_fairness_rescues_a_late_category_end_to_end() {
         effects: Effects::none(),
         arguments: ArgumentSchema::opaque(),
     };
-    let variants = MAX_PLANS + 2;
+    let variants = 10;
     let mut contracts = vec![sink];
     for i in 0..variants {
         contracts.push(ToolContract {
@@ -2828,17 +2974,25 @@ fn cap_fairness_rescues_a_late_category_end_to_end() {
     let payload = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "raw");
     let request = ToolRequest::new(ToolName::new("sink"), ArgumentTree::Value(payload), BTreeSet::new());
     let plans = remediable(&engine, &mut trajectory, request);
-    assert!(plans.len() <= MAX_PLANS);
-    assert!(
-        plans
-            .iter()
-            .any(|p| super::planning::RouteCategory::decisive(&p.steps) == super::planning::RouteCategory::Sanitize),
-        "fair selection must keep the late-generated Sanitize route"
+    // Every narrowing route plus the one sanitizer route — no cap; each plan
+    // is a single irreducible step (any derive+narrow composite unlocks with
+    // either step removed, so the replay filter drops it).
+    assert_eq!(plans.len(), variants + 1);
+    assert!(plans.iter().all(|p| p.steps.len() == 1));
+    assert_eq!(
+        plans.iter().filter(|p| derive_step(p.steps.first()).is_some()).count(),
+        1,
+        "the sanitizer route survives uncapped enumeration"
     );
-    assert!(
+    assert_eq!(
         plans
             .iter()
-            .any(|p| super::planning::RouteCategory::decisive(&p.steps) == super::planning::RouteCategory::Constrain)
+            .filter(|p| matches!(
+                p.steps.first(),
+                PlannedRemedy::Reduce(ReductionTarget::NarrowAction { .. })
+            ))
+            .count(),
+        variants
     );
 }
 
@@ -4245,10 +4399,7 @@ fn rescue_composes_an_accept_for_projected_growth() {
     let mut trajectory = Trajectory::new();
     let (_, _, request) = masked_flow(&mut trajectory);
     let plans = remediable(&engine, &mut trajectory, request.clone());
-    assert_eq!(
-        super::planning::RouteCategory::decisive(&plans.first().steps),
-        super::planning::RouteCategory::Raise
-    );
+    assert!(plans.first().steps.iter().any(|step| raise_step(step).is_some()));
     assert!(plans.first().steps.iter().any(|step| acquire_step(step).is_some()));
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "published").unwrap();
@@ -4414,12 +4565,12 @@ fn rescue_external_approval_resolves_the_projected_residual() {
     assert!(matches!(decision, FlowOutcome::Remediable { .. }));
 }
 
-/// Past the exhaustive-search bound the rescue refuses outright — even when
-/// a release-all-anchored search would have found a plan (endorser and
-/// releaser both present, release-all viable). Fail-closed terminal, never a
-/// partial search that inherits the non-monotone blindness.
+/// There is no search bound: the release search streams past 32 control
+/// dependencies (the old fixed-width mask enumeration could not represent
+/// them) and still finds the one-dep release early — sizes ascend, so the
+/// minimum release is reached without sweeping the exponential tail.
 #[test]
-fn rescue_refuses_past_the_exhaustive_bound() {
+fn release_search_streams_past_32_control_deps() {
     let mut engine = engine_with([masked_contract()]);
     engine
         .register_authority(inline_authority("endorser", endorser_mandate(), approve_all))
@@ -4429,21 +4580,23 @@ fn rescue_refuses_past_the_exhaustive_bound() {
         .unwrap();
     let mut trajectory = Trajectory::new();
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
-    let (_, _, mut request) = masked_flow(&mut trajectory);
-    // Under the bound this exact flow is rescued (the composition test
-    // above); pad with neutral identity-label controls until the control set
-    // exceeds the bound and the same flow must refuse instead.
-    for i in 0..12 {
+    let (_, secret, mut request) = masked_flow(&mut trajectory);
+    // Pad with neutral identity-label controls well past 32 total deps.
+    for i in 0..39 {
         request
             .control
             .insert(identity_ingress(&mut trajectory, &format!("noise-{i}")));
     }
-    assert!(request.control.len() > 12);
+    assert!(request.control.len() > 32);
 
-    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
-        panic!("expected the bounded rescue to refuse");
-    };
-    assert_eq!(block.reason, BlockReason::NoRemedy);
+    let plans = remediable(&engine, &mut trajectory, request);
+    let steps = &plans.first().steps;
+    assert!(steps.iter().any(|step| raise_step(step).is_some()));
+    assert_eq!(
+        release_step(steps.get(steps.len() - 1).unwrap()),
+        Some(BTreeSet::from([secret])),
+        "the minimum release names exactly the masking dep, none of the noise"
+    );
 }
 
 /// One raise to the bottom trust bar re-masks the remaining Unknown leaves in

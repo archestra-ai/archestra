@@ -1,10 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::ToolName;
 use crate::approval::{Authority, AuthorityMode};
 use crate::audit::AuthorityName;
 use crate::contract::{AudienceRule, Fixability, Requirements, Unprovable, Verdict, Violation};
-use crate::dimension::{Effects, KnownTrust};
+use crate::dimension::{Effect, Effects, KnownTrust, UserId};
 use crate::plan::NonEmptyVec;
 use crate::remedy::{
     Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, Lift, PlannedRemedy,
@@ -12,12 +13,12 @@ use crate::remedy::{
 };
 use crate::request::{ArgumentTree, EmissionRequest, ToolRequest};
 use crate::revision::{ActionId, FlowId, ValueId};
-use crate::transition::{ActionTransition, RegisteredTransformer};
+use crate::transition::{ActionTransition, effects_narrow};
 use crate::turn::Trajectory;
-use crate::value::{UnknownValue, ValueLabel};
+use crate::value::{TransformerRef, UnknownValue, ValueLabel, ValueStore};
 
+use super::PolicyEngine;
 use super::capability::{RESPONSE_SINK, ResponsePolicy, ToolContract};
-use super::{MAX_PLANS, PolicyEngine};
 
 /// A successful joint-cleanability probe: the per-leaf raises — each with the
 /// projected residual at its own peel, the vector its ruling authority is
@@ -29,39 +30,77 @@ struct JointRescue {
     delta: Lift,
 }
 
-/// Exhaustive-subset bound for the rescue's release search; a larger control
-/// set refuses the rescue outright (fail-closed).
-const RESCUE_EXHAUSTIVE_MAX: usize = 12;
-
-/// A constrain candidate that passed [`PolicyEngine::constrain_gate`]: the
-/// transition with its target contract and the recipients resolved under the
-/// target's schema.
-struct ConstrainCandidate<'a> {
-    transition: &'a ActionTransition,
-    target: &'a ToolContract,
-    recipients: BTreeSet<crate::dimension::UserId>,
-}
-
-/// What the shared enumeration needs to know about one checked flow: its
-/// leaf tree (transform candidates), the leaves excluded as recipients, the
-/// gated narrowing candidates (empty for an emission), the acquisition
-/// target (`None` for an emission — it proposes no effects), and the checked
-/// flow the lifts scope to.
-struct FlowSubject<'a> {
+/// What the search needs to know about one checked flow beyond its
+/// [`SimFlow`]: the value store and argument tree (recipient resolution for
+/// narrowing hops), the acquisition target (`None` for an emission — it
+/// proposes no effects), whether narrowing applies at all (an emission has no
+/// tool identity to narrow), and the checked flow the lifts scope to.
+struct SearchCtx<'a> {
+    store: &'a ValueStore,
     tree: &'a ArgumentTree<ValueId>,
-    recipient_leaves: BTreeSet<ValueId>,
-    constrains: Vec<ConstrainCandidate<'a>>,
     acquire: Option<ActionId>,
     flow: FlowId,
+    narrows: bool,
+}
+
+/// One candidate plan, carried with its dominance-group identity.
+struct Candidate {
+    steps: NonEmptyVec<PlannedRemedy>,
+    group: GroupKey,
+}
+
+/// Plans predict the same resulting flow iff their derivation sequences and
+/// final tool identity agree — only then are their authorization vectors
+/// comparable. A content-changing `Reduce` versus a content-preserving
+/// `Authorize` (or two different transformers) are different outcomes, so
+/// they never dominate one another.
+#[derive(Clone, PartialEq, Eq)]
+struct GroupKey {
+    derives: Vec<(ValueId, TransformerRef)>,
+    tool: ToolName,
+}
+
+/// One reachable reduce-state of the exhaustive search: the simulated flow
+/// after a sequence of `Reduce` steps, the steps taken, and the leaves the
+/// current contract excludes from transformation (its recipients).
+#[derive(Clone)]
+struct ReduceState {
+    sim: SimFlow,
+    steps: Vec<PlannedRemedy>,
+    derives: Vec<(ValueId, TransformerRef)>,
+    recipient_leaves: BTreeSet<ValueId>,
+}
+
+/// The semantic identity of a reduce-state for cycle detection: the per-leaf
+/// labels, the tool identity, and the proposed effects. Requirements and
+/// recipients are functions of the tool's contract over the fixed request
+/// tree, so they need no separate coordinate.
+#[derive(PartialEq)]
+struct StateKey {
+    labels: Vec<(ValueId, ValueLabel)>,
+    tool: ToolName,
+    proposed_effects: Effects,
+}
+
+impl StateKey {
+    fn of(sim: &SimFlow) -> Self {
+        Self {
+            labels: sim.leaf_labels.iter().map(|(id, label)| (*id, label.clone())).collect(),
+            tool: sim.tool.clone(),
+            proposed_effects: sim.proposed_effects.clone(),
+        }
+    }
 }
 
 impl PolicyEngine {
-    /// Deterministic bounded plan enumeration: candidate step sequences in the
-    /// canonical order Reduce(derive)? -> Reduce(narrow)? -> Authorize(raise)*
-    /// -> Authorize(acquire)? -> Authorize(lift)?, each subset instantiated
-    /// from the registries in registration order, kept iff the simulated
-    /// residual is clean, capped at [`MAX_PLANS`].
-    pub(super) fn enumerate_plans(
+    /// The complete nondominated frontier of remedy plans for one blocked
+    /// tool flow: an exhaustive reachable-state search over the registered
+    /// reducers (any number of derived leaves, chained action transitions),
+    /// the deterministic authorize peels per state, the joint
+    /// Endorse×control-release rescue solve, then irreducibility and
+    /// dominance filtering. Terminal — an empty return — is a *proven* claim
+    /// over the registered capability space: there is no generation bound.
+    pub(super) fn plan_frontier(
         &self,
         trajectory: &Trajectory,
         checked: &ToolRequest,
@@ -74,49 +113,20 @@ impl PolicyEngine {
             // is append-only and we validated already), but fail closed.
             Err(_) => return Vec::new(),
         };
-        // Recipient leaves are not transform candidates.
-        let recipient_leaves: BTreeSet<ValueId> = contract
-            .and_then(|c| {
-                c.arguments
-                    .recipients
-                    .as_ref()
-                    .and_then(|role| checked.arguments.top_level(role))
-            })
-            .map(|subtree| subtree.leaves())
-            .unwrap_or_default();
-        // Candidate constrain steps: registered action transitions from this
-        // tool that pass the same structural gate the applier rechecks
-        // (`constrain_gate`), carried with their target contract and resolved
-        // recipients.
-        let constrains: Vec<ConstrainCandidate<'_>> = self
-            .action_transitions
-            .iter()
-            .filter_map(|t| {
-                self.constrain_gate(t, pending, checked, trajectory.store(), &base.recipients)
-                    .ok()
-                    .map(|(target, recipients)| ConstrainCandidate {
-                        transition: t,
-                        target,
-                        recipients,
-                    })
-            })
-            .collect();
-        self.enumerate_for(
-            &base,
-            FlowSubject {
-                tree: &checked.arguments,
-                recipient_leaves,
-                constrains,
-                acquire: Some(pending.id()),
-                flow: pending.flow(),
-            },
-        )
+        let ctx = SearchCtx {
+            store: trajectory.store(),
+            tree: &checked.arguments,
+            acquire: Some(pending.id()),
+            flow: pending.flow(),
+            narrows: true,
+        };
+        self.frontier(&base, recipient_leaves_for(contract, ctx.tree), &ctx)
     }
 
-    /// Plan enumeration for a pending emission: the same pipeline over the
+    /// The plan frontier for a pending emission: the same pipeline over the
     /// body tree, with no narrowing (an emission has no tool identity to
     /// narrow) and no acquisition (an emission proposes no effects).
-    pub(super) fn enumerate_emission_plans(
+    pub(super) fn emission_plan_frontier(
         &self,
         trajectory: &Trajectory,
         checked: &EmissionRequest,
@@ -126,162 +136,275 @@ impl PolicyEngine {
             Ok(base) => base,
             Err(_) => return Vec::new(),
         };
-        self.enumerate_for(
-            &base,
-            FlowSubject {
-                tree: &checked.body,
-                recipient_leaves: BTreeSet::new(),
-                constrains: Vec::new(),
-                acquire: None,
-                flow,
-            },
-        )
+        let ctx = SearchCtx {
+            store: trajectory.store(),
+            tree: &checked.body,
+            acquire: None,
+            flow,
+            narrows: false,
+        };
+        self.frontier(&base, BTreeSet::new(), &ctx)
     }
 
-    /// The shared candidate enumeration over one checked flow's subject.
-    fn enumerate_for(&self, base: &SimFlow, subject: FlowSubject<'_>) -> Vec<NonEmptyVec<PlannedRemedy>> {
-        // Candidate transform steps: non-recipient leaves x registered
-        // transformers whose precondition matches, in (leaf, registration)
-        // order.
-        let mut transforms: Vec<(ValueId, &RegisteredTransformer)> = Vec::new();
-        for leaf in subject.tree.leaves() {
-            if subject.recipient_leaves.contains(&leaf) {
-                continue;
-            }
-            let label = &base.leaf_labels[&leaf];
-            for transformer in &self.transformers {
-                if transformer.descriptor.precondition.matches(label) && transformer.descriptor.output != *label {
-                    transforms.push((leaf, transformer));
-                }
+    /// Generate every candidate (reduce-state peels plus the rescue solve in
+    /// one pool), then filter: irreducibility (no removable step may leave an
+    /// unlocking sequence), dominance (drop any plan another plan unlocks
+    /// with strictly less authorization), and a deterministic serialization —
+    /// fewest steps first, then generation order (a deterministic breadth-
+    /// first walk over the registries in registration order).
+    fn frontier(
+        &self,
+        base: &SimFlow,
+        base_recipient_leaves: BTreeSet<ValueId>,
+        ctx: &SearchCtx<'_>,
+    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
+        let mut candidates: Vec<Candidate> = Vec::new();
+        for state in self.reduce_states(base, base_recipient_leaves, ctx) {
+            self.peel_state(&state, ctx, &mut candidates);
+        }
+        candidates.extend(self.rescue_candidates(base, ctx));
+
+        // Structural dedup: the same remedy sequence (ignoring the violation
+        // vectors shown to authorities) generated twice keeps its first,
+        // fewest-reduce-steps occurrence.
+        let mut deduped: Vec<Candidate> = Vec::new();
+        for candidate in candidates {
+            if !deduped.iter().any(|kept| same_shape(&kept.steps, &candidate.steps)) {
+                deduped.push(candidate);
             }
         }
-        let constrains = subject.constrains;
 
-        let mut plans: Vec<NonEmptyVec<PlannedRemedy>> = Vec::new();
-        let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
-            std::iter::once(None).chain(transforms.iter().map(Some)).collect();
-        let constrain_options: Vec<Option<&ConstrainCandidate<'_>>> =
-            std::iter::once(None).chain(constrains.iter().map(Some)).collect();
+        // Irreducibility: removing any single step must break the predicted
+        // unlock — replay the remaining original sequence verbatim against
+        // the base simulation.
+        deduped.retain(|candidate| {
+            let steps: Vec<&PlannedRemedy> = candidate.steps.iter().collect();
+            debug_assert!(
+                self.replay_unlocks(base, ctx, &steps),
+                "every generated plan must predict a clean flow"
+            );
+            (0..steps.len()).all(|removed| {
+                let reduced: Vec<&PlannedRemedy> = steps
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, step)| (i != removed).then_some(*step))
+                    .collect();
+                !self.replay_unlocks(base, ctx, &reduced)
+            })
+        });
 
-        // Generate the full candidate cartesian so `select_fair` sees every
-        // applicable category before trimming to MAX_PLANS — any pre-trim cap
-        // (on the plan pool or the candidate lists) can drop the sole clearing
-        // route of a category and starve it, and confirming a category has no
-        // clearing route requires trying all its candidates. The cartesian is
-        // bounded by the construction-time registries times the request's leaf
-        // count; the latter's quadratic scaling is a documented follow-up.
-        for transform in &transform_options {
-            for constrain in &constrain_options {
-                let mut sim = base.clone();
-                let mut steps: Vec<PlannedRemedy> = Vec::new();
-
-                if let Some((leaf, transformer)) = transform {
-                    sim.leaf_labels.insert(*leaf, transformer.descriptor.output.clone());
-                    steps.push(PlannedRemedy::Reduce(ReductionTarget::DeriveValue {
-                        source: *leaf,
-                        transformer: transformer.descriptor.transformer.clone(),
-                    }));
-                }
-                if let Some(ConstrainCandidate {
-                    transition,
-                    target,
-                    recipients,
-                }) = constrain
+        // Nondominated frontier: within one outcome group, drop any plan
+        // whose authorization ask another plan strictly undercuts.
+        let asks: Vec<AskVector> = deduped.iter().map(|c| AskVector::of(&c.steps)).collect();
+        let mut keep = vec![true; deduped.len()];
+        for i in 0..deduped.len() {
+            for j in 0..deduped.len() {
+                if i != j && deduped[i].group == deduped[j].group && ask_cmp(&asks[j], &asks[i]) == Some(Ordering::Less)
                 {
-                    sim.tool = transition.to_tool.clone();
-                    sim.requires = target.requires.clone();
-                    sim.recipients = recipients.clone();
-                    // The constrain narrows the proposed effects, so any surface
-                    // growth is recomputed against the reduced set — an acquire
-                    // then authorizes only the residual growth (a full constrain
-                    // to no-egress leaves none).
-                    sim.proposed_effects = transition.effects.clone();
-                    steps.push(PlannedRemedy::Reduce(ReductionTarget::NarrowAction {
-                        transition: transition.id.clone(),
-                    }));
-                }
-
-                let mut remaining = sim.violations(None);
-
-                // Criterion (2): peel a confidentiality sink breach into durable
-                // raises — one relabel per arg leaf whose own label fails the
-                // sink requirement (multi-source). Computed on the
-                // post-reduction residual, so a reducer's derivation shrinks what
-                // the authority must vouch. A control-borne residual is left to
-                // the control-release lift below. All contributing leaves must
-                // have a competent route, else this branch cannot clear the
-                // breach.
-                let endorse = endorse_steps(&sim, &remaining);
-                let raise_steps: Option<Vec<PlannedRemedy>> = {
-                    let mut probe = sim.clone();
-                    let mut residual = remaining.clone();
-                    endorse
-                        .iter()
-                        .map(|(leaf, delta)| {
-                            let step = self.authorize_step(raise_authorization(*leaf, delta), residual.clone())?;
-                            let raised = delta.raise(&probe.leaf_labels[leaf]);
-                            probe.leaf_labels.insert(*leaf, raised);
-                            residual = probe.violations(None);
-                            Some(step)
-                        })
-                        .collect()
-                };
-                if let Some(raise_steps) = raise_steps {
-                    for (leaf, delta) in endorse {
-                        let raised = delta.raise(&sim.leaf_labels[&leaf]);
-                        sim.leaf_labels.insert(leaf, raised);
-                    }
-                    remaining = sim.violations(None);
-                    steps.extend(raise_steps);
-                }
-
-                // Criterion (1): peel any surface growth into an acquire step
-                // before a lift handles the confidentiality residual. Acquire
-                // composes additively with a lift — they are separate steps to
-                // separate competences (acquire_effects vs the lift dims).
-                if let Some(growth) = surface_growth_of(&remaining) {
-                    // No acquisition target (an emission flow): this branch
-                    // cannot reach a clean residual, so it yields no plan.
-                    let Some(action) = subject.acquire else {
-                        continue;
-                    };
-                    let grant = acquire_authorization(action, &growth);
-                    let Some(step) = self.authorize_step(grant, remaining.clone()) else {
-                        // No authority can acquire this effect: this branch
-                        // cannot reach a clean residual, so it yields no plan.
-                        continue;
-                    };
-                    sim.accepted_effects = sim.accepted_effects.clone().combine(growth);
-                    remaining = sim.violations(None);
-                    steps.push(step);
-                }
-
-                if remaining.is_empty() {
-                    if let Some(steps) = NonEmptyVec::from_vec(steps) {
-                        push_plan(&mut plans, steps);
-                    }
-                    continue;
-                }
-
-                // A final lift for whatever remains. Prefer the narrower
-                // control-release variant when the taint is control-borne.
-                for delta in self.waiver_candidates(&sim, &remaining) {
-                    if !sim.violations(Some(&delta)).is_empty() {
-                        continue;
-                    }
-                    let grant = authorization_for(&delta, &remaining, subject.flow);
-                    let Some(step) = self.authorize_step(grant, remaining.clone()) else {
-                        continue;
-                    };
-                    let mut lift_steps = steps.clone();
-                    lift_steps.push(step);
-                    let steps = NonEmptyVec::from_vec(lift_steps).expect("lift step just pushed");
-                    push_plan(&mut plans, steps);
+                    keep[i] = false;
                     break;
                 }
             }
         }
-        select_fair(plans, MAX_PLANS)
+        let mut plans: Vec<NonEmptyVec<PlannedRemedy>> = deduped
+            .into_iter()
+            .zip(keep)
+            .filter_map(|(candidate, keep)| keep.then_some(candidate.steps))
+            .collect();
+        plans.sort_by_key(NonEmptyVec::len);
+        plans
+    }
+
+    /// Breadth-first walk of every reduce-state reachable from the checked
+    /// flow: a transformer application to any non-recipient leaf, or a gated
+    /// action transition from the current tool, in registration order.
+    /// Semantic-state deduplication makes the walk terminate: leaf labels
+    /// range over the finite set of registered transformer outputs and tool
+    /// identity over the registered contracts, and a revisited state is never
+    /// expanded twice.
+    fn reduce_states(
+        &self,
+        base: &SimFlow,
+        base_recipient_leaves: BTreeSet<ValueId>,
+        ctx: &SearchCtx<'_>,
+    ) -> Vec<ReduceState> {
+        let mut visited: Vec<StateKey> = vec![StateKey::of(base)];
+        let mut queue = VecDeque::from([ReduceState {
+            sim: base.clone(),
+            steps: Vec::new(),
+            derives: Vec::new(),
+            recipient_leaves: base_recipient_leaves,
+        }]);
+        let mut states = Vec::new();
+        while let Some(state) = queue.pop_front() {
+            let leaves: Vec<ValueId> = state.sim.leaf_labels.keys().copied().collect();
+            for leaf in leaves {
+                if state.recipient_leaves.contains(&leaf) {
+                    continue;
+                }
+                for transformer in &self.transformers {
+                    let label = &state.sim.leaf_labels[&leaf];
+                    if !transformer.descriptor.precondition.matches(label) || transformer.descriptor.output == *label {
+                        continue;
+                    }
+                    let mut next = state.clone();
+                    next.sim.leaf_labels.insert(leaf, transformer.descriptor.output.clone());
+                    let key = StateKey::of(&next.sim);
+                    if visited.contains(&key) {
+                        continue;
+                    }
+                    next.steps.push(PlannedRemedy::Reduce(ReductionTarget::DeriveValue {
+                        source: leaf,
+                        transformer: transformer.descriptor.transformer.clone(),
+                    }));
+                    next.derives.push((leaf, transformer.descriptor.transformer.clone()));
+                    visited.push(key);
+                    queue.push_back(next);
+                }
+            }
+            if ctx.narrows {
+                for transition in &self.action_transitions {
+                    let Some((target, recipients)) = self.sim_constrain_gate(&state.sim, transition, ctx) else {
+                        continue;
+                    };
+                    let mut next = state.clone();
+                    next.sim.tool = transition.to_tool.clone();
+                    next.sim.requires = target.requires.clone();
+                    next.sim.recipients = recipients;
+                    // The narrow shrinks the proposed effects, so any surface
+                    // growth is recomputed against the reduced set — an
+                    // acquire then authorizes only the residual growth.
+                    next.sim.proposed_effects = transition.effects.clone();
+                    next.recipient_leaves = recipient_leaves_for(Some(target), ctx.tree);
+                    let key = StateKey::of(&next.sim);
+                    if visited.contains(&key) {
+                        continue;
+                    }
+                    next.steps.push(PlannedRemedy::Reduce(ReductionTarget::NarrowAction {
+                        transition: transition.id.clone(),
+                    }));
+                    visited.push(key);
+                    queue.push_back(next);
+                }
+            }
+            states.push(state);
+        }
+        states
+    }
+
+    /// The simulation-level narrowing gate, mirroring the applier's
+    /// [`constrain_gate`](PolicyEngine::constrain_gate) one hop at a time:
+    /// the transition must leave the state's current tool, verifiably narrow
+    /// its current proposed effects, target a registered contract declaring
+    /// exactly the transition's effects, and never widen the resolved
+    /// recipient set.
+    fn sim_constrain_gate<'a>(
+        &'a self,
+        sim: &SimFlow,
+        transition: &ActionTransition,
+        ctx: &SearchCtx<'_>,
+    ) -> Option<(&'a ToolContract, BTreeSet<UserId>)> {
+        if transition.from_tool != sim.tool || !effects_narrow(&sim.proposed_effects, &transition.effects) {
+            return None;
+        }
+        let target = self.contracts.get(&transition.to_tool)?;
+        if target.effects != transition.effects {
+            return None;
+        }
+        let recipients = target.arguments.resolve_recipients(ctx.tree, ctx.store).ok()?;
+        recipients.is_subset(&sim.recipients).then_some((target, recipients))
+    }
+
+    /// The deterministic authorize peels for one reduce-state: durable raises
+    /// for the arg-borne confidentiality residual, an acquisition for any
+    /// surface growth, then — when a residual remains — one candidate plan
+    /// per clearing lift alternative (the least-privilege control-release
+    /// variant and the plain lift are genuinely different asks; dominance,
+    /// not enumeration order, decides between them).
+    fn peel_state(&self, state: &ReduceState, ctx: &SearchCtx<'_>, out: &mut Vec<Candidate>) {
+        let group = GroupKey {
+            derives: state.derives.clone(),
+            tool: state.sim.tool.clone(),
+        };
+        let mut sim = state.sim.clone();
+        let mut steps = state.steps.clone();
+        let mut remaining = sim.violations(None);
+
+        // Criterion (2): peel a confidentiality sink breach into durable
+        // raises — one relabel per arg leaf whose own label fails the sink
+        // requirement (multi-source). Computed on the post-reduction
+        // residual, so a reducer's derivation shrinks what the authority must
+        // vouch. A control-borne residual is left to the control-release lift
+        // below. All contributing leaves must have a competent route, else
+        // this state cannot clear the breach.
+        let endorse = endorse_steps(&sim, &remaining);
+        let raise_steps: Option<Vec<PlannedRemedy>> = {
+            let mut probe = sim.clone();
+            let mut residual = remaining.clone();
+            endorse
+                .iter()
+                .map(|(leaf, delta)| {
+                    let step = self.authorize_step(raise_authorization(*leaf, delta), residual.clone())?;
+                    let raised = delta.raise(&probe.leaf_labels[leaf]);
+                    probe.leaf_labels.insert(*leaf, raised);
+                    residual = probe.violations(None);
+                    Some(step)
+                })
+                .collect()
+        };
+        if let Some(raise_steps) = raise_steps {
+            for (leaf, delta) in endorse {
+                let raised = delta.raise(&sim.leaf_labels[&leaf]);
+                sim.leaf_labels.insert(leaf, raised);
+            }
+            remaining = sim.violations(None);
+            steps.extend(raise_steps);
+        }
+
+        // Criterion (1): peel any surface growth into an acquire step before
+        // a lift handles the confidentiality residual. Acquire composes
+        // additively with a lift — they are separate steps to separate
+        // competences (acquire_effects vs the lift dims).
+        if let Some(growth) = surface_growth_of(&remaining) {
+            // No acquisition target (an emission flow), or no competent
+            // acquirer: this state cannot reach a clean residual.
+            let Some(action) = ctx.acquire else {
+                return;
+            };
+            let grant = acquire_authorization(action, &growth);
+            let Some(step) = self.authorize_step(grant, remaining.clone()) else {
+                return;
+            };
+            sim.accepted_effects = sim.accepted_effects.clone().combine(growth);
+            remaining = sim.violations(None);
+            steps.push(step);
+        }
+
+        if remaining.is_empty() {
+            if let Some(steps) = NonEmptyVec::from_vec(steps) {
+                out.push(Candidate { steps, group });
+            }
+            return;
+        }
+
+        // A final lift for whatever remains: every clearing, authorizable
+        // alternative becomes its own candidate.
+        for delta in self.waiver_candidates(&sim, &remaining) {
+            if !sim.violations(Some(&delta)).is_empty() {
+                continue;
+            }
+            let grant = authorization_for(&delta, &remaining, ctx.flow);
+            let Some(step) = self.authorize_step(grant, remaining.clone()) else {
+                continue;
+            };
+            let mut lift_steps = steps.clone();
+            lift_steps.push(step);
+            let steps = NonEmptyVec::from_vec(lift_steps).expect("lift step just pushed");
+            out.push(Candidate {
+                steps,
+                group: group.clone(),
+            });
+        }
     }
 
     /// The planned authorize step for `authorization`, carrying the competent
@@ -300,14 +423,13 @@ impl PolicyEngine {
         })
     }
 
-    /// Terminal rescue: a joint Endorse×control-release solve, consulted only
-    /// when ordinary enumeration yields no plan — so existing plan sets are
-    /// untouched, and a rescue route exists only where the flow was terminal.
+    /// The joint Endorse×control-release rescue solve, part of the one
+    /// candidate pool.
     ///
-    /// Ordinary enumeration peels Endorse from the *unreleased* residual and
-    /// measures a control release against the release-all raw vector, both of
-    /// which assume releasing control monotonically improves adequacy. That is
-    /// false when a control dep masks an argument's `Unknown` in the trust
+    /// The ordinary peels derive Endorse from the *unreleased* residual and
+    /// measure a control release against the release-all raw vector, both of
+    /// which assume releasing control monotonically improves adequacy. That
+    /// is false when a control dep masks an argument's `Unknown` in the trust
     /// fold: the valid plan must endorse against the *projected post-release*
     /// residual and then release. This solver searches release candidates for
     /// joint cleanability: project the release, derive per-leaf Endorse
@@ -317,125 +439,85 @@ impl PolicyEngine {
     /// growth and the final waiver (carrying its acknowledge-only facts),
     /// and keep the candidate iff every grant is authorizable and the
     /// projection then clears.
-    pub(super) fn rescue_plans(
-        &self,
-        trajectory: &Trajectory,
-        checked: &ToolRequest,
-        contract: Option<&ToolContract>,
-    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
-        let base = match SimFlow::of(trajectory, checked, contract) {
-            Ok(base) => base,
-            Err(_) => return Vec::new(),
-        };
-        let pending = trajectory
-            .pending_action()
-            .expect("rescue runs only for the stored pending action");
-        self.rescue_for(base, Some(pending.id()), pending.flow())
-    }
-
-    /// Terminal rescue for a pending emission: the same joint solve with no
-    /// acquisition target.
-    pub(super) fn rescue_emission_plans(
-        &self,
-        trajectory: &Trajectory,
-        checked: &EmissionRequest,
-        flow: FlowId,
-    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
-        let base = match SimFlow::of_emission(trajectory, checked, self.response_policy.as_ref()) {
-            Ok(base) => base,
-            Err(_) => return Vec::new(),
-        };
-        self.rescue_for(base, None, flow)
-    }
-
-    fn rescue_for(&self, base: SimFlow, acquire: Option<ActionId>, flow: FlowId) -> Vec<NonEmptyVec<PlannedRemedy>> {
+    fn rescue_candidates(&self, base: &SimFlow, ctx: &SearchCtx<'_>) -> Vec<Candidate> {
         if base.control_labels.is_empty() {
             return Vec::new();
         }
         let ids: Vec<ValueId> = base.control_labels.keys().copied().collect();
-        let Some(rescue) = self.minimal_joint_release(&base, &ids, acquire, flow) else {
-            return Vec::new();
+        let group = GroupKey {
+            derives: Vec::new(),
+            tool: base.tool.clone(),
         };
-
-        // A rescue raise's `targets` are the *projected post-release*
-        // residual at its own peel — the vector its ruling authority is
-        // shown; the actual flow may not mention the deficit at all while a
-        // masking control dependency holds.
-        let mut sim = base;
-        let mut steps = Vec::new();
-        for (leaf, delta, targets) in &rescue.endorse {
-            let Some(step) = self.authorize_step(raise_authorization(*leaf, delta), targets.clone()) else {
-                return Vec::new();
-            };
-            let raised = delta.raise(&sim.leaf_labels[leaf]);
-            sim.leaf_labels.insert(*leaf, raised);
-            steps.push(step);
-        }
-        let mut remaining = sim.violations(None);
-        if let Some(growth) = surface_growth_of(&remaining) {
-            let Some(action) = acquire else {
-                return Vec::new();
-            };
-            let grant = acquire_authorization(action, &growth);
-            let Some(step) = self.authorize_step(grant, remaining.clone()) else {
-                return Vec::new();
-            };
-            sim.accepted_effects = sim.accepted_effects.clone().combine(growth);
-            remaining = sim.violations(None);
-            steps.push(step);
-        }
-        if !sim.violations(Some(&rescue.delta)).is_empty() {
-            return Vec::new();
-        }
-        let grant = authorization_for(&rescue.delta, &remaining, flow);
-        let Some(step) = self.authorize_step(grant, remaining) else {
-            return Vec::new();
-        };
-        steps.push(step);
-        match NonEmptyVec::from_vec(steps) {
-            Some(steps) => vec![steps],
-            None => Vec::new(),
-        }
+        self.minimal_joint_releases(base, &ids, ctx.acquire, ctx.flow)
+            .into_iter()
+            .filter_map(|rescue| {
+                // A rescue raise's `targets` are the *projected post-release*
+                // residual at its own peel — the vector its ruling authority
+                // is shown; the actual flow may not mention the deficit at
+                // all while a masking control dependency holds.
+                let mut sim = base.clone();
+                let mut steps = Vec::new();
+                for (leaf, delta, targets) in &rescue.endorse {
+                    let step = self.authorize_step(raise_authorization(*leaf, delta), targets.clone())?;
+                    let raised = delta.raise(&sim.leaf_labels[leaf]);
+                    sim.leaf_labels.insert(*leaf, raised);
+                    steps.push(step);
+                }
+                let mut remaining = sim.violations(None);
+                if let Some(growth) = surface_growth_of(&remaining) {
+                    let action = ctx.acquire?;
+                    let grant = acquire_authorization(action, &growth);
+                    let step = self.authorize_step(grant, remaining.clone())?;
+                    sim.accepted_effects = sim.accepted_effects.clone().combine(growth);
+                    remaining = sim.violations(None);
+                    steps.push(step);
+                }
+                if !sim.violations(Some(&rescue.delta)).is_empty() {
+                    return None;
+                }
+                let grant = authorization_for(&rescue.delta, &remaining, ctx.flow);
+                let step = self.authorize_step(grant, remaining)?;
+                steps.push(step);
+                NonEmptyVec::from_vec(steps).map(|steps| Candidate {
+                    steps,
+                    group: group.clone(),
+                })
+            })
+            .collect()
     }
 
-    /// The smallest release whose joint composition clears the projection:
-    /// an exhaustive size-ascending subset search, deterministic, whose first
-    /// hit is size-minimal (hence inclusion-minimal — any feasible proper
-    /// subset would have been probed earlier). The space is bounded by the
-    /// request's own control set — agent-shaped, not adversarial — and hard-
-    /// capped: past [`RESCUE_EXHAUSTIVE_MAX`] deps the rescue *refuses*
-    /// (fail-closed terminal). No partial search substitutes — a greedy
-    /// anchored anywhere inherits exactly the non-monotone blindness this
-    /// solver exists to fix, and the monotone cases a greedy could still
-    /// clear are ordinary enumeration's domain. The empty release is not
-    /// probed for the same reason: an unreleased endorse-plus-waiver solve is
-    /// ordinary enumeration's domain, and the rescue only runs when that came
-    /// up empty.
-    fn minimal_joint_release(
+    /// Every minimum-cardinality release whose joint composition clears the
+    /// projection: sizes ascending through a streaming lexicographic
+    /// combination generator, collecting *all* successes of the first
+    /// successful size — the complete antichain of minimal releases (any
+    /// proper subset was probed at a smaller size and failed, so each is
+    /// inclusion-minimal; same-size sets are mutually incomparable). There is
+    /// no width or count bound: a flow with no successful release at any size
+    /// sweeps the full subset lattice — exponential in the request's own
+    /// control-set size, and exactly the proof behind a `Terminal` claim
+    /// (accepted prototype trade; a silent bound would turn "no remedy
+    /// exists" into "none was found where we looked"). The empty release is
+    /// not probed: an unreleased endorse-plus-waiver solve is the ordinary
+    /// peels' domain, and its candidates are already in the pool.
+    fn minimal_joint_releases(
         &self,
         base: &SimFlow,
         ids: &[ValueId],
         acquire: Option<ActionId>,
         flow: FlowId,
-    ) -> Option<JointRescue> {
-        let n = ids.len();
-        if n > RESCUE_EXHAUSTIVE_MAX {
-            return None;
-        }
-        let mut masks: Vec<u32> = (1..(1u32 << n)).collect();
-        masks.sort_by_key(|mask| (mask.count_ones(), *mask));
-        for mask in masks {
-            let release: BTreeSet<ValueId> = ids
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| mask & (1 << i) != 0)
-                .map(|(_, id)| *id)
+    ) -> Vec<JointRescue> {
+        for size in 1..=ids.len() {
+            let hits: Vec<JointRescue> = Combinations::new(ids.len(), size)
+                .filter_map(|combo| {
+                    let release: BTreeSet<ValueId> = combo.iter().map(|&i| ids[i]).collect();
+                    self.joint_rescue(base, &release, acquire, flow)
+                })
                 .collect();
-            if let Some(rescue) = self.joint_rescue(base, &release, acquire, flow) {
-                return Some(rescue);
+            if !hits.is_empty() {
+                return hits;
             }
         }
-        None
+        Vec::new()
     }
 
     /// One joint-cleanability probe for a release candidate. `None` when any
@@ -492,9 +574,90 @@ impl PolicyEngine {
         Some(JointRescue { endorse, delta })
     }
 
+    /// Replay a step sequence verbatim against the base simulation and
+    /// report whether it predicts a clean flow. Every reduce step re-checks
+    /// its registered relation against the replayed state (a transformer
+    /// whose precondition no longer matches, or a transition whose gate no
+    /// longer holds, breaks the prediction); authorize steps apply their
+    /// coordinates; the final check runs under the last lift, if any.
+    fn replay_unlocks(&self, base: &SimFlow, ctx: &SearchCtx<'_>, steps: &[&PlannedRemedy]) -> bool {
+        let mut sim = base.clone();
+        let mut lift: Option<Lift> = None;
+        for step in steps {
+            match step {
+                PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, transformer }) => {
+                    let Some(registered) = self
+                        .transformers
+                        .iter()
+                        .find(|t| t.descriptor.transformer == *transformer)
+                    else {
+                        return false;
+                    };
+                    let Some(label) = sim.leaf_labels.get(source) else {
+                        return false;
+                    };
+                    if !registered.descriptor.precondition.matches(label) {
+                        return false;
+                    }
+                    sim.leaf_labels.insert(*source, registered.descriptor.output.clone());
+                }
+                PlannedRemedy::Reduce(ReductionTarget::NarrowAction { transition }) => {
+                    let Some(registered) = self.action_transitions.iter().find(|t| t.id == *transition) else {
+                        return false;
+                    };
+                    let Some((target, recipients)) = self.sim_constrain_gate(&sim, registered, ctx) else {
+                        return false;
+                    };
+                    sim.tool = registered.to_tool.clone();
+                    sim.requires = target.requires.clone();
+                    sim.recipients = recipients;
+                    sim.proposed_effects = registered.effects.clone();
+                }
+                PlannedRemedy::Authorize { authorization, .. } => {
+                    for coordinate in authorization.delta().coordinates() {
+                        match (coordinate, authorization.scope()) {
+                            (DeltaCoordinate::RaiseLabel(raise), AuthorizationScope::DerivedValue { source }) => {
+                                let Some(label) = sim.leaf_labels.get(source) else {
+                                    return false;
+                                };
+                                let raised = raise.raise(label);
+                                sim.leaf_labels.insert(*source, raised);
+                            }
+                            (DeltaCoordinate::AcquireEffects(effects), _) => {
+                                sim.accepted_effects = sim.accepted_effects.clone().combine(effects.clone());
+                            }
+                            (lift_coordinate, _) => {
+                                let entry = lift.get_or_insert_with(Lift::empty);
+                                match lift_coordinate {
+                                    DeltaCoordinate::ExceptPriorEffects(effects) => {
+                                        entry
+                                            .prior_effects
+                                            .get_or_insert_with(BTreeSet::new)
+                                            .extend(effects.iter().copied());
+                                    }
+                                    DeltaCoordinate::StandInConfirmation => entry.confirms = true,
+                                    DeltaCoordinate::ReleaseControl(deps) => {
+                                        entry.control_release.extend(deps.iter().copied());
+                                    }
+                                    // Acknowledged facts are cleared by the
+                                    // presence of any lift on the recheck.
+                                    DeltaCoordinate::AcknowledgeUnknown(_) => {}
+                                    DeltaCoordinate::RaiseLabel(_) | DeltaCoordinate::AcquireEffects(_) => {
+                                        unreachable!("matched above")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        sim.violations(lift.as_ref()).is_empty()
+    }
+
     /// Deterministic waiver candidates for a remaining violation set: the
-    /// scoped control-release variant first when releasing control shrinks the
-    /// residual, then the plain delta. The waiver clears only the non-relabel
+    /// scoped control-release variant when releasing control shrinks the
+    /// residual, and the plain delta. The waiver clears only the non-relabel
     /// dims (prior effects, confirmation, control release); trust/audience route
     /// to Endorse steps peeled before this.
     fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<Lift> {
@@ -594,109 +757,246 @@ impl PolicyEngine {
     }
 }
 
-/// The presentation category of a remedy route, derived from its decisive
-/// (most authority-dependent) step. Interim: exists only to keep the
-/// cap-fairness guarantee until the nondominated frontier replaces
-/// [`select_fair`]; deliberately private.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum RouteCategory {
-    /// A content-justified derivation by a registered transformer.
-    Sanitize,
-    /// A registered narrowing of the action.
-    Constrain,
-    /// An authority acquires a surface growth.
-    Accept,
-    /// An authority lifts a check or acknowledges an unprovable fact.
-    LiftOrAcknowledge,
-    /// An authority durably raises a value's label — taint erased, the
-    /// priciest elevation, so it is decisive for any route containing it.
-    Raise,
+/// The leaves the contract's recipients role occupies in the request tree —
+/// excluded as transform candidates (deriving a recipient would change who
+/// receives, not what flows).
+fn recipient_leaves_for(contract: Option<&ToolContract>, tree: &ArgumentTree<ValueId>) -> BTreeSet<ValueId> {
+    contract
+        .and_then(|c| c.arguments.recipients.as_ref().and_then(|role| tree.top_level(role)))
+        .map(|subtree| subtree.leaves())
+        .unwrap_or_default()
 }
 
-impl RouteCategory {
-    pub(super) fn of_step(step: &PlannedRemedy) -> Self {
-        match step {
-            PlannedRemedy::Reduce(ReductionTarget::DeriveValue { .. }) => Self::Sanitize,
-            PlannedRemedy::Reduce(ReductionTarget::NarrowAction { .. }) => Self::Constrain,
-            PlannedRemedy::Authorize { authorization, .. } => {
-                let coordinates: Vec<_> = authorization.delta().coordinates().collect();
-                if coordinates.iter().any(|c| matches!(c, DeltaCoordinate::RaiseLabel(_))) {
-                    Self::Raise
-                } else if coordinates
-                    .iter()
-                    .any(|c| matches!(c, DeltaCoordinate::AcquireEffects(_)))
-                {
-                    Self::Accept
-                } else {
-                    Self::LiftOrAcknowledge
+/// Streaming k-of-n index combinations in lexicographic order. The caller
+/// enumerates sizes ascending; nothing here bounds n (no fixed-width mask).
+struct Combinations {
+    indices: Vec<usize>,
+    n: usize,
+    done: bool,
+}
+
+impl Combinations {
+    fn new(n: usize, k: usize) -> Self {
+        Self {
+            indices: (0..k).collect(),
+            n,
+            done: k == 0 || k > n,
+        }
+    }
+}
+
+impl Iterator for Combinations {
+    type Item = Vec<usize>;
+
+    fn next(&mut self) -> Option<Vec<usize>> {
+        if self.done {
+            return None;
+        }
+        let current = self.indices.clone();
+        let k = self.indices.len();
+        let mut i = k;
+        loop {
+            if i == 0 {
+                self.done = true;
+                break;
+            }
+            i -= 1;
+            if self.indices[i] != i + self.n - k {
+                self.indices[i] += 1;
+                for j in i + 1..k {
+                    self.indices[j] = self.indices[j - 1] + 1;
+                }
+                break;
+            }
+        }
+        Some(current)
+    }
+}
+
+/// Structural identity of two step sequences: the same remedies in the same
+/// order, ignoring the violation vectors shown to authorities (`targets`) —
+/// prediction metadata that differs by generation path, not by what the plan
+/// asks or does. Routes are a deterministic function of the authorization, so
+/// they never differ between shape-identical steps.
+fn same_shape(a: &NonEmptyVec<PlannedRemedy>, b: &NonEmptyVec<PlannedRemedy>) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b.iter()).all(|(x, y)| match (x, y) {
+            (PlannedRemedy::Reduce(t1), PlannedRemedy::Reduce(t2)) => t1 == t2,
+            (
+                PlannedRemedy::Authorize { authorization: a1, .. },
+                PlannedRemedy::Authorize { authorization: a2, .. },
+            ) => a1 == a2,
+            _ => false,
+        })
+}
+
+/// The total authorization a plan asks for, folded into one comparable
+/// vector of atomic coordinates. Scope targets are pinned by validated
+/// construction (a raise lives at its derived value, an acquisition at the
+/// one pending action, lifts at the one policy check), so the vector keys on
+/// coordinate kind — plus the raised leaf for raises.
+#[derive(Default)]
+pub(super) struct AskVector {
+    raises: BTreeMap<ValueId, LabelRaise>,
+    acquire: Option<Effects>,
+    except: Option<BTreeSet<Effect>>,
+    confirm: bool,
+    release: Option<BTreeSet<ValueId>>,
+    acknowledged: Option<Vec<Unprovable>>,
+}
+
+impl AskVector {
+    pub(super) fn of(steps: &NonEmptyVec<PlannedRemedy>) -> Self {
+        let mut vector = Self::default();
+        for step in steps.iter() {
+            let PlannedRemedy::Authorize { authorization, .. } = step else {
+                continue;
+            };
+            for coordinate in authorization.delta().coordinates() {
+                match (coordinate, authorization.scope()) {
+                    (DeltaCoordinate::RaiseLabel(raise), AuthorizationScope::DerivedValue { source }) => {
+                        let entry = vector.raises.entry(*source).or_default();
+                        entry.trust = entry.trust.max(raise.trust);
+                        if let Some(readers) = &raise.audience {
+                            entry
+                                .audience
+                                .get_or_insert_with(BTreeSet::new)
+                                .extend(readers.iter().cloned());
+                        }
+                    }
+                    (DeltaCoordinate::RaiseLabel(_), _) => unreachable!("validated construction pins raise scope"),
+                    (DeltaCoordinate::AcquireEffects(effects), _) => {
+                        vector.acquire = Some(match vector.acquire.take() {
+                            Some(acquired) => acquired.combine(effects.clone()),
+                            None => effects.clone(),
+                        });
+                    }
+                    (DeltaCoordinate::ExceptPriorEffects(effects), _) => {
+                        vector
+                            .except
+                            .get_or_insert_with(BTreeSet::new)
+                            .extend(effects.iter().copied());
+                    }
+                    (DeltaCoordinate::StandInConfirmation, _) => vector.confirm = true,
+                    (DeltaCoordinate::ReleaseControl(deps), _) => {
+                        vector
+                            .release
+                            .get_or_insert_with(BTreeSet::new)
+                            .extend(deps.iter().copied());
+                    }
+                    (DeltaCoordinate::AcknowledgeUnknown(facts), _) => {
+                        vector
+                            .acknowledged
+                            .get_or_insert_with(Vec::new)
+                            .extend(facts.iter().cloned());
+                    }
                 }
             }
         }
-    }
-
-    /// The decisive category of a step sequence: its most
-    /// authority-dependent step.
-    pub(super) fn decisive(steps: &NonEmptyVec<PlannedRemedy>) -> Self {
-        steps
-            .iter()
-            .map(Self::of_step)
-            .max()
-            .expect("a plan has at least one step")
+        vector
     }
 }
 
-/// Trim enumerated candidates to `cap`, guaranteeing the best (fewest-step, then
-/// earliest) route of each applicable [`RouteCategory`] survives before
-/// remaining slots fill in enumeration order — so the cap never starves a
-/// category. Enumeration order is otherwise preserved, and a pool already
-/// within `cap` is returned unchanged.
-pub(super) fn select_fair(plans: Vec<NonEmptyVec<PlannedRemedy>>, cap: usize) -> Vec<NonEmptyVec<PlannedRemedy>> {
-    if plans.len() <= cap {
-        return plans;
+/// The typed partial order over authorization asks: `Less` means the left
+/// plan asks for strictly less than the right on some coordinate and no more
+/// on any other — it dominates. A missing coordinate asks less than any
+/// present one; within a kind, trust compares by level, the set-valued
+/// coordinates by inclusion, a confirmation stand-in by presence; coordinates
+/// of different kinds never compare. `None` is incomparability: conflicting
+/// directions, or set pairs neither of which contains the other.
+pub(super) fn ask_cmp(a: &AskVector, b: &AskVector) -> Option<Ordering> {
+    let mut acc = Ordering::Equal;
+    let leaves: BTreeSet<ValueId> = a.raises.keys().chain(b.raises.keys()).copied().collect();
+    for leaf in leaves {
+        let step = match (a.raises.get(&leaf), b.raises.get(&leaf)) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(x), Some(y)) => {
+                // Trust levels are totally ordered (`None` asks nothing);
+                // audiences compare by reader-set inclusion.
+                let trust = x.trust.cmp(&y.trust);
+                let audience = option_set_cmp(&x.audience, &y.audience)?;
+                combine_orders(trust, audience)?
+            }
+        };
+        acc = combine_orders(acc, step)?;
     }
-    let categories: Vec<RouteCategory> = plans.iter().map(RouteCategory::decisive).collect();
-    let mut keep = vec![false; plans.len()];
-    let mut kept = 0usize;
-    // Pass 1: the fewest-step (then earliest) route of each category.
-    for cat in categories.iter().copied().collect::<BTreeSet<_>>() {
-        if kept >= cap {
-            break;
-        }
-        if let Some(best) = (0..plans.len())
-            .filter(|&i| categories[i] == cat)
-            .min_by_key(|&i| (plans[i].len(), i))
-        {
-            keep[best] = true;
-            kept += 1;
-        }
-    }
-    // Pass 2: fill remaining slots in enumeration order.
-    for slot in keep.iter_mut() {
-        if kept >= cap {
-            break;
-        }
-        if !*slot {
-            *slot = true;
-            kept += 1;
-        }
-    }
-    plans
-        .into_iter()
-        .zip(keep)
-        .filter_map(|(plan, keep)| keep.then_some(plan))
-        .collect()
+    acc = combine_orders(acc, option_effects_cmp(&a.acquire, &b.acquire)?)?;
+    acc = combine_orders(acc, option_set_cmp(&a.except, &b.except)?)?;
+    acc = combine_orders(acc, a.confirm.cmp(&b.confirm))?;
+    acc = combine_orders(acc, option_set_cmp(&a.release, &b.release)?)?;
+    acc = combine_orders(acc, acknowledged_cmp(&a.acknowledged, &b.acknowledged)?)?;
+    Some(acc)
 }
 
-fn push_plan(plans: &mut Vec<NonEmptyVec<PlannedRemedy>>, steps: NonEmptyVec<PlannedRemedy>) {
-    if plans.iter().all(|existing| *existing != steps) {
-        plans.push(steps);
+/// Merge one coordinate's ordering into the running product order:
+/// conflicting strict directions are incomparable.
+fn combine_orders(acc: Ordering, next: Ordering) -> Option<Ordering> {
+    match (acc, next) {
+        (Ordering::Equal, next) => Some(next),
+        (acc, Ordering::Equal) => Some(acc),
+        (acc, next) if acc == next => Some(acc),
+        _ => None,
+    }
+}
+
+/// `None < Some`; two sets compare by inclusion, incomparable otherwise.
+fn option_set_cmp<T: Ord>(a: &Option<BTreeSet<T>>, b: &Option<BTreeSet<T>>) -> Option<Ordering> {
+    match (a, b) {
+        (None, None) => Some(Ordering::Equal),
+        (None, Some(_)) => Some(Ordering::Less),
+        (Some(_), None) => Some(Ordering::Greater),
+        (Some(x), Some(y)) => set_cmp(x, y),
+    }
+}
+
+fn set_cmp<T: Ord>(a: &BTreeSet<T>, b: &BTreeSet<T>) -> Option<Ordering> {
+    match (a == b, a.is_subset(b), b.is_subset(a)) {
+        (true, ..) => Some(Ordering::Equal),
+        (false, true, _) => Some(Ordering::Less),
+        (false, _, true) => Some(Ordering::Greater),
+        _ => None,
+    }
+}
+
+/// Effects order: declared sets by inclusion; anything declared is less than
+/// `Unknown` (acquiring an unknown surface asks for everything).
+fn option_effects_cmp(a: &Option<Effects>, b: &Option<Effects>) -> Option<Ordering> {
+    match (a, b) {
+        (None, None) => Some(Ordering::Equal),
+        (None, Some(_)) => Some(Ordering::Less),
+        (Some(_), None) => Some(Ordering::Greater),
+        (Some(x), Some(y)) => match (x.declared_set(), y.declared_set()) {
+            (Some(x), Some(y)) => set_cmp(&x, &y),
+            (Some(_), None) => Some(Ordering::Less),
+            (None, Some(_)) => Some(Ordering::Greater),
+            (None, None) => Some(Ordering::Equal),
+        },
+    }
+}
+
+/// Acknowledgment order: presence asks for the acknowledge competence even
+/// with no facts; fact lists compare as sets by inclusion.
+fn acknowledged_cmp(a: &Option<Vec<Unprovable>>, b: &Option<Vec<Unprovable>>) -> Option<Ordering> {
+    let subset = |x: &Vec<Unprovable>, y: &Vec<Unprovable>| x.iter().all(|fact| y.contains(fact));
+    match (a, b) {
+        (None, None) => Some(Ordering::Equal),
+        (None, Some(_)) => Some(Ordering::Less),
+        (Some(_), None) => Some(Ordering::Greater),
+        (Some(x), Some(y)) => match (subset(x, y), subset(y, x)) {
+            (true, true) => Some(Ordering::Equal),
+            (true, false) => Some(Ordering::Less),
+            (false, true) => Some(Ordering::Greater),
+            (false, false) => None,
+        },
     }
 }
 
 /// The pure simulation state of one flow's check: per-leaf argument labels
 /// (so a transform can be predicted by swapping one), the control fold, and
 /// the sink parameters. Prediction (planning) and validation (application)
-/// share this so a plan's postconditions mean exactly what the recheck
+/// share this so a plan's predictions mean exactly what the recheck
 /// computes.
 #[derive(Debug, Clone)]
 pub(crate) struct SimFlow {

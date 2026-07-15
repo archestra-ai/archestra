@@ -112,13 +112,10 @@ impl PolicyEngine {
         };
         let pending = trajectory.pending_action().expect("pending action set above");
         let flow = pending.flow();
-        let mut drafts = self.enumerate_plans(trajectory, &checked_request, contract, pending);
-        if drafts.is_empty() {
-            // Terminal rescue: only a flow ordinary enumeration cannot clear
-            // consults the joint Endorse×control-release solver, so plan sets
-            // for remediable flows are untouched.
-            drafts = self.rescue_plans(trajectory, &checked_request, contract);
-        }
+        // The complete nondominated frontier: ordinary peels and the joint
+        // rescue solve share one candidate pool, so an empty return is a
+        // proven no-remedy claim over the registered capability space.
+        let drafts = self.plan_frontier(trajectory, &checked_request, contract, pending);
         match NonEmptyVec::from_vec(trajectory.store_plans(flow, Some(action), self.id, drafts)) {
             Some(plans) => {
                 debug!(count = plans.len(), "blocked (remediable)");
@@ -207,10 +204,7 @@ impl PolicyEngine {
             Some(flow) => flow,
             None => trajectory.set_pending_emission(request),
         };
-        let mut drafts = self.enumerate_emission_plans(trajectory, &checked, flow);
-        if drafts.is_empty() {
-            drafts = self.rescue_emission_plans(trajectory, &checked, flow);
-        }
+        let drafts = self.emission_plan_frontier(trajectory, &checked, flow);
         match NonEmptyVec::from_vec(trajectory.store_plans(flow, None, self.id, drafts)) {
             Some(plans) => {
                 debug!(count = plans.len(), "emission blocked (remediable)");

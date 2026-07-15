@@ -249,7 +249,15 @@ impl BatonGateBuilder {
             })?;
         }
         for mut contract in self.contracts {
-            if contract.requires.attention == AttentionRule::ExplicitConfirmation {
+            // `None` (unknown requirements) never declares an explicit
+            // confirmation demand — that is a distinct fail-closed gap the
+            // engine enforces itself (`RequirementsUnknown`), not this
+            // slice's "no confirming-turn API" restriction.
+            let wants_confirmation = contract
+                .requires
+                .as_ref()
+                .is_some_and(|requires| requires.attention == AttentionRule::ExplicitConfirmation);
+            if wants_confirmation {
                 return Err(DojoError::UnsupportedContract {
                     detail: format!(
                         "tool `{}` requires explicit confirmation, unsupported this slice",
@@ -297,7 +305,7 @@ mod tests {
     fn read_contract(name: &str) -> ToolContract {
         ToolContract {
             name: ToolName::new(name),
-            requires: Requirements::default(),
+            requires: Some(Requirements::default()),
             output_label: ValueLabel {
                 audience: Audience::readers([UserId::new(ALICE), UserId::new(BOB)]),
                 trust: Trust::TRUSTED,
@@ -311,10 +319,10 @@ mod tests {
     fn sink_contract(name: &str) -> ToolContract {
         ToolContract {
             name: ToolName::new(name),
-            requires: Requirements {
+            requires: Some(Requirements {
                 audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
-            },
+            }),
             output_label: ValueLabel::identity(),
             effects: Effects::declared([Effect::Egress]),
             arguments: baton_core::ArgumentSchema::opaque(),

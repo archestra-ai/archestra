@@ -226,12 +226,16 @@ impl From<&ContractIn> for ToolContract {
     fn from(contract: &ContractIn) -> Self {
         Self {
             name: ToolName::new(&contract.tool),
-            requires: Requirements {
+            // `RequiresIn`'s JSON wire uses `#[serde(default)]`, so an absent
+            // `requires` and an explicit `requires: {}` are indistinguishable
+            // on this wire — baton-check always builds known requirements
+            // here; honoring absent-means-`None` over JSON is out of scope.
+            requires: Some(Requirements {
                 trust: contract.requires.trust.map(KnownTrust::from),
                 audience: Default::default(),
                 attention: Default::default(),
                 forbid_prior_effects: effect_set(&contract.requires.forbid_prior_effects),
-            },
+            }),
             output_label: ValueLabel {
                 audience: Audience::PUBLIC,
                 trust: contract.output.trust.into(),

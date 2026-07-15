@@ -91,10 +91,10 @@ fn gate() -> Result<BatonGate, DojoError> {
         ))
         .contract(ToolContract {
             name: ToolName::new("send_email"),
-            requires: Requirements {
+            requires: Some(Requirements {
                 audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
-            },
+            }),
             output_label: ValueLabel::identity(),
             effects: Effects::declared([Effect::Egress]),
             arguments: ArgumentSchema::opaque(),

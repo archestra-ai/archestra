@@ -188,10 +188,7 @@ impl PolicyEngine {
                 // composes additively with a lift — they are separate steps to
                 // separate competences (acquire_effects vs the lift dims).
                 if let Some(growth) = surface_growth_of(&remaining) {
-                    let grant = Authorization {
-                        delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
-                        scope: AuthorizationScope::PendingAction { action: pending.id() },
-                    };
+                    let grant = acquire_authorization(pending.id(), &growth);
                     let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                         // No authority can acquire this effect: this branch
                         // cannot reach a clean residual, so it yields no plan.
@@ -301,10 +298,7 @@ impl PolicyEngine {
         }
         let mut remaining = sim.violations(None);
         if let Some(growth) = surface_growth_of(&remaining) {
-            let grant = Authorization {
-                delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
-                scope: AuthorizationScope::PendingAction { action },
-            };
+            let grant = acquire_authorization(action, &growth);
             let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                 return Vec::new();
             };
@@ -402,10 +396,7 @@ impl PolicyEngine {
             residual = projected.violations(None);
         }
         if let Some(growth) = surface_growth_of(&residual) {
-            if !self.can_authorize(&Authorization {
-                delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
-                scope: AuthorizationScope::PendingAction { action },
-            }) {
+            if !self.can_authorize(&acquire_authorization(action, &growth)) {
                 return None;
             }
             projected.accepted_effects = projected.accepted_effects.clone().combine(growth);
@@ -549,7 +540,7 @@ impl RouteCategory {
             PlannedRemedy::Reduce(ReductionTarget::DeriveValue { .. }) => Self::Sanitize,
             PlannedRemedy::Reduce(ReductionTarget::NarrowAction { .. }) => Self::Constrain,
             PlannedRemedy::Authorize { authorization, .. } => {
-                let coordinates: Vec<_> = authorization.delta.coordinates().collect();
+                let coordinates: Vec<_> = authorization.delta().coordinates().collect();
                 if coordinates.iter().any(|c| matches!(c, DeltaCoordinate::RaiseLabel(_))) {
                     Self::Raise
                 } else if coordinates
@@ -790,18 +781,29 @@ pub(super) fn authorization_for(delta: &Lift, resolved: &[Violation], flow: Flow
     if !acknowledged.is_empty() || coordinates.is_empty() {
         coordinates.push(DeltaCoordinate::AcknowledgeUnknown(acknowledged));
     }
-    Authorization {
-        delta: AuthorizationDelta::product(coordinates).expect("at least one coordinate by construction"),
-        scope: AuthorizationScope::PolicyCheck { flow },
-    }
+    Authorization::new(
+        AuthorizationDelta::product(coordinates).expect("at least one coordinate by construction"),
+        AuthorizationScope::PolicyCheck { flow },
+    )
+    .expect("the planner lifts only non-empty coordinates at their check scope")
 }
 
 /// The durable raise authorization an endorse of `source` asks for.
 pub(super) fn raise_authorization(source: ValueId, delta: &LabelRaise) -> Authorization {
-    Authorization {
-        delta: AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(delta.clone())),
-        scope: AuthorizationScope::DerivedValue { source },
-    }
+    Authorization::new(
+        AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(delta.clone())),
+        AuthorizationScope::DerivedValue { source },
+    )
+    .expect("the planner raises only non-empty deltas at their derived-value scope")
+}
+
+/// The action-scoped acquisition authorization for a surface growth.
+pub(super) fn acquire_authorization(action: ActionId, growth: &Effects) -> Authorization {
+    Authorization::new(
+        AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
+        AuthorizationScope::PendingAction { action },
+    )
+    .expect("a surface-growth witness is never empty")
 }
 
 /// The surface growth in a violation set, if any — the effects an Accept step

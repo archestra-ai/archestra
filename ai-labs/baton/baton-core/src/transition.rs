@@ -230,7 +230,7 @@ impl AuthorityMandate {
     /// grant's binding.
     #[must_use]
     pub fn authorizes(&self, ask: &crate::remedy::Authorization) -> bool {
-        self.authorizes_delta(&ask.delta)
+        self.authorizes_delta(ask.delta())
     }
 
     fn authorizes_delta(&self, delta: &crate::remedy::AuthorizationDelta) -> bool {
@@ -374,9 +374,19 @@ mod tests {
         use crate::revision::FlowId;
 
         let check_scope = AuthorizationScope::PolicyCheck { flow: FlowId::new(0) };
-        let ask = |coordinate: DeltaCoordinate| Authorization {
-            delta: AuthorizationDelta::single(coordinate),
-            scope: check_scope.clone(),
+        // Competence is scope-independent, but construction is not: each ask
+        // is built at the coordinate's own valid scope.
+        let ask = |coordinate: DeltaCoordinate| {
+            let scope = match &coordinate {
+                DeltaCoordinate::RaiseLabel(_) => AuthorizationScope::DerivedValue {
+                    source: ValueId::new(0),
+                },
+                DeltaCoordinate::AcquireEffects(_) => AuthorizationScope::PendingAction {
+                    action: crate::revision::ActionId::new(0),
+                },
+                _ => AuthorizationScope::PolicyCheck { flow: FlowId::new(0) },
+            };
+            Authorization::new(AuthorizationDelta::single(coordinate), scope).unwrap()
         };
         let cases: Vec<(AuthorityMandate, Authorization)> = vec![
             (
@@ -427,14 +437,15 @@ mod tests {
         // release+confirm is covered only when both powers are present, and
         // an acknowledge coordinate riding along still demands its explicit
         // capability — even over an empty fact list.
-        let release_and_confirm = Authorization {
-            delta: AuthorizationDelta::product(vec![
+        let release_and_confirm = Authorization::new(
+            AuthorizationDelta::product(vec![
                 DeltaCoordinate::ReleaseControl(BTreeSet::from([ValueId::new(0)])),
                 DeltaCoordinate::StandInConfirmation,
             ])
             .expect("two coordinates"),
-            scope: check_scope.clone(),
-        };
+            check_scope.clone(),
+        )
+        .unwrap();
         assert!(
             AuthorityMandate::none()
                 .release_control()
@@ -448,14 +459,15 @@ mod tests {
         );
         assert!(!AuthorityMandate::none().confirms().authorizes(&release_and_confirm));
 
-        let release_and_acknowledge = Authorization {
-            delta: AuthorizationDelta::product(vec![
+        let release_and_acknowledge = Authorization::new(
+            AuthorizationDelta::product(vec![
                 DeltaCoordinate::ReleaseControl(BTreeSet::from([ValueId::new(0)])),
                 DeltaCoordinate::AcknowledgeUnknown(Vec::new()),
             ])
             .expect("two coordinates"),
-            scope: check_scope.clone(),
-        };
+            check_scope.clone(),
+        )
+        .unwrap();
         assert!(
             !AuthorityMandate::none()
                 .release_control()
@@ -468,21 +480,23 @@ mod tests {
                 .authorizes(&release_and_acknowledge)
         );
 
-        // A raise past the mandate's ceiling is not covered; scope never
-        // broadens competence (the same delta at a durable scope routes the
-        // same way).
-        let big_raise = |scope| Authorization {
-            delta: AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(LabelRaise {
+        // A raise past the mandate's ceiling is not covered. (A raise at a
+        // non-durable scope is unrepresentable — refused at construction,
+        // covered by the remedy module's own tests — so scope cannot
+        // broaden competence by construction.)
+        let big_raise = Authorization::new(
+            AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(LabelRaise {
                 trust: Some(KnownTrust::Trusted),
                 audience: Some(BTreeSet::from([UserId::new("bob"), UserId::new("charlie")])),
             })),
-            scope,
-        };
+            AuthorizationScope::DerivedValue {
+                source: ValueId::new(0),
+            },
+        )
+        .unwrap();
         let narrow = AuthorityMandate::none().vouch_audience([UserId::new("bob")]);
-        assert!(!narrow.authorizes(&big_raise(check_scope)));
-        assert!(!narrow.authorizes(&big_raise(AuthorizationScope::DerivedValue {
-            source: ValueId::new(0)
-        })));
+        assert!(!narrow.authorizes(&big_raise));
+        let _ = check_scope;
     }
 
     #[test]

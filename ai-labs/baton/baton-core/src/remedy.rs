@@ -204,16 +204,190 @@ impl fmt::Display for AuthorizationScope {
 }
 
 /// The typed elevation an authority rules on: an exact delta at an exact
-/// scope.
+/// scope. Constructed only through [`Authorization::new`], which refuses
+/// coordinates outside their scope and no-op coordinates — a malformed
+/// authorization is unrepresentable, not merely unrouted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Authorization {
-    pub delta: AuthorizationDelta,
-    pub scope: AuthorizationScope,
+    delta: AuthorizationDelta,
+    scope: AuthorizationScope,
+}
+
+/// An authorization shape refused at construction.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum MalformedAuthorization {
+    /// The coordinate's kind cannot apply at the requested scope: a durable
+    /// raise lives at [`AuthorizationScope::DerivedValue`], a surface
+    /// acquisition at [`AuthorizationScope::PendingAction`], and the
+    /// check-transient lifts at [`AuthorizationScope::PolicyCheck`].
+    #[error("{coordinate} does not apply at {scope}")]
+    CoordinateOutsideScope {
+        coordinate: DeltaCoordinate,
+        scope: AuthorizationScope,
+    },
+    /// The coordinate authorizes nothing (an empty raise, an empty set).
+    #[error("{coordinate} authorizes nothing")]
+    EmptyCoordinate { coordinate: DeltaCoordinate },
+}
+
+impl Authorization {
+    /// The only constructor. Refuses (a) coordinates incompatible with the
+    /// scope and (b) no-op coordinates. An empty [`DeltaCoordinate::AcknowledgeUnknown`]
+    /// stays valid: it demands the explicit acknowledge competence rather
+    /// than authorizing nothing.
+    pub fn new(delta: AuthorizationDelta, scope: AuthorizationScope) -> Result<Self, MalformedAuthorization> {
+        for coordinate in delta.coordinates() {
+            let fits = matches!(
+                (coordinate, &scope),
+                (DeltaCoordinate::RaiseLabel(_), AuthorizationScope::DerivedValue { .. })
+                    | (
+                        DeltaCoordinate::AcquireEffects(_),
+                        AuthorizationScope::PendingAction { .. }
+                    )
+                    | (
+                        DeltaCoordinate::ExceptPriorEffects(_)
+                            | DeltaCoordinate::StandInConfirmation
+                            | DeltaCoordinate::ReleaseControl(_)
+                            | DeltaCoordinate::AcknowledgeUnknown(_),
+                        AuthorizationScope::PolicyCheck { .. },
+                    )
+            );
+            if !fits {
+                return Err(MalformedAuthorization::CoordinateOutsideScope {
+                    coordinate: coordinate.clone(),
+                    scope,
+                });
+            }
+            let noop = match coordinate {
+                DeltaCoordinate::RaiseLabel(raise) => raise.is_empty(),
+                DeltaCoordinate::AcquireEffects(effects) => effects == &Effects::none(),
+                DeltaCoordinate::ExceptPriorEffects(effects) => effects.is_empty(),
+                DeltaCoordinate::ReleaseControl(deps) => deps.is_empty(),
+                DeltaCoordinate::StandInConfirmation | DeltaCoordinate::AcknowledgeUnknown(_) => false,
+            };
+            if noop {
+                return Err(MalformedAuthorization::EmptyCoordinate {
+                    coordinate: coordinate.clone(),
+                });
+            }
+        }
+        Ok(Self { delta, scope })
+    }
+
+    pub fn delta(&self) -> &AuthorizationDelta {
+        &self.delta
+    }
+
+    pub fn scope(&self) -> &AuthorizationScope {
+        &self.scope
+    }
 }
 
 impl fmt::Display for Authorization {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} for {}", self.delta, self.scope)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check_scope() -> AuthorizationScope {
+        AuthorizationScope::PolicyCheck { flow: FlowId::new(0) }
+    }
+
+    /// Every scope admits exactly its own coordinate kinds.
+    #[test]
+    fn construction_refuses_coordinates_outside_their_scope() {
+        let raise = DeltaCoordinate::RaiseLabel(LabelRaise {
+            trust: Some(KnownTrust::Trusted),
+            audience: None,
+        });
+        let acquire = DeltaCoordinate::AcquireEffects(Effects::declared([Effect::Egress]));
+        let lift = DeltaCoordinate::StandInConfirmation;
+        let derived = AuthorizationScope::DerivedValue {
+            source: ValueId::new(0),
+        };
+        let action = AuthorizationScope::PendingAction {
+            action: ActionId::new(0),
+        };
+
+        assert!(Authorization::new(AuthorizationDelta::single(raise.clone()), derived.clone()).is_ok());
+        assert!(Authorization::new(AuthorizationDelta::single(acquire.clone()), action.clone()).is_ok());
+        assert!(Authorization::new(AuthorizationDelta::single(lift.clone()), check_scope()).is_ok());
+
+        for (coordinate, wrong_scope) in [
+            (raise.clone(), check_scope()),
+            (raise.clone(), action),
+            (acquire.clone(), derived.clone()),
+            (acquire, check_scope()),
+            (lift, derived),
+        ] {
+            assert!(matches!(
+                Authorization::new(AuthorizationDelta::single(coordinate), wrong_scope),
+                Err(MalformedAuthorization::CoordinateOutsideScope { .. })
+            ));
+        }
+
+        // A cross-kind product fits no scope at all.
+        let cross = AuthorizationDelta::product(vec![
+            DeltaCoordinate::RaiseLabel(LabelRaise {
+                trust: Some(KnownTrust::Trusted),
+                audience: None,
+            }),
+            DeltaCoordinate::AcquireEffects(Effects::declared([Effect::Egress])),
+        ])
+        .expect("two coordinates");
+        for scope in [
+            AuthorizationScope::DerivedValue {
+                source: ValueId::new(0),
+            },
+            AuthorizationScope::PendingAction {
+                action: ActionId::new(0),
+            },
+            check_scope(),
+        ] {
+            assert!(matches!(
+                Authorization::new(cross.clone(), scope),
+                Err(MalformedAuthorization::CoordinateOutsideScope { .. })
+            ));
+        }
+    }
+
+    /// No-op coordinates are refused; an empty acknowledgment is not a
+    /// no-op (it demands the acknowledge competence).
+    #[test]
+    fn construction_refuses_noop_coordinates() {
+        for (coordinate, scope) in [
+            (
+                DeltaCoordinate::RaiseLabel(LabelRaise::default()),
+                AuthorizationScope::DerivedValue {
+                    source: ValueId::new(0),
+                },
+            ),
+            (
+                DeltaCoordinate::AcquireEffects(Effects::none()),
+                AuthorizationScope::PendingAction {
+                    action: ActionId::new(0),
+                },
+            ),
+            (DeltaCoordinate::ExceptPriorEffects(BTreeSet::new()), check_scope()),
+            (DeltaCoordinate::ReleaseControl(BTreeSet::new()), check_scope()),
+        ] {
+            assert!(matches!(
+                Authorization::new(AuthorizationDelta::single(coordinate), scope),
+                Err(MalformedAuthorization::EmptyCoordinate { .. })
+            ));
+        }
+
+        assert!(
+            Authorization::new(
+                AuthorizationDelta::single(DeltaCoordinate::AcknowledgeUnknown(Vec::new())),
+                check_scope(),
+            )
+            .is_ok()
+        );
     }
 }
 

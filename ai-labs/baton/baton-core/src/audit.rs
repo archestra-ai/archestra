@@ -19,6 +19,16 @@ use crate::remedy::Authorization;
 use crate::revision::{ActionId, PlanId, TransitionId, ValueId};
 use crate::value::{TransformerRef, ValueLabel};
 
+/// The exact before/after labels of a durable raise, carried on its audit
+/// record so the record is self-contained.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RaiseLabels {
+    /// The source value's label at the moment of the grant.
+    pub input: ValueLabel,
+    /// The label the authorized derived value was minted under.
+    pub raised: ValueLabel,
+}
+
 /// Name of a registered authority.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
@@ -94,14 +104,16 @@ pub enum AuditEvent {
     /// An authority granted and the engine applied a typed authorization —
     /// an exact delta at an exact scope. `derived` names the authorized
     /// derived value a durable grant minted (the raise is the authority's
-    /// fiat, not a verified property of the bytes); a check-scoped grant
-    /// mints none.
+    /// fiat, not a verified property of the bytes) and `labels` its exact
+    /// before/after labels, so the audit record is self-contained; a check-
+    /// or action-scoped grant mints none and carries none.
     AuthorizationApplied {
         transition: TransitionId,
         authorization: Authorization,
         authority: AuthorityName,
         resolved: Vec<Violation>,
         derived: Option<ValueId>,
+        labels: Option<RaiseLabels>,
     },
     /// An authority denied a typed authorization.
     AuthorizationDenied {
@@ -160,10 +172,16 @@ impl fmt::Display for AuditEvent {
                 authorization,
                 authority,
                 derived,
+                labels,
                 ..
-            } => match derived {
-                Some(derived) => write!(f, "{authorization} granted by {authority}, minted {derived}"),
-                None => write!(f, "{authorization} granted by {authority}"),
+            } => match (derived, labels) {
+                (Some(derived), Some(labels)) => write!(
+                    f,
+                    "{authorization} granted by {authority}, minted {derived}: {} -> {}",
+                    labels.input, labels.raised
+                ),
+                (Some(derived), None) => write!(f, "{authorization} granted by {authority}, minted {derived}"),
+                (None, _) => write!(f, "{authorization} granted by {authority}"),
             },
             Self::AuthorizationDenied {
                 authorization,

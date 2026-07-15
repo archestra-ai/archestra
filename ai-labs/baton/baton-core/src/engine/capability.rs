@@ -211,8 +211,6 @@ pub enum RejectedToken {
     /// The action the token was minted for is no longer pending.
     #[error("action {action} is not pending on this trajectory")]
     ActionNotPending { action: ActionId },
-    #[error("flow {flow} has no pending proposal on this trajectory")]
-    FlowNotPending { flow: crate::revision::FlowId },
 }
 
 /// The linear capability to apply one plan step. Bound to the trajectory,
@@ -239,6 +237,10 @@ pub enum StepRefused {
     StalePlan { basis: Revision, current: Revision },
     #[error("{plan} has no step {step}")]
     NoSuchStep { plan: PlanId, step: usize },
+    /// Only a plan's head step is executable; the remainder is predictive
+    /// and is re-planned by the recheck after each applied remedy.
+    #[error("only the plan's head step is executable; step {step} is predictive")]
+    NotNextStep { step: usize },
     #[error("capability was minted for {minted_for}, not {this}")]
     ForeignTrajectory {
         minted_for: TrajectoryId,

@@ -584,6 +584,7 @@ impl Trajectory {
             authority,
             resolved,
             derived: None,
+            labels: None,
         });
         self.commit(batch);
     }
@@ -733,6 +734,11 @@ impl Trajectory {
         let transition = self.mint_transition();
         let pending = self.pending.as_mut().expect("pending action validated by the engine");
         let action = pending.id();
+        let acquisition = crate::remedy::Authorization::new(
+            crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::AcquireEffects(effects.clone())),
+            crate::remedy::AuthorizationScope::PendingAction { action },
+        )
+        .expect("the engine accepts only non-empty growths");
         let batch = vec![
             Fact::GrowthAccepted {
                 action,
@@ -740,29 +746,20 @@ impl Trajectory {
                 authority: authority.clone(),
             },
             Fact::AuthorizationApplied {
-                authorization: crate::remedy::Authorization {
-                    delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::AcquireEffects(
-                        effects.clone(),
-                    )),
-                    scope: crate::remedy::AuthorizationScope::PendingAction { action },
-                },
+                authorization: acquisition.clone(),
                 authority: authority.clone(),
                 resolved: resolved.clone(),
                 derived: None,
             },
         ];
-        pending.accept_growth(effects.clone());
+        pending.accept_growth(effects);
         self.state.record(AuditEvent::AuthorizationApplied {
             transition,
-            authorization: crate::remedy::Authorization {
-                delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::AcquireEffects(
-                    effects,
-                )),
-                scope: crate::remedy::AuthorizationScope::PendingAction { action },
-            },
+            authorization: acquisition,
             authority,
             resolved,
             derived: None,
+            labels: None,
         });
         self.commit(batch);
     }
@@ -783,6 +780,11 @@ impl Trajectory {
         let source_value = self.store.get(source).expect("endorse source validated by the engine");
         let input = source_value.label().clone();
         let body = source_value.body().clone();
+        let raise_grant = crate::remedy::Authorization::new(
+            crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(delta.clone())),
+            crate::remedy::AuthorizationScope::DerivedValue { source },
+        )
+        .expect("the engine endorses only non-empty raises");
         let derived = self.store.next_id();
         let action = self
             .pending
@@ -805,12 +807,7 @@ impl Trajectory {
                 to: derived,
             },
             Fact::AuthorizationApplied {
-                authorization: crate::remedy::Authorization {
-                    delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
-                        delta.clone(),
-                    )),
-                    scope: crate::remedy::AuthorizationScope::DerivedValue { source },
-                },
+                authorization: raise_grant.clone(),
                 authority: authority.clone(),
                 resolved: Vec::new(),
                 derived: Some(derived),
@@ -825,16 +822,13 @@ impl Trajectory {
             .as_mut()
             .expect("pending action validated by the engine")
             .substitute_argument(source, derived);
-        let _ = input;
         self.state.record(AuditEvent::AuthorizationApplied {
             transition,
-            authorization: crate::remedy::Authorization {
-                delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(delta)),
-                scope: crate::remedy::AuthorizationScope::DerivedValue { source },
-            },
+            authorization: raise_grant,
             authority,
             resolved: Vec::new(),
             derived: Some(derived),
+            labels: Some(crate::audit::RaiseLabels { input, raised }),
         });
         self.commit(batch);
         derived

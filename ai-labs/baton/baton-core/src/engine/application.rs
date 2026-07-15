@@ -72,7 +72,7 @@ fn pending_flow_is(trajectory: &Trajectory, flow: FlowId) -> Result<&crate::requ
 /// facts are cleared by the recheck's presence-of-a-lift rule).
 fn lift_of(ask: &Authorization) -> Lift {
     let mut lift = Lift::empty();
-    for coordinate in ask.delta.coordinates() {
+    for coordinate in ask.delta().coordinates() {
         match coordinate {
             DeltaCoordinate::ExceptPriorEffects(effects) => lift.prior_effects = Some(effects.clone()),
             DeltaCoordinate::StandInConfirmation => lift.confirms = true,
@@ -87,7 +87,7 @@ fn lift_of(ask: &Authorization) -> Lift {
 
 /// The durable raise an authorization mints, if it carries one.
 fn raise_of(ask: &Authorization) -> Option<LabelRaise> {
-    ask.delta.coordinates().find_map(|coordinate| match coordinate {
+    ask.delta().coordinates().find_map(|coordinate| match coordinate {
         DeltaCoordinate::RaiseLabel(raise) => Some(raise.clone()),
         _ => None,
     })
@@ -95,7 +95,7 @@ fn raise_of(ask: &Authorization) -> Option<LabelRaise> {
 
 /// The surface growth an authorization acquires, if it carries one.
 fn acquisition_of(ask: &Authorization) -> Option<Effects> {
-    ask.delta.coordinates().find_map(|coordinate| match coordinate {
+    ask.delta().coordinates().find_map(|coordinate| match coordinate {
         DeltaCoordinate::AcquireEffects(effects) => Some(effects.clone()),
         _ => None,
     })
@@ -120,6 +120,13 @@ impl PolicyEngine {
             });
         }
         stored.steps.get(step).ok_or(StepRefused::NoSuchStep { plan, step })?;
+        // Only the head step is executable: the remainder of a plan is
+        // predictive and is replaced by the recheck after each applied
+        // remedy, so applying it out of order would route authorities on
+        // targets the earlier steps were supposed to remove.
+        if step != 0 {
+            return Err(StepRefused::NotNextStep { step });
+        }
         let pending = pending_flow_is(trajectory, stored.flow)?;
         Ok(StepCapability {
             plan,
@@ -170,6 +177,9 @@ impl PolicyEngine {
                 step: capability.step,
             })?
             .clone();
+        if capability.step != 0 {
+            return Err(StepRefused::NotNextStep { step: capability.step });
+        }
         let pending = pending_action_is(trajectory, capability.action)?;
         let checked = pending.current().clone();
         let original = pending.original().clone();
@@ -254,7 +264,7 @@ impl PolicyEngine {
                 // control dependency hides from the actual vector.
                 Ok(
                     match self.route_step_grant(trajectory, &capability, &checked, authorization.clone(), targets) {
-                        RoutedStep::Approved { authority, resolved } => match &authorization.scope {
+                        RoutedStep::Approved { authority, resolved } => match &authorization.scope() {
                             AuthorizationScope::DerivedValue { source } => {
                                 let raise =
                                     raise_of(&authorization).expect("a derived-value authorization carries a raise");
@@ -411,7 +421,7 @@ impl PolicyEngine {
             // endorsed value; an action-scoped acquisition records the growth
             // marker and re-evaluates; a check-scoped lift (or acknowledgment)
             // rechecks and permits.
-            Ruling::Approve { .. } => match &parts.grant.scope {
+            Ruling::Approve { .. } => match &parts.grant.scope() {
                 AuthorizationScope::DerivedValue { source } => {
                     let raise = raise_of(&parts.grant).expect("a derived-value grant carries a raise");
                     let original = trajectory

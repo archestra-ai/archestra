@@ -251,7 +251,7 @@ impl Fact {
             | Self::ActionAbandoned { action } => Subject::Action(*action),
             Self::CheckPerformed { flow, .. } => Subject::Check(*flow),
             Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
-                match &authorization.scope {
+                match &authorization.scope() {
                     AuthorizationScope::DerivedValue { source } => Subject::Value(*source),
                     AuthorizationScope::PendingAction { action } => Subject::Action(*action),
                     AuthorizationScope::PolicyCheck { flow } => Subject::Check(*flow),
@@ -274,7 +274,7 @@ impl Fact {
             | Self::ActionAbandoned { .. }
             | Self::CheckPerformed { .. } => Scope::Action,
             Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
-                match &authorization.scope {
+                match &authorization.scope() {
                     AuthorizationScope::DerivedValue { .. } => Scope::Value,
                     AuthorizationScope::PendingAction { .. } => Scope::Action,
                     AuthorizationScope::PolicyCheck { .. } => Scope::Action,

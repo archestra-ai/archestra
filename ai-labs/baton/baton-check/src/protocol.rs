@@ -152,7 +152,7 @@ impl From<&BlockReason> for BlockKind {
 
 fn acquires_effects(grant: &Authorization) -> bool {
     grant
-        .delta
+        .delta()
         .coordinates()
         .any(|coordinate| matches!(coordinate, DeltaCoordinate::AcquireEffects(_)))
 }

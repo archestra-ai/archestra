@@ -104,18 +104,21 @@ fn apply_first_step(engine: &PolicyEngine, trajectory: &mut Trajectory, plan: Pl
     engine.apply_step(trajectory, capability).unwrap()
 }
 
-/// The (source, raise) of a durable-raise authorize step.
+/// The (source, raise) of a durable-raise authorize step. Panics on a
+/// malformed shape (extra coordinates, wrong coordinate kind) so an
+/// accidentally combined grant cannot slip through a test.
 fn raise_step(step: &PlannedRemedy) -> Option<(ValueId, LabelRaise)> {
     let PlannedRemedy::Authorize { authorization, .. } = step else {
         return None;
     };
-    let AuthorizationScope::DerivedValue { source } = &authorization.scope else {
+    let AuthorizationScope::DerivedValue { source } = authorization.scope() else {
         return None;
     };
-    authorization.delta.coordinates().find_map(|c| match c {
-        DeltaCoordinate::RaiseLabel(raise) => Some((*source, raise.clone())),
-        _ => None,
-    })
+    let coordinates: Vec<_> = authorization.delta().coordinates().collect();
+    match coordinates.as_slice() {
+        [DeltaCoordinate::RaiseLabel(raise)] => Some((*source, raise.clone())),
+        other => panic!("a durable-raise step must carry exactly one raise coordinate, got {other:?}"),
+    }
 }
 
 /// The violations an authorize step shows its ruling authority.
@@ -132,25 +135,31 @@ fn release_step(step: &PlannedRemedy) -> Option<BTreeSet<ValueId>> {
     let PlannedRemedy::Authorize { authorization, .. } = step else {
         return None;
     };
-    let AuthorizationScope::PolicyCheck { .. } = &authorization.scope else {
+    let AuthorizationScope::PolicyCheck { .. } = &authorization.scope() else {
         return None;
     };
-    let release = authorization.delta.coordinates().find_map(|c| match c {
+    let release = authorization.delta().coordinates().find_map(|c| match c {
         DeltaCoordinate::ReleaseControl(deps) => Some(deps.clone()),
         _ => None,
     });
     Some(release.unwrap_or_default())
 }
 
-/// The effects an action-scoped authorize step acquires.
+/// The effects an action-scoped authorize step acquires. Panics on a
+/// malformed shape (wrong scope, extra coordinates) so an accidentally
+/// combined grant cannot slip through a test.
 fn acquire_step(step: &PlannedRemedy) -> Option<Effects> {
     let PlannedRemedy::Authorize { authorization, .. } = step else {
         return None;
     };
-    authorization.delta.coordinates().find_map(|c| match c {
-        DeltaCoordinate::AcquireEffects(effects) => Some(effects.clone()),
-        _ => None,
-    })
+    let AuthorizationScope::PendingAction { .. } = authorization.scope() else {
+        return None;
+    };
+    let coordinates: Vec<_> = authorization.delta().coordinates().collect();
+    match coordinates.as_slice() {
+        [DeltaCoordinate::AcquireEffects(effects)] => Some(effects.clone()),
+        other => panic!("an acquisition step must carry exactly one acquire coordinate, got {other:?}"),
+    }
 }
 
 /// The source of a content-derivation reduce step.
@@ -177,7 +186,7 @@ fn applied_raise(event: &AuditEvent) -> Option<(ValueId, &AuthorityName)> {
             authority,
             derived: Some(derived),
             ..
-        } if matches!(authorization.scope, AuthorizationScope::DerivedValue { .. }) => Some((*derived, authority)),
+        } if matches!(authorization.scope(), AuthorizationScope::DerivedValue { .. }) => Some((*derived, authority)),
         _ => None,
     }
 }
@@ -186,9 +195,9 @@ fn applied_raise(event: &AuditEvent) -> Option<(ValueId, &AuthorityName)> {
 fn applied_acquire(event: &AuditEvent) -> Option<&Effects> {
     match event {
         AuditEvent::AuthorizationApplied { authorization, .. }
-            if matches!(authorization.scope, AuthorizationScope::PendingAction { .. }) =>
+            if matches!(authorization.scope(), AuthorizationScope::PendingAction { .. }) =>
         {
-            authorization.delta.coordinates().find_map(|c| match c {
+            authorization.delta().coordinates().find_map(|c| match c {
                 DeltaCoordinate::AcquireEffects(effects) => Some(effects),
                 _ => None,
             })
@@ -202,9 +211,9 @@ fn applied_acquire(event: &AuditEvent) -> Option<&Effects> {
 fn applied_lift(event: &AuditEvent) -> Option<&crate::remedy::AuthorizationDelta> {
     match event {
         AuditEvent::AuthorizationApplied { authorization, .. }
-            if matches!(authorization.scope, AuthorizationScope::PolicyCheck { .. }) =>
+            if matches!(authorization.scope(), AuthorizationScope::PolicyCheck { .. }) =>
         {
-            Some(&authorization.delta)
+            Some(authorization.delta())
         }
         _ => None,
     }
@@ -213,7 +222,7 @@ fn applied_lift(event: &AuditEvent) -> Option<&crate::remedy::AuthorizationDelta
 /// The delta a denial audit event refused.
 fn denied_delta(event: &AuditEvent) -> Option<&crate::remedy::AuthorizationDelta> {
     match event {
-        AuditEvent::AuthorizationDenied { authorization, .. } => Some(&authorization.delta),
+        AuditEvent::AuthorizationDenied { authorization, .. } => Some(authorization.delta()),
         _ => None,
     }
 }
@@ -1228,6 +1237,12 @@ fn tainted_payload_plans_a_transform() {
     assert_eq!(trajectory.plans().len(), plans.len());
     assert_eq!(trajectory.plans()[0].basis, trajectory.revision());
     assert!(trajectory.pending_action().is_some());
+
+    // The plan predicts a clean flow: walking its single step permits.
+    let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trajectory, transform_plan.id)
+    else {
+        panic!("the transform plan must unlock the flow");
+    };
 }
 
 /// An audience breach carried by an argument leaf yields an Endorse plan (a
@@ -1374,12 +1389,27 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
         .state()
         .audit()
         .iter()
-        .find_map(|e| match e {
-            e => applied_raise(e).map(|(derived, authority)| (derived, authority.clone())),
-        })
+        .find_map(|e| applied_raise(e).map(|(derived, authority)| (derived, authority.clone())))
         .expect("the endorse was audited");
     assert_eq!(authority.as_str(), "human");
+    // The audit record is self-contained: it carries the exact before and
+    // after labels of the raise.
+    let labels = trajectory
+        .state()
+        .audit()
+        .iter()
+        .find_map(|e| match e {
+            AuditEvent::AuthorizationApplied {
+                derived: Some(_),
+                labels: Some(labels),
+                ..
+            } => Some(labels.clone()),
+            _ => None,
+        })
+        .expect("a durable raise audits its labels");
+    assert_eq!(labels.input, doc_label);
     let derived_stored = trajectory.store().get(derived).unwrap();
+    assert_eq!(&labels.raised, derived_stored.label());
     assert_ne!(
         derived_stored.label(),
         &doc_label,
@@ -1401,29 +1431,31 @@ fn an_endorse_routes_only_within_the_mandate_bounds() {
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "doc");
     let view = TrajectoryView::new(trajectory.store());
 
-    let beyond = crate::remedy::Authorization {
-        delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
+    let beyond = crate::remedy::Authorization::new(
+        crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
             crate::remedy::LabelRaise {
                 trust: None,
                 audience: Some(BTreeSet::from([user("dave")])),
             },
         )),
-        scope: crate::remedy::AuthorizationScope::DerivedValue { source: doc },
-    };
+        crate::remedy::AuthorizationScope::DerivedValue { source: doc },
+    )
+    .unwrap();
     assert!(matches!(
         engine.route_grant(&beyond, &[], &view),
         RoutedRuling::NoRuling
     ));
 
-    let within = crate::remedy::Authorization {
-        delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
+    let within = crate::remedy::Authorization::new(
+        crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
             crate::remedy::LabelRaise {
                 trust: None,
                 audience: Some(BTreeSet::from([user("charlie")])),
             },
         )),
-        scope: crate::remedy::AuthorizationScope::DerivedValue { source: doc },
-    };
+        crate::remedy::AuthorizationScope::DerivedValue { source: doc },
+    )
+    .unwrap();
     assert!(matches!(
         engine.route_grant(&within, &[], &view),
         RoutedRuling::External(_)
@@ -1486,7 +1518,7 @@ fn endorse_authority_refuses_a_suspicious_transitive_ancestry() {
         _: &[Violation],
         view: &crate::approval::TrajectoryView,
     ) -> Option<crate::approval::Ruling> {
-        let crate::remedy::AuthorizationScope::DerivedValue { source } = &grant.scope else {
+        let crate::remedy::AuthorizationScope::DerivedValue { source } = &grant.scope() else {
             return None;
         };
         let tainted = view
@@ -2188,7 +2220,7 @@ fn external_accept_roundtrip() {
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
         panic!("the external acquirer should defer to an out-of-process ruling");
     };
-    assert!(pending.grant().delta.coordinates().any(|coordinate| matches!(
+    assert!(pending.grant().delta().coordinates().any(|coordinate| matches!(
         coordinate,
         crate::remedy::DeltaCoordinate::AcquireEffects(effects) if *effects == Effects::declared([Effect::Egress])
     )));
@@ -2338,10 +2370,7 @@ fn narrow_remedy() -> PlannedRemedy {
 
 fn authorize_remedy(coordinate: DeltaCoordinate, scope: AuthorizationScope) -> PlannedRemedy {
     PlannedRemedy::Authorize {
-        authorization: Authorization {
-            delta: crate::remedy::AuthorizationDelta::single(coordinate),
-            scope,
-        },
+        authorization: Authorization::new(crate::remedy::AuthorizationDelta::single(coordinate), scope).unwrap(),
         routes: NonEmptyVec::new(AuthorityName::new("x"), Vec::new()),
         targets: Vec::new(),
     }
@@ -2428,14 +2457,9 @@ fn cap_fairness_keeps_one_route_per_category() {
 
 // ---- S8: Constrain <-> Accept composition ----
 
-/// A flow that BOTH breaches a sink (suspicious payload at a Trusted-
-/// requiring tool) AND grows the surface ({Egress, Mutation}) composes a
-/// Constrain (fixing the trust breach and dropping Mutation) with an Accept
-/// of the *residual* growth. Accept is computed on the reduced effects, so
-/// it acquires only {Egress}; a full constrain to no effects leaves no
-/// Accept step at all.
-#[test]
-fn constrain_then_accept_covers_only_the_residual_growth() {
+/// Engine + trajectory + request where the only unlock composes a Constrain
+/// with an Accept of the residual growth (no trust authority registered).
+fn constrain_then_accept_fixture() -> (PolicyEngine, Trajectory, ToolRequest) {
     let export = ToolContract {
         name: ToolName::new("db.export"),
         requires: Requirements {
@@ -2488,6 +2512,18 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
         ArgumentTree::Value(payload),
         BTreeSet::new(),
     );
+    (engine, trajectory, request)
+}
+
+/// A flow that BOTH breaches a sink (suspicious payload at a Trusted-
+/// requiring tool) AND grows the surface ({Egress, Mutation}) composes a
+/// Constrain (fixing the trust breach and dropping Mutation) with an Accept
+/// of the *residual* growth. Accept is computed on the reduced effects, so
+/// it acquires only {Egress}; a full constrain to no effects leaves no
+/// Accept step at all.
+#[test]
+fn constrain_then_accept_covers_only_the_residual_growth() {
+    let (engine, mut trajectory, request) = constrain_then_accept_fixture();
     let plans = remediable(&engine, &mut trajectory, request.clone());
 
     // The readonly route constrains first, then accepts *only* {Egress}.
@@ -2552,7 +2588,7 @@ fn step_label(step: &PlannedRemedy) -> &'static str {
     match step {
         PlannedRemedy::Reduce(ReductionTarget::DeriveValue { .. }) => "sanitize",
         PlannedRemedy::Reduce(ReductionTarget::NarrowAction { .. }) => "constrain",
-        PlannedRemedy::Authorize { authorization, .. } => match &authorization.scope {
+        PlannedRemedy::Authorize { authorization, .. } => match &authorization.scope() {
             AuthorizationScope::DerivedValue { .. } => "endorse",
             AuthorizationScope::PendingAction { .. } => "accept",
             AuthorizationScope::PolicyCheck { .. } => "waiver",
@@ -2820,7 +2856,7 @@ fn inline_authority_inspects_the_view_and_violations() {
             .is_some_and(|label| label.trust == Trust::TRUSTED);
         if audience_breach
             && source_trusted
-            && matches!(grant.scope, crate::remedy::AuthorizationScope::DerivedValue { .. })
+            && matches!(grant.scope(), crate::remedy::AuthorizationScope::DerivedValue { .. })
         {
             Some(crate::approval::Ruling::Approve {
                 reason: "source document is trusted".to_owned(),
@@ -3057,6 +3093,55 @@ fn foreign_trajectory_approval_is_refused() {
     assert_eq!(other.revision(), revision_before);
     assert!(other.turns().is_empty());
     assert!(other.state().audit().is_empty());
+}
+
+/// Only a plan's head step is executable: later steps are predictions and
+/// minting them is refused without touching state — applying them out of
+/// order would route authorities on targets the earlier steps were supposed
+/// to remove.
+#[test]
+fn non_head_plan_steps_are_refused_without_touching_state() {
+    let (engine, mut trajectory, request) = constrain_then_accept_fixture();
+    let plans = remediable(&engine, &mut trajectory, request);
+    let composite = plans
+        .iter()
+        .find(|p| p.steps.len() == 2)
+        .expect("a constrain-then-accept route");
+
+    let revision_before = trajectory.revision();
+    assert!(matches!(
+        engine.mint_step(&trajectory, composite.id, 1),
+        Err(StepRefused::NotNextStep { step: 1 })
+    ));
+    // Out of range is still its own refusal.
+    assert!(matches!(
+        engine.mint_step(&trajectory, composite.id, 9),
+        Err(StepRefused::NoSuchStep { .. })
+    ));
+    // Refusals touched nothing: the pending action and revision survive,
+    // and the plan's head step still walks to a permit from here.
+    assert_eq!(trajectory.revision(), revision_before);
+    assert!(trajectory.pending_action().is_some());
+    let mut decision = Decision::Blocked(Blocked::Remediable {
+        violations: Vec::new(),
+        plans: plans.clone(),
+    });
+    for _ in 0..4 {
+        let Decision::Blocked(Blocked::Remediable { plans, .. }) = decision else {
+            break;
+        };
+        let plan = plans
+            .iter()
+            .find(|p| {
+                p.steps.len() == 2 || narrow_step(p.steps.first()).is_some() || acquire_step(p.steps.first()).is_some()
+            })
+            .unwrap_or(plans.first());
+        let StepOutcome::Advanced(next) = apply_first_step(&engine, &mut trajectory, plan.id) else {
+            panic!("inline authorities rule immediately");
+        };
+        decision = next;
+    }
+    assert!(matches!(decision, Decision::Permitted(_)));
 }
 
 /// A transformer error fails the step, audits the failure with no

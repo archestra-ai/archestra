@@ -71,6 +71,9 @@ pub struct RemedyPlan {
     pub id: PlanId,
     /// The checked flow every step targets.
     pub flow: FlowId,
+    /// The predicted remedy sequence. Only the head step is executable;
+    /// the remainder is prediction — applying the head triggers the full
+    /// recheck, which re-plans (or permits, or blocks) from the new state.
     pub steps: NonEmptyVec<PlannedRemedy>,
     /// The trajectory revision the prediction was computed against. Any
     /// state change invalidates the plan.

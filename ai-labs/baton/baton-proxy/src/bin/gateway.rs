@@ -165,17 +165,21 @@ impl ServerHandler for Gateway {
             let args = request.arguments.unwrap_or_default();
             let mut session = self.session.lock().await;
             let outcome = match request.name.as_ref() {
-                ESCALATE_TOOL => {
-                    let reason = args
-                        .get("reason")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("(no reason given)")
-                        .to_owned();
-                    let peer = context.peer.clone();
-                    session
-                        .escalate(&reason, move |message| async move { elicit(&peer, message).await })
-                        .await
-                }
+                ESCALATE_TOOL => match escalate_reason(&args) {
+                    Ok(reason) => {
+                        let peer = context.peer.clone();
+                        session
+                            .escalate(&reason, move |message| {
+                                let peer = peer.clone();
+                                async move { elicit(&peer, message).await }
+                            })
+                            .await
+                    }
+                    Err(reason) => Outcome::BadArguments {
+                        tool: baton_core::ToolName::new(ESCALATE_TOOL),
+                        reason,
+                    },
+                },
                 tool => session.call_tool(tool, &args),
             };
             narrate(&outcome);
@@ -188,20 +192,47 @@ impl ServerHandler for Gateway {
     }
 }
 
-/// Ask the connected client's human through MCP elicitation. Accept → true;
-/// decline, cancel, or a transport/support error → false (fail closed).
-async fn elicit(peer: &Peer<RoleServer>, message: String) -> bool {
+/// Enforce the advertised `baton__escalate` schema: `reason` (a string) is
+/// required and the only argument.
+fn escalate_reason(args: &serde_json::Map<String, serde_json::Value>) -> Result<String, String> {
+    if let Some(unknown) = args.keys().find(|key| key.as_str() != "reason") {
+        return Err(format!("undeclared argument `{unknown}`"));
+    }
+    match args.get("reason") {
+        Some(serde_json::Value::String(reason)) => Ok(reason.clone()),
+        Some(other) => Err(format!("argument `reason` must be a string, got {other}")),
+        None => Err("missing required argument `reason`".to_owned()),
+    }
+}
+
+/// How long an approval prompt may sit unanswered. The session is serialized
+/// across the elicitation on purpose; the timeout bounds how long it can wedge.
+const ELICITATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// Ask the connected client's human through MCP elicitation. `Some(bool)` is a
+/// human ruling (accept/decline); `None` means no ruling was obtained —
+/// transport/support error, timeout, or a dismissed prompt — and the caller
+/// fails closed without recording a human decision.
+async fn elicit(peer: &Peer<RoleServer>, message: String) -> Option<bool> {
     let params = CreateElicitationRequestParams::FormElicitationParams {
         meta: None,
         message,
         // The accept/decline action carries the ruling; no form fields.
         requested_schema: ElicitationSchema::builder().build_unchecked(),
     };
-    match peer.create_elicitation(params).await {
-        Ok(result) => result.action == ElicitationAction::Accept,
-        Err(e) => {
-            tracing::warn!(error = %e, "elicitation failed; denying");
-            false
+    match tokio::time::timeout(ELICITATION_TIMEOUT, peer.create_elicitation(params)).await {
+        Ok(Ok(result)) => match result.action {
+            ElicitationAction::Accept => Some(true),
+            ElicitationAction::Decline => Some(false),
+            ElicitationAction::Cancel => None,
+        },
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "elicitation failed; no ruling");
+            None
+        }
+        Err(_) => {
+            tracing::warn!("elicitation timed out; no ruling");
+            None
         }
     }
 }
@@ -230,6 +261,12 @@ fn render(outcome: Outcome) -> CallToolResult {
         Outcome::Denied { reason, .. } => CallToolResult::success(text(format!(
             "DENIED — the operator declined ({reason}). Do not retry; explain to the user why it could not be done."
         ))),
+        Outcome::EscalationUnavailable { .. } => CallToolResult::error(text(
+            "no ruling: the approval channel is unavailable (elicitation failed, timed out, or was dismissed). \
+             Nothing was executed. The blocked call is still pending — you may escalate once more, or tell the \
+             user approval could not be obtained."
+                .to_owned(),
+        )),
         Outcome::NothingPending => CallToolResult::success(text(
             "No blocked call is pending escalation. Call the tool you need first; escalate only after its result \
              says it was blocked."

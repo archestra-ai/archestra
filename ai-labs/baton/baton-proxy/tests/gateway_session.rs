@@ -106,7 +106,7 @@ async fn approved_escalation_dispatches_the_canonical_request_once() {
         .escalate("auditor needs the summary", |message| {
             asks.fetch_add(1, Ordering::SeqCst);
             assert!(message.contains("alex@finance-audit.com"));
-            async { true }
+            async { Some(true) }
         })
         .await;
     match outcome {
@@ -116,7 +116,7 @@ async fn approved_escalation_dispatches_the_canonical_request_once() {
     assert_eq!(asks.load(Ordering::SeqCst), 1, "the human is asked exactly once");
 
     // The action closed: there is nothing left to escalate.
-    match session.escalate("again", |_| async { true }).await {
+    match session.escalate("again", |_| async { Some(true) }).await {
         Outcome::NothingPending => {}
         other => panic!("expected nothing pending after the grant, got {other:?}"),
     }
@@ -130,7 +130,7 @@ async fn declined_escalation_denies_and_clears_the_action() {
         panic!("expected a soft block");
     };
 
-    match session.escalate("auditor needs it", |_| async { false }).await {
+    match session.escalate("auditor needs it", |_| async { Some(false) }).await {
         Outcome::Denied { .. } => {}
         other => panic!("expected the escalation to be denied, got {other:?}"),
     }
@@ -145,7 +145,7 @@ async fn declined_escalation_denies_and_clears_the_action() {
 #[tokio::test]
 async fn escalation_without_a_pending_action_reports_nothing_pending() {
     let mut session = session();
-    match session.escalate("nothing was blocked", |_| async { true }).await {
+    match session.escalate("nothing was blocked", |_| async { Some(true) }).await {
         Outcome::NothingPending => {}
         other => panic!("expected nothing pending, got {other:?}"),
     }
@@ -161,7 +161,7 @@ async fn a_different_call_abandons_the_pending_action() {
 
     // The agent moves on; the blocked send is abandoned, not wedged.
     read_invoices(&mut session);
-    match session.escalate("stale", |_| async { true }).await {
+    match session.escalate("stale", |_| async { Some(true) }).await {
         Outcome::NothingPending => {}
         other => panic!("expected the abandoned action to be gone, got {other:?}"),
     }
@@ -177,6 +177,136 @@ fn a_reissued_identical_call_soft_blocks_again() {
     match session.call_tool("send_email", &email_args()) {
         Outcome::SoftBlocked { .. } => {}
         other => panic!("expected idempotent re-entry to soft-block again, got {other:?}"),
+    }
+}
+
+/// A retried identical call after the action completed is a **new** action —
+/// it re-enters policy (soft-blocking again here), never silently re-executing
+/// the finished one. Transport-level retries of a lost response are the
+/// transport's to replay; the session offers no completed-call cache.
+#[tokio::test]
+async fn a_reissued_call_after_completion_is_a_new_action() {
+    let mut session = session();
+    read_invoices(&mut session);
+    let Outcome::SoftBlocked { .. } = session.call_tool("send_email", &email_args()) else {
+        panic!("expected a soft block");
+    };
+    let Outcome::Granted { .. } = session.escalate("auditor needs it", |_| async { Some(true) }).await else {
+        panic!("expected the escalation to be granted");
+    };
+
+    match session.call_tool("send_email", &email_args()) {
+        Outcome::SoftBlocked { .. } => {}
+        other => panic!("expected the replay to re-enter policy as a new action, got {other:?}"),
+    }
+}
+
+/// When the remedy's grants split across authorities, each authority is asked
+/// separately — one ruling never impersonates another authority.
+#[tokio::test]
+async fn split_mandates_ask_each_authority_once() {
+    const SPLIT: &str = r#"
+[[authority]]
+name = "audience-endorser"
+audience = ["alice@archestra.ai", "bob@archestra.ai", "alex@finance-audit.com"]
+
+[[authority]]
+name = "effects-officer"
+may_release_control = true
+acquire_effects = true
+
+[[tool]]
+name = "invoices_list"
+description = "List invoices."
+result = "47 invoices totaling $1,248,000."
+
+[tool.contract]
+output = { audience = ["alice@archestra.ai", "bob@archestra.ai"], trust = "trusted" }
+
+[[tool]]
+name = "send_email"
+description = "Send an email."
+result = "Email sent to {to}."
+
+[[tool.arg]]
+name = "to"
+required = true
+
+[tool.contract]
+requires = { audience = "recipients_within_context" }
+recipients_arg = "to"
+effects = ["egress"]
+"#;
+    let config = GatewayConfig::from_toml(SPLIT).expect("scenario parses");
+    let mut session = Session::new(Arc::new(config));
+    read_invoices(&mut session);
+    let Outcome::SoftBlocked { .. } = session.call_tool("send_email", &args(&[("to", "alex@finance-audit.com")]))
+    else {
+        panic!("expected a soft block");
+    };
+
+    let asked = std::sync::Mutex::new(Vec::new());
+    let outcome = session
+        .escalate("auditor needs it", |message| {
+            asked.lock().unwrap().push(message);
+            async { Some(true) }
+        })
+        .await;
+    let Outcome::Granted { .. } = outcome else {
+        panic!("expected the escalation to be granted, got {outcome:?}");
+    };
+    let asked = asked.into_inner().unwrap();
+    assert_eq!(asked.len(), 2, "one prompt per authority, not per grant");
+    assert!(asked[0].contains("audience-endorser") ^ asked[1].contains("audience-endorser"));
+    assert!(asked[0].contains("effects-officer") ^ asked[1].contains("effects-officer"));
+}
+
+/// An `ask` that yields no ruling (elicitation failure/timeout) fails closed
+/// without recording a human decision: the action stays pending and a later
+/// escalation with a working channel still succeeds.
+#[tokio::test]
+async fn no_ruling_fails_closed_and_keeps_the_action_pending() {
+    let mut session = session();
+    read_invoices(&mut session);
+    let Outcome::SoftBlocked { .. } = session.call_tool("send_email", &email_args()) else {
+        panic!("expected a soft block");
+    };
+
+    match session.escalate("auditor needs it", |_| async { None }).await {
+        Outcome::EscalationUnavailable { .. } => {}
+        other => panic!("expected no-ruling to fail closed, got {other:?}"),
+    }
+    match session.escalate("auditor needs it", |_| async { Some(true) }).await {
+        Outcome::Granted { result, .. } => assert_eq!(result, "Email sent to alex@finance-audit.com."),
+        other => panic!("expected the retried escalation to succeed, got {other:?}"),
+    }
+}
+
+/// A template placeholder for a declared-but-omitted optional argument fails
+/// the executor after release; the receipt closes via `record_failure` and the
+/// session keeps working.
+#[test]
+fn executor_failure_closes_the_receipt() {
+    const OPTIONAL: &str = r#"
+[[tool]]
+name = "greet"
+description = "Greet someone."
+result = "Hello {name}."
+
+[[tool.arg]]
+name = "name"
+
+[tool.contract]
+"#;
+    let config = GatewayConfig::from_toml(OPTIONAL).expect("scenario parses");
+    let mut session = Session::new(Arc::new(config));
+    match session.call_tool("greet", &args(&[])) {
+        Outcome::ExecutorFailed { .. } => {}
+        other => panic!("expected the render to fail after release, got {other:?}"),
+    }
+    match session.call_tool("greet", &args(&[("name", "alice")])) {
+        Outcome::Executed { result, .. } => assert_eq!(result, "Hello alice."),
+        other => panic!("expected the next call to execute, got {other:?}"),
     }
 }
 
@@ -234,4 +364,23 @@ description = "d"
 result = "r"
 "#;
     assert!(GatewayConfig::from_toml(reserved).is_err());
+    // Result templates are validated at load: undeclared placeholder…
+    let unknown_placeholder = r#"
+[[tool]]
+name = "greet"
+description = "d"
+result = "Hello {nope}."
+"#;
+    assert!(GatewayConfig::from_toml(unknown_placeholder).is_err());
+    // …and an unclosed one.
+    let unclosed = r#"
+[[tool]]
+name = "greet"
+description = "d"
+result = "Hello {name."
+
+[[tool.arg]]
+name = "name"
+"#;
+    assert!(GatewayConfig::from_toml(unclosed).is_err());
 }

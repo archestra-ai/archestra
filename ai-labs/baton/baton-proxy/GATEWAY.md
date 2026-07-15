@@ -54,13 +54,21 @@ string arguments, a `result` template filled from the canonical request), an
 optional baton contract per tool (requirements, `recipients_arg`, effects,
 output label), and the authorities. A tool without a contract is served but
 unregistered — calling it is unprovable and routes through the same authority
-chain, baton's fail-closed default.
+chain, baton's fail-closed default. A **present** `[tool.contract]` registers
+exactly what it declares, and everything it omits defaults open — no
+requirements, no effects, a public/trusted output — so an *empty* contract
+table is the most permissive registration there is; omit the table entirely
+unless you mean to declare something.
 
 One gateway policy decision worth knowing: an escalation elicits the human
-**once**, and that single ruling is applied to every grant the remedy needs.
+**once per authority** the remedy routes to, and that ruling is applied to
+every grant the same authority must rule on — never to another authority's.
 The conservative provenance fold (every argument reads all prior tool outputs)
 means an out-of-audience send needs several grants — per-grant prompts would
-ask the same human the same question four times.
+ask the same human the same question four times. The checked-in scenario has
+one authority, so one prompt. No ruling at all (elicitation failure, timeout,
+dismissal) fails closed without recording a human decision: the action stays
+pending and can be escalated again.
 
 ## Run the demo
 
@@ -108,13 +116,19 @@ not conversation text. What remains deliberately out of scope:
 
 - **Simulated tools.** Executors render a canned template from the canonical
   request; wiring real tools means replacing one function, not the mediation.
-- **Conservative provenance.** The gateway never sees the LLM's context, so
-  every argument is assumed derived from every prior tool output. That is the
-  honest upper bound at this layer; value-granular reads need the inference
-  layer (see `baton-proxy`).
+- **Conservative provenance — over tool outputs only.** The gateway never sees
+  the LLM's context, so every argument is assumed derived from every prior
+  tool output (the conservative upper bound at this layer). The flip side:
+  anything that never entered through a mediated tool call — the user and
+  system prompts — is invisible and implicitly treated as public and trusted.
+  A secret pasted into the prompt is outside the policy. Value-granular (and
+  prompt-aware) reads need the inference layer (see `README.md`).
 - **One pending action per session.** A different call while one is
-  soft-blocked abandons the blocked one (audited); a re-issued identical call
-  re-enters it.
+  soft-blocked abandons the blocked one; a re-issued identical call re-enters
+  it. Once an action *completes*, an identical retry is a **new** action that
+  re-enters policy — the gateway keeps no completed-call cache, so a
+  transport-level retry of a lost response must be replayed by the transport
+  (streamable HTTP resumability), not re-issued as a fresh `tools/call`.
 - No TLS, no persistence, no multi-approver queue; approvals do not survive a
   gateway restart (linear capabilities cannot be serialized back — by design).
 

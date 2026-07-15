@@ -61,6 +61,9 @@ pub fn narrate(outcome: &Outcome) {
         Outcome::Denied { tool, reason } => {
             eprintln!("{MAGENTA}✋ {tool} → denied by human{RESET} ({reason})");
         }
+        Outcome::EscalationUnavailable { tool } => {
+            eprintln!("{YELLOW}⚠ {tool} → approval channel unavailable{RESET} (no ruling; fail closed, still pending)");
+        }
         Outcome::NothingPending => {
             eprintln!("{DIM}· escalation with nothing pending{RESET}");
         }
@@ -133,6 +136,9 @@ impl DecisionLog {
             Outcome::TerminalBlocked { tool, reason, .. } => (tool.to_string(), &empty, "terminal", reason.to_string()),
             Outcome::Granted { tool, .. } => (tool.to_string(), &empty, "granted", String::new()),
             Outcome::Denied { tool, reason } => (tool.to_string(), &empty, "denied", reason.clone()),
+            Outcome::EscalationUnavailable { tool } => {
+                (tool.to_string(), &empty, "escalation_unavailable", String::new())
+            }
             Outcome::NothingPending => ("baton__escalate".to_owned(), &empty, "nothing_pending", String::new()),
             Outcome::RemedyStalled { tool, cause, .. } => (tool.to_string(), &empty, "stalled", format!("{cause:?}")),
             Outcome::ExecutorFailed { tool, reason } => (tool.to_string(), &empty, "executor_failed", reason.clone()),

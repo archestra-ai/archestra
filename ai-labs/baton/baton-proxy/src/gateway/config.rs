@@ -34,6 +34,8 @@ pub enum ConfigError {
     MissingRecipientsArg(String),
     #[error("tool `{tool}` recipients_arg `{arg}` is not a declared argument")]
     UnknownRecipientsArg { tool: String, arg: String },
+    #[error("tool `{tool}`: {problem}")]
+    BadResultTemplate { tool: String, problem: String },
 }
 
 /// One simulated tool: what the MCP client sees, and the canned result the
@@ -265,6 +267,11 @@ impl RawConfig {
                 args: tool.args,
                 result: tool.result,
             };
+            sim.validate_template()
+                .map_err(|problem| ConfigError::BadResultTemplate {
+                    tool: tool.name.clone(),
+                    problem,
+                })?;
             if tools.insert(name, sim).is_some() {
                 return Err(ConfigError::DuplicateTool(tool.name));
             }
@@ -366,9 +373,30 @@ impl ToolSim {
         self.args.iter().map(|arg| arg.name.as_str()).collect()
     }
 
+    /// Static check at config load: every placeholder names a declared
+    /// argument and every brace closes — a scenario typo must fail before any
+    /// dispatch could cross the release boundary.
+    pub fn validate_template(&self) -> Result<(), String> {
+        let declared = self.declared_args();
+        let mut rest = self.result.as_str();
+        while let Some(open) = rest.find('{') {
+            let Some(close) = rest[open..].find('}') else {
+                return Err("unclosed placeholder in result template".to_owned());
+            };
+            let key = &rest[open + 1..open + close];
+            if !declared.contains(key) {
+                return Err(format!(
+                    "result template references `{{{key}}}`, which is not a declared argument"
+                ));
+            }
+            rest = &rest[open + close + 1..];
+        }
+        Ok(())
+    }
+
     /// Fill the result template from the canonical argument map. Fails on a
-    /// placeholder with no argument — the dispatch then closes via
-    /// `record_failure`, never a half-rendered result.
+    /// placeholder with no argument (a declared-but-omitted optional) — the
+    /// dispatch then closes via `record_failure`, never a half-rendered result.
     pub fn render_result(&self, args: &BTreeMap<String, String>) -> Result<String, String> {
         let mut out = String::new();
         let mut rest = self.result.as_str();

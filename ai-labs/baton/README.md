@@ -48,8 +48,7 @@ action — and the final assistant response is a mediated sink like any tool.
 concepts and semantics are documented in `baton-core/src/lib.rs`.
 
 ```sh
-cd baton-core
-cargo test
+cargo test -p baton-core
 
 baton-proxy/run-gateway-demo.sh   # the end-to-end demo (needs OPENROUTER_API_KEY)
 ```

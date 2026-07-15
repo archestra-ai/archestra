@@ -447,10 +447,14 @@ fn evaluate_call(
             if unknown_policy == UnknownPolicyIn::Deny && has_unknown {
                 let detail = violations
                     .iter()
+                    .filter(|violation| !matches!(violation, Violation::Breach(Breach::SurfaceGrowth { .. })))
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join("; ");
-                let violation_count = violations.len();
+                let violation_count = violations
+                    .iter()
+                    .filter(|violation| !matches!(violation, Violation::Breach(Breach::SurfaceGrowth { .. })))
+                    .count();
                 trajectory.abandon_pending();
                 return Ok(CallOutcome::Blocked {
                     block_kind: BlockKind::UnknownDenied,
@@ -631,10 +635,16 @@ mod tests {
 
         let mut spec = workspace_ish("deny");
         spec["proposed"] = proposed.clone();
-        let Output::Blocked { block_kind, .. } = run(&input(spec)).unwrap() else {
+        let Output::Blocked {
+            block_kind,
+            violation_count,
+            ..
+        } = run(&input(spec)).unwrap()
+        else {
             panic!("deny must block an unregistered tool");
         };
         assert_eq!(block_kind, BlockKind::UnknownDenied);
+        assert_eq!(violation_count, 1);
 
         let mut spec = workspace_ish("allow_with_audit");
         spec["proposed"] = proposed.clone();

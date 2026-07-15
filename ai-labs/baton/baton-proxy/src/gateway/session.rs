@@ -9,15 +9,15 @@
 //! result, so the conservative fold is the honest one — and the request's
 //! control set is that same context. Consequently an out-of-audience send is
 //! both argument-borne (endorse) and control-borne (release), plus a
-//! first-egress surface growth (accept): several grants, one human ruling
-//! (see [`Session::escalate`]).
+//! first-egress surface growth (accept): several grants, one human ruling per
+//! authority (see [`Session::escalate`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use baton_core::{
-    ArgumentTree, BlockReason, Decision, ExecutionToken, OpaqueValue, Pursuit, Ruling, StallCause, ToolName,
-    ToolRequest, UserId, ValueId, Violation,
+    ArgumentTree, AuthorityName, BlockReason, Decision, ExecutionToken, OpaqueValue, Pursuit, Ruling, StallCause,
+    ToolName, ToolRequest, UserId, ValueId, Violation,
 };
 
 use crate::gateway::config::{GatewayConfig, ToolSim};
@@ -50,6 +50,11 @@ pub enum Outcome {
     Granted { tool: ToolName, result: String },
     /// Escalation denied by the human (or terminally blocked mid-remedy).
     Denied { tool: ToolName, reason: String },
+    /// The approval channel produced no ruling (elicitation error, timeout,
+    /// or dismissal). Fail closed: nothing was ruled or executed — but no
+    /// human decision is recorded either, and the pending action is kept so
+    /// escalation can be retried.
+    EscalationUnavailable { tool: ToolName },
     /// `baton__escalate` with no soft-blocked call pending.
     NothingPending,
     /// The remedy walk stalled (bound exhausted, stale step, failed
@@ -199,14 +204,16 @@ impl Session {
     }
 
     /// Escalate the soft-blocked pending action to the human, then walk the
-    /// remedy to a settled end. `ask` is called **at most once** — its single
-    /// accept/decline is applied as the ruling to every grant the remedy
-    /// needs (the message says so). Fail closed: an `ask` that errors should
-    /// return `false`.
-    pub async fn escalate<F, Fut>(&mut self, reason: &str, ask: F) -> Outcome
+    /// remedy to a settled end. `ask` is called **at most once per authority**
+    /// the remedy routes to — that authority's single accept/decline is
+    /// applied as the ruling to every grant it must rule on (the message says
+    /// so; the checked-in scenario has one authority, so one prompt). `ask`
+    /// returning `None` means the approval channel produced no ruling: fail
+    /// closed without recording a human decision, keeping the action pending.
+    pub async fn escalate<F, Fut>(&mut self, reason: &str, mut ask: F) -> Outcome
     where
-        F: FnOnce(String) -> Fut,
-        Fut: Future<Output = bool>,
+        F: FnMut(String) -> Fut,
+        Fut: Future<Output = Option<bool>>,
     {
         let Some(pending) = self.trajectory.pending_action() else {
             return Outcome::NothingPending;
@@ -218,14 +225,13 @@ impl Session {
                 tool: tool.as_str().to_owned(),
             };
         };
-        let recipients = self
+        let (args, recipients) = self
             .pending_wire
             .as_ref()
-            .map(|wire| wire.recipients.clone())
+            .map(|wire| (wire.args.clone(), wire.recipients.clone()))
             .unwrap_or_default();
 
-        let mut ask = Some(ask);
-        let mut approved = None;
+        let mut verdicts: BTreeMap<AuthorityName, bool> = BTreeMap::new();
         for _ in 0..MAX_APPROVAL_ROUNDS {
             let pending_approval =
                 match self
@@ -246,12 +252,15 @@ impl Session {
                     }
                 };
 
-            let verdict = match approved {
-                Some(verdict) => verdict,
+            let authority = pending_approval.authority().clone();
+            let verdict = match verdicts.get(&authority) {
+                Some(verdict) => *verdict,
                 None => {
-                    let message = approval_message(&tool, &recipients, reason, &pending_approval);
-                    let verdict = (ask.take().expect("ask is consumed exactly once"))(message).await;
-                    approved = Some(verdict);
+                    let message = approval_message(&tool, &args, &recipients, reason, &pending_approval);
+                    let Some(verdict) = ask(message).await else {
+                        return Outcome::EscalationUnavailable { tool };
+                    };
+                    verdicts.insert(authority, verdict);
                     verdict
                 }
             };
@@ -415,6 +424,7 @@ fn canonical_args(rendered: &str) -> Result<BTreeMap<String, String>, String> {
 
 fn approval_message(
     tool: &ToolName,
+    args: &BTreeMap<String, String>,
     recipients: &BTreeSet<UserId>,
     reason: &str,
     pending: &baton_core::PendingApproval,
@@ -427,11 +437,36 @@ fn approval_message(
             .collect::<Vec<_>>()
             .join(", "),
     };
+    let args = match args.is_empty() {
+        true => "  (no arguments)".to_owned(),
+        false => args
+            .iter()
+            .map(|(name, value)| format!("  {name}: {}", quote(value)))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    };
     format!(
         "The agent wants to run `{tool}` (recipients: {recipients}), which policy blocks.\n\
-         Agent's reason: {reason}\n\
-         First grant needed: {grant}. One ruling covers every grant this remedy needs.\n\
+         {args}\n\
+         Agent's reason (unverified): {reason}\n\
+         Grant needed: {grant} — ruled by `{authority}`; one ruling covers every grant \
+         this remedy routes to this authority.\n\
          Accept to allow; decline to block.",
+        reason = quote(reason),
         grant = pending.grant(),
+        authority = pending.authority(),
     )
+}
+
+/// Model-controlled text rendered into the privileged approval prompt: quote
+/// it as a JSON string (escaping newlines and control sequences that could
+/// spoof or erase parts of the prompt) and cap the length.
+fn quote(text: &str) -> String {
+    const MAX: usize = 300;
+    let clipped: String = text.chars().take(MAX).collect();
+    let mut quoted = serde_json::to_string(&clipped).expect("a string always serializes");
+    if text.chars().count() > MAX {
+        quoted.push('…');
+    }
+    quoted
 }

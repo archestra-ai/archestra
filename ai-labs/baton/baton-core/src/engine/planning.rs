@@ -835,7 +835,7 @@ fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, Endor
             Violation::Unprovable(Unprovable::AudienceUnknown) => match &sim.requires.audience {
                 AudienceRule::FromRecipients => readers.extend(sim.recipients.iter().cloned()),
                 AudienceRule::Readers(declared) => readers.extend(declared.iter().cloned()),
-                AudienceRule::Public | AudienceRule::None => {}
+                AudienceRule::Public | AudienceRule::Unrestricted => {}
             },
             _ => {}
         }

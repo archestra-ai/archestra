@@ -20,7 +20,7 @@ use crate::value::ValueLabel;
 pub enum AudienceRule {
     /// Exposes no one beyond the mediated conversation — nothing to cover.
     #[default]
-    None,
+    Unrestricted,
     /// Exposes to everyone; only a publicly readable flow passes.
     Public,
     /// Exposes to a fixed reader set: `readers − flow.audience` must be empty.
@@ -262,7 +262,7 @@ impl Requirements {
         }
 
         match &self.audience {
-            AudienceRule::None => {}
+            AudienceRule::Unrestricted => {}
             AudienceRule::Public => match flow.audience.covers_everyone() {
                 Adequacy::Holds => {}
                 Adequacy::Unprovable => {

@@ -81,7 +81,7 @@ impl RawConfig {
             }
             let (sink_audience, recipients_arg) = match &spec.audience {
                 Some(audience) => audience.build(&spec.name)?,
-                None => (AudienceRule::None, None),
+                None => (AudienceRule::Unrestricted, None),
             };
             let name = ToolName::new(&spec.name);
             let arguments = match &recipients_arg {
@@ -360,7 +360,7 @@ mod tests {
             .unwrap();
         assert_eq!(logs.output_label.trust, Trust::SUSPICIOUS);
         assert!(logs.requires.trust.is_none());
-        assert_eq!(logs.requires.audience, AudienceRule::None);
+        assert_eq!(logs.requires.audience, AudienceRule::Unrestricted);
         assert_eq!(logs.effects, Effects::none());
 
         let del = c

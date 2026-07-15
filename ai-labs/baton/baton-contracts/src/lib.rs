@@ -166,8 +166,8 @@ struct OutputSpec {
 impl Default for OutputSpec {
     fn default() -> Self {
         Self {
-            trust: TrustSpec::Unknown,
-            audience: AudienceSpec::Keyword("unknown".to_string()),
+            trust: unknown_trust(),
+            audience: unknown_audience(),
             effects: Vec::new(),
         }
     }
@@ -352,7 +352,7 @@ mod tests {
 
         [[tool]]
         name = "k8s_delete_resource"
-        output = { trust = "trusted", audience = ["operator"] }
+        output = { trust = "trusted", audience = ["operator"], effects = ["mutation"] }
         requires = { trust = "trusted", attention = "explicit_confirmation" }
 
         [[tool]]
@@ -395,6 +395,7 @@ mod tests {
             .unwrap();
         assert_eq!(del.requires.trust, Some(KnownTrust::Trusted));
         assert_eq!(del.requires.attention, AttentionRule::ExplicitConfirmation);
+        assert_eq!(del.effects, Effects::declared([Effect::Mutation]));
 
         let post = c.contracts.iter().find(|t| t.name.as_str() == "http_post").unwrap();
         assert_eq!(post.requires.audience, AudienceRule::FromRecipients);

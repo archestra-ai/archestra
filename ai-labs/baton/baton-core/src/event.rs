@@ -383,6 +383,8 @@ pub enum EventConflict {
     IdCollision { id: EventId },
     #[error("event {id} skips ahead of the frontier")]
     NonContiguous { id: EventId },
+    #[error("event {id} carries basis {basis:?} outside the canonical batch order")]
+    NonCanonicalBasis { id: EventId, basis: Basis },
     #[error("value {value} was already admitted")]
     DuplicateValue { value: ValueId },
     #[error("turn {turn} was already appended")]
@@ -475,9 +477,19 @@ impl EventSet {
 
     /// Admit one event. Idempotent on exact replay: an already-admitted
     /// event (same id, same content) is a no-op; the same id with different
-    /// content, a gap past the frontier, or a fact contradicting the
-    /// admitted lifecycle is refused, and refusal changes nothing.
-    pub fn admit(&mut self, event: Event) -> Result<(), EventConflict> {
+    /// content, a gap past the frontier, a non-canonical basis, or a fact
+    /// contradicting the admitted lifecycle is refused, and refusal changes
+    /// nothing.
+    ///
+    /// Crate-internal on purpose: there is no public write surface into an
+    /// event set — engine-owned batches are the only admission path, so a
+    /// forged event (wrong basis, unknown endorse source, fabricated
+    /// issuer/scope) is unrepresentable outside the crate rather than merely
+    /// refused. Test-only today — replay exists for the event-algebra
+    /// property tests; a future rehydration API must validate a foreign log
+    /// through this same path.
+    #[cfg(test)]
+    pub(crate) fn admit(&mut self, event: Event) -> Result<(), EventConflict> {
         match event.id.0.cmp(&(self.events.len() as u64)) {
             std::cmp::Ordering::Less => {
                 let admitted = &self.events[event.id.0 as usize];
@@ -489,6 +501,16 @@ impl EventSet {
             }
             std::cmp::Ordering::Greater => Err(EventConflict::NonContiguous { id: event.id }),
             std::cmp::Ordering::Equal => {
+                // Canonical bases: the first event of a batch sits at the
+                // current frontier, later events of the same batch repeat it.
+                let expected_next = self.batches;
+                let expected_same = self.events.last().map(|last| last.basis.0);
+                if event.basis.0 != expected_next && Some(event.basis.0) != expected_same {
+                    return Err(EventConflict::NonCanonicalBasis {
+                        id: event.id,
+                        basis: event.basis,
+                    });
+                }
                 self.check_fact(&event.fact)?;
                 self.index_fact(&event.fact);
                 // Replay reconstructs the frontier from the admitted events'
@@ -505,8 +527,9 @@ impl EventSet {
     /// Append one mutation's facts as one atomic batch and advance the
     /// frontier once. All facts are validated against the admitted state
     /// (plus the earlier facts of the same batch) before any is admitted, so
-    /// a refused batch changes nothing.
-    pub fn append_batch(&mut self, facts: Vec<Fact>) -> Result<(), EventConflict> {
+    /// a refused batch changes nothing. Crate-internal like [`Self::admit`]:
+    /// batches enter only through engine-owned mutations.
+    pub(crate) fn append_batch(&mut self, facts: Vec<Fact>) -> Result<(), EventConflict> {
         if facts.is_empty() {
             return Err(EventConflict::EmptyBatch);
         }
@@ -548,6 +571,7 @@ impl EventSet {
         Ok(())
     }
 
+    #[cfg(test)]
     fn check_fact(&self, fact: &Fact) -> Result<(), EventConflict> {
         ProbeState {
             admitted_values: self.admitted_values.clone(),
@@ -835,6 +859,36 @@ mod tests {
         let mut ahead = set.events()[0].clone();
         ahead.id = EventId(5);
         assert_eq!(set.admit(ahead), Err(EventConflict::NonContiguous { id: EventId(5) }));
+    }
+
+    #[test]
+    fn a_forged_basis_is_refused() {
+        let mut set = EventSet::default();
+        set.append_batch(vec![ingress_fact(0, ValueLabel::identity())]).unwrap();
+        // A basis copied from a later frontier cannot inflate the count.
+        let mut inflated = EventSet::default();
+        let mut forged = set.events()[0].clone();
+        forged.basis = Basis(2);
+        assert_eq!(
+            inflated.admit(forged),
+            Err(EventConflict::NonCanonicalBasis {
+                id: EventId(0),
+                basis: Basis(2),
+            })
+        );
+        assert_eq!(inflated.frontier(), Basis(0));
+        // A regressing basis is refused too.
+        set.append_batch(vec![turn_fact(0)]).unwrap();
+        let mut regressed = set.events()[1].clone();
+        regressed.id = EventId(2);
+        regressed.basis = Basis(0);
+        assert_eq!(
+            set.admit(regressed),
+            Err(EventConflict::NonCanonicalBasis {
+                id: EventId(2),
+                basis: Basis(0),
+            })
+        );
     }
 
     #[test]

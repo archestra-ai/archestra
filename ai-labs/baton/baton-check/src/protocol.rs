@@ -387,11 +387,14 @@ fn configure_authorities(engine: &mut PolicyEngine, unknown_policy: UnknownPolic
     authorities.push(Authority::inline("deny-all", broad_mandate(), deny_all));
 
     for authority in authorities {
-        engine
-            .register_authority(authority)
-            .map_err(|duplicate| ProtocolError::DuplicateAuthority {
+        engine.register_authority(authority).map_err(|refused| match refused {
+            baton_core::RegistrationRefused::Duplicate(duplicate) => ProtocolError::DuplicateAuthority {
                 authority: duplicate.id,
-            })?;
+            },
+            baton_core::RegistrationRefused::Frozen(_) => {
+                unreachable!("authorities are registered before any evaluation")
+            }
+        })?;
     }
     Ok(())
 }
@@ -532,7 +535,9 @@ fn evaluate_call(
                     .iter()
                     .filter(|violation| !matches!(violation, Violation::Breach(Breach::SurfaceGrowth { .. })))
                     .count();
-                trajectory.abandon_pending();
+                trajectory
+                    .abandon_pending()
+                    .expect("an oracle-denied action was never released");
                 return Ok(CallOutcome::Blocked {
                     block_kind: BlockKind::UnknownDenied,
                     violation_count,
@@ -567,11 +572,14 @@ pub fn run(input: &Input) -> Result<Output, ProtocolError> {
     let mut engine = PolicyEngine::new();
     configure_authorities(&mut engine, input.unknown_policy)?;
     for contract in &input.contracts {
-        engine
-            .register(contract.into())
-            .map_err(|duplicate| ProtocolError::DuplicateContract {
+        engine.register(contract.into()).map_err(|refused| match refused {
+            baton_core::ContractRefused::Duplicate(duplicate) => ProtocolError::DuplicateContract {
                 tool: duplicate.tool.to_string(),
-            })?;
+            },
+            baton_core::ContractRefused::Frozen(_) => {
+                unreachable!("contracts are registered before any evaluation")
+            }
+        })?;
     }
 
     let mut trajectory = Trajectory::new();

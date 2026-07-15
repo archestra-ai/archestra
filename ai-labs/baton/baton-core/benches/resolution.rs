@@ -210,7 +210,10 @@ fn bench_resolution(c: &mut Criterion) {
                     let _ = black_box(decision);
                     // A permit stores the pending action; abandon it so the
                     // next iteration's distinct request is not refused.
-                    world.trajectory.abandon_pending();
+                    world
+                        .trajectory
+                        .abandon_pending()
+                        .expect("bench actions are never released");
                 });
             },
         );

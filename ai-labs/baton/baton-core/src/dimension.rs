@@ -220,11 +220,13 @@ impl Trust {
         self.0.at_least(floor)
     }
 
-    /// Widening relation (dual of adequacy): does `self` assert strictly more
-    /// trust than `baseline`? A higher known judgement widens; asserting any
-    /// judgement over an `Unknown` baseline widens (that assertion is exactly
-    /// the endorse raise). An `Unknown` self asserts nothing and widens
-    /// nothing.
+    /// Widening relation (dual of adequacy): does `self` gain provability
+    /// *upward* over `baseline`? A higher known judgement widens. Over an
+    /// `Unknown` baseline only an above-bottom judgement widens (that
+    /// assertion is exactly the durable raise): resolving `Unknown` to the
+    /// bottom judgement is the taint fold's own worst-wins outcome
+    /// (`Suspicious ∧ Unknown = Suspicious`), never a widening. An `Unknown`
+    /// self asserts nothing and widens nothing.
     pub(crate) fn widening_over(&self, baseline: &Trust) -> Option<Trust> {
         match (self.0, baseline.0) {
             (MinLevel::Unknown, _) => None,
@@ -232,7 +234,10 @@ impl Trust {
                 true => Some(*self),
                 false => None,
             },
-            (MinLevel::Known(_), MinLevel::Unknown) => Some(*self),
+            (MinLevel::Known(asserted), MinLevel::Unknown) => match asserted > KnownTrust::bottom() {
+                true => Some(*self),
+                false => None,
+            },
         }
     }
 
@@ -514,12 +519,15 @@ mod tests {
     /// strictly more exposure than the baseline, witnessed by the excess.
     #[test]
     fn widening_over_is_the_dual_of_adequacy_per_dimension() {
-        // Trust: a higher assertion widens; any assertion over Unknown widens
-        // (that assertion is the endorse raise); Unknown asserts nothing.
+        // Trust: a higher assertion widens; an above-bottom assertion over
+        // Unknown widens (that assertion is the durable raise); resolving
+        // Unknown to bottom is the fold's own worst-wins outcome, not a
+        // widening; Unknown asserts nothing.
         assert_eq!(Trust::TRUSTED.widening_over(&Trust::SUSPICIOUS), Some(Trust::TRUSTED));
         assert_eq!(Trust::SUSPICIOUS.widening_over(&Trust::TRUSTED), None);
         assert_eq!(Trust::TRUSTED.widening_over(&Trust::TRUSTED), None);
         assert_eq!(Trust::TRUSTED.widening_over(&Trust::UNKNOWN), Some(Trust::TRUSTED));
+        assert_eq!(Trust::SUSPICIOUS.widening_over(&Trust::UNKNOWN), None);
         assert_eq!(Trust::UNKNOWN.widening_over(&Trust::SUSPICIOUS), None);
 
         // Audience: the excess readers are the witness; public over bounded

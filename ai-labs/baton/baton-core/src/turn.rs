@@ -100,6 +100,14 @@ pub(crate) enum ReductionSite {
     Emission,
 }
 
+/// Abandonment refused: the pending action was already released, so a
+/// dispatch is in flight — it closes only through its receipt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("{action} is released with a dispatch in flight; close it through its receipt")]
+pub struct DispatchInFlight {
+    pub action: ActionId,
+}
+
 /// Identity of one trajectory instance, unique within the process; every
 /// capability is bound to it so an authorization cannot cross trajectories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
@@ -249,10 +257,12 @@ impl Trajectory {
                 actor: actor.clone(),
             },
         ];
+        // Admit the batch first: the log is authoritative, materializations
+        // (store, turns) are written only for admitted facts.
+        self.commit(batch);
         let admitted = self.store.admit_ingress(turn_id, label, body);
         debug_assert_eq!(admitted, value);
         self.turns.push(Turn { actor, value: admitted });
-        self.commit(batch);
         value
     }
 
@@ -277,12 +287,12 @@ impl Trajectory {
                 control: control.clone(),
             },
         }];
+        self.commit(batch);
         let admitted = self
             .store
             .admit_model_output(body, reads, control)
             .expect("dependencies prevalidated above");
         debug_assert_eq!(admitted, value);
-        self.commit(batch);
         Ok(value)
     }
 
@@ -379,16 +389,22 @@ impl Trajectory {
                 output: value,
             },
         ];
+        self.commit(batch);
         let admitted = self
             .store
-            .admit_tool_output(parts.action, parts.intrinsic, parts.arguments, parts.control, body)
+            .admit_tool_output(
+                parts.action,
+                parts.intrinsic.clone(),
+                parts.arguments.clone(),
+                parts.control.clone(),
+                body,
+            )
             .expect("receipt dependencies were validated at evaluate time");
         debug_assert_eq!(admitted, value);
         self.turns.push(Turn {
             actor: Actor::Tool(parts.tool),
             value,
         });
-        self.commit(batch);
         debug!(action = %parts.action, %value, "record_output: recorded tool result");
         Ok(value)
     }
@@ -457,6 +473,9 @@ impl Trajectory {
             },
             Fact::ResponseEmitted { value },
         ];
+        // The batch's ResponseEmitted fact settles any pending emission;
+        // admit it first — materializations follow admitted facts.
+        self.commit(batch);
         let admitted = self
             .store
             .admit_model_output(OpaqueValue::new(rendered.clone()), reads, control)
@@ -466,17 +485,25 @@ impl Trajectory {
             actor: Actor::Assistant,
             value,
         });
-        // The batch's ResponseEmitted fact settles any pending emission.
-        self.commit(batch);
         Ok((value, rendered))
     }
 
     /// Explicitly abandon the pending action (e.g. the harness dropped its
     /// token). Clears the slot and advances the revision, so the dropped
-    /// token can never be spent.
-    pub fn abandon_pending(&mut self) {
-        if let Some(action) = self.pending.as_ref().map(PendingAction::id) {
-            self.commit(vec![Fact::ActionAbandoned { action }]);
+    /// token can never be spent. Legal only while the action is still open:
+    /// a released action has a dispatch in flight and closes only through
+    /// its receipt ([`Trajectory::record_output`] /
+    /// [`Trajectory::record_failure`]) — abandoning it would let the same
+    /// request re-evaluate and dispatch a second time. No pending action is
+    /// a no-op.
+    pub fn abandon_pending(&mut self) -> Result<(), DispatchInFlight> {
+        match self.pending.as_ref().map(|p| (p.id(), p.state())) {
+            Some((action, ActionState::Released)) => Err(DispatchInFlight { action }),
+            Some((action, _)) => {
+                self.commit(vec![Fact::ActionAbandoned { action }]);
+                Ok(())
+            }
+            None => Ok(()),
         }
     }
 
@@ -683,12 +710,12 @@ impl Trajectory {
                 },
             },
         ];
+        self.commit(batch);
         let admitted = self
             .store
             .admit_transformed(source, transition, transformer, declared_output, body)
             .expect("transform source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.commit(batch);
         derived
     }
 
@@ -821,12 +848,12 @@ impl Trajectory {
                 }),
             },
         ];
+        self.commit(batch);
         let admitted = self
             .store
             .admit_endorsed(source, authority, delta, raised, body)
             .expect("endorse source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.commit(batch);
         derived
     }
 
@@ -920,12 +947,12 @@ impl Trajectory {
                 declared: output.clone(),
             },
         }];
+        self.commit(batch);
         let admitted = self
             .store
             .admit_transformed(source, transition, transformer, output, body)
             .expect("seed_transformed source admitted");
         debug_assert_eq!(admitted, derived);
-        self.commit(batch);
         derived
     }
 

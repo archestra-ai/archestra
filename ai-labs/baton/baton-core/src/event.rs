@@ -16,7 +16,7 @@
 //! completion before release) is refused at admission. Facts only grow;
 //! nothing is ever removed.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::Serialize;
@@ -403,6 +403,18 @@ pub enum EventConflict {
     GrantAlreadyConsumed { grant: GrantId },
     #[error("another emission is live; {flow} cannot be proposed")]
     EmissionSlotOccupied { flow: FlowId },
+    #[error("an empty batch records no fact and cannot advance the frontier")]
+    EmptyBatch,
+    #[error("grant {grant} is not check-scoped; only one-off grants have an availability")]
+    GrantNotCheckScoped { grant: GrantId },
+    #[error("grant {grant} was issued for {issued}, not {consumed}")]
+    GrantScopeMismatch {
+        grant: GrantId,
+        issued: FlowId,
+        consumed: FlowId,
+    },
+    #[error("{turn} is not an admitted confirming user turn")]
+    UnknownConfirmation { turn: TurnId },
 }
 
 /// Lifecycle a live action has reached, tracked for conflict refusal.
@@ -430,14 +442,19 @@ pub struct EventSet {
     admitted_values: BTreeSet<ValueId>,
     #[serde(skip)]
     admitted_turns: BTreeSet<TurnId>,
+    /// Admitted user turns that carry a confirmation — the only turns a
+    /// `ConfirmationSpent` may reference.
+    #[serde(skip)]
+    confirming_turns: BTreeSet<TurnId>,
     #[serde(skip)]
     spent_confirmations: BTreeSet<TurnId>,
     #[serde(skip)]
     live_action: Option<(ActionId, ActionPhase)>,
     #[serde(skip)]
     live_emission: Option<FlowId>,
+    /// Issued one-off grants and the checked flow each is scoped to.
     #[serde(skip)]
-    issued_grants: BTreeSet<GrantId>,
+    issued_grants: BTreeMap<GrantId, FlowId>,
     #[serde(skip)]
     consumed_grants: BTreeSet<GrantId>,
 }
@@ -474,6 +491,11 @@ impl EventSet {
             std::cmp::Ordering::Equal => {
                 self.check_fact(&event.fact)?;
                 self.index_fact(&event.fact);
+                // Replay reconstructs the frontier from the admitted events'
+                // bases: every batch has at least one event (empty batches
+                // are refused), so the highest basis + 1 is the batch count.
+                let after = event.basis.0.checked_add(1).expect("frontier overflow: refuse to wrap");
+                self.batches = self.batches.max(after);
                 self.events.push(event);
                 Ok(())
             }
@@ -485,6 +507,9 @@ impl EventSet {
     /// (plus the earlier facts of the same batch) before any is admitted, so
     /// a refused batch changes nothing.
     pub fn append_batch(&mut self, facts: Vec<Fact>) -> Result<(), EventConflict> {
+        if facts.is_empty() {
+            return Err(EventConflict::EmptyBatch);
+        }
         self.check_batch(&facts)?;
         let basis = self.frontier();
         for fact in facts {
@@ -499,7 +524,7 @@ impl EventSet {
             self.index_fact(&event.fact);
             self.events.push(event);
         }
-        self.batches += 1;
+        self.batches = self.batches.checked_add(1).expect("frontier overflow: refuse to wrap");
         Ok(())
     }
 
@@ -509,6 +534,7 @@ impl EventSet {
         let mut probe = ProbeState {
             admitted_values: self.admitted_values.clone(),
             admitted_turns: self.admitted_turns.clone(),
+            confirming_turns: self.confirming_turns.clone(),
             spent_confirmations: self.spent_confirmations.clone(),
             live_action: self.live_action,
             live_emission: self.live_emission,
@@ -526,6 +552,7 @@ impl EventSet {
         ProbeState {
             admitted_values: self.admitted_values.clone(),
             admitted_turns: self.admitted_turns.clone(),
+            confirming_turns: self.confirming_turns.clone(),
             spent_confirmations: self.spent_confirmations.clone(),
             live_action: self.live_action,
             live_emission: self.live_emission,
@@ -539,6 +566,7 @@ impl EventSet {
         let mut state = ProbeState {
             admitted_values: std::mem::take(&mut self.admitted_values),
             admitted_turns: std::mem::take(&mut self.admitted_turns),
+            confirming_turns: std::mem::take(&mut self.confirming_turns),
             spent_confirmations: std::mem::take(&mut self.spent_confirmations),
             live_action: self.live_action,
             live_emission: self.live_emission,
@@ -548,6 +576,7 @@ impl EventSet {
         state.index(fact);
         self.admitted_values = state.admitted_values;
         self.admitted_turns = state.admitted_turns;
+        self.confirming_turns = state.confirming_turns;
         self.spent_confirmations = state.spent_confirmations;
         self.live_action = state.live_action;
         self.live_emission = state.live_emission;
@@ -561,10 +590,11 @@ impl EventSet {
 struct ProbeState {
     admitted_values: BTreeSet<ValueId>,
     admitted_turns: BTreeSet<TurnId>,
+    confirming_turns: BTreeSet<TurnId>,
     spent_confirmations: BTreeSet<TurnId>,
     live_action: Option<(ActionId, ActionPhase)>,
     live_emission: Option<FlowId>,
-    issued_grants: BTreeSet<GrantId>,
+    issued_grants: BTreeMap<GrantId, FlowId>,
     consumed_grants: BTreeSet<GrantId>,
 }
 
@@ -604,23 +634,49 @@ impl ProbeState {
             Fact::ActionCompleted { action, .. } | Fact::DispatchFailed { action } => {
                 self.requires_live(*action, ActionPhase::Released)
             }
-            Fact::ActionAbandoned { action } => match self.live_action {
-                Some((live, _)) if live == *action => Ok(()),
-                _ => Err(EventConflict::ActionLifecycle { action: *action }),
+            // Abandonment is legal only from `Open`: a released action has an
+            // outstanding dispatch and closes only through its receipt.
+            Fact::ActionAbandoned { action } => self.requires_live(*action, ActionPhase::Open),
+            Fact::ConfirmationSpent { turn } => match (
+                self.confirming_turns.contains(turn),
+                self.spent_confirmations.contains(turn),
+            ) {
+                (false, _) => Err(EventConflict::UnknownConfirmation { turn: *turn }),
+                (true, true) => Err(EventConflict::ConfirmationAlreadySpent { turn: *turn }),
+                (true, false) => Ok(()),
             },
-            Fact::ConfirmationSpent { turn } => match self.spent_confirmations.contains(turn) {
-                true => Err(EventConflict::ConfirmationAlreadySpent { turn: *turn }),
-                false => Ok(()),
-            },
-            Fact::GrantIssued { grant, .. } => match self.issued_grants.contains(grant) {
-                true => Err(EventConflict::GrantAlreadyIssued { grant: *grant }),
-                false => Ok(()),
-            },
-            Fact::GrantConsumed { grant, .. } => {
-                match (self.issued_grants.contains(grant), self.consumed_grants.contains(grant)) {
-                    (false, _) => Err(EventConflict::UnknownGrant { grant: *grant }),
-                    (true, true) => Err(EventConflict::GrantAlreadyConsumed { grant: *grant }),
-                    (true, false) => Ok(()),
+            Fact::GrantIssued {
+                grant, authorization, ..
+            } => {
+                if self.issued_grants.contains_key(grant) {
+                    return Err(EventConflict::GrantAlreadyIssued { grant: *grant });
+                }
+                // Only one-off (check-scoped) authorizations have an
+                // availability; durable and action-scoped grants mint a value
+                // or a growth marker instead.
+                match authorization.scope() {
+                    AuthorizationScope::PolicyCheck { .. } => Ok(()),
+                    _ => Err(EventConflict::GrantNotCheckScoped { grant: *grant }),
+                }
+            }
+            Fact::GrantConsumed { grant, flow, action } => {
+                let issued = match self.issued_grants.get(grant) {
+                    None => return Err(EventConflict::UnknownGrant { grant: *grant }),
+                    Some(issued) => *issued,
+                };
+                if self.consumed_grants.contains(grant) {
+                    return Err(EventConflict::GrantAlreadyConsumed { grant: *grant });
+                }
+                if issued != *flow {
+                    return Err(EventConflict::GrantScopeMismatch {
+                        grant: *grant,
+                        issued,
+                        consumed: *flow,
+                    });
+                }
+                match action {
+                    Some(action) => self.requires_live(*action, ActionPhase::Open),
+                    None => Ok(()),
                 }
             }
             Fact::ResponseEmitted { .. }
@@ -649,8 +705,11 @@ impl ProbeState {
             Fact::ValueAdmitted { value, .. } => {
                 self.admitted_values.insert(*value);
             }
-            Fact::TurnAppended { turn, .. } => {
+            Fact::TurnAppended { turn, actor } => {
                 self.admitted_turns.insert(*turn);
+                if matches!(actor, Actor::User(crate::turn::UserTurn { confirms: Some(_), .. })) {
+                    self.confirming_turns.insert(*turn);
+                }
             }
             Fact::ActionProposed { action, .. } => {
                 self.live_action = Some((*action, ActionPhase::Open));
@@ -672,8 +731,12 @@ impl ProbeState {
             Fact::EmissionAbandoned { .. } | Fact::ResponseEmitted { .. } => {
                 self.live_emission = None;
             }
-            Fact::GrantIssued { grant, .. } => {
-                self.issued_grants.insert(*grant);
+            Fact::GrantIssued {
+                grant, authorization, ..
+            } => {
+                if let AuthorizationScope::PolicyCheck { flow } = authorization.scope() {
+                    self.issued_grants.insert(*grant, *flow);
+                }
             }
             Fact::GrantConsumed { grant, .. } => {
                 self.consumed_grants.insert(*grant);
@@ -715,6 +778,16 @@ mod tests {
             actor: Actor::User(UserTurn {
                 id: crate::dimension::UserId::new("alice"),
                 confirms: None,
+            }),
+        }
+    }
+
+    fn confirming_turn_fact(index: u64) -> Fact {
+        Fact::TurnAppended {
+            turn: TurnId::new(index),
+            actor: Actor::User(UserTurn {
+                id: crate::dimension::UserId::new("alice"),
+                confirms: Some(crate::ToolName::new("db.drop")),
             }),
         }
     }
@@ -799,11 +872,28 @@ mod tests {
     #[test]
     fn double_confirmation_spend_is_refused() {
         let mut set = EventSet::default();
+        set.append_batch(vec![confirming_turn_fact(0)]).unwrap();
         set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }])
             .unwrap();
         assert!(matches!(
             set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }]),
             Err(EventConflict::ConfirmationAlreadySpent { .. })
+        ));
+    }
+
+    /// A spend must reference an admitted confirming user turn: a
+    /// never-appended turn and a non-confirming turn are both refused.
+    #[test]
+    fn confirmation_spend_requires_an_admitted_confirming_turn() {
+        let mut set = EventSet::default();
+        assert!(matches!(
+            set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }]),
+            Err(EventConflict::UnknownConfirmation { .. })
+        ));
+        set.append_batch(vec![turn_fact(0)]).unwrap();
+        assert!(matches!(
+            set.append_batch(vec![Fact::ConfirmationSpent { turn: TurnId::new(0) }]),
+            Err(EventConflict::UnknownConfirmation { .. })
         ));
     }
 
@@ -897,6 +987,86 @@ mod tests {
         ));
     }
 
+    /// Grants are exactly-scoped at admission: only a check-scoped
+    /// authorization may be issued as a one-off grant, and consumption must
+    /// reference the issued flow (and, where named, the live open action).
+    #[test]
+    fn grant_admission_enforces_the_issued_scope() {
+        use crate::remedy::{Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate};
+
+        // A durable (non-check) authorization has no availability to issue.
+        let durable = Authorization::new(
+            AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(crate::remedy::LabelRaise {
+                trust: Some(crate::dimension::KnownTrust::Trusted),
+                audience: None,
+            })),
+            AuthorizationScope::DerivedValue {
+                source: ValueId::new(0),
+            },
+        )
+        .unwrap();
+        let mut set = EventSet::default();
+        assert!(matches!(
+            set.append_batch(vec![Fact::GrantIssued {
+                grant: crate::revision::GrantId::new(0),
+                authorization: durable,
+                authority: AuthorityName::new("human"),
+            }]),
+            Err(EventConflict::GrantNotCheckScoped { .. })
+        ));
+
+        // Consumption against a different flow than the issued scope is
+        // refused; the availability survives for the right check.
+        let checked = Authorization::new(
+            AuthorizationDelta::single(DeltaCoordinate::StandInConfirmation),
+            AuthorizationScope::PolicyCheck {
+                flow: crate::revision::FlowId::new(7),
+            },
+        )
+        .unwrap();
+        let grant = crate::revision::GrantId::new(1);
+        set.append_batch(vec![Fact::GrantIssued {
+            grant,
+            authorization: checked,
+            authority: AuthorityName::new("human"),
+        }])
+        .unwrap();
+        assert!(matches!(
+            set.append_batch(vec![Fact::GrantConsumed {
+                grant,
+                flow: crate::revision::FlowId::new(8),
+                action: None,
+            }]),
+            Err(EventConflict::GrantScopeMismatch { .. })
+        ));
+        // Naming an action requires it to be the live open action.
+        assert!(matches!(
+            set.append_batch(vec![Fact::GrantConsumed {
+                grant,
+                flow: crate::revision::FlowId::new(7),
+                action: Some(ActionId::new(4)),
+            }]),
+            Err(EventConflict::ActionLifecycle { .. })
+        ));
+        assert!(!crate::projection::grant_availability(&set).is_empty());
+        set.append_batch(vec![Fact::GrantConsumed {
+            grant,
+            flow: crate::revision::FlowId::new(7),
+            action: None,
+        }])
+        .unwrap();
+        assert!(crate::projection::grant_availability(&set).is_empty());
+    }
+
+    /// An empty batch records no fact and cannot advance the frontier.
+    #[test]
+    fn an_empty_batch_is_refused() {
+        let mut set = EventSet::default();
+        let frontier = set.frontier();
+        assert!(matches!(set.append_batch(Vec::new()), Err(EventConflict::EmptyBatch)));
+        assert_eq!(set.frontier(), frontier);
+    }
+
     mod laws {
         use proptest::prelude::*;
 
@@ -951,6 +1121,9 @@ mod tests {
                     rebuilt.admit(event.clone()).unwrap();
                 }
                 prop_assert_eq!(rebuilt.events(), canonical.as_slice());
+                // The frontier is replay-derived: a rebuilt set reproduces
+                // the authoritative revision, not just the facts.
+                prop_assert_eq!(rebuilt.frontier(), set.frontier());
             }
 
             /// Projections are a pure function of the admitted events:

@@ -151,7 +151,9 @@ impl Session {
                     .clone();
                 return self.settle(&sim, request, recipients);
             }
-            self.trajectory.abandon_pending();
+            self.trajectory
+                .abandon_pending()
+                .expect("the gateway settles dispatches synchronously, so no released action lingers");
             self.pending_wire = None;
         }
 
@@ -316,7 +318,9 @@ impl Session {
                 }
             }
         }
-        self.trajectory.abandon_pending();
+        self.trajectory
+            .abandon_pending()
+            .expect("a stalled action was never released");
         self.pending_wire = None;
         Outcome::RemedyStalled {
             tool,

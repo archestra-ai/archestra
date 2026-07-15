@@ -25,6 +25,8 @@ use crate::wire::{RequestMessage, ToolCall, content_text};
 pub enum ReplayError {
     #[error("duplicate contract for `{0}` in policy")]
     Duplicate(ToolName),
+    #[error("policy registration refused: {0}")]
+    RegistryFrozen(String),
     #[error("tool result has no tool_call_id")]
     OrphanToolResult,
     #[error("a previously-executed call to `{tool}` no longer passes policy: {reason}")]
@@ -63,9 +65,10 @@ impl<'a> Session<'a> {
     pub fn build(policy: &'a Policy, messages: &[RequestMessage]) -> Result<Self, ReplayError> {
         let mut engine = PolicyEngine::new();
         for contract in &policy.contracts.contracts {
-            engine
-                .register(contract.clone())
-                .map_err(|e| ReplayError::Duplicate(e.tool))?;
+            engine.register(contract.clone()).map_err(|e| match e {
+                baton_core::ContractRefused::Duplicate(duplicate) => ReplayError::Duplicate(duplicate.tool),
+                baton_core::ContractRefused::Frozen(frozen) => ReplayError::RegistryFrozen(frozen.to_string()),
+            })?;
         }
 
         let mut session = Self {
@@ -188,8 +191,11 @@ impl<'a> Session<'a> {
         };
         // The proxy never dispatches through the engine — the harness executes
         // the passed-through call itself. Clear the pending slot either way so
-        // sibling calls in the same response evaluate independently.
-        self.trajectory.abandon_pending();
+        // sibling calls in the same response evaluate independently. The slot
+        // is never released here, so abandonment cannot refuse.
+        self.trajectory
+            .abandon_pending()
+            .expect("the replay engine never releases an action");
         outcome
     }
 

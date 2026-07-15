@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, Audience, AudienceRule, Authority, AuthorityMandate, DuplicateContract,
-    DuplicateRegistration, Effect, Effects, KnownTrust, PolicyEngine, Requirements, ToolContract, ToolName, Trust,
-    UserId, ValueLabel,
+    ArgumentName, ArgumentSchema, Audience, AudienceRule, Authority, AuthorityMandate, ContractRefused, Effect,
+    Effects, KnownTrust, PolicyEngine, RegistrationRefused, RegistryFrozen, Requirements, ToolContract, ToolName,
+    Trust, UserId, ValueLabel,
 };
 use serde::Deserialize;
 
@@ -25,9 +25,11 @@ pub enum ConfigError {
     #[error("parse error: {0}")]
     Parse(#[from] toml::de::Error),
     #[error(transparent)]
-    DuplicateContract(#[from] DuplicateContract),
+    ContractRefused(#[from] ContractRefused),
     #[error(transparent)]
-    DuplicateRegistration(#[from] DuplicateRegistration),
+    RegistrationRefused(#[from] RegistrationRefused),
+    #[error(transparent)]
+    RegistryFrozen(#[from] RegistryFrozen),
     #[error("duplicate tool `{0}`")]
     DuplicateTool(String),
     #[error("tool name `{ESCALATE_TOOL}` is reserved for the gateway's escalation tool")]
@@ -318,7 +320,7 @@ impl RawConfig {
                     ..baton_core::Requirements::default()
                 },
                 readers: response.readers.iter().map(UserId::new).collect(),
-            });
+            })?;
         }
         Ok(GatewayConfig { engine, tools })
     }

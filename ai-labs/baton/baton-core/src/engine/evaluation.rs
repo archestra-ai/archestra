@@ -34,6 +34,10 @@ impl PolicyEngine {
         trajectory: &mut Trajectory,
         request: ToolRequest,
     ) -> Result<FlowOutcome<ExecutionToken>, FlowRefusal> {
+        // The first evaluation freezes the registries: routing is resolved
+        // live, so a later registration would change which authority rules
+        // an already-minted plan.
+        self.freeze();
         // Pending-slot discipline: at most one action, idempotent re-entry
         // against the immutable original, everything else refused.
         let (checked_request, existing_action) = match trajectory.pending_action() {
@@ -153,6 +157,7 @@ impl PolicyEngine {
         trajectory: &mut Trajectory,
         request: EmissionRequest,
     ) -> Result<FlowOutcome<Emitted>, FlowRefusal> {
+        self.freeze();
         // Pending-slot discipline, per emission kind: idempotent re-entry
         // against the immutable original, a different proposal refused.
         let (checked, existing_flow) = match trajectory.pending_emission() {

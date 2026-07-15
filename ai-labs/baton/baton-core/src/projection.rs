@@ -45,7 +45,14 @@ pub fn value_labels(events: &EventSet) -> BTreeMap<ValueId, ValueLabel> {
                     .combine(fold(&labels, arguments))
                     .combine(fold(&labels, control)),
                 ValueOrigin::Transformed { declared, .. } => declared.clone(),
-                ValueOrigin::Endorsed { raised, .. } => raised.clone(),
+                // Recomputed from the source label and the granted delta —
+                // never the fact's own copy — so rebuild equivalence can
+                // detect a recorded `raised` inconsistent with the raise.
+                ValueOrigin::Endorsed { source, delta, .. } => delta.raise(
+                    labels
+                        .get(source)
+                        .expect("endorse sources are admitted before their derivations"),
+                ),
             };
             labels.insert(*value, label);
         }

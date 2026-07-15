@@ -146,8 +146,9 @@ observable; preserve it (there is a typed-order test).
   application** against the current registry (a minted plan no longer pins its
   authority), so the construction-time-only rule is load-bearing for *safety*,
   not merely determinism: registering an authority between minting a plan and
-  applying its step would change which authority rules it. Do not mutate the
-  registry after the first evaluation.
+  applying its step would change which authority rules it. The rule is
+  mechanical: the first evaluation freezes the registries, and any later
+  registration is refused (`RegistryFrozen`).
 - Transformers are plain `fn` pointers (`TransformerFn`) beside a
   serializable descriptor. No capturing closures, no `dyn`/`Box` in engine
   state.

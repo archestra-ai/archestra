@@ -287,11 +287,14 @@ impl ValueStore {
         // The general no-widening law, trust/audience instances: unaided
         // admission never exposes more than the causal dependency fold — a
         // contract-declared wider output (trust laundering, audience
-        // widening) is absorbed by the combine above. Only a *validated*
+        // widening) is absorbed by the combine above, so the invariant holds
+        // by construction (the fold's worst-wins resolution of Unknown is
+        // not a widening — see `Trust::widening_over`). Only a *validated*
         // transformer derivation or an *authority-granted* endorsement may
         // sit below the fold. The effects instance binds at the flow check
-        // (`Effects::widening_over`).
-        debug_assert!(
+        // (`Effects::widening_over`). Always-on: this is the admission
+        // half of the no-widening law, cheap and load-bearing.
+        assert!(
             label.trust.widening_over(&fold.trust).is_none() && label.audience.widening_over(&fold.audience).is_none(),
             "tool-output admission widened the dependency fold"
         );
@@ -507,6 +510,44 @@ mod tests {
         assert_eq!(admitted, &fold);
         assert!(admitted.trust.widening_over(&fold.trust).is_none());
         assert!(admitted.audience.widening_over(&fold.audience).is_none());
+    }
+
+    /// The fold's worst-wins resolution is not a widening: an intrinsically
+    /// suspicious output over an unknown dependency admits at known
+    /// `Suspicious` (so it satisfies a `Suspicious` floor the unknown input
+    /// could not) without tripping the no-widening invariant in any build —
+    /// becoming known-bad grants nothing upward.
+    #[test]
+    fn suspicious_intrinsic_over_unknown_fold_is_not_a_widening() {
+        let mut store = ValueStore::default();
+        let unknown_dep = store.admit_ingress(
+            TurnId::new(0),
+            ValueLabel {
+                audience: Audience::readers([UserId::new("alice")]),
+                trust: Trust::UNKNOWN,
+            },
+            OpaqueValue::new("unvetted page"),
+        );
+        let out = store
+            .admit_tool_output(
+                ActionId::new(0),
+                ValueLabel {
+                    audience: Audience::readers([UserId::new("alice")]),
+                    trust: Trust::SUSPICIOUS,
+                },
+                BTreeSet::from([unknown_dep]),
+                BTreeSet::new(),
+                OpaqueValue::new("scraped text"),
+            )
+            .unwrap();
+        let admitted = store.get(out).unwrap().label();
+        // Worst wins: the known-bad judgement resolves the unknown downward.
+        assert_eq!(admitted.trust, Trust::SUSPICIOUS);
+        assert!(matches!(
+            admitted.trust.at_least(crate::dimension::KnownTrust::Suspicious),
+            crate::preset::Adequacy::Holds
+        ));
+        assert!(admitted.trust.widening_over(&Trust::UNKNOWN).is_none());
     }
 
     #[test]

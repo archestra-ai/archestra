@@ -128,7 +128,9 @@ impl BatonGate {
             Pursuit::NeedsApproval(pending) => {
                 let reason = format!("needs external ruling from {}", pending.authority());
                 drop(pending);
-                self.trajectory.abandon_pending();
+                self.trajectory
+                    .abandon_pending()
+                    .expect("a stalled or blocked action was never released");
                 GateVerdict::Block { reason }
             }
             // A stalled pursuit already abandoned the pending action.
@@ -340,13 +342,15 @@ impl BatonGateBuilder {
                 .map_err(|_| DojoError::DuplicateContract { tool })?;
         }
         if let Some(readers) = self.conversation_readers {
-            engine = engine.with_response_policy(ResponsePolicy {
-                requires: Requirements {
-                    audience: baton_core::AudienceRule::FromRecipients,
-                    ..Requirements::default()
-                },
-                readers,
-            });
+            engine = engine
+                .with_response_policy(ResponsePolicy {
+                    requires: Requirements {
+                        audience: baton_core::AudienceRule::FromRecipients,
+                        ..Requirements::default()
+                    },
+                    readers,
+                })
+                .expect("the gate registers its response policy before any evaluation");
         }
         Ok(BatonGate {
             engine,

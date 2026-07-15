@@ -120,7 +120,14 @@ impl PolicyEngine {
             Ok(outcome) => outcome.map_allowed(FlowPermit::Execute),
             Err(refusal) => return Pursuit::Refused(refusal),
         };
-        match self.drive(trajectory, first, max_steps, Trajectory::abandon_pending) {
+        // A pursued flow stalls only pre-release (the permit ends the walk),
+        // so its pending action is still open and abandonment cannot refuse.
+        let abandon = |trajectory: &mut Trajectory| {
+            trajectory
+                .abandon_pending()
+                .expect("a stalled pursuit abandons an open action");
+        };
+        match self.drive(trajectory, first, max_steps, abandon) {
             Driven::Allowed(FlowPermit::Execute(token)) => Pursuit::Permitted(token),
             Driven::Allowed(FlowPermit::Emit(_)) => {
                 unreachable!("a tool flow settles in an execution permit")

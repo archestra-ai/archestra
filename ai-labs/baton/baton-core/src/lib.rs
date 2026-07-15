@@ -123,7 +123,7 @@ pub use engine::{
 };
 pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, EmissionRequest, ToolRequest};
 pub use revision::{Revision, ValueId};
-pub use turn::{Speaker, Trajectory};
+pub use turn::{DispatchInFlight, Speaker, Trajectory};
 pub use value::{OpaqueValue, UnknownValue, ValueLabel};
 
 // ── Feature ─────────────────────────────────────────────────────────────
@@ -134,7 +134,10 @@ pub use approval::{
 };
 pub use audit::{AuthorityName, TransitionFailure};
 pub use contract::{AttentionRule, AudienceRule};
-pub use engine::{BlockReason, EmissionPursuit, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
+pub use engine::{
+    BlockReason, ContractRefused, EmissionPursuit, RegistrationRefused, RegistryFrozen, ResponsePolicy, StepCapability,
+    StepOutcome, StepRefused,
+};
 pub use plan::{NonEmptyVec, RemedyPlan};
 pub use remedy::{
     Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, PlannedRemedy, ReductionTarget,

@@ -586,7 +586,7 @@ fn second_distinct_proposal_is_refused_until_abandoned() {
     assert_eq!(trajectory.pending_action().unwrap().id(), pending);
     assert_eq!(trajectory.revision(), revision_before);
 
-    trajectory.abandon_pending();
+    trajectory.abandon_pending().unwrap();
     assert!(trajectory.pending_action().is_none());
 }
 
@@ -653,12 +653,10 @@ fn committed_effects_feed_later_checks() {
 fn duplicate_contract_is_refused() {
     let mut engine = PolicyEngine::new();
     engine.register(email_contract()).unwrap();
-    assert_eq!(
+    assert!(matches!(
         engine.register(email_contract()),
-        Err(DuplicateContract {
-            tool: ToolName::new("email.send")
-        })
-    );
+        Err(crate::engine::ContractRefused::Duplicate(DuplicateContract { tool })) if tool == ToolName::new("email.send")
+    ));
 }
 
 #[test]
@@ -1013,13 +1011,15 @@ fn spent_confirmation_cannot_authorize_a_second_attempt() {
 }
 
 fn response_engine(readers: &[&str]) -> PolicyEngine {
-    PolicyEngine::new().with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            audience: crate::contract::AudienceRule::FromRecipients,
-            ..Requirements::default()
-        },
-        readers: readers.iter().map(|r| user(r)).collect(),
-    })
+    PolicyEngine::new()
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::FromRecipients,
+                ..Requirements::default()
+            },
+            readers: readers.iter().map(|r| user(r)).collect(),
+        })
+        .unwrap()
 }
 
 #[test]
@@ -1908,20 +1908,19 @@ fn transform_step_applies_and_flow_permits() {
     };
     // The raw value keeps its label; the derived value took its slot.
     assert_eq!(trajectory.value(raw).unwrap().label().trust, Trust::SUSPICIOUS);
-    // The seeded prior dispatch audited its own commitment and failure;
-    // this flow's only transition record is the applied transform.
-    let transitions: Vec<_> = trajectory
-        .state()
-        .audit()
-        .iter()
-        .filter(|e| matches!(e, AuditEvent::ValueTransition { .. }))
-        .collect();
+    // The complete audit: the seeded prior dispatch's own commitment and
+    // declared failure, then this flow's applied transform — and nothing
+    // else.
     assert!(matches!(
-        transitions.as_slice(),
-        [AuditEvent::ValueTransition {
-            outcome: crate::audit::TransitionOutcome::Applied,
-            ..
-        }]
+        trajectory.state().audit(),
+        [
+            AuditEvent::EffectsCommitted { .. },
+            AuditEvent::DispatchFailed { .. },
+            AuditEvent::ValueTransition {
+                outcome: crate::audit::TransitionOutcome::Applied,
+                ..
+            },
+        ]
     ));
 
     let (canonical, receipt) = trajectory.release(token).unwrap();
@@ -3313,7 +3312,7 @@ fn stale_and_foreign_step_capabilities_are_refused() {
     assert_eq!(trajectory.revision(), revision_before);
 
     // A stale approval is likewise refused.
-    trajectory.abandon_pending();
+    trajectory.abandon_pending().unwrap();
     let retry = email_request(&mut trajectory, doc, "charlie");
     let plans = remediable(&engine, &mut trajectory, retry);
     let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
@@ -3438,6 +3437,71 @@ fn non_head_plan_steps_are_refused_without_touching_state() {
     assert!(matches!(decision, FlowOutcome::AllowedNow(_)));
 }
 
+/// A released action cannot be abandoned: its dispatch is in flight, so the
+/// slot frees only through the receipt — abandonment there would let the
+/// same request re-evaluate and dispatch a second time.
+#[test]
+fn a_released_action_cannot_be_abandoned() {
+    let engine = engine_with([email_contract()]);
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let request = email_request(&mut trajectory, body, "bob");
+    let token = walk_to_permit(&engine, &mut trajectory, request.clone());
+    let (_canonical, receipt) = trajectory.release(token).unwrap();
+
+    let revision_before = trajectory.revision();
+    assert!(matches!(
+        trajectory.abandon_pending(),
+        Err(crate::turn::DispatchInFlight { .. })
+    ));
+    // Refusal touched nothing: the action is still released, in flight, and
+    // the same request still refuses re-evaluation.
+    assert_eq!(trajectory.revision(), revision_before);
+    assert!(matches!(
+        trajectory.pending_action().map(crate::request::PendingAction::state),
+        Some(crate::request::ActionState::Released)
+    ));
+    assert!(matches!(
+        engine.evaluate(&mut trajectory, request),
+        Err(FlowRefusal::ActionAlreadyPending { .. })
+    ));
+    // The receipt still closes the action normally.
+    trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+    assert!(trajectory.pending_action().is_none());
+}
+
+/// The first evaluation freezes the registries: late registration of any
+/// kind is refused (routing is resolved live, so a mid-run registration
+/// would change which authority rules an already-minted plan), while plans
+/// minted before the freeze stay applicable.
+#[test]
+fn registries_freeze_at_the_first_evaluation() {
+    let mut engine = engine_with([email_contract()]);
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+    let request = email_request(&mut trajectory, doc, "charlie");
+    let plans = remediable(&engine, &mut trajectory, request);
+
+    assert!(matches!(
+        engine.register_authority(inline_authority("late-voucher", human().mandate, approve_all)),
+        Err(crate::engine::RegistrationRefused::Frozen(_))
+    ));
+    assert!(matches!(
+        engine.register_transformer(redact_transformer()),
+        Err(crate::engine::RegistrationRefused::Frozen(_))
+    ));
+    assert!(matches!(
+        engine.register(email_contract()),
+        Err(crate::engine::ContractRefused::Frozen(_))
+    ));
+    // Plans minted before the freeze stay applicable under the unchanged
+    // registries.
+    let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+    assert!(engine.apply_step(&mut trajectory, capability).is_ok());
+}
+
 /// A transformer error fails the step, audits the failure with no
 /// derived value, and advances the revision (staling siblings).
 #[test]
@@ -3466,19 +3530,19 @@ fn transformer_error_fails_the_step_and_audits() {
     ));
     assert_eq!(trajectory.store().len(), values_before);
     assert!(trajectory.revision() > revision_before);
-    let transitions: Vec<_> = trajectory
-        .state()
-        .audit()
-        .iter()
-        .filter(|e| matches!(e, AuditEvent::ValueTransition { .. }))
-        .collect();
+    // The complete audit: the seeded prior dispatch's records, then the
+    // failed transform — no derived value, and nothing else.
     assert!(matches!(
-        transitions.as_slice(),
-        [AuditEvent::ValueTransition {
-            derived: None,
-            outcome: crate::audit::TransitionOutcome::Failed(_),
-            ..
-        }]
+        trajectory.state().audit(),
+        [
+            AuditEvent::EffectsCommitted { .. },
+            AuditEvent::DispatchFailed { .. },
+            AuditEvent::ValueTransition {
+                derived: None,
+                outcome: crate::audit::TransitionOutcome::Failed(_),
+                ..
+            },
+        ]
     ));
 }
 
@@ -4063,13 +4127,15 @@ fn a_missing_contract_reports_no_contract_then_unknown_growth() {
 /// unrelated response.
 #[test]
 fn a_response_is_independent_of_the_pending_tool_action() {
-    let mut engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            audience: crate::contract::AudienceRule::FromRecipients,
-            ..Requirements::default()
-        },
-        readers: BTreeSet::from([user("alice")]),
-    });
+    let mut engine = engine_with([email_contract()])
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::FromRecipients,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("alice")]),
+        })
+        .unwrap();
     engine.register_authority(inline_acquirer()).unwrap();
     let mut trajectory = Trajectory::new();
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
@@ -4094,13 +4160,15 @@ fn a_response_is_independent_of_the_pending_tool_action() {
 /// response check consults no confirmation at all.
 #[test]
 fn a_pending_confirmation_never_satisfies_response_attention() {
-    let engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            attention: crate::contract::AttentionRule::ExplicitConfirmation,
-            ..Requirements::default()
-        },
-        readers: BTreeSet::from([user("alice")]),
-    });
+    let engine = PolicyEngine::new()
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                attention: crate::contract::AttentionRule::ExplicitConfirmation,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("alice")]),
+        })
+        .unwrap();
     let mut trajectory = Trajectory::new();
     let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "hi");
     trajectory.ingress(
@@ -4128,13 +4196,15 @@ fn a_pending_confirmation_never_satisfies_response_attention() {
 /// The response check consumes committed past effects.
 #[test]
 fn a_response_checks_committed_past_effects() {
-    let engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            forbid_prior_effects: BTreeSet::from([Effect::Egress]),
-            ..Requirements::default()
-        },
-        readers: BTreeSet::from([user("alice")]),
-    });
+    let engine = PolicyEngine::new()
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                forbid_prior_effects: BTreeSet::from([Effect::Egress]),
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("alice")]),
+        })
+        .unwrap();
     let mut trajectory = Trajectory::new();
     let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "quiet so far");
     let response = EmissionRequest {
@@ -4166,13 +4236,15 @@ fn a_response_checks_committed_past_effects() {
 /// settles in an atomic emit of exactly the checked bytes.
 #[test]
 fn remediable_emission_walks_to_an_emit_via_pursue() {
-    let mut engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            audience: crate::contract::AudienceRule::FromRecipients,
-            ..Requirements::default()
-        },
-        readers: BTreeSet::from([user("charlie")]),
-    });
+    let mut engine = PolicyEngine::new()
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::FromRecipients,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("charlie")]),
+        })
+        .unwrap();
     engine
         .register_authority(inline_authority("auto-voucher", human().mandate, approve_all))
         .unwrap();
@@ -4211,13 +4283,15 @@ fn remediable_emission_walks_to_an_emit_via_pursue() {
 /// emission stays re-enterable; the tool-action slot stays independent.
 #[test]
 fn emission_slot_discipline_is_per_kind() {
-    let mut engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            audience: crate::contract::AudienceRule::FromRecipients,
-            ..Requirements::default()
-        },
-        readers: BTreeSet::from([user("charlie")]),
-    });
+    let mut engine = engine_with([email_contract()])
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::FromRecipients,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("charlie")]),
+        })
+        .unwrap();
     engine.register_authority(human()).unwrap();
     let mut trajectory = Trajectory::new();
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
@@ -4266,13 +4340,15 @@ fn emission_slot_discipline_is_per_kind() {
 /// pending action before.
 #[test]
 fn a_blocked_emission_never_clears_a_pending_action() {
-    let engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
-        requires: Requirements {
-            audience: crate::contract::AudienceRule::FromRecipients,
-            ..Requirements::default()
-        },
-        readers: BTreeSet::from([user("charlie")]),
-    });
+    let engine = engine_with([email_contract()])
+        .with_response_policy(ResponsePolicy {
+            requires: Requirements {
+                audience: crate::contract::AudienceRule::FromRecipients,
+                ..Requirements::default()
+            },
+            readers: BTreeSet::from([user("charlie")]),
+        })
+        .unwrap();
     let mut trajectory = Trajectory::new();
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");

@@ -11,8 +11,8 @@
 //! Run with `cargo run --example recording_to_task`.
 
 use baton_core::{
-    ArgumentTree, Blocked, Decision, OpaqueValue, PolicyEngine, Speaker, ToolContract, ToolName, ToolRequest,
-    Trajectory, UserId, ValueId, ValueLabel,
+    ArgumentTree, FlowOutcome, OpaqueValue, PolicyEngine, Speaker, ToolContract, ToolName, ToolRequest, Trajectory,
+    UserId, ValueId, ValueLabel,
 };
 
 /// The internal team who may read the recording.
@@ -52,7 +52,7 @@ fn main() {
     // Fetch the recording; the output wears the internal team's audience.
     let fetch = ToolRequest::new(ToolName::new("grain.fetch"), ArgumentTree::empty(), []);
     let recording = match engine.evaluate(&mut trajectory, fetch) {
-        Decision::Permitted(token) => {
+        Ok(FlowOutcome::AllowedNow(token)) => {
             let (_canonical, receipt) = trajectory.release(token).unwrap();
             trajectory
                 .record_output(
@@ -74,11 +74,12 @@ fn main() {
     let open = open_issue(&mut trajectory, recording, WORLD);
     print!("  open public issue → {WORLD}: ");
     match engine.evaluate(&mut trajectory, open) {
-        Decision::Permitted(_) => println!("PERMITTED (unexpected: no authority is mandated)"),
-        Decision::Blocked(Blocked::Terminal(block)) => println!("BLOCKED — {}", block.reason),
-        Decision::Blocked(Blocked::Remediable { .. }) => {
+        Ok(FlowOutcome::AllowedNow(_)) => println!("PERMITTED (unexpected: no authority is mandated)"),
+        Ok(FlowOutcome::Terminal { reason, .. }) => println!("BLOCKED — {reason}"),
+        Ok(FlowOutcome::Remediable { .. }) => {
             println!("BLOCKED — remediable, but no registered authority can clear it")
         }
+        Err(refusal) => println!("REFUSED — {refusal}"),
     }
 
     println!("\naudit trail:");

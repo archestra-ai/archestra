@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Audience, AudienceRule, Decision, Effects, KnownTrust,
+    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Audience, AudienceRule, Effects, KnownTrust,
     OpaqueValue, PolicyEngine, Requirements, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust, UserId,
     ValueId, ValueLabel,
 };
@@ -207,9 +207,7 @@ fn bench_resolution(c: &mut Criterion) {
                     let decision = world
                         .engine
                         .evaluate(black_box(&mut world.trajectory), black_box(request));
-                    match black_box(decision) {
-                        Decision::Permitted(_) | Decision::Blocked { .. } => {}
-                    }
+                    let _ = black_box(decision);
                     // A permit stores the pending action; abandon it so the
                     // next iteration's distinct request is not refused.
                     world.trajectory.abandon_pending();

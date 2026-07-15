@@ -28,7 +28,7 @@ use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptPa
 use crate::event::{EventSet, Fact, ValueOrigin};
 use crate::plan::{NonEmptyVec, RemedyPlan};
 use crate::remedy::PlannedRemedy;
-use crate::request::{ActionState, PendingAction, ToolRequest};
+use crate::request::{ActionState, EmissionRequest, PendingAction, PendingEmission, ToolRequest};
 use crate::revision::{ActionId, FlowId, PlanId, Revision, TransitionId, TurnId, ValueId};
 use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
 
@@ -89,6 +89,15 @@ pub struct Turn {
     pub value: ValueId,
 }
 
+/// Which pending target a derivation substitutes into: the (at most one)
+/// pending tool action's argument tree, or the (at most one) pending
+/// emission's body tree. The two slots are independent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReductionSite {
+    Action,
+    Emission,
+}
+
 /// Identity of one trajectory instance, unique within the process; every
 /// capability is bound to it so an authorization cannot cross trajectories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
@@ -124,6 +133,10 @@ pub struct Trajectory {
     /// the revision they were computed against; any state change stales them.
     plans: Vec<RemedyPlan>,
     next_plan: u64,
+    /// The (at most one) pending emission, independent of the pending
+    /// tool-action slot: a blocked emission never clears a pending action,
+    /// and vice versa.
+    pending_emission: Option<PendingEmission>,
     /// The confirming turn most recently spent by an action release. A
     /// receipt-declared failure closes the action without appending a turn,
     /// so without this marker the confirming turn would become the newest
@@ -151,6 +164,7 @@ impl Trajectory {
             state: TrajectoryState::default(),
             revision: Revision::INITIAL,
             pending: None,
+            pending_emission: None,
             next_action: 0,
             next_flow: 0,
             next_transition: 0,
@@ -191,6 +205,10 @@ impl Trajectory {
 
     pub fn pending_action(&self) -> Option<&PendingAction> {
         self.pending.as_ref()
+    }
+
+    pub fn pending_emission(&self) -> Option<&PendingEmission> {
+        self.pending_emission.as_ref()
     }
 
     /// The remedy plans of the most recent remediable block. Only plans
@@ -455,6 +473,9 @@ impl Trajectory {
             actor: Actor::Assistant,
             value,
         });
+        // An emitted response settles any pending emission (the fact batch's
+        // ResponseEmitted closes the live emission in the event log).
+        self.pending_emission = None;
         self.commit(batch);
         Ok((value, rendered))
     }
@@ -521,11 +542,35 @@ impl Trajectory {
         }
     }
 
+    /// Retain a remediable emission proposal as the pending emission,
+    /// opening its checked flow.
+    pub(crate) fn set_pending_emission(&mut self, request: EmissionRequest) -> FlowId {
+        let flow = FlowId::new(self.next_flow);
+        self.next_flow += 1;
+        let batch = vec![Fact::EmissionProposed { flow }];
+        self.pending_emission = Some(PendingEmission::proposed(flow, request));
+        self.commit(batch);
+        flow
+    }
+
+    pub(crate) fn clear_pending_emission(&mut self) {
+        if let Some(pending) = self.pending_emission.take() {
+            self.commit(vec![Fact::EmissionAbandoned { flow: pending.flow() }]);
+        }
+    }
+
+    /// Explicitly abandon the pending emission (e.g. the harness gave up on
+    /// remediating it). Clears the slot and advances the revision.
+    pub fn abandon_pending_emission(&mut self) {
+        self.clear_pending_emission();
+    }
+
     /// Replace the stored remedy plans with freshly enumerated drafts,
     /// assigning ids and stamping the post-advance revision as their basis.
     pub(crate) fn store_plans(
         &mut self,
-        action: ActionId,
+        flow: FlowId,
+        action: Option<ActionId>,
         engine: crate::engine::EngineId,
         drafts: Vec<NonEmptyVec<PlannedRemedy>>,
     ) -> Vec<RemedyPlan> {
@@ -533,11 +578,6 @@ impl Trajectory {
         // included): it mirrors this unconditional advance 1:1 so the
         // frontier can replace the revision at cutover without weakening
         // cross-evaluation staleness.
-        let flow = self
-            .pending
-            .as_ref()
-            .expect("plans are stored only for the pending action")
-            .flow();
         self.commit(vec![Fact::CheckPerformed { flow, action }]);
         let basis = self.revision;
         self.plans = drafts
@@ -621,6 +661,7 @@ impl Trajectory {
         transformer: crate::value::TransformerRef,
         declared_output: ValueLabel,
         body: OpaqueValue,
+        site: ReductionSite,
     ) -> ValueId {
         let transition = self.mint_transition();
         let input = self
@@ -630,11 +671,6 @@ impl Trajectory {
             .label()
             .clone();
         let derived = self.store.next_id();
-        let action = self
-            .pending
-            .as_ref()
-            .expect("pending action validated by the engine")
-            .id();
         let batch = vec![
             Fact::ValueAdmitted {
                 value: derived,
@@ -645,21 +681,14 @@ impl Trajectory {
                     declared: declared_output.clone(),
                 },
             },
-            Fact::ArgumentSubstituted {
-                action,
-                from: source,
-                to: derived,
-            },
+            self.substitution_fact(site, source, derived),
         ];
         let admitted = self
             .store
             .admit_transformed(source, transition, transformer.clone(), declared_output.clone(), body)
             .expect("transform source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.pending
-            .as_mut()
-            .expect("pending action validated by the engine")
-            .substitute_argument(source, derived);
+        self.substitute_into(site, source, derived);
         self.state.record(AuditEvent::ValueTransition {
             transition,
             transformer,
@@ -775,6 +804,7 @@ impl Trajectory {
         authority: crate::audit::AuthorityName,
         delta: crate::remedy::LabelRaise,
         raised: ValueLabel,
+        site: ReductionSite,
     ) -> ValueId {
         let transition = self.mint_transition();
         let source_value = self.store.get(source).expect("endorse source validated by the engine");
@@ -786,11 +816,6 @@ impl Trajectory {
         )
         .expect("the engine endorses only non-empty raises");
         let derived = self.store.next_id();
-        let action = self
-            .pending
-            .as_ref()
-            .expect("pending action validated by the engine")
-            .id();
         let batch = vec![
             Fact::ValueAdmitted {
                 value: derived,
@@ -801,11 +826,7 @@ impl Trajectory {
                     raised: raised.clone(),
                 },
             },
-            Fact::ArgumentSubstituted {
-                action,
-                from: source,
-                to: derived,
-            },
+            self.substitution_fact(site, source, derived),
             Fact::AuthorizationApplied {
                 authorization: raise_grant.clone(),
                 authority: authority.clone(),
@@ -818,10 +839,7 @@ impl Trajectory {
             .admit_endorsed(source, authority.clone(), delta.clone(), raised.clone(), body)
             .expect("endorse source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.pending
-            .as_mut()
-            .expect("pending action validated by the engine")
-            .substitute_argument(source, derived);
+        self.substitute_into(site, source, derived);
         self.state.record(AuditEvent::AuthorizationApplied {
             transition,
             authorization: raise_grant,
@@ -832,6 +850,46 @@ impl Trajectory {
         });
         self.commit(batch);
         derived
+    }
+
+    /// The substitution fact for a derivation at `site`.
+    fn substitution_fact(&self, site: ReductionSite, from: ValueId, to: ValueId) -> Fact {
+        match site {
+            ReductionSite::Action => Fact::ArgumentSubstituted {
+                action: self
+                    .pending
+                    .as_ref()
+                    .expect("pending action validated by the engine")
+                    .id(),
+                from,
+                to,
+            },
+            ReductionSite::Emission => Fact::EmissionBodySubstituted {
+                flow: self
+                    .pending_emission
+                    .as_ref()
+                    .expect("pending emission validated by the engine")
+                    .flow(),
+                from,
+                to,
+            },
+        }
+    }
+
+    /// Substitute a derived value into the pending target at `site`.
+    fn substitute_into(&mut self, site: ReductionSite, from: ValueId, to: ValueId) {
+        match site {
+            ReductionSite::Action => self
+                .pending
+                .as_mut()
+                .expect("pending action validated by the engine")
+                .substitute_argument(from, to),
+            ReductionSite::Emission => self
+                .pending_emission
+                .as_mut()
+                .expect("pending emission validated by the engine")
+                .substitute_body(from, to),
+        }
     }
 
     pub(crate) fn mint_transition(&mut self) -> TransitionId {

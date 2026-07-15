@@ -214,14 +214,14 @@ pub enum RejectedToken {
 }
 
 /// The linear capability to apply one plan step. Bound to the trajectory,
-/// its exact revision, and the exact plan and step; minted by
-/// [`PolicyEngine::mint_step`](crate::engine::PolicyEngine::mint_step) and consumed — success or failure — by
+/// its exact revision, the checked flow, and the exact plan and step; minted
+/// by [`PolicyEngine::mint_step`](crate::engine::PolicyEngine::mint_step) and consumed — success or failure — by
 /// [`PolicyEngine::apply_step`](crate::engine::PolicyEngine::apply_step).
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct StepCapability {
     pub(super) plan: PlanId,
     pub(super) step: usize,
-    pub(super) action: ActionId,
+    pub(super) flow: crate::revision::FlowId,
     pub(super) trajectory: TrajectoryId,
     pub(super) revision: Revision,
     pub(super) engine: EngineId,
@@ -254,20 +254,21 @@ pub enum StepRefused {
     FlowNotPending { flow: crate::revision::FlowId },
 }
 
-/// The outcome of applying one plan step.
+/// The outcome of applying one plan step: a continuation within the
+/// remediable flow, never a new policy outcome kind.
 #[derive(Debug, Serialize)]
 #[must_use = "a dropped StepOutcome loses the flow's continuation"]
 pub enum StepOutcome {
     /// The step applied; the original flow was re-evaluated against the new
-    /// state (permitting, re-planning, or blocking terminally).
-    Advanced(Decision),
+    /// state (allowing, re-planning, or blocking terminally).
+    Advanced(FlowOutcome<FlowPermit>),
     /// The step names an external authority: its ruling re-enters through
     /// [`PolicyEngine::apply_approval`](crate::engine::PolicyEngine::apply_approval).
     NeedsApproval(PendingApproval),
-    /// The step's precondition no longer held or its transformer failed. The
-    /// failure is audited, the revision advanced (staling every sibling
-    /// capability and plan), and no value or action was changed beyond the
-    /// audit record. Re-evaluate to replan.
+    /// The step's reduction relation no longer held or its transformer
+    /// failed. The failure is audited, the revision advanced (staling every
+    /// sibling capability and plan), and no value or action was changed
+    /// beyond the audit record. Re-evaluate to replan.
     Failed(crate::audit::TransitionFailure),
 }
 
@@ -280,6 +281,9 @@ pub struct DuplicateContract {
     pub tool: ToolName,
 }
 
+/// Why a flow is terminally blocked: a *policy* outcome — the flow was
+/// well-formed and the policy proved (or an authority ruled) it cannot
+/// proceed. Protocol/state defects are [`FlowRefusal`]s, never here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum BlockReason {
     /// A structural violation (an integration bug the caller must fix) was
@@ -287,16 +291,7 @@ pub enum BlockReason {
     RequiresStructuralFix,
     /// The flow escalated and no remedy machinery exists for it (yet).
     NoRemedy,
-    /// A different action is already pending on this trajectory; it must be
-    /// recorded or abandoned before a new proposal.
-    ActionAlreadyPending { pending: ActionId },
-    /// The request referenced a value this trajectory never admitted — a
-    /// caller bug, failed closed and loudly.
-    UnknownValueReferenced { value: ValueId },
-    /// The response was composed against a revision the trajectory has moved
-    /// past; recompose against the real state.
-    StaleResponse { composed_at: Revision, current: Revision },
-    /// An authority denied the waiver this flow needed.
+    /// An authority denied the authorization this flow needed.
     DeniedByAuthority { authority: AuthorityName, reason: String },
     /// An approved or applied remedy did not clear the checks it targeted on
     /// the fail-closed recheck — a bug in prediction or registration; the
@@ -315,18 +310,6 @@ impl fmt::Display for BlockReason {
                 write!(f, "a structural violation nothing may override")
             }
             Self::NoRemedy => write!(f, "the flow escalated and no remedy applies"),
-            Self::ActionAlreadyPending { pending } => {
-                write!(f, "{pending} is already pending on this trajectory")
-            }
-            Self::UnknownValueReferenced { value } => {
-                write!(f, "request references {value}, which this trajectory never admitted")
-            }
-            Self::StaleResponse { composed_at, current } => {
-                write!(
-                    f,
-                    "response composed at {composed_at}, but the trajectory is now at {current}"
-                )
-            }
             Self::DeniedByAuthority { authority, reason } => {
                 write!(f, "denied by {authority}: {reason}")
             }
@@ -340,44 +323,90 @@ impl fmt::Display for BlockReason {
     }
 }
 
-/// A blocked flow. `Terminal` is an explicit type, not an empty plan list:
-/// there is nothing any transition or waiver could change. `Remediable`
-/// carries at least one predicted route to a permit.
+/// An invalid, stale, foreign, or conflicting proposal, refused before any
+/// policy judgment — outside the tri-state, touching no state (no revision
+/// advance, no event, no cleared slot). Distinct from a [`BlockReason`]:
+/// a refusal says "this request does not describe the trajectory's current
+/// state", not "policy forbids this flow".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, thiserror::Error)]
+pub enum FlowRefusal {
+    /// A different action is already pending on this trajectory (or this one
+    /// has a dispatch in flight); it must be recorded or abandoned before a
+    /// new proposal.
+    #[error("{pending} is already pending on this trajectory")]
+    ActionAlreadyPending { pending: ActionId },
+    /// A different emission is already pending on this trajectory.
+    #[error("emission {flow} is already pending on this trajectory")]
+    EmissionAlreadyPending { flow: crate::revision::FlowId },
+    /// The request referenced a value this trajectory never admitted — a
+    /// caller bug, failed closed and loudly.
+    #[error("request references {value}, which this trajectory never admitted")]
+    UnknownValueReferenced { value: ValueId },
+    /// The proposal was composed against a revision the trajectory has moved
+    /// past; recompose against the real state.
+    #[error("proposal composed at {composed_at}, but the trajectory is now at {current}")]
+    StaleBasis { composed_at: Revision, current: Revision },
+}
+
+/// The one policy outcome of checking a well-formed flow proposal against
+/// the current state, for every emission sink alike (a tool dispatch or an
+/// assistant emission — `P` is the sink's permit payload).
 #[derive(Debug, PartialEq, Eq, Serialize)]
-pub enum Blocked {
-    Terminal(TerminalBlock),
+#[must_use = "a dropped FlowOutcome loses the permit or the flow's continuation"]
+pub enum FlowOutcome<P> {
+    /// The checked flow satisfies policy now.
+    AllowedNow(P),
+    /// Blocked, with at least one predicted remedy plan that can unlock it.
+    /// A plan is a prediction, never a permit.
     Remediable {
         violations: Vec<Violation>,
         plans: NonEmptyVec<RemedyPlan>,
     },
+    /// Blocked, and no available remedy can unlock it under the current
+    /// policy and registered capabilities.
+    Terminal {
+        violations: Vec<Violation>,
+        reason: BlockReason,
+    },
 }
 
+impl<P> FlowOutcome<P> {
+    /// Map the permit payload, preserving the policy outcome.
+    pub(crate) fn map_allowed<Q>(self, f: impl FnOnce(P) -> Q) -> FlowOutcome<Q> {
+        match self {
+            Self::AllowedNow(permit) => FlowOutcome::AllowedNow(f(permit)),
+            Self::Remediable { violations, plans } => FlowOutcome::Remediable { violations, plans },
+            Self::Terminal { violations, reason } => FlowOutcome::Terminal { violations, reason },
+        }
+    }
+}
+
+/// An emitted assistant response: the harness sends `rendered` — bytes
+/// produced from the exact checked tree — and nothing else; there is no
+/// separate raw model string that may be returned after the check.
 #[derive(Debug, PartialEq, Eq, Serialize)]
-pub struct TerminalBlock {
-    pub violations: Vec<Violation>,
-    pub reason: BlockReason,
+#[must_use = "a dropped Emitted loses the only bytes the check permitted"]
+pub struct Emitted {
+    pub value: ValueId,
+    pub rendered: String,
 }
 
+/// The permit payload of a flow whose sink kind is dynamic (plan application
+/// and approval re-entry work over stored plans, which may target a tool
+/// action or a pending emission).
 #[derive(Debug, PartialEq, Eq, Serialize)]
-#[must_use = "a dropped Decision means the flow was neither executed nor blocked"]
-pub enum Decision {
-    Permitted(ExecutionToken),
-    Blocked(Blocked),
+#[must_use = "a dropped FlowPermit means the flow was authorized but never carried out"]
+pub enum FlowPermit {
+    /// A tool flow: release the token to dispatch.
+    Execute(ExecutionToken),
+    /// An emission flow: the checked response was emitted atomically.
+    Emit(Emitted),
 }
 
-/// Outcome of the completely mediated response sink. On `Emitted`, the
-/// harness sends `rendered` — bytes produced from the exact checked tree —
-/// and nothing else; there is no separate raw model string that may be
-/// returned after the check.
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[must_use = "a dropped ResponseDecision means the response was neither emitted nor blocked"]
-pub enum ResponseDecision {
-    Emitted { value: ValueId, rendered: String },
-    Blocked(Blocked),
-}
-
-/// Policy for the final-response sink: what the response flow must satisfy,
-/// and who reads the conversation (the sink's recipients).
+/// Policy for the reserved assistant-response sink: what an emission flow
+/// must satisfy, and who reads the conversation (the sink's recipients).
+/// Registration routes emissions through the same shared evaluation
+/// pipeline as every tool sink.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ResponsePolicy {
     pub requires: Requirements,

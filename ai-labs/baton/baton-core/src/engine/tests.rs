@@ -10,13 +10,54 @@ use crate::contract::{Requirements, Unprovable, Violation};
 use crate::dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 use crate::plan::{NonEmptyVec, RemedyPlan};
 use crate::remedy::{Authorization, AuthorizationScope, DeltaCoordinate, LabelRaise, PlannedRemedy, ReductionTarget};
-use crate::request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
+use crate::request::{ArgumentName, ArgumentSchema, ArgumentTree, EmissionRequest, ToolRequest};
 use crate::revision::{PlanId, ValueId};
 use crate::turn::{Speaker, Trajectory};
 use crate::value::{OpaqueValue, ValueLabel};
 
 fn user(id: &str) -> UserId {
     UserId::new(id)
+}
+
+/// Test lens: a terminal policy outcome's payload, shaped like the old
+/// `TerminalBlock` so assertions read the same.
+struct TerminalBlock {
+    violations: Vec<Violation>,
+    reason: BlockReason,
+}
+
+fn terminal_block<P: std::fmt::Debug>(outcome: FlowOutcome<P>) -> Option<TerminalBlock> {
+    match outcome {
+        FlowOutcome::Terminal { violations, reason } => Some(TerminalBlock { violations, reason }),
+        _ => None,
+    }
+}
+
+fn terminal_block_of<P: std::fmt::Debug>(outcome: Result<FlowOutcome<P>, FlowRefusal>) -> Option<TerminalBlock> {
+    terminal_block(outcome.expect("expected a policy outcome, got a refusal"))
+}
+
+fn advanced_terminal(outcome: StepOutcome) -> Option<TerminalBlock> {
+    match outcome {
+        StepOutcome::Advanced(advanced) => terminal_block(advanced),
+        _ => None,
+    }
+}
+
+/// Test lens: an advanced step's execution token, if it permitted.
+fn advanced_execution(outcome: StepOutcome) -> Option<ExecutionToken> {
+    match outcome {
+        StepOutcome::Advanced(advanced) => execution(advanced),
+        _ => None,
+    }
+}
+
+/// Test lens: the execution token of an allowed dynamic-kind outcome.
+fn execution(outcome: FlowOutcome<FlowPermit>) -> Option<ExecutionToken> {
+    match outcome {
+        FlowOutcome::AllowedNow(FlowPermit::Execute(token)) => Some(token),
+        _ => None,
+    }
 }
 
 fn email_contract() -> ToolContract {
@@ -93,7 +134,7 @@ fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) ->
 /// Evaluate a flow expected to block remediably and return its plans.
 fn remediable(engine: &PolicyEngine, trajectory: &mut Trajectory, request: ToolRequest) -> NonEmptyVec<RemedyPlan> {
     match engine.evaluate(trajectory, request) {
-        Decision::Blocked(Blocked::Remediable { plans, .. }) => plans,
+        Ok(FlowOutcome::Remediable { plans, .. }) => plans,
         other => panic!("expected a remediable block, got {other:?}"),
     }
 }
@@ -323,7 +364,7 @@ fn explicit_flow_taint_blocks_the_sink() {
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
     let request = email_request(&mut trajectory, body, "bob");
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -354,7 +395,7 @@ fn control_dependence_taints_a_clean_payload() {
         BTreeSet::from([secret]),
     );
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert!(matches!(
@@ -377,7 +418,7 @@ fn unregistered_tool_blocks_without_an_acknowledge_authority() {
 
     // No implicit accept: an unprovable flow with no competent authority
     // has no remedy and blocks terminally (fail-closed default).
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -444,7 +485,7 @@ fn unknown_trust_routes_as_an_endorse() {
     let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "doc");
     let request = email_request(&mut trajectory, doc, "bob");
 
-    let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected a remediable block");
     };
     assert!(
@@ -479,7 +520,7 @@ fn guarded_sink_without_recipients_is_structural() {
         BTreeSet::new(),
     );
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert_eq!(block.reason, BlockReason::RequiresStructuralFix);
@@ -493,7 +534,7 @@ fn stale_token_is_rejected_after_any_mutation() {
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, body, "bob");
 
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
     };
     // Any state change — here a value admission, not even a turn —
@@ -513,7 +554,7 @@ fn foreign_trajectory_token_is_rejected() {
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, body, "bob");
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
     };
 
@@ -531,17 +572,19 @@ fn second_distinct_proposal_is_refused_until_abandoned() {
     let first = email_request(&mut trajectory, body, "bob");
     let second = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::Value(body), BTreeSet::new());
 
-    let Decision::Permitted(_token) = engine.evaluate(&mut trajectory, first.clone()) else {
+    let Ok(FlowOutcome::AllowedNow(_token)) = engine.evaluate(&mut trajectory, first.clone()) else {
         panic!("expected permit");
     };
     let pending = trajectory.pending_action().unwrap().id();
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, second.clone()) else {
-        panic!("expected terminal block");
+    let revision_before = trajectory.revision();
+    let Err(refusal) = engine.evaluate(&mut trajectory, second.clone()) else {
+        panic!("expected refusal");
     };
-    assert_eq!(block.reason, BlockReason::ActionAlreadyPending { pending });
+    assert_eq!(refusal, FlowRefusal::ActionAlreadyPending { pending });
     // The in-flight action is untouched by the refused proposal.
     assert_eq!(trajectory.pending_action().unwrap().id(), pending);
+    assert_eq!(trajectory.revision(), revision_before);
 
     trajectory.abandon_pending();
     assert!(trajectory.pending_action().is_none());
@@ -555,10 +598,10 @@ fn re_entry_reuses_the_pending_action() {
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, body, "bob");
 
-    let Decision::Permitted(first) = engine.evaluate(&mut trajectory, request.clone()) else {
+    let Ok(FlowOutcome::AllowedNow(first)) = engine.evaluate(&mut trajectory, request.clone()) else {
         panic!("expected permit");
     };
-    let Decision::Permitted(second) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(second)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit on re-entry");
     };
     assert_eq!(first.action(), second.action());
@@ -597,7 +640,7 @@ fn committed_effects_feed_later_checks() {
         ArgumentTree::Value(body),
         BTreeSet::new(),
     );
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, report_request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, report_request)) else {
         panic!("expected terminal block");
     };
     assert!(matches!(
@@ -625,10 +668,13 @@ fn unknown_value_reference_blocks_loudly() {
     let ghost = ValueId::new(1000);
     let request = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::Value(ghost), BTreeSet::new());
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
-        panic!("expected terminal block");
+    let revision_before = trajectory.revision();
+    let Err(refusal) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected refusal");
     };
-    assert_eq!(block.reason, BlockReason::UnknownValueReferenced { value: ghost });
+    assert_eq!(refusal, FlowRefusal::UnknownValueReferenced { value: ghost });
+    // The refusal touched nothing.
+    assert_eq!(trajectory.revision(), revision_before);
 }
 
 #[test]
@@ -659,7 +705,7 @@ fn canonical_request_renders_the_checked_tree() {
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "the doc");
     let request = email_request(&mut trajectory, body, "bob");
 
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
     };
     let (canonical, receipt) = trajectory.release(token).unwrap();
@@ -740,13 +786,16 @@ fn pursue_of_a_different_proposal_leaves_the_inflight_action_untouched() {
         [],
     );
 
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, first) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, first) else {
         panic!("expected a permit");
     };
-    let Pursuit::Terminal(block) = engine.pursue(&mut trajectory, second, 8) else {
-        panic!("a different proposal while one is pending must refuse terminally");
+    let revision_before = trajectory.revision();
+    let Pursuit::Refused(refusal) = engine.pursue(&mut trajectory, second, 8) else {
+        panic!("a different proposal while one is pending must be refused");
     };
-    assert!(matches!(block.reason, BlockReason::ActionAlreadyPending { .. }));
+    assert!(matches!(refusal, FlowRefusal::ActionAlreadyPending { .. }));
+    // The refusal touched nothing: the in-flight action and its token survive.
+    assert_eq!(trajectory.revision(), revision_before);
     assert!(trajectory.pending_action().is_some());
     dispatch(&mut trajectory, token, "sent").unwrap();
 }
@@ -765,16 +814,17 @@ fn pursue_keeps_the_slot_for_an_external_ruling() {
         panic!("the external acquirer should defer");
     };
     assert!(trajectory.pending_action().is_some());
-    let Decision::Permitted(token) = engine
-        .apply_approval(
-            &mut trajectory,
-            pending,
-            crate::approval::Ruling::Approve {
-                reason: "acquired".to_owned(),
-            },
-        )
-        .unwrap()
-    else {
+    let Some(token) = execution(
+        engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "acquired".to_owned(),
+                },
+            )
+            .unwrap(),
+    ) else {
         panic!("the approval should permit");
     };
     dispatch(&mut trajectory, token, "pong").unwrap();
@@ -828,7 +878,7 @@ fn source_contract_output_wears_the_declared_label() {
     let engine = engine_with([ToolContract::source("invoices.list", internal())]);
     let mut trajectory = Trajectory::new();
     let request = ToolRequest::new(ToolName::new("invoices.list"), ArgumentTree::empty(), []);
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("a pure read must permit");
     };
     let id = dispatch(&mut trajectory, token, "47 invoices").unwrap();
@@ -852,7 +902,7 @@ fn egress_sink_contract_resolves_recipients_and_blocks_undeclared() {
 
     let body = ingress(&mut trajectory, &["bob"], Trust::TRUSTED, "doc two");
     let bare = ToolRequest::new(ToolName::new("email.send"), ArgumentTree::object([("body", body)]), []);
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, bare) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, bare)) else {
         panic!("an egress sink with no recipients argument must block terminally");
     };
     assert!(
@@ -878,7 +928,7 @@ fn object_built_request_checks_and_renders_like_the_literal_tree() {
     );
     assert_eq!(request.control, BTreeSet::from([body]));
 
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
     };
     let (canonical, receipt) = trajectory.release(token).unwrap();
@@ -894,7 +944,7 @@ fn stale_receipt_is_rejected_after_any_mutation() {
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, body, "bob");
 
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
     };
     let (_, receipt) = trajectory.release(token).unwrap();
@@ -912,7 +962,7 @@ fn foreign_receipt_is_rejected() {
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, body, "bob");
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit");
     };
     let (_, receipt) = trajectory.release(token).unwrap();
@@ -944,7 +994,7 @@ fn spent_confirmation_cannot_authorize_a_second_attempt() {
     );
     let request = ToolRequest::new(ToolName::new("db.drop"), ArgumentTree::Value(go), BTreeSet::new());
 
-    let Decision::Permitted(token) = engine.evaluate(&mut trajectory, request.clone()) else {
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request.clone()) else {
         panic!("expected permit with confirmation in force");
     };
     let (_, receipt) = trajectory.release(token).unwrap();
@@ -953,7 +1003,7 @@ fn spent_confirmation_cannot_authorize_a_second_attempt() {
     trajectory.record_failure(receipt).unwrap();
     assert_eq!(trajectory.pending_confirmation(), None);
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected block without a live confirmation");
     };
     assert!(matches!(
@@ -977,13 +1027,14 @@ fn clean_response_is_emitted_from_the_exact_checked_tree() {
     let engine = response_engine(&["alice"]);
     let mut trajectory = Trajectory::new();
     let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "all done");
-    let request = ResponseRequest {
+    let request = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
 
-    let ResponseDecision::Emitted { value, rendered } = engine.evaluate_response(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(Emitted { value, rendered })) = engine.evaluate_emission(&mut trajectory, request)
+    else {
         panic!("expected emission");
     };
     assert_eq!(rendered, "\"all done\"");
@@ -1012,13 +1063,13 @@ fn response_leaking_outside_readers_is_blocked() {
             BTreeSet::new(),
         )
         .unwrap();
-    let request = ResponseRequest {
+    let request = EmissionRequest {
         body: ArgumentTree::Value(summary),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
 
-    let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate_emission(&mut trajectory, request)) else {
         panic!("expected block");
     };
     assert!(matches!(
@@ -1035,13 +1086,13 @@ fn response_control_dependence_is_checked() {
     let bland = ingress(&mut trajectory, &["alice", "charlie"], Trust::TRUSTED, "ok");
     // The response text is clean, but WHETHER to say it was decided after
     // reading the secret.
-    let request = ResponseRequest {
+    let request = EmissionRequest {
         body: ArgumentTree::Value(bland),
         control: BTreeSet::from([secret]),
         basis: trajectory.revision(),
     };
 
-    let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate_emission(&mut trajectory, request)) else {
         panic!("expected block");
     };
     assert!(matches!(
@@ -1062,16 +1113,20 @@ fn stale_response_basis_is_blocked_and_touches_nothing() {
         .unwrap();
     let turns_before = trajectory.turns().len();
 
-    let request = ResponseRequest {
+    let request = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: stale_basis,
     };
-    let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request) else {
-        panic!("expected block");
+    let revision_before = trajectory.revision();
+    let Err(refusal) = engine.evaluate_emission(&mut trajectory, request) else {
+        panic!("expected refusal");
     };
-    assert!(matches!(block.reason, BlockReason::StaleResponse { .. }));
+    assert!(matches!(refusal, FlowRefusal::StaleBasis { .. }));
+    // The refusal touched nothing.
     assert_eq!(trajectory.turns().len(), turns_before);
+    assert_eq!(trajectory.revision(), revision_before);
+    assert!(trajectory.pending_emission().is_none());
 }
 
 #[test]
@@ -1079,18 +1134,18 @@ fn response_without_policy_is_unprovable() {
     let engine = engine_with([]);
     let mut trajectory = Trajectory::new();
     let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "hi");
-    let request = ResponseRequest {
+    let request = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
 
-    let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate_emission(&mut trajectory, request)) else {
         panic!("expected block");
     };
-    // The response sink is strict emit-or-terminal (D1): an unprovable
-    // response with no policy has no remedy. The vector is exactly the
-    // unprovable call against the reserved sink — the response check has
+    // An unprovable emission with no policy and no acknowledge-competent
+    // authority fails closed with no remedy. The vector is exactly the
+    // unprovable call against the reserved sink — the emission check has
     // no surface-growth arm.
     assert_eq!(block.reason, BlockReason::NoRemedy);
     assert!(matches!(
@@ -1107,10 +1162,10 @@ fn duplicate_reentry_token_cannot_release_twice() {
     let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, body, "bob");
 
-    let Decision::Permitted(first) = engine.evaluate(&mut trajectory, request.clone()) else {
+    let Ok(FlowOutcome::AllowedNow(first)) = engine.evaluate(&mut trajectory, request.clone()) else {
         panic!("expected permit");
     };
-    let Decision::Permitted(second) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(second)) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected permit on re-entry");
     };
 
@@ -1134,10 +1189,12 @@ fn unknown_control_dependency_blocks_loudly() {
         BTreeSet::from([ghost]),
     );
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
-        panic!("expected terminal block");
+    let revision_before = trajectory.revision();
+    let Err(refusal) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected refusal");
     };
-    assert_eq!(block.reason, BlockReason::UnknownValueReferenced { value: ghost });
+    assert_eq!(refusal, FlowRefusal::UnknownValueReferenced { value: ghost });
+    assert_eq!(trajectory.revision(), revision_before);
 }
 
 #[test]
@@ -1220,7 +1277,7 @@ fn tainted_payload_plans_a_transform() {
     let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
     let request = email_request(&mut trajectory, raw, "bob");
 
-    let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected remediable block");
     };
     assert!(matches!(
@@ -1239,10 +1296,10 @@ fn tainted_payload_plans_a_transform() {
     assert!(trajectory.pending_action().is_some());
 
     // The plan predicts a clean flow: walking its single step permits.
-    let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trajectory, transform_plan.id)
-    else {
-        panic!("the transform plan must unlock the flow");
+    let StepOutcome::Advanced(advanced) = apply_first_step(&engine, &mut trajectory, transform_plan.id) else {
+        panic!("the transform step must advance");
     };
+    assert!(execution(advanced).is_some(), "the transform plan must unlock the flow");
 }
 
 /// An audience breach carried by an argument leaf yields an Endorse plan (a
@@ -1322,14 +1379,14 @@ fn a_multi_source_audience_breach_endorses_every_contributing_leaf() {
         panic!("expected the step to advance");
     };
     assert!(
-        matches!(decision, Decision::Blocked(Blocked::Remediable { .. })),
+        matches!(decision, FlowOutcome::Remediable { .. }),
         "a single endorse does not clear a two-leaf intersection breach"
     );
     // Continuing endorses the second leaf and reaches a permit.
     loop {
         match decision {
-            Decision::Permitted(_) => break,
-            Decision::Blocked(Blocked::Remediable { plans, .. }) => {
+            FlowOutcome::AllowedNow(_) => break,
+            FlowOutcome::Remediable { plans, .. } => {
                 decision = match apply_first_step(&engine, &mut trajectory, plans.first().id) {
                     StepOutcome::Advanced(d) => d,
                     other => panic!("unexpected outcome: {other:?}"),
@@ -1378,7 +1435,7 @@ fn a_granted_endorse_durably_relabels_the_source_and_permits() {
         )
         .unwrap();
     assert!(
-        matches!(decision, Decision::Permitted(_)),
+        matches!(decision, FlowOutcome::AllowedNow(_)),
         "the raise clears the audience breach"
     );
 
@@ -1492,7 +1549,7 @@ fn a_denied_endorse_is_terminal_and_mints_no_value() {
             },
         )
         .unwrap();
-    assert!(matches!(decision, Decision::Blocked(Blocked::Terminal(_))));
+    assert!(matches!(decision, FlowOutcome::Terminal { .. }));
     assert_eq!(
         trajectory.store().len(),
         values_before,
@@ -1555,9 +1612,7 @@ fn endorse_authority_refuses_a_suspicious_transitive_ancestry() {
     let body = laundered_body(&mut tainted, Trust::SUSPICIOUS);
     let request = email_request(&mut tainted, body, "charlie");
     let plans = remediable(&engine, &mut tainted, request);
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-        apply_first_step(&engine, &mut tainted, plans.first().id)
-    else {
+    let Some(block) = advanced_terminal(apply_first_step(&engine, &mut tainted, plans.first().id)) else {
         panic!("a suspicious transitive ancestor should be refused");
     };
     assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
@@ -1813,7 +1868,7 @@ fn no_applicable_remedy_is_terminal() {
     let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw");
     let request = email_request(&mut trajectory, raw, "bob");
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -1848,8 +1903,8 @@ fn transform_step_applies_and_flow_permits() {
         .expect("transform plan");
 
     let outcome = apply_first_step(&engine, &mut trajectory, plan.id);
-    let StepOutcome::Advanced(Decision::Permitted(token)) = outcome else {
-        panic!("expected the transform to advance to a permit, got {outcome:?}");
+    let Some(token) = advanced_execution(outcome) else {
+        panic!("expected the transform to advance to a permit");
     };
     // The raw value keeps its label; the derived value took its slot.
     assert_eq!(trajectory.value(raw).unwrap().label().trust, Trust::SUSPICIOUS);
@@ -1882,8 +1937,8 @@ fn rule_approved_endorse_permits_inline() {
     let plans = remediable(&engine, &mut trajectory, request);
     assert!(raise_step(plans.first().steps.first()).is_some());
     let outcome = apply_first_step(&engine, &mut trajectory, plans.first().id);
-    let StepOutcome::Advanced(Decision::Permitted(_token)) = outcome else {
-        panic!("expected inline endorse permit, got {outcome:?}");
+    let Some(_token) = advanced_execution(outcome) else {
+        panic!("expected inline endorse permit");
     };
     assert!(trajectory.state().audit().iter().any(|e| applied_raise(e).is_some()));
 }
@@ -1904,8 +1959,7 @@ fn inline_abstention_falls_through_to_the_next_authority() {
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
     let request = email_request(&mut trajectory, doc, "charlie");
     let plans = remediable(&engine, &mut trajectory, request);
-    let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(_) = advanced_execution(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("expected the second authority to approve after the first abstained");
     };
     // The applied endorse is attributed to the authority that actually ruled.
@@ -1934,8 +1988,7 @@ fn inline_authority_is_consulted_before_external() {
     let request = email_request(&mut trajectory, doc, "charlie");
     let plans = remediable(&engine, &mut trajectory, request);
     // Inline resolves synchronously — no round-trip to the external human.
-    let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(_) = advanced_execution(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("expected the inline authority to decide before the external one");
     };
 }
@@ -1952,9 +2005,7 @@ fn all_inline_abstentions_block_with_no_ruling() {
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
     let request = email_request(&mut trajectory, doc, "charlie");
     let plans = remediable(&engine, &mut trajectory, request);
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(block) = advanced_terminal(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("expected a terminal block when every authority abstains");
     };
     assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
@@ -1975,9 +2026,7 @@ fn inline_denial_is_decisive_and_does_not_fall_through() {
     let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
     let request = email_request(&mut trajectory, doc, "charlie");
     let plans = remediable(&engine, &mut trajectory, request);
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(block) = advanced_terminal(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("a denial must terminate, not fall through to the approver");
     };
     assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
@@ -2008,7 +2057,7 @@ fn control_release_only_authority_cannot_acknowledge_an_unknown() {
         ArgumentTree::Value(body),
         BTreeSet::new(),
     );
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("a control-release-only authority must not clear an unknown");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -2063,7 +2112,7 @@ fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
     trajectory.seed_committed_effects(Effects::UNKNOWN);
     let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::UNKNOWN, "doc");
     // Dispatch fetch to drive past-effects to UNKNOWN.
-    let Decision::Permitted(token) = engine.evaluate(
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(
         &mut trajectory,
         ToolRequest::new(ToolName::new("fetch"), ArgumentTree::Value(doc), BTreeSet::new()),
     ) else {
@@ -2075,8 +2124,8 @@ fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
     // avoids the prior Egress (unknown past): [TrustUnknown, EffectsUnknown].
     let request = email_request(&mut trajectory, doc, "bob");
     let decision = engine.evaluate(&mut trajectory, request);
-    let Decision::Blocked(Blocked::Terminal(block)) = decision else {
-        panic!("trust-only must not clear the unknown effect, got {decision:?}");
+    let Some(block) = terminal_block_of(decision) else {
+        panic!("trust-only must not clear the unknown effect");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
 }
@@ -2111,7 +2160,7 @@ fn surface_growth_blocks_without_an_acquire_authority() {
     let engine = engine_with([egress_tool()]);
     let mut trajectory = Trajectory::new();
     let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, ping_request(body)) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, ping_request(body))) else {
         panic!("a growing effect with no acquirer must block terminally");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -2135,9 +2184,10 @@ fn accept_authority_acquires_the_growth_and_permits() {
     assert!(
         acquire_step(plans.first().steps.first()).is_some_and(|effects| effects == Effects::declared([Effect::Egress]))
     );
-    let StepOutcome::Advanced(Decision::Permitted(token)) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(token) = (match apply_first_step(&engine, &mut trajectory, plans.first().id) {
+        StepOutcome::Advanced(advanced) => execution(advanced),
+        _ => None,
+    }) else {
         panic!("the acceptance should clear the flow and permit");
     };
     // No early commit.
@@ -2181,7 +2231,7 @@ fn no_contract_growth_needs_both_acknowledge_and_acquire() {
         .unwrap();
     let mut trajectory = Trajectory::new();
     let request = mystery(&mut trajectory);
-    let Decision::Blocked(Blocked::Terminal(_)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(_) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("an acknowledge-only authority must not clear the unknown growth");
     };
 
@@ -2224,16 +2274,17 @@ fn external_accept_roundtrip() {
         coordinate,
         crate::remedy::DeltaCoordinate::AcquireEffects(effects) if *effects == Effects::declared([Effect::Egress])
     )));
-    let Decision::Permitted(token) = engine
-        .apply_approval(
-            &mut trajectory,
-            pending,
-            crate::approval::Ruling::Approve {
-                reason: "acquired".to_owned(),
-            },
-        )
-        .unwrap()
-    else {
+    let Some(token) = execution(
+        engine
+            .apply_approval(
+                &mut trajectory,
+                pending,
+                crate::approval::Ruling::Approve {
+                    reason: "acquired".to_owned(),
+                },
+            )
+            .unwrap(),
+    ) else {
         panic!("the approval should permit");
     };
     dispatch(&mut trajectory, token, "pong").unwrap();
@@ -2249,9 +2300,10 @@ fn accepted_growth_then_abandon_commits_nothing() {
     let mut trajectory = Trajectory::new();
     let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
     let plans = remediable(&engine, &mut trajectory, ping_request(body));
-    let StepOutcome::Advanced(Decision::Permitted(token)) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(token) = (match apply_first_step(&engine, &mut trajectory, plans.first().id) {
+        StepOutcome::Advanced(advanced) => execution(advanced),
+        _ => None,
+    }) else {
         panic!("expected a permit after acceptance");
     };
     drop(token);
@@ -2275,16 +2327,17 @@ fn second_egress_is_downhill_after_the_first() {
     let mut trajectory = Trajectory::new();
     let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
     let plans = remediable(&engine, &mut trajectory, ping_request(body));
-    let StepOutcome::Advanced(Decision::Permitted(token)) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(token) = (match apply_first_step(&engine, &mut trajectory, plans.first().id) {
+        StepOutcome::Advanced(advanced) => execution(advanced),
+        _ => None,
+    }) else {
         panic!("expected a permit after acceptance");
     };
     dispatch(&mut trajectory, token, "pong").unwrap();
     assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
 
     let body2 = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping-again");
-    let Decision::Permitted(_) = engine.evaluate(&mut trajectory, ping_request(body2)) else {
+    let Ok(FlowOutcome::AllowedNow(_)) = engine.evaluate(&mut trajectory, ping_request(body2)) else {
         panic!("a second egress is downhill and permits without another acceptance");
     };
 }
@@ -2310,7 +2363,7 @@ fn acquire_incompetent_authority_gets_no_accept_route() {
         .unwrap();
     let mut trajectory = Trajectory::new();
     let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, ping_request(body)) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, ping_request(body))) else {
         panic!("without acquire_effects the growth cannot be routed");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -2326,8 +2379,7 @@ fn accept_re_entry_writes_no_duplicate_audit() {
     let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
     let request = ping_request(body);
     let plans = remediable(&engine, &mut trajectory, request.clone());
-    let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(_) = advanced_execution(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("expected a permit after acceptance");
     };
     let accepts = |t: &Trajectory| {
@@ -2338,7 +2390,7 @@ fn accept_re_entry_writes_no_duplicate_audit() {
             .count()
     };
     assert_eq!(accepts(&trajectory), 1);
-    let Decision::Permitted(_) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::AllowedNow(_)) = engine.evaluate(&mut trajectory, request) else {
         panic!("re-entry after acceptance should permit idempotently");
     };
     assert_eq!(accepts(&trajectory), 1);
@@ -2553,11 +2605,14 @@ fn constrain_then_accept_covers_only_the_residual_growth() {
     assert_eq!(full.steps.len(), 1);
 
     // Walking the composite commits exactly the reduced effect.
-    let mut decision = engine.evaluate(&mut trajectory, request);
+    let mut decision = engine
+        .evaluate(&mut trajectory, request)
+        .expect("a fresh proposal is never refused")
+        .map_allowed(FlowPermit::Execute);
     let token = loop {
         match decision {
-            Decision::Permitted(token) => break token,
-            Decision::Blocked(Blocked::Remediable { plans, .. }) => {
+            FlowOutcome::AllowedNow(FlowPermit::Execute(token)) => break token,
+            FlowOutcome::Remediable { plans, .. } => {
                 let plan = plans
                     .iter()
                     .find(|p| narrow_step(p.steps.first()) != Some(&tref("noop")))
@@ -2705,8 +2760,8 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
         let plan = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
         applied.push(step_label(plan.steps.first()));
         match apply_first_step(&engine, &mut trajectory, plan.id) {
-            StepOutcome::Advanced(Decision::Permitted(token)) => break token,
-            StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans: next, .. })) => plans = next,
+            StepOutcome::Advanced(FlowOutcome::AllowedNow(FlowPermit::Execute(token))) => break token,
+            StepOutcome::Advanced(FlowOutcome::Remediable { plans: next, .. }) => plans = next,
             other => panic!("unexpected outcome: {other:?}"),
         }
     };
@@ -2826,7 +2881,7 @@ fn external_waiver_approval_roundtrip() {
             },
         )
         .unwrap();
-    assert!(matches!(decision, Decision::Permitted(_)));
+    assert!(matches!(decision, FlowOutcome::AllowedNow(_)));
     assert!(
         trajectory
             .state()
@@ -2876,8 +2931,7 @@ fn inline_authority_inspects_the_view_and_violations() {
     let doc = ingress(&mut trusted, &["alice"], Trust::TRUSTED, "private");
     let request = email_request(&mut trusted, doc, "charlie");
     let plans = remediable(&engine, &mut trusted, request);
-    let StepOutcome::Advanced(Decision::Permitted(_)) = apply_first_step(&engine, &mut trusted, plans.first().id)
-    else {
+    let Some(_) = advanced_execution(apply_first_step(&engine, &mut trusted, plans.first().id)) else {
         panic!("expected approval when the view shows a trusted source");
     };
 
@@ -2888,9 +2942,7 @@ fn inline_authority_inspects_the_view_and_violations() {
     let doc = ingress(&mut suspicious, &["alice"], Trust::SUSPICIOUS, "private");
     let request = email_request(&mut suspicious, doc, "charlie");
     let plans = remediable(&engine, &mut suspicious, request);
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-        apply_first_step(&engine, &mut suspicious, plans.first().id)
-    else {
+    let Some(block) = advanced_terminal(apply_first_step(&engine, &mut suspicious, plans.first().id)) else {
         panic!("expected abstention when the view shows a suspicious source");
     };
     assert_eq!(block.reason, BlockReason::NoAuthorityRuled);
@@ -2939,7 +2991,7 @@ fn external_pending_carries_a_transitive_ancestry_snapshot() {
             },
         )
         .unwrap();
-    assert!(matches!(decision, Decision::Permitted(_)));
+    assert!(matches!(decision, FlowOutcome::AllowedNow(_)));
 }
 
 /// A denial blocks terminally and is audited; the identical later flow
@@ -2965,7 +3017,7 @@ fn external_waiver_denial_blocks_terminally() {
             },
         )
         .unwrap();
-    let Decision::Blocked(Blocked::Terminal(block)) = decision else {
+    let Some(block) = terminal_block(decision) else {
         panic!("expected terminal block");
     };
     assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
@@ -2984,7 +3036,7 @@ fn external_waiver_denial_blocks_terminally() {
     // and stored nothing.
     assert!(matches!(
         engine.evaluate(&mut trajectory, request),
-        Decision::Blocked(Blocked::Remediable { .. })
+        Ok(FlowOutcome::Remediable { .. })
     ));
 }
 
@@ -3122,12 +3174,12 @@ fn non_head_plan_steps_are_refused_without_touching_state() {
     // and the plan's head step still walks to a permit from here.
     assert_eq!(trajectory.revision(), revision_before);
     assert!(trajectory.pending_action().is_some());
-    let mut decision = Decision::Blocked(Blocked::Remediable {
+    let mut decision: FlowOutcome<FlowPermit> = FlowOutcome::Remediable {
         violations: Vec::new(),
         plans: plans.clone(),
-    });
+    };
     for _ in 0..4 {
-        let Decision::Blocked(Blocked::Remediable { plans, .. }) = decision else {
+        let FlowOutcome::Remediable { plans, .. } = decision else {
             break;
         };
         let plan = plans
@@ -3141,7 +3193,7 @@ fn non_head_plan_steps_are_refused_without_touching_state() {
         };
         decision = next;
     }
-    assert!(matches!(decision, Decision::Permitted(_)));
+    assert!(matches!(decision, FlowOutcome::AllowedNow(_)));
 }
 
 /// A transformer error fails the step, audits the failure with no
@@ -3227,7 +3279,7 @@ fn multi_step_composition_transform_then_waiver() {
         .iter()
         .find(|p| derive_step(p.steps.first()).is_some())
         .expect("plan starting with a transform");
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Remediable { plans, violations })) =
+    let StepOutcome::Advanced(FlowOutcome::Remediable { plans, violations }) =
         apply_first_step(&engine, &mut trajectory, transform_plan.id)
     else {
         panic!("expected the transform to advance to a re-planned block");
@@ -3249,7 +3301,7 @@ fn multi_step_composition_transform_then_waiver() {
             },
         )
         .unwrap();
-    let Decision::Permitted(token) = decision else {
+    let Some(token) = execution(decision) else {
         panic!("expected permit after the full composition");
     };
     let (canonical, receipt) = trajectory.release(token).unwrap();
@@ -3285,16 +3337,17 @@ fn confirmation_survives_remedy_steps() {
     let request = ToolRequest::new(ToolName::new("db.drop"), ArgumentTree::Value(table), BTreeSet::new());
 
     // Blocked on trust only — the confirmation holds.
-    let Decision::Blocked(Blocked::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::Remediable { violations, plans }) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected remediable block");
     };
     assert!(matches!(
         violations.as_slice(),
         [Violation::Breach(crate::contract::Breach::TrustBelow { .. })]
     ));
-    let StepOutcome::Advanced(Decision::Permitted(token)) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(token) = (match apply_first_step(&engine, &mut trajectory, plans.first().id) {
+        StepOutcome::Advanced(advanced) => execution(advanced),
+        _ => None,
+    }) else {
         panic!("expected permit — the confirmation must survive the transform");
     };
     assert!(trajectory.pending_confirmation().is_some());
@@ -3402,7 +3455,7 @@ fn constrain_with_mismatched_target_effects_is_not_planned() {
     let url = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "http://x");
     let request = ToolRequest::new(ToolName::new("web.fetch"), ArgumentTree::Value(url), BTreeSet::new());
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block — the inconsistent mapping must not be planned");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -3460,8 +3513,7 @@ fn constrained_effects_survive_to_release_and_later_sinks() {
         .iter()
         .find(|p| narrow_step(p.steps.first()).is_some())
         .expect("constrain plan");
-    let StepOutcome::Advanced(Decision::Permitted(token)) = apply_first_step(&engine, &mut trajectory, constrain.id)
-    else {
+    let Some(token) = advanced_execution(apply_first_step(&engine, &mut trajectory, constrain.id)) else {
         panic!("expected the constraint to clear the flow");
     };
     let (canonical, receipt) = trajectory.release(token).unwrap();
@@ -3482,7 +3534,7 @@ fn constrained_effects_survive_to_release_and_later_sinks() {
     );
     assert!(matches!(
         engine.evaluate(&mut trajectory, report_request),
-        Decision::Permitted(_)
+        Ok(FlowOutcome::AllowedNow(_))
     ));
 }
 
@@ -3498,16 +3550,16 @@ fn released_action_cannot_be_re_permitted_or_re_released() {
     let doc = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
     let request = email_request(&mut trajectory, doc, "bob");
 
-    let Decision::Permitted(token1) = engine.evaluate(&mut trajectory, request.clone()) else {
+    let Ok(FlowOutcome::AllowedNow(token1)) = engine.evaluate(&mut trajectory, request.clone()) else {
         panic!("expected permit");
     };
     let (_, receipt) = trajectory.release(token1).unwrap();
 
     // Re-entry while the dispatch is in flight is refused, not re-permitted.
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
-        panic!("expected the released action to block re-entry");
+    let Err(refusal) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected the released action to refuse re-entry");
     };
-    assert!(matches!(block.reason, BlockReason::ActionAlreadyPending { .. }));
+    assert!(matches!(refusal, FlowRefusal::ActionAlreadyPending { .. }));
 
     // The outstanding receipt still closes the action normally.
     trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
@@ -3548,12 +3600,12 @@ fn unprovable_re_entry_writes_no_audit() {
             .count()
     };
 
-    let Decision::Blocked(Blocked::Remediable { .. }) = engine.evaluate(&mut trajectory, request.clone()) else {
+    let Ok(FlowOutcome::Remediable { .. }) = engine.evaluate(&mut trajectory, request.clone()) else {
         panic!("expected a remediable block");
     };
     assert_eq!(waiver_audits(&trajectory), 0);
     // Re-evaluate the same original request: still remediable, still no audit.
-    let Decision::Blocked(Blocked::Remediable { .. }) = engine.evaluate(&mut trajectory, request) else {
+    let Ok(FlowOutcome::Remediable { .. }) = engine.evaluate(&mut trajectory, request) else {
         panic!("expected a remediable block on re-entry");
     };
     assert_eq!(waiver_audits(&trajectory), 0);
@@ -3613,9 +3665,7 @@ fn an_inline_accept_denial_audits_accept_denied() {
     let mut trajectory = Trajectory::new();
     let body = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "ping");
     let plans = remediable(&engine, &mut trajectory, ping_request(body));
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-        apply_first_step(&engine, &mut trajectory, plans.first().id)
-    else {
+    let Some(block) = advanced_terminal(apply_first_step(&engine, &mut trajectory, plans.first().id)) else {
         panic!("expected terminal denial");
     };
     assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
@@ -3658,7 +3708,7 @@ fn an_external_accept_denial_audits_accept_denied() {
             },
         )
         .unwrap();
-    assert!(matches!(decision, Decision::Blocked(Blocked::Terminal(_))));
+    assert!(matches!(decision, FlowOutcome::Terminal { .. }));
     assert!(
         trajectory
             .state()
@@ -3682,9 +3732,7 @@ fn an_inline_control_release_denial_audits_waiver_denied() {
         .iter()
         .find(|p| release_step(p.steps.first()).is_some())
         .expect("a control-release route");
-    let StepOutcome::Advanced(Decision::Blocked(Blocked::Terminal(block))) =
-        apply_first_step(&engine, &mut trajectory, plan.id)
-    else {
+    let Some(block) = advanced_terminal(apply_first_step(&engine, &mut trajectory, plan.id)) else {
         panic!("expected terminal denial");
     };
     assert!(matches!(block.reason, BlockReason::DeniedByAuthority { .. }));
@@ -3724,7 +3772,7 @@ fn an_external_control_release_denial_audits_waiver_denied() {
             },
         )
         .unwrap();
-    assert!(matches!(decision, Decision::Blocked(Blocked::Terminal(_))));
+    assert!(matches!(decision, FlowOutcome::Terminal { .. }));
     assert!(
         trajectory
             .state()
@@ -3748,7 +3796,7 @@ fn a_missing_contract_reports_no_contract_then_unknown_growth() {
         ArgumentTree::Value(body),
         BTreeSet::new(),
     );
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert!(matches!(
@@ -3782,14 +3830,16 @@ fn a_response_is_independent_of_the_pending_tool_action() {
     assert!(trajectory.pending_action().is_some());
 
     let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "sending it now");
-    let response = ResponseRequest {
+    let response = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
-    let ResponseDecision::Emitted { .. } = engine.evaluate_response(&mut trajectory, response) else {
+    let Ok(FlowOutcome::AllowedNow(Emitted { .. })) = engine.evaluate_emission(&mut trajectory, response) else {
         panic!("expected emission despite the pending accepted egress");
     };
+    // The emission settled without touching the in-flight action.
+    assert!(trajectory.pending_action().is_some());
 }
 
 /// A pending user confirmation never satisfies response attention: the
@@ -3812,13 +3862,12 @@ fn a_pending_confirmation_never_satisfies_response_attention() {
     );
     assert!(trajectory.pending_confirmation().is_some());
 
-    let response = ResponseRequest {
+    let response = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
-    let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, response)
-    else {
+    let Some(block) = terminal_block_of(engine.evaluate_emission(&mut trajectory, response)) else {
         panic!("expected block");
     };
     assert!(matches!(
@@ -3840,29 +3889,166 @@ fn a_response_checks_committed_past_effects() {
     });
     let mut trajectory = Trajectory::new();
     let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "quiet so far");
-    let response = ResponseRequest {
+    let response = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
-    let ResponseDecision::Emitted { .. } = engine.evaluate_response(&mut trajectory, response) else {
+    let Ok(FlowOutcome::AllowedNow(Emitted { .. })) = engine.evaluate_emission(&mut trajectory, response) else {
         panic!("expected emission before any egress");
     };
 
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
-    let response = ResponseRequest {
+    let response = EmissionRequest {
         body: ArgumentTree::Value(note),
         control: BTreeSet::new(),
         basis: trajectory.revision(),
     };
-    let ResponseDecision::Blocked(Blocked::Terminal(block)) = engine.evaluate_response(&mut trajectory, response)
-    else {
+    let Some(block) = terminal_block_of(engine.evaluate_emission(&mut trajectory, response)) else {
         panic!("expected block after the committed egress");
     };
     assert!(matches!(
         block.violations.as_slice(),
         [Violation::Breach(crate::contract::Breach::ForbiddenPriorEffects { .. })]
     ));
+}
+
+/// A remediable emission is an ordinary flow: the leak is endorsed by an
+/// inline authority, the derived value takes the body slot, and the walk
+/// settles in an atomic emit of exactly the checked bytes.
+#[test]
+fn remediable_emission_walks_to_an_emit_via_pursue() {
+    let mut engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
+        requires: Requirements {
+            audience: crate::contract::AudienceRule::FromRecipients,
+            ..Requirements::default()
+        },
+        readers: BTreeSet::from([user("charlie")]),
+    });
+    engine
+        .register_authority(inline_authority("auto-voucher", human().mandate, approve_all))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    // Only alice may read the note, but the conversation reader is charlie.
+    let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "the note");
+    let request = EmissionRequest {
+        body: ArgumentTree::Value(note),
+        control: BTreeSet::new(),
+        basis: trajectory.revision(),
+    };
+
+    let EmissionPursuit::Emitted(emitted) = engine.pursue_emission(&mut trajectory, request, 8) else {
+        panic!("expected the endorse walk to settle in an emit");
+    };
+    assert_eq!(emitted.rendered, "\"the note\"");
+    // The emitted value is the rendered bytes of the endorsed derivation;
+    // the raw source keeps its own label.
+    assert_eq!(
+        trajectory.value(note).unwrap().label().audience,
+        Audience::readers([user("alice")])
+    );
+    assert!(matches!(
+        trajectory.turns().last(),
+        Some(crate::turn::Turn {
+            actor: crate::turn::Actor::Assistant,
+            ..
+        })
+    ));
+    // The emission settled: its slot is free.
+    assert!(trajectory.pending_emission().is_none());
+}
+
+/// Per-kind single-slot discipline: a second, different emission proposal
+/// while one is pending is a refusal that touches nothing, while the pending
+/// emission stays re-enterable; the tool-action slot stays independent.
+#[test]
+fn emission_slot_discipline_is_per_kind() {
+    let mut engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
+        requires: Requirements {
+            audience: crate::contract::AudienceRule::FromRecipients,
+            ..Requirements::default()
+        },
+        readers: BTreeSet::from([user("charlie")]),
+    });
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private note");
+    let bland = ingress(&mut trajectory, &["alice", "bob", "charlie"], Trust::TRUSTED, "ok");
+
+    // The leaking emission is remediable (the external human could vouch),
+    // so the proposal is retained in the pending-emission slot.
+    let first = EmissionRequest {
+        body: ArgumentTree::Value(note),
+        control: BTreeSet::new(),
+        basis: trajectory.revision(),
+    };
+    let Ok(FlowOutcome::Remediable { .. }) = engine.evaluate_emission(&mut trajectory, first.clone()) else {
+        panic!("expected a remediable emission");
+    };
+    let pending_flow = trajectory.pending_emission().unwrap().flow();
+
+    // A different emission proposal is refused without touching anything.
+    let second = EmissionRequest {
+        body: ArgumentTree::Value(bland),
+        control: BTreeSet::new(),
+        basis: trajectory.revision(),
+    };
+    let revision_before = trajectory.revision();
+    let Err(refusal) = engine.evaluate_emission(&mut trajectory, second) else {
+        panic!("expected refusal while an emission is pending");
+    };
+    assert_eq!(refusal, FlowRefusal::EmissionAlreadyPending { flow: pending_flow });
+    assert_eq!(trajectory.revision(), revision_before);
+    assert_eq!(trajectory.pending_emission().unwrap().flow(), pending_flow);
+
+    // The slots are independent: a tool flow proposes and permits while the
+    // emission stays pending.
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let email = email_request(&mut trajectory, body, "bob");
+    let Ok(FlowOutcome::AllowedNow(_token)) = engine.evaluate(&mut trajectory, email) else {
+        panic!("expected the tool flow to permit alongside the pending emission");
+    };
+    assert!(trajectory.pending_emission().is_some());
+    assert!(trajectory.pending_action().is_some());
+}
+
+/// A terminally blocked emission clears only the emission slot: the pending
+/// tool action survives, exactly as a blocked emission never cleared the
+/// pending action before.
+#[test]
+fn a_blocked_emission_never_clears_a_pending_action() {
+    let engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
+        requires: Requirements {
+            audience: crate::contract::AudienceRule::FromRecipients,
+            ..Requirements::default()
+        },
+        readers: BTreeSet::from([user("charlie")]),
+    });
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let email = email_request(&mut trajectory, body, "bob");
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, email) else {
+        panic!("expected the tool flow to permit");
+    };
+    // No transformer and no authority: the leaking emission is terminal.
+    let note = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+    let response = EmissionRequest {
+        body: ArgumentTree::Value(note),
+        control: BTreeSet::new(),
+        basis: trajectory.revision(),
+    };
+    let Some(block) = terminal_block_of(engine.evaluate_emission(&mut trajectory, response)) else {
+        panic!("expected a terminal emission block");
+    };
+    assert_eq!(block.reason, BlockReason::NoRemedy);
+    assert!(trajectory.pending_emission().is_none());
+    // The pending tool action is untouched — its token is stale (the
+    // emission check advanced the trajectory), which is the revision
+    // binding working as designed, not a cleared slot.
+    assert!(trajectory.pending_action().is_some());
+    drop(token);
 }
 
 // ---- Terminal rescue: joint Endorse x control-release ----
@@ -3953,7 +4139,7 @@ fn rescue_without_an_endorse_authority_stays_terminal() {
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let (_, _, request) = masked_flow(&mut trajectory);
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -3969,7 +4155,7 @@ fn rescue_without_a_release_authority_stays_terminal() {
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
     let (_, _, request) = masked_flow(&mut trajectory);
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected terminal block");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);
@@ -4074,7 +4260,7 @@ fn rescue_composes_an_accept_for_projected_growth() {
     let (_, _, request) = masked_flow(&mut trajectory);
     assert!(matches!(
         engine.evaluate(&mut trajectory, request),
-        Decision::Blocked(Blocked::Terminal(_))
+        Ok(FlowOutcome::Terminal { .. })
     ));
 }
 
@@ -4118,7 +4304,7 @@ fn rescue_carries_acknowledge_only_facts() {
     let (engine, mut trajectory, request) = run(false);
     assert!(matches!(
         engine.evaluate(&mut trajectory, request),
-        Decision::Blocked(Blocked::Terminal(_))
+        Ok(FlowOutcome::Terminal { .. })
     ));
 
     // With the competence, the rescue applies end-to-end and the waiver's
@@ -4225,7 +4411,7 @@ fn rescue_external_approval_resolves_the_projected_residual() {
             },
         )
         .unwrap();
-    assert!(matches!(decision, Decision::Blocked(Blocked::Remediable { .. })));
+    assert!(matches!(decision, FlowOutcome::Remediable { .. }));
 }
 
 /// Past the exhaustive-search bound the rescue refuses outright — even when
@@ -4254,7 +4440,7 @@ fn rescue_refuses_past_the_exhaustive_bound() {
     }
     assert!(request.control.len() > 12);
 
-    let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+    let Some(block) = terminal_block_of(engine.evaluate(&mut trajectory, request)) else {
         panic!("expected the bounded rescue to refuse");
     };
     assert_eq!(block.reason, BlockReason::NoRemedy);

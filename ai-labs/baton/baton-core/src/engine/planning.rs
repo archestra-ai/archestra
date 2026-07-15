@@ -10,13 +10,13 @@ use crate::remedy::{
     Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, Lift, PlannedRemedy,
     ReductionTarget,
 };
-use crate::request::ToolRequest;
+use crate::request::{ArgumentTree, EmissionRequest, ToolRequest};
 use crate::revision::{ActionId, FlowId, ValueId};
 use crate::transition::{ActionTransition, RegisteredTransformer};
 use crate::turn::Trajectory;
 use crate::value::{UnknownValue, ValueLabel};
 
-use super::capability::ToolContract;
+use super::capability::{RESPONSE_SINK, ResponsePolicy, ToolContract};
 use super::{MAX_PLANS, PolicyEngine};
 
 /// A successful joint-cleanability probe: the per-leaf raises — each with the
@@ -42,6 +42,19 @@ struct ConstrainCandidate<'a> {
     recipients: BTreeSet<crate::dimension::UserId>,
 }
 
+/// What the shared enumeration needs to know about one checked flow: its
+/// leaf tree (transform candidates), the leaves excluded as recipients, the
+/// gated narrowing candidates (empty for an emission), the acquisition
+/// target (`None` for an emission — it proposes no effects), and the checked
+/// flow the lifts scope to.
+struct FlowSubject<'a> {
+    tree: &'a ArgumentTree<ValueId>,
+    recipient_leaves: BTreeSet<ValueId>,
+    constrains: Vec<ConstrainCandidate<'a>>,
+    acquire: Option<ActionId>,
+    flow: FlowId,
+}
+
 impl PolicyEngine {
     /// Deterministic bounded plan enumeration: candidate step sequences in the
     /// canonical order Reduce(derive)? -> Reduce(narrow)? -> Authorize(raise)*
@@ -61,10 +74,7 @@ impl PolicyEngine {
             // is append-only and we validated already), but fail closed.
             Err(_) => return Vec::new(),
         };
-
-        // Candidate transform steps: non-recipient argument leaves x
-        // registered transformers whose precondition matches, in (leaf,
-        // registration) order.
+        // Recipient leaves are not transform candidates.
         let recipient_leaves: BTreeSet<ValueId> = contract
             .and_then(|c| {
                 c.arguments
@@ -74,19 +84,6 @@ impl PolicyEngine {
             })
             .map(|subtree| subtree.leaves())
             .unwrap_or_default();
-        let mut transforms: Vec<(ValueId, &RegisteredTransformer)> = Vec::new();
-        for leaf in checked.arguments.leaves() {
-            if recipient_leaves.contains(&leaf) {
-                continue;
-            }
-            let label = &base.leaf_labels[&leaf];
-            for transformer in &self.transformers {
-                if transformer.descriptor.precondition.matches(label) && transformer.descriptor.output != *label {
-                    transforms.push((leaf, transformer));
-                }
-            }
-        }
-
         // Candidate constrain steps: registered action transitions from this
         // tool that pass the same structural gate the applier rechecks
         // (`constrain_gate`), carried with their target contract and resolved
@@ -104,6 +101,61 @@ impl PolicyEngine {
                     })
             })
             .collect();
+        self.enumerate_for(
+            &base,
+            FlowSubject {
+                tree: &checked.arguments,
+                recipient_leaves,
+                constrains,
+                acquire: Some(pending.id()),
+                flow: pending.flow(),
+            },
+        )
+    }
+
+    /// Plan enumeration for a pending emission: the same pipeline over the
+    /// body tree, with no narrowing (an emission has no tool identity to
+    /// narrow) and no acquisition (an emission proposes no effects).
+    pub(super) fn enumerate_emission_plans(
+        &self,
+        trajectory: &Trajectory,
+        checked: &EmissionRequest,
+        flow: FlowId,
+    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
+        let base = match SimFlow::of_emission(trajectory, checked, self.response_policy.as_ref()) {
+            Ok(base) => base,
+            Err(_) => return Vec::new(),
+        };
+        self.enumerate_for(
+            &base,
+            FlowSubject {
+                tree: &checked.body,
+                recipient_leaves: BTreeSet::new(),
+                constrains: Vec::new(),
+                acquire: None,
+                flow,
+            },
+        )
+    }
+
+    /// The shared candidate enumeration over one checked flow's subject.
+    fn enumerate_for(&self, base: &SimFlow, subject: FlowSubject<'_>) -> Vec<NonEmptyVec<PlannedRemedy>> {
+        // Candidate transform steps: non-recipient leaves x registered
+        // transformers whose precondition matches, in (leaf, registration)
+        // order.
+        let mut transforms: Vec<(ValueId, &RegisteredTransformer)> = Vec::new();
+        for leaf in subject.tree.leaves() {
+            if subject.recipient_leaves.contains(&leaf) {
+                continue;
+            }
+            let label = &base.leaf_labels[&leaf];
+            for transformer in &self.transformers {
+                if transformer.descriptor.precondition.matches(label) && transformer.descriptor.output != *label {
+                    transforms.push((leaf, transformer));
+                }
+            }
+        }
+        let constrains = subject.constrains;
 
         let mut plans: Vec<NonEmptyVec<PlannedRemedy>> = Vec::new();
         let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
@@ -188,7 +240,12 @@ impl PolicyEngine {
                 // composes additively with a lift — they are separate steps to
                 // separate competences (acquire_effects vs the lift dims).
                 if let Some(growth) = surface_growth_of(&remaining) {
-                    let grant = acquire_authorization(pending.id(), &growth);
+                    // No acquisition target (an emission flow): this branch
+                    // cannot reach a clean residual, so it yields no plan.
+                    let Some(action) = subject.acquire else {
+                        continue;
+                    };
+                    let grant = acquire_authorization(action, &growth);
                     let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                         // No authority can acquire this effect: this branch
                         // cannot reach a clean residual, so it yields no plan.
@@ -212,7 +269,7 @@ impl PolicyEngine {
                     if !sim.violations(Some(&delta)).is_empty() {
                         continue;
                     }
-                    let grant = authorization_for(&delta, &remaining, pending.flow());
+                    let grant = authorization_for(&delta, &remaining, subject.flow);
                     let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                         continue;
                     };
@@ -270,15 +327,33 @@ impl PolicyEngine {
             Ok(base) => base,
             Err(_) => return Vec::new(),
         };
-        if base.control_labels.is_empty() {
-            return Vec::new();
-        }
         let pending = trajectory
             .pending_action()
             .expect("rescue runs only for the stored pending action");
-        let (action, flow) = (pending.id(), pending.flow());
+        self.rescue_for(base, Some(pending.id()), pending.flow())
+    }
+
+    /// Terminal rescue for a pending emission: the same joint solve with no
+    /// acquisition target.
+    pub(super) fn rescue_emission_plans(
+        &self,
+        trajectory: &Trajectory,
+        checked: &EmissionRequest,
+        flow: FlowId,
+    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
+        let base = match SimFlow::of_emission(trajectory, checked, self.response_policy.as_ref()) {
+            Ok(base) => base,
+            Err(_) => return Vec::new(),
+        };
+        self.rescue_for(base, None, flow)
+    }
+
+    fn rescue_for(&self, base: SimFlow, acquire: Option<ActionId>, flow: FlowId) -> Vec<NonEmptyVec<PlannedRemedy>> {
+        if base.control_labels.is_empty() {
+            return Vec::new();
+        }
         let ids: Vec<ValueId> = base.control_labels.keys().copied().collect();
-        let Some(rescue) = self.minimal_joint_release(&base, &ids, action, flow) else {
+        let Some(rescue) = self.minimal_joint_release(&base, &ids, acquire, flow) else {
             return Vec::new();
         };
 
@@ -298,6 +373,9 @@ impl PolicyEngine {
         }
         let mut remaining = sim.violations(None);
         if let Some(growth) = surface_growth_of(&remaining) {
+            let Some(action) = acquire else {
+                return Vec::new();
+            };
             let grant = acquire_authorization(action, &growth);
             let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                 return Vec::new();
@@ -337,7 +415,7 @@ impl PolicyEngine {
         &self,
         base: &SimFlow,
         ids: &[ValueId],
-        action: ActionId,
+        acquire: Option<ActionId>,
         flow: FlowId,
     ) -> Option<JointRescue> {
         let n = ids.len();
@@ -353,7 +431,7 @@ impl PolicyEngine {
                 .filter(|(i, _)| mask & (1 << i) != 0)
                 .map(|(_, id)| *id)
                 .collect();
-            if let Some(rescue) = self.joint_rescue(base, &release, action, flow) {
+            if let Some(rescue) = self.joint_rescue(base, &release, acquire, flow) {
                 return Some(rescue);
             }
         }
@@ -368,7 +446,7 @@ impl PolicyEngine {
         &self,
         base: &SimFlow,
         release: &BTreeSet<ValueId>,
-        action: ActionId,
+        acquire: Option<ActionId>,
         flow: FlowId,
     ) -> Option<JointRescue> {
         let mut projected = base.clone();
@@ -396,6 +474,7 @@ impl PolicyEngine {
             residual = projected.violations(None);
         }
         if let Some(growth) = surface_growth_of(&residual) {
+            let action = acquire?;
             if !self.can_authorize(&acquire_authorization(action, &growth)) {
                 return None;
             }
@@ -691,6 +770,50 @@ impl SimFlow {
             proposed_effects,
             accepted_effects,
             confirmed: trajectory.pending_confirmation().cloned(),
+            extra,
+        })
+    }
+
+    /// The simulation state of one emission flow's check, under the reserved
+    /// response sink and the registered [`ResponsePolicy`]. An emission
+    /// proposes no effects and acquires none; its recipients are the policy's
+    /// declared readers. `confirmed` is deliberately `None`: a user
+    /// confirmation names a tool and never satisfies the response sink's
+    /// attention rule — only an authority's confirmation stand-in can.
+    pub(crate) fn of_emission(
+        trajectory: &Trajectory,
+        checked: &EmissionRequest,
+        policy: Option<&ResponsePolicy>,
+    ) -> Result<Self, UnknownValue> {
+        let store = trajectory.store();
+        let mut leaf_labels = BTreeMap::new();
+        for leaf in checked.body.leaves() {
+            leaf_labels.insert(leaf, store.get(leaf)?.label().clone());
+        }
+        let mut control_labels = BTreeMap::new();
+        for id in checked.control.iter() {
+            control_labels.insert(*id, store.get(*id)?.label().clone());
+        }
+        let (requires, recipients, extra) = match policy {
+            Some(policy) => (policy.requires.clone(), policy.readers.clone(), Vec::new()),
+            None => (
+                Requirements::default(),
+                BTreeSet::new(),
+                vec![Violation::Unprovable(Unprovable::NoContract {
+                    tool: ToolName::new(RESPONSE_SINK),
+                })],
+            ),
+        };
+        Ok(Self {
+            leaf_labels,
+            control_labels,
+            tool: ToolName::new(RESPONSE_SINK),
+            requires,
+            recipients,
+            past_effects: trajectory.state().past_effects().clone(),
+            proposed_effects: Effects::none(),
+            accepted_effects: Effects::none(),
+            confirmed: None,
             extra,
         })
     }

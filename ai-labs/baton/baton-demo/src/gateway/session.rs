@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use baton_core::{
-    ArgumentTree, AuthorityName, BlockReason, Decision, ExecutionToken, OpaqueValue, Pursuit, Ruling, StallCause,
-    ToolName, ToolRequest, UserId, ValueId, Violation,
+    ArgumentTree, AuthorityName, BlockReason, ExecutionToken, FlowOutcome, FlowPermit, OpaqueValue, Pursuit, Ruling,
+    StallCause, ToolName, ToolRequest, UserId, ValueId, Violation,
 };
 
 use crate::gateway::config::{GatewayConfig, ToolSim};
@@ -186,18 +186,25 @@ impl Session {
     /// human: permitted → dispatch, remediable → soft block, terminal → block.
     fn settle(&mut self, sim: &ToolSim, request: ToolRequest, recipients: BTreeSet<UserId>) -> Outcome {
         match self.shared().engine.evaluate(&mut self.trajectory, request) {
-            Decision::Permitted(token) => self.dispatch(sim, token),
-            Decision::Blocked(baton_core::Blocked::Remediable { violations, .. }) => Outcome::SoftBlocked {
+            Err(refusal) => {
+                self.pending_wire = None;
+                Outcome::Refused {
+                    tool: sim.name.clone(),
+                    reason: refusal.to_string(),
+                }
+            }
+            Ok(FlowOutcome::AllowedNow(token)) => self.dispatch(sim, token),
+            Ok(FlowOutcome::Remediable { violations, .. }) => Outcome::SoftBlocked {
                 tool: sim.name.clone(),
                 violations,
                 recipients,
             },
-            Decision::Blocked(baton_core::Blocked::Terminal(block)) => {
+            Ok(FlowOutcome::Terminal { violations, reason }) => {
                 self.pending_wire = None;
                 Outcome::TerminalBlocked {
                     tool: sim.name.clone(),
-                    reason: block.reason,
-                    violations: block.violations,
+                    reason,
+                    violations,
                 }
             }
         }
@@ -240,7 +247,16 @@ impl Session {
                     .pursue(&mut self.trajectory, request.clone(), MAX_REMEDY_STEPS)
                 {
                     Pursuit::Permitted(token) => return self.granted(&sim, token),
-                    Pursuit::Terminal(block) => return self.denied_or_terminal(&tool, block),
+                    Pursuit::Terminal { violations, reason } => {
+                        return self.denied_or_terminal(&tool, violations, reason);
+                    }
+                    Pursuit::Refused(refusal) => {
+                        self.pending_wire = None;
+                        return Outcome::Refused {
+                            tool,
+                            reason: refusal.to_string(),
+                        };
+                    }
                     Pursuit::NeedsApproval(pending_approval) => pending_approval,
                     Pursuit::Stalled { violations, cause } => {
                         self.pending_wire = None;
@@ -277,10 +293,13 @@ impl Session {
                 .engine
                 .apply_approval(&mut self.trajectory, pending_approval, ruling)
             {
-                Ok(Decision::Permitted(token)) => return self.granted(&sim, token),
-                Ok(Decision::Blocked(baton_core::Blocked::Remediable { .. })) => continue,
-                Ok(Decision::Blocked(baton_core::Blocked::Terminal(block))) => {
-                    return self.denied_or_terminal(&tool, block);
+                Ok(FlowOutcome::AllowedNow(FlowPermit::Execute(token))) => return self.granted(&sim, token),
+                Ok(FlowOutcome::AllowedNow(FlowPermit::Emit(_))) => {
+                    unreachable!("a tool flow's approval settles in an execution permit")
+                }
+                Ok(FlowOutcome::Remediable { .. }) => continue,
+                Ok(FlowOutcome::Terminal { violations, reason }) => {
+                    return self.denied_or_terminal(&tool, violations, reason);
                 }
                 Err(refused) => {
                     self.pending_wire = None;
@@ -307,9 +326,14 @@ impl Session {
         }
     }
 
-    fn denied_or_terminal(&mut self, tool: &ToolName, block: baton_core::TerminalBlock) -> Outcome {
+    fn denied_or_terminal(
+        &mut self,
+        tool: &ToolName,
+        violations: Vec<baton_core::Violation>,
+        reason: BlockReason,
+    ) -> Outcome {
         self.pending_wire = None;
-        match block.reason {
+        match reason {
             BlockReason::DeniedByAuthority { authority, reason } => Outcome::Denied {
                 tool: tool.clone(),
                 reason: format!("{authority}: {reason}"),
@@ -317,7 +341,7 @@ impl Session {
             reason => Outcome::TerminalBlocked {
                 tool: tool.clone(),
                 reason,
-                violations: block.violations,
+                violations,
             },
         }
     }

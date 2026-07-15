@@ -10,9 +10,10 @@ use std::collections::BTreeSet;
 
 use baton_core::contract::Breach;
 use baton_core::{
-    ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, Authorization, BlockReason, Blocked, Decision,
-    DeltaCoordinate, Effect, Effects, KnownTrust, OpaqueValue, PolicyEngine, Pursuit, Requirements, Ruling, Speaker,
-    ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId, ValueLabel, Violation,
+    ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, Authorization, BlockReason, DeltaCoordinate,
+    Effect, Effects, FlowOutcome, FlowRefusal, KnownTrust, OpaqueValue, PolicyEngine, Pursuit, Requirements, Ruling,
+    Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId, ValueLabel,
+    Violation,
 };
 use serde::{Deserialize, Serialize};
 
@@ -142,10 +143,7 @@ impl From<&BlockReason> for BlockKind {
             BlockReason::DeniedByAuthority { .. } => Self::DeniedByAuthority,
             BlockReason::RequiresStructuralFix => Self::RequiresStructuralFix,
             BlockReason::NoRemedy | BlockReason::NoAuthorityRuled => Self::NoCompetentAuthority,
-            BlockReason::ActionAlreadyPending { .. }
-            | BlockReason::UnknownValueReferenced { .. }
-            | BlockReason::StaleResponse { .. }
-            | BlockReason::PostconditionFailed => Self::InternalInvariantFailed,
+            BlockReason::PostconditionFailed => Self::InternalInvariantFailed,
         }
     }
 }
@@ -390,10 +388,20 @@ fn would_degrade(trajectory: &Trajectory, context: &ValueLabel, contract: Option
         || trajectory.state().past_effects().clone().combine(effects) != *trajectory.state().past_effects()
 }
 
-fn blocked_violations(blocked: &Blocked) -> &[Violation] {
+fn blocked_violations<P>(blocked: &FlowOutcome<P>) -> &[Violation] {
     match blocked {
-        Blocked::Terminal(block) => &block.violations,
-        Blocked::Remediable { violations, .. } => violations,
+        FlowOutcome::AllowedNow(_) => &[],
+        FlowOutcome::Terminal { violations, .. } | FlowOutcome::Remediable { violations, .. } => violations,
+    }
+}
+
+/// A protocol/state refusal, kept on the wire where these cases mapped
+/// before the outcome/refusal split (the wire redesign lands separately).
+fn refused_outcome(refusal: &FlowRefusal) -> CallOutcome {
+    CallOutcome::Blocked {
+        block_kind: BlockKind::InternalInvariantFailed,
+        violation_count: 0,
+        detail: refusal.to_string(),
     }
 }
 
@@ -445,8 +453,9 @@ fn evaluate_call(
 
     let request = tool_request(trajectory, context, call)?;
     match engine.evaluate(trajectory, request.clone()) {
-        Decision::Permitted(token) => dispatch(trajectory, token, false),
-        Decision::Blocked(blocked) => {
+        Err(refusal) => Ok(refused_outcome(&refusal)),
+        Ok(FlowOutcome::AllowedNow(token)) => dispatch(trajectory, token, false),
+        Ok(blocked) => {
             let violations = blocked_violations(&blocked);
             let has_unknown = violations
                 .iter()
@@ -477,7 +486,7 @@ fn evaluate_call(
                 .saturating_add(8);
             match engine.pursue(trajectory, request, max_steps) {
                 Pursuit::Permitted(token) => dispatch(trajectory, token, audited),
-                Pursuit::Terminal(block) => Ok(blocked_outcome(&block.reason, &block.violations)),
+                Pursuit::Terminal { violations, reason } => Ok(blocked_outcome(&reason, &violations)),
                 Pursuit::NeedsApproval(_) => Ok(CallOutcome::Blocked {
                     block_kind: BlockKind::InternalInvariantFailed,
                     violation_count: 0,
@@ -488,6 +497,7 @@ fn evaluate_call(
                     violation_count: violations.len(),
                     detail: format!("remedy pursuit stalled: {cause:?}"),
                 }),
+                Pursuit::Refused(refusal) => Ok(refused_outcome(&refusal)),
             }
         }
     }

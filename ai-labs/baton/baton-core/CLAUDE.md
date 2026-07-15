@@ -78,9 +78,14 @@ observable; preserve it (there is a typed-order test).
   form (what is checked and dispatched). A different proposal while one is
   pending is refused, never queued. Terminal blocks clear the slot;
   remediable blocks keep it.
-- `Blocked::Terminal` is an explicit type; `Blocked::Remediable` carries a
+- Every checked flow — a tool dispatch or an assistant emission — settles in
+  one tri-state `FlowOutcome`: `AllowedNow(permit)`, `Remediable` (carrying a
   `NonEmptyVec<RemedyPlan>` — "remediable with zero plans" is
-  unrepresentable. Plans are predictions, not permits: plain serializable
+  unrepresentable), or `Terminal`. Invalid, stale, foreign, or conflicting
+  proposals are `FlowRefusal`s on a separate channel, outside the tri-state,
+  touching no state. The two pending slots (action, emission) are
+  independent and per-kind single-slot; a blocked emission never clears a
+  pending action. Plans are predictions, not permits: plain serializable
   data, revision-bound, recomputed after every applied step; each step is a
   `PlannedRemedy` (the remedy plus its competent routes and the violations
   the authority is shown), and applying any remedy triggers the full

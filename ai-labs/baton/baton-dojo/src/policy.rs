@@ -115,8 +115,8 @@ impl BatonGate {
                 GateVerdict::Allow
             }
             // The engine cleared this request's slot on a terminal block.
-            Pursuit::Terminal(block) => GateVerdict::Block {
-                reason: block.reason.to_string(),
+            Pursuit::Terminal { reason, .. } => GateVerdict::Block {
+                reason: reason.to_string(),
             },
             // Inline authorities resolve synchronously; a needs-approval means
             // only an out-of-process authority could clear it, which this
@@ -137,6 +137,11 @@ impl BatonGate {
                     }
                     StallCause::Failed(failure) => format!("remedy step failed: {failure:?}"),
                 },
+            },
+            // An invalid/stale/conflicting proposal touched nothing; the gate
+            // reports it like any other block.
+            Pursuit::Refused(refusal) => GateVerdict::Block {
+                reason: format!("proposal refused: {refusal}"),
             },
         }
     }

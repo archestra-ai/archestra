@@ -12,7 +12,7 @@
 //! Run with `cargo run --example external_auditor`.
 
 use baton_core::{
-    ArgumentTree, Authority, AuthorityMandate, Authorization, Decision, OpaqueValue, PolicyEngine, Pursuit, Ruling,
+    ArgumentTree, Authority, AuthorityMandate, Authorization, FlowOutcome, OpaqueValue, PolicyEngine, Pursuit, Ruling,
     Speaker, ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, UserId, ValueId, ValueLabel, Violation,
 };
 
@@ -68,7 +68,7 @@ fn main() {
     // Read the invoices; the output wears the finance team's audience.
     let list = ToolRequest::new(ToolName::new("invoices.list"), ArgumentTree::empty(), []);
     let report = match engine.evaluate(&mut trajectory, list) {
-        Decision::Permitted(token) => {
+        Ok(FlowOutcome::AllowedNow(token)) => {
             let (_canonical, receipt) = trajectory.release(token).unwrap();
             trajectory
                 .record_output(receipt, OpaqueValue::new("<47 invoices totaling $1.2M>"))
@@ -94,7 +94,7 @@ fn main() {
                 .unwrap();
             println!("PERMITTED (finance approver endorsed the auditor and accepted the egress)");
         }
-        Pursuit::Terminal(block) => println!("BLOCKED — {}", block.reason),
+        Pursuit::Terminal { reason, .. } => println!("BLOCKED — {reason}"),
         other => println!("BLOCKED — {other:?}"),
     }
 

@@ -84,7 +84,8 @@ pub enum Subject {
 pub enum Scope {
     /// Local to one value (admission, derivation).
     Value,
-    /// Local to one action's lifecycle.
+    /// Local to one checked flow's lifecycle (a tool action or a pending
+    /// emission).
     Action,
     /// Trajectory-wide monotone state (committed effects, spent
     /// confirmations, turns, control-plane history).
@@ -202,12 +203,31 @@ pub enum Fact {
     /// One policy evaluation of the named flow ran. A new occurrence is
     /// admitted per evaluation — identical-proposal re-entry included —
     /// mirroring the unconditional plan-storage revision advance it will
-    /// replace at the projection cutover.
+    /// replace at the projection cutover. `action` names the pending action
+    /// a tool flow targets; an emission flow's check carries `None`.
     CheckPerformed {
         flow: FlowId,
-        action: ActionId,
+        action: Option<ActionId>,
     },
-    /// A checked response was emitted as `value`.
+    /// An emission proposal opened the named flow (its check came back
+    /// remediable, so the proposal is retained as the pending emission).
+    EmissionProposed {
+        flow: FlowId,
+    },
+    /// A derivation replaced `from` with `to` in the pending emission's
+    /// current body tree.
+    EmissionBodySubstituted {
+        flow: FlowId,
+        from: ValueId,
+        to: ValueId,
+    },
+    /// The pending emission was abandoned (terminal block or explicit
+    /// abandonment) without emitting.
+    EmissionAbandoned {
+        flow: FlowId,
+    },
+    /// A checked response was emitted as `value`, closing any pending
+    /// emission.
     ResponseEmitted {
         value: ValueId,
     },
@@ -249,7 +269,10 @@ impl Fact {
             | Self::ActionCompleted { action, .. }
             | Self::DispatchFailed { action }
             | Self::ActionAbandoned { action } => Subject::Action(*action),
-            Self::CheckPerformed { flow, .. } => Subject::Check(*flow),
+            Self::CheckPerformed { flow, .. }
+            | Self::EmissionProposed { flow }
+            | Self::EmissionBodySubstituted { flow, .. }
+            | Self::EmissionAbandoned { flow } => Subject::Check(*flow),
             Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
                 match &authorization.scope() {
                     AuthorizationScope::DerivedValue { source } => Subject::Value(*source),
@@ -272,7 +295,10 @@ impl Fact {
             | Self::ActionCompleted { .. }
             | Self::DispatchFailed { .. }
             | Self::ActionAbandoned { .. }
-            | Self::CheckPerformed { .. } => Scope::Action,
+            | Self::CheckPerformed { .. }
+            | Self::EmissionProposed { .. }
+            | Self::EmissionBodySubstituted { .. }
+            | Self::EmissionAbandoned { .. } => Scope::Action,
             Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
                 match &authorization.scope() {
                     AuthorizationScope::DerivedValue { .. } => Scope::Value,
@@ -335,6 +361,10 @@ pub enum EventConflict {
     ActionSlotOccupied { action: ActionId },
     #[error("confirmation of {turn} was already spent")]
     ConfirmationAlreadySpent { turn: TurnId },
+    #[error("emission {flow}: fact contradicts its admitted lifecycle")]
+    EmissionLifecycle { flow: FlowId },
+    #[error("another emission is live; {flow} cannot be proposed")]
+    EmissionSlotOccupied { flow: FlowId },
 }
 
 /// Lifecycle a live action has reached, tracked for conflict refusal.
@@ -366,6 +396,8 @@ pub struct EventSet {
     spent_confirmations: BTreeSet<TurnId>,
     #[serde(skip)]
     live_action: Option<(ActionId, ActionPhase)>,
+    #[serde(skip)]
+    live_emission: Option<FlowId>,
 }
 
 impl EventSet {
@@ -437,6 +469,7 @@ impl EventSet {
             admitted_turns: self.admitted_turns.clone(),
             spent_confirmations: self.spent_confirmations.clone(),
             live_action: self.live_action,
+            live_emission: self.live_emission,
         };
         for fact in facts {
             probe.check(fact)?;
@@ -451,6 +484,7 @@ impl EventSet {
             admitted_turns: self.admitted_turns.clone(),
             spent_confirmations: self.spent_confirmations.clone(),
             live_action: self.live_action,
+            live_emission: self.live_emission,
         }
         .check(fact)
     }
@@ -461,12 +495,14 @@ impl EventSet {
             admitted_turns: std::mem::take(&mut self.admitted_turns),
             spent_confirmations: std::mem::take(&mut self.spent_confirmations),
             live_action: self.live_action,
+            live_emission: self.live_emission,
         };
         state.index(fact);
         self.admitted_values = state.admitted_values;
         self.admitted_turns = state.admitted_turns;
         self.spent_confirmations = state.spent_confirmations;
         self.live_action = state.live_action;
+        self.live_emission = state.live_emission;
     }
 }
 
@@ -477,6 +513,7 @@ struct ProbeState {
     admitted_turns: BTreeSet<TurnId>,
     spent_confirmations: BTreeSet<TurnId>,
     live_action: Option<(ActionId, ActionPhase)>,
+    live_emission: Option<FlowId>,
 }
 
 impl ProbeState {
@@ -497,8 +534,20 @@ impl ProbeState {
             Fact::ActionConstrained { action, .. }
             | Fact::ArgumentSubstituted { action, .. }
             | Fact::GrowthAccepted { action, .. }
-            | Fact::EffectsCommitted { action, .. }
-            | Fact::CheckPerformed { action, .. } => self.requires_live(*action, ActionPhase::Open),
+            | Fact::EffectsCommitted { action, .. } => self.requires_live(*action, ActionPhase::Open),
+            // A tool flow's check requires its live action; an emission
+            // flow's check its live emission.
+            Fact::CheckPerformed { action, flow } => match action {
+                Some(action) => self.requires_live(*action, ActionPhase::Open),
+                None => self.requires_live_emission(*flow),
+            },
+            Fact::EmissionProposed { flow } => match self.live_emission {
+                Some(_) => Err(EventConflict::EmissionSlotOccupied { flow: *flow }),
+                None => Ok(()),
+            },
+            Fact::EmissionBodySubstituted { flow, .. } | Fact::EmissionAbandoned { flow } => {
+                self.requires_live_emission(*flow)
+            }
             Fact::ActionReleased { action } => self.requires_live(*action, ActionPhase::Open),
             Fact::ActionCompleted { action, .. } | Fact::DispatchFailed { action } => {
                 self.requires_live(*action, ActionPhase::Released)
@@ -525,6 +574,13 @@ impl ProbeState {
         }
     }
 
+    fn requires_live_emission(&self, flow: FlowId) -> Result<(), EventConflict> {
+        match self.live_emission {
+            Some(live) if live == flow => Ok(()),
+            _ => Err(EventConflict::EmissionLifecycle { flow }),
+        }
+    }
+
     fn index(&mut self, fact: &Fact) {
         match fact {
             Fact::ValueAdmitted { value, .. } => {
@@ -545,12 +601,20 @@ impl ProbeState {
             Fact::ConfirmationSpent { turn } => {
                 self.spent_confirmations.insert(*turn);
             }
+            Fact::EmissionProposed { flow } => {
+                self.live_emission = Some(*flow);
+            }
+            // An emitted response settles any pending emission; an
+            // abandonment clears it.
+            Fact::EmissionAbandoned { .. } | Fact::ResponseEmitted { .. } => {
+                self.live_emission = None;
+            }
             Fact::ActionConstrained { .. }
             | Fact::ArgumentSubstituted { .. }
             | Fact::GrowthAccepted { .. }
             | Fact::EffectsCommitted { .. }
             | Fact::CheckPerformed { .. }
-            | Fact::ResponseEmitted { .. }
+            | Fact::EmissionBodySubstituted { .. }
             | Fact::AuthorizationApplied { .. }
             | Fact::AuthorizationDenied { .. }
             | Fact::ControlPlane { .. } => {}

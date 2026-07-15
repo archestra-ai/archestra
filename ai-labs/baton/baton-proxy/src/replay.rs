@@ -13,7 +13,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use baton_core::{
-    ArgumentTree, Blocked, Decision, OpaqueValue, PolicyEngine, RejectedToken, Speaker, ToolName, ToolRequest,
+    ArgumentTree, FlowOutcome, FlowRefusal, OpaqueValue, PolicyEngine, RejectedToken, Speaker, ToolName, ToolRequest,
     Trajectory, UnknownValue, ValueId, Violation,
 };
 use serde_json::{Map, Value};
@@ -118,17 +118,23 @@ impl<'a> Session<'a> {
                         .build_tool_request(&tool, &args, proposed_by)
                         .map_err(|_| ReplayError::MalformedHistoricalCall { tool: tool.clone() })?;
                     match session.engine.evaluate(&mut session.trajectory, request) {
-                        Decision::Permitted(token) => {
+                        Ok(FlowOutcome::AllowedNow(token)) => {
                             let (_canonical, receipt) = session.trajectory.release(token)?;
                             let result = session
                                 .trajectory
                                 .record_output(receipt, OpaqueValue::new(content_text(msg.content.as_ref())))?;
                             session.context.insert(result);
                         }
-                        Decision::Blocked(blocked) => {
+                        Ok(blocked) => {
                             return Err(ReplayError::ReplayBlocked {
                                 tool,
                                 reason: describe_blocked(&blocked),
+                            });
+                        }
+                        Err(refusal) => {
+                            return Err(ReplayError::ReplayBlocked {
+                                tool,
+                                reason: describe_refusal(&refusal),
                             });
                         }
                     }
@@ -166,19 +172,18 @@ impl<'a> Session<'a> {
         };
 
         let outcome = match self.engine.evaluate(&mut self.trajectory, request) {
-            Decision::Permitted(_token) => CallOutcome::Permitted,
-            Decision::Blocked(Blocked::Terminal(block)) => CallOutcome::Terminal {
-                reason: format!(
-                    "`{tool}` was blocked ({}): {}",
-                    block.reason,
-                    describe(&block.violations)
-                ),
+            Ok(FlowOutcome::AllowedNow(_token)) => CallOutcome::Permitted,
+            Ok(FlowOutcome::Terminal { violations, reason }) => CallOutcome::Terminal {
+                reason: format!("`{tool}` was blocked ({}): {}", reason, describe(&violations)),
             },
-            Decision::Blocked(Blocked::Remediable { violations, .. }) => CallOutcome::Terminal {
+            Ok(FlowOutcome::Remediable { violations, .. }) => CallOutcome::Terminal {
                 reason: format!(
                     "`{tool}` was blocked (no authority registered to remedy): {}",
                     describe(&violations)
                 ),
+            },
+            Err(refusal) => CallOutcome::Terminal {
+                reason: format!("`{tool}` was refused: {refusal}"),
             },
         };
         // The proxy never dispatches through the engine — the harness executes
@@ -287,13 +292,18 @@ fn describe(violations: &[Violation]) -> String {
         .join("; ")
 }
 
-fn describe_blocked(blocked: &Blocked) -> String {
+fn describe_blocked<P>(blocked: &FlowOutcome<P>) -> String {
     match blocked {
-        Blocked::Terminal(block) => format!("{}: {}", block.reason, describe(&block.violations)),
-        Blocked::Remediable { violations, .. } => {
+        FlowOutcome::AllowedNow(_) => unreachable!("callers describe only blocked outcomes"),
+        FlowOutcome::Terminal { violations, reason } => format!("{}: {}", reason, describe(violations)),
+        FlowOutcome::Remediable { violations, .. } => {
             format!("remediable, but no authority is registered: {}", describe(violations))
         }
     }
+}
+
+fn describe_refusal(refusal: &FlowRefusal) -> String {
+    format!("refused: {refusal}")
 }
 
 #[cfg(test)]

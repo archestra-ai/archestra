@@ -14,7 +14,7 @@
 //!   the engine issued.
 //!
 //! A [`PendingApproval`] is opaque, linear (non-`Clone`), `Serialize`-only,
-//! and bound to the exact trajectory revision, pending action, waiver,
+//! and bound to the exact trajectory revision, pending flow, grant,
 //! targeted violations, and authority registration. Any state change —
 //! including a process restart, since nothing can deserialize one —
 //! invalidates it.
@@ -28,7 +28,7 @@ use crate::audit::AuthorityName;
 use crate::contract::Violation;
 use crate::engine::EngineId;
 use crate::remedy::Authorization;
-use crate::revision::{ActionId, PlanId, Revision, ValueId};
+use crate::revision::{FlowId, PlanId, Revision, ValueId};
 use crate::transition::AuthorityMandate;
 use crate::turn::TrajectoryId;
 use crate::value::{Provenance, ValueLabel, ValueStore};
@@ -182,15 +182,14 @@ pub enum AuthorityMode {
     External,
 }
 
-/// A grant step awaiting an external authority's ruling. Issued by the engine
-/// when an `ApplyWaiver`, `AcceptGrowth`, or fiat `Derive` (Endorse) step names an
-/// external authority; consumed by
+/// A grant step awaiting an external authority's ruling. Issued by the
+/// engine when an `Authorize` step names an external authority; consumed by
 /// [`crate::engine::PolicyEngine::apply_approval`], which dispatches on the
-/// grant variant.
+/// granted authorization's scope.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct PendingApproval {
     plan: PlanId,
-    action: ActionId,
+    flow: FlowId,
     grant: Authorization,
     authority: AuthorityName,
     /// The violations this grant targets, as predicted at issuance.
@@ -205,9 +204,9 @@ pub struct PendingApproval {
 
 /// The consumed contents of a [`PendingApproval`]. The plan id stays behind
 /// on the serialized approval only — validation binds through the revision
-/// and the pending action.
+/// and the pending flow.
 pub(crate) struct ApprovalParts {
-    pub(crate) action: ActionId,
+    pub(crate) flow: FlowId,
     pub(crate) grant: Authorization,
     pub(crate) authority: AuthorityName,
     pub(crate) resolved: Vec<Violation>,
@@ -223,7 +222,7 @@ impl PendingApproval {
     )]
     pub(crate) fn new(
         plan: PlanId,
-        action: ActionId,
+        flow: FlowId,
         grant: Authorization,
         authority: AuthorityName,
         resolved: Vec<Violation>,
@@ -234,7 +233,7 @@ impl PendingApproval {
     ) -> Self {
         Self {
             plan,
-            action,
+            flow,
             grant,
             authority,
             resolved,
@@ -267,7 +266,7 @@ impl PendingApproval {
 
     pub(crate) fn into_parts(self) -> ApprovalParts {
         ApprovalParts {
-            action: self.action,
+            flow: self.flow,
             grant: self.grant,
             authority: self.authority,
             resolved: self.resolved,

@@ -100,10 +100,10 @@ impl fmt::Display for ToolName {
 pub use contract::{Requirements, Violation};
 pub use dimension::{Audience, Effect, Effects, KnownTrust, Trust, UserId};
 pub use engine::{
-    Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken, PolicyEngine, Pursuit,
-    RejectedToken, StallCause, TerminalBlock, ToolContract,
+    CanonicalRequest, DispatchReceipt, DuplicateContract, Emitted, ExecutionToken, FlowOutcome, FlowPermit,
+    FlowRefusal, PolicyEngine, Pursuit, RejectedToken, StallCause, ToolContract,
 };
-pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, ResponseRequest, ToolRequest};
+pub use request::{ArgumentName, ArgumentSchema, ArgumentTree, EmissionRequest, ToolRequest};
 pub use revision::{Revision, ValueId};
 pub use turn::{Speaker, Trajectory};
 pub use value::{OpaqueValue, UnknownValue, ValueLabel};
@@ -116,7 +116,7 @@ pub use approval::{
 };
 pub use audit::{AuthorityName, TransitionFailure};
 pub use contract::{AttentionRule, AudienceRule};
-pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
+pub use engine::{BlockReason, EmissionPursuit, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
 pub use plan::{NonEmptyVec, RemedyPlan};
 pub use remedy::{
     Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, PlannedRemedy, ReductionTarget,

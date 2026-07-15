@@ -19,9 +19,9 @@
 //!
 //! ```
 //! use baton_core::engine::{
-//!     BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, EngineId,
-//!     ExecutionToken, PolicyEngine, RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome,
-//!     StepRefused, TerminalBlock, ToolContract,
+//!     BlockReason, CanonicalRequest, DispatchReceipt, DuplicateContract, Emitted, EngineId, ExecutionToken,
+//!     FlowOutcome, FlowPermit, FlowRefusal, PolicyEngine, RejectedToken, ResponsePolicy, StepCapability,
+//!     StepOutcome, StepRefused, ToolContract,
 //! };
 //! # fn main() {}
 //! ```
@@ -49,11 +49,10 @@ mod tests;
 
 pub(crate) use capability::ReceiptParts;
 pub use capability::{
-    BlockReason, Blocked, CanonicalRequest, Decision, DispatchReceipt, DuplicateContract, ExecutionToken,
-    RejectedToken, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused, TerminalBlock,
-    ToolContract,
+    BlockReason, CanonicalRequest, DispatchReceipt, DuplicateContract, Emitted, ExecutionToken, FlowOutcome,
+    FlowPermit, FlowRefusal, RejectedToken, ResponsePolicy, StepCapability, StepOutcome, StepRefused, ToolContract,
 };
-pub use pursue::{Pursuit, StallCause};
+pub use pursue::{EmissionPursuit, Pursuit, StallCause};
 
 /// Identity of one engine configuration, unique within the process. Plans,
 /// step capabilities, and pending approvals bind to it: registries are the
@@ -150,9 +149,10 @@ impl PolicyEngine {
         Ok(())
     }
 
-    /// Set the final-response sink policy. Without one, emitting a response is
-    /// unprovable (like calling a tool with no contract) and blocks terminally
-    /// — the response sink is strict emit-or-terminal (no remediation).
+    /// Register the reserved assistant-response sink's policy. An emission
+    /// is checked through the same pipeline as any tool flow; without a
+    /// policy it is unprovable (like calling a tool with no contract) and
+    /// fails closed through the same remedy chain.
     #[must_use]
     pub fn with_response_policy(mut self, policy: ResponsePolicy) -> Self {
         self.response_policy = Some(policy);

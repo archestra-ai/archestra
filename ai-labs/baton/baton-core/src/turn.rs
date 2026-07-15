@@ -28,7 +28,7 @@ use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptPa
 use crate::event::{EventSet, Fact, ValueOrigin};
 use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionSpec};
 use crate::request::{ActionState, PendingAction, ToolRequest};
-use crate::revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
+use crate::revision::{ActionId, FlowId, PlanId, Revision, TransitionId, TurnId, ValueId};
 use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
 
 /// A user's contribution to a turn: who spoke, and whether they explicitly
@@ -117,6 +117,7 @@ pub struct Trajectory {
     revision: Revision,
     pending: Option<PendingAction>,
     next_action: u64,
+    next_flow: u64,
     next_transition: u64,
     /// The remedy plans minted for the current blocked flow, if any. Bound to
     /// the revision they were computed against; any state change stales them.
@@ -150,6 +151,7 @@ impl Trajectory {
             revision: Revision::INITIAL,
             pending: None,
             next_action: 0,
+            next_flow: 0,
             next_transition: 0,
             plans: Vec::new(),
             next_plan: 0,
@@ -499,12 +501,15 @@ impl Trajectory {
     ) -> ActionId {
         let id = ActionId::new(self.next_action);
         self.next_action += 1;
+        let flow = FlowId::new(self.next_flow);
+        self.next_flow += 1;
         let batch = vec![Fact::ActionProposed {
             action: id,
+            flow,
             tool: request.tool.clone(),
             effects: proposed_effects.clone(),
         }];
-        self.pending = Some(PendingAction::proposed(id, request, proposed_effects));
+        self.pending = Some(PendingAction::proposed(id, flow, request, proposed_effects));
         self.commit(batch);
         id
     }
@@ -527,7 +532,12 @@ impl Trajectory {
         // included): it mirrors this unconditional advance 1:1 so the
         // frontier can replace the revision at cutover without weakening
         // cross-evaluation staleness.
-        self.commit(vec![Fact::CheckPerformed { action }]);
+        let flow = self
+            .pending
+            .as_ref()
+            .expect("plans are stored only for the pending action")
+            .flow();
+        self.commit(vec![Fact::CheckPerformed { flow, action }]);
         let basis = self.revision;
         self.plans = drafts
             .into_iter()

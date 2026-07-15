@@ -134,7 +134,9 @@ pub fn pending_action(events: &EventSet) -> Option<PendingActionView> {
     let mut view: Option<PendingActionView> = None;
     for event in events.events() {
         match &event.fact {
-            Fact::ActionProposed { action, tool, effects } => {
+            Fact::ActionProposed {
+                action, tool, effects, ..
+            } => {
                 view = Some(PendingActionView {
                     action: *action,
                     tool: tool.clone(),

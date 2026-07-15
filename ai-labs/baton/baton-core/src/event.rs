@@ -24,7 +24,7 @@ use serde::Serialize;
 use crate::ToolName;
 use crate::audit::{AuditEvent, AuthorityName};
 use crate::dimension::Effects;
-use crate::revision::{ActionId, TransitionId, TurnId, ValueId};
+use crate::revision::{ActionId, FlowId, TransitionId, TurnId, ValueId};
 use crate::transition::EndorseDelta;
 use crate::turn::Actor;
 use crate::value::{TransformerRef, ValueLabel};
@@ -72,9 +72,8 @@ pub enum Subject {
     Value(ValueId),
     Action(ActionId),
     Turn(TurnId),
-    /// One policy check of a flow. Until the typed flow identity lands
-    /// (S2), the checked action names the check.
-    Check(ActionId),
+    /// One policy check of the named flow.
+    Check(FlowId),
     Trajectory,
 }
 
@@ -150,6 +149,9 @@ pub enum Fact {
     },
     ActionProposed {
         action: ActionId,
+        /// The checked flow the proposal opens; check facts and check-scoped
+        /// grants bind to it.
+        flow: FlowId,
         tool: ToolName,
         effects: Effects,
     },
@@ -200,6 +202,7 @@ pub enum Fact {
     /// mirroring the unconditional plan-storage revision advance it will
     /// replace at the projection cutover.
     CheckPerformed {
+        flow: FlowId,
         action: ActionId,
     },
     /// A checked response was emitted as `value`.
@@ -229,7 +232,7 @@ impl Fact {
             | Self::ActionCompleted { action, .. }
             | Self::DispatchFailed { action }
             | Self::ActionAbandoned { action } => Subject::Action(*action),
-            Self::CheckPerformed { action } => Subject::Check(*action),
+            Self::CheckPerformed { flow, .. } => Subject::Check(*flow),
             Self::ControlPlane { .. } => Subject::Trajectory,
         }
     }
@@ -462,7 +465,7 @@ impl ProbeState {
             | Fact::ArgumentSubstituted { action, .. }
             | Fact::GrowthAccepted { action, .. }
             | Fact::EffectsCommitted { action, .. }
-            | Fact::CheckPerformed { action } => self.requires_live(*action, ActionPhase::Open),
+            | Fact::CheckPerformed { action, .. } => self.requires_live(*action, ActionPhase::Open),
             Fact::ActionReleased { action } => self.requires_live(*action, ActionPhase::Open),
             Fact::ActionCompleted { action, .. } | Fact::DispatchFailed { action } => {
                 self.requires_live(*action, ActionPhase::Released)
@@ -548,6 +551,7 @@ mod tests {
     fn proposal(action: u64) -> Fact {
         Fact::ActionProposed {
             action: ActionId::new(action),
+            flow: crate::revision::FlowId::new(action),
             tool: crate::ToolName::new("email.send"),
             effects: Effects::none(),
         }

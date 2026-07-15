@@ -53,6 +53,7 @@ pub mod projection;
 // Technically public (reusable label algebras) but never re-exported at the
 // root: a consumer composes the built-in dimensions, not the raw presets.
 pub mod preset;
+pub mod remedy;
 pub mod request;
 pub mod revision;
 pub mod transition;
@@ -117,7 +118,10 @@ pub use audit::{AuthorityName, TransitionFailure};
 pub use contract::{AttentionRule, AudienceRule};
 pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
 pub use plan::{ExitKind, Justification, NonEmptyVec, RemedyPlan, TransitionKind};
-pub use revision::PlanId;
+pub use remedy::{
+    Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, PlannedRemedy, ReductionTarget,
+};
+pub use revision::{FlowId, PlanId};
 pub use transition::{
     ActionTransition, AuthorityMandate, DuplicateRegistration, EndorseDelta, LabelPredicate, ProposedGrant,
     RegisteredTransformer, TransformerDescriptor, TransformerError, TransformerFn, TransientWaiver,

@@ -26,7 +26,7 @@ use serde::Serialize;
 
 use crate::ToolName;
 use crate::dimension::{Effects, UserId};
-use crate::revision::{ActionId, Revision, ValueId};
+use crate::revision::{ActionId, FlowId, Revision, ValueId};
 use crate::value::{UnknownValue, ValueLabel, ValueStore};
 
 /// Name of one argument in an [`ArgumentTree::Object`].
@@ -284,6 +284,9 @@ pub enum ActionState {
 #[derive(Debug, Serialize)]
 pub struct PendingAction {
     id: ActionId,
+    /// The checked flow this action is the target of: plans, check-scoped
+    /// grants, and check facts bind to it; re-entry re-checks the same flow.
+    flow: FlowId,
     original: ToolRequest,
     current: ToolRequest,
     proposed_effects: Effects,
@@ -295,9 +298,10 @@ pub struct PendingAction {
 }
 
 impl PendingAction {
-    pub(crate) fn proposed(id: ActionId, request: ToolRequest, proposed_effects: Effects) -> Self {
+    pub(crate) fn proposed(id: ActionId, flow: FlowId, request: ToolRequest, proposed_effects: Effects) -> Self {
         Self {
             id,
+            flow,
             original: request.clone(),
             current: request,
             proposed_effects,
@@ -308,6 +312,11 @@ impl PendingAction {
 
     pub fn id(&self) -> ActionId {
         self.id
+    }
+
+    /// The checked flow this action is the target of.
+    pub fn flow(&self) -> FlowId {
+        self.flow
     }
 
     pub fn original(&self) -> &ToolRequest {

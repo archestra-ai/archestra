@@ -92,6 +92,14 @@ sequential_id!(
 );
 
 sequential_id!(
+    /// Identity of one checked flow within its trajectory — the subject a
+    /// policy check, its remedy plans, and any check-scoped authorization
+    /// bind to. Re-evaluating the same proposal re-checks the same flow.
+    pub FlowId,
+    "flow"
+);
+
+sequential_id!(
     /// Identity of one remedy plan minted for one blocked flow.
     pub PlanId,
     "plan"

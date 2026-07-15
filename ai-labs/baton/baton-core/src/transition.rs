@@ -225,26 +225,57 @@ impl AuthorityMandate {
         self
     }
 
-    /// Is this mandate competent for `grant`? Endorse dimensions compare by
-    /// their order (trust by [`KnownTrust`], audience by set inclusion); every
-    /// other elevation by boolean implication. An elevation the grant does not
-    /// ask for is not required of the mandate.
+    /// Is this mandate competent for `grant`? Delegates to the typed
+    /// coordinate relation ([`Self::authorizes`]): the grant's delta
+    /// decomposes into atomic coordinates and every one must be covered. An
+    /// elevation the grant does not ask for is not required of the mandate.
     #[must_use]
     pub fn covers(&self, grant: &ProposedGrant) -> bool {
-        match grant {
-            ProposedGrant::Waive { waiver, acknowledged } => {
-                let effects_ok = waiver.prior_effects.is_none() || self.waive_prior_effects;
-                let confirms_ok = !waiver.confirms || self.confirms;
-                let control_ok = waiver.control_release.is_empty() || self.may_release_control;
-                // A lift that also clears acknowledge-only facts needs the
-                // explicit acknowledge capability — the lift dims alone must
-                // not let an authority acknowledge an unknown it cannot vouch.
-                let acknowledge_ok = acknowledged.is_empty() || self.acknowledge_unknown;
-                effects_ok && confirms_ok && control_ok && acknowledge_ok
+        match grant.delta() {
+            Some(delta) => self.authorizes_delta(&delta),
+            // A grant that asks for nothing (the identity waiver with no
+            // acknowledged facts) is covered by every mandate.
+            None => true,
+        }
+    }
+
+    /// The typed competence relation: is this mandate competent for the
+    /// asked authorization? Every atomic coordinate of the delta must be
+    /// covered — a label raise by the trust ceiling and vouchable readers, a
+    /// product lift by each of its named capabilities. Scope never broadens
+    /// competence: what may be granted is the delta; where it applies is the
+    /// grant's binding.
+    #[must_use]
+    pub fn authorizes(&self, ask: &crate::remedy::Authorization) -> bool {
+        self.authorizes_delta(&ask.delta)
+    }
+
+    fn authorizes_delta(&self, delta: &crate::remedy::AuthorizationDelta) -> bool {
+        delta.coordinates().all(|coordinate| self.covers_coordinate(coordinate))
+    }
+
+    fn covers_coordinate(&self, coordinate: &crate::remedy::DeltaCoordinate) -> bool {
+        use crate::remedy::DeltaCoordinate;
+        match coordinate {
+            DeltaCoordinate::RaiseLabel(raise) => {
+                let trust_ok = match raise.trust {
+                    None => true,
+                    Some(need) => matches!(self.trust, Some(ceiling) if ceiling >= need),
+                };
+                let audience_ok = match &raise.audience {
+                    None => true,
+                    Some(need) => matches!(&self.audience, Some(vouchable) if need.is_subset(vouchable)),
+                };
+                trust_ok && audience_ok
             }
-            ProposedGrant::Endorse { delta, .. } => delta.covered_by(self),
-            ProposedGrant::Accept { .. } => self.acquire_effects,
-            ProposedGrant::Acknowledge { .. } => self.acknowledge_unknown,
+            DeltaCoordinate::AcquireEffects(_) => self.acquire_effects,
+            DeltaCoordinate::ExceptPriorEffects(_) => self.waive_prior_effects,
+            DeltaCoordinate::StandInConfirmation => self.confirms,
+            DeltaCoordinate::ReleaseControl(_) => self.may_release_control,
+            // The coordinate demands the explicit acknowledge capability even
+            // over an empty fact list — the lift dims alone must not let an
+            // authority acknowledge an unknown it cannot vouch.
+            DeltaCoordinate::AcknowledgeUnknown(_) => self.acknowledge_unknown,
         }
     }
 }
@@ -402,6 +433,41 @@ pub enum ProposedGrant {
     Acknowledge { facts: Vec<Unprovable> },
 }
 
+impl ProposedGrant {
+    /// The grant's typed authorization delta: its atomic coordinates in
+    /// canonical order. `None` iff the grant asks for nothing (the identity
+    /// waiver with no acknowledged facts) — "authorize nothing" is
+    /// unrepresentable as a delta.
+    pub(crate) fn delta(&self) -> Option<crate::remedy::AuthorizationDelta> {
+        use crate::remedy::{AuthorizationDelta, DeltaCoordinate, LabelRaise};
+        let coordinates = match self {
+            Self::Endorse { delta, .. } => vec![DeltaCoordinate::RaiseLabel(LabelRaise {
+                trust: delta.trust,
+                audience: delta.audience.clone(),
+            })],
+            Self::Accept { effects } => vec![DeltaCoordinate::AcquireEffects(effects.clone())],
+            Self::Acknowledge { facts } => vec![DeltaCoordinate::AcknowledgeUnknown(facts.clone())],
+            Self::Waive { waiver, acknowledged } => {
+                let mut coordinates = Vec::new();
+                if let Some(effects) = &waiver.prior_effects {
+                    coordinates.push(DeltaCoordinate::ExceptPriorEffects(effects.clone()));
+                }
+                if waiver.confirms {
+                    coordinates.push(DeltaCoordinate::StandInConfirmation);
+                }
+                if !waiver.control_release.is_empty() {
+                    coordinates.push(DeltaCoordinate::ReleaseControl(waiver.control_release.clone()));
+                }
+                if !acknowledged.is_empty() {
+                    coordinates.push(DeltaCoordinate::AcknowledgeUnknown(acknowledged.clone()));
+                }
+                coordinates
+            }
+        };
+        AuthorizationDelta::product(coordinates)
+    }
+}
+
 impl fmt::Display for ProposedGrant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -434,6 +500,7 @@ mod tests {
     fn pending(tool: &str, effects: Effects) -> PendingAction {
         PendingAction::proposed(
             ActionId::new(0),
+            crate::revision::FlowId::new(0),
             ToolRequest::new(
                 ToolName::new(tool),
                 ArgumentTree::Object(BTreeMap::new()),
@@ -592,6 +659,126 @@ mod tests {
                     audience: None,
                 }))
         );
+    }
+
+    /// The typed competence relation is diagonal over atomic coordinates:
+    /// each builder combinator authorizes exactly the ask demanding its named
+    /// power, and a product ask requires every coordinate covered.
+    #[test]
+    fn typed_competence_is_diagonal_and_products_need_every_coordinate() {
+        use crate::remedy::{Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise};
+        use crate::revision::FlowId;
+
+        let check_scope = AuthorizationScope::PolicyCheck { flow: FlowId::new(0) };
+        let ask = |coordinate: DeltaCoordinate| Authorization {
+            delta: AuthorizationDelta::single(coordinate),
+            scope: check_scope.clone(),
+        };
+        let cases: Vec<(AuthorityMandate, Authorization)> = vec![
+            (
+                AuthorityMandate::none().endorse_trust(KnownTrust::Trusted),
+                ask(DeltaCoordinate::RaiseLabel(LabelRaise {
+                    trust: Some(KnownTrust::Trusted),
+                    audience: None,
+                })),
+            ),
+            (
+                AuthorityMandate::none().vouch_audience([UserId::new("bob")]),
+                ask(DeltaCoordinate::RaiseLabel(LabelRaise {
+                    trust: None,
+                    audience: Some(BTreeSet::from([UserId::new("bob")])),
+                })),
+            ),
+            (
+                AuthorityMandate::none().waive_prior_effects(),
+                ask(DeltaCoordinate::ExceptPriorEffects(BTreeSet::from([Effect::Egress]))),
+            ),
+            (
+                AuthorityMandate::none().confirms(),
+                ask(DeltaCoordinate::StandInConfirmation),
+            ),
+            (
+                AuthorityMandate::none().release_control(),
+                ask(DeltaCoordinate::ReleaseControl(BTreeSet::from([ValueId::new(0)]))),
+            ),
+            (
+                AuthorityMandate::none().acknowledge_unknown(),
+                ask(DeltaCoordinate::AcknowledgeUnknown(vec![Unprovable::EffectsUnknown])),
+            ),
+            (
+                AuthorityMandate::none().acquire_effects(),
+                ask(DeltaCoordinate::AcquireEffects(Effects::declared([Effect::Egress]))),
+            ),
+        ];
+        for (i, (mandate, _)) in cases.iter().enumerate() {
+            for (j, (_, ask)) in cases.iter().enumerate() {
+                assert_eq!(mandate.authorizes(ask), i == j, "mandate {i} vs ask {j}");
+            }
+        }
+        for (_, ask) in &cases {
+            assert!(!AuthorityMandate::none().authorizes(ask));
+        }
+
+        // A product ask requires one mandate competent for every coordinate:
+        // release+confirm is covered only when both powers are present, and
+        // an acknowledge coordinate riding along still demands its explicit
+        // capability — even over an empty fact list.
+        let release_and_confirm = Authorization {
+            delta: AuthorizationDelta::product(vec![
+                DeltaCoordinate::ReleaseControl(BTreeSet::from([ValueId::new(0)])),
+                DeltaCoordinate::StandInConfirmation,
+            ])
+            .expect("two coordinates"),
+            scope: check_scope.clone(),
+        };
+        assert!(
+            AuthorityMandate::none()
+                .release_control()
+                .confirms()
+                .authorizes(&release_and_confirm)
+        );
+        assert!(
+            !AuthorityMandate::none()
+                .release_control()
+                .authorizes(&release_and_confirm)
+        );
+        assert!(!AuthorityMandate::none().confirms().authorizes(&release_and_confirm));
+
+        let release_and_acknowledge = Authorization {
+            delta: AuthorizationDelta::product(vec![
+                DeltaCoordinate::ReleaseControl(BTreeSet::from([ValueId::new(0)])),
+                DeltaCoordinate::AcknowledgeUnknown(Vec::new()),
+            ])
+            .expect("two coordinates"),
+            scope: check_scope.clone(),
+        };
+        assert!(
+            !AuthorityMandate::none()
+                .release_control()
+                .authorizes(&release_and_acknowledge)
+        );
+        assert!(
+            AuthorityMandate::none()
+                .release_control()
+                .acknowledge_unknown()
+                .authorizes(&release_and_acknowledge)
+        );
+
+        // A raise past the mandate's ceiling is not covered; scope never
+        // broadens competence (the same delta at a durable scope routes the
+        // same way).
+        let big_raise = |scope| Authorization {
+            delta: AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(LabelRaise {
+                trust: Some(KnownTrust::Trusted),
+                audience: Some(BTreeSet::from([UserId::new("bob"), UserId::new("charlie")])),
+            })),
+            scope,
+        };
+        let narrow = AuthorityMandate::none().vouch_audience([UserId::new("bob")]);
+        assert!(!narrow.authorizes(&big_raise(check_scope)));
+        assert!(!narrow.authorizes(&big_raise(AuthorizationScope::DerivedValue {
+            source: ValueId::new(0)
+        })));
     }
 
     #[test]

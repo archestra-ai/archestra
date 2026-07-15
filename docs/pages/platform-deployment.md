@@ -932,6 +932,15 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.openai.com/v1`
   - Use this to point to your own proxy, an OpenAI-compatible API, or other custom endpoints
 
+- **`ARCHESTRA_OPENAI_CODEX_API_BASE_URL`** - Codex backend serving the ChatGPT-subscription Responses API.
+  - Default: `https://chatgpt.com/backend-api/codex`
+- **`ARCHESTRA_OPENAI_CODEX_ISSUER`** - OAuth issuer hosting the ChatGPT authorize, token, and device endpoints.
+  - Default: `https://auth.openai.com`
+- **`ARCHESTRA_OPENAI_CODEX_CLIENT_ID`** - Public OAuth client id for the ChatGPT/Codex sign-in.
+  - Default: the Codex CLI client id
+- **`ARCHESTRA_OPENAI_CODEX_ORIGINATOR`** - `originator` header the Codex backend attributes traffic by. Override to `codex_cli_rs` if OpenAI ever restricts unknown originators.
+  - Default: `archestra`
+
 - **`ARCHESTRA_ANTHROPIC_BASE_URL`** - Override the Anthropic API base URL.
   - Default: `https://api.anthropic.com`
   - Use this to point to your own proxy or other custom endpoints

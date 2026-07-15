@@ -57302,6 +57302,184 @@ export type OpenAiListModelsWithAgentResponses = {
 
 export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
 
+export type OpenaiCodexDeviceAuthStartData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openai-codex-auth/device/start';
+};
+
+export type OpenaiCodexDeviceAuthStartErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenaiCodexDeviceAuthStartError = OpenaiCodexDeviceAuthStartErrors[keyof OpenaiCodexDeviceAuthStartErrors];
+
+export type OpenaiCodexDeviceAuthStartResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        deviceAuthId: string;
+        userCode: string;
+        verificationUri: string;
+        interval: number;
+        expiresIn: number;
+    };
+};
+
+export type OpenaiCodexDeviceAuthStartResponse = OpenaiCodexDeviceAuthStartResponses[keyof OpenaiCodexDeviceAuthStartResponses];
+
+export type OpenaiCodexDeviceAuthPollData = {
+    body: {
+        deviceAuthId: string;
+        userCode: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openai-codex-auth/device/poll';
+};
+
+export type OpenaiCodexDeviceAuthPollErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenaiCodexDeviceAuthPollError = OpenaiCodexDeviceAuthPollErrors[keyof OpenaiCodexDeviceAuthPollErrors];
+
+export type OpenaiCodexDeviceAuthPollResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'pending';
+    } | {
+        status: 'slow_down';
+    } | {
+        status: 'complete';
+        credential: string;
+    };
+};
+
+export type OpenaiCodexDeviceAuthPollResponse = OpenaiCodexDeviceAuthPollResponses[keyof OpenaiCodexDeviceAuthPollResponses];
+
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: OpenrouterChatCompletionRequestInput;
     headers: {

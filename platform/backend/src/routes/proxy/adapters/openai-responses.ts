@@ -13,6 +13,7 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -87,6 +88,17 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   ): OpenAIProvider {
     if (!apiKey) {
       throw new ApiError(401, "API key required for OpenAI");
+    }
+
+    // A ChatGPT-subscription (Codex) credential is surfaced only through
+    // chat/completions (its models never route to the Responses transport).
+    // Guard the raw Responses endpoint so a client can't hand this credential
+    // here — that would send the encoded OAuth token to api.openai.com.
+    if (isOpenAiCodexCredential(apiKey)) {
+      throw new ApiError(
+        400,
+        "ChatGPT subscription (Codex) credentials are not supported on the OpenAI Responses endpoint — use the chat/completions endpoint.",
+      );
     }
 
     const resolvedBaseUrl = options.baseUrl || config.llm.openai.baseUrl;

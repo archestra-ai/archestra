@@ -42,6 +42,7 @@ export { default as microsoft365CopilotAuthRoutes } from "./microsoft-365-copilo
 export { default as oauthRoutes } from "./oauth";
 export { default as oauthServerRoutes } from "./oauth-server";
 export { default as onboardingRoutes } from "./onboarding/onboarding.routes";
+export { default as openaiCodexAuthRoutes } from "./openai-codex-auth/openai-codex-auth.routes";
 export { default as optimizationRuleRoutes } from "./optimization-rule";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";

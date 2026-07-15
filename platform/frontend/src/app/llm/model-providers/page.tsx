@@ -97,6 +97,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
+  openaiAuthMethod: "api-key",
 };
 
 export default function ApiKeysPage() {
@@ -185,6 +186,7 @@ export default function ApiKeysPage() {
         awsAccessKeyId: null,
         awsSecretAccessKey: null,
         awsSessionToken: null,
+        openaiAuthMethod: "api-key",
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);

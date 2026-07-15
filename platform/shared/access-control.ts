@@ -948,6 +948,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same self-service rationale for Microsoft 365 Copilot's Entra device flow.
   [RouteId.Microsoft365CopilotDeviceAuthStart]: {},
   [RouteId.Microsoft365CopilotDeviceAuthPoll]: {},
+  // Same self-service rationale for the ChatGPT/Codex subscription device flow:
+  // it only obtains the caller's own OAuth credential for a new personal
+  // OpenAI (ChatGPT subscription) key.
+  [RouteId.OpenaiCodexDeviceAuthStart]: {},
+  [RouteId.OpenaiCodexDeviceAuthPoll]: {},
   [RouteId.GetLlmProviderApiKey]: {
     llmProviderApiKey: ["read"],
   },

@@ -29,6 +29,7 @@ const DEFAULTS: LlmProviderApiKeyFormValues = {
   vaultSecretKey: null,
   isPrimary: false,
   bedrockAuthMethod: "api-key",
+  openaiAuthMethod: "api-key",
   awsAccessKeyId: null,
   awsSecretAccessKey: null,
   awsSessionToken: null,
@@ -167,6 +168,31 @@ describe("LlmProviderApiKeyForm", () => {
 
     await waitFor(() => {
       expect(form.getValues("name")).toBe("Microsoft 365 Copilot (3)");
+    });
+  });
+
+  it("retitles the auto-filled name to match the OpenAI credential type", async () => {
+    // Selecting the ChatGPT Subscription tab must rename the auto-filled key
+    // from "OpenAI", so it is not saved under the wrong, confusing name.
+    renderForm();
+
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("OpenAI");
+    });
+
+    act(() => {
+      form.setValue("openaiAuthMethod", "chatgpt-subscription");
+    });
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("ChatGPT Subscription");
+    });
+
+    // Switching back to the API-key tab restores the plain provider default.
+    act(() => {
+      form.setValue("openaiAuthMethod", "api-key");
+    });
+    await waitFor(() => {
+      expect(form.getValues("name")).toBe("OpenAI");
     });
   });
 

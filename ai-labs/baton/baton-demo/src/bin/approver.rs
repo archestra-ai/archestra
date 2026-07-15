@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use std::net::SocketAddr;
 
 use baton_core::{ToolName, UserId};
-use baton_approver_demo::approval::{ApprovalRecord, Verdict};
+use baton_demo::approval::{ApprovalRecord, Verdict};
 use clap::Parser;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, CreateElicitationRequestParams, ElicitationAction,

@@ -10,8 +10,11 @@
 //! No authorities are registered — a flow the contracts cannot prove is
 //! blocked, fail closed. The prototype's human-approval flow (the
 //! `baton-approver` / `baton-demo-agent` binaries) predates current baton-core's
-//! authority model; it lives in PR #6551 on `main` and will return as a port to
-//! External authorities (`PendingApproval` + `apply_approval`).
+//! authority model; it is parked in the `baton-demo` crate (behind its
+//! `approver` feature) and returns as a port to External authorities
+//! (`PendingApproval` + `apply_approval`). The tool-layer successor to that
+//! flow — soft blocks, escalation, canonical dispatch — is the `baton-demo`
+//! gateway.
 //!
 //! Nothing here is cryptographic: authenticity rests on the harness only
 //! recording tool results that real MCP servers returned. See `README.md`.

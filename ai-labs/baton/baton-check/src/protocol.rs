@@ -8,10 +8,11 @@
 
 use std::collections::BTreeSet;
 
+use baton_core::contract::Breach;
 use baton_core::{
-    Audience, Authority, AuthorityName, BlockReason, Decision, Effect, Effects, Grant, KnownTrust,
-    Label, PolicyEngine, Requirements, Ruling, Speaker, TaintPolicy, ToolContract, ToolName,
-    ToolRequest, Trajectory, Trust, UnknownPolicy, UserId, Violation,
+    ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, BlockReason, Blocked, Decision, Effect,
+    Effects, KnownTrust, OpaqueValue, PolicyEngine, ProposedGrant, Pursuit, Requirements, Ruling, Speaker,
+    ToolContract, ToolName, ToolRequest, Trajectory, TrajectoryView, Trust, UserId, ValueId, ValueLabel, Violation,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,7 +29,7 @@ pub struct Input {
     pub proposed: CallIn,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UnknownPolicyIn {
     Deny,
@@ -36,7 +37,7 @@ pub enum UnknownPolicyIn {
     Escalate,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaintPolicyIn {
     #[default]
@@ -123,9 +124,8 @@ pub enum Output {
     },
 }
 
-/// One-to-one, exhaustive image of [`BlockReason`]; the `match` below has no
-/// catch-all, so a new core variant is a compile error here, never a silent
-/// misreport.
+/// Stable wire categories retained for the AgentDojo bridge. Current core
+/// reasons are mapped exhaustively below.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum BlockKind {
@@ -140,60 +140,58 @@ impl From<&BlockReason> for BlockKind {
     fn from(reason: &BlockReason) -> Self {
         match reason {
             BlockReason::DeniedByAuthority { .. } => Self::DeniedByAuthority,
-            BlockReason::UnknownDenied => Self::UnknownDenied,
             BlockReason::RequiresStructuralFix => Self::RequiresStructuralFix,
-            BlockReason::NoCompetentAuthority => Self::NoCompetentAuthority,
-            BlockReason::InternalInvariantFailed => Self::InternalInvariantFailed,
+            BlockReason::NoRemedy | BlockReason::NoAuthorityRuled => Self::NoCompetentAuthority,
+            BlockReason::ActionAlreadyPending { .. }
+            | BlockReason::UnknownValueReferenced { .. }
+            | BlockReason::StaleResponse { .. }
+            | BlockReason::PostconditionFailed => Self::InternalInvariantFailed,
         }
     }
 }
 
-/// Universal mandate: covers every grant, so it is always the consulted
-/// member, and it always denies. Within the `Authority` contract — a member
-/// is consulted once its mandate covers the needed grant, and this mandate
-/// covers all of them (the empty grant is covered by all; this extends that
-/// to everything).
-///
-/// Because `rule` never returns `None`, `BlockKind::NoCompetentAuthority` is
-/// unreachable under this authority: every escalated flow reports
-/// `DeniedByAuthority`. That is deliberate fail-closed harness behavior, not
-/// a claim about how a mandated panel would attribute the same block.
-struct DenyAll;
-
-impl Authority for DenyAll {
-    fn rule(
-        &self,
-        _needed: &Grant,
-        _request: &ToolRequest,
-        _context: &Label,
-        _violations: &[Violation],
-    ) -> Option<(AuthorityName, Ruling)> {
-        Some((
-            AuthorityName::new("deny-all"),
-            Ruling::Deny {
-                reason: "deny-all harness authority never declassifies".to_owned(),
-            },
-        ))
-    }
+fn approve_effect_growth(
+    grant: &ProposedGrant,
+    _violations: &[Violation],
+    _trajectory: &TrajectoryView<'_>,
+) -> Option<Ruling> {
+    matches!(grant, ProposedGrant::Accept { .. }).then(|| Ruling::Approve {
+        reason: "legacy baton-check treats declared effects as ordinary trajectory state".to_owned(),
+    })
 }
 
-impl From<UnknownPolicyIn> for UnknownPolicy {
-    fn from(policy: UnknownPolicyIn) -> Self {
-        match policy {
-            UnknownPolicyIn::Deny => Self::Deny,
-            UnknownPolicyIn::AllowWithAudit => Self::AllowWithAudit,
-            UnknownPolicyIn::Escalate => Self::Escalate,
-        }
-    }
+fn approve_unknown(
+    grant: &ProposedGrant,
+    violations: &[Violation],
+    _trajectory: &TrajectoryView<'_>,
+) -> Option<Ruling> {
+    (!matches!(grant, ProposedGrant::Accept { .. })
+        && !violations.is_empty()
+        && violations.iter().all(|violation| {
+            matches!(
+                violation,
+                Violation::Unprovable(_) | Violation::Breach(Breach::SurfaceGrowth { .. })
+            )
+        }))
+    .then(|| Ruling::Approve {
+        reason: "legacy allow_with_audit policy acknowledged the unknown flow".to_owned(),
+    })
 }
 
-impl From<TaintPolicyIn> for TaintPolicy {
-    fn from(policy: TaintPolicyIn) -> Self {
-        match policy {
-            TaintPolicyIn::Allow => Self::Allow,
-            TaintPolicyIn::Escalate => Self::Escalate,
-        }
-    }
+fn deny_all(_grant: &ProposedGrant, _violations: &[Violation], _trajectory: &TrajectoryView<'_>) -> Option<Ruling> {
+    Some(Ruling::Deny {
+        reason: "deny-all harness authority never declassifies".to_owned(),
+    })
+}
+
+fn broad_mandate() -> AuthorityMandate {
+    AuthorityMandate::none()
+        .endorse_trust(KnownTrust::Trusted)
+        .waive_prior_effects()
+        .confirms()
+        .acknowledge_unknown()
+        .release_control()
+        .acquire_effects()
 }
 
 impl From<TrustIn> for Trust {
@@ -201,7 +199,7 @@ impl From<TrustIn> for Trust {
         match trust {
             TrustIn::Trusted => Self::TRUSTED,
             TrustIn::Suspicious => Self::SUSPICIOUS,
-            TrustIn::Unknown => Self::Unknown,
+            TrustIn::Unknown => Self::UNKNOWN,
         }
     }
 }
@@ -234,23 +232,13 @@ impl From<&ContractIn> for ToolContract {
                 attention: Default::default(),
                 forbid_prior_effects: effect_set(&contract.requires.forbid_prior_effects),
             },
-            output_label: Label {
-                audience: Audience::Public,
+            output_label: ValueLabel {
+                audience: Audience::PUBLIC,
                 trust: contract.output.trust.into(),
-                effects: Effects::declared(
-                    contract.output.effects.iter().copied().map(Effect::from),
-                ),
-                audit: Vec::new(),
             },
+            effects: Effects::declared(contract.output.effects.iter().copied().map(Effect::from)),
+            arguments: ArgumentSchema::opaque(),
         }
-    }
-}
-
-impl From<&CallIn> for ToolRequest {
-    fn from(call: &CallIn) -> Self {
-        let mut request = Self::new(ToolName::new(&call.tool));
-        request.recipients = call.recipients.iter().map(UserId::new).collect();
-        request
     }
 }
 
@@ -262,6 +250,9 @@ fn effect_set(effects: &[EffectIn]) -> BTreeSet<Effect> {
 /// a decision — exit 2 upstream.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProtocolError {
+    DuplicateAuthority {
+        authority: String,
+    },
     DuplicateContract {
         tool: String,
     },
@@ -277,11 +268,17 @@ pub enum ProtocolError {
         index: usize,
         tool: String,
     },
+    ProposedRejected {
+        tool: String,
+    },
 }
 
 impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::DuplicateAuthority { authority } => {
+                write!(f, "internal authority `{authority}` was registered twice")
+            }
             Self::DuplicateContract { tool } => {
                 write!(f, "a contract for `{tool}` is declared twice")
             }
@@ -291,10 +288,199 @@ impl std::fmt::Display for ProtocolError {
                  the caller must only replay permitted calls"
             ),
             Self::ReplayRejected { index, tool } => {
-                write!(
-                    f,
-                    "executed[{index}] `{tool}`: permit rejected during replay"
-                )
+                write!(f, "executed[{index}] `{tool}`: permit rejected during replay")
+            }
+            Self::ProposedRejected { tool } => {
+                write!(f, "proposed `{tool}`: execution token rejected")
+            }
+        }
+    }
+}
+
+enum CallOutcome {
+    Permitted {
+        value: ValueId,
+        audited: bool,
+    },
+    Blocked {
+        block_kind: BlockKind,
+        violation_count: usize,
+        detail: String,
+    },
+}
+
+#[derive(Debug)]
+enum CallError {
+    DependencyRejected,
+    TokenRejected,
+}
+
+fn configure_authorities(engine: &mut PolicyEngine, unknown_policy: UnknownPolicyIn) -> Result<(), ProtocolError> {
+    let mut authorities = vec![Authority::inline(
+        "legacy-effects",
+        AuthorityMandate::none().acquire_effects(),
+        approve_effect_growth,
+    )];
+    if unknown_policy == UnknownPolicyIn::AllowWithAudit {
+        authorities.push(Authority::inline("allow-unknown", broad_mandate(), approve_unknown));
+    }
+    authorities.push(Authority::inline("deny-all", broad_mandate(), deny_all));
+
+    for authority in authorities {
+        engine
+            .register_authority(authority)
+            .map_err(|duplicate| ProtocolError::DuplicateAuthority {
+                authority: duplicate.id,
+            })?;
+    }
+    Ok(())
+}
+
+fn folded_context(trajectory: &Trajectory, context: &BTreeSet<ValueId>) -> Result<ValueLabel, CallError> {
+    context
+        .iter()
+        .map(|value| {
+            trajectory
+                .value(*value)
+                .map(|stored| stored.label().clone())
+                .map_err(|_| CallError::DependencyRejected)
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(ValueLabel::fold)
+}
+
+fn tool_request(
+    trajectory: &mut Trajectory,
+    context: &BTreeSet<ValueId>,
+    call: &CallIn,
+) -> Result<ToolRequest, CallError> {
+    let mut recipients = Vec::with_capacity(call.recipients.len());
+    for recipient in &call.recipients {
+        let value = trajectory
+            .admit_model_output(OpaqueValue::new(recipient), context.clone(), context.clone())
+            .map_err(|_| CallError::DependencyRejected)?;
+        recipients.push(ArgumentTree::Value(value));
+    }
+    Ok(ToolRequest::new(
+        ToolName::new(&call.tool),
+        ArgumentTree::object([("recipients", ArgumentTree::List(recipients))]),
+        context.iter().copied(),
+    ))
+}
+
+fn would_degrade(trajectory: &Trajectory, context: &ValueLabel, contract: Option<&ContractIn>) -> bool {
+    let (output_label, effects) = match contract {
+        Some(contract) => (
+            ValueLabel {
+                audience: Audience::PUBLIC,
+                trust: contract.output.trust.into(),
+            },
+            Effects::declared(contract.output.effects.iter().copied().map(Effect::from)),
+        ),
+        None => (ValueLabel::unknown(), Effects::UNKNOWN),
+    };
+    context.clone().combine(output_label) != *context
+        || trajectory.state().past_effects().clone().combine(effects) != *trajectory.state().past_effects()
+}
+
+fn blocked_violations(blocked: &Blocked) -> &[Violation] {
+    match blocked {
+        Blocked::Terminal(block) => &block.violations,
+        Blocked::Remediable { violations, .. } => violations,
+    }
+}
+
+fn blocked_outcome(reason: &BlockReason, violations: &[Violation]) -> CallOutcome {
+    let detail = std::iter::once(reason.to_string())
+        .chain(violations.iter().map(ToString::to_string))
+        .collect::<Vec<_>>()
+        .join("; ");
+    CallOutcome::Blocked {
+        block_kind: reason.into(),
+        violation_count: violations.len(),
+        detail,
+    }
+}
+
+fn dispatch(
+    trajectory: &mut Trajectory,
+    token: baton_core::ExecutionToken,
+    audited: bool,
+) -> Result<CallOutcome, CallError> {
+    let (_, receipt) = trajectory.release(token).map_err(|_| CallError::TokenRejected)?;
+    let value = trajectory
+        .record_output(receipt, OpaqueValue::new(""))
+        .map_err(|_| CallError::TokenRejected)?;
+    Ok(CallOutcome::Permitted { value, audited })
+}
+
+fn evaluate_call(
+    engine: &PolicyEngine,
+    trajectory: &mut Trajectory,
+    context: &BTreeSet<ValueId>,
+    call: &CallIn,
+    contract: Option<&ContractIn>,
+    unknown_policy: UnknownPolicyIn,
+    taint_policy: TaintPolicyIn,
+) -> Result<CallOutcome, CallError> {
+    let context_label = folded_context(trajectory, context)?;
+    if taint_policy == TaintPolicyIn::Escalate && would_degrade(trajectory, &context_label, contract) {
+        let (block_kind, violation_count) = match (contract, unknown_policy) {
+            (None, UnknownPolicyIn::Deny) => (BlockKind::UnknownDenied, 2),
+            _ => (BlockKind::DeniedByAuthority, 1 + usize::from(contract.is_none())),
+        };
+        return Ok(CallOutcome::Blocked {
+            block_kind,
+            violation_count,
+            detail: "tool output would degrade the trajectory context".to_owned(),
+        });
+    }
+
+    let request = tool_request(trajectory, context, call)?;
+    match engine.evaluate(trajectory, request.clone()) {
+        Decision::Permitted(token) => dispatch(trajectory, token, false),
+        Decision::Blocked(blocked) => {
+            let violations = blocked_violations(&blocked);
+            let has_unknown = violations
+                .iter()
+                .any(|violation| matches!(violation, Violation::Unprovable(_)));
+            if unknown_policy == UnknownPolicyIn::Deny && has_unknown {
+                let detail = violations
+                    .iter()
+                    .filter(|violation| !matches!(violation, Violation::Breach(Breach::SurfaceGrowth { .. })))
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                let violation_count = violations
+                    .iter()
+                    .filter(|violation| !matches!(violation, Violation::Breach(Breach::SurfaceGrowth { .. })))
+                    .count();
+                trajectory.abandon_pending();
+                return Ok(CallOutcome::Blocked {
+                    block_kind: BlockKind::UnknownDenied,
+                    violation_count,
+                    detail,
+                });
+            }
+            let audited = unknown_policy == UnknownPolicyIn::AllowWithAudit && has_unknown;
+            let max_steps = context
+                .len()
+                .saturating_add(call.recipients.len())
+                .saturating_mul(4)
+                .saturating_add(8);
+            match engine.pursue(trajectory, request, max_steps) {
+                Pursuit::Permitted(token) => dispatch(trajectory, token, audited),
+                Pursuit::Terminal(block) => Ok(blocked_outcome(&block.reason, &block.violations)),
+                Pursuit::NeedsApproval(_) => Ok(CallOutcome::Blocked {
+                    block_kind: BlockKind::InternalInvariantFailed,
+                    violation_count: 0,
+                    detail: "internal authority unexpectedly requested external approval".to_owned(),
+                }),
+                Pursuit::Stalled { violations, cause } => Ok(CallOutcome::Blocked {
+                    block_kind: BlockKind::InternalInvariantFailed,
+                    violation_count: violations.len(),
+                    detail: format!("remedy pursuit stalled: {cause:?}"),
+                }),
             }
         }
     }
@@ -302,8 +488,8 @@ impl std::fmt::Display for ProtocolError {
 
 /// Rebuild the episode and check the proposed call.
 pub fn run(input: &Input) -> Result<Output, ProtocolError> {
-    let mut engine = PolicyEngine::new(DenyAll, input.unknown_policy.into())
-        .with_taint_policy(input.taint_policy.into());
+    let mut engine = PolicyEngine::new();
+    configure_authorities(&mut engine, input.unknown_policy)?;
     for contract in &input.contracts {
         engine
             .register(contract.into())
@@ -313,23 +499,32 @@ pub fn run(input: &Input) -> Result<Output, ProtocolError> {
     }
 
     let mut trajectory = Trajectory::new();
-    trajectory.push_message(
-        Label::identity(),
+    let prompt = trajectory.ingress(
         Speaker::user(UserId::new("user")),
-        &input.user_prompt,
+        ValueLabel::identity(),
+        OpaqueValue::new(input.user_prompt.as_str()),
     );
+    let mut context = BTreeSet::from([prompt]);
 
     for (index, call) in input.executed.iter().enumerate() {
-        match engine.evaluate(&trajectory, &call.tool_request()) {
-            Decision::Permitted(permit) => {
-                trajectory.record_result(permit, "").map_err(|_| {
-                    ProtocolError::ReplayRejected {
-                        index,
-                        tool: call.tool.clone(),
-                    }
-                })?;
+        let contract = input.contracts.iter().find(|contract| contract.tool == call.tool);
+        match evaluate_call(
+            &engine,
+            &mut trajectory,
+            &context,
+            call,
+            contract,
+            input.unknown_policy,
+            input.taint_policy,
+        )
+        .map_err(|_| ProtocolError::ReplayRejected {
+            index,
+            tool: call.tool.clone(),
+        })? {
+            CallOutcome::Permitted { value, .. } => {
+                context.insert(value);
             }
-            Decision::Blocked { .. } => {
+            CallOutcome::Blocked { .. } => {
                 return Err(ProtocolError::ReplayBlocked {
                     index,
                     tool: call.tool.clone(),
@@ -338,30 +533,38 @@ pub fn run(input: &Input) -> Result<Output, ProtocolError> {
         }
     }
 
-    Ok(
-        match engine.evaluate(&trajectory, &input.proposed.tool_request()) {
-            Decision::Permitted(permit) => Output::Permitted {
-                audited: !permit.result_label().audit.is_empty(),
-                context: trajectory.context_label().to_string(),
-            },
-            Decision::Blocked { violations, reason } => {
-                let detail = std::iter::once(reason.to_string())
-                    .chain(violations.iter().map(|v| v.to_string()))
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                Output::Blocked {
-                    block_kind: (&reason).into(),
-                    violation_count: violations.len(),
-                    detail,
-                }
-            }
-        },
+    let context_label = folded_context(&trajectory, &context).map_err(|_| ProtocolError::ProposedRejected {
+        tool: input.proposed.tool.clone(),
+    })?;
+    let contract = input
+        .contracts
+        .iter()
+        .find(|contract| contract.tool == input.proposed.tool);
+    match evaluate_call(
+        &engine,
+        &mut trajectory,
+        &context,
+        &input.proposed,
+        contract,
+        input.unknown_policy,
+        input.taint_policy,
     )
-}
-
-impl CallIn {
-    fn tool_request(&self) -> ToolRequest {
-        self.into()
+    .map_err(|_| ProtocolError::ProposedRejected {
+        tool: input.proposed.tool.clone(),
+    })? {
+        CallOutcome::Permitted { audited, .. } => Ok(Output::Permitted {
+            audited,
+            context: context_label.to_string(),
+        }),
+        CallOutcome::Blocked {
+            block_kind,
+            violation_count,
+            detail,
+        } => Ok(Output::Blocked {
+            block_kind,
+            violation_count,
+            detail,
+        }),
     }
 }
 
@@ -397,6 +600,17 @@ mod tests {
     }
 
     #[test]
+    fn taint_escalation_blocks_a_degrading_output() {
+        let mut spec = workspace_ish("escalate");
+        spec["taint_policy"] = serde_json::json!("escalate");
+        spec["proposed"] = serde_json::json!({"tool": "get_unread_emails"});
+        let Output::Blocked { block_kind, .. } = run(&input(spec)).unwrap() else {
+            panic!("a degrading output must escalate");
+        };
+        assert_eq!(block_kind, BlockKind::DeniedByAuthority);
+    }
+
+    #[test]
     fn tainted_context_blocks_trusted_sink_via_authority() {
         for policy in ["deny", "allow_with_audit", "escalate"] {
             let mut spec = workspace_ish(policy);
@@ -421,10 +635,16 @@ mod tests {
 
         let mut spec = workspace_ish("deny");
         spec["proposed"] = proposed.clone();
-        let Output::Blocked { block_kind, .. } = run(&input(spec)).unwrap() else {
+        let Output::Blocked {
+            block_kind,
+            violation_count,
+            ..
+        } = run(&input(spec)).unwrap()
+        else {
             panic!("deny must block an unregistered tool");
         };
         assert_eq!(block_kind, BlockKind::UnknownDenied);
+        assert_eq!(violation_count, 1);
 
         let mut spec = workspace_ish("allow_with_audit");
         spec["proposed"] = proposed.clone();

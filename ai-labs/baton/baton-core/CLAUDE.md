@@ -126,10 +126,10 @@ observable; preserve it (there is a typed-order test).
 
 - No `dyn`/`Box`; newtypes over primitives; pattern matching over if-chains.
   Core ops emit `tracing` events (decision path at `debug!`, algebra at
-  `trace!`) — borrow-only, never behavior-changing; `demo -- -v`/`-vv`
-  selects the level.
+  `trace!`) — borrow-only, never behavior-changing; `baton-gateway -- -v`/`-vv`
+  (in `../baton-proxy`) selects the level.
 - Validate every change: `cargo test`, `cargo clippy --all-targets -- -D warnings`,
-  `cargo fmt --check`, `cargo run --example demo`.
+  `cargo fmt --check`.
 - The algebra **laws** are real `proptest` properties
   (`src/test_strategies.rs`), not fixture loops. Do not assert on `Display`
   output or doc text; behavior tests assert typed values.

@@ -277,8 +277,8 @@ impl Tool for RequestApproval {
             Ok(result) => result,
             Err(e) => {
                 let recipients = args.recipients.iter().map(|r| r.as_str()).collect::<BTreeSet<_>>();
-                let record = baton_approver_demo::ApprovalRecord::new(
-                    baton_approver_demo::Verdict::Denied,
+                let record = baton_demo::approval::ApprovalRecord::new(
+                    baton_demo::approval::Verdict::Denied,
                     baton_core::ToolName::new(&args.tool),
                     recipients.into_iter().map(UserId::new).collect(),
                 );

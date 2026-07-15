@@ -5,11 +5,11 @@ edition = "2024"
 publish = false
 description = "Declarative policy layer: parse a contracts TOML into baton-core ToolContracts"
 
-# Standalone on purpose, like the sibling baton crates.
-[workspace]
-
 [dependencies]
 baton-core = { path = "../baton-core" }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 thiserror = "2"
+
+[lints]
+workspace = true

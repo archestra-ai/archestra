@@ -1,12 +1,14 @@
-# baton-approver-demo
+# baton-demo — the parked approver demo
 
-> **PARKED.** This crate does not build against the current value-granular
-> baton-core. `approval.rs` uses `baton_core::Grant` (removed by the #6525
-> rewrite), and the flow below needs the *approval-rewriting* proxy behavior —
-> a blocked call becoming a `baton__request_approval` call — which `baton-proxy`
-> no longer has (it now blocks fail-closed). It is preserved here and returns
-> once the approval path is ported to External authorities (`PendingApproval` +
-> `apply_approval`). The description below is the flow as it worked in PR #6551.
+> **PARKED.** This demo lives in `baton-demo` behind the `approver` cargo
+> feature (off by default). It compiles, but it no longer runs end-to-end: the
+> flow below needs the *approval-rewriting* proxy behavior — a blocked call
+> becoming a `baton__request_approval` call — which `baton-proxy` no longer has
+> (it now blocks fail-closed). It is preserved here and returns once the
+> approval path is ported to External authorities (`PendingApproval` +
+> `apply_approval`). The tool-layer successor already works — see
+> [README.md](README.md). The description below is the flow as it worked in
+> PR #6551.
 
 A prototype that puts baton's audience policy on the **inference layer**: an
 OpenAI-compatible HTTP proxy sits between an agent harness and the LLM, and when
@@ -79,13 +81,13 @@ Tools without a contract are outside the policy and pass through untouched
 Needs an `OPENROUTER_API_KEY` (the proxy forwards your `Authorization` header
 upstream, so the key is what the demo agent sends).
 
-One command — `run-demo.sh` builds everything, starts the approver and proxy,
+One command — `run-approver-demo.sh` builds everything, starts the approver and proxy,
 runs the agent, and cleans up on exit. It resolves the key from the environment
 or `ai-labs/.env` (including the main checkout's, when run from a worktree):
 
 ```sh
-ai-labs/baton/baton-proxy/run-demo.sh
-# or with a different ask: run-demo.sh --task "email bob@archestra.ai the summary"
+ai-labs/baton/baton-demo/run-approver-demo.sh
+# or with a different ask: run-approver-demo.sh --task "email bob@archestra.ai the summary"
 ```
 
 The agent reads the invoices and tries to email the auditor; the proxy turns

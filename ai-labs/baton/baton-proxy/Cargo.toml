@@ -5,10 +5,6 @@ edition = "2024"
 publish = false
 description = "Inference-layer proxy that blocks tool calls failing their baton contract, over baton-core"
 
-# Standalone on purpose, like baton-core and baton-check: a harness sidecar for
-# the baton prototype, not part of the archestra-bench workspace.
-[workspace]
-
 [dependencies]
 baton-core = { path = "../baton-core" }
 baton-contracts = { path = "../baton-contracts" }
@@ -23,6 +19,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "ansi"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror = "2"
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "baton-proxy"

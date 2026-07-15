@@ -136,7 +136,7 @@ dependencies = [
  "nix",
  "percent-encoding",
  "regex",
- "reqwest 0.13.1",
+ "reqwest 0.13.4",
  "rmcp",
  "serde",
  "serde_json",
@@ -342,6 +342,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "baton-check"
+version = "0.1.0"
+dependencies = [
+ "baton-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "baton-contracts"
+version = "0.1.0"
+dependencies = [
+ "baton-core",
+ "serde",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
 name = "baton-core"
 version = "0.1.0"
 dependencies = [
@@ -365,6 +384,25 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "baton-proxy"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "baton-contracts",
+ "baton-core",
+ "chrono",
+ "clap",
+ "reqwest 0.13.4",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1950,7 +1988,7 @@ dependencies = [
  "glob",
  "rand 0.10.1",
  "regex",
- "reqwest 0.13.1",
+ "reqwest 0.13.4",
  "rig-core",
  "serde",
  "serde_json",
@@ -2702,9 +2740,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.13.1"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04e9018c9d814e5f30cc16a0f03271aeab3571e609612d9fe78c1aa8d11c2f62"
+checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
  "base64",
  "bytes",
@@ -2745,7 +2783,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
- "webpki-roots 1.0.7",
 ]
 
 [[package]]
@@ -2770,7 +2807,7 @@ dependencies = [
  "nanoid",
  "ordered-float",
  "pin-project-lite",
- "reqwest 0.13.1",
+ "reqwest 0.13.4",
  "rig-derive",
  "schemars",
  "serde",
@@ -4102,9 +4139,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-streams"
-version = "0.4.2"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
 dependencies = [
  "futures-util",
  "js-sys",

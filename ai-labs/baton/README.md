@@ -48,30 +48,35 @@ action — and the final assistant response is a mediated sink like any tool.
 concepts and semantics are documented in `baton-core/src/lib.rs`.
 
 ```sh
-cd baton-core
-cargo run --example demo
-cargo run --example scenarios   # declarative pipelines from scenarios.toml
-cargo test
+cargo test -p baton-core
+
+baton-demo/run-gateway-demo.sh   # the end-to-end demo (needs OPENROUTER_API_KEY)
 ```
 
 `agentdojo-harness/` evaluates the engine against the AgentDojo
 prompt-injection benchmark (with `baton-check`, a stateless JSON oracle over
 baton-core); see its README.
 
-`baton-proxy/` is a prototype that puts the engine on the inference layer: an
-OpenAI-compatible HTTP proxy that replays the conversation into a trajectory
-and blocks tool calls that fail their contract before the agent sees them. It
-loads its contracts from a TOML document via `baton-contracts/`, a small crate
-that translates the declarative policy into baton-core `ToolContract`s. See its
-README.
+`baton-proxy/` puts the engine on the **inference layer**: an OpenAI-compatible
+HTTP proxy that replays the conversation into a trajectory and blocks tool
+calls that fail their contract before the agent sees them, loading contracts
+via `baton-contracts/`, a small crate that translates the declarative policy
+into baton-core `ToolContract`s. See its README.
+
+`baton-demo/` is the ad-hoc demo harness. Its built, tested demo is the
+**tool-layer gateway** (`README.md`, the demo above): a real rig agent talking
+to an MCP server that mimics an Archestra-style tool gateway — it serves a
+scenario's tools from TOML, checks every call against baton-core,
+**soft-blocks** breaches as ordinary tool results the model can act on,
+escalates to a human through MCP elicitation, and on approval dispatches the
+exact canonical request the engine checked. The crate also parks the earlier
+inference-layer human-approval flow (behind its `approver` feature — a blocked
+call becomes an approval request a person rules on over MCP); that flow still
+compiles but **no longer runs end-to-end** (it needs the approval-rewriting
+proxy behavior baton-proxy dropped) and returns once ported to External
+authorities. See `APPROVER.md`.
 
 `demo/kagent/` wires baton-proxy into a stock [kagent](https://kagent.dev)
 agent as a pod sidecar: the agent is prompt-injected by a crashlooping pod's
 logs and baton blocks the injected `kubectl delete`, with no changes to the
 agent. `./demo/kagent/run-demo.sh` runs it end-to-end on kind.
-
-`baton-approver-demo/` is the earlier human-in-the-loop variant (a blocked call
-becomes an approval request a person rules on over MCP). **Currently broken /
-parked**: it uses the pre-#6525 baton-core API and the old approval-rewriting
-proxy behavior, so it does not build against current baton-core. It returns
-once the approval flow is ported to External authorities. See its README.

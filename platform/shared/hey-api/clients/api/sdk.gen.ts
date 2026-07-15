@@ -195,7 +195,7 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * Clone an agent and all its associations
+ * Clone an agent and all its associations. Optionally override the clone's visibility (scope/teams); by default the source's visibility is copied.
  *
  * Authentication:
  *
@@ -205,7 +205,14 @@ export const updateAgent = <ThrowOnError extends boolean = false>(options: Optio
  *
  * None (no additional RBAC permission required)
  */
-export const cloneAgent = <ThrowOnError extends boolean = false>(options: Options<CloneAgentData, ThrowOnError>) => (options.client ?? client).post<CloneAgentResponses, CloneAgentErrors, ThrowOnError>({ url: '/api/agents/{id}/clone', ...options });
+export const cloneAgent = <ThrowOnError extends boolean = false>(options: Options<CloneAgentData, ThrowOnError>) => (options.client ?? client).post<CloneAgentResponses, CloneAgentErrors, ThrowOnError>({
+    url: '/api/agents/{id}/clone',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Export an agent configuration as a portable JSON payload for cross-instance transfer

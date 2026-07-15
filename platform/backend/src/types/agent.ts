@@ -331,6 +331,18 @@ export const UpdateAgentSchema = UpdateAgentSchemaBase.superRefine(
   validateIncomingEmailDomain,
 );
 
+export const CloneAgentBodySchema = z.object({
+  scope: AgentScopeSchema.optional().describe(
+    "Visibility of the clone. Defaults to the source agent's scope.",
+  ),
+  teams: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.",
+    ),
+});
+
 export type Agent = z.infer<typeof SelectAgentSchema>;
 export type AgentAccessContext = Pick<
   Agent,

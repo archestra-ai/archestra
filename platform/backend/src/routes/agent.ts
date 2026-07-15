@@ -36,6 +36,7 @@ import {
   AgentToolExclusionsSchema,
   ApiError,
   BuiltInAgentConfigSchema,
+  CloneAgentBodySchema,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
@@ -591,15 +592,19 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CloneAgent,
-        description: "Clone an agent and all its associations",
+        description:
+          "Clone an agent and all its associations. Optionally override the clone's visibility (scope/teams); by default the source's visibility is copied.",
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
         }),
+        // Nullish so pre-existing clients that POST without a payload keep
+        // working (an empty body arrives as null)
+        body: CloneAgentBodySchema.nullish(),
         response: constructResponseSchema(SelectAgentSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // Fetch agent first to determine its type for permission checks
       const sourceAgent = await AgentModel.findById(id, user.id, true);
       if (!sourceAgent) {
@@ -645,6 +650,36 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+
+      // The clone is a new agent, so an explicitly requested visibility is
+      // validated like agent creation (mirrors POST /api/agents).
+      const targetScope = body?.scope ?? sourceAgent.scope;
+      const requestedTeams = body?.teams ?? [];
+      if (!checker.isAdmin(sourceAgent.agentType)) {
+        if (targetScope === "org") {
+          throw new ApiError(403, "Only admins can create org-scoped agents");
+        }
+        if (targetScope === "team" || requestedTeams.length > 0) {
+          if (!checker.isTeamAdmin(sourceAgent.agentType)) {
+            throw new ApiError(
+              403,
+              "You need team-admin permission to create team-scoped agents",
+            );
+          }
+
+          // team-admin can only assign teams they are a member of
+          const userTeamIdSet = new Set(userTeamIds);
+          const invalidTeams = requestedTeams.filter(
+            (teamId) => !userTeamIdSet.has(teamId),
+          );
+          if (invalidTeams.length > 0) {
+            throw new ApiError(
+              403,
+              "You can only assign teams you are a member of",
+            );
+          }
+        }
+      }
 
       // Validate knowledgeBaseIds if provided
       if ((sourceAgent.knowledgeBaseIds?.length ?? 0) > 0) {
@@ -694,6 +729,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const clonedAgent = await AgentModel.cloneAgent({
         sourceId: sourceAgent.id,
         userId: user.id,
+        scope: body?.scope,
+        teams: body?.teams,
       });
 
       return reply.send(clonedAgent);

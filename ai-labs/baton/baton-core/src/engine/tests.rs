@@ -2945,6 +2945,61 @@ fn stale_and_foreign_step_capabilities_are_refused() {
     ));
 }
 
+/// A step capability minted on one trajectory is refused on another
+/// without touching it.
+#[test]
+fn foreign_trajectory_step_capability_is_refused() {
+    let mut engine = engine_with([email_contract()]);
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+    let request = email_request(&mut trajectory, doc, "charlie");
+    let plans = remediable(&engine, &mut trajectory, request);
+    let capability = engine.mint_step(&trajectory, plans.first().id, 0).unwrap();
+
+    let mut other = Trajectory::new();
+    let revision_before = other.revision();
+    assert!(matches!(
+        engine.apply_step(&mut other, capability),
+        Err(StepRefused::ForeignTrajectory { .. })
+    ));
+    // Refusal touched nothing on the foreign trajectory.
+    assert_eq!(other.revision(), revision_before);
+    assert!(other.turns().is_empty());
+    assert!(other.state().audit().is_empty());
+}
+
+/// A pending approval minted on one trajectory is refused on another
+/// without touching it.
+#[test]
+fn foreign_trajectory_approval_is_refused() {
+    let mut engine = engine_with([email_contract()]);
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    let doc = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "private");
+    let request = email_request(&mut trajectory, doc, "charlie");
+    let plans = remediable(&engine, &mut trajectory, request);
+    let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
+        panic!("expected pending approval");
+    };
+
+    let mut other = Trajectory::new();
+    let revision_before = other.revision();
+    assert!(matches!(
+        engine.apply_approval(
+            &mut other,
+            pending,
+            crate::approval::Ruling::Approve {
+                reason: "misrouted".to_owned()
+            }
+        ),
+        Err(StepRefused::ForeignTrajectory { .. })
+    ));
+    assert_eq!(other.revision(), revision_before);
+    assert!(other.turns().is_empty());
+    assert!(other.state().audit().is_empty());
+}
+
 /// A transformer error fails the step, audits the failure with no
 /// derived value, and advances the revision (staling siblings).
 #[test]

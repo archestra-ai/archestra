@@ -80,8 +80,7 @@ fn random_trajectory(
     for turn_index in 0..turn_count {
         let speaker = match rng.below(8) {
             0 => Speaker::confirming(random_user(rng, users), random_tool(rng, tool_names)),
-            1..=4 => Speaker::user(random_user(rng, users)),
-            _ => Speaker::Assistant,
+            _ => Speaker::user(random_user(rng, users)),
         };
         values.push(trajectory.ingress(
             speaker,

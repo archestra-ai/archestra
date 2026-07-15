@@ -48,17 +48,23 @@ pub enum Actor {
     Tool(ToolName),
 }
 
-/// Who may author an ingress turn. Tool results are deliberately absent:
-/// they enter a trajectory only through [`Trajectory::record_output`].
+/// Who may author an ingress turn: only a user. Tool results are deliberately
+/// absent: they enter a trajectory only through [`Trajectory::record_output`].
+/// Assistant output is likewise absent: it is admitted through
+/// [`Trajectory::admit_model_output`] under its dependency fold and crosses the
+/// mediation boundary only through the checked response sink — a caller-labeled
+/// assistant turn would bypass that check.
+///
+/// ```compile_fail
+/// // The bypass is unrepresentable: `Speaker` has no assistant constructor.
+/// let speaker = baton_core::Speaker::Assistant;
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Speaker {
-    User(UserTurn),
-    Assistant,
-}
+pub struct Speaker(UserTurn);
 
 impl Speaker {
     pub fn user(id: UserId) -> Self {
-        Self::User(UserTurn { id, confirms: None })
+        Self(UserTurn { id, confirms: None })
     }
 
     /// A user message that explicitly confirms one named tool. The
@@ -66,7 +72,7 @@ impl Speaker {
     /// not been spent by an action release — see
     /// [`Trajectory::pending_confirmation`].
     pub fn confirming(id: UserId, tool: ToolName) -> Self {
-        Self::User(UserTurn {
+        Self(UserTurn {
             id,
             confirms: Some(tool),
         })
@@ -187,11 +193,10 @@ impl Trajectory {
     pub fn ingress(&mut self, speaker: Speaker, label: ValueLabel, body: OpaqueValue) -> ValueId {
         let turn_id = TurnId::new(self.turns.len() as u64);
         let value = self.store.admit_ingress(turn_id, label, body);
-        let actor = match speaker {
-            Speaker::User(user) => Actor::User(user),
-            Speaker::Assistant => Actor::Assistant,
-        };
-        self.turns.push(Turn { actor, value });
+        self.turns.push(Turn {
+            actor: Actor::User(speaker.0),
+            value,
+        });
         self.advance();
         value
     }

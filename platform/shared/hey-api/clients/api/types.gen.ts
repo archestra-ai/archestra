@@ -36292,9 +36292,9 @@ export type GetInteractionSessionsData = {
          */
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete';
         /**
-         * Filter by client app (queries external_agent_id; e.g. claude)
+         * Filter by client app (queries external_agent_id; e.g. claude, codex)
          */
-        client?: 'claude';
+        client?: 'claude' | 'codex';
         /**
          * Filter by session ID
          */

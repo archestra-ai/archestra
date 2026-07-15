@@ -133814,13 +133814,14 @@
             "schema": {
               "type": "string",
               "enum": [
-                "claude"
+                "claude",
+                "codex"
               ]
             },
             "in": "query",
             "name": "client",
             "required": false,
-            "description": "Filter by client app (queries external_agent_id; e.g. claude)"
+            "description": "Filter by client app (queries external_agent_id; e.g. claude, codex)"
           },
           {
             "schema": {

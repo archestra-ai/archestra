@@ -13,7 +13,7 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
-import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -30,6 +30,7 @@ import type {
   UsageView,
 } from "@/types";
 import { ApiError, createStreamAccumulatorState } from "@/types";
+import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -90,15 +91,17 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       throw new ApiError(401, "API key required for OpenAI");
     }
 
-    // A ChatGPT-subscription (Codex) credential is surfaced only through
-    // chat/completions (its models never route to the Responses transport).
-    // Guard the raw Responses endpoint so a client can't hand this credential
-    // here — that would send the encoded OAuth token to api.openai.com.
-    if (isOpenAiCodexCredential(apiKey)) {
-      throw new ApiError(
-        400,
-        "ChatGPT subscription (Codex) credentials are not supported on the OpenAI Responses endpoint — use the chat/completions endpoint.",
-      );
+    // A ChatGPT-subscription (Codex) credential routes to the ChatGPT Codex
+    // Responses backend (chatgpt.com), never to api.openai.com. The Codex
+    // backend is itself a Responses API, so the request is forwarded with the
+    // OAuth identity headers + mandatory transforms and its event stream is
+    // returned unchanged. This is the endpoint the OpenAI Codex CLI targets.
+    const codexCredential = decodeOpenAiCodexCredential(apiKey);
+    if (codexCredential) {
+      return createOpenAiCodexResponsesClient({
+        credential: codexCredential,
+        options,
+      });
     }
 
     const resolvedBaseUrl = options.baseUrl || config.llm.openai.baseUrl;

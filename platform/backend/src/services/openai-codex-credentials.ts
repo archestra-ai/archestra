@@ -18,6 +18,11 @@
  * services/openai-codex-token.
  */
 
+import {
+  providerRequiresPerUserCredential,
+  type SupportedProvider,
+} from "@archestra/shared";
+
 /** Marker prefix identifying an encoded ChatGPT-subscription credential. */
 const OPENAI_CODEX_CREDENTIAL_MARKER = "chatgpt-oauth:";
 
@@ -38,6 +43,40 @@ export function isOpenAiCodexCredential(value: string | undefined): boolean {
     typeof value === "string" &&
     value.startsWith(OPENAI_CODEX_CREDENTIAL_MARKER)
   );
+}
+
+/**
+ * True when a specific credential must be governed as **per-user** — personal
+ * scope only, owner-matched, never shared through team/org or multi-provider
+ * (model-router) virtual keys. Two cases collapse here: the provider is
+ * inherently per-user (GitHub / Microsoft Copilot), or the secret is a
+ * ChatGPT-subscription (Codex) credential, which is one person's ChatGPT account
+ * and must get the identical treatment on the `openai` provider.
+ *
+ * Unlike `providerRequiresPerUserCredential` (provider-only), this is the
+ * KEY-level check: pass the resolved secret so a Codex credential is recognized.
+ */
+export function credentialRequiresPerUserScope(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+}): boolean {
+  return (
+    providerRequiresPerUserCredential(params.provider) ||
+    isOpenAiCodexCredential(params.apiKey ?? undefined)
+  );
+}
+
+/**
+ * User-facing label for a per-user credential in enforcement messages: the
+ * "ChatGPT Subscription" auth mode reads better than the raw `openai` provider.
+ */
+export function perUserCredentialLabel(params: {
+  provider: SupportedProvider;
+  apiKey: string | null | undefined;
+}): string {
+  return isOpenAiCodexCredential(params.apiKey ?? undefined)
+    ? "ChatGPT Subscription"
+    : params.provider;
 }
 
 export function encodeOpenAiCodexCredential(

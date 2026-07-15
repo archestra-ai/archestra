@@ -17,10 +17,15 @@ const OPTIONS: CreateClientOptions = { source: "api" };
 // and routes to the Codex backend. Every other openai entry point fails closed
 // so the encoded OAuth refresh token can't leak.
 describe("Codex credential guards keep the token off api.openai.com", () => {
-  it("rejects a codex credential on the OpenAI Responses adapter", () => {
-    expect(() =>
-      openAiResponsesAdapterFactory.createClient(CODEX_CREDENTIAL, OPTIONS),
-    ).toThrowError(/Responses endpoint/i);
+  it("routes a codex credential on the OpenAI Responses adapter to the Codex backend", () => {
+    // The Responses endpoint is what the Codex CLI targets, so the adapter must
+    // hand back the Codex-backed client (which talks to chatgpt.com, never
+    // api.openai.com) rather than reject the credential.
+    const client = openAiResponsesAdapterFactory.createClient(
+      CODEX_CREDENTIAL,
+      OPTIONS,
+    ) as unknown as { responses?: { create?: unknown } };
+    expect(typeof client.responses?.create).toBe("function");
   });
 
   it("rejects a codex credential on the OpenAI embeddings adapter", () => {

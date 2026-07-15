@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import { LlmProviderApiKeyModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -151,6 +152,44 @@ describe("POST /api/llm-virtual-keys", () => {
     });
     expect(bundle.statusCode).toBe(400);
     expect(bundle.json().error.message).toContain("per-user");
+  });
+
+  test("ChatGPT-subscription (Codex) openai key: rejected in a shared org-scoped virtual key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    // A codex credential lives on the `openai` provider but is one person's
+    // ChatGPT account, so it must get the same per-user treatment as Copilot.
+    mockUserHasPermission.mockResolvedValue(true); // allow org scope past the admin check
+    const codexSecret = await makeSecret({
+      secret: {
+        apiKey: encodeOpenAiCodexCredential({
+          refreshToken: "rt_self",
+          accountId: "acc_self",
+        }),
+      },
+    });
+    const codexKey = await makeLlmProviderApiKey(
+      organizationId,
+      codexSecret.id,
+      { provider: "openai", scope: "personal", userId: user.id },
+    );
+
+    const orgScoped = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "Shared ChatGPT VK",
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: codexKey.id },
+        ],
+        scope: "org",
+        teams: [],
+      },
+    });
+    expect(orgScoped.statusCode).toBe(400);
+    expect(orgScoped.json().error.message).toContain("per-user");
+    expect(orgScoped.json().error.message).toContain("ChatGPT Subscription");
   });
 
   test("POST /api/llm-virtual-keys allows llmVirtualKey admins to assign any team", async ({

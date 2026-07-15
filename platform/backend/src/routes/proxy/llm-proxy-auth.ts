@@ -9,7 +9,6 @@ import {
   hasArchestraTokenPrefix,
   isSupportedProvider,
   LLM_PROXY_OAUTH_SCOPE,
-  providerRequiresPerUserCredential,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { userHasPermission } from "@/auth";
@@ -28,6 +27,10 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import {
+  credentialRequiresPerUserScope,
+  perUserCredentialLabel,
+} from "@/services/openai-codex-credentials";
 import { type Agent, ApiError, type ResourceVisibilityScope } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackAddress } from "@/utils/network";
@@ -131,33 +134,8 @@ export async function validateVirtualApiKey(
     );
   }
 
-  // Per-user providers (GitHub Copilot) hold an individual's token, so it may
-  // only be served through the owner's OWN personal virtual key mapping to
-  // their OWN personal provider key. Re-checked here at runtime (not just at
-  // create/update) so a virtual key mapped before this rule existed, or one
-  // whose scope/mapping changed, can never hand the token to another user.
-  if (
-    isSupportedProvider(expectedProvider) &&
-    providerRequiresPerUserCredential(expectedProvider)
-  ) {
-    const parentKey = await LlmProviderApiKeyModel.findById(
-      mappedProviderKey.providerApiKeyId,
-    );
-    if (
-      resolved.virtualKey.scope !== "personal" ||
-      !parentKey ||
-      parentKey.scope !== "personal" ||
-      parentKey.userId == null ||
-      parentKey.userId !== resolved.virtualKey.authorId
-    ) {
-      throw new ApiError(
-        403,
-        `${expectedProvider} is per-user: it can only be used through your own personal virtual key linked to your own ${expectedProvider} account.`,
-      );
-    }
-  }
-
-  // Resolve the real provider API key from the secret.
+  // Resolve the real provider API key from the secret first — the per-user
+  // check below needs it to recognize a ChatGPT-subscription (Codex) credential.
   // If the parent key's secret was removed (orphaned row), apiKey will be
   // undefined. For providers that require keys, the upstream call will fail
   // with a clear error. For keyless providers the virtual key alone is
@@ -177,6 +155,33 @@ export async function validateVirtualApiKey(
           secretId: mappedProviderKey.secretId,
         },
         "Virtual key's parent chat API key secret could not be resolved (may be orphaned)",
+      );
+    }
+  }
+
+  // Per-user credentials — GitHub/Microsoft Copilot, and a ChatGPT-subscription
+  // (Codex) key on `openai` — hold an individual's token, so it may only be
+  // served through the owner's OWN personal virtual key mapping to their OWN
+  // personal provider key. Re-checked here at runtime (not just at create/update)
+  // so a virtual key mapped before this rule existed, or one whose scope/mapping
+  // changed, can never hand the token to another user.
+  if (
+    isSupportedProvider(expectedProvider) &&
+    credentialRequiresPerUserScope({ provider: expectedProvider, apiKey })
+  ) {
+    const parentKey = await LlmProviderApiKeyModel.findById(
+      mappedProviderKey.providerApiKeyId,
+    );
+    if (
+      resolved.virtualKey.scope !== "personal" ||
+      !parentKey ||
+      parentKey.scope !== "personal" ||
+      parentKey.userId == null ||
+      parentKey.userId !== resolved.virtualKey.authorId
+    ) {
+      throw new ApiError(
+        403,
+        `${perUserCredentialLabel({ provider: expectedProvider, apiKey })} is per-user: it can only be used through your own personal virtual key linked to your own account.`,
       );
     }
   }
@@ -558,20 +563,6 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     );
   }
 
-  // OAuth client credentials are a service-to-service credential with no acting
-  // user. Per-user providers (GitHub Copilot) are an individual's token, so
-  // they can never be served this way — there's no user to attribute, and the
-  // mapped key would be one person's token for every caller.
-  if (
-    isSupportedProvider(params.expectedProvider) &&
-    providerRequiresPerUserCredential(params.expectedProvider)
-  ) {
-    throw new ApiError(
-      400,
-      `${params.expectedProvider} is per-user and cannot be used via OAuth client credentials; each user must connect their own account.`,
-    );
-  }
-
   const providerApiKey = await LlmProviderApiKeyModel.findById(
     mappedProviderKey.providerApiKeyId,
   );
@@ -581,6 +572,30 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
       "LLM OAuth client references a missing provider API key.",
     );
   }
+  const oauthMappedSecret = providerApiKey.secretId
+    ? ((await getSecretValueForLlmProviderApiKey(providerApiKey.secretId)) as
+        | string
+        | undefined)
+    : undefined;
+
+  // OAuth client credentials are a service-to-service credential with no acting
+  // user. Per-user credentials — GitHub/Microsoft Copilot, and a
+  // ChatGPT-subscription (Codex) key on `openai` — are an individual's token, so
+  // they can never be served this way: there's no user to attribute, and the
+  // mapped key would be one person's token for every caller.
+  if (
+    isSupportedProvider(params.expectedProvider) &&
+    credentialRequiresPerUserScope({
+      provider: params.expectedProvider,
+      apiKey: oauthMappedSecret,
+    })
+  ) {
+    throw new ApiError(
+      400,
+      `${perUserCredentialLabel({ provider: params.expectedProvider, apiKey: oauthMappedSecret })} is per-user and cannot be used via OAuth client credentials; each user must connect their own account.`,
+    );
+  }
+
   return resolveOAuthProviderApiKey({
     chatApiKeyId: providerApiKey.id,
     secretId: providerApiKey.secretId,

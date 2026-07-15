@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  credentialRequiresPerUserScope,
   decodeOpenAiCodexCredential,
   encodeOpenAiCodexCredential,
   extractChatgptAccountId,
   isOpenAiCodexCredential,
+  perUserCredentialLabel,
 } from "./openai-codex-credentials";
 
 /** Builds a JWT with the given payload (header/signature are irrelevant here). */
@@ -61,5 +63,60 @@ describe("extractChatgptAccountId", () => {
   it("returns undefined for a token without the claim or an unparseable token", () => {
     expect(extractChatgptAccountId(makeJwt({ sub: "user" }))).toBeUndefined();
     expect(extractChatgptAccountId("not-a-jwt")).toBeUndefined();
+  });
+});
+
+describe("credentialRequiresPerUserScope", () => {
+  const codex = encodeOpenAiCodexCredential({
+    refreshToken: "rt",
+    accountId: "acc",
+  });
+
+  it("treats a ChatGPT-subscription openai key as per-user", () => {
+    expect(
+      credentialRequiresPerUserScope({ provider: "openai", apiKey: codex }),
+    ).toBe(true);
+  });
+
+  it("treats a plain openai API key as NOT per-user", () => {
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "openai",
+        apiKey: "sk-plain",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps inherently per-user providers per-user regardless of the secret", () => {
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "github-copilot",
+        apiKey: "gho_x",
+      }),
+    ).toBe(true);
+    expect(
+      credentialRequiresPerUserScope({
+        provider: "microsoft-365-copilot",
+        apiKey: null,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("perUserCredentialLabel", () => {
+  it("labels a codex openai key as ChatGPT Subscription", () => {
+    const codex = encodeOpenAiCodexCredential({
+      refreshToken: "rt",
+      accountId: "acc",
+    });
+    expect(perUserCredentialLabel({ provider: "openai", apiKey: codex })).toBe(
+      "ChatGPT Subscription",
+    );
+  });
+
+  it("labels other per-user providers by provider name", () => {
+    expect(
+      perUserCredentialLabel({ provider: "github-copilot", apiKey: "gho_x" }),
+    ).toBe("github-copilot");
   });
 });

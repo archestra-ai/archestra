@@ -70,7 +70,7 @@ export const ARCHESTRA_APP_SDK_SURFACE = {
   tools: ["call", "list"],
   llm: ["complete", "prompt"],
   ui: ["openLink", "requestDisplayMode"],
-  files: ["read"],
+  files: ["list", "read"],
 } as const;
 
 // The only iframe permissions an app may request. Mirrors AppUiPermissionsSchema

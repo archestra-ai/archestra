@@ -364,7 +364,7 @@ window.addEventListener("message", async (event) => {
         data.type === "mcp-apps:csp-violation" ||
         data.type === "mcp-apps:runtime-error" ||
         data.type === "mcp-apps:screenshot" ||
-        data.type === "archestra:files/read"
+        data.type === "archestra:files/request"
       ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }

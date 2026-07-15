@@ -464,43 +464,66 @@
       "",
     );
 
-  // Raw chat-file bytes over a host side channel. `read_file` via tools.call
-  // must render its result for an LLM, so it refuses binary and caps output;
-  // this asks the trusted host layer to fetch the file's exact bytes over HTTP
-  // (as the viewer, re-authorized server-side against the app's read_file
-  // grant) and hand them across as an ArrayBuffer — no base64, no size
-  // inflation, any file type. Only the Archestra host answers the message:
-  // anywhere else (external MCP hosts, no host at all) the request times out
-  // and rejects with { code: "unsupported" }.
-  const FILES_READ_TIMEOUT_MS = 30_000;
-  const filesReadPending = new Map();
-  let filesReadNextId = 0;
+  // Chat-file access over a host side channel. `read_file` via tools.call must
+  // render its result for an LLM, so it refuses binary and caps output; these
+  // ask the trusted host layer to do plain HTTP instead (as the viewer,
+  // re-authorized server-side against the app and chat access): `list`
+  // returns the chat's file metadata, `read` hands the exact bytes across as
+  // an ArrayBuffer — no base64, no size inflation, any file type. Only the
+  // Archestra host answers the message: anywhere else (external MCP hosts, no
+  // host at all) a request times out and rejects with { code: "unsupported" }.
+  const FILES_TIMEOUT_MS = 30_000;
+  const filesPending = new Map();
+  let filesNextId = 0;
   window.addEventListener("message", (event) => {
     // Results only ever arrive from the parent (the sandbox proxy relaying the
     // host's answer); anything else — e.g. a frame the app created — is ignored.
     if (event.source !== window.parent) return;
     const data = event.data;
-    if (!data || data.type !== "archestra:files/read:result") return;
-    const pending = filesReadPending.get(data.requestId);
+    if (!data || data.type !== "archestra:files/result") return;
+    const pending = filesPending.get(data.requestId);
     if (!pending) return;
-    filesReadPending.delete(data.requestId);
+    filesPending.delete(data.requestId);
     clearTimeout(pending.timer);
     if (data.ok) {
-      pending.resolve({
-        bytes: data.bytes,
-        mimeType: data.mimeType || "application/octet-stream",
-        filename: data.filename || "",
-        sizeBytes: data.bytes ? data.bytes.byteLength : 0,
-        fileId: data.fileId || null,
-      });
+      pending.resolve(data);
     } else {
       pending.reject(
-        Object.assign(new Error(data.message || "files.read failed"), {
-          code: data.code || "read_failed",
-        }),
+        Object.assign(
+          new Error(data.message || "files." + pending.op + " failed"),
+          { code: data.code || "request_failed" },
+        ),
       );
     }
   });
+  const filesRequest = (op, params) =>
+    new Promise((resolve, reject) => {
+      const requestId = ++filesNextId;
+      const timer = setTimeout(() => {
+        filesPending.delete(requestId);
+        reject(
+          Object.assign(
+            new Error(
+              "files." +
+                op +
+                " is not available here — it needs the app to be rendered inside an Archestra chat",
+            ),
+            { code: "unsupported" },
+          ),
+        );
+      }, FILES_TIMEOUT_MS);
+      filesPending.set(requestId, { resolve, reject, timer, op });
+      window.parent.postMessage(
+        Object.assign({ type: "archestra:files/request", op, requestId }, params),
+        "*",
+      );
+    });
+  const filesList = async (query) => {
+    const result = await filesRequest("list", {
+      query: typeof query === "string" ? query : undefined,
+    });
+    return Array.isArray(result.files) ? result.files : [];
+  };
   const filesRead = (ref) => {
     const params =
       typeof ref === "string"
@@ -514,25 +537,13 @@
         ),
       );
     }
-    return new Promise((resolve, reject) => {
-      const requestId = ++filesReadNextId;
-      const timer = setTimeout(() => {
-        filesReadPending.delete(requestId);
-        reject(
-          Object.assign(
-            new Error(
-              "files.read is not available here — it needs the app to be rendered inside an Archestra chat",
-            ),
-            { code: "unsupported" },
-          ),
-        );
-      }, FILES_READ_TIMEOUT_MS);
-      filesReadPending.set(requestId, { resolve, reject, timer });
-      window.parent.postMessage(
-        { type: "archestra:files/read", requestId, ...params },
-        "*",
-      );
-    });
+    return filesRequest("read", params).then((result) => ({
+      bytes: result.bytes,
+      mimeType: result.mimeType || "application/octet-stream",
+      filename: result.filename || "",
+      sizeBytes: result.bytes ? result.bytes.byteLength : 0,
+      fileId: result.fileId || null,
+    }));
   };
 
   window.archestra = Object.freeze({
@@ -554,6 +565,7 @@
       list: async () => (context.tools || []).map((t) => ({ ...t })),
     }),
     files: Object.freeze({
+      list: filesList,
       read: filesRead,
     }),
     ui: Object.freeze({

@@ -769,7 +769,12 @@ export const McpAppRuntime = function McpAppRuntime({
   filesEndpointRef.current = filesEndpoint;
   const onFilesReadRequest = useCallback(
     (
-      params: { id?: string; filename?: string },
+      params: {
+        op: "read" | "list";
+        id?: string;
+        filename?: string;
+        query?: string;
+      },
       respond: (
         result: Record<string, unknown>,
         transfer?: Transferable[],
@@ -781,13 +786,54 @@ export const McpAppRuntime = function McpAppRuntime({
           ok: false,
           code: "unsupported",
           message:
-            "files.read works only for an app rendered inside an Archestra chat",
+            "archestra.files works only for an app rendered inside an Archestra chat",
         });
         return;
       }
+      const respondHttpError = async (response: Response) => {
+        let message = response.statusText;
+        try {
+          const body = (await response.json()) as {
+            error?: { message?: string };
+          };
+          message = body?.error?.message ?? message;
+        } catch {
+          // non-JSON error body — keep the status text
+        }
+        respond({
+          ok: false,
+          code:
+            response.status === 404
+              ? "not_found"
+              : response.status === 403
+                ? "forbidden"
+                : "request_failed",
+          message,
+        });
+      };
+
       const query = new URLSearchParams({
         conversationId: target.conversationId,
       });
+      if (params.op === "list") {
+        if (params.query) query.set("query", params.query);
+        fetch(`/api/apps/${target.appId}/files?${query.toString()}`, {
+          credentials: "include",
+        })
+          .then(async (response) => {
+            if (!response.ok) return respondHttpError(response);
+            respond({ ok: true, files: await response.json() });
+          })
+          .catch((error: unknown) => {
+            respond({
+              ok: false,
+              code: "request_failed",
+              message: String(error),
+            });
+          });
+        return;
+      }
+
       if (params.id) {
         query.set("id", params.id);
       } else if (params.filename) {
@@ -797,28 +843,7 @@ export const McpAppRuntime = function McpAppRuntime({
         credentials: "include",
       })
         .then(async (response) => {
-          if (!response.ok) {
-            let message = response.statusText;
-            try {
-              const body = (await response.json()) as {
-                error?: { message?: string };
-              };
-              message = body?.error?.message ?? message;
-            } catch {
-              // non-JSON error body — keep the status text
-            }
-            respond({
-              ok: false,
-              code:
-                response.status === 404
-                  ? "not_found"
-                  : response.status === 403
-                    ? "forbidden"
-                    : "read_failed",
-              message,
-            });
-            return;
-          }
+          if (!response.ok) return respondHttpError(response);
           const bytes = await response.arrayBuffer();
           let filename = "";
           try {
@@ -842,7 +867,11 @@ export const McpAppRuntime = function McpAppRuntime({
           );
         })
         .catch((error: unknown) => {
-          respond({ ok: false, code: "read_failed", message: String(error) });
+          respond({
+            ok: false,
+            code: "request_failed",
+            message: String(error),
+          });
         });
     },
     [],
@@ -995,9 +1024,14 @@ function SandboxIframe({
   toolInput?: Record<string, unknown>;
   toolResult?: McpCallToolResult;
   onError?: (error: Error) => void;
-  /** Answers the SDK's archestra.files.read side-channel message. */
+  /** Answers the SDK's archestra.files side-channel messages (list/read). */
   onFilesReadRequest?: (
-    params: { id?: string; filename?: string },
+    params: {
+      op: "read" | "list";
+      id?: string;
+      filename?: string;
+      query?: string;
+    },
     respond: (
       result: Record<string, unknown>,
       transfer?: Transferable[],
@@ -1187,10 +1221,10 @@ function SandboxIframe({
       }
     };
 
-    // Persistent files.read listener: the proxy relays the SDK's request up;
-    // the response (with its ArrayBuffer) is posted back down and relayed to
-    // the app frame. Payloads are untrusted — only the two string fields are
-    // read, and the requestId is echoed opaquely.
+    // Persistent archestra.files listener: the proxy relays the SDK's request
+    // up; the response (with its ArrayBuffer for reads) is posted back down
+    // and relayed to the app frame. Payloads are untrusted — only the typed
+    // string fields are read, and the requestId is echoed opaquely.
     const onFilesReadMessage = (event: MessageEvent) => {
       if (
         event.source !== iframe.contentWindow ||
@@ -1200,18 +1234,20 @@ function SandboxIframe({
       }
       const data = event.data as {
         type?: unknown;
+        op?: unknown;
         requestId?: unknown;
         id?: unknown;
         filename?: unknown;
+        query?: unknown;
       } | null;
-      if (data?.type !== "archestra:files/read") return;
+      if (data?.type !== "archestra:files/request") return;
       const requestId = data.requestId;
       const respond = (
         result: Record<string, unknown>,
         transfer?: Transferable[],
       ) => {
         iframe.contentWindow?.postMessage(
-          { type: "archestra:files/read:result", requestId, ...result },
+          { type: "archestra:files/result", requestId, ...result },
           // The opaque-origin proxy can only be addressed with "*" (its origin
           // serializes as the literal "null"); a dedicated origin is explicit.
           expectedOrigin === "null" ? "*" : sandboxUrl.origin,
@@ -1229,9 +1265,11 @@ function SandboxIframe({
       }
       handler(
         {
+          op: data.op === "list" ? "list" : "read",
           id: typeof data.id === "string" ? data.id : undefined,
           filename:
             typeof data.filename === "string" ? data.filename : undefined,
+          query: typeof data.query === "string" ? data.query : undefined,
         },
         respond,
       );

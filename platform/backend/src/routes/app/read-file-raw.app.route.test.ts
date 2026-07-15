@@ -137,6 +137,60 @@ describe("GET /api/apps/:appId/files/raw", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("lists chat files, filename-filtered", async () => {
+    await putConversationFile({
+      filename: "model.stl",
+      data: Buffer.from([0x00, 0x01]),
+    });
+    await putConversationFile({
+      filename: "notes.txt",
+      data: Buffer.from("hi"),
+      mimeType: "text/plain",
+    });
+
+    const listUrl = (extra: Record<string, string> = {}) =>
+      `/api/apps/${ownedApp.id}/files?${new URLSearchParams({ conversationId, ...extra })}`;
+
+    const all = await app.inject({ method: "GET", url: listUrl() });
+    expect(all.statusCode).toBe(200);
+    expect(
+      all
+        .json()
+        .map((f: { filename: string }) => f.filename)
+        .sort(),
+    ).toEqual(["model.stl", "notes.txt"]);
+    const stl = all
+      .json()
+      .find((f: { filename: string }) => f.filename === "model.stl");
+    expect(stl.ref).toBeTruthy();
+    expect(stl.sizeBytes).toBe(2);
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: listUrl({ query: ".STL" }),
+    });
+    expect(
+      filtered.json().map((f: { filename: string }) => f.filename),
+    ).toEqual(["model.stl"]);
+
+    // The listing's ref round-trips into the raw read.
+    const read = await app.inject({
+      method: "GET",
+      url: rawUrl({ conversationId, id: stl.ref }),
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.rawPayload.equals(Buffer.from([0x00, 0x01]))).toBe(true);
+  });
+
+  test("listing refuses when the sandbox flag is dark", async () => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${ownedApp.id}/files?${new URLSearchParams({ conversationId })}`,
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
   test("rejects a query with neither or both of id and filename", async () => {
     const neither = await app.inject({
       method: "GET",

@@ -1467,6 +1467,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
   [RouteId.GetAppTools]: { app: ["read"] },
+  [RouteId.GetAppConversationFiles]: { app: ["read"] },
   [RouteId.GetAppConversationFileRaw]: { app: ["read"] },
   [RouteId.AssignToolToApp]: { app: ["update"] },
   [RouteId.UnassignToolFromApp]: { app: ["update"] },

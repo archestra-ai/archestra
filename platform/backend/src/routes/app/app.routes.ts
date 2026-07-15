@@ -39,7 +39,10 @@ import {
   createSeededAppConversation,
   createSeededExternalAppConversation,
 } from "@/services/apps/app-chat-conversation";
-import { readAppConversationFile } from "@/services/apps/app-conversation-file";
+import {
+  listAppConversationFiles,
+  readAppConversationFile,
+} from "@/services/apps/app-conversation-file";
 import {
   createAppBacking,
   deleteAppBacking,
@@ -923,6 +926,55 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { appId }, user, organizationId }, reply) => {
       await loadViewableApp({ appId, userId: user.id, organizationId });
       return reply.send(await AppToolModel.getToolsForApp(appId));
+    },
+  );
+
+  fastify.get(
+"/api/apps/:appId/files",
+    {
+      schema: {
+        operationId: RouteId.GetAppConversationFiles,
+        description:
+          "List the chat-scoped files a rendered app may read — the backing " +
+          "of the SDK's archestra.files.list.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        querystring: z.object({
+          conversationId: UuidIdSchema,
+          // Case-insensitive filename substring; omit to list.
+          query: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(
+          z.array(
+            z.object({
+              id: z.string().nullable(),
+              // The handle to pass to files.read / the raw endpoint as `id`.
+              ref: z.string(),
+              filename: z.string(),
+              mimeType: z.string(),
+              sizeBytes: z.number(),
+              createdAt: z.date(),
+            }),
+          ),
+        ),
+      },
+    },
+    async ({ params: { appId }, query, user, organizationId }) => {
+      const files = await listAppConversationFiles({
+        appId,
+        organizationId,
+        userId: user.id,
+        conversationId: query.conversationId,
+        query: query.query,
+      });
+      return files.map((file) => ({
+        id: file.id,
+        ref: file.downloadRef,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        createdAt: file.createdAt,
+      }));
     },
   );
 

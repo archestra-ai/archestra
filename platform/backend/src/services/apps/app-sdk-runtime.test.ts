@@ -460,7 +460,7 @@ describe("Apps SDK runtime", () => {
   });
 });
 
-describe("files.read side channel", () => {
+describe("archestra.files side channel", () => {
   /** Plays the host: dispatch a message to the SDK's window listeners. */
   const dispatch = (data: Record<string, unknown>, source?: unknown) => {
     for (const listener of [...messageListeners]) {
@@ -476,13 +476,14 @@ describe("files.read side channel", () => {
     const pending = archestra.files.read("model.stl");
     const request = parentPosts.pop() as Record<string, unknown>;
     expect(request).toMatchObject({
-      type: "archestra:files/read",
+      type: "archestra:files/request",
+      op: "read",
       filename: "model.stl",
     });
 
     const bytes = new ArrayBuffer(8);
     dispatch({
-      type: "archestra:files/read:result",
+      type: "archestra:files/result",
       requestId: request.requestId,
       ok: true,
       bytes,
@@ -503,12 +504,13 @@ describe("files.read side channel", () => {
     const pending = archestra.files.read({ id: "row-1" });
     const request = parentPosts.pop() as Record<string, unknown>;
     expect(request).toMatchObject({
-      type: "archestra:files/read",
+      type: "archestra:files/request",
+      op: "read",
       id: "row-1",
     });
 
     dispatch({
-      type: "archestra:files/read:result",
+      type: "archestra:files/result",
       requestId: request.requestId,
       ok: false,
       code: "not_found",
@@ -522,7 +524,7 @@ describe("files.read side channel", () => {
     const request = parentPosts.pop() as Record<string, unknown>;
 
     const forged = {
-      type: "archestra:files/read:result",
+      type: "archestra:files/result",
       requestId: request.requestId,
       ok: true,
       bytes: new ArrayBuffer(1),
@@ -541,5 +543,46 @@ describe("files.read side channel", () => {
       code: "bad_request",
     });
     expect(parentPosts.length).toBe(before);
+  });
+
+  test("files.list posts the query and resolves the host's file entries", async () => {
+    const pending = archestra.files.list(".stl");
+    const request = parentPosts.pop() as Record<string, unknown>;
+    expect(request).toMatchObject({
+      type: "archestra:files/request",
+      op: "list",
+      query: ".stl",
+    });
+
+    const files = [
+      {
+        id: "f1",
+        ref: "f1",
+        filename: "model.stl",
+        mimeType: "model/stl",
+        sizeBytes: 84,
+      },
+    ];
+    dispatch({
+      type: "archestra:files/result",
+      requestId: request.requestId,
+      ok: true,
+      files,
+    });
+    await expect(pending).resolves.toEqual(files);
+  });
+
+  test("files.list surfaces the host's error code", async () => {
+    const pending = archestra.files.list();
+    const request = parentPosts.pop() as Record<string, unknown>;
+
+    dispatch({
+      type: "archestra:files/result",
+      requestId: request.requestId,
+      ok: false,
+      code: "forbidden",
+      message: "no grant",
+    });
+    await expect(pending).rejects.toMatchObject({ code: "forbidden" });
   });
 });

@@ -49,6 +49,14 @@ spec:
             - k8s_delete_resource
             - k8s_apply_manifest
             - k8s_patch_resource
+      - type: McpServer
+        mcpServer:
+          apiGroup: kagent.dev
+          kind: RemoteMCPServer
+          name: notify-tools
+          toolNames:
+            - notify
+            - http_post
     deployment:
       extraContainers:
         - name: baton-proxy

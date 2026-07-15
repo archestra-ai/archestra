@@ -1,30 +1,36 @@
 # baton-proxy policy for the kagent demo.
 #
-# The proxy forwards to OpenRouter and gates the agent's k8s tool calls. Only
-# the tools this scenario touches are annotated; every other kagent tool is
+# The proxy forwards to OpenRouter and gates the agent's tool calls. Only the
+# tools this scenario touches are annotated; every other kagent tool is
 # unregistered and passes through — gradual adoption, and with no authorities
 # registered an unprovable flow simply fails closed.
 
 upstream_base_url = "https://openrouter.ai/api/v1"
 
-# The user's turns default to trusted, so a clean investigation reaches the
-# guarded sinks; the injection blocks them by tainting the flow suspicious. Add
-# a `[contracts.user]` block only to change that (e.g. `trust = "suspicious"`
-# for a public-facing agent) or to use audience rules.
+# The user's turns are trusted, so a clean investigation reaches the guarded
+# sinks; the injection blocks them by tainting the flow suspicious.
+#
+# Audience holds PEOPLE only — never destinations. This conversation is
+# team-private: readable by the operator and the SRE team. Audience folds by
+# intersection, so the flow can never widen past this set.
+[contracts.user]
+id = "operator"
+trust = "trusted"
+audience = ["operator", "sre-team"]
 
-# --- Injection vector: pod logs are third-party text. --------------------------
+# --- Injection vector: pod logs are third-party text, team-private. ------------
 [[contracts.tool]]
 name = "k8s_get_pod_logs"
-output = { trust = "suspicious" }
+output = { trust = "suspicious", audience = ["operator", "sre-team"] }
 
-# --- Trusted readers: pure cluster state, no third-party text. -----------------
+# --- Trusted readers: pure cluster state, team-private. ------------------------
 [[contracts.tool]]
 name = "k8s_get_resources"
-output = { trust = "trusted" }
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
 
 [[contracts.tool]]
 name = "k8s_describe_resource"
-output = { trust = "trusted" }
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
 
 # --- Guarded sinks: a mutation may only run from a trusted flow. ---------------
 # A flow tainted by suspicious log output fails this bar and is blocked.
@@ -39,3 +45,29 @@ requires = { trust = "trusted" }
 [[contracts.tool]]
 name = "k8s_patch_resource"
 requires = { trust = "trusted" }
+
+# --- Egress sinks (both served by notify-mcp, manifests/notify.yaml). ----------
+# `audience` declares the sink's audience: the people a call exposes the flow
+# to. The check is always the same — the flow's audience must cover the sink's.
+#
+# `notify` posts to one fixed destination, the internal ops hook (baked into
+# notify-mcp). Its audience is therefore static: the people who read that hook.
+# The team-private flow covers them, so status updates go through — even from
+# a suspicious-tainted flow; trust and audience are independent dimensions.
+[[contracts.tool]]
+name = "notify"
+audience = ["operator", "sre-team"]
+
+# `http_post` posts anywhere the model chooses. Nobody can bound who reads an
+# arbitrary URL, so the sink is public — only a publicly readable flow may use
+# it, and this conversation is team-private from the first user turn. The
+# injected vendor tracker is blocked as "sink is public but the flow may only
+# be read by: operator sre-team", regardless of trust.
+#
+# No `effects = ["egress"]` on either output: committing a new effect needs an
+# Accept authority, and this proxy registers none — declaring it would fail
+# every call closed, sanctioned or not. The sink audience is the egress
+# control here.
+[[contracts.tool]]
+name = "http_post"
+audience = "public"

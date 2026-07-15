@@ -78,6 +78,17 @@ impl Audience {
         self.0.covers(recipients)
     }
 
+    /// Adequacy of this audience for a public sink: does it admit everyone?
+    /// Only `Public` holds; a bounded reader set fails with itself as the
+    /// witness (no finite vouch covers "everyone"); `Unknown` is unprovable.
+    pub(crate) fn covers_everyone(&self) -> Adequacy<BTreeSet<UserId>> {
+        match &self.0 {
+            MeetSet::All => Adequacy::Holds,
+            MeetSet::Only(readers) => Adequacy::Fails(readers.clone()),
+            MeetSet::Unknown => Adequacy::Unprovable,
+        }
+    }
+
     /// Endorse lift (durable relabel — see [`crate::transition::EndorseDelta`]):
     /// admit `vouched` into the readers. `Public` stays public; `Unknown`
     /// becomes exactly the vouched readers. Monotone in the adequacy order.

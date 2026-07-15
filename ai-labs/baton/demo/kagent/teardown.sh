@@ -9,7 +9,7 @@
 set -euo pipefail
 
 CLUSTER=baton-poc
-IMAGE=baton-proxy:poc
+IMAGES=(baton-proxy:poc notify-mcp:poc)
 
 remove_image=false
 [[ "${1:-}" == "--image" ]] && remove_image=true
@@ -22,8 +22,10 @@ else
 fi
 
 if [[ "$remove_image" == true ]]; then
-  echo "▸ removing image $IMAGE"
-  docker image rm "$IMAGE" 2>/dev/null || echo "  (image not present)"
+  for image in "${IMAGES[@]}"; do
+    echo "▸ removing image $image"
+    docker image rm "$image" 2>/dev/null || echo "  (image not present)"
+  done
 fi
 
 echo "done"

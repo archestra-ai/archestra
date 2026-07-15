@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ToolName;
 use crate::approval::{Authority, AuthorityMode};
-use crate::contract::{Fixability, Requirements, Unprovable, Verdict, Violation};
+use crate::contract::{Fixability, Requirements, SinkAudience, Unprovable, Verdict, Violation};
 use crate::dimension::{Effects, KnownTrust};
 use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, TransitionKind, TransitionSpec};
 use crate::request::ToolRequest;
@@ -794,6 +794,7 @@ fn needed_delta(violations: &[Violation]) -> TransientWaiver {
             Violation::Breach(
                 Breach::TrustBelow { .. }
                 | Breach::AudienceExceeds { .. }
+                | Breach::AudienceNotPublic { .. }
                 | Breach::UndeclaredRecipients
                 | Breach::SurfaceGrowth { .. },
             )
@@ -827,7 +828,15 @@ fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, Endor
     for v in violations {
         match v {
             Violation::Breach(Breach::AudienceExceeds { outside }) => readers.extend(outside.iter().cloned()),
-            Violation::Unprovable(Unprovable::AudienceUnknown) => readers.extend(sim.recipients.iter().cloned()),
+            // An unknown flow audience needs a vouch for whatever the sink
+            // exposes to: the resolved recipients, or the declared readers. A
+            // public sink has no finite reader set to vouch — no endorse step
+            // can clear it (`AudienceNotPublic` likewise contributes none).
+            Violation::Unprovable(Unprovable::AudienceUnknown) => match &sim.requires.audience {
+                SinkAudience::FromRecipients => readers.extend(sim.recipients.iter().cloned()),
+                SinkAudience::Readers(declared) => readers.extend(declared.iter().cloned()),
+                SinkAudience::Public | SinkAudience::None => {}
+            },
             _ => {}
         }
     }

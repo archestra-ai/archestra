@@ -7,7 +7,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, AttentionRule, Audience, AudienceRule, Effect, Effects, KnownTrust, Requirements,
+    ArgumentName, ArgumentSchema, AttentionRule, Audience, Effect, Effects, KnownTrust, Requirements, SinkAudience,
     ToolContract, ToolName, Trust, UserId, ValueLabel,
 };
 use serde::Deserialize;
@@ -20,10 +20,12 @@ pub enum ContractsError {
     AudienceKeyword(String),
     #[error("duplicate contract for tool `{0}`")]
     DuplicateTool(String),
-    #[error(
-        "tool `{0}` requires recipients within context but declares no recipients_arg, so every call would be blocked"
-    )]
-    MissingRecipientsArg(String),
+    #[error("invalid sink audience `{0}` (use \"public\", a list of reader ids, or \"$.args.<argument>\")")]
+    SinkAudience(String),
+    #[error("sink audience path `{0}` must name one top-level argument (no nested paths)")]
+    SinkAudiencePath(String),
+    #[error("tool `{0}` declares an empty audience reader list")]
+    EmptyAudience(String),
 }
 
 /// The parsed policy document: who the requesting user is, and the contracts
@@ -77,11 +79,12 @@ impl RawConfig {
             if !seen.insert(spec.name.clone()) {
                 return Err(ContractsError::DuplicateTool(spec.name));
             }
-            if spec.requires.guards_recipients() && spec.recipients_arg.is_none() {
-                return Err(ContractsError::MissingRecipientsArg(spec.name));
-            }
+            let (sink_audience, recipients_arg) = match &spec.audience {
+                Some(audience) => audience.build(&spec.name)?,
+                None => (SinkAudience::None, None),
+            };
             let name = ToolName::new(&spec.name);
-            let arguments = match &spec.recipients_arg {
+            let arguments = match &recipients_arg {
                 Some(arg) => {
                     recipients_args.insert(name.clone(), arg.clone());
                     ArgumentSchema::with_recipients(ArgumentName::new(arg))
@@ -90,7 +93,7 @@ impl RawConfig {
             };
             contracts.push(ToolContract {
                 name,
-                requires: spec.requires.build()?,
+                requires: spec.requires.build(sink_audience),
                 output_label: ValueLabel {
                     audience: spec.output.audience.to_audience()?,
                     trust: spec.output.trust.to_trust(),
@@ -142,8 +145,10 @@ struct ToolSpec {
     output: OutputSpec,
     #[serde(default)]
     requires: RequiresSpec,
+    /// The sink's audience: who a call exposes the flow to. Absent means the
+    /// tool exposes no one beyond the conversation — no audience check.
     #[serde(default)]
-    recipients_arg: Option<String>,
+    audience: Option<SinkAudienceSpec>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -163,31 +168,57 @@ struct RequiresSpec {
     #[serde(default)]
     trust: Option<KnownTrustSpec>,
     #[serde(default)]
-    audience: AudienceRuleSpec,
-    #[serde(default)]
     attention: AttentionRuleSpec,
     #[serde(default)]
     forbid_prior_effects: Vec<EffectSpec>,
 }
 
 impl RequiresSpec {
-    /// Whether this tool guards its recipients against the flow audience — the
-    /// rule that needs `recipients_arg` to know who a call exposes to.
-    fn guards_recipients(&self) -> bool {
-        matches!(self.audience, AudienceRuleSpec::RecipientsWithinContext)
-    }
-
-    fn build(self) -> Result<Requirements, ContractsError> {
-        Ok(Requirements {
+    /// The sink audience is declared at the tool level (`audience = …`), not
+    /// under `requires` — it is a fact about the sink, folded in here.
+    fn build(self, audience: SinkAudience) -> Requirements {
+        Requirements {
             trust: self.trust.map(KnownTrustSpec::into_known_trust),
-            audience: self.audience.into(),
+            audience,
             attention: self.attention.into(),
             forbid_prior_effects: self
                 .forbid_prior_effects
                 .into_iter()
                 .map(EffectSpec::to_effect)
                 .collect(),
-        })
+        }
+    }
+}
+
+/// The path prefix marking a dynamic sink audience: the named top-level call
+/// argument carries the recipients.
+const ARGS_PATH_PREFIX: &str = "$.args.";
+
+/// Sink audience as `"public"`, a list of reader ids, or `"$.args.<key>"`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum SinkAudienceSpec {
+    Keyword(String),
+    Readers(Vec<String>),
+}
+
+impl SinkAudienceSpec {
+    /// The engine-side declaration plus, for the dynamic form, the wire
+    /// argument the proxy must extract recipients from.
+    fn build(&self, tool: &str) -> Result<(SinkAudience, Option<String>), ContractsError> {
+        match self {
+            Self::Keyword(k) if k == "public" => Ok((SinkAudience::Public, None)),
+            Self::Keyword(k) if k.starts_with(ARGS_PATH_PREFIX) => {
+                let key = &k[ARGS_PATH_PREFIX.len()..];
+                if key.is_empty() || key.contains('.') {
+                    return Err(ContractsError::SinkAudiencePath(k.clone()));
+                }
+                Ok((SinkAudience::FromRecipients, Some(key.to_string())))
+            }
+            Self::Keyword(k) => Err(ContractsError::SinkAudience(k.clone())),
+            Self::Readers(ids) if ids.is_empty() => Err(ContractsError::EmptyAudience(tool.to_string())),
+            Self::Readers(ids) => Ok((SinkAudience::Readers(ids.iter().map(UserId::new).collect()), None)),
+        }
     }
 }
 
@@ -253,23 +284,6 @@ impl KnownTrustSpec {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum AudienceRuleSpec {
-    #[default]
-    Unrestricted,
-    RecipientsWithinContext,
-}
-
-impl From<AudienceRuleSpec> for AudienceRule {
-    fn from(spec: AudienceRuleSpec) -> Self {
-        match spec {
-            AudienceRuleSpec::Unrestricted => Self::Unrestricted,
-            AudienceRuleSpec::RecipientsWithinContext => Self::RecipientsWithinContext,
-        }
-    }
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
 enum AttentionRuleSpec {
     #[default]
     NotRequired,
@@ -320,16 +334,24 @@ mod tests {
 
         [[tool]]
         name = "http_post"
-        requires = { trust = "trusted", audience = "recipients_within_context" }
-        recipients_arg = "url"
+        requires = { trust = "trusted" }
+        audience = "$.args.url"
         output = { effects = ["egress"] }
+
+        [[tool]]
+        name = "create_issue"
+        audience = "public"
+
+        [[tool]]
+        name = "send_report"
+        audience = ["ops-hook", "operator"]
     "#;
 
     #[test]
     fn parses_demo_contracts() {
         let c = Contracts::from_toml(DEMO).unwrap();
         assert_eq!(c.user_id.as_str(), "operator");
-        assert_eq!(c.contracts.len(), 3);
+        assert_eq!(c.contracts.len(), 5);
 
         let logs = c
             .contracts
@@ -338,6 +360,7 @@ mod tests {
             .unwrap();
         assert_eq!(logs.output_label.trust, Trust::SUSPICIOUS);
         assert!(logs.requires.trust.is_none());
+        assert_eq!(logs.requires.audience, SinkAudience::None);
         assert_eq!(logs.effects, Effects::none());
 
         let del = c
@@ -350,8 +373,73 @@ mod tests {
         assert_eq!(del.effects, Effects::declared([Effect::Mutation]));
 
         let post = c.contracts.iter().find(|t| t.name.as_str() == "http_post").unwrap();
-        assert_eq!(post.requires.audience, AudienceRule::RecipientsWithinContext);
+        assert_eq!(post.requires.audience, SinkAudience::FromRecipients);
         assert_eq!(c.recipients_args.get(&post.name).map(String::as_str), Some("url"));
+
+        let issue = c.contracts.iter().find(|t| t.name.as_str() == "create_issue").unwrap();
+        assert_eq!(issue.requires.audience, SinkAudience::Public);
+        assert!(!c.recipients_args.contains_key(&issue.name));
+
+        let report = c.contracts.iter().find(|t| t.name.as_str() == "send_report").unwrap();
+        assert_eq!(
+            report.requires.audience,
+            SinkAudience::Readers(BTreeSet::from([UserId::new("ops-hook"), UserId::new("operator")]))
+        );
+        assert!(!c.recipients_args.contains_key(&report.name));
+    }
+
+    #[test]
+    fn sink_audience_rejects_unknown_keyword() {
+        let text = r#"
+            [[tool]]
+            name = "send"
+            audience = "recipients_within_context"
+        "#;
+        assert!(matches!(
+            Contracts::from_toml(text),
+            Err(ContractsError::SinkAudience(_))
+        ));
+    }
+
+    #[test]
+    fn sink_audience_rejects_nested_or_empty_path() {
+        for path in ["$.args.", "$.args.params.repo"] {
+            let text = format!(
+                r#"
+                [[tool]]
+                name = "send"
+                audience = "{path}"
+                "#
+            );
+            assert!(matches!(
+                Contracts::from_toml(&text),
+                Err(ContractsError::SinkAudiencePath(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn sink_audience_rejects_empty_reader_list() {
+        let text = r#"
+            [[tool]]
+            name = "send"
+            audience = []
+        "#;
+        assert!(matches!(
+            Contracts::from_toml(text),
+            Err(ContractsError::EmptyAudience(_))
+        ));
+    }
+
+    #[test]
+    fn removed_recipients_arg_field_is_rejected() {
+        let text = r#"
+            [[tool]]
+            name = "send"
+            audience = "$.args.url"
+            recipients_arg = "url"
+        "#;
+        assert!(matches!(Contracts::from_toml(text), Err(ContractsError::Parse(_))));
     }
 
     #[test]
@@ -369,16 +457,15 @@ mod tests {
     }
 
     #[test]
-    fn recipients_guard_without_recipients_arg_is_an_error() {
+    fn requires_audience_field_is_rejected() {
+        // The sink audience moved to the tool level; the old `requires`
+        // placement must not silently parse.
         let text = r#"
             [[tool]]
             name = "send"
-            requires = { audience = "recipients_within_context" }
+            requires = { audience = "public" }
         "#;
-        assert!(matches!(
-            Contracts::from_toml(text),
-            Err(ContractsError::MissingRecipientsArg(_))
-        ));
+        assert!(matches!(Contracts::from_toml(text), Err(ContractsError::Parse(_))));
     }
 
     #[test]

@@ -12,13 +12,23 @@ use crate::dimension::{Effect, Effects, KnownTrust, UserId};
 use crate::preset::Adequacy;
 use crate::value::ValueLabel;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
-pub enum AudienceRule {
+/// The sink's audience: the readers a call exposes the flow to, declared on
+/// the contract. Not a requirement on the flow's label — a fact about the
+/// sink; the check is always the same comparison, "the flow's audience must
+/// cover the sink's".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub enum SinkAudience {
+    /// Exposes no one beyond the mediated conversation — nothing to cover.
     #[default]
-    Unrestricted,
-    /// Every resolved recipient must already be an allowed reader of the
-    /// flow: `recipients − flow.audience` must be empty.
-    RecipientsWithinContext,
+    None,
+    /// Exposes to everyone; only a publicly readable flow passes.
+    Public,
+    /// Exposes to a fixed reader set: `readers − flow.audience` must be empty.
+    Readers(BTreeSet<UserId>),
+    /// Exposes to the recipients resolved from the call's argument tree (the
+    /// [`crate::request::ArgumentSchema`] recipients role):
+    /// `recipients − flow.audience` must be empty.
+    FromRecipients,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -41,7 +51,7 @@ pub struct Requirements {
     /// `Some(KnownTrust::Suspicious)` means "provenance must merely be
     /// established".
     pub trust: Option<KnownTrust>,
-    pub audience: AudienceRule,
+    pub audience: SinkAudience,
     pub attention: AttentionRule,
     /// Effects that must not already have happened in the trajectory.
     pub forbid_prior_effects: BTreeSet<Effect>,
@@ -54,9 +64,15 @@ pub enum Breach {
         required: KnownTrust,
         actual: KnownTrust,
     },
-    /// The non-empty diff `recipients − flow.audience`.
+    /// The non-empty diff `sink audience − flow.audience` (resolved
+    /// recipients or declared readers alike).
     AudienceExceeds {
         outside: BTreeSet<UserId>,
+    },
+    /// The sink is public but the flow's audience is a bounded reader set —
+    /// no finite vouch can cover "everyone".
+    AudienceNotPublic {
+        readers: BTreeSet<UserId>,
     },
     /// An audience-guarded sink was called with no recipients at all. The
     /// caller definitionally has this data, so its absence is an integration
@@ -89,6 +105,13 @@ impl fmt::Display for Breach {
             Self::AudienceExceeds { outside } => {
                 write!(f, "recipients outside flow audience:")?;
                 for id in outside {
+                    write!(f, " {id}")?;
+                }
+                Ok(())
+            }
+            Self::AudienceNotPublic { readers } => {
+                write!(f, "sink is public but the flow may only be read by:")?;
+                for id in readers {
                     write!(f, " {id}")?;
                 }
                 Ok(())
@@ -183,6 +206,7 @@ impl Violation {
             Self::Breach(
                 Breach::TrustBelow { .. }
                 | Breach::AudienceExceeds { .. }
+                | Breach::AudienceNotPublic { .. }
                 | Breach::ForbiddenPriorEffects { .. }
                 | Breach::ConfirmationMissing { .. }
                 | Breach::ConfirmationForOtherTool { .. },
@@ -237,9 +261,27 @@ impl Requirements {
             }
         }
 
-        match self.audience {
-            AudienceRule::Unrestricted => {}
-            AudienceRule::RecipientsWithinContext => {
+        match &self.audience {
+            SinkAudience::None => {}
+            SinkAudience::Public => match flow.audience.covers_everyone() {
+                Adequacy::Holds => {}
+                Adequacy::Unprovable => {
+                    violations.push(Violation::Unprovable(Unprovable::AudienceUnknown));
+                }
+                Adequacy::Fails(readers) => {
+                    violations.push(Violation::Breach(Breach::AudienceNotPublic { readers }));
+                }
+            },
+            SinkAudience::Readers(readers) => match flow.audience.covers(readers) {
+                Adequacy::Holds => {}
+                Adequacy::Unprovable => {
+                    violations.push(Violation::Unprovable(Unprovable::AudienceUnknown));
+                }
+                Adequacy::Fails(outside) => {
+                    violations.push(Violation::Breach(Breach::AudienceExceeds { outside }));
+                }
+            },
+            SinkAudience::FromRecipients => {
                 if recipients.is_empty() {
                     violations.push(Violation::Breach(Breach::UndeclaredRecipients));
                 } else {
@@ -308,7 +350,7 @@ mod tests {
     fn check_flow_emits_violations_in_contract_order() {
         let requirements = Requirements {
             trust: Some(KnownTrust::Trusted),
-            audience: AudienceRule::RecipientsWithinContext,
+            audience: SinkAudience::FromRecipients,
             attention: AttentionRule::ExplicitConfirmation,
             forbid_prior_effects: BTreeSet::from([Effect::Egress]),
         };
@@ -342,7 +384,7 @@ mod tests {
     fn check_flow_allows_adequate_flow() {
         let requirements = Requirements {
             trust: Some(KnownTrust::Trusted),
-            audience: AudienceRule::RecipientsWithinContext,
+            audience: SinkAudience::FromRecipients,
             ..Requirements::default()
         };
         let flow = ValueLabel {
@@ -363,7 +405,7 @@ mod tests {
     fn check_flow_unknown_flow_is_unprovable_not_breach() {
         let requirements = Requirements {
             trust: Some(KnownTrust::Suspicious),
-            audience: AudienceRule::RecipientsWithinContext,
+            audience: SinkAudience::FromRecipients,
             ..Requirements::default()
         };
         let verdict = requirements.check_flow(
@@ -383,9 +425,88 @@ mod tests {
     }
 
     #[test]
+    fn check_flow_public_sink_needs_public_flow() {
+        let requirements = Requirements {
+            audience: SinkAudience::Public,
+            ..Requirements::default()
+        };
+        let tool = ToolName::new("issue.create");
+        let no_recipients = BTreeSet::new();
+
+        let public = ValueLabel {
+            audience: Audience::PUBLIC,
+            trust: Trust::TRUSTED,
+        };
+        assert_eq!(
+            requirements.check_flow(&public, &Effects::none(), None, &tool, &no_recipients),
+            Verdict::Allow
+        );
+
+        let bounded = ValueLabel {
+            audience: Audience::readers([user("operator")]),
+            trust: Trust::TRUSTED,
+        };
+        assert_eq!(
+            requirements.check_flow(&bounded, &Effects::none(), None, &tool, &no_recipients),
+            Verdict::Escalate(vec![Violation::Breach(Breach::AudienceNotPublic {
+                readers: BTreeSet::from([user("operator")]),
+            })])
+        );
+
+        let unknown = ValueLabel {
+            audience: Audience::UNKNOWN,
+            trust: Trust::TRUSTED,
+        };
+        assert_eq!(
+            requirements.check_flow(&unknown, &Effects::none(), None, &tool, &no_recipients),
+            Verdict::Escalate(vec![Violation::Unprovable(Unprovable::AudienceUnknown)])
+        );
+    }
+
+    #[test]
+    fn check_flow_declared_readers_checked_without_recipients() {
+        let requirements = Requirements {
+            audience: SinkAudience::Readers(BTreeSet::from([user("ops-hook")])),
+            ..Requirements::default()
+        };
+        let tool = ToolName::new("report.send");
+        let no_recipients = BTreeSet::new();
+
+        let covering = ValueLabel {
+            audience: Audience::readers([user("operator"), user("ops-hook")]),
+            trust: Trust::TRUSTED,
+        };
+        assert_eq!(
+            requirements.check_flow(&covering, &Effects::none(), None, &tool, &no_recipients),
+            Verdict::Allow
+        );
+
+        // A public flow covers any declared reader set.
+        let public = ValueLabel {
+            audience: Audience::PUBLIC,
+            trust: Trust::TRUSTED,
+        };
+        assert_eq!(
+            requirements.check_flow(&public, &Effects::none(), None, &tool, &no_recipients),
+            Verdict::Allow
+        );
+
+        let excluding = ValueLabel {
+            audience: Audience::readers([user("operator")]),
+            trust: Trust::TRUSTED,
+        };
+        assert_eq!(
+            requirements.check_flow(&excluding, &Effects::none(), None, &tool, &no_recipients),
+            Verdict::Escalate(vec![Violation::Breach(Breach::AudienceExceeds {
+                outside: BTreeSet::from([user("ops-hook")]),
+            })])
+        );
+    }
+
+    #[test]
     fn check_flow_guarded_sink_without_recipients_is_structural() {
         let requirements = Requirements {
-            audience: AudienceRule::RecipientsWithinContext,
+            audience: SinkAudience::FromRecipients,
             ..Requirements::default()
         };
         let verdict = requirements.check_flow(

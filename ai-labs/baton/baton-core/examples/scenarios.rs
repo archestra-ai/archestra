@@ -9,11 +9,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
-    AuthorityName, BlockReason, Blocked, Decision, DuplicateContract, DuplicateRegistration, Effect, Effects,
-    KnownTrust, LabelPredicate, OpaqueValue, PolicyEngine, RegisteredTransformer, RejectedToken, Requirements, Ruling,
-    Speaker, StepOutcome, StepRefused, ToolContract, ToolName, ToolRequest, Trajectory, TransformerDescriptor,
-    TransformerError, TransformerRef, Trust, UnknownValue, UserId, ValueId, ValueLabel,
+    ArgumentName, ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, AuthorityMode, AuthorityName,
+    BlockReason, Blocked, Decision, DuplicateContract, DuplicateRegistration, Effect, Effects, KnownTrust,
+    LabelPredicate, OpaqueValue, PolicyEngine, RegisteredTransformer, RejectedToken, Requirements, Ruling,
+    SinkAudience, Speaker, StepOutcome, StepRefused, ToolContract, ToolName, ToolRequest, Trajectory,
+    TransformerDescriptor, TransformerError, TransformerRef, Trust, UnknownValue, UserId, ValueId, ValueLabel,
 };
 use clap::Parser;
 use serde::Deserialize;
@@ -275,8 +275,8 @@ fn build_engine(scenario: &Scenario) -> Result<PolicyEngine, ScenarioError> {
             requires: Requirements {
                 trust: tool.requires_trust.map(KnownTrustConfig::to_domain),
                 audience: match tool.requires_audience {
-                    true => AudienceRule::RecipientsWithinContext,
-                    false => AudienceRule::Unrestricted,
+                    true => SinkAudience::FromRecipients,
+                    false => SinkAudience::None,
                 },
                 ..Requirements::default()
             },

@@ -470,6 +470,11 @@ async fn checked_in_config_preserves_the_demo_scenario() {
         .expect("send_email is contracted");
     assert_eq!(send.output_label.trust, baton_core::Trust::TRUSTED);
     assert_eq!(send.output_label.audience, baton_core::Audience::PUBLIC);
+    assert_eq!(
+        send.effects,
+        baton_core::Effects::declared([baton_core::Effect::Egress]),
+        "send_email's egress moved from contract level into output.effects in the migration"
+    );
 
     let config = GatewayConfig::from_toml(include_str!("../gateway.toml"), include_str!("../gateway-policy.toml"))
         .expect("checked-in config parses");

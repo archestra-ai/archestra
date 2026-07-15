@@ -7,6 +7,14 @@
 //! The policy's `[user]` section (`Contracts.user_id`/`user_label`) is
 //! ignored: the gateway session has no user model — every admitted value is
 //! model output over the session context.
+//!
+//! The canonical dialect can also declare inline `rule = "allow"` authorities
+//! (the old gateway dialect could not). They work, with one wrinkle: the
+//! session soft-blocks first and resolves inline rulings only during the
+//! escalation's remedy walk — so a call an allow authority fully covers still
+//! round-trips through `baton__escalate`, which then executes without
+//! prompting the human. The checked-in scenario uses only the escalate
+//! authority.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;

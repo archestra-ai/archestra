@@ -1,5 +1,6 @@
 //! `baton-gateway`: the MCP server. Serves the scenario's tools from
-//! `gateway.toml`, mediates every `tools/call` through baton-core, soft-blocks
+//! `gateway.toml` under the policy in `gateway-policy.toml` (baton-contracts
+//! dialect), mediates every `tools/call` through baton-core, soft-blocks
 //! remediable breaches (the block is an ordinary tool result telling the model
 //! how to escalate), and on `baton__escalate` asks the human through MCP
 //! **elicitation** — so the approval prompt appears in the connected client's
@@ -17,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use baton_demo::gateway::narrate::{DecisionLog, narrate};
-use baton_demo::gateway::{ESCALATE_TOOL, GatewayConfig, Outcome, Session};
+use baton_demo::gateway::{ConfigFile, ESCALATE_TOOL, GatewayConfig, Outcome, Session};
 use clap::Parser;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, CreateElicitationRequestParams, ElicitationAction,
@@ -36,9 +37,12 @@ struct Args {
     /// Address to listen on.
     #[arg(long, env = "BATON_GATEWAY_ADDR", default_value = "127.0.0.1:8732")]
     addr: String,
-    /// The scenario / policy file.
+    /// The tool catalog: simulated tools, their arguments and result templates.
     #[arg(long, default_value_os_t = default_config_path())]
     config: PathBuf,
+    /// The policy: tool contracts and authorities (baton-contracts dialect).
+    #[arg(long, default_value_os_t = default_policy_path())]
+    policy: PathBuf,
     /// Append one JSON line per decision to this file.
     #[arg(long)]
     log: Option<PathBuf>,
@@ -49,6 +53,10 @@ struct Args {
 
 fn default_config_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("gateway.toml")
+}
+
+fn default_policy_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("gateway-policy.toml")
 }
 
 #[tokio::main]
@@ -64,8 +72,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_writer(std::io::stderr)
         .init();
 
-    let text = std::fs::read_to_string(&args.config).map_err(|e| format!("reading {}: {e}", args.config.display()))?;
-    let config = Arc::new(GatewayConfig::from_toml(&text).map_err(|e| format!("{}: {e}", args.config.display()))?);
+    let tools_text =
+        std::fs::read_to_string(&args.config).map_err(|e| format!("reading {}: {e}", args.config.display()))?;
+    let policy_text =
+        std::fs::read_to_string(&args.policy).map_err(|e| format!("reading {}: {e}", args.policy.display()))?;
+    let config = Arc::new(GatewayConfig::from_toml(&tools_text, &policy_text).map_err(|e| {
+        let file = match e.source_file() {
+            ConfigFile::Tools => &args.config,
+            ConfigFile::Policy => &args.policy,
+        };
+        format!("{}: {e}", file.display())
+    })?);
     let log = match &args.log {
         Some(path) => Some(Arc::new(DecisionLog::open(path)?)),
         None => None,

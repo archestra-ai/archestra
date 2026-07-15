@@ -21,6 +21,7 @@ approver = []
 
 [dependencies]
 baton-core = { path = "../baton-core" }
+baton-contracts = { path = "../baton-contracts" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std", "net"] }
 axum = "0.8"
 rmcp = { version = "1.7", features = [

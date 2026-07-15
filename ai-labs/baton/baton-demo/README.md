@@ -51,18 +51,26 @@ baton-gateway ── tools/call ──▶ baton-core evaluate
    └── every decision narrated + optional JSONL log
 ```
 
-## Scenario config (`gateway.toml`)
+## Scenario config (`gateway.toml` + `gateway-policy.toml`)
 
-TOML declares the whole scenario: the tools the gateway serves (description,
-string arguments, a `result` template filled from the canonical request), an
-optional baton contract per tool (requirements, `recipients_arg`, effects,
-output label), and the authorities. A tool without a contract is served but
-unregistered — calling it is unprovable and routes through the same authority
-chain, baton's fail-closed default. A **present** `[tool.contract]` registers
-exactly what it declares, and everything it omits defaults open — no
-requirements, no effects, a public/trusted output — so an *empty* contract
-table is the most permissive registration there is; omit the table entirely
-unless you mean to declare something.
+Two TOML files declare the scenario, joined by tool name. `gateway.toml` is
+the demo-owned tool catalog: the tools the gateway serves (description, string
+arguments, a `result` template filled from the canonical request).
+`gateway-policy.toml` is the policy — tool contracts and authorities — in the
+canonical `baton-contracts` dialect, the same one `baton-proxy` reads: per
+tool a `requires` section (trust, an audience as `"public"`, a reader list, or
+`"$.args.<argument>"` naming the wire argument that carries recipients) and an
+`output` section (trust, audience, effects); per authority a `rule` —
+`"allow"` for the narrow inline acknowledge-only competence, `"escalate"` for
+the full-mandate human-in-the-loop authority the gateway elicits.
+
+A catalog tool without a contract is served but unregistered — calling it is
+unprovable and routes through the same authority chain, baton's fail-closed
+default. A contract naming no catalog tool is a load error. Within a present
+contract, omissions fail **closed**: an absent `requires` table means unknown
+requirements (write `requires = {}` to declare "considered, nothing
+required"), and an omitted output trust/audience is unknown — spell out what
+you mean. Only `effects` defaults to none.
 
 One gateway policy decision worth knowing: an escalation elicits the human
 **once per authority** the remedy routes to, and that ruling is applied to

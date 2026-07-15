@@ -545,6 +545,11 @@ fn evaluate_call(
                 });
             }
             let audited = unknown_policy == UnknownPolicyIn::AllowWithAudit && has_unknown;
+            // Step budget, not policy: a plan peels at most a handful of
+            // remedies per involved value (raise, lift, acquire, release),
+            // so 4×(context + recipients) + 8 comfortably exceeds any real
+            // walk while keeping a runaway re-planning loop finite. Hitting
+            // it reports `unresolved` (stall), never a policy outcome.
             let max_steps = context
                 .len()
                 .saturating_add(call.recipients.len())

@@ -51,7 +51,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Get tokens visible to the user based on their permissions:
    * - ac:update: can see org-wide token
    * - team:create: can see all team tokens
-   * - team admin role: can see tokens for teams they administer
+   * - team membership (any role): can see their teams' tokens — listing
+   *   only exposes metadata (name, tokenStart); the value endpoint below
+   *   stays gated behind team admin / org-level team management
    *
    * When profileId is provided, team tokens are further filtered to only
    * include tokens for teams that the profile is also assigned to.
@@ -119,22 +121,17 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Filter team tokens based on user permissions
+      // Filter team tokens: users see tokens for teams they belong to (any
+      // role). Listing only exposes metadata — the token value itself stays
+      // gated behind team admin / org-level team management, so members see
+      // that a token exists and can ask an admin for it.
       if (!canManageAllTeams) {
-        if (!hasMcpGatewayTeamAdmin && adminTeamIds.length === 0) {
-          visibleTokens = visibleTokens.filter(
-            (token) => token.isOrganizationToken,
-          );
-        } else {
-          const userTeamIds = hasMcpGatewayTeamAdmin
-            ? await TeamModel.getUserTeamIds(user.id)
-            : adminTeamIds;
-          visibleTokens = visibleTokens.filter(
-            (token) =>
-              token.isOrganizationToken ||
-              (token.teamId && userTeamIds.includes(token.teamId)),
-          );
-        }
+        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+        visibleTokens = visibleTokens.filter(
+          (token) =>
+            token.isOrganizationToken ||
+            (token.teamId && userTeamIds.includes(token.teamId)),
+        );
       }
 
       // If profileId is provided, further filter team tokens to only show

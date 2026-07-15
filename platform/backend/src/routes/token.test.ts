@@ -239,7 +239,7 @@ describe("Token Route Authorization", () => {
       expect(teamTokens.length).toBe(2);
     });
 
-    test("literal team admin sees only administered team tokens", async ({
+    test("team member sees only tokens for teams they belong to", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -259,8 +259,8 @@ describe("Token Route Authorization", () => {
 
       setupPermissions({ team: ["read"] });
 
-      // Get user's teams
-      const userTeamIds = await TeamModel.getUserAdminTeamIds(user.id);
+      // Get user's teams (membership, any role — same as the route)
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       expect(userTeamIds).toEqual([team1.id]);
 
       // Simulate filtering logic
@@ -361,7 +361,7 @@ describe("Token Route Authorization", () => {
       );
     });
 
-    test("user without team:update sees no team tokens", async ({
+    test("plain team member without team management permissions still sees their team's token listed", async ({
       makeOrganization,
       makeUser,
       makeTeam,
@@ -374,7 +374,9 @@ describe("Token Route Authorization", () => {
 
       await TeamTokenModel.createTeamToken(team.id, team.name);
 
-      // Grant only team:read
+      // Grant only team:read — the member can list the token's metadata,
+      // while the value endpoint stays admin-gated (see checkTokenAccess
+      // tests above).
       setupPermissions({ team: ["read"] });
 
       const { success: hasTeamUpdate } = await hasPermission(
@@ -383,14 +385,16 @@ describe("Token Route Authorization", () => {
       );
       expect(hasTeamUpdate).toBe(false);
 
-      // Simulate filtering logic - no team tokens visible
+      // Simulate filtering logic — membership grants listing visibility
+      const userTeamIds = await TeamModel.getUserTeamIds(user.id);
       const tokens = await TeamTokenModel.findAllWithTeam();
-      const visibleTokens = hasTeamUpdate
-        ? tokens
-        : tokens.filter((t) => t.isOrganizationToken);
+      const visibleTokens = tokens.filter(
+        (t) =>
+          t.isOrganizationToken || (t.teamId && userTeamIds.includes(t.teamId)),
+      );
 
       expect(visibleTokens.filter((t) => !t.isOrganizationToken).length).toBe(
-        0,
+        1,
       );
     });
   });

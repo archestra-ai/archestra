@@ -2,8 +2,9 @@
 #
 # The proxy forwards to OpenRouter and gates the agent's tool calls. Only the
 # tools this scenario touches are annotated; every other kagent tool is
-# unregistered and passes through — gradual adoption, and with no authorities
-# registered an unprovable flow simply fails closed.
+# unregistered and passes through — gradual adoption, and unprovable flows
+# route to the declared `default-allow` authority — allowed, with an audit
+# line; anything it is not competent for fails closed.
 #
 # Every tool contract has two sections:
 #   output   — how the returned information is labeled and how the call
@@ -88,3 +89,14 @@ requires = { audience = ["operator", "sre-team"] }
 name = "http_post"
 output = { trust = "trusted", audience = ["operator", "sre-team"] }
 requires = { audience = "public" }
+
+# --- Default authorizer: unknowns pass with receipts. ---------------------------
+# The three readers above declare no `requires` — under fail-closed semantics
+# every call to them escalates as "tool requirements unknown". This authority
+# acknowledges exactly those unprovable facts, on the record; it cannot clear
+# proven breaches (the trust-gated mutations and audience-gated egress above
+# stay blocked without it ever being consulted).
+[[contracts.authority]]
+name = "default-allow"
+rule = "allow"
+acknowledge_unknown = true

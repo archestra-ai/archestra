@@ -49,6 +49,14 @@ requires = { audience = ["ops-hook"] }  # sink exposes to fixed readers the flow
 [[contracts.tool]]
 name = "notify"
 requires = { audience = "$.args.url" }  # sink audience read from the call's `url` argument
+
+[[contracts.tool]]
+name = "search_notes"   # no `requires` at all — an unprovable fact, not "nothing required"
+
+[[contracts.authority]]
+name = "default-allow"
+rule = "allow"
+acknowledge_unknown = true
 ```
 
 Every tool contract has two sections. `output` is how the returned
@@ -62,6 +70,15 @@ the flow to. That check is always the same comparison: the flow's audience
 in three forms — `"public"`, a fixed reader list, or `"$.args.<argument>"` to
 read the recipients from one top-level call argument. Absent means the tool
 exposes no one and gets no audience check.
+
+An absent `requires` means the requirements are **unknown** — every call
+escalates as an unprovable fact and fails closed unless an authority clears
+it. Write `requires = {}` to say "considered, nothing required". A policy may
+declare that authority itself: `[[contracts.authority]]` with `rule = "allow"`
+and `acknowledge_unknown = true` approves exactly the unprovable facts routed
+to it (unknown requirements, unknown effects, missing contracts) and records
+each grant in the decision log — proven breaches are outside its competence
+and stay blocked.
 
 Tools without a contract pass through untouched — annotate the risky few, leave
 the rest.

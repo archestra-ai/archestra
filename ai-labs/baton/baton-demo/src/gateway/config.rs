@@ -161,7 +161,7 @@ impl AudienceRuleConfig {
     fn to_domain(self) -> AudienceRule {
         match self {
             Self::Unrestricted => AudienceRule::Unrestricted,
-            Self::RecipientsWithinContext => AudienceRule::RecipientsWithinContext,
+            Self::RecipientsWithinContext => AudienceRule::FromRecipients,
         }
     }
 }
@@ -316,18 +316,18 @@ impl ContractConfig {
                 }
                 ArgumentSchema::with_recipients(ArgumentName::new(arg))
             }
-            None if audience == AudienceRule::RecipientsWithinContext => {
+            None if audience == AudienceRule::FromRecipients => {
                 return Err(ConfigError::MissingRecipientsArg(tool.name.clone()));
             }
             None => ArgumentSchema::opaque(),
         };
         Ok(ToolContract {
             name: ToolName::new(&tool.name),
-            requires: Requirements {
+            requires: Some(Requirements {
                 trust: self.requires.trust.map(KnownTrustConfig::to_domain),
                 audience,
                 ..Requirements::default()
-            },
+            }),
             output_label: ValueLabel {
                 audience: self.output.audience.to_domain(),
                 trust: self.output.trust.to_domain(),

@@ -2831,6 +2831,10 @@ class AgentModel {
   static async cloneAgent(params: {
     sourceId: string;
     userId: string;
+    /** Visibility for the clone; defaults to copying the source's scope. */
+    scope?: AgentScope;
+    /** Teams for a team-scoped clone; defaults to the source's teams. */
+    teams?: string[];
   }): Promise<Agent> {
     const { sourceId, userId } = params;
 
@@ -2839,9 +2843,12 @@ class AgentModel {
       throw new Error("Source agent not found");
     }
 
+    const cloneScope = params.scope ?? sourceAgent.scope;
     // Omit teams if scope is not 'team' — scope takes precedence
     const cloneTeams =
-      sourceAgent.scope === "team" ? sourceAgent.teams.map((t) => t.id) : [];
+      cloneScope === "team"
+        ? (params.teams ?? sourceAgent.teams.map((t) => t.id))
+        : [];
 
     let created: Agent | null = null;
     try {
@@ -2849,7 +2856,7 @@ class AgentModel {
         {
           organizationId: sourceAgent.organizationId,
           agentType: sourceAgent.agentType,
-          scope: sourceAgent.scope,
+          scope: cloneScope,
           teams: cloneTeams,
           labels: sourceAgent.labels,
           knowledgeBaseIds: sourceAgent.knowledgeBaseIds ?? [],
@@ -2873,7 +2880,7 @@ class AgentModel {
           identityProviderId: null,
           passthroughHeaders: null,
         },
-        sourceAgent.scope === "personal" ? userId : undefined,
+        cloneScope === "personal" ? userId : undefined,
         // Copy the source's assignments verbatim below; don't let create's
         // default assignment force built-ins the source lacked onto the clone.
         { skipCreationDefaultTools: true },

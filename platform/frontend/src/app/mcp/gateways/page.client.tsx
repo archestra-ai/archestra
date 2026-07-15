@@ -15,6 +15,7 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
@@ -217,6 +218,9 @@ function McpGateways({
   );
   const editDialog = useAgentDialogUrlParam("edit");
   const [deletingGatewayId, setDeletingGatewayId] = useState<string | null>(
+    null,
+  );
+  const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
   const restoreGateway = useRestoreProfile();
@@ -436,6 +440,7 @@ function McpGateways({
                 },
               });
             }}
+            onClone={setCloningGateway}
           />
         );
       },
@@ -626,6 +631,17 @@ function McpGateways({
                 onOpenChange={(open) => !open && setDeletingGatewayId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningGateway}
+              onOpenChange={(open) => {
+                if (!open) setCloningGateway(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as GatewayData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

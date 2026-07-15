@@ -423,6 +423,219 @@ describe("clone agent route", () => {
     );
   });
 
+  test("overrides visibility to personal and clears teams", async ({
+    makeInternalAgent,
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Team Agent",
+      scope: "team",
+      teams: [team.id],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "personal" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.scope).toBe("personal");
+    expect(cloned.teams).toEqual([]);
+    // A personal clone is owned by the user who cloned it
+    expect(cloned.authorId).toBe(user.id);
+  });
+
+  test("overrides visibility to org", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "org" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.scope).toBe("org");
+    expect(cloned.teams).toEqual([]);
+  });
+
+  test("overrides visibility to team with explicit teams", async ({
+    makeInternalAgent,
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "team", teams: [team.id] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.scope).toBe("team");
+    expect(cloned.teams.map((t) => t.id)).toEqual([team.id]);
+  });
+
+  test("empty body copies the source's visibility (backward compatible)", async ({
+    makeInternalAgent,
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Team Agent",
+      scope: "team",
+      teams: [team.id],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+
+    expect(cloned.scope).toBe("team");
+    expect(cloned.teams.map((t) => t.id)).toEqual([team.id]);
+  });
+
+  test("non-admin cannot clone to org scope", async ({ makeInternalAgent }) => {
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    mockGetAgentTypePermissionChecker.mockResolvedValueOnce({
+      require: vi.fn(),
+      isAdmin: vi.fn().mockReturnValue(false),
+      isTeamAdmin: vi.fn().mockReturnValue(true),
+      hasAnyReadPermission: vi.fn().mockReturnValue(true),
+      hasAnyAdminPermission: vi.fn().mockReturnValue(false),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "org" },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("non-admin team-admin can only assign teams they are a member of", async ({
+    makeInternalAgent,
+    makeTeam,
+  }) => {
+    // User is not a member of this team
+    const team = await makeTeam(organizationId, user.id);
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    mockGetAgentTypePermissionChecker.mockResolvedValueOnce({
+      require: vi.fn(),
+      isAdmin: vi.fn().mockReturnValue(false),
+      isTeamAdmin: vi.fn().mockReturnValue(true),
+      hasAnyReadPermission: vi.fn().mockReturnValue(true),
+      hasAnyAdminPermission: vi.fn().mockReturnValue(false),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "team", teams: [team.id] },
+    });
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  test("non-admin team-admin can clone to a team they belong to", async ({
+    makeInternalAgent,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id, { role: "member" });
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "Personal Agent",
+      scope: "personal",
+      authorId: user.id,
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    mockGetAgentTypePermissionChecker.mockResolvedValueOnce({
+      require: vi.fn(),
+      isAdmin: vi.fn().mockReturnValue(false),
+      isTeamAdmin: vi.fn().mockReturnValue(true),
+      hasAnyReadPermission: vi.fn().mockReturnValue(true),
+      hasAnyAdminPermission: vi.fn().mockReturnValue(false),
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+      payload: { scope: "team", teams: [team.id] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(cloned.scope).toBe("team");
+    expect(cloned.teams.map((t) => t.id)).toEqual([team.id]);
+  });
+
   test("clones all three built-in agent types", async ({
     makeInternalAgent,
   }) => {

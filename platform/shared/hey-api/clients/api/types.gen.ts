@@ -12616,7 +12616,16 @@ export type UpdateAgentResponses = {
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
 
 export type CloneAgentData = {
-    body?: never;
+    body: {
+        /**
+         * Visibility of the clone. Defaults to the source agent's scope.
+         */
+        scope?: 'personal' | 'team' | 'org';
+        /**
+         * Teams for a team-scoped clone. Defaults to the source agent's teams. Ignored unless the clone's scope resolves to 'team'.
+         */
+        teams?: Array<string>;
+    } | null;
     path: {
         id: string;
     };
@@ -51115,6 +51124,10 @@ export type GetMcpServersResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
 };
@@ -51252,6 +51265,10 @@ export type InstallMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -51455,6 +51472,10 @@ export type GetMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -51583,6 +51604,10 @@ export type ReauthenticateMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };
@@ -51983,6 +52008,10 @@ export type ReinstallMcpServerResponses = {
             name: string;
             createdAt: string;
         } | null;
+        assignedAgents?: Array<{
+            id: string;
+            name: string;
+        }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
 };

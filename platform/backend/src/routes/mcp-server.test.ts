@@ -3875,6 +3875,40 @@ describe("mcp server core route coverage", () => {
     await app.close();
   });
 
+  describe("GET /api/mcp_server", () => {
+    test("lists the agents using each server via explicit tool assignments", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+      const tool = await makeTool({ catalogId: catalog.id });
+      const agent = await makeAgent({ name: "Server Consumer" });
+      await makeAgentTool(agent.id, tool.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const servers = response.json();
+      const returned = servers.find((s: { id: string }) => s.id === server.id);
+      expect(returned.assignedAgents).toEqual([
+        { id: agent.id, name: "Server Consumer" },
+      ]);
+    });
+  });
+
   describe("GET /api/mcp_server/:id", () => {
     test("returns an MCP server the caller can access", async ({
       makeInternalMcpCatalog,
@@ -3896,6 +3930,7 @@ describe("mcp server core route coverage", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().id).toBe(server.id);
+      expect(response.json().assignedAgents).toEqual([]);
     });
 
     test("returns 404 for an unknown id", async () => {

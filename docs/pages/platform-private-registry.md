@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-06
+lastUpdated: 2026-07-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,6 +86,8 @@ See [Environments](/docs/platform-environments) for the full isolation model and
 The registry does not expose tools to clients by itself. After a server is installed, Archestra discovers the tools exposed by that installed connection. Those tools become usable after they are assigned to an Agent or MCP Gateway.
 
 For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries (or use Automatic tool assignment mode to derive them from labels), then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.
+
+Each registry card shows which agents and gateways have tools assigned from the server. The uninstall dialog lists them too, so you can see who is affected before removing a connection. The count covers explicit assignments only — Automatic tool assignment mode is not included.
 
 ## Refreshing Tools
 

@@ -17,6 +17,7 @@ import {
 import { CodeText } from "@/components/code-text";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
+import { getManageTokenLink } from "@/components/tokens/manage-token-link";
 import {
   Collapsible,
   CollapsibleContent,
@@ -175,6 +176,12 @@ export function A2AConnectionInstructions({
     : hasAdminPermission && selectedTeamToken
       ? `${selectedTeamToken.tokenStart}***`
       : "ask-admin-for-access-token";
+
+  // Deep link to the settings surface where the selected token is managed.
+  const manageTokenLink = getManageTokenLink({
+    isPersonalTokenSelected,
+    selectedTeamToken: selectedTeamToken ?? null,
+  });
 
   // Agent Card URL for discovery
   const agentCardUrl = `${a2aEndpoint}/.well-known/agent-card.json`;
@@ -470,10 +477,10 @@ curl -N -X POST "${a2aEndpoint}" \\
           </Select>
           <p className="text-xs text-muted-foreground">
             <Link
-              href="/settings/account?tab=tokens"
+              href={manageTokenLink.href}
               className="underline hover:text-foreground"
             >
-              Manage your tokens
+              {manageTokenLink.label}
             </Link>
             {canCreateOauthClients && (
               <>

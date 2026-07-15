@@ -3,6 +3,7 @@
 import { Key } from "lucide-react";
 import { useState } from "react";
 import { WithPermissions } from "@/components/roles/with-permissions";
+import { HighlightAnchor } from "@/components/settings/highlight-anchor";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
 import { Button } from "@/components/ui/button";
@@ -19,24 +20,27 @@ export function OrganizationTokenSection() {
       permissions={{ team: ["update"] }}
       noPermissionHandle="hide"
     >
-      <PlatformTokenCard
-        title="Organization Token"
-        description="Organization-wide authentication token for Agents / MCP Gateways."
-        isLoading={tokensLoading}
-        error={error}
-        tokenExists={!!orgToken}
-        emptyDescription="No organization token available. It will be automatically created."
-        action={
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setTokenDialogOpen(true)}
-          >
-            <Key className="h-4 w-4" />
-            Manage Token
-          </Button>
-        }
-      />
+      {/* Deep-linked from connection instructions ("Manage your organization token") */}
+      <HighlightAnchor id="organization-token">
+        <PlatformTokenCard
+          title="Organization Token"
+          description="Organization-wide authentication token for Agents / MCP Gateways."
+          isLoading={tokensLoading}
+          error={error}
+          tokenExists={!!orgToken}
+          emptyDescription="No organization token available. It will be automatically created."
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTokenDialogOpen(true)}
+            >
+              <Key className="h-4 w-4" />
+              Manage Token
+            </Button>
+          }
+        />
+      </HighlightAnchor>
 
       {orgToken && (
         <TokenManagerDialog

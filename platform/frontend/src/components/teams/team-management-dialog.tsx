@@ -71,6 +71,12 @@ type TeamManagementDialogProps =
       open: boolean;
       onOpenChange: (open: boolean) => void;
       team: Team;
+      /**
+       * Section to open on instead of "team" — used by deep links (e.g.
+       * "Manage your team token" on connection instructions), which also
+       * flash the section to point at it.
+       */
+      initialSection?: TeamDialogSection;
     };
 
 const editNavItems = [
@@ -98,9 +104,13 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const mode = props.mode ?? "edit";
   const [createdTeam, setCreatedTeam] = useState<Team | null>(null);
   const editTeam = "team" in props ? props.team : null;
+  const initialSection =
+    "initialSection" in props ? props.initialSection : undefined;
   const team = editTeam ?? createdTeam;
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
+  // Flashes the deep-linked section once so the user lands on the right spot.
+  const [flashActiveSection, setFlashActiveSection] = useState(false);
   const [name, setName] = useState(team?.name ?? "");
   const [description, setDescription] = useState(team?.description ?? "");
   const [labels, setLabels] = useState<ProfileLabel[]>(team?.labels ?? []);
@@ -139,7 +149,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
   useEffect(() => {
     if (!open) return;
-    setActiveSection("team");
+    setActiveSection(
+      mode === "edit" && initialSection ? initialSection : "team",
+    );
+    setFlashActiveSection(mode === "edit" && !!initialSection);
     if (mode === "create") {
       setCreatedTeam(null);
       setName("");
@@ -151,7 +164,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
     setLabels(editTeam?.labels ?? []);
-  }, [editTeam, mode, open]);
+  }, [editTeam, initialSection, mode, open]);
 
   useEffect(() => {
     const canShowActiveSection =
@@ -272,7 +285,17 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         />
       )}
       {activeSection === "token" && mode === "edit" && (
-        <TokenSection token={teamToken} />
+        <div
+          // p/-m cancel out so the flashing ring gets breathing room
+          // without shifting the section's layout.
+          className={cn(
+            flashActiveSection &&
+              "settings-highlight-flash -m-3 rounded-lg p-3",
+          )}
+          onAnimationEnd={() => setFlashActiveSection(false)}
+        >
+          <TokenSection token={teamToken} />
+        </div>
       )}
       {activeSection === "vault-folder" && mode === "edit" && team && (
         <TeamManagementVaultFolderSection open={open} team={team} />

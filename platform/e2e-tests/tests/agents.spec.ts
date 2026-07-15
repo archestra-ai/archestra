@@ -106,12 +106,13 @@ test(
     await createViaDialog(page, /Create Agent/i, AGENT_NAME);
 
     // Creation hands off to the agent's connect dialog so the user knows how
-    // to use it; close it to get back to the table.
+    // to use it; close it (X button — the dialog has no footer) to get back
+    // to the table.
     const connectDialog = page.getByRole("dialog", {
       name: new RegExp(`Connect to "${AGENT_NAME}"`, "i"),
     });
     await expect(connectDialog).toBeVisible({ timeout: 15_000 });
-    await connectDialog.getByRole("button", { name: "Done" }).click();
+    await connectDialog.getByRole("button", { name: "Close" }).click();
     await expect(connectDialog).not.toBeVisible({ timeout: 10_000 });
 
     // Poll for the agent to appear in the table

@@ -20,13 +20,13 @@ const PORT_RELEASE_DELAY_MS = 250;
  * race because the previous server hasn't fully released 9000/9050 within
  * PORT_RELEASE_DELAY_MS — which the retry below recovers from.
  */
-const SERVER_STARTUP_WINDOW_MS = 1000;
+const SERVER_STARTUP_WINDOW_MS = 750;
 
-/** Max re-spawn attempts after a startup failure before giving up (and logging loudly). */
-const SERVER_SPAWN_MAX_RETRIES = 5;
+/** Re-spawn attempts after a startup failure before giving up (and logging loudly). */
+const SERVER_SPAWN_MAX_RETRIES = 3;
 
-/** Base backoff between re-spawn attempts; grows exponentially, plus jitter. */
-const SERVER_SPAWN_BACKOFF_MS = 150;
+/** Fixed delay between re-spawn attempts (a local port frees in well under this). */
+const SERVER_SPAWN_RETRY_DELAY_MS = 250;
 
 type DevServerState = {
   /** The running server child, or null when none is up. */
@@ -237,13 +237,12 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
           if (devServer.current === child) devServer.current = null;
           return;
         }
-        const backoff =
-          SERVER_SPAWN_BACKOFF_MS * 2 ** (attempt - 1) +
-          Math.floor(Math.random() * 100);
         console.log(
-          `Dev server exited on startup (code ${startupExit.code}); ports may not be free yet — retry ${attempt}/${SERVER_SPAWN_MAX_RETRIES} in ${backoff}ms...`,
+          `Dev server exited on startup (code ${startupExit.code}); ports may not be free yet — retry ${attempt}/${SERVER_SPAWN_MAX_RETRIES} in ${SERVER_SPAWN_RETRY_DELAY_MS}ms...`,
         );
-        await new Promise((resolve) => setTimeout(resolve, backoff));
+        await new Promise((resolve) =>
+          setTimeout(resolve, SERVER_SPAWN_RETRY_DELAY_MS),
+        );
         await spawnWithRetry();
       };
 

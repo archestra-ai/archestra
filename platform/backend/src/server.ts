@@ -16,6 +16,7 @@ if (isMainModule) {
   await import("./observability/tracing/sdk");
 }
 
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -952,39 +953,48 @@ const registerSandboxRoute = (
   // The ext-apps guest SDK, served same-deployment so app templates can import
   // it (see loadExtAppsSdk). Module imports from an opaque-origin guest are
   // cross-origin, so allow any origin — the bundle is a public, immutable asset.
-  if (extAppsSdk) {
-    fastify.get("/_sandbox/ext-apps-app.js", async (_request, reply) => {
+  // Serve an in-memory sandbox asset with ETag revalidation. The URLs are not
+  // content-hashed, so a fixed max-age would pin already-rendered apps to a
+  // stale SDK/stylesheet for up to the TTL after an upgrade (the app then
+  // calls SDK members its platform no longer — or doesn't yet — expose).
+  // `no-cache` makes every load a cheap conditional request: an unchanged
+  // asset costs a 304, a changed one arrives immediately.
+  const registerSandboxAsset = (
+    assetPath: string,
+    body: string,
+    contentType: string,
+  ) => {
+    const etag = `"${createHash("sha1").update(body).digest("base64url")}"`;
+    fastify.get(assetPath, async (request, reply) => {
       void reply.header("Access-Control-Allow-Origin", "*");
-      // The URL is not content-hashed and the bundle tracks the installed
-      // ext-apps version, so cache briefly (not immutable) — an upgrade must
-      // reach clients without waiting out a year-long cache.
-      void reply.header("Cache-Control", "public, max-age=3600");
-      void reply.type("text/javascript");
-      return reply.send(extAppsSdk);
+      void reply.header("Cache-Control", "public, no-cache");
+      void reply.header("ETag", etag);
+      if (request.headers["if-none-match"] === etag) {
+        return reply.code(304).send();
+      }
+      void reply.type(contentType);
+      return reply.send(body);
     });
+  };
+
+  if (extAppsSdk) {
+    registerSandboxAsset(
+      "/_sandbox/ext-apps-app.js",
+      extAppsSdk,
+      "text/javascript",
+    );
   }
 
   // The Archestra Apps SDK (window.archestra), loaded by the <script src>
-  // injected into every owned app at serve time. Same delivery posture as the
-  // ext-apps bundle above: public asset, brief cache so fixes roll out.
+  // injected into every owned app at serve time.
   if (archestraAppSdk) {
-    fastify.get(APP_SDK_PATH, async (_request, reply) => {
-      void reply.header("Access-Control-Allow-Origin", "*");
-      void reply.header("Cache-Control", "public, max-age=3600");
-      void reply.type("text/javascript");
-      return reply.send(archestraAppSdk);
-    });
+    registerSandboxAsset(APP_SDK_PATH, archestraAppSdk, "text/javascript");
   }
 
   // The platform baseline stylesheet, loaded by the <link> injected into every
-  // owned app at serve time. Same delivery posture as the SDK above.
+  // owned app at serve time.
   if (archestraAppBaseCss) {
-    fastify.get(APP_BASE_CSS_PATH, async (_request, reply) => {
-      void reply.header("Access-Control-Allow-Origin", "*");
-      void reply.header("Cache-Control", "public, max-age=3600");
-      void reply.type("text/css");
-      return reply.send(archestraAppBaseCss);
-    });
+    registerSandboxAsset(APP_BASE_CSS_PATH, archestraAppBaseCss, "text/css");
   }
 };
 

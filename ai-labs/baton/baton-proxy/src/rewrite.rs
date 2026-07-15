@@ -19,9 +19,11 @@ pub struct TurnDecision {
 }
 
 impl TurnDecision {
-    /// Whether this decision changed what the model asked for.
+    /// Whether this decision changed what the model asked for. A granted call
+    /// rides through with its original arguments, same as a permitted one —
+    /// only a terminal block rewrites the message.
     pub fn rewritten(&self) -> bool {
-        self.outcome != "permitted"
+        self.outcome == "terminal"
     }
 }
 
@@ -64,7 +66,7 @@ pub fn rewrite_response(session: &mut Session, response: &mut ChatResponse) -> V
             .iter()
             .filter_map(|o| match o {
                 CallOutcome::Terminal { reason } => Some(reason.as_str()),
-                CallOutcome::Permitted => None,
+                CallOutcome::Permitted | CallOutcome::Granted { .. } => None,
             })
             .collect();
         if !terminals.is_empty() {
@@ -82,6 +84,11 @@ fn decision_of(tool: &str, outcome: &CallOutcome) -> TurnDecision {
             tool: tool.to_string(),
             outcome: "permitted",
             reason: None,
+        },
+        CallOutcome::Granted { reason } => TurnDecision {
+            tool: tool.to_string(),
+            outcome: "granted",
+            reason: Some(reason.clone()),
         },
         CallOutcome::Terminal { reason } => TurnDecision {
             tool: tool.to_string(),

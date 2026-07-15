@@ -96,7 +96,10 @@ export default defineConfig({
     // it across worker threads sharing one process-global V8 JIT-page registry
     // intermittently aborts the whole process with a fatal
     // "Check failed: jit_page.has_value()" (and its sibling on unregister).
-    // Forks give each worker its own V8, so the registry can't be raced.
+    // Forks give each worker its own V8, so the registry can't be raced. This
+    // is Vitest's default pool, recommended for native modules that misbehave
+    // across threads (https://vitest.dev/config/pool); pinned explicitly so a
+    // switch back to threads for speed can't silently reintroduce the crash.
     pool: "forks",
 
     // Auto-restore vi.stubGlobal/vi.stubEnv after every test. Without this, a

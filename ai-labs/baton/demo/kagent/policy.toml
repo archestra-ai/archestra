@@ -4,6 +4,15 @@
 # tools this scenario touches are annotated; every other kagent tool is
 # unregistered and passes through — gradual adoption, and with no authorities
 # registered an unprovable flow simply fails closed.
+#
+# Every tool contract has two sections:
+#   output   — how the returned information is labeled and how the call
+#              modifies the trajectory. Omitted fields are UNKNOWN (fail
+#              closed downstream), so every registered tool declares its
+#              output explicitly; effects default to none.
+#   requires — what the current trajectory must satisfy. `requires.audience`
+#              is the sink's audience (who the call exposes the flow to);
+#              the flow's audience must cover it.
 
 upstream_base_url = "https://openrouter.ai/api/v1"
 
@@ -34,29 +43,36 @@ output = { trust = "trusted", audience = ["operator", "sre-team"] }
 
 # --- Guarded sinks: a mutation may only run from a trusted flow. ---------------
 # A flow tainted by suspicious log output fails this bar and is blocked.
+# Outputs (mutation confirmations) are declared explicitly: under the unknown
+# default an omitted output would wedge any flow continuing past a success.
 [[contracts.tool]]
 name = "k8s_delete_resource"
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
 requires = { trust = "trusted" }
 
 [[contracts.tool]]
 name = "k8s_apply_manifest"
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
 requires = { trust = "trusted" }
 
 [[contracts.tool]]
 name = "k8s_patch_resource"
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
 requires = { trust = "trusted" }
 
 # --- Egress sinks (both served by notify-mcp, manifests/notify.yaml). ----------
-# `audience` declares the sink's audience: the people a call exposes the flow
-# to. The check is always the same — the flow's audience must cover the sink's.
+# `requires.audience` declares the sink's audience: the people a call exposes
+# the flow to. The check is always the same — the flow's audience must cover
+# the sink's. Outputs are the delivery receipts: trusted, team-private text.
 #
 # `notify` posts to one fixed destination, the internal ops hook (baked into
-# notify-mcp). Its audience is therefore static: the people who read that hook.
-# The team-private flow covers them, so status updates go through — even from
-# a suspicious-tainted flow; trust and audience are independent dimensions.
+# notify-mcp). Its sink audience is therefore static: the people who read that
+# hook. The team-private flow covers them, so status updates go through — even
+# from a suspicious-tainted flow; trust and audience are independent dimensions.
 [[contracts.tool]]
 name = "notify"
-audience = ["operator", "sre-team"]
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
+requires = { audience = ["operator", "sre-team"] }
 
 # `http_post` posts anywhere the model chooses. Nobody can bound who reads an
 # arbitrary URL, so the sink is public — only a publicly readable flow may use
@@ -70,4 +86,5 @@ audience = ["operator", "sre-team"]
 # control here.
 [[contracts.tool]]
 name = "http_post"
-audience = "public"
+output = { trust = "trusted", audience = ["operator", "sre-team"] }
+requires = { audience = "public" }

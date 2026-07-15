@@ -34,11 +34,13 @@ The policy (`policy.toml`) annotates only the tools this scenario touches:
   people only — never URLs or channels — and folds by intersection.
 - `notify` (served by `notify-mcp/`) posts to one fixed destination, the
   internal ops hook, so its contract declares the sink's audience statically:
-  `audience = ["operator", "sre-team"]` — the people who read the hook. The
+  `requires = { audience = ["operator", "sre-team"] }` — the people who read
+  the hook. The
   team-private flow covers them, so status updates go through even from a
   suspicious-tainted flow.
 - `http_post` (same server) posts anywhere the model chooses. Nobody can bound
-  who reads an arbitrary URL, so its contract declares `audience = "public"` —
+  who reads an arbitrary URL, so its contract declares
+  `requires = { audience = "public" }` —
   and a team-private flow can never satisfy a public sink. The injected
   `incident-tracker.evil-corp.example` is blocked regardless of trust.
 

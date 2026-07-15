@@ -104,18 +104,17 @@ export default defineConfig({
     unstubGlobals: true,
     unstubEnvs: true,
 
-    // Bound the fork count by BOTH cores and memory. CPU half: mirror the
-    // frontend config's "50%" convention locally (leaves half the box for the
-    // human); CI runs all cores because the memory cap below is the real limit
-    // there. Memory half: with the forks pool each worker loads the full module
-    // graph + its own PGlite (WASM) independently — ~3 GB RSS per fork, not
-    // shared like the threads pool's single address space — so cap at ~5 GB/fork
-    // or a shard OOM-kills the runner (cgroup OOM aborts a worker abruptly, not
-    // with a clean Vitest error). Yields 12 forks on the 16-vCPU / 64-GB CI
-    // runner, and half-cores (memory permitting) locally. The memory cap trusts
-    // os.totalmem() to report real available RAM — valid on the bare-VM CI
-    // runner, but it would over-report (and stop protecting) inside a
-    // cgroup-limited container.
+    // Bound the fork count by BOTH cores and memory. CPU half: 50% of cores
+    // locally (leaves the other half for the human); CI runs all cores because
+    // the memory cap below is the real limit there. Memory half: with the forks
+    // pool each worker loads the full module graph + its own PGlite (WASM)
+    // independently — up to ~3 GB RSS per fork, not shared like the threads
+    // pool's single address space — so cap at ~5 GB/fork or a shard OOM-kills
+    // the runner (cgroup OOM aborts a worker abruptly, not with a clean Vitest
+    // error). Yields 12 forks on the 16-vCPU / 64-GB CI runner, and half-cores
+    // (memory permitting) locally. The memory cap trusts os.totalmem() to report
+    // real available RAM — valid on the bare-VM CI runner, but it would
+    // over-report (and stop protecting) inside a cgroup-limited container.
     maxWorkers: Math.min(
       isCI
         ? os.availableParallelism()

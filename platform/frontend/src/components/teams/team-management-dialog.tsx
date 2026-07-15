@@ -48,9 +48,19 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
-type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
 type TeamDialogSection = "team" | "token" | "vault-folder" | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
+
+/**
+ * Member edits staged in the dialog, keyed by userId. Nothing is sent to the
+ * server until Save — the members list renders the server state with these
+ * changes applied on top.
+ */
+type StagedMemberChange =
+  | { type: "add"; role: TeamMemberRole; name?: string; email?: string }
+  | { type: "remove" }
+  | { type: "role"; role: TeamMemberRole };
+type StagedMemberChanges = Map<string, StagedMemberChange>;
 type TeamManagementExternalSyncSectionComponent = ComponentType<{
   open: boolean;
   team: Team;
@@ -73,8 +83,7 @@ type TeamManagementDialogProps =
       team: Team;
       /**
        * Section to open on instead of "team" — used by deep links (e.g.
-       * "Manage your team token" on connection instructions), which also
-       * flash the section to point at it.
+       * "Manage your team token" on connection instructions).
        */
       initialSection?: TeamDialogSection;
     };
@@ -109,11 +118,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const team = editTeam ?? createdTeam;
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
-  // Flashes the deep-linked section once so the user lands on the right spot.
-  const [flashActiveSection, setFlashActiveSection] = useState(false);
   const [name, setName] = useState(team?.name ?? "");
   const [description, setDescription] = useState(team?.description ?? "");
   const [labels, setLabels] = useState<ProfileLabel[]>(team?.labels ?? []);
+  const [memberChanges, setMemberChanges] = useState<StagedMemberChanges>(
+    new Map(),
+  );
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const TeamManagementExternalSyncSection =
     useTeamManagementExternalSyncSection();
@@ -152,7 +162,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     setActiveSection(
       mode === "edit" && initialSection ? initialSection : "team",
     );
-    setFlashActiveSection(mode === "edit" && !!initialSection);
+    setMemberChanges(new Map());
     if (mode === "create") {
       setCreatedTeam(null);
       setName("");
@@ -180,27 +190,96 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
   const saveTeam = useMutation({
     mutationFn: async () => {
-      // Flush any label typed into the picker but not yet committed.
-      const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-      const body = {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        labels: finalLabels.map(({ key, value }) => ({ key, value })),
+      let savedTeam = team;
+      // Team details are only editable with org-level team management; a
+      // team admin can still open the dialog to manage members, so skip the
+      // details update they aren't allowed to make.
+      if (canEditDetails) {
+        // Flush any label typed into the picker but not yet committed.
+        const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+        const body = {
+          name: name.trim(),
+          description: description.trim() || undefined,
+          labels: finalLabels.map(({ key, value }) => ({ key, value })),
+        };
+        const { data, error } = !team
+          ? await archestraApiSdk.createTeam({ body })
+          : await archestraApiSdk.updateTeam({
+              path: { id: team.id },
+              body,
+            });
+        if (error) throw new Error(error.error.message);
+        savedTeam = data as Team;
+      }
+
+      // Apply staged member changes (members can only be staged once the
+      // team exists). Failed changes stay staged so Save can be retried.
+      const failedChanges: StagedMemberChanges = new Map();
+      const memberErrors: string[] = [];
+      if (savedTeam) {
+        for (const [userId, change] of memberChanges) {
+          try {
+            if (change.type === "add") {
+              const { error } = await archestraApiSdk.addTeamMember({
+                path: { id: savedTeam.id },
+                body: { userId, role: change.role },
+              });
+              if (error) throw new Error(error.error.message);
+            } else if (change.type === "remove") {
+              const { error } = await archestraApiSdk.removeTeamMember({
+                path: { id: savedTeam.id, userId },
+              });
+              if (error) throw new Error(error.error.message);
+            } else {
+              const { error } = await archestraApiSdk.updateTeamMember({
+                path: { id: savedTeam.id, userId },
+                body: { role: change.role },
+              });
+              if (error) throw new Error(error.error.message);
+            }
+          } catch (err) {
+            failedChanges.set(userId, change);
+            memberErrors.push(err instanceof Error ? err.message : `${err}`);
+          }
+        }
+      }
+
+      return {
+        savedTeam,
+        failedChanges,
+        memberErrors,
+        hadMemberChanges: memberChanges.size > 0,
       };
-      const { data, error } = !team
-        ? await archestraApiSdk.createTeam({ body })
-        : await archestraApiSdk.updateTeam({
-            path: { id: team.id },
-            body,
-          });
-      if (error) throw new Error(error.error.message);
-      return data;
     },
-    onSuccess: (savedTeam) => {
+    onSuccess: ({
+      savedTeam,
+      failedChanges,
+      memberErrors,
+      hadMemberChanges,
+    }) => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      if (hadMemberChanges && savedTeam) {
+        queryClient.invalidateQueries({
+          queryKey: ["teamMembers", savedTeam.id],
+        });
+        queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+        queryClient.invalidateQueries({ queryKey: ["tools"] });
+      }
+      setMemberChanges(failedChanges);
+      if (mode === "create" && !team && savedTeam) {
+        setCreatedTeam(savedTeam);
+      }
+      if (memberErrors.length > 0) {
+        toast.error(
+          `Failed to apply ${memberErrors.length} member change${
+            memberErrors.length === 1 ? "" : "s"
+          }: ${memberErrors[0]}`,
+        );
+        // Keep the dialog open so the remaining staged changes can be retried.
+        return;
+      }
       if (mode === "create" && !team) {
-        setCreatedTeam(savedTeam as Team);
         toast.success("Team created");
         return;
       }
@@ -219,7 +298,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!name.trim()) {
+    if (canEditDetails && !name.trim()) {
       toast.error("Team name is required");
       return;
     }
@@ -251,7 +330,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           >
             Cancel
           </Button>
-          {activeSection === "team" && canEditDetails ? (
+          {activeSection === "team" &&
+          (canEditDetails || memberChanges.size > 0) ? (
             <Button type="submit" disabled={saveTeam.isPending}>
               {saveTeam.isPending
                 ? mode === "create" && !team
@@ -282,20 +362,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           onDescriptionChange={setDescription}
           onLabelsChange={setLabels}
           readOnlyDetails={!canEditDetails}
+          memberChanges={memberChanges}
+          onMemberChangesChange={setMemberChanges}
         />
       )}
       {activeSection === "token" && mode === "edit" && (
-        <div
-          // p/-m cancel out so the flashing ring gets breathing room
-          // without shifting the section's layout.
-          className={cn(
-            flashActiveSection &&
-              "settings-highlight-flash -m-3 rounded-lg p-3",
-          )}
-          onAnimationEnd={() => setFlashActiveSection(false)}
-        >
-          <TokenSection token={teamToken} />
-        </div>
+        <TokenSection token={teamToken} />
       )}
       {activeSection === "vault-folder" && mode === "edit" && team && (
         <TeamManagementVaultFolderSection open={open} team={team} />
@@ -319,6 +391,8 @@ function TeamSection(props: {
   onDescriptionChange: (value: string) => void;
   onLabelsChange: (labels: ProfileLabel[]) => void;
   readOnlyDetails: boolean;
+  memberChanges: StagedMemberChanges;
+  onMemberChangesChange: (changes: StagedMemberChanges) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -375,7 +449,12 @@ function TeamSection(props: {
 
           <div className="space-y-4">
             <h3 className="text-sm font-medium">Members</h3>
-            <MembersSection open={props.open} team={props.team} />
+            <MembersSection
+              open={props.open}
+              team={props.team}
+              changes={props.memberChanges}
+              onChangesChange={props.onMemberChangesChange}
+            />
           </div>
         </>
       )}
@@ -383,8 +462,17 @@ function TeamSection(props: {
   );
 }
 
-function MembersSection({ open, team }: { open: boolean; team: Team }) {
-  const queryClient = useQueryClient();
+function MembersSection({
+  open,
+  team,
+  changes,
+  onChangesChange,
+}: {
+  open: boolean;
+  team: Team;
+  changes: StagedMemberChanges;
+  onChangesChange: (changes: StagedMemberChanges) => void;
+}) {
   const { data: activeOrg } = useActiveOrganization();
   const [memberSearch, setMemberSearch] = useState("");
   const debouncedMemberSearch = useDebounce(memberSearch, 300);
@@ -408,77 +496,102 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
     });
 
   const orgMembers = activeOrg?.members ?? [];
-  const memberUserIds = useMemo(
-    () => new Set(teamMembers.map((member) => member.userId)),
-    [teamMembers],
-  );
   const userOptions = (membersResponse?.data ?? []).map((member) => ({
     userId: member.userId,
     name: member.name,
     email: member.email,
   }));
-  const canAddAnyMember = userOptions.some(
-    (user) => !memberUserIds.has(user.userId),
-  );
 
-  const invalidateMembers = () => {
-    queryClient.invalidateQueries({ queryKey: ["teamMembers", team.id] });
-    queryClient.invalidateQueries({ queryKey: ["teams"] });
-    queryClient.invalidateQueries({ queryKey: ["tokens"] });
-    queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-    queryClient.invalidateQueries({ queryKey: ["tools"] });
+  const setChange = (userId: string, change: StagedMemberChange | null) => {
+    const next = new Map(changes);
+    if (change) {
+      next.set(userId, change);
+    } else {
+      next.delete(userId);
+    }
+    onChangesChange(next);
   };
 
-  const addMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const { error } = await archestraApiSdk.addTeamMember({
-        path: { id: team.id },
-        body: { userId, role: MEMBER_ROLE_NAME },
+  const stageAdd = (userId: string) => {
+    if (teamMembers.some((member) => member.userId === userId)) {
+      // Re-adding an existing member just cancels a staged removal.
+      setChange(userId, null);
+    } else {
+      const user = userOptions.find((option) => option.userId === userId);
+      setChange(userId, {
+        type: "add",
+        role: MEMBER_ROLE_NAME,
+        name: user?.name ?? undefined,
+        email: user?.email ?? undefined,
       });
-      if (error) throw new Error(error.error.message);
-    },
-    onSuccess: () => {
-      invalidateMembers();
-      setMemberSearch("");
-      toast.success("Member added to team");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to add member");
-    },
-  });
+    }
+    setMemberSearch("");
+  };
 
-  const updateRoleMutation = useMutation({
-    mutationFn: async (params: { userId: string; role: TeamMemberRole }) => {
-      const { error } = await archestraApiSdk.updateTeamMember({
-        path: { id: team.id, userId: params.userId },
-        body: { role: params.role },
-      });
-      if (error) throw new Error(error.error.message);
-    },
-    onSuccess: () => {
-      invalidateMembers();
-      toast.success("Member role updated");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to update member role");
-    },
-  });
+  const stageRemove = (userId: string) => {
+    if (changes.get(userId)?.type === "add") {
+      setChange(userId, null);
+    } else {
+      setChange(userId, { type: "remove" });
+    }
+  };
 
-  const removeMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const { error } = await archestraApiSdk.removeTeamMember({
-        path: { id: team.id, userId },
-      });
-      if (error) throw new Error(error.error.message);
-    },
-    onSuccess: () => {
-      invalidateMembers();
-      toast.success("Member removed from team");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to remove member");
-    },
-  });
+  const stageRole = (userId: string, role: TeamMemberRole) => {
+    const change = changes.get(userId);
+    if (change?.type === "add") {
+      setChange(userId, { ...change, role });
+      return;
+    }
+    const original = teamMembers.find(
+      (member) => member.userId === userId,
+    )?.role;
+    setChange(userId, original === role ? null : { type: "role", role });
+  };
+
+  // Server members with staged removals hidden and staged role changes
+  // applied, followed by staged additions.
+  const memberRows = [
+    ...teamMembers
+      .filter((member) => changes.get(member.userId)?.type !== "remove")
+      .map((member) => {
+        const change = changes.get(member.userId);
+        const orgMember = orgMembers.find(
+          (candidate) => candidate.userId === member.userId,
+        );
+        return {
+          userId: member.userId,
+          displayName:
+            member.name ||
+            orgMember?.user.name ||
+            member.email ||
+            orgMember?.user.email ||
+            member.userId,
+          displayEmail: member.email || orgMember?.user.email || member.userId,
+          role: change?.type === "role" ? change.role : member.role,
+          pending: !!change,
+        };
+      }),
+    ...[...changes.entries()]
+      .filter(
+        (
+          entry,
+        ): entry is [string, Extract<StagedMemberChange, { type: "add" }>] =>
+          entry[1].type === "add",
+      )
+      .map(([userId, change]) => ({
+        userId,
+        displayName: change.name || change.email || userId,
+        displayEmail: change.email || userId,
+        role: change.role as string,
+        pending: true,
+      })),
+  ];
+
+  const listedUserIds = new Set(memberRows.map((row) => row.userId));
+  const canAddAnyMember = userOptions.some(
+    (user) => !listedUserIds.has(user.userId),
+  );
+  const hasStagedChanges = changes.size > 0;
 
   return (
     <div className="space-y-6">
@@ -486,9 +599,9 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
         <Label>Add User</Label>
         <UserSearchableSelect
           value=""
-          onValueChange={(userId) => addMutation.mutate(userId)}
+          onValueChange={stageAdd}
           users={userOptions}
-          disabledUserIds={memberUserIds}
+          disabledUserIds={listedUserIds}
           placeholder={
             canAddAnyMember ? "Select a user" : "All listed users already added"
           }
@@ -505,8 +618,8 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
       </div>
 
       <div className="space-y-2">
-        <Label>Current Members ({teamMembers.length})</Label>
-        {teamMembers.length === 0 ? (
+        <Label>Current Members ({memberRows.length})</Label>
+        {memberRows.length === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-center">
             <p className="text-sm text-muted-foreground">
               No members in this team yet
@@ -514,63 +627,57 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
           </div>
         ) : (
           <div className="space-y-2">
-            {teamMembers.map((member: TeamMember) => {
-              const orgMember = orgMembers.find(
-                (orgMember) => orgMember.userId === member.userId,
-              );
-              const displayName =
-                member.name ||
-                orgMember?.user.name ||
-                member.email ||
-                orgMember?.user.email ||
-                member.userId;
-              const displayEmail =
-                member.email || orgMember?.user.email || member.userId;
-              return (
-                <div
-                  key={member.id}
-                  className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
-                >
-                  <div className="min-w-0">
+            {memberRows.map((row) => (
+              <div
+                key={row.userId}
+                className="grid grid-cols-[minmax(0,1fr)_180px_40px] items-center gap-3 rounded-lg border p-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium">
-                      {displayName}
+                      {row.displayName}
                     </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {displayEmail}
-                    </p>
+                    {row.pending && (
+                      <Badge variant="outline" className="shrink-0 text-xs">
+                        pending
+                      </Badge>
+                    )}
                   </div>
-                  <Select
-                    value={member.role}
-                    onValueChange={(role: TeamMemberRole) =>
-                      updateRoleMutation.mutate({
-                        userId: member.userId,
-                        role,
-                      })
-                    }
-                    disabled={updateRoleMutation.isPending}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
-                      <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeMutation.mutate(member.userId)}
-                    disabled={removeMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                    <span className="sr-only">Remove member</span>
-                  </Button>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.displayEmail}
+                  </p>
                 </div>
-              );
-            })}
+                <Select
+                  value={row.role}
+                  onValueChange={(role: TeamMemberRole) =>
+                    stageRole(row.userId, role)
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ADMIN_ROLE_NAME}>Admin</SelectItem>
+                    <SelectItem value={MEMBER_ROLE_NAME}>Member</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => stageRemove(row.userId)}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                  <span className="sr-only">Remove member</span>
+                </Button>
+              </div>
+            ))}
           </div>
+        )}
+        {hasStagedChanges && (
+          <p className="text-xs text-muted-foreground">
+            Member changes are applied when you save.
+          </p>
         )}
       </div>
     </div>

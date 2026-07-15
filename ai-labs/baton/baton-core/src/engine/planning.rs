@@ -82,8 +82,9 @@ struct ReduceState {
 /// visited-set keyed on anything order-insensitive would prune routes whose
 /// continuations differ — expansion is path-sensitive, so a state reached
 /// by `A,B` and by `B,A` admits different follow-up moves under the cycle
-/// check. Order-permuted routes that end in the same plan collapse later,
-/// at plan construction (see `canonicalize_steps`).
+/// check. Order-permuted routes stay distinct plans: only a plan's head is
+/// executable and every application rechecks, so the step order is part of
+/// the prediction, never a presentation detail to normalize away.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct StateKey {
     labels: Vec<(ValueId, ValueLabel)>,
@@ -177,15 +178,20 @@ impl PolicyEngine {
         }
         candidates.extend(self.rescue_candidates(base, ctx));
 
-        // Structural dedup: the same remedy multiset (ignoring the violation
-        // vectors shown to authorities) generated twice — including by
-        // order-permuted routes — keeps its first, fewest-reduce-steps
-        // occurrence.
+        // Structural dedup: exactly the same ordered remedy sequence
+        // (ignoring the violation vectors shown to authorities) generated
+        // twice keeps its first occurrence. Equal-multiset, different-order
+        // plans are deliberately NOT collapsed: their asks are equal, but
+        // the executable head and the recheck sequence differ — the
+        // head-only contract makes order observable, so both orderings are
+        // distinct predictions in the frontier (mutually non-dominating:
+        // same group, equal ask vectors). Execution converges regardless,
+        // because every applied head re-plans.
         let mut deduped: Vec<Candidate> = Vec::new();
         for candidate in candidates {
             if !deduped
                 .iter()
-                .any(|kept| kept.group == candidate.group && same_step_multiset(&kept.steps, &candidate.steps))
+                .any(|kept| kept.group == candidate.group && same_step_sequence(&kept.steps, &candidate.steps))
             {
                 deduped.push(candidate);
             }
@@ -241,11 +247,11 @@ impl PolicyEngine {
     /// over registered contracts) and the walk terminates because finitely
     /// many simple paths exist. Every simple path is explored — the
     /// exponential worst case is the accepted price of a complete frontier,
-    /// exactly like the rescue subset sweep. Order-permuted routes that
-    /// assemble the same plan collapse at emission via `canonicalize_steps`,
-    /// never during the walk (a global order-insensitive visited-set would
-    /// wrongly prune continuations that are cyclic on one ordering's path
-    /// but simple on another's).
+    /// exactly like the rescue subset sweep. No global visited-set, no step
+    /// reordering: an order-insensitive prune would drop continuations that
+    /// are cyclic on one ordering's path but simple on another's, and a
+    /// reorder would fabricate a step sequence the walk never verified —
+    /// each emitted route keeps its discovered order verbatim.
     fn reduce_states(
         &self,
         base: &SimFlow,
@@ -308,7 +314,12 @@ impl PolicyEngine {
                     queue.push_back(next);
                 }
             }
-            Self::canonicalize_steps(&mut state);
+            // The dominance-group identity is order-insensitive by design
+            // (per-leaf derivation chains + final tool): stable-sort the
+            // route's derive pairs by leaf so interleavings land in one
+            // group, where equal ask vectors keep both orderings in the
+            // frontier. The steps themselves are never reordered.
+            state.derives.sort_by_key(|(leaf, _)| *leaf);
             states.push(state);
         }
         states
@@ -323,51 +334,6 @@ impl PolicyEngine {
         }
         next.path.insert(key);
         true
-    }
-
-    /// Canonicalize an emitted route's step order so order-permuted routes
-    /// assemble byte-identical plans and collapse in the structural dedup:
-    /// within each maximal run of consecutive derive steps, stable-sort by
-    /// source leaf. Derives on distinct leaves commute (each touches only
-    /// its own leaf's label under an unchanged recipient set); same-leaf
-    /// chains keep their relative order (stable sort), and nothing is moved
-    /// across a narrow step (a narrow changes the recipient set and the
-    /// gate, so it does not commute). The route's derive list is rebuilt in
-    /// the same order for the dominance-group identity.
-    fn canonicalize_steps(state: &mut ReduceState) {
-        let steps = &mut state.steps;
-        let mut start = 0;
-        while start < steps.len() {
-            let is_derive =
-                |step: &PlannedRemedy| matches!(step, PlannedRemedy::Reduce(ReductionTarget::DeriveValue { .. }));
-            if !is_derive(&steps[start]) {
-                start += 1;
-                continue;
-            }
-            let mut end = start;
-            while end < steps.len() && is_derive(&steps[end]) {
-                end += 1;
-            }
-            steps[start..end].sort_by_key(|step| match step {
-                PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, .. }) => *source,
-                _ => unreachable!("run contains only derive steps"),
-            });
-            start = end;
-        }
-        // The dominance-group identity is the per-leaf derivation chains
-        // plus the final tool: stable-sort the route's derive pairs by leaf
-        // so any interleaving with narrows (which cannot reorder a leaf's
-        // own chain) yields one group.
-        state.derives = steps
-            .iter()
-            .filter_map(|step| match step {
-                PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, transformer }) => {
-                    Some((*source, transformer.clone()))
-                }
-                _ => None,
-            })
-            .collect();
-        state.derives.sort_by_key(|(leaf, _)| *leaf);
     }
 
     /// The simulation-level narrowing gate, mirroring the applier's
@@ -901,17 +867,10 @@ impl Iterator for Combinations {
 /// order, ignoring the violation vectors shown to authorities (`targets`) —
 /// prediction metadata that differs by generation path, not by what the plan
 /// asks or does. Routes are a deterministic function of the authorization, so
-/// they never differ between shape-identical steps.
-/// Order-insensitive plan identity: the same step multiset (ignoring the
-/// violation vectors shown to authorities) is the same prediction —
-/// identical derived values, identical narrowed action, identical
-/// authorization asks — assembled by order-permuted routes the
-/// path-complete walk explores separately. `canonicalize_steps` collapses
-/// permutations within one derive run; this catches permutations across a
-/// narrow, where run-local sorting cannot reach. Both compared plans were
-/// verified unlocking verbatim, so keeping the first (breadth-first,
-/// fewest-hops) order loses nothing.
-fn same_step_multiset(a: &NonEmptyVec<PlannedRemedy>, b: &NonEmptyVec<PlannedRemedy>) -> bool {
+/// they never differ between shape-identical steps. Deliberately
+/// order-sensitive: a permuted sequence is a different prediction (different
+/// executable head, different recheck sequence) and stays in the frontier.
+fn same_step_sequence(a: &NonEmptyVec<PlannedRemedy>, b: &NonEmptyVec<PlannedRemedy>) -> bool {
     fn step_eq(x: &PlannedRemedy, y: &PlannedRemedy) -> bool {
         match (x, y) {
             (PlannedRemedy::Reduce(t1), PlannedRemedy::Reduce(t2)) => t1 == t2,
@@ -922,17 +881,7 @@ fn same_step_multiset(a: &NonEmptyVec<PlannedRemedy>, b: &NonEmptyVec<PlannedRem
             _ => false,
         }
     }
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut unmatched: Vec<&PlannedRemedy> = b.iter().collect();
-    a.iter().all(|x| match unmatched.iter().position(|y| step_eq(x, y)) {
-        Some(i) => {
-            unmatched.swap_remove(i);
-            true
-        }
-        None => false,
-    })
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| step_eq(x, y))
 }
 
 /// The total authorization a plan asks for, folded into one comparable

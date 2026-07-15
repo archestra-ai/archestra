@@ -6,8 +6,10 @@
 //! *consumer* policy — **the first plan in the frontier's deterministic
 //! serialization (fewest steps first, then generation order), one head step
 //! at a time** — never a core-semantics choice: the frontier retains every
-//! nondominated alternative, and callers wanting a different selection
-//! (least-authority, a particular route) keep driving
+//! nondominated alternative the search generates (complete over the
+//! reduce/authorize space; rescue contributes the smallest successful
+//! release cardinality — see `minimal_joint_releases`), and callers wanting
+//! a different selection (least-authority, a particular route) keep driving
 //! [`PolicyEngine::mint_step`] / [`PolicyEngine::apply_step`] themselves.
 //!
 //! Two-phase dispatch is untouched: an allowed tool pursuit hands back the

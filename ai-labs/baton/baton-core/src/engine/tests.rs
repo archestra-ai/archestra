@@ -2637,13 +2637,52 @@ fn two_tainted_leaves_each_get_their_own_transform() {
     );
 
     let plans = remediable(&engine, &mut trajectory, request.clone());
-    // Exactly one plan: the path-complete walk explores both leaf orders,
-    // and canonicalization collapses the permutations into one prediction.
-    assert_eq!(plans.len(), 1);
-    let sources: Vec<ValueId> = plans.first().steps.iter().filter_map(derive_step).collect();
-    assert_eq!(sources, vec![notes, draft]);
+    // Both leaf orders are explored and kept: only a plan's head is
+    // executable and every application rechecks, so step order is part of
+    // the prediction — the two permutations are distinct frontier plans.
+    let orders: Vec<Vec<ValueId>> = plans
+        .iter()
+        .map(|plan| plan.steps.iter().filter_map(derive_step).collect())
+        .collect();
+    assert_eq!(plans.len(), 2);
+    assert!(orders.contains(&vec![notes, draft]));
+    assert!(orders.contains(&vec![draft, notes]));
 
-    let token = walk_to_permit(&engine, &mut trajectory, request);
+    // The first serialized ordering walks to a permit through pursue…
+    let token = walk_to_permit(&engine, &mut trajectory, request.clone());
+    dispatch(&mut trajectory, token, "saved").unwrap();
+
+    // …and the draft-first ordering walks too, driven head by head.
+    let mut trajectory = Trajectory::new();
+    let notes = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "notes");
+    let draft = ingress(&mut trajectory, &["alice"], Trust::SUSPICIOUS, "draft");
+    let retry = ToolRequest::new(
+        ToolName::new("report.save"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("notes"), ArgumentTree::Value(notes)),
+            (ArgumentName::new("draft"), ArgumentTree::Value(draft)),
+        ])),
+        BTreeSet::new(),
+    );
+    let mut plans = remediable(&engine, &mut trajectory, retry);
+    let mut first_sources = Vec::new();
+    let token = loop {
+        let plan = plans
+            .iter()
+            .find(|plan| {
+                let sources: Vec<ValueId> = plan.steps.iter().filter_map(derive_step).collect();
+                first_sources.is_empty() && sources == vec![draft, notes]
+                    || !first_sources.is_empty() && sources == vec![notes]
+            })
+            .expect("the draft-first ordering stays walkable");
+        first_sources.push(derive_step(plan.steps.first()).expect("a derive head"));
+        match apply_first_step(&engine, &mut trajectory, plan.id) {
+            StepOutcome::Advanced(FlowOutcome::AllowedNow(FlowPermit::Execute(token))) => break token,
+            StepOutcome::Advanced(FlowOutcome::Remediable { plans: next, .. }) => plans = next,
+            other => panic!("unexpected outcome: {other:?}"),
+        }
+    };
+    assert_eq!(first_sources, vec![draft, notes]);
     dispatch(&mut trajectory, token, "saved").unwrap();
 }
 
@@ -2720,27 +2759,63 @@ fn order_sensitive_derivation_chains_are_not_pruned() {
     );
 
     let plans = remediable(&engine, &mut trajectory, request);
-    let chains: Vec<Vec<(ValueId, &str)>> = plans
-        .iter()
-        .map(|plan| {
-            plan.steps
-                .iter()
-                .filter_map(|step| match step {
-                    PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, transformer }) => {
-                        Some((*source, transformer.id.as_str()))
-                    }
-                    _ => None,
-                })
-                .collect()
-        })
-        .collect();
+    let chain_of = |plan: &crate::plan::RemedyPlan| -> Vec<(ValueId, String)> {
+        plan.steps
+            .iter()
+            .filter_map(|step| match step {
+                PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, transformer }) => {
+                    Some((*source, transformer.id.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let chains: Vec<Vec<(ValueId, String)>> = plans.iter().map(chain_of).collect();
     // The direct plan (redact the suspicious leaf) is present…
-    assert!(chains.contains(&vec![(notes, "pii.redact")]));
-    // …and so is the order-sensitive taint-then-restore derivation of the
-    // draft, exactly once (canonical order: notes first, draft chain in
-    // application order).
-    let detour = vec![(notes, "pii.redact"), (draft, "draft.taint"), (draft, "draft.restore")];
+    assert!(chains.contains(&vec![(notes, "pii.redact".to_owned())]));
+    // …and so is the detour, in its DISCOVERED order, exactly once: taint
+    // must lead (redact-first is cycle-pruned on its own path — restore
+    // would revisit it; taint→restore first is pruned as a return to the
+    // base state), and the plan keeps that verified order verbatim.
+    let detour = vec![
+        (draft, "draft.taint".to_owned()),
+        (notes, "pii.redact".to_owned()),
+        (draft, "draft.restore".to_owned()),
+    ];
     assert_eq!(chains.iter().filter(|chain| **chain == detour).count(), 1);
+
+    // Walk the detour head by head: the real sequence is exercised, and no
+    // intermediate recheck permits before the restore step lands. The
+    // remainder is matched by transformer sequence — each applied derive
+    // mints a new value, so source ids shift as the walk substitutes them
+    // (the exact sources were pinned on the initial frontier above).
+    let mut plans = plans;
+    let mut remaining: Vec<String> = detour.iter().map(|(_, transformer)| transformer.clone()).collect();
+    let token = loop {
+        let plan = plans
+            .iter()
+            .find(|plan| {
+                chain_of(plan)
+                    .iter()
+                    .map(|(_, transformer)| transformer.clone())
+                    .collect::<Vec<_>>()
+                    == remaining
+            })
+            .expect("the detour's remainder stays predicted after each recheck");
+        remaining.remove(0);
+        match apply_first_step(&engine, &mut trajectory, plan.id) {
+            StepOutcome::Advanced(FlowOutcome::AllowedNow(FlowPermit::Execute(token))) => {
+                assert!(remaining.is_empty(), "permitted before the restore step");
+                break token;
+            }
+            StepOutcome::Advanced(FlowOutcome::Remediable { plans: next, .. }) => {
+                assert!(!remaining.is_empty(), "still blocked after the final step");
+                plans = next;
+            }
+            other => panic!("unexpected outcome: {other:?}"),
+        }
+    };
+    dispatch(&mut trajectory, token, "saved").unwrap();
 }
 
 /// Only a two-hop chain of registered narrowings (A→B→C) reaches a contract
@@ -2788,8 +2863,14 @@ fn transform_plus_two_hop_chain_composes() {
     );
 
     let plans = remediable(&engine, &mut trajectory, request.clone());
-    assert_eq!(plans.len(), 1);
-    let steps = &plans.first().steps;
+    // The derive interleaves at each position across the two fixed hops —
+    // three orderings, each a distinct head-only prediction in the frontier.
+    assert_eq!(plans.len(), 3);
+    let derive_first = plans
+        .iter()
+        .find(|plan| derive_step(plan.steps.first()).is_some())
+        .expect("the derive-first ordering is present");
+    let steps = &derive_first.steps;
     assert_eq!(steps.len(), 3);
     assert_eq!(derive_step(steps.first()), Some(payload));
     assert_eq!(narrow_step(steps.get(1).unwrap()), Some(&tref("to-readonly")));
@@ -3057,11 +3138,22 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
 
     let plans = remediable(&engine, &mut trajectory, request);
 
-    // The composite route is all four steps in canonical order, each
-    // authority signing off only the reduced residual.
-    let composite = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
-    let kinds: Vec<&str> = composite.steps.iter().map(step_label).collect();
-    assert_eq!(kinds, ["sanitize", "constrain", "endorse", "accept"]);
+    // The composite route is all four steps, each authority signing off
+    // only the reduced residual. The two reduce steps commute, so both
+    // orderings are distinct frontier plans; assert on the sanitize-first
+    // one.
+    let expected = ["sanitize", "constrain", "endorse", "accept"];
+    let composite = plans
+        .iter()
+        .find(|p| p.steps.iter().map(step_label).collect::<Vec<_>>() == expected)
+        .expect("the sanitize-first composite is present");
+    let permuted = ["constrain", "sanitize", "endorse", "accept"];
+    assert!(
+        plans
+            .iter()
+            .any(|p| p.steps.iter().map(step_label).collect::<Vec<_>>() == permuted),
+        "the commuting ordering is retained as its own prediction"
+    );
     // Endorse signs off only the audience — trust was reduced by Sanitize.
     let endorse = composite
         .steps
@@ -3074,11 +3166,17 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
     let accept = composite.steps.iter().find_map(acquire_step).expect("an accept step");
     assert_eq!(accept, Effects::declared([Effect::Egress]));
 
-    // Walk the most-composed route to a permit; all four steps run.
+    // Walk the sanitize-first composite to a permit; all four steps run in
+    // the plan's own order (pick the plan predicting the remaining suffix
+    // after each recheck).
     let mut applied: Vec<&str> = Vec::new();
     let mut plans = plans;
     let token = loop {
-        let plan = plans.iter().max_by_key(|p| p.steps.len()).expect("a plan");
+        let suffix = &expected[applied.len()..];
+        let plan = plans
+            .iter()
+            .find(|p| p.steps.iter().map(step_label).collect::<Vec<_>>() == suffix)
+            .expect("the composite's remainder stays predicted");
         applied.push(step_label(plan.steps.first()));
         match apply_first_step(&engine, &mut trajectory, plan.id) {
             StepOutcome::Advanced(FlowOutcome::AllowedNow(FlowPermit::Execute(token))) => break token,

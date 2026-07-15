@@ -116,9 +116,12 @@ impl PolicyEngine {
         };
         let pending = trajectory.pending_action().expect("pending action set above");
         let flow = pending.flow();
-        // The complete nondominated frontier: ordinary peels and the joint
-        // rescue solve share one candidate pool, so an empty return is a
-        // proven no-remedy claim over the registered capability space.
+        // The nondominated frontier: ordinary peels (complete over the
+        // reduce/authorize space) and the joint rescue solve (all
+        // incomparable releases of the smallest successful cardinality —
+        // see `minimal_joint_releases`) share one candidate pool, and an
+        // empty return is a proven no-remedy claim over the registered
+        // capability space (the rescue sweep is exhaustive on failure).
         let drafts = self.plan_frontier(trajectory, &checked_request, contract, pending);
         match NonEmptyVec::from_vec(trajectory.store_plans(flow, Some(action), self.id, drafts)) {
             Some(plans) => {

@@ -37,6 +37,7 @@ import {
 } from "@/secrets-manager";
 import { ApiError } from "@/types";
 import {
+  decodeJwtClaims,
   decodeOpenAiCodexCredential,
   encodeOpenAiCodexCredential,
   type OpenAiCodexCredential,
@@ -450,8 +451,17 @@ function appendKnownDigests(
   return merged.slice(-KNOWN_REFRESH_TOKEN_LIMIT);
 }
 
+// Per-process HMAC key for `knownRefreshTokenDigests`. Regenerated on every
+// module load, so cached lineage digests intentionally do not survive a restart
+// — after a restart the first refresh simply re-redeems and repopulates the
+// digest set. This mirrors the Microsoft/GitHub Copilot token managers.
 const LINEAGE_HMAC_KEY = randomBytes(32);
 
+// Digests a refresh token for `knownRefreshTokenDigests`. The digest is never
+// stored, persisted, or compared against anything outside this process, so a
+// slow password KDF (bcrypt/scrypt/argon2) would only add latency to the proxy
+// hot path. HMAC with a per-process key (rather than bare SHA-256) means an
+// observer of a heap dump can't confirm a guessed token offline.
 function hashToken(token: string): string {
   // codeql[js/insufficient-password-hash] HMACs a high-entropy OAuth refresh token for ephemeral lineage tracking, not password verification.
   return createHmac("sha256", LINEAGE_HMAC_KEY).update(token).digest("hex");
@@ -551,16 +561,6 @@ function accessTokenExpiryMs(
 }
 
 function jwtExpMs(jwt: string): number | undefined {
-  const parts = jwt.split(".");
-  if (parts.length < 2) {
-    return undefined;
-  }
-  try {
-    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = Buffer.from(padded, "base64").toString("utf8");
-    const parsed = JSON.parse(json) as { exp?: unknown };
-    return typeof parsed.exp === "number" ? parsed.exp * 1000 : undefined;
-  } catch {
-    return undefined;
-  }
+  const exp = decodeJwtClaims(jwt)?.exp;
+  return typeof exp === "number" ? exp * 1000 : undefined;
 }

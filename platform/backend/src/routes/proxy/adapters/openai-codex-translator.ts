@@ -19,6 +19,7 @@ import type {
   ResponseInput,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
+import logger from "@/logging";
 import { OPENAI_CODEX_INSTRUCTIONS } from "@/services/openai-codex-credentials";
 import { ApiError, type OpenAi } from "@/types";
 
@@ -113,7 +114,16 @@ export async function* codexResponsesStreamToChatChunks(params: {
     }
 
     if (event.type === "response.function_call_arguments.delta") {
-      const index = toolIndexByItemId.get(event.item_id) ?? 0;
+      const knownIndex = toolIndexByItemId.get(event.item_id);
+      if (knownIndex === undefined) {
+        // A delta for an item we never saw added would otherwise silently
+        // corrupt the first tool call's arguments. Surface it and fall back.
+        logger.warn(
+          { itemId: event.item_id },
+          "[OpenAiCodexTranslator] arguments delta for unknown tool-call item; defaulting to index 0",
+        );
+      }
+      const index = knownIndex ?? 0;
       yield makeChunk({
         ...base,
         delta: {

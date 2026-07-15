@@ -25,6 +25,12 @@ const DEVICE_AUTH_POLL_RATE_LIMIT = {
   maxRequests: 30,
 };
 
+// OpenAI device-flow endpoints, resolved against `config.llm.openai.codex.issuer`.
+// Kept here so the OpenAI API surface this route talks to is discoverable in one
+// place (matching the first-party Codex CLI's codex-rs paths).
+const DEVICE_USERCODE_PATH = "/api/accounts/deviceauth/usercode";
+const DEVICE_TOKEN_PATH = "/api/accounts/deviceauth/token";
+
 /**
  * ChatGPT/Codex subscription OAuth **device flow**, proxied through the backend.
  *
@@ -69,31 +75,33 @@ const openaiCodexAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // The device endpoint takes ONLY the client id — matching the first-party
       // Codex CLI (codex-rs `UserCodeReq { client_id }`). Sending extra fields
       // such as `scope` is not part of the contract.
-      const response = await fetch(
-        `${issuer}/api/accounts/deviceauth/usercode`,
-        {
-          method: "POST",
-          headers: {
-            accept: "application/json",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ client_id: clientId }),
+      const response = await fetch(`${issuer}${DEVICE_USERCODE_PATH}`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
         },
-      );
+        body: JSON.stringify({ client_id: clientId }),
+      });
       if (!response.ok) {
         const body = await response.text();
-        logger.error(
-          { status: response.status, ...oauthErrorLogFields(body) },
-          "[OpenAiCodexAuth] device code request failed",
-        );
         // OpenAI returns 404 when device-code login is disabled for the account.
-        // It is off by default, so tell the user how to turn it on.
+        // It is off by default, so this is a user-configuration issue (log at
+        // warn, not error) — tell the user how to turn it on.
         if (response.status === 404) {
+          logger.warn(
+            { status: response.status, ...oauthErrorLogFields(body) },
+            "[OpenAiCodexAuth] device code login is disabled for the account",
+          );
           throw new ApiError(
             400,
             'Device code sign-in is turned off for this ChatGPT account. Turn it on in ChatGPT → Settings → Security → "Allow device code login", then try again.',
           );
         }
+        logger.error(
+          { status: response.status, ...oauthErrorLogFields(body) },
+          "[OpenAiCodexAuth] device code request failed",
+        );
         throw new ApiError(
           502,
           "ChatGPT did not accept the device code request",
@@ -183,7 +191,7 @@ const openaiCodexAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { issuer } = config.llm.openai.codex;
       // Poll body is exactly { device_auth_id, user_code } — matching codex-rs
       // `TokenPollReq`. The client id is NOT part of the poll contract.
-      const response = await fetch(`${issuer}/api/accounts/deviceauth/token`, {
+      const response = await fetch(`${issuer}${DEVICE_TOKEN_PATH}`, {
         method: "POST",
         headers: {
           accept: "application/json",
@@ -230,7 +238,9 @@ const openaiCodexAuthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "The ChatGPT sign-in expired before it was authorized — start again",
           );
         }
-        logger.error(
+        // Remaining poll errors (e.g. access_denied) are user-triggered outcomes
+        // of the device flow, not backend faults — log at warn, not error.
+        logger.warn(
           { status: response.status, error: payload.error },
           "[OpenAiCodexAuth] device token poll returned an error",
         );

@@ -82,6 +82,13 @@ export function perUserCredentialLabel(params: {
 export function encodeOpenAiCodexCredential(
   credential: OpenAiCodexCredential,
 ): string {
+  // Fail loudly at encode time rather than minting a valid-looking string that
+  // only breaks later at request time (decode rejects the same empty values).
+  if (!credential.refreshToken || !credential.accountId) {
+    throw new Error(
+      "Cannot encode ChatGPT credential with empty refreshToken or accountId",
+    );
+  }
   const json = JSON.stringify(credential);
   const b64 = Buffer.from(json, "utf8").toString("base64");
   return `${OPENAI_CODEX_CREDENTIAL_MARKER}${b64}`;
@@ -165,9 +172,15 @@ export const OPENAI_CODEX_INSTRUCTIONS =
   "developer's instructions, use the provided tools when helpful, and be " +
   "concise and correct.";
 
-// ===== Internal helpers =====
-
-function decodeJwtClaims(jwt: string): Record<string, unknown> | undefined {
+/**
+ * Decodes (without verifying) the payload claims of a JWT. Shared by the token
+ * manager's expiry read and the account-id extraction here so the base64url
+ * normalization lives in one place. Signature verification is unnecessary: these
+ * tokens are obtained over TLS directly from the OpenAI token endpoint.
+ */
+export function decodeJwtClaims(
+  jwt: string,
+): Record<string, unknown> | undefined {
   const parts = jwt.split(".");
   if (parts.length < 2) {
     return undefined;
@@ -182,6 +195,8 @@ function decodeJwtClaims(jwt: string): Record<string, unknown> | undefined {
     return undefined;
   }
 }
+
+// ===== Internal helpers =====
 
 function base64UrlToBase64(value: string): string {
   const replaced = value.replace(/-/g, "+").replace(/_/g, "/");

@@ -31,6 +31,10 @@ pub(crate) const RESPONSE_SINK: &str = "assistant.response";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ToolContract {
     pub name: ToolName,
+    /// What the trajectory must satisfy before this tool runs. `None` means
+    /// the requirements were never stated — every call escalates as
+    /// [`crate::contract::Unprovable::RequirementsUnknown`], fail closed;
+    /// `Some(Requirements::default())` means considered, nothing required.
     pub requires: Option<Requirements>,
     pub output_label: ValueLabel,
     /// Effects one dispatch of this tool proposes; committed to the monotone

@@ -78,14 +78,11 @@ requires = { trust = "trusted" }
 name = "http_post"
 output   = { trust = "trusted", audience = ["operator", "sre-team"] }
 requires = { audience = "public" }
+
+[[contracts.authority]]
+name = "default-allow"
+rule = "allow"
+acknowledge_unknown = true
 ```
 
-Logs are third-party text, so their contract marks them suspicious. The delete requires a trusted flow — once the agent reads the logs, the injected delete is blocked. `http_post` is a public sink, and this conversation is team-private, so the injected "report to the vendor" call is blocked too. The demo in `demo/kagent` runs this scenario end to end.
-
-<!--
-Flagged ambiguities:
-- Voice and structure follow the tone rules given for docs/kagent.md; confirm they apply to this page.
-- The use-case scenario is reused from the kagent demo (tone rule 14 says the scenario comes from you).
-- This page documents the baton-contracts format only. baton-demo's gateway dialect (authorities, plural recipients_args) is deliberately excluded — flag if it should be mentioned.
-- Field tables are denser than the platform docs voice usually allows; kept because this is the format's reference page.
--->
+Logs are third-party text, so their contract marks them suspicious. The delete requires a trusted flow — once the agent reads the logs, the injected delete is blocked. `http_post` is a public sink, and this conversation is team-private, so the injected "report to the vendor" call is blocked too. The logs read has no `requires`, so `default-allow` acknowledges it on the record — remove the authority and every read fails closed. The demo in `demo/kagent` runs this scenario end to end.

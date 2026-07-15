@@ -152,10 +152,10 @@ impl<'a> Session<'a> {
                                 reason: format!("{}: {}", block.reason, describe(&block.violations)),
                             });
                         }
-                        Pursuit::Stalled { violations, .. } => {
+                        Pursuit::Stalled { violations, cause } => {
                             return Err(ReplayError::ReplayBlocked {
                                 tool,
-                                reason: format!("remedy stalled during replay: {}", describe(&violations)),
+                                reason: format!("remedy stalled during replay ({cause:?}): {}", describe(&violations)),
                             });
                         }
                         Pursuit::NeedsApproval(_) => {
@@ -211,8 +211,11 @@ impl<'a> Session<'a> {
                     describe(&block.violations)
                 ),
             },
-            Pursuit::Stalled { violations, .. } => CallOutcome::Terminal {
-                reason: format!("`{tool}` was blocked (remedy stalled): {}", describe(&violations)),
+            Pursuit::Stalled { violations, cause } => CallOutcome::Terminal {
+                reason: format!(
+                    "`{tool}` was blocked (remedy stalled: {cause:?}): {}",
+                    describe(&violations)
+                ),
             },
             Pursuit::NeedsApproval(_) => CallOutcome::Terminal {
                 reason: format!("`{tool}` requires external approval but no approval channel exists"),

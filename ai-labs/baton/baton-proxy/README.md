@@ -12,11 +12,12 @@ call that fails its contract is replaced with a short stop explanation on the
 normal text channel, so the model sees why and takes a different approach. A
 blocked call is never returned to the harness and never executed.
 
-No authorities are registered, so a flow the contracts cannot prove is blocked,
-fail closed. (The earlier human-approval variant — where a blocked call became
-a request to a human over MCP — is in PR #6551 on `main`; it predates the
-current value-granular baton-core and will return as a port to External
-authorities.)
+Unprovable flows fail closed unless the policy declares an authority competent
+to acknowledge them (see the Policy section) — anything an authority cannot
+clear stays blocked. (The earlier human-approval variant — where a blocked
+call became a request to a human over MCP — is in PR #6551 on `main`; it
+predates the current value-granular baton-core and will return as a port to
+External authorities.)
 
 ## Policy
 

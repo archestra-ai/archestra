@@ -21,11 +21,11 @@ fn user(id: &str) -> UserId {
 fn email_contract() -> ToolContract {
     ToolContract {
         name: ToolName::new("email.send"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress]),
         arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
@@ -432,10 +432,10 @@ fn re_entry_reuses_the_pending_action() {
 fn committed_effects_feed_later_checks() {
     let mut report = email_contract();
     report.name = ToolName::new("report.generate");
-    report.requires = Requirements {
+    report.requires = Some(Requirements {
         forbid_prior_effects: BTreeSet::from([Effect::Egress]),
         ..Requirements::default()
-    };
+    });
     report.effects = Effects::none();
     report.arguments = ArgumentSchema::opaque();
 
@@ -784,10 +784,10 @@ fn foreign_receipt_is_rejected() {
 fn spent_confirmation_cannot_authorize_a_second_attempt() {
     let drop_contract = ToolContract {
         name: ToolName::new("db.drop"),
-        requires: Requirements {
+        requires: Some(Requirements {
             attention: crate::contract::AttentionRule::ExplicitConfirmation,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Mutation]),
         arguments: ArgumentSchema::opaque(),
@@ -1565,11 +1565,11 @@ fn control_release_is_least_privilege_over_joint_carriers() {
 fn control_release_fixpoint_avoids_masked_over_release() {
     let sink = ToolContract {
         name: ToolName::new("email.send"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Suspicious),
             audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::none(),
         arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
@@ -1628,10 +1628,10 @@ fn control_release_fixpoint_avoids_masked_over_release() {
 fn constrain_plan_maps_to_narrower_tool() {
     let fetch = ToolContract {
         name: ToolName::new("web.fetch"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel {
             audience: Audience::PUBLIC,
             trust: Trust::SUSPICIOUS,
@@ -1641,7 +1641,7 @@ fn constrain_plan_maps_to_narrower_tool() {
     };
     let cached = ToolContract {
         name: ToolName::new("web.fetch.cached"),
-        requires: Requirements::default(),
+        requires: Some(Requirements::default()),
         output_label: ValueLabel {
             audience: Audience::PUBLIC,
             trust: Trust::SUSPICIOUS,
@@ -1912,7 +1912,7 @@ fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
     engine
         .register(ToolContract {
             name: ToolName::new("fetch"),
-            requires: Requirements::default(),
+            requires: Some(Requirements::default()),
             output_label: ValueLabel::unknown(),
             effects: Effects::UNKNOWN,
             arguments: ArgumentSchema::opaque(),
@@ -1922,12 +1922,12 @@ fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
     engine
         .register(ToolContract {
             name: ToolName::new("email.send"),
-            requires: Requirements {
+            requires: Some(Requirements {
                 trust: Some(KnownTrust::Trusted),
                 audience: crate::contract::AudienceRule::FromRecipients,
                 forbid_prior_effects: BTreeSet::from([Effect::Egress]),
                 ..Requirements::default()
-            },
+            }),
             output_label: ValueLabel::identity(),
             effects: Effects::declared([Effect::Egress]),
             arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
@@ -1975,7 +1975,7 @@ fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
 fn egress_tool() -> ToolContract {
     ToolContract {
         name: ToolName::new("net.ping"),
-        requires: Requirements::default(),
+        requires: Some(Requirements::default()),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress]),
         arguments: ArgumentSchema::opaque(),
@@ -2357,24 +2357,24 @@ fn cap_fairness_keeps_one_route_per_category() {
 fn constrain_then_accept_covers_only_the_residual_growth() {
     let export = ToolContract {
         name: ToolName::new("db.export"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress, Effect::Mutation]),
         arguments: ArgumentSchema::opaque(),
     };
     let readonly = ToolContract {
         name: ToolName::new("db.export.readonly"),
-        requires: Requirements::default(),
+        requires: Some(Requirements::default()),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress]),
         arguments: ArgumentSchema::opaque(),
     };
     let noop = ToolContract {
         name: ToolName::new("db.export.noop"),
-        requires: Requirements::default(),
+        requires: Some(Requirements::default()),
         output_label: ValueLabel::identity(),
         effects: Effects::none(),
         arguments: ArgumentSchema::opaque(),
@@ -2497,11 +2497,11 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
     }
     let dispatch_tool = ToolContract {
         name: ToolName::new("dispatch"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress, Effect::Mutation]),
         arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
@@ -2643,10 +2643,10 @@ fn cap_fairness_is_a_noop_within_the_cap() {
 fn cap_fairness_rescues_a_late_category_end_to_end() {
     let sink = ToolContract {
         name: ToolName::new("sink"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::none(),
         arguments: ArgumentSchema::opaque(),
@@ -2656,7 +2656,7 @@ fn cap_fairness_rescues_a_late_category_end_to_end() {
     for i in 0..variants {
         contracts.push(ToolContract {
             name: ToolName::new(format!("sink.v{i}")),
-            requires: Requirements::default(),
+            requires: Some(Requirements::default()),
             output_label: ValueLabel::identity(),
             effects: Effects::none(),
             arguments: ArgumentSchema::opaque(),
@@ -3072,11 +3072,11 @@ fn multi_step_composition_transform_then_waiver() {
 fn confirmation_survives_remedy_steps() {
     let drop_contract = ToolContract {
         name: ToolName::new("db.drop"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             attention: crate::contract::AttentionRule::ExplicitConfirmation,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Mutation]),
         arguments: ArgumentSchema::opaque(),
@@ -3178,10 +3178,10 @@ fn capabilities_are_bound_to_their_engine() {
 fn constrain_with_mismatched_target_effects_is_not_planned() {
     let fetch = ToolContract {
         name: ToolName::new("web.fetch"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress]),
         arguments: ArgumentSchema::opaque(),
@@ -3190,7 +3190,7 @@ fn constrain_with_mismatched_target_effects_is_not_planned() {
     // effects. The narrowing claim and reality disagree.
     let cached = ToolContract {
         name: ToolName::new("web.fetch.cached"),
-        requires: Requirements::default(),
+        requires: Some(Requirements::default()),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Mutation]),
         arguments: ArgumentSchema::opaque(),
@@ -3223,27 +3223,27 @@ fn constrain_with_mismatched_target_effects_is_not_planned() {
 fn constrained_effects_survive_to_release_and_later_sinks() {
     let fetch = ToolContract {
         name: ToolName::new("web.fetch"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Trusted),
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress]),
         arguments: ArgumentSchema::opaque(),
     };
     let cached = ToolContract {
         name: ToolName::new("web.fetch.cached"),
-        requires: Requirements::default(),
+        requires: Some(Requirements::default()),
         output_label: ValueLabel::identity(),
         effects: Effects::none(),
         arguments: ArgumentSchema::opaque(),
     };
     let report = ToolContract {
         name: ToolName::new("report.generate"),
-        requires: Requirements {
+        requires: Some(Requirements {
             forbid_prior_effects: BTreeSet::from([Effect::Egress]),
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::none(),
         arguments: ArgumentSchema::opaque(),
@@ -3679,11 +3679,11 @@ fn a_response_checks_committed_past_effects() {
 fn masked_contract() -> ToolContract {
     ToolContract {
         name: ToolName::new("post.publish"),
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Suspicious),
             audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
-        },
+        }),
         output_label: ValueLabel::identity(),
         effects: Effects::declared([Effect::Egress]),
         arguments: ArgumentSchema::with_recipients(ArgumentName::new("to")),
@@ -3898,12 +3898,12 @@ fn rescue_composes_an_accept_for_projected_growth() {
 #[test]
 fn rescue_carries_acknowledge_only_facts() {
     let contract = ToolContract {
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: Some(KnownTrust::Suspicious),
             audience: crate::contract::AudienceRule::FromRecipients,
             forbid_prior_effects: BTreeSet::from([Effect::Egress]),
             ..Requirements::default()
-        },
+        }),
         ..masked_contract()
     };
 
@@ -4194,4 +4194,138 @@ fn rescue_endorse_targets_shrink_per_peel() {
 
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "published").unwrap();
+}
+
+// ---- Unknown requirements: fail closed as RequirementsUnknown ----
+
+/// A tool contract that never states its requirements (`requires: None`)
+/// escalates as the sole `RequirementsUnknown` fact, regardless of the
+/// calling flow's own label — an unstated policy is unprovable, not an
+/// implicit allow, so even a fully trusted, publicly readable flow escalates
+/// exactly like a suspicious, narrowly-bounded one.
+#[test]
+fn unknown_requirements_escalate_as_sole_unprovable() {
+    let mut engine = PolicyEngine::new();
+    engine
+        .register(ToolContract {
+            name: ToolName::new("mystery.tool"),
+            requires: None,
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        })
+        .unwrap();
+    // Unknown requirements escalate identically for a fully trusted public
+    // flow and a suspicious bounded one — the flow label is irrelevant.
+    for label in [
+        ValueLabel::identity(),
+        ValueLabel {
+            trust: Trust::SUSPICIOUS,
+            audience: Audience::readers([user("alice")]),
+        },
+    ] {
+        let mut trajectory = Trajectory::new();
+        let value = trajectory.ingress(Speaker::user(user("alice")), label, OpaqueValue::new("hi"));
+        let request = ToolRequest::new(
+            ToolName::new("mystery.tool"),
+            ArgumentTree::Value(value),
+            BTreeSet::new(),
+        );
+        // With no authority registered to acknowledge it, the acknowledge-only
+        // fact has no remedy at all — fail closed all the way to terminal.
+        let Decision::Blocked(Blocked::Terminal(block)) = engine.evaluate(&mut trajectory, request) else {
+            panic!("expected terminal block");
+        };
+        assert_eq!(
+            block.violations,
+            vec![Violation::Unprovable(Unprovable::RequirementsUnknown)]
+        );
+        assert_eq!(block.reason, BlockReason::NoRemedy);
+    }
+}
+
+/// An authority explicitly competent to acknowledge unknown facts can still
+/// clear the call — unknown requirements are acknowledge-only, not
+/// unconditionally terminal; they route through the same `acknowledge_unknown`
+/// competence as a missing contract.
+#[test]
+fn allow_authority_acknowledges_unknown_requirements() {
+    fn always_allow(
+        _grant: &crate::transition::ProposedGrant,
+        _violations: &[Violation],
+        _view: &TrajectoryView,
+    ) -> Option<Ruling> {
+        Some(Ruling::Approve {
+            reason: "policy allow".into(),
+        })
+    }
+    let mut engine = PolicyEngine::new();
+    engine
+        .register(ToolContract {
+            name: ToolName::new("mystery.tool"),
+            requires: None,
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        })
+        .unwrap();
+    engine
+        .register_authority(Authority::inline(
+            "default-allow",
+            crate::transition::AuthorityMandate::none().acknowledge_unknown(),
+            always_allow,
+        ))
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let value = trajectory.ingress(
+        Speaker::user(user("alice")),
+        ValueLabel::identity(),
+        OpaqueValue::new("hi"),
+    );
+    let request = ToolRequest::new(
+        ToolName::new("mystery.tool"),
+        ArgumentTree::Value(value),
+        BTreeSet::new(),
+    );
+    match engine.pursue(&mut trajectory, request, 8) {
+        Pursuit::Permitted(_token) => {}
+        other => panic!("expected permitted via acknowledgment, got {other:?}"),
+    }
+    // The audit trail names the authority and the acknowledged fact.
+    let acknowledged = trajectory.state().audit().iter().any(|e| {
+        matches!(
+            e,
+            AuditEvent::WaiverApplied { authority, .. } if authority.as_str() == "default-allow"
+        )
+    });
+    assert!(acknowledged, "expected a WaiverApplied audit event from default-allow");
+}
+
+/// A contract that considers its requirements and declares none (`Some(default)`)
+/// is unconditionally different from one that never states them (`None`): the
+/// former is a deliberate "nothing required" and stays ungated, no escalation
+/// at all.
+#[test]
+fn considered_empty_requirements_stay_ungated() {
+    let mut engine = PolicyEngine::new();
+    engine
+        .register(ToolContract {
+            name: ToolName::new("open.tool"),
+            requires: Some(Requirements::default()),
+            output_label: ValueLabel::identity(),
+            effects: Effects::none(),
+            arguments: ArgumentSchema::opaque(),
+        })
+        .unwrap();
+    let mut trajectory = Trajectory::new();
+    let value = trajectory.ingress(
+        Speaker::user(user("alice")),
+        ValueLabel::identity(),
+        OpaqueValue::new("hi"),
+    );
+    let request = ToolRequest::new(ToolName::new("open.tool"), ArgumentTree::Value(value), BTreeSet::new());
+    assert!(matches!(
+        engine.evaluate(&mut trajectory, request),
+        Decision::Permitted(_)
+    ));
 }

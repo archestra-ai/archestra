@@ -147,6 +147,9 @@ pub enum Unprovable {
     TrustUnknown,
     AudienceUnknown,
     EffectsUnknown,
+    /// The tool's contract declares no requirements at all — the policy
+    /// author never stated what this sink demands.
+    RequirementsUnknown,
     /// The tool has no registered contract at all.
     NoContract {
         tool: ToolName,
@@ -161,6 +164,9 @@ impl fmt::Display for Unprovable {
             }
             Self::AudienceUnknown => write!(f, "flow audience unknown, cannot bound recipients"),
             Self::EffectsUnknown => write!(f, "trajectory effects unknown"),
+            Self::RequirementsUnknown => {
+                write!(f, "tool requirements unknown, nothing can be proven about this call")
+            }
             Self::NoContract { tool } => write!(f, "tool `{tool}` has no contract"),
         }
     }
@@ -213,7 +219,9 @@ impl Violation {
             )
             | Self::Unprovable(Unprovable::TrustUnknown | Unprovable::AudienceUnknown) => Fixability::GrantFixable,
             Self::Breach(Breach::SurfaceGrowth { .. }) => Fixability::AcceptFixable,
-            Self::Unprovable(Unprovable::EffectsUnknown | Unprovable::NoContract { .. }) => Fixability::AcknowledgeOnly,
+            Self::Unprovable(
+                Unprovable::EffectsUnknown | Unprovable::NoContract { .. } | Unprovable::RequirementsUnknown,
+            ) => Fixability::AcknowledgeOnly,
         }
     }
 }

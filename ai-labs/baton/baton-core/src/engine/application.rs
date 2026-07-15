@@ -243,7 +243,7 @@ impl PolicyEngine {
                 // planner's simulation exactly.
                 let mut after = sim.clone();
                 after.tool = registered.to_tool.clone();
-                after.requires = target.requires.clone();
+                after.adopt_requires(&target.requires);
                 after.recipients = recipients;
                 // Mirror the planner: the constrain narrows the proposed effects,
                 // so the postcondition recheck must see the reduced surface too

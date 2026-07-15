@@ -55,12 +55,12 @@ impl World {
 fn random_contract(rng: &mut TinyRng, name: ToolName, users: &[UserId]) -> ToolContract {
     ToolContract {
         name,
-        requires: Requirements {
+        requires: Some(Requirements {
             trust: random_trust_requirement(rng),
             audience: random_audience_requirement(rng),
             attention: random_attention_requirement(rng),
             forbid_prior_effects: BTreeSet::new(),
-        },
+        }),
         output_label: random_label(rng, users),
         effects: Effects::none(),
         arguments: ArgumentSchema::opaque(),

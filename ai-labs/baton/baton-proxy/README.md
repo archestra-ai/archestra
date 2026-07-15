@@ -31,31 +31,37 @@ id = "operator"
 
 [[contracts.tool]]
 name = "read_notes"
-output = { trust = "suspicious" }   # third-party text taints the flow
+output = { trust = "suspicious", audience = "public" }   # third-party text taints the flow
 
 [[contracts.tool]]
 name = "delete_file"
+output   = { trust = "trusted", audience = "public" }
 requires = { trust = "trusted" }    # a mutation may not run from a tainted flow
 
 [[contracts.tool]]
 name = "create_issue"
-audience = "public"                 # sink exposes to everyone: only a public flow passes
+requires = { audience = "public" }  # sink exposes to everyone: only a public flow passes
 
 [[contracts.tool]]
 name = "send_report"
-audience = ["ops-hook"]             # sink exposes to fixed readers the flow must cover
+requires = { audience = ["ops-hook"] }  # sink exposes to fixed readers the flow must cover
 
 [[contracts.tool]]
 name = "notify"
-audience = "$.args.url"             # sink audience read from the call's `url` argument
+requires = { audience = "$.args.url" }  # sink audience read from the call's `url` argument
 ```
 
-`audience` declares the sink's audience — who a call exposes the flow to. The
-check is always the same comparison: the flow's audience (folded by
-intersection from everything read) must cover the sink's. It comes in three
-forms — `"public"`, a fixed reader list, or `"$.args.<argument>"` to read the
-recipients from one top-level call argument. Absent means the tool exposes no
-one and gets no audience check.
+Every tool contract has two sections. `output` is how the returned
+information is labeled and how the call modifies the trajectory — omitted
+fields default to **unknown** (fail closed at any guarded sink downstream),
+except `effects`, which defaults to none. `requires` is what the current
+trajectory must satisfy: a trust bar, an attention rule, forbidden prior
+effects, and `requires.audience` — the sink's audience, who a call exposes
+the flow to. That check is always the same comparison: the flow's audience
+(folded by intersection from everything read) must cover the sink's. It comes
+in three forms — `"public"`, a fixed reader list, or `"$.args.<argument>"` to
+read the recipients from one top-level call argument. Absent means the tool
+exposes no one and gets no audience check.
 
 Tools without a contract pass through untouched — annotate the risky few, leave
 the rest.

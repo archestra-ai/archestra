@@ -378,6 +378,78 @@ describe("McpAppContainer (via McpAppSection)", () => {
       screen.queryByRole("button", { name: /exit fullscreen/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("shows an exit-fullscreen button in the panel top bar when the app goes fullscreen", async () => {
+    // Regression: the panel surface renders no hover overlay, so when a
+    // panel-hosted app requested fullscreen via the SDK there was no way back
+    // out (Escape is swallowed by iframe focus) short of reloading the page.
+    const user = userEvent.setup();
+
+    const { AppBridge } = await import(
+      "@modelcontextprotocol/ext-apps/app-bridge"
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: Record<string, unknown>,
+    ) {
+      this.onrequestdisplaymode = null as
+        | null
+        | ((args: { mode: string }) => Promise<{ mode: string }>);
+      this.onopenlink = null;
+      this.oncalltool = null;
+      this.onreadresource = null;
+      this.onlistresources = null;
+      this.onlistresourcetemplates = null;
+      this.onlistprompts = null;
+      this.onloggingmessage = null;
+      this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
+      this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
+      this.setHostContext = vi.fn();
+      this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
+      bridgeInstances.push(this);
+    });
+
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          surface="panel"
+          preloadedResource={preloadedResource}
+        />,
+      );
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /exit fullscreen/i }),
+    ).not.toBeInTheDocument();
+
+    const bridge = bridgeInstances[0];
+    await act(async () => {
+      await bridge.onrequestdisplaymode({ mode: "fullscreen" });
+    });
+
+    const exitButton = screen.getByRole("button", {
+      name: /exit fullscreen/i,
+    });
+
+    await act(async () => {
+      await user.click(exitButton);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /exit fullscreen/i }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("McpAppContainer inline height (via McpAppSection)", () => {

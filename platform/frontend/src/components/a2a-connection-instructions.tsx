@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
 import { ChevronDown, Mail, MessageCircle, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -91,6 +95,8 @@ export function A2AConnectionInstructions({
   // so each example gets a real UUID (fresh per dialog open).
   const [sendExampleMessageId] = useState(() => crypto.randomUUID());
   const [streamExampleMessageId] = useState(() => crypto.randomUUID());
+  const [replyExampleMessageId] = useState(() => crypto.randomUUID());
+  const [approvalExampleMessageId] = useState(() => crypto.randomUUID());
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
@@ -237,6 +243,60 @@ curl -N -X POST "${a2aEndpoint}" \\
     }
   }'`,
     [a2aEndpoint, tokenForDisplay, streamExampleMessageId],
+  );
+
+  // cURL example for continuing the same conversation across turns
+  const replyCurlCode = useMemo(
+    () => `# Continue the conversation: copy contextId from the previous reply
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "${replyExampleMessageId}",
+        "contextId": "<contextId from the previous reply>",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Do you remember my earlier question?"}]
+      }
+    }
+  }'`,
+    [a2aEndpoint, tokenForDisplay, replyExampleMessageId],
+  );
+
+  // cURL example for answering a tool-approval request
+  const approvalCurlCode = useMemo(
+    () => `# Approve or deny tool calls. When a tool needs approval, the reply
+# is a task with status.state TASK_STATE_INPUT_REQUIRED and
+# metadata.approvalRequests — answer each approvalId with a decision.
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "${approvalExampleMessageId}",
+        "taskId": "<task.id from the reply>",
+        "contextId": "<contextId from the reply>",
+        "role": "ROLE_USER",
+        "parts": [],
+        "metadata": {
+          "taskOps": {
+            "approvalDecisions": [
+              {"approvalId": "<approvalId from approvalRequests>", "approved": true}
+            ]
+          }
+        }
+      }
+    }
+  }'`,
+    [a2aEndpoint, tokenForDisplay, approvalExampleMessageId],
   );
 
   const chatDeepLinkBlock = (
@@ -538,6 +598,39 @@ curl -N -X POST "${a2aEndpoint}" \\
             fetchUserTokenMutation={fetchUserTokenMutation}
             fetchTeamTokenMutation={fetchTeamTokenMutation}
           />
+          <CurlExampleSection
+            key={`reply-${effectiveTokenId}`}
+            code={replyCurlCode}
+            tokenForDisplay={tokenForDisplay}
+            isPersonalTokenSelected={isPersonalTokenSelected}
+            hasAdminPermission={hasAdminPermission ?? false}
+            selectedTeamToken={selectedTeamToken ?? null}
+            fetchUserTokenMutation={fetchUserTokenMutation}
+            fetchTeamTokenMutation={fetchTeamTokenMutation}
+          />
+          <CurlExampleSection
+            key={`approval-${effectiveTokenId}`}
+            code={approvalCurlCode}
+            tokenForDisplay={tokenForDisplay}
+            isPersonalTokenSelected={isPersonalTokenSelected}
+            hasAdminPermission={hasAdminPermission ?? false}
+            selectedTeamToken={selectedTeamToken ?? null}
+            fetchUserTokenMutation={fetchUserTokenMutation}
+            fetchTeamTokenMutation={fetchTeamTokenMutation}
+          />
+          <p className="text-xs text-muted-foreground">
+            Full protocol reference — streaming, multi-turn conversations, and
+            tool approvals — in the{" "}
+            <a
+              href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              A2A docs
+            </a>
+            .
+          </p>
         </div>
       </WizardStep>
 

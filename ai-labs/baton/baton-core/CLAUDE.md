@@ -21,6 +21,13 @@ must not silently break.
   opposite of its fold position. Trust is the only dimension where the two
   orders disagree on `Unknown`.
 
+Each dimension also carries `widening_over` — the **dual of adequacy** (is
+this label strictly wider than a baseline). It powers the no-widening
+invariant: effects growth binds live at the flow check; trust/audience
+widening is prevented at admission by construction (the conservative fold
+absorbs a wider declaration — `debug_assert`-guarded, test-pinned). It is a
+third derived relation, not a third order to conflate with the two above.
+
 `Requirements::check_flow` is a thin *ordered* composition over the adequacy
 relations — the emission order (trust, audience, attention, effects) is
 observable; preserve it (there is a typed-order test).
@@ -42,15 +49,25 @@ observable; preserve it (there is a typed-order test).
   the conservative fold, and only under its *declared* output label.
   `ValueStore` mutators stay `pub(crate)` — never add a public
   `insert(bytes, label)`.
-- Effects are **monotone trajectory state** (`TrajectoryState::past_effects`),
-  committed at release (may-effects: failure removes nothing). Audit is
+- Effects are **monotone trajectory state**, committed at release (a
+  may-effect commitment fact: failure appends and removes nothing); the
+  committed past is a projection over commitment facts. Audit is
   **control-plane history** (`AuditEvent`), never a label field; failed
   transitions audit an event and create no value or action.
 
-## Revisions and linear capabilities
+## The event log, revisions, linear capabilities
 
-- Every public `Trajectory` mutation advances `Revision` exactly once, as one
-  transaction. Overflow fails loudly (no wrap).
+- The `EventSet` is the authoritative state: every public `Trajectory`
+  mutation prevalidates, then appends **one atomic batch** of facts; lifecycle
+  contradictions (double release, completion-before-release, double grant
+  consumption) are refused at admission — the single enforcement point.
+  `TrajectoryState` and `StoredValue`'s embedded label/provenance are
+  **materialized read models** written only as facts are applied
+  (rebuild-equivalence is test-pinned); never mutate one without its fact.
+- `Revision` digests the event frontier; every appended batch advances it.
+  Plans live in a side cache bound to their basis and append nothing — the
+  per-evaluation `CheckPerformed` fact is what preserves cross-evaluate
+  staling.
 - Capabilities — `ExecutionToken`, `DispatchReceipt`, `StepCapability`,
   `PendingApproval` — are **non-`Clone`, `Serialize`-only, no public
   constructor**, bound to trajectory + revision (+ action/plan/step), spent on
@@ -67,9 +84,11 @@ observable; preserve it (there is a typed-order test).
   either way. The pending action's (possibly constrained) proposed effects
   are the single source of truth for what release commits.
 - Confirmation stays structural on user turns; it survives remedy steps on
-  the confirmed action and is spent atomically at release (the
-  spent-confirmation marker exists so a receipt-declared failure cannot
-  resurrect it).
+  the confirmed action and is spent atomically at release as a grant
+  consumption fact (facts only grow, so a receipt-declared failure cannot
+  resurrect a spent confirmation). One-off (`PolicyCheck`-scoped) grants
+  follow the same issued/consumed model — a second consumption is
+  unrepresentable at admission.
 
 ## Pending action, plans, remedies
 

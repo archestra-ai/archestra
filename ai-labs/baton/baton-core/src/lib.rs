@@ -7,11 +7,17 @@
 //!
 //! The moving parts:
 //!
-//! - A [`turn::Trajectory`] owns an immutable, append-only store of labeled
-//!   [`value::StoredValue`]s with full [`value::Provenance`]. Admission is
-//!   engine-owned: ingress is the only caller-labeled path (the explicit
-//!   trust boundary); every other value's label is computed inside the crate
-//!   as the conservative fold of its mandatory dependency sets.
+//! - A [`turn::Trajectory`] is an append-only [`event::EventSet`] of scoped
+//!   facts with derived [`projection`]s and materialized read models: values
+//!   ([`value::StoredValue`] with full [`value::Provenance`]), effects,
+//!   action/emission lifecycle, grants, and audit are all facts or
+//!   projections over them. One public mutation = prevalidation, then one
+//!   atomic event batch. Admission is engine-owned: ingress is the only
+//!   caller-labeled path (the explicit trust boundary); every other value's
+//!   label is computed inside the crate as the conservative fold of its
+//!   mandatory dependency sets — a declared-wider output label is absorbed by
+//!   the fold, and each dimension's widening relation guards that no-widening
+//!   invariant.
 //! - A [`request::ToolRequest`] carries the executable
 //!   [`request::ArgumentTree`] — recipients, paths, and payloads are values
 //!   in this tree, and the canonical rendering handed out for dispatch comes
@@ -19,14 +25,26 @@
 //!   dependencies of whatever selected the invocation. Requirements are
 //!   checked against `L_flow = combine(L_args, L_control)` (the sink check
 //!   behind [`contract::Requirements`]), so a sanitized payload cannot
-//!   launder a secret-dependent tool or recipient choice.
-//! - Effects are monotone trajectory state
-//!   ([`audit::TrajectoryState::past_effects`]), committed when dispatch
-//!   begins (a may-effect record: a later failure removes nothing). Audit is
-//!   control-plane history ([`audit::AuditEvent`]), not a label field.
-//! - Every mutation advances the trajectory's [`revision::Revision`];
-//!   capabilities (the [`engine::ExecutionToken`]) are linear, bound to
-//!   trajectory + revision + pending action, and spent on use.
+//!   launder a secret-dependent tool or recipient choice. An assistant
+//!   emission ([`request::EmissionRequest`]) is a flow to the reserved
+//!   response sink through the same pipeline — core never infers that a turn
+//!   is "final", and caller-labeled assistant ingress does not typecheck.
+//! - Every checked flow settles in one tri-state [`engine::FlowOutcome`]:
+//!   allowed now (a linear permit), remediable (the irreducible nondominated
+//!   frontier of predicted [`plan::RemedyPlan`]s — `Reduce` via registered
+//!   transformers/transitions, `Authorize` as an exact typed delta at an
+//!   exact scope), or terminal — a proven no-remedy claim (the search is
+//!   uncapped). Stale, foreign, or conflicting proposals are
+//!   [`engine::FlowRefusal`]s outside the tri-state and touch nothing.
+//! - Effects commit when dispatch begins (release appends the may-effect
+//!   commitment; a later failure appends and removes nothing). Audit is
+//!   control-plane history ([`audit::AuditEvent`], a derived read model),
+//!   not a label field.
+//! - [`revision::Revision`] digests the event frontier; every appended batch
+//!   advances it. Capabilities (the [`engine::ExecutionToken`], receipts,
+//!   step capabilities, approvals) are linear, bound to trajectory + basis
+//!   (+ flow/plan/step), and spent on use; one-off grants are issued and
+//!   consumed as facts, so a spent grant is unavailable by projection.
 //! - `Unknown` is a first-class value of audience, trust, and effects, and an
 //!   unregistered tool is evaluable (all-`Unknown` output, `Unknown`
 //!   effects). An unprovable flow is not accepted implicitly: it routes
@@ -43,10 +61,10 @@ pub mod audit;
 pub mod contract;
 pub mod dimension;
 pub mod engine;
-// The append-only event substrate and its derived projections (shadow phase:
-// dual-recorded beside the legacy state, parity-tested, not yet read by
-// policy). Public as modules but deliberately not re-exported at the root
-// until the projection cutover makes them the authoritative model.
+// The append-only event substrate (the authoritative trajectory state) and
+// its derived projections. Public as modules but deliberately not
+// re-exported at the root: consumers read trajectory state through the
+// `Trajectory` accessors; the raw log is an audit/inspection surface.
 pub mod event;
 pub mod plan;
 pub mod projection;

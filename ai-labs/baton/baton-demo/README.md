@@ -33,8 +33,9 @@ is not a reader of the invoices.
 3. The model calls `baton__escalate(reason = …)`. The gateway walks the
    engine's remedy plan; the first grant routes to the external
    `human-in-the-loop` authority, so it **elicits** the connected client's
-   user. One accept/decline rules every grant this remedy needs (endorse the
-   argument values, release the control dependencies, accept the egress).
+   user. One accept/decline rules every authorization this remedy needs
+   (durably raise the argument values' labels, release the control
+   dependencies, acquire the egress growth).
 4. On accept, the engine permits; the gateway releases and dispatches the
    canonical request, and the escalation result returns `GRANTED — executed`
    with the tool's real output. On decline: `DENIED`, terminal for that

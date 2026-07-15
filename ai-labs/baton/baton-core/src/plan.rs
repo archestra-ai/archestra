@@ -18,7 +18,7 @@ use crate::revision::{FlowId, PlanId, Revision};
 
 /// A vector that provably holds at least one element. "Remediable with zero
 /// plans" is unrepresentable — a block with no plan is the explicit
-/// [`crate::engine::Blocked::Terminal`].
+/// [`crate::engine::FlowOutcome::Terminal`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct NonEmptyVec<T>(Vec<T>);

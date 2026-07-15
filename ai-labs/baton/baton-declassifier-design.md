@@ -1,9 +1,15 @@
 # Transitions and declassifiers in baton: design note
 
-Status: foundation design — fully built, then extended by the authority model.
-Superseded in places (marked inline with `> **Superseded.**` blockquotes);
-`baton-authority-model-design.md` is the plan-of-record. The code sketches
-below are historical: the code is the reference.
+Status: foundation design — fully built, then extended by the authority model
+and finally by the **compact architecture** (two-kind Reduce/Authorize remedy
+vocabulary, unified tri-state flow outcomes with the response as an ordinary
+mediated sink, complete-search nondominated plan frontiers, and append-only
+event-log trajectory state). The five-kind transition taxonomy and the mutable
+trajectory state this note describes no longer exist in code. Superseded in
+places (marked inline with `> **Superseded.**` blockquotes);
+`baton-authority-model-design.md` is the plan-of-record and `docs/spec.md` the
+normative spec. The code sketches below are historical: the code is the
+reference.
 
 This revision follows source review of `baton-core`, the platform Dual LLM
 implementation, and recent agent IFC work. It makes three scope decisions explicit:

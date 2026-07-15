@@ -4,48 +4,58 @@ Prototype of an ADT-based information-flow policy engine for LLM agents.
 Instead of filtering prompts and outputs, it asks: *can this value, derived
 from these sources, legally flow into this sink?*
 
-The engine is value-granular. A trajectory owns an immutable store of labeled
-values with full provenance; a tool request carries the executable argument
-tree (recipients, paths, payloads are values in it) plus the control
-dependencies of whatever selected the invocation, and is checked against
+The engine is value-granular. A trajectory is an append-only log of scoped
+facts; values, effects, lifecycle, grants, and audit are projections over it.
+A tool request carries the executable argument tree (recipients, paths,
+payloads are values in it) plus the control dependencies of whatever selected
+the invocation, and is checked against
 `L_flow = combine(L_args, L_control)` — never against the whole conversation.
 A raw value elsewhere in the trajectory does not taint an unrelated sink,
 but it still taints anything derived from it, including the *choice* to act
-(implicit flows). Effects are monotone trajectory state committed when
-dispatch begins; audit is control-plane history.
+(implicit flows). Release appends the may-effect commitment before dispatch;
+a failure appends and removes nothing.
 
-A blocked flow is either terminal or comes with typed remedy plans, one of
-five kinds:
+Every proposed flow — a tool call or an assistant emission, same pipeline —
+settles in one of three outcomes: **allowed now** (a linear permit),
+**remediable** (a soft block with predicted plans), or **terminal** (a proven
+claim: the uncapped search established that no remedy exists under the
+registered capabilities). Stale, foreign, or conflicting proposals are
+refusals outside that tri-state and touch nothing. Remedies come in exactly
+two kinds:
 
-- **Sanitize** — a registered transformer derives a new value under its
-  declared label (content-justified); the raw source keeps its own.
-- **Constrain** — a registered tool-identity mapping narrows the pending
-  action (network fetch → cache-only fetch), verified never wider.
-- **Endorse** — an authority durably relabels a value by fiat, minting a new
-  value under endorsed provenance; raising trust or audience is always a
-  relabel, never a waiver.
-- **Accept** — an authority acquires a surface growth on the effect axis; the
-  effect still commits to the monotone past at release, never early.
-- **Waive / Acknowledge** — a check-transient lift (a prior effect, a
-  confirmation stand-in, releasing named control deps — nothing else) or an
-  on-the-record acknowledgment of an unprovable fact; changes no stored state.
+- **Reduce** — change the flow so it fits: derive a value through a
+  registered transformer (the raw source keeps its own label), or narrow the
+  pending action through a registered tool-identity mapping (network fetch →
+  cache-only fetch), verified never wider.
+- **Authorize** — grant the irreducible residual: an exact typed delta at an
+  exact scope — durable (minting a derived value under the raised label, the
+  source untouched), one pending action (an acquired effect growth, still
+  committed only at release), or one policy check (a transient lift or an
+  on-the-record acknowledgment of an unprovable fact; grants are issued and
+  consumed as facts, so a one-off can never be spent twice).
 
-Authorities live in one registry — inline functions or external approval
-round-trips — routed by mandate competence, inline-first in registration
-order, with a fail-closed recheck after every grant. `Unknown` is a
-first-class label and fail-closed: an unprovable flow routes through the same
-authority chain as a breach, no policy knob — annotate five high-risk tools,
-leave the rest unknown, still catch the obvious flows.
+A soft block returns the irreducible nondominated frontier of plans — no
+removable steps, no plan dominated by a smaller ask, incomparable
+alternatives all retained — so the actor picks its remedy as early as
+possible. Authorities live in one registry — inline functions or external
+approval round-trips — routed by mandate competence over typed deltas and
+scopes, inline-first in registration order, with a fail-closed recheck after
+every grant. `Unknown` is a first-class label and fail-closed: an unprovable
+flow routes through the same authority chain as a breach, no policy knob —
+annotate five high-risk tools, leave the rest unknown, still catch the
+obvious flows.
 
-Every applied step is a linear, revision-bound capability: one-shot,
-rechecked, audited; any state change invalidates everything minted before it.
-Dispatch is two-phase — release commits may-effects and renders the one
-canonical request from the exact checked tree, a receipt must close the
-action — and the final assistant response is a mediated sink like any tool.
+Every applied step is a linear capability bound to the event-frontier basis:
+one-shot, rechecked, audited; any appended fact invalidates everything minted
+before it. Dispatch is two-phase — release commits may-effects and renders
+the one canonical request from the exact checked tree, a receipt must close
+the action — and the assistant response is a mediated emission sink like any
+tool: caller-labeled assistant ingress does not typecheck.
 
-`baton-authority-model-design.md` is the plan-of-record;
-`baton-declassifier-design.md` is the foundation rationale it builds on;
-concepts and semantics are documented in `baton-core/src/lib.rs`.
+`docs/spec.md` is the normative spec; `baton-authority-model-design.md` is
+the plan-of-record; `baton-declassifier-design.md` is the foundation
+rationale it builds on; concepts and semantics are documented in
+`baton-core/src/lib.rs`.
 
 ```sh
 cargo test -p baton-core
@@ -68,8 +78,10 @@ into baton-core `ToolContract`s. See its README.
 to an MCP server that mimics an Archestra-style tool gateway — it serves a
 scenario's tools from TOML, checks every call against baton-core,
 **soft-blocks** breaches as ordinary tool results the model can act on,
-escalates to a human through MCP elicitation, and on approval dispatches the
-exact canonical request the engine checked. The crate also parks the earlier
+escalates to a human through MCP elicitation, on approval dispatches the
+exact canonical request the engine checked, and routes the agent's final
+answer through the reserved `baton__respond` tool so only the emission-checked
+rendering reaches the user. The crate also parks the earlier
 inference-layer human-approval flow (behind its `approver` feature — a blocked
 call becomes an approval request a person rules on over MCP); that flow still
 compiles but **no longer runs end-to-end** (it needs the approval-rewriting

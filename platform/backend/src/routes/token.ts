@@ -3,7 +3,12 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
-import { AgentTeamModel, TeamModel, TeamTokenModel } from "@/models";
+import {
+  AgentModel,
+  AgentTeamModel,
+  TeamModel,
+  TeamTokenModel,
+} from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -55,8 +60,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    *   only exposes metadata (name, tokenStart); the value endpoint below
    *   stays gated behind team admin / org-level team management
    *
-   * When profileId is provided, team tokens are further filtered to only
-   * include tokens for teams that the profile is also assigned to.
+   * When profileId is provided, team tokens are further filtered to the
+   * ones that can authenticate against that agent (org-scoped agents accept
+   * any team token; team-scoped agents only their teams'; personal none).
    *
    * Also returns permission flags so the UI can show disabled options
    * for tokens the user doesn't have access to.
@@ -75,7 +81,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .uuid()
             .optional()
             .describe(
-              "Filter team tokens to only show tokens for teams the profile is assigned to",
+              "Filter team tokens to only show tokens that can authenticate against this profile",
             ),
         }),
         response: constructResponseSchema(TokensListResponseSchema),
@@ -134,15 +140,26 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // If profileId is provided, further filter team tokens to only show
-      // tokens for teams that the profile is also assigned to
+      // If profileId is provided, further filter team tokens to the ones
+      // that can actually authenticate against that agent — mirroring
+      // AgentTeamModel.teamHasAgentAccess: org-scoped agents accept any
+      // team token, team-scoped agents only their assigned teams' tokens,
+      // personal agents none. Org tokens always pass.
       if (profileId) {
-        const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-        visibleTokens = visibleTokens.filter(
-          (token) =>
-            token.isOrganizationToken ||
-            (token.teamId && profileTeamIds.includes(token.teamId)),
-        );
+        const agent = await AgentModel.findAccessContextById(profileId);
+        if (agent?.scope === "team") {
+          const profileTeamIds =
+            await AgentTeamModel.getTeamsForAgent(profileId);
+          visibleTokens = visibleTokens.filter(
+            (token) =>
+              token.isOrganizationToken ||
+              (token.teamId && profileTeamIds.includes(token.teamId)),
+          );
+        } else if (agent?.scope !== "org") {
+          visibleTokens = visibleTokens.filter(
+            (token) => token.isOrganizationToken,
+          );
+        }
       }
 
       return reply.send({

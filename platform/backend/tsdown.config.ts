@@ -14,6 +14,20 @@ const POST_KILL_DELAY_MS = 100;
 /** Delay after process exit to ensure OS releases the ports */
 const PORT_RELEASE_DELAY_MS = 250;
 
+/**
+ * A freshly spawned server must stay up at least this long to count as started.
+ * A quicker exit is treated as a startup failure — most often an EADDRINUSE bind
+ * race because the previous server hasn't fully released 9000/9050 within
+ * PORT_RELEASE_DELAY_MS — which the retry below recovers from.
+ */
+const SERVER_STARTUP_WINDOW_MS = 1000;
+
+/** Max re-spawn attempts after a startup failure before giving up (and logging loudly). */
+const SERVER_SPAWN_MAX_RETRIES = 5;
+
+/** Base backoff between re-spawn attempts; grows exponentially, plus jitter. */
+const SERVER_SPAWN_BACKOFF_MS = 150;
+
 type DevServerState = {
   /** The running server child, or null when none is up. */
   current: ChildProcess | null;
@@ -141,36 +155,99 @@ const onSuccessHandler: UserConfig["onSuccess"] = () => {
         return;
       }
 
-      const args = ["--enable-source-maps"];
-
-      if (process.env.DEBUG) {
-        args.push("--inspect");
-      }
-
-      args.push("dist/server.mjs");
-
-      // Use process.execPath (absolute path to Node.js binary) instead of "node" string
-      // for cross-platform compatibility. On Windows, spawn("node", ...) can fail if
-      // Node.js isn't in PATH or PATH resolution behaves differently. Using the absolute
-      // path bypasses PATH resolution entirely.
-      // Note: We intentionally avoid shell: true to prevent orphaned processes on Windows
-      // (shell creates cmd.exe as parent, making kill() ineffective on the actual server).
-      const child = spawn(process.execPath, args, {
-        stdio: "inherit",
-      });
-      devServer.current = child;
-
-      child.on("error", (err) => {
-        console.error("Server process error:", err);
-      });
-
-      child.on("exit", (code, exitSignal) => {
-        if (exitSignal) {
-          console.log(`Server process terminated by signal: ${exitSignal}`);
-        } else if (code !== 0) {
-          console.error(`Server process exited with code: ${code}`);
+      const spawnServer = () => {
+        const args = ["--enable-source-maps"];
+        if (process.env.DEBUG) {
+          args.push("--inspect");
         }
-      });
+        args.push("dist/server.mjs");
+        // Use process.execPath (absolute path to Node.js binary) instead of the
+        // "node" string for cross-platform compatibility. On Windows,
+        // spawn("node", ...) can fail if Node.js isn't in PATH or PATH resolution
+        // differs. We intentionally avoid shell:true so kill() reaches the actual
+        // server rather than a cmd.exe wrapper (Windows orphan avoidance).
+        return spawn(process.execPath, args, { stdio: "inherit" });
+      };
+
+      const isSuperseded = () =>
+        restartId !== devServer.latestRestartId ||
+        configGeneration !== devServer.generation;
+
+      // Spawn the server, and if it dies during startup — almost always an
+      // EADDRINUSE bind race because the old server hasn't released 9000/9050
+      // within PORT_RELEASE_DELAY_MS — re-spawn a bounded number of times with
+      // backoff. Without this, a single lost race left the dev server down until
+      // the next save. A superseding build/reload still wins and stops the retries.
+      let attempt = 0;
+      const spawnWithRetry = async (): Promise<void> => {
+        if (isSuperseded()) return;
+
+        const child = spawnServer();
+        devServer.current = child;
+        child.on("error", (err) => {
+          console.error("Server process error:", err);
+        });
+
+        // Race the child's exit against a startup window: an exit inside the
+        // window means it never came up; null means it is running.
+        const startupExit = await new Promise<{
+          code: number | null;
+          signal: NodeJS.Signals | null;
+        } | null>((resolve) => {
+          const onExit = (
+            code: number | null,
+            signal: NodeJS.Signals | null,
+          ) => {
+            clearTimeout(timer);
+            resolve({ code, signal });
+          };
+          const timer = setTimeout(() => {
+            child.off("exit", onExit);
+            resolve(null);
+          }, SERVER_STARTUP_WINDOW_MS);
+          child.once("exit", onExit);
+        });
+
+        if (!startupExit) {
+          // Came up. Log a later crash but don't restart it — the next
+          // successful build owns the next restart.
+          child.on("exit", (code, exitSignal) => {
+            if (exitSignal) {
+              console.log(`Server process terminated by signal: ${exitSignal}`);
+            } else if (code !== 0) {
+              console.error(`Server process exited with code: ${code}`);
+            }
+          });
+          return;
+        }
+
+        // Died during startup. A signal exit means our own stop killed it during
+        // a superseding restart — let that restart own the swap.
+        if (startupExit.signal || isSuperseded()) {
+          if (devServer.current === child) devServer.current = null;
+          return;
+        }
+
+        attempt += 1;
+        if (attempt > SERVER_SPAWN_MAX_RETRIES) {
+          console.error(
+            `Dev server failed to start after ${attempt} attempts (last exit code ${startupExit.code}); ` +
+              "leaving it down until the next successful build. A stale process may be holding 9000/9050.",
+          );
+          if (devServer.current === child) devServer.current = null;
+          return;
+        }
+        const backoff =
+          SERVER_SPAWN_BACKOFF_MS * 2 ** (attempt - 1) +
+          Math.floor(Math.random() * 100);
+        console.log(
+          `Dev server exited on startup (code ${startupExit.code}); ports may not be free yet — retry ${attempt}/${SERVER_SPAWN_MAX_RETRIES} in ${backoff}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+        await spawnWithRetry();
+      };
+
+      await spawnWithRetry();
     })
     .catch((error) => {
       // A rejected restartQueue would skip every future rebuild's restart and

@@ -228,6 +228,11 @@ pub enum MalformedAuthorization {
     /// The coordinate authorizes nothing (an empty raise, an empty set).
     #[error("{coordinate} authorizes nothing")]
     EmptyCoordinate { coordinate: DeltaCoordinate },
+    /// A product carries two coordinates of the same kind; application is
+    /// defined over at most one coordinate per kind, so a duplicate would be
+    /// silently dropped rather than ruled on.
+    #[error("duplicate {coordinate} coordinate kind in one product")]
+    DuplicateCoordinateKind { coordinate: DeltaCoordinate },
 }
 
 impl Authorization {
@@ -271,6 +276,16 @@ impl Authorization {
                 });
             }
         }
+        // Coordinates are kind-ranked at construction, so a duplicated kind
+        // is adjacent; application handles at most one coordinate per kind.
+        let coordinates: Vec<_> = delta.coordinates().collect();
+        for pair in coordinates.windows(2) {
+            if pair[0].rank() == pair[1].rank() {
+                return Err(MalformedAuthorization::DuplicateCoordinateKind {
+                    coordinate: pair[1].clone(),
+                });
+            }
+        }
         Ok(Self { delta, scope })
     }
 
@@ -295,6 +310,28 @@ mod tests {
 
     fn check_scope() -> AuthorizationScope {
         AuthorizationScope::PolicyCheck { flow: FlowId::new(0) }
+    }
+
+    /// One coordinate per kind: application rules on at most one raise,
+    /// acquisition, or lift of each kind, so a duplicated kind is refused
+    /// rather than silently dropped.
+    #[test]
+    fn construction_refuses_duplicate_coordinate_kinds() {
+        let release_a = DeltaCoordinate::ReleaseControl(std::collections::BTreeSet::from([ValueId::new(0)]));
+        let release_b = DeltaCoordinate::ReleaseControl(std::collections::BTreeSet::from([ValueId::new(1)]));
+        let delta = AuthorizationDelta::product(vec![release_a, release_b]).unwrap();
+        assert!(matches!(
+            Authorization::new(delta, check_scope()),
+            Err(MalformedAuthorization::DuplicateCoordinateKind { .. })
+        ));
+
+        // Distinct kinds compose as before.
+        let mixed = AuthorizationDelta::product(vec![
+            DeltaCoordinate::StandInConfirmation,
+            DeltaCoordinate::ReleaseControl(std::collections::BTreeSet::from([ValueId::new(0)])),
+        ])
+        .unwrap();
+        assert!(Authorization::new(mixed, check_scope()).is_ok());
     }
 
     /// Every scope admits exactly its own coordinate kinds.

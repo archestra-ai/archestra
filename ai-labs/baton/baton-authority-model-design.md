@@ -432,7 +432,6 @@ only; a confidentiality breach carried by a **control dependency** clears via
 cargo fmt -p baton-core -- --check
 cargo clippy -p baton-core --all-targets -- -D warnings
 cargo test -p baton-core
-cargo run -q --example demo
 ```
 
 Gate discipline (every pass): full validation → external + internal

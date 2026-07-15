@@ -49,10 +49,17 @@ concepts and semantics are documented in `baton-core/src/lib.rs`.
 
 ```sh
 cd baton-core
-cargo run --example demo
-cargo run --example scenarios   # declarative pipelines from scenarios.toml
 cargo test
+
+baton-gateway/run-demo.sh   # the end-to-end demo (needs OPENROUTER_API_KEY)
 ```
+
+`baton-gateway/` is the demo: a real rig agent talking to an MCP server that
+mimics an Archestra-style tool gateway. The gateway serves the scenario's
+tools from a TOML file, checks every call against baton-core, **soft-blocks**
+breaches as ordinary tool results the model can act on, escalates to a human
+through MCP elicitation, and on approval dispatches the exact canonical
+request the engine checked. See its README.
 
 `agentdojo-harness/` evaluates the engine against the AgentDojo
 prompt-injection benchmark (with `baton-check`, a stateless JSON oracle over

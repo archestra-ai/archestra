@@ -2637,12 +2637,110 @@ fn two_tainted_leaves_each_get_their_own_transform() {
     );
 
     let plans = remediable(&engine, &mut trajectory, request.clone());
+    // Exactly one plan: the path-complete walk explores both leaf orders,
+    // and canonicalization collapses the permutations into one prediction.
     assert_eq!(plans.len(), 1);
     let sources: Vec<ValueId> = plans.first().steps.iter().filter_map(derive_step).collect();
     assert_eq!(sources, vec![notes, draft]);
 
     let token = walk_to_permit(&engine, &mut trajectory, request);
     dispatch(&mut trajectory, token, "saved").unwrap();
+}
+
+/// Route enumeration is path-complete: a derivation whose intermediate state
+/// revisits another ordering's path is still found. Here `restore`'s target
+/// state (draft back at its original label) lies on the redact-first route's
+/// own path, so that ordering is cycle-pruned — only the taint-first
+/// ordering assembles the plan, and a walk that dedups order-permuted routes
+/// globally loses it entirely.
+#[test]
+fn order_sensitive_derivation_chains_are_not_pruned() {
+    fn body(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+        Ok(OpaqueValue::new("[derived]"))
+    }
+    let alice_only = || Audience::readers([user("alice")]);
+    let taint = RegisteredTransformer {
+        descriptor: crate::transition::TransformerDescriptor {
+            transformer: crate::value::TransformerRef {
+                id: "draft.taint".into(),
+                version: 1,
+            },
+            precondition: crate::transition::LabelPredicate {
+                trust: Some(Trust::TRUSTED),
+                audience: Some(alice_only()),
+            },
+            output: ValueLabel {
+                trust: Trust::SUSPICIOUS,
+                audience: alice_only(),
+            },
+        },
+        run: body,
+    };
+    let restore = RegisteredTransformer {
+        descriptor: crate::transition::TransformerDescriptor {
+            transformer: crate::value::TransformerRef {
+                id: "draft.restore".into(),
+                version: 1,
+            },
+            precondition: crate::transition::LabelPredicate {
+                trust: Some(Trust::SUSPICIOUS),
+                audience: Some(alice_only()),
+            },
+            output: ValueLabel {
+                trust: Trust::TRUSTED,
+                audience: alice_only(),
+            },
+        },
+        run: body,
+    };
+    let sink = ToolContract {
+        name: ToolName::new("report.save"),
+        requires: Requirements {
+            trust: Some(KnownTrust::Trusted),
+            ..Requirements::default()
+        },
+        output_label: ValueLabel::identity(),
+        effects: Effects::none(),
+        arguments: ArgumentSchema::opaque(),
+    };
+    let mut engine = engine_with([sink]);
+    engine.register_transformer(redact_transformer()).unwrap();
+    engine.register_transformer(taint).unwrap();
+    engine.register_transformer(restore).unwrap();
+    let mut trajectory = Trajectory::new();
+    let notes = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "notes");
+    let draft = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "draft");
+    let request = ToolRequest::new(
+        ToolName::new("report.save"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("notes"), ArgumentTree::Value(notes)),
+            (ArgumentName::new("draft"), ArgumentTree::Value(draft)),
+        ])),
+        BTreeSet::new(),
+    );
+
+    let plans = remediable(&engine, &mut trajectory, request);
+    let chains: Vec<Vec<(ValueId, &str)>> = plans
+        .iter()
+        .map(|plan| {
+            plan.steps
+                .iter()
+                .filter_map(|step| match step {
+                    PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, transformer }) => {
+                        Some((*source, transformer.id.as_str()))
+                    }
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect();
+    // The direct plan (redact the suspicious leaf) is present…
+    assert!(chains.contains(&vec![(notes, "pii.redact")]));
+    // …and so is the order-sensitive taint-then-restore derivation of the
+    // draft, exactly once (canonical order: notes first, draft chain in
+    // application order).
+    let detour = vec![(notes, "pii.redact"), (draft, "draft.taint"), (draft, "draft.restore")];
+    assert_eq!(chains.iter().filter(|chain| **chain == detour).count(), 1);
 }
 
 /// Only a two-hop chain of registered narrowings (A→B→C) reaches a contract

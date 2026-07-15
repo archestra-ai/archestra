@@ -70,8 +70,11 @@ observable; preserve it (there is a typed-order test).
   staling.
 - Capabilities — `ExecutionToken`, `DispatchReceipt`, `StepCapability`,
   `PendingApproval` — are **non-`Clone`, `Serialize`-only, no public
-  constructor**, bound to trajectory + revision (+ action/plan/step), spent on
-  use. Plans, step capabilities, and pending approvals additionally bind the
+  constructor**, spent on use. All but the receipt bind trajectory + revision
+  (+ action/plan/step); a `DispatchReceipt` is deliberately lifecycle-bound
+  instead (trajectory + action in Released phase) — it records a dispatch
+  that already happened, so unrelated later mutations must not wedge the
+  action. Plans, step capabilities, and pending approvals additionally bind the
   `EngineId` whose registries produced them — a capability never resolves
   against another engine's registries. Never add `Deserialize`: deserializing
   one forges the linearity. `Trajectory` itself is not serde at all.

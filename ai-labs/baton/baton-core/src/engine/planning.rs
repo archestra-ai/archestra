@@ -62,10 +62,9 @@ struct GroupKey {
 
 /// One reachable reduce-state of the exhaustive search: the simulated flow
 /// after a sequence of `Reduce` steps, the steps taken, the leaves the
-/// current contract excludes from transformation (its recipients), the
+/// current contract excludes from transformation (its recipients), and the
 /// semantic states this route has passed through (path-local cycle
-/// detection), and the route's canonical move multiset (order-duplicate
-/// pruning).
+/// detection — the walk's only pruning).
 #[derive(Clone)]
 struct ReduceState {
     sim: SimFlow,
@@ -73,31 +72,23 @@ struct ReduceState {
     derives: Vec<(ValueId, TransformerRef)>,
     recipient_leaves: BTreeSet<ValueId>,
     path: BTreeSet<StateKey>,
-    route: Vec<RouteMove>,
 }
 
 /// The semantic identity of a reduce-state: the per-leaf labels, the tool
 /// identity, and the proposed effects. Requirements and recipients are
 /// functions of the tool's contract over the fixed request tree, so they
-/// need no separate coordinate. Semantic identity alone is deliberately NOT
-/// the deduplication key — two registered transformers with the same
-/// declared output label are distinct derivations and both must reach the
-/// frontier — so the walk dedups on (state, route multiset) globally and on
-/// revisited semantic states per route.
+/// need no separate coordinate. Deduplication is deliberately per-route
+/// only (a route never revisits its own semantic state): a global
+/// visited-set keyed on anything order-insensitive would prune routes whose
+/// continuations differ — expansion is path-sensitive, so a state reached
+/// by `A,B` and by `B,A` admits different follow-up moves under the cycle
+/// check. Order-permuted routes that end in the same plan collapse later,
+/// at plan construction (see `canonicalize_steps`).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct StateKey {
     labels: Vec<(ValueId, ValueLabel)>,
     tool: ToolName,
     proposed_effects: Effects,
-}
-
-/// One move of the reduce walk, canonicalized (sorted) into a route multiset
-/// so the same set of reductions applied in a different order is one route,
-/// while different transformers to the same label stay distinct routes.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum RouteMove {
-    Derive { leaf: ValueId, transformer: TransformerRef },
-    Narrow { transition: TransformerRef },
 }
 
 impl StateKey {
@@ -111,13 +102,17 @@ impl StateKey {
 }
 
 impl PolicyEngine {
-    /// The complete nondominated frontier of remedy plans for one blocked
-    /// tool flow: an exhaustive reachable-state search over the registered
-    /// reducers (any number of derived leaves, chained action transitions),
-    /// the deterministic authorize peels per state, the joint
-    /// Endorse×control-release rescue solve, then irreducibility and
-    /// dominance filtering. Terminal — an empty return — is a *proven* claim
-    /// over the registered capability space: there is no generation bound.
+    /// The nondominated frontier of remedy plans for one blocked tool flow:
+    /// an exhaustive reachable-state search over the registered reducers
+    /// (any number of derived leaves, chained action transitions — complete
+    /// for the reduce/authorize space), the deterministic authorize peels
+    /// per state, the joint Endorse×control-release rescue solve (which
+    /// contributes all incomparable releases of the *smallest successful
+    /// cardinality* — see the size-first note on `minimal_joint_releases`),
+    /// then irreducibility and dominance filtering. Terminal — an empty
+    /// return — is a *proven* claim over the registered capability space in
+    /// all cases: there is no generation bound, and the rescue sweep runs
+    /// every subset size before concluding nothing unlocks.
     pub(super) fn plan_frontier(
         &self,
         trajectory: &Trajectory,
@@ -182,12 +177,16 @@ impl PolicyEngine {
         }
         candidates.extend(self.rescue_candidates(base, ctx));
 
-        // Structural dedup: the same remedy sequence (ignoring the violation
-        // vectors shown to authorities) generated twice keeps its first,
-        // fewest-reduce-steps occurrence.
+        // Structural dedup: the same remedy multiset (ignoring the violation
+        // vectors shown to authorities) generated twice — including by
+        // order-permuted routes — keeps its first, fewest-reduce-steps
+        // occurrence.
         let mut deduped: Vec<Candidate> = Vec::new();
         for candidate in candidates {
-            if !deduped.iter().any(|kept| same_shape(&kept.steps, &candidate.steps)) {
+            if !deduped
+                .iter()
+                .any(|kept| kept.group == candidate.group && same_step_multiset(&kept.steps, &candidate.steps))
+            {
                 deduped.push(candidate);
             }
         }
@@ -236,13 +235,17 @@ impl PolicyEngine {
     /// Breadth-first walk of every reduce-route reachable from the checked
     /// flow: a transformer application to any non-recipient leaf, or a gated
     /// action transition from the current tool, in registration order.
-    /// Two-level deduplication makes the walk terminate while keeping every
-    /// distinct derivation: a route never revisits its own semantic states
-    /// (so each hop strictly grows the route's path over the finite state
-    /// space), and the same move multiset reaching the same state is
-    /// expanded once globally (so leaf-order permutations collapse while two
-    /// transformers with the same declared output label both survive as
-    /// distinct routes).
+    /// The only pruning is path-local: a route never revisits its own
+    /// semantic state, so every route is a simple path over the finite state
+    /// space (leaf labels range over {original} ∪ registered outputs, tools
+    /// over registered contracts) and the walk terminates because finitely
+    /// many simple paths exist. Every simple path is explored — the
+    /// exponential worst case is the accepted price of a complete frontier,
+    /// exactly like the rescue subset sweep. Order-permuted routes that
+    /// assemble the same plan collapse at emission via `canonicalize_steps`,
+    /// never during the walk (a global order-insensitive visited-set would
+    /// wrongly prune continuations that are cyclic on one ordering's path
+    /// but simple on another's).
     fn reduce_states(
         &self,
         base: &SimFlow,
@@ -250,17 +253,15 @@ impl PolicyEngine {
         ctx: &SearchCtx<'_>,
     ) -> Vec<ReduceState> {
         let base_key = StateKey::of(base);
-        let mut expanded: BTreeSet<(StateKey, Vec<RouteMove>)> = BTreeSet::from([(base_key.clone(), Vec::new())]);
         let mut queue = VecDeque::from([ReduceState {
             sim: base.clone(),
             steps: Vec::new(),
             derives: Vec::new(),
             recipient_leaves: base_recipient_leaves,
             path: BTreeSet::from([base_key]),
-            route: Vec::new(),
         }]);
         let mut states = Vec::new();
-        while let Some(state) = queue.pop_front() {
+        while let Some(mut state) = queue.pop_front() {
             let leaves: Vec<ValueId> = state.sim.leaf_labels.keys().copied().collect();
             for leaf in leaves {
                 if state.recipient_leaves.contains(&leaf) {
@@ -273,11 +274,7 @@ impl PolicyEngine {
                     }
                     let mut next = state.clone();
                     next.sim.leaf_labels.insert(leaf, transformer.descriptor.output.clone());
-                    let reduce = RouteMove::Derive {
-                        leaf,
-                        transformer: transformer.descriptor.transformer.clone(),
-                    };
-                    if !Self::enter(&mut next, reduce, &mut expanded) {
+                    if !Self::enter(&mut next) {
                         continue;
                     }
                     next.steps.push(PlannedRemedy::Reduce(ReductionTarget::DeriveValue {
@@ -302,10 +299,7 @@ impl PolicyEngine {
                     // acquire then authorizes only the residual growth.
                     next.sim.proposed_effects = transition.effects.clone();
                     next.recipient_leaves = recipient_leaves_for(Some(target), ctx.tree);
-                    let narrow = RouteMove::Narrow {
-                        transition: transition.id.clone(),
-                    };
-                    if !Self::enter(&mut next, narrow, &mut expanded) {
+                    if !Self::enter(&mut next) {
                         continue;
                     }
                     next.steps.push(PlannedRemedy::Reduce(ReductionTarget::NarrowAction {
@@ -314,29 +308,66 @@ impl PolicyEngine {
                     queue.push_back(next);
                 }
             }
+            Self::canonicalize_steps(&mut state);
             states.push(state);
         }
         states
     }
 
     /// Record one walk move onto `next`: refuse a route that revisits its
-    /// own semantic state (cycle) or an (state, route-multiset) pair another
-    /// order of the same moves already expanded; otherwise extend the
-    /// route's path and canonical multiset.
-    fn enter(next: &mut ReduceState, hop: RouteMove, expanded: &mut BTreeSet<(StateKey, Vec<RouteMove>)>) -> bool {
+    /// own semantic state (cycle); otherwise extend the route's path.
+    fn enter(next: &mut ReduceState) -> bool {
         let key = StateKey::of(&next.sim);
         if next.path.contains(&key) {
             return false;
         }
-        let mut route = next.route.clone();
-        route.push(hop);
-        route.sort();
-        if !expanded.insert((key.clone(), route.clone())) {
-            return false;
-        }
         next.path.insert(key);
-        next.route = route;
         true
+    }
+
+    /// Canonicalize an emitted route's step order so order-permuted routes
+    /// assemble byte-identical plans and collapse in the structural dedup:
+    /// within each maximal run of consecutive derive steps, stable-sort by
+    /// source leaf. Derives on distinct leaves commute (each touches only
+    /// its own leaf's label under an unchanged recipient set); same-leaf
+    /// chains keep their relative order (stable sort), and nothing is moved
+    /// across a narrow step (a narrow changes the recipient set and the
+    /// gate, so it does not commute). The route's derive list is rebuilt in
+    /// the same order for the dominance-group identity.
+    fn canonicalize_steps(state: &mut ReduceState) {
+        let steps = &mut state.steps;
+        let mut start = 0;
+        while start < steps.len() {
+            let is_derive =
+                |step: &PlannedRemedy| matches!(step, PlannedRemedy::Reduce(ReductionTarget::DeriveValue { .. }));
+            if !is_derive(&steps[start]) {
+                start += 1;
+                continue;
+            }
+            let mut end = start;
+            while end < steps.len() && is_derive(&steps[end]) {
+                end += 1;
+            }
+            steps[start..end].sort_by_key(|step| match step {
+                PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, .. }) => *source,
+                _ => unreachable!("run contains only derive steps"),
+            });
+            start = end;
+        }
+        // The dominance-group identity is the per-leaf derivation chains
+        // plus the final tool: stable-sort the route's derive pairs by leaf
+        // so any interleaving with narrows (which cannot reorder a leaf's
+        // own chain) yields one group.
+        state.derives = steps
+            .iter()
+            .filter_map(|step| match step {
+                PlannedRemedy::Reduce(ReductionTarget::DeriveValue { source, transformer }) => {
+                    Some((*source, transformer.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        state.derives.sort_by_key(|(leaf, _)| *leaf);
     }
 
     /// The simulation-level narrowing gate, mirroring the applier's
@@ -871,16 +902,37 @@ impl Iterator for Combinations {
 /// prediction metadata that differs by generation path, not by what the plan
 /// asks or does. Routes are a deterministic function of the authorization, so
 /// they never differ between shape-identical steps.
-fn same_shape(a: &NonEmptyVec<PlannedRemedy>, b: &NonEmptyVec<PlannedRemedy>) -> bool {
-    a.len() == b.len()
-        && a.iter().zip(b.iter()).all(|(x, y)| match (x, y) {
+/// Order-insensitive plan identity: the same step multiset (ignoring the
+/// violation vectors shown to authorities) is the same prediction —
+/// identical derived values, identical narrowed action, identical
+/// authorization asks — assembled by order-permuted routes the
+/// path-complete walk explores separately. `canonicalize_steps` collapses
+/// permutations within one derive run; this catches permutations across a
+/// narrow, where run-local sorting cannot reach. Both compared plans were
+/// verified unlocking verbatim, so keeping the first (breadth-first,
+/// fewest-hops) order loses nothing.
+fn same_step_multiset(a: &NonEmptyVec<PlannedRemedy>, b: &NonEmptyVec<PlannedRemedy>) -> bool {
+    fn step_eq(x: &PlannedRemedy, y: &PlannedRemedy) -> bool {
+        match (x, y) {
             (PlannedRemedy::Reduce(t1), PlannedRemedy::Reduce(t2)) => t1 == t2,
             (
                 PlannedRemedy::Authorize { authorization: a1, .. },
                 PlannedRemedy::Authorize { authorization: a2, .. },
             ) => a1 == a2,
             _ => false,
-        })
+        }
+    }
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut unmatched: Vec<&PlannedRemedy> = b.iter().collect();
+    a.iter().all(|x| match unmatched.iter().position(|y| step_eq(x, y)) {
+        Some(i) => {
+            unmatched.swap_remove(i);
+            true
+        }
+        None => false,
+    })
 }
 
 /// The total authorization a plan asks for, folded into one comparable

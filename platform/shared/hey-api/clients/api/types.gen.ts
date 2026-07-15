@@ -17388,6 +17388,7 @@ export type GetAppAssignableBuiltinToolsResponses = {
         catalogId: string | null;
         delegateToAgentId: string | null;
         name: string;
+        rawName: string | null;
         /**
          *
          * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217

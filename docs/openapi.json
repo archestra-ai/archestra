@@ -60029,6 +60029,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "rawName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "parameters": {
                         "anyOf": [
                           {
@@ -60111,6 +60115,7 @@
                       "catalogId",
                       "delegateToAgentId",
                       "name",
+                      "rawName",
                       "description",
                       "meta",
                       "clonedPendingDiscovery",
@@ -188635,7 +188640,7 @@
             "schema": {
               "type": "string",
               "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "in": "path",
             "name": "appId",

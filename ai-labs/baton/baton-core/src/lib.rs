@@ -43,7 +43,13 @@ pub mod audit;
 pub mod contract;
 pub mod dimension;
 pub mod engine;
+// The append-only event substrate and its derived projections (shadow phase:
+// dual-recorded beside the legacy state, parity-tested, not yet read by
+// policy). Public as modules but deliberately not re-exported at the root
+// until the projection cutover makes them the authoritative model.
+pub mod event;
 pub mod plan;
+pub mod projection;
 // Technically public (reusable label algebras) but never re-exported at the
 // root: a consumer composes the built-in dimensions, not the raw presets.
 pub mod preset;

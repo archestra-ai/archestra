@@ -205,6 +205,12 @@ impl ValueStore {
         self.values.len()
     }
 
+    /// The id the next admission will mint. Lets a trajectory mutation build
+    /// its event batch — which names the value — before any state is written.
+    pub(crate) fn next_id(&self) -> ValueId {
+        ValueId::new(self.values.len() as u64)
+    }
+
     /// Every value reachable from `seeds` by following provenance edges — the
     /// transitive ancestry, seeds included. A visited-set graph walk; it
     /// terminates because provenance names only already-admitted values (minted with a

@@ -25,6 +25,7 @@ use crate::ToolName;
 use crate::audit::{AuditEvent, TrajectoryState};
 use crate::dimension::UserId;
 use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptParts, RejectedToken};
+use crate::event::{EventSet, Fact, ValueOrigin};
 use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionSpec};
 use crate::request::{ActionState, PendingAction, ToolRequest};
 use crate::revision::{ActionId, PlanId, Revision, TransitionId, TurnId, ValueId};
@@ -126,6 +127,11 @@ pub struct Trajectory {
     /// so without this marker the confirming turn would become the newest
     /// turn again and its confirmation would resurrect.
     spent_confirmation: Option<TurnId>,
+    /// Shadow substrate: every mutation dual-records its facts here as one
+    /// batch (built before any legacy write, appended in the same
+    /// transaction that advances the revision). Reads stay on the legacy
+    /// fields until the projection cutover.
+    events: EventSet,
 }
 
 impl Default for Trajectory {
@@ -148,7 +154,15 @@ impl Trajectory {
             plans: Vec::new(),
             next_plan: 0,
             spent_confirmation: None,
+            events: EventSet::default(),
         }
+    }
+
+    /// The append-only event set this trajectory dual-records into (shadow
+    /// phase: derived projections are parity-tested against the legacy
+    /// fields, which remain authoritative until the cutover).
+    pub fn events(&self) -> &EventSet {
+        &self.events
     }
 
     pub fn id(&self) -> TrajectoryId {
@@ -192,12 +206,25 @@ impl Trajectory {
     /// only caller-labeled admission path.
     pub fn ingress(&mut self, speaker: Speaker, label: ValueLabel, body: OpaqueValue) -> ValueId {
         let turn_id = TurnId::new(self.turns.len() as u64);
-        let value = self.store.admit_ingress(turn_id, label, body);
-        self.turns.push(Turn {
-            actor: Actor::User(speaker.0),
-            value,
-        });
-        self.advance();
+        let value = self.store.next_id();
+        let actor = Actor::User(speaker.0);
+        let batch = vec![
+            Fact::ValueAdmitted {
+                value,
+                origin: ValueOrigin::Ingress {
+                    turn: turn_id,
+                    label: label.clone(),
+                },
+            },
+            Fact::TurnAppended {
+                turn: turn_id,
+                actor: actor.clone(),
+            },
+        ];
+        let admitted = self.store.admit_ingress(turn_id, label, body);
+        debug_assert_eq!(admitted, value);
+        self.turns.push(Turn { actor, value: admitted });
+        self.commit(batch);
         value
     }
 
@@ -211,8 +238,23 @@ impl Trajectory {
         reads: BTreeSet<ValueId>,
         control: BTreeSet<ValueId>,
     ) -> Result<ValueId, UnknownValue> {
-        let value = self.store.admit_model_output(body, reads, control)?;
-        self.advance();
+        // Prevalidate the dependency sets (the same check admission runs)
+        // before building the batch, so refusal writes nothing anywhere.
+        self.store.fold_labels(reads.iter().chain(control.iter()))?;
+        let value = self.store.next_id();
+        let batch = vec![Fact::ValueAdmitted {
+            value,
+            origin: ValueOrigin::ModelOutput {
+                reads: reads.clone(),
+                control: control.clone(),
+            },
+        }];
+        let admitted = self
+            .store
+            .admit_model_output(body, reads, control)
+            .expect("dependencies prevalidated above");
+        debug_assert_eq!(admitted, value);
+        self.commit(batch);
         Ok(value)
     }
 
@@ -261,6 +303,16 @@ impl Trajectory {
         };
 
         // Dispatch boundary: commit may-effects before release.
+        let mut batch = vec![Fact::EffectsCommitted {
+            action: parts.action,
+            effects: parts.proposed_effects.clone(),
+        }];
+        if self.pending_confirmation().is_some() {
+            batch.push(Fact::ConfirmationSpent {
+                turn: TurnId::new((self.turns.len() - 1) as u64),
+            });
+        }
+        batch.push(Fact::ActionReleased { action: parts.action });
         self.state.commit_effects(parts.proposed_effects.clone());
         self.state.record(AuditEvent::EffectsCommitted {
             action: parts.action,
@@ -271,7 +323,7 @@ impl Trajectory {
             .as_mut()
             .expect("pending action validated above")
             .mark_released();
-        self.advance();
+        self.commit(batch);
         debug!(action = %parts.action, "release: effects committed, action released");
 
         let canonical = CanonicalRequest {
@@ -288,16 +340,38 @@ impl Trajectory {
     /// tool turn is appended, and the action closes.
     pub fn record_output(&mut self, receipt: DispatchReceipt, body: OpaqueValue) -> Result<ValueId, RejectedToken> {
         let parts = self.validate_receipt(receipt)?;
-        let value = self
+        let turn_id = TurnId::new(self.turns.len() as u64);
+        let value = self.store.next_id();
+        let batch = vec![
+            Fact::ValueAdmitted {
+                value,
+                origin: ValueOrigin::ToolOutput {
+                    action: parts.action,
+                    intrinsic: parts.intrinsic.clone(),
+                    arguments: parts.arguments.clone(),
+                    control: parts.control.clone(),
+                },
+            },
+            Fact::TurnAppended {
+                turn: turn_id,
+                actor: Actor::Tool(parts.tool.clone()),
+            },
+            Fact::ActionCompleted {
+                action: parts.action,
+                output: value,
+            },
+        ];
+        let admitted = self
             .store
             .admit_tool_output(parts.action, parts.intrinsic, parts.arguments, parts.control, body)
             .expect("receipt dependencies were validated at evaluate time");
+        debug_assert_eq!(admitted, value);
         self.turns.push(Turn {
             actor: Actor::Tool(parts.tool),
             value,
         });
         self.pending = None;
-        self.advance();
+        self.commit(batch);
         debug!(action = %parts.action, %value, "record_output: recorded tool result");
         Ok(value)
     }
@@ -308,9 +382,10 @@ impl Trajectory {
     /// cannot authorize a second attempt.
     pub fn record_failure(&mut self, receipt: DispatchReceipt) -> Result<(), RejectedToken> {
         let parts = self.validate_receipt(receipt)?;
+        let batch = vec![Fact::DispatchFailed { action: parts.action }];
         self.state.record(AuditEvent::DispatchFailed { action: parts.action });
         self.pending = None;
-        self.advance();
+        self.commit(batch);
         debug!(action = %parts.action, "record_failure: dispatch failed, action closed");
         Ok(())
     }
@@ -350,14 +425,34 @@ impl Trajectory {
         control: BTreeSet<ValueId>,
     ) -> Result<(ValueId, String), UnknownValue> {
         let rendered = crate::request::render(body, &self.store)?;
-        let value = self
+        let reads = body.leaves();
+        self.store.fold_labels(reads.iter().chain(control.iter()))?;
+        let turn_id = TurnId::new(self.turns.len() as u64);
+        let value = self.store.next_id();
+        let batch = vec![
+            Fact::ValueAdmitted {
+                value,
+                origin: ValueOrigin::ModelOutput {
+                    reads: reads.clone(),
+                    control: control.clone(),
+                },
+            },
+            Fact::TurnAppended {
+                turn: turn_id,
+                actor: Actor::Assistant,
+            },
+            Fact::ResponseEmitted { value },
+        ];
+        let admitted = self
             .store
-            .admit_model_output(OpaqueValue::new(rendered.clone()), body.leaves(), control)?;
+            .admit_model_output(OpaqueValue::new(rendered.clone()), reads, control)
+            .expect("dependencies prevalidated above");
+        debug_assert_eq!(admitted, value);
         self.turns.push(Turn {
             actor: Actor::Assistant,
             value,
         });
-        self.advance();
+        self.commit(batch);
         Ok((value, rendered))
     }
 
@@ -365,8 +460,8 @@ impl Trajectory {
     /// token). Clears the slot and advances the revision, so the dropped
     /// token can never be spent.
     pub fn abandon_pending(&mut self) {
-        if self.pending.take().is_some() {
-            self.advance();
+        if let Some(pending) = self.pending.take() {
+            self.commit(vec![Fact::ActionAbandoned { action: pending.id() }]);
         }
     }
 
@@ -404,14 +499,19 @@ impl Trajectory {
     ) -> ActionId {
         let id = ActionId::new(self.next_action);
         self.next_action += 1;
+        let batch = vec![Fact::ActionProposed {
+            action: id,
+            tool: request.tool.clone(),
+            effects: proposed_effects.clone(),
+        }];
         self.pending = Some(PendingAction::proposed(id, request, proposed_effects));
-        self.advance();
+        self.commit(batch);
         id
     }
 
     pub(crate) fn clear_pending(&mut self) {
-        if self.pending.take().is_some() {
-            self.advance();
+        if let Some(pending) = self.pending.take() {
+            self.commit(vec![Fact::ActionAbandoned { action: pending.id() }]);
         }
     }
 
@@ -423,7 +523,11 @@ impl Trajectory {
         engine: crate::engine::EngineId,
         drafts: Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
     ) -> Vec<RemedyPlan> {
-        self.advance();
+        // The check fact is a new occurrence per evaluation (re-entry
+        // included): it mirrors this unconditional advance 1:1 so the
+        // frontier can replace the revision at cutover without weakening
+        // cross-evaluation staleness.
+        self.commit(vec![Fact::CheckPerformed { action }]);
         let basis = self.revision;
         self.plans = drafts
             .into_iter()
@@ -444,8 +548,9 @@ impl Trajectory {
     }
 
     pub(crate) fn record_event(&mut self, event: AuditEvent) {
+        let batch = vec![Fact::ControlPlane { event: event.clone() }];
         self.state.record(event);
-        self.advance();
+        self.commit(batch);
     }
 
     /// Apply a validated content-justified `Derive` step as one transaction: admit the
@@ -467,10 +572,33 @@ impl Trajectory {
             .expect("transform source validated by the engine")
             .label()
             .clone();
-        let derived = self
+        let derived = self.store.next_id();
+        let action = self
+            .pending
+            .as_ref()
+            .expect("pending action validated by the engine")
+            .id();
+        let batch = vec![
+            Fact::ValueAdmitted {
+                value: derived,
+                origin: ValueOrigin::Transformed {
+                    source,
+                    transition,
+                    transformer: transformer.clone(),
+                    declared: declared_output.clone(),
+                },
+            },
+            Fact::ArgumentSubstituted {
+                action,
+                from: source,
+                to: derived,
+            },
+        ];
+        let admitted = self
             .store
             .admit_transformed(source, transition, transformer.clone(), declared_output.clone(), body)
             .expect("transform source validated by the engine");
+        debug_assert_eq!(admitted, derived);
         self.pending
             .as_mut()
             .expect("pending action validated by the engine")
@@ -484,7 +612,7 @@ impl Trajectory {
             declared_output,
             outcome: crate::audit::TransitionOutcome::Applied,
         });
-        self.advance();
+        self.commit(batch);
         derived
     }
 
@@ -504,7 +632,7 @@ impl Trajectory {
             .expect("transform source validated by the engine")
             .label()
             .clone();
-        self.state.record(AuditEvent::ValueTransition {
+        let event = AuditEvent::ValueTransition {
             transition,
             transformer,
             source,
@@ -512,8 +640,10 @@ impl Trajectory {
             input,
             declared_output,
             outcome: crate::audit::TransitionOutcome::Failed(failure),
-        });
-        self.advance();
+        };
+        let batch = vec![Fact::ControlPlane { event: event.clone() }];
+        self.state.record(event);
+        self.commit(batch);
     }
 
     /// Apply a validated `ConstrainAction` step as one transaction.
@@ -521,13 +651,18 @@ impl Trajectory {
         let transition = self.mint_transition();
         let pending = self.pending.as_mut().expect("pending action validated by the engine");
         let action = pending.id();
+        let batch = vec![Fact::ActionConstrained {
+            action,
+            to_tool: to_tool.clone(),
+            effects: effects.clone(),
+        }];
         pending.constrain(to_tool, effects);
         self.state.record(AuditEvent::ActionConstrained {
             transition,
             action,
             outcome: crate::audit::TransitionOutcome::Applied,
         });
-        self.advance();
+        self.commit(batch);
     }
 
     /// Apply a granted `AcceptGrowth` step as one transaction: record the
@@ -542,6 +677,11 @@ impl Trajectory {
         let transition = self.mint_transition();
         let pending = self.pending.as_mut().expect("pending action validated by the engine");
         let action = pending.id();
+        let batch = vec![Fact::GrowthAccepted {
+            action,
+            effects: effects.clone(),
+            authority: authority.clone(),
+        }];
         pending.accept_growth(effects.clone());
         self.state.record(AuditEvent::AcceptApplied {
             transition,
@@ -550,7 +690,7 @@ impl Trajectory {
             authority,
             resolved,
         });
-        self.advance();
+        self.commit(batch);
     }
 
     /// Apply a granted fiat `Derive` (Endorse) step as one transaction: admit a new
@@ -569,10 +709,33 @@ impl Trajectory {
         let source_value = self.store.get(source).expect("endorse source validated by the engine");
         let input = source_value.label().clone();
         let body = source_value.body().clone();
-        let derived = self
+        let derived = self.store.next_id();
+        let action = self
+            .pending
+            .as_ref()
+            .expect("pending action validated by the engine")
+            .id();
+        let batch = vec![
+            Fact::ValueAdmitted {
+                value: derived,
+                origin: ValueOrigin::Endorsed {
+                    source,
+                    authority: authority.clone(),
+                    delta: delta.clone(),
+                    raised: raised.clone(),
+                },
+            },
+            Fact::ArgumentSubstituted {
+                action,
+                from: source,
+                to: derived,
+            },
+        ];
+        let admitted = self
             .store
             .admit_endorsed(source, authority.clone(), delta.clone(), raised.clone(), body)
             .expect("endorse source validated by the engine");
+        debug_assert_eq!(admitted, derived);
         self.pending
             .as_mut()
             .expect("pending action validated by the engine")
@@ -586,7 +749,7 @@ impl Trajectory {
             input,
             raised,
         });
-        self.advance();
+        self.commit(batch);
         derived
     }
 
@@ -600,6 +763,11 @@ impl Trajectory {
     /// trajectory's past, as a prior dispatch would have. Lets a test whose
     /// subject is the confidentiality axis exercise an egress-bearing sink
     /// without criterion (1) (surface growth) firing on the first egress.
+    ///
+    /// Deliberately bypasses the event log: it advances nothing today, so a
+    /// shadow batch would desynchronize the frontier from the revision. The
+    /// seeded trajectories are therefore outside the projection parity
+    /// domain; the projection cutover replaces this helper.
     #[cfg(test)]
     pub(crate) fn seed_committed_effects(&mut self, effects: crate::dimension::Effects) {
         self.state.commit_effects(effects);
@@ -619,20 +787,26 @@ impl Trajectory {
             .expect("seed_transformed source admitted")
             .body()
             .clone();
-        let derived = self
-            .store
-            .admit_transformed(
+        let transformer = crate::value::TransformerRef {
+            id: "seed".to_owned(),
+            version: 0,
+        };
+        let derived = self.store.next_id();
+        let batch = vec![Fact::ValueAdmitted {
+            value: derived,
+            origin: ValueOrigin::Transformed {
                 source,
                 transition,
-                crate::value::TransformerRef {
-                    id: "seed".to_owned(),
-                    version: 0,
-                },
-                output,
-                body,
-            )
+                transformer: transformer.clone(),
+                declared: output.clone(),
+            },
+        }];
+        let admitted = self
+            .store
+            .admit_transformed(source, transition, transformer, output, body)
             .expect("seed_transformed source admitted");
-        self.advance();
+        debug_assert_eq!(admitted, derived);
+        self.commit(batch);
         derived
     }
 
@@ -640,6 +814,18 @@ impl Trajectory {
     /// transaction.
     fn advance(&mut self) {
         self.revision = self.revision.next();
+    }
+
+    /// One mutation = one event batch + one revision advance, atomically.
+    /// The batch is built before any legacy write and mirrors validations
+    /// that already passed, so an admission conflict here is a crate bug —
+    /// it fails loudly rather than letting the log and the legacy state
+    /// diverge.
+    fn commit(&mut self, facts: Vec<Fact>) {
+        self.events
+            .append_batch(facts)
+            .expect("shadow facts mirror an already-validated mutation");
+        self.advance();
     }
 }
 

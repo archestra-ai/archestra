@@ -43,6 +43,8 @@ mod planning;
 mod pursue;
 
 #[cfg(test)]
+mod parity_tests;
+#[cfg(test)]
 mod tests;
 
 pub(crate) use capability::ReceiptParts;

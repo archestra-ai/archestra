@@ -161,7 +161,7 @@ impl AudienceRuleConfig {
     fn to_domain(self) -> AudienceRule {
         match self {
             Self::Unrestricted => AudienceRule::Unrestricted,
-            Self::RecipientsWithinContext => AudienceRule::RecipientsWithinContext,
+            Self::RecipientsWithinContext => AudienceRule::FromRecipients,
         }
     }
 }
@@ -316,7 +316,7 @@ impl ContractConfig {
                 }
                 ArgumentSchema::with_recipients(ArgumentName::new(arg))
             }
-            None if audience == AudienceRule::RecipientsWithinContext => {
+            None if audience == AudienceRule::FromRecipients => {
                 return Err(ConfigError::MissingRecipientsArg(tool.name.clone()));
             }
             None => ArgumentSchema::opaque(),

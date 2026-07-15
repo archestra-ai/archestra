@@ -162,14 +162,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   ) {
     return "chats";
   }
-  const studioPrefixes = [
-    "/agents",
-    "/scheduled-tasks",
-    "/mcp",
-    "/llm",
-    "/knowledge",
-    "/audit",
-  ];
+  const studioPrefixes = ["/agents", "/mcp", "/llm", "/knowledge", "/audit"];
   if (
     studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {

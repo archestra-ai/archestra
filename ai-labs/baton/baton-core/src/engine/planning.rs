@@ -2,13 +2,17 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ToolName;
 use crate::approval::{Authority, AuthorityMode};
+use crate::audit::AuthorityName;
 use crate::contract::{AudienceRule, Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::{Effects, KnownTrust};
-use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, TransitionKind, TransitionSpec};
-use crate::remedy::{Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate};
+use crate::plan::NonEmptyVec;
+use crate::remedy::{
+    Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, Lift, PlannedRemedy,
+    ReductionTarget,
+};
 use crate::request::ToolRequest;
 use crate::revision::{ActionId, FlowId, ValueId};
-use crate::transition::{ActionTransition, EndorseDelta, RegisteredTransformer, TransientWaiver};
+use crate::transition::{ActionTransition, RegisteredTransformer};
 use crate::turn::Trajectory;
 use crate::value::{UnknownValue, ValueLabel};
 
@@ -21,8 +25,8 @@ use super::{MAX_PLANS, PolicyEngine};
 /// facts). The raise list may be empty: a non-monotone subset release can be
 /// clean on its own.
 struct JointRescue {
-    endorse: Vec<(ValueId, EndorseDelta, Vec<Violation>)>,
-    delta: TransientWaiver,
+    endorse: Vec<(ValueId, LabelRaise, Vec<Violation>)>,
+    delta: Lift,
 }
 
 /// Exhaustive-subset bound for the rescue's release search; a larger control
@@ -40,17 +44,17 @@ struct ConstrainCandidate<'a> {
 
 impl PolicyEngine {
     /// Deterministic bounded plan enumeration: candidate step sequences in the
-    /// canonical order Sanitize? -> Constrain? -> Endorse* -> Accept? ->
-    /// Waiver?, each subset instantiated from the registries in registration
-    /// order, kept iff the predicted final posture is clean, capped at
-    /// [`MAX_PLANS`].
+    /// canonical order Reduce(derive)? -> Reduce(narrow)? -> Authorize(raise)*
+    /// -> Authorize(acquire)? -> Authorize(lift)?, each subset instantiated
+    /// from the registries in registration order, kept iff the simulated
+    /// residual is clean, capped at [`MAX_PLANS`].
     pub(super) fn enumerate_plans(
         &self,
         trajectory: &Trajectory,
         checked: &ToolRequest,
         contract: Option<&ToolContract>,
         pending: &crate::request::PendingAction,
-    ) -> Vec<(NonEmptyVec<TransitionSpec>, Posture)> {
+    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
         let base = match SimFlow::of(trajectory, checked, contract) {
             Ok(base) => base,
             // A dependency vanished mid-evaluation cannot happen (the store
@@ -101,7 +105,7 @@ impl PolicyEngine {
             })
             .collect();
 
-        let mut plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)> = Vec::new();
+        let mut plans: Vec<NonEmptyVec<PlannedRemedy>> = Vec::new();
         let transform_options: Vec<Option<&(ValueId, &RegisteredTransformer)>> =
             std::iter::once(None).chain(transforms.iter().map(Some)).collect();
         let constrain_options: Vec<Option<&ConstrainCandidate<'_>>> =
@@ -117,23 +121,14 @@ impl PolicyEngine {
         for transform in &transform_options {
             for constrain in &constrain_options {
                 let mut sim = base.clone();
-                let mut steps: Vec<TransitionSpec> = Vec::new();
+                let mut steps: Vec<PlannedRemedy> = Vec::new();
 
                 if let Some((leaf, transformer)) = transform {
-                    let precondition = Posture {
-                        remaining: sim.violations(None),
-                    };
                     sim.leaf_labels.insert(*leaf, transformer.descriptor.output.clone());
-                    steps.push(TransitionSpec {
-                        precondition,
-                        postcondition: Posture {
-                            remaining: sim.violations(None),
-                        },
-                        kind: TransitionKind::Derive {
-                            source: *leaf,
-                            justification: Justification::Content(transformer.descriptor.transformer.clone()),
-                        },
-                    });
+                    steps.push(PlannedRemedy::Reduce(ReductionTarget::DeriveValue {
+                        source: *leaf,
+                        transformer: transformer.descriptor.transformer.clone(),
+                    }));
                 }
                 if let Some(ConstrainCandidate {
                     transition,
@@ -141,124 +136,114 @@ impl PolicyEngine {
                     recipients,
                 }) = constrain
                 {
-                    let precondition = Posture {
-                        remaining: sim.violations(None),
-                    };
                     sim.tool = transition.to_tool.clone();
                     sim.requires = target.requires.clone();
                     sim.recipients = recipients.clone();
                     // The constrain narrows the proposed effects, so any surface
-                    // growth is recomputed against the reduced set — an Accept
+                    // growth is recomputed against the reduced set — an acquire
                     // then authorizes only the residual growth (a full constrain
                     // to no-egress leaves none).
                     sim.proposed_effects = transition.effects.clone();
-                    steps.push(TransitionSpec {
-                        precondition,
-                        postcondition: Posture {
-                            remaining: sim.violations(None),
-                        },
-                        kind: TransitionKind::ConstrainAction {
-                            transition: transition.id.clone(),
-                        },
-                    });
+                    steps.push(PlannedRemedy::Reduce(ReductionTarget::NarrowAction {
+                        transition: transition.id.clone(),
+                    }));
                 }
 
                 let mut remaining = sim.violations(None);
 
-                // Criterion (2): peel a confidentiality sink breach into Endorse
-                // steps — one durable relabel per arg leaf whose own label fails
-                // the sink requirement (multi-source). Computed on the
-                // post-reduction residual, so a sanitizer's reduction shrinks what
+                // Criterion (2): peel a confidentiality sink breach into durable
+                // raises — one relabel per arg leaf whose own label fails the
+                // sink requirement (multi-source). Computed on the
+                // post-reduction residual, so a reducer's derivation shrinks what
                 // the authority must vouch. A control-borne residual is left to
-                // the control-release waiver below. All contributing leaves must
-                // be endorsable, else this branch cannot clear the breach.
+                // the control-release lift below. All contributing leaves must
+                // have a competent route, else this branch cannot clear the
+                // breach.
                 let endorse = endorse_steps(&sim, &remaining);
-                let endorsable = endorse
-                    .iter()
-                    .all(|(leaf, delta)| self.can_authorize(&raise_authorization(*leaf, delta)));
-                if endorsable {
+                let raise_steps: Option<Vec<PlannedRemedy>> = {
+                    let mut probe = sim.clone();
+                    let mut residual = remaining.clone();
+                    endorse
+                        .iter()
+                        .map(|(leaf, delta)| {
+                            let step = self.authorize_step(raise_authorization(*leaf, delta), residual.clone())?;
+                            let raised = delta.raise(&probe.leaf_labels[leaf]);
+                            probe.leaf_labels.insert(*leaf, raised);
+                            residual = probe.violations(None);
+                            Some(step)
+                        })
+                        .collect()
+                };
+                if let Some(raise_steps) = raise_steps {
                     for (leaf, delta) in endorse {
-                        let precondition = Posture {
-                            remaining: remaining.clone(),
-                        };
                         let raised = delta.raise(&sim.leaf_labels[&leaf]);
                         sim.leaf_labels.insert(leaf, raised);
-                        let targets = precondition.remaining.clone();
-                        remaining = sim.violations(None);
-                        steps.push(TransitionSpec {
-                            precondition,
-                            postcondition: Posture {
-                                remaining: remaining.clone(),
-                            },
-                            kind: TransitionKind::Derive {
-                                source: leaf,
-                                justification: Justification::Fiat { delta, targets },
-                            },
-                        });
                     }
+                    remaining = sim.violations(None);
+                    steps.extend(raise_steps);
                 }
 
-                // Criterion (1): peel any surface growth into an Accept step
-                // before a waiver handles the confidentiality residual. Accept
-                // composes additively with a waiver — they are separate steps to
+                // Criterion (1): peel any surface growth into an acquire step
+                // before a lift handles the confidentiality residual. Acquire
+                // composes additively with a lift — they are separate steps to
                 // separate competences (acquire_effects vs the lift dims).
                 if let Some(growth) = surface_growth_of(&remaining) {
                     let grant = Authorization {
                         delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
                         scope: AuthorizationScope::PendingAction { action: pending.id() },
                     };
-                    if !self.can_authorize(&grant) {
+                    let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                         // No authority can acquire this effect: this branch
-                        // cannot reach a clean posture, so it yields no plan.
+                        // cannot reach a clean residual, so it yields no plan.
                         continue;
-                    }
-                    let precondition = Posture {
-                        remaining: remaining.clone(),
                     };
-                    sim.accepted_effects = sim.accepted_effects.clone().combine(growth.clone());
+                    sim.accepted_effects = sim.accepted_effects.clone().combine(growth);
                     remaining = sim.violations(None);
-                    steps.push(TransitionSpec {
-                        precondition,
-                        postcondition: Posture {
-                            remaining: remaining.clone(),
-                        },
-                        kind: TransitionKind::AcceptGrowth { effects: growth },
-                    });
+                    steps.push(step);
                 }
 
                 if remaining.is_empty() {
                     if let Some(steps) = NonEmptyVec::from_vec(steps) {
-                        push_plan(&mut plans, steps, Posture::clean());
+                        push_plan(&mut plans, steps);
                     }
                     continue;
                 }
 
-                // A final waiver for whatever remains. Prefer the narrower
+                // A final lift for whatever remains. Prefer the narrower
                 // control-release variant when the taint is control-borne.
-                let precondition = Posture {
-                    remaining: remaining.clone(),
-                };
                 for delta in self.waiver_candidates(&sim, &remaining) {
                     if !sim.violations(Some(&delta)).is_empty() {
                         continue;
                     }
                     let grant = authorization_for(&delta, &remaining, pending.flow());
-                    if !self.can_authorize(&grant) {
+                    let Some(step) = self.authorize_step(grant, remaining.clone()) else {
                         continue;
-                    }
-                    let mut waiver_steps = steps.clone();
-                    waiver_steps.push(TransitionSpec {
-                        precondition: precondition.clone(),
-                        postcondition: Posture::clean(),
-                        kind: TransitionKind::ApplyWaiver { delta },
-                    });
-                    let steps = NonEmptyVec::from_vec(waiver_steps).expect("waiver step just pushed");
-                    push_plan(&mut plans, steps, Posture::clean());
+                    };
+                    let mut lift_steps = steps.clone();
+                    lift_steps.push(step);
+                    let steps = NonEmptyVec::from_vec(lift_steps).expect("lift step just pushed");
+                    push_plan(&mut plans, steps);
                     break;
                 }
             }
         }
         select_fair(plans, MAX_PLANS)
+    }
+
+    /// The planned authorize step for `authorization`, carrying the competent
+    /// routes identified now (prediction metadata — application still resolves
+    /// the ruling authority live) and the violations the step asks its
+    /// authority to clear. `None` when no registered authority is competent.
+    fn authorize_step(&self, authorization: Authorization, targets: Vec<Violation>) -> Option<PlannedRemedy> {
+        let routes: Vec<AuthorityName> = self
+            .competent_authorities(&authorization)
+            .map(|authority| authority.name.clone())
+            .collect();
+        NonEmptyVec::from_vec(routes).map(|routes| PlannedRemedy::Authorize {
+            authorization,
+            routes,
+            targets,
+        })
     }
 
     /// Terminal rescue: a joint Endorse×control-release solve, consulted only
@@ -283,7 +268,7 @@ impl PolicyEngine {
         trajectory: &Trajectory,
         checked: &ToolRequest,
         contract: Option<&ToolContract>,
-    ) -> Vec<(NonEmptyVec<TransitionSpec>, Posture)> {
+    ) -> Vec<NonEmptyVec<PlannedRemedy>> {
         let base = match SimFlow::of(trajectory, checked, contract) {
             Ok(base) => base,
             Err(_) => return Vec::new(),
@@ -300,60 +285,43 @@ impl PolicyEngine {
             return Vec::new();
         };
 
-        // The plan's postures are the *actual* flow at each application point
-        // (apply-time preconditions compare against reality); an Endorse step
-        // may leave the actual posture unchanged while the mask holds — its
-        // effect is visible only in the projection its `targets` carry.
+        // A rescue raise's `targets` are the *projected post-release*
+        // residual at its own peel — the vector its ruling authority is
+        // shown; the actual flow may not mention the deficit at all while a
+        // masking control dependency holds.
         let mut sim = base;
         let mut steps = Vec::new();
-        let mut remaining = sim.violations(None);
         for (leaf, delta, targets) in &rescue.endorse {
-            let precondition = Posture {
-                remaining: remaining.clone(),
+            let Some(step) = self.authorize_step(raise_authorization(*leaf, delta), targets.clone()) else {
+                return Vec::new();
             };
             let raised = delta.raise(&sim.leaf_labels[leaf]);
             sim.leaf_labels.insert(*leaf, raised);
-            remaining = sim.violations(None);
-            steps.push(TransitionSpec {
-                precondition,
-                postcondition: Posture {
-                    remaining: remaining.clone(),
-                },
-                kind: TransitionKind::Derive {
-                    source: *leaf,
-                    justification: Justification::Fiat {
-                        delta: delta.clone(),
-                        targets: targets.clone(),
-                    },
-                },
-            });
+            steps.push(step);
         }
+        let mut remaining = sim.violations(None);
         if let Some(growth) = surface_growth_of(&remaining) {
-            let precondition = Posture {
-                remaining: remaining.clone(),
+            let grant = Authorization {
+                delta: AuthorizationDelta::single(DeltaCoordinate::AcquireEffects(growth.clone())),
+                scope: AuthorizationScope::PendingAction { action },
             };
-            sim.accepted_effects = sim.accepted_effects.clone().combine(growth.clone());
+            let Some(step) = self.authorize_step(grant, remaining.clone()) else {
+                return Vec::new();
+            };
+            sim.accepted_effects = sim.accepted_effects.clone().combine(growth);
             remaining = sim.violations(None);
-            steps.push(TransitionSpec {
-                precondition,
-                postcondition: Posture {
-                    remaining: remaining.clone(),
-                },
-                kind: TransitionKind::AcceptGrowth { effects: growth },
-            });
+            steps.push(step);
         }
         if !sim.violations(Some(&rescue.delta)).is_empty() {
             return Vec::new();
         }
-        steps.push(TransitionSpec {
-            precondition: Posture {
-                remaining: remaining.clone(),
-            },
-            postcondition: Posture::clean(),
-            kind: TransitionKind::ApplyWaiver { delta: rescue.delta },
-        });
+        let grant = authorization_for(&rescue.delta, &remaining, flow);
+        let Some(step) = self.authorize_step(grant, remaining) else {
+            return Vec::new();
+        };
+        steps.push(step);
         match NonEmptyVec::from_vec(steps) {
-            Some(steps) => vec![(steps, Posture::clean())],
+            Some(steps) => vec![steps],
             None => Vec::new(),
         }
     }
@@ -459,12 +427,12 @@ impl PolicyEngine {
     /// residual, then the plain delta. The waiver clears only the non-relabel
     /// dims (prior effects, confirmation, control release); trust/audience route
     /// to Endorse steps peeled before this.
-    fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<TransientWaiver> {
+    fn waiver_candidates(&self, sim: &SimFlow, remaining: &[Violation]) -> Vec<Lift> {
         let mut candidates = Vec::new();
         if let Some(release) = self.minimal_control_release(sim) {
-            let after = sim.violations(Some(&TransientWaiver {
+            let after = sim.violations(Some(&Lift {
                 control_release: release.clone(),
-                ..TransientWaiver::empty()
+                ..Lift::empty()
             }));
             let mut delta = needed_delta(&after);
             delta.control_release = release;
@@ -495,9 +463,9 @@ impl PolicyEngine {
             return None;
         }
         let residual = |set: &BTreeSet<ValueId>| -> Vec<Violation> {
-            sim.violations(Some(&TransientWaiver {
+            sim.violations(Some(&Lift {
                 control_release: set.clone(),
-                ..TransientWaiver::empty()
+                ..Lift::empty()
             }))
         };
         // Compare like with like: both baselines go through `violations(Some(_))`,
@@ -556,19 +524,67 @@ impl PolicyEngine {
     }
 }
 
+/// The presentation category of a remedy route, derived from its decisive
+/// (most authority-dependent) step. Interim: exists only to keep the
+/// cap-fairness guarantee until the nondominated frontier replaces
+/// [`select_fair`]; deliberately private.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum RouteCategory {
+    /// A content-justified derivation by a registered transformer.
+    Sanitize,
+    /// A registered narrowing of the action.
+    Constrain,
+    /// An authority acquires a surface growth.
+    Accept,
+    /// An authority lifts a check or acknowledges an unprovable fact.
+    LiftOrAcknowledge,
+    /// An authority durably raises a value's label — taint erased, the
+    /// priciest elevation, so it is decisive for any route containing it.
+    Raise,
+}
+
+impl RouteCategory {
+    pub(super) fn of_step(step: &PlannedRemedy) -> Self {
+        match step {
+            PlannedRemedy::Reduce(ReductionTarget::DeriveValue { .. }) => Self::Sanitize,
+            PlannedRemedy::Reduce(ReductionTarget::NarrowAction { .. }) => Self::Constrain,
+            PlannedRemedy::Authorize { authorization, .. } => {
+                let coordinates: Vec<_> = authorization.delta.coordinates().collect();
+                if coordinates.iter().any(|c| matches!(c, DeltaCoordinate::RaiseLabel(_))) {
+                    Self::Raise
+                } else if coordinates
+                    .iter()
+                    .any(|c| matches!(c, DeltaCoordinate::AcquireEffects(_)))
+                {
+                    Self::Accept
+                } else {
+                    Self::LiftOrAcknowledge
+                }
+            }
+        }
+    }
+
+    /// The decisive category of a step sequence: its most
+    /// authority-dependent step.
+    pub(super) fn decisive(steps: &NonEmptyVec<PlannedRemedy>) -> Self {
+        steps
+            .iter()
+            .map(Self::of_step)
+            .max()
+            .expect("a plan has at least one step")
+    }
+}
+
 /// Trim enumerated candidates to `cap`, guaranteeing the best (fewest-step, then
-/// earliest) route of each applicable [`ExitKind`] survives before remaining
-/// slots fill in enumeration order — so the cap never starves a category.
-/// Enumeration order is otherwise preserved, and a pool already within `cap` is
-/// returned unchanged.
-pub(super) fn select_fair(
-    plans: Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
-    cap: usize,
-) -> Vec<(NonEmptyVec<TransitionSpec>, Posture)> {
+/// earliest) route of each applicable [`RouteCategory`] survives before
+/// remaining slots fill in enumeration order — so the cap never starves a
+/// category. Enumeration order is otherwise preserved, and a pool already
+/// within `cap` is returned unchanged.
+pub(super) fn select_fair(plans: Vec<NonEmptyVec<PlannedRemedy>>, cap: usize) -> Vec<NonEmptyVec<PlannedRemedy>> {
     if plans.len() <= cap {
         return plans;
     }
-    let categories: Vec<ExitKind> = plans.iter().map(|(steps, _)| ExitKind::decisive(steps)).collect();
+    let categories: Vec<RouteCategory> = plans.iter().map(RouteCategory::decisive).collect();
     let mut keep = vec![false; plans.len()];
     let mut kept = 0usize;
     // Pass 1: the fewest-step (then earliest) route of each category.
@@ -578,7 +594,7 @@ pub(super) fn select_fair(
         }
         if let Some(best) = (0..plans.len())
             .filter(|&i| categories[i] == cat)
-            .min_by_key(|&i| (plans[i].0.len(), i))
+            .min_by_key(|&i| (plans[i].len(), i))
         {
             keep[best] = true;
             kept += 1;
@@ -601,13 +617,9 @@ pub(super) fn select_fair(
         .collect()
 }
 
-fn push_plan(
-    plans: &mut Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
-    steps: NonEmptyVec<TransitionSpec>,
-    final_postcondition: Posture,
-) {
-    if plans.iter().all(|(existing, _)| *existing != steps) {
-        plans.push((steps, final_postcondition));
+fn push_plan(plans: &mut Vec<NonEmptyVec<PlannedRemedy>>, steps: NonEmptyVec<PlannedRemedy>) {
+    if plans.iter().all(|existing| *existing != steps) {
+        plans.push(steps);
     }
 }
 
@@ -699,9 +711,9 @@ impl SimFlow {
     }
 
     /// The violations this flow would report, optionally under a
-    /// check-transient waiver. A waiver lifts exactly its declared
-    /// dimensions and acknowledges acknowledge-only facts on the record.
-    pub(crate) fn violations(&self, waiver: Option<&TransientWaiver>) -> Vec<Violation> {
+    /// check-transient lift. A lift loosens exactly its declared dimensions
+    /// and acknowledges acknowledge-only facts on the record.
+    pub(crate) fn violations(&self, waiver: Option<&Lift>) -> Vec<Violation> {
         let released = waiver.map(|w| &w.control_release);
         let control = ValueLabel::fold(self.control_labels.iter().filter_map(|(id, label)| {
             if released.is_some_and(|set| set.contains(id)) {
@@ -756,7 +768,7 @@ impl SimFlow {
 /// an unknown it has no competence to acknowledge. An empty lift is a pure
 /// acknowledgment, which routes on the explicit `acknowledge_unknown`
 /// capability rather than being covered by every mandate.
-pub(super) fn authorization_for(delta: &TransientWaiver, resolved: &[Violation], flow: FlowId) -> Authorization {
+pub(super) fn authorization_for(delta: &Lift, resolved: &[Violation], flow: FlowId) -> Authorization {
     let acknowledged: Vec<Unprovable> = resolved
         .iter()
         .filter(|violation| violation.fixability() == Fixability::AcknowledgeOnly)
@@ -785,9 +797,9 @@ pub(super) fn authorization_for(delta: &TransientWaiver, resolved: &[Violation],
 }
 
 /// The durable raise authorization an endorse of `source` asks for.
-pub(super) fn raise_authorization(source: ValueId, delta: &EndorseDelta) -> Authorization {
+pub(super) fn raise_authorization(source: ValueId, delta: &LabelRaise) -> Authorization {
     Authorization {
-        delta: AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(delta.as_raise())),
+        delta: AuthorizationDelta::single(DeltaCoordinate::RaiseLabel(delta.clone())),
         scope: AuthorizationScope::DerivedValue { source },
     }
 }
@@ -806,9 +818,9 @@ fn surface_growth_of(violations: &[Violation]) -> Option<Effects> {
 /// `violations`: prior effects and confirmation. Trust and audience are no
 /// longer waived — they route to Endorse steps — and acknowledge-only,
 /// surface-growth, and structural members contribute no lift.
-fn needed_delta(violations: &[Violation]) -> TransientWaiver {
+fn needed_delta(violations: &[Violation]) -> Lift {
     use crate::contract::Breach;
-    let mut delta = TransientWaiver::empty();
+    let mut delta = Lift::empty();
     for violation in violations {
         match violation {
             Violation::Breach(Breach::ForbiddenPriorEffects { effects }) => {
@@ -848,7 +860,7 @@ fn needed_delta(violations: &[Violation]) -> TransientWaiver {
 /// control-release waiver's concern. Sufficient and minimal because the
 /// audience fold is intersection and the trust fold is meet, so once every
 /// contributing leaf passes, the fold passes.
-fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, EndorseDelta)> {
+fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, LabelRaise)> {
     use crate::contract::Breach;
     let trust_req: Option<KnownTrust> = violations.iter().find_map(|v| match v {
         Violation::Breach(Breach::TrustBelow { required, .. }) => Some(*required),
@@ -875,7 +887,7 @@ fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, Endor
     if trust_req.is_none() && audience_req.is_none() {
         return Vec::new();
     }
-    let full = EndorseDelta {
+    let full = LabelRaise {
         trust: trust_req,
         audience: audience_req,
     };
@@ -890,7 +902,7 @@ fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, Endor
             .audience
             .as_ref()
             .map(|readers| label.audience.missing_readers(readers));
-        let delta = EndorseDelta {
+        let delta = LabelRaise {
             trust: full.trust.filter(|req| label.trust.raised_to(*req) != label.trust),
             audience: audience.filter(|deficit| !deficit.is_empty()),
         };

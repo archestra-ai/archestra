@@ -38,6 +38,23 @@ impl LabelRaise {
     pub fn is_empty(&self) -> bool {
         self.trust.is_none() && self.audience.is_none()
     }
+
+    /// The label a value gets when this raise is applied: trust raised and
+    /// audience admitted. Monotone — the lift helpers only raise a label,
+    /// never lower it, so `combine` (the taint fold, which cannot improve a
+    /// label) is deliberately not used.
+    pub(crate) fn raise(&self, label: &crate::value::ValueLabel) -> crate::value::ValueLabel {
+        crate::value::ValueLabel {
+            trust: match self.trust {
+                Some(attested) => label.trust.raised_to(attested),
+                None => label.trust,
+            },
+            audience: match &self.audience {
+                Some(vouched) => label.audience.admitting(vouched),
+                None => label.audience.clone(),
+            },
+        }
+    }
 }
 
 impl fmt::Display for LabelRaise {
@@ -48,6 +65,30 @@ impl fmt::Display for LabelRaise {
             (None, Some(readers)) => write!(f, "audience+{}", readers.len()),
             (None, None) => write!(f, "nothing"),
         }
+    }
+}
+
+/// A check-transient loosening applied to one flow's check: it lifts exactly
+/// its populated dimensions for a single sink check and changes no stored
+/// state. Crate-internal simulation data — the public vocabulary for the
+/// same ask is an [`Authorization`] whose delta carries the corresponding
+/// atomic coordinates at [`AuthorizationScope::PolicyCheck`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub(crate) struct Lift {
+    /// Treat these already-committed effects as excepted for this check.
+    pub(crate) prior_effects: Option<BTreeSet<Effect>>,
+    /// Stand in for a user confirmation.
+    pub(crate) confirms: bool,
+    /// Exclude exactly these control dependencies from the flow label for
+    /// this check. Empty releases nothing; releasing one dep never releases
+    /// another.
+    pub(crate) control_release: BTreeSet<ValueId>,
+}
+
+impl Lift {
+    /// The identity lift: loosens nothing.
+    pub(crate) fn empty() -> Self {
+        Self::default()
     }
 }
 

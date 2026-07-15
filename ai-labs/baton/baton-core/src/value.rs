@@ -25,8 +25,8 @@ use tracing::trace;
 
 use crate::audit::AuthorityName;
 use crate::dimension::{Audience, Trust, UserId};
+use crate::remedy::LabelRaise;
 use crate::revision::{ActionId, TransitionId, TurnId, ValueId};
-use crate::transition::EndorseDelta;
 
 /// Bytes the engine never inspects — except where a contract's argument role
 /// (e.g. recipients) requires a typed reading, which is explicit at the use
@@ -150,7 +150,7 @@ pub enum Provenance {
     Endorsed {
         source: ValueId,
         authority: AuthorityName,
-        delta: EndorseDelta,
+        delta: LabelRaise,
     },
 }
 
@@ -320,7 +320,7 @@ impl ValueStore {
         &mut self,
         source: ValueId,
         authority: AuthorityName,
-        delta: EndorseDelta,
+        delta: LabelRaise,
         label: ValueLabel,
         body: OpaqueValue,
     ) -> Result<ValueId, UnknownValue> {

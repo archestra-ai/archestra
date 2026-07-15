@@ -81,30 +81,36 @@ observable; preserve it (there is a typed-order test).
 - `Blocked::Terminal` is an explicit type; `Blocked::Remediable` carries a
   `NonEmptyVec<RemedyPlan>` — "remediable with zero plans" is
   unrepresentable. Plans are predictions, not permits: plain serializable
-  data, revision-bound, recomputed after every applied step.
-- The closed `TransitionKind` variants enforce conservation laws: transforms
-  cannot touch actions or past effects; constraints go only through
-  registered tool-identity mappings verified never wider
-  (`ActionTransition::narrows` — subset or unknown-confinement; the target
-  contract must declare exactly the transition's effects and must not widen
-  the resolved recipient set — the PoC's structural relation covers tool
-  identity, effects, and recipient roles; egress-destination and
-  runtime-capability sets are not modeled); a **transient waiver** changes no
-  stored state — a check-transient lift (`waiving` a prior effect, standing in
-  for a confirmation, excluding a control dep) plus an audit record. A
-  **fiat relabel** (`TransitionKind::Derive` with `Justification::Fiat`, the
-  Endorse), by contrast, mints a *durable* value like a
-  transform: an authority raises `source`'s label with the raise helpers
-  (`raised_to`/`admitting`, never `combine`), and a new value carries the raised
-  label under `Provenance::Endorsed` — the source is untouched. So raising trust
-  or audience is a relabel, not a waiver; a waiver never raises trust or
-  audience. A `TransientWaiver` is proposal data, not a capability; the
-  `ProposedGrant` an authority rules on carries both the lift and any
-  acknowledge-only facts it clears, so `AuthorityMandate::covers` requires
-  `acknowledge_unknown` to clear an unknown even when the lift dimensions alone
-  are covered. Authority comes from competence routing + the fail-closed recheck
-  (`PostconditionFailed`, or a re-evaluation that re-routes the residual, blocks
-  rather than permitting an under-covered flow).
+  data, revision-bound, recomputed after every applied step; each step is a
+  `PlannedRemedy` (the remedy plus its competent routes and the violations
+  the authority is shown), and applying any remedy triggers the full
+  re-evaluation as an execution invariant, never a plan-step object.
+- The two-kind remedy vocabulary enforces conservation laws. **Reduce**
+  answers to registered reduction relations: a value derivation
+  (`ReductionTarget::DeriveValue`) cannot touch actions or past effects and
+  wears its transformer's declared output label; an action narrowing
+  (`ReductionTarget::NarrowAction`) goes only through registered
+  tool-identity mappings verified never wider (`ActionTransition::narrows` —
+  subset or unknown-confinement; the target contract must declare exactly
+  the transition's effects and must not widen the resolved recipient set —
+  the PoC's structural relation covers tool identity, effects, and recipient
+  roles; egress-destination and runtime-capability sets are not modeled).
+  **Authorize** grants an exact `AuthorizationDelta` at an exact
+  `AuthorizationScope`: a check-scoped lift (excepting a prior effect,
+  standing in for a confirmation, releasing a control dep, acknowledging an
+  unprovable fact) changes no stored state; a durable raise
+  (`AuthorizationScope::DerivedValue`) mints a *new* value like a transform —
+  the authority raises `source`'s label with the raise helpers
+  (`raised_to`/`admitting`, never `combine`), and the new value carries the
+  raised label under `Provenance::Endorsed`, the source untouched. So raising
+  trust or audience is durable and scoped to the derived value, never a
+  check-transient lift. An `Authorization` is proposal data, not a
+  capability; a product delta carries every atomic coordinate it asks for,
+  so `AuthorityMandate::authorizes` requires `acknowledge_unknown` to clear
+  an unknown even when the lift coordinates alone are covered. Authority
+  comes from competence routing + the fail-closed recheck
+  (`PostconditionFailed`, or a re-evaluation that re-routes the residual,
+  blocks rather than permitting an under-covered flow).
 - Registration is an operator trust decision, not content correctness: audit
   wording says "admitted under the transition declared by registered
   transformer X", never "verified as clean". Registries are populated at

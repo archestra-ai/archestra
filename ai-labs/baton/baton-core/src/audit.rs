@@ -9,15 +9,14 @@
 //! Raw bytes and content digests deliberately do not appear here: the audit
 //! record names identities, labels, and outcomes only.
 
-use std::collections::BTreeSet;
 use std::fmt;
 
 use serde::Serialize;
 
 use crate::contract::Violation;
 use crate::dimension::Effects;
+use crate::remedy::Authorization;
 use crate::revision::{ActionId, PlanId, TransitionId, ValueId};
-use crate::transition::EndorseDelta;
 use crate::value::{TransformerRef, ValueLabel};
 
 /// Name of a registered authority.
@@ -44,21 +43,20 @@ impl fmt::Display for AuthorityName {
 /// Why a transition attempt did not apply.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum TransitionFailure {
-    /// The source state no longer matches the transition's declared
-    /// precondition.
-    PreconditionMismatch,
+    /// The registered reduction relation does not hold for the current
+    /// state: a transformer's label predicate did not match its source, or
+    /// an action transition's structural narrowing gate refused (wrong
+    /// source tool, widened effects or recipients, missing target contract).
+    ReductionRefused,
     /// The transformer implementation reported an error.
     TransformerError { message: String },
-    /// The predicted postcondition did not hold after application.
-    PostconditionMismatch,
 }
 
 impl fmt::Display for TransitionFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PreconditionMismatch => write!(f, "precondition no longer holds"),
+            Self::ReductionRefused => write!(f, "the registered reduction relation does not hold"),
             Self::TransformerError { message } => write!(f, "transformer failed: {message}"),
-            Self::PostconditionMismatch => write!(f, "predicted postcondition did not hold"),
         }
     }
 }
@@ -68,29 +66,6 @@ impl fmt::Display for TransitionFailure {
 pub enum TransitionOutcome {
     Applied,
     Failed(TransitionFailure),
-}
-
-/// Which check a waiver loosened. `Acknowledgment` records an
-/// acknowledge-only fact (unprovable effects, a missing contract) accepted on
-/// the record without loosening anything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-pub enum WaiverKind {
-    Effects,
-    Confirmation,
-    /// Explicit, audited release of a control-dependence taint for one flow.
-    ControlRelease,
-    Acknowledgment,
-}
-
-impl fmt::Display for WaiverKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Effects => write!(f, "effects"),
-            Self::Confirmation => write!(f, "confirmation"),
-            Self::ControlRelease => write!(f, "control-release"),
-            Self::Acknowledgment => write!(f, "acknowledgment"),
-        }
-    }
 }
 
 /// One control-plane audit record. Failures append an event but create no
@@ -116,11 +91,23 @@ pub enum AuditEvent {
         action: ActionId,
         outcome: TransitionOutcome,
     },
-    WaiverApplied {
+    /// An authority granted and the engine applied a typed authorization —
+    /// an exact delta at an exact scope. `derived` names the authorized
+    /// derived value a durable grant minted (the raise is the authority's
+    /// fiat, not a verified property of the bytes); a check-scoped grant
+    /// mints none.
+    AuthorizationApplied {
         transition: TransitionId,
-        changes: BTreeSet<WaiverKind>,
+        authorization: Authorization,
         authority: AuthorityName,
         resolved: Vec<Violation>,
+        derived: Option<ValueId>,
+    },
+    /// An authority denied a typed authorization.
+    AuthorizationDenied {
+        authorization: Authorization,
+        authority: AuthorityName,
+        reason: String,
     },
     /// Dispatch began: the action's proposed effects were committed to the
     /// monotone past-effects state *before* release.
@@ -143,33 +130,6 @@ pub enum AuditEvent {
         authority: AuthorityName,
         resolved: Vec<Violation>,
     },
-    /// An authority denied a waiver.
-    WaiverDenied { authority: AuthorityName, reason: String },
-    /// An authority acquired a criterion-(1) surface growth for an action. The
-    /// effect is authorized here but still commits at release, never early.
-    AcceptApplied {
-        transition: TransitionId,
-        action: ActionId,
-        effects: Effects,
-        authority: AuthorityName,
-        resolved: Vec<Violation>,
-    },
-    /// An authority denied acquiring a surface growth.
-    AcceptDenied { authority: AuthorityName, reason: String },
-    /// An authority vouched a durable label raise (Endorse): a new value was
-    /// minted under the raised label. The raise is the authority's fiat, not a
-    /// verified property of the bytes.
-    EndorseApplied {
-        transition: TransitionId,
-        source: ValueId,
-        derived: ValueId,
-        authority: AuthorityName,
-        delta: EndorseDelta,
-        input: ValueLabel,
-        raised: ValueLabel,
-    },
-    /// An authority denied a label raise.
-    EndorseDenied { authority: AuthorityName, reason: String },
 }
 
 impl fmt::Display for AuditEvent {
@@ -196,12 +156,21 @@ impl fmt::Display for AuditEvent {
                 TransitionOutcome::Applied => write!(f, "{action} constrained"),
                 TransitionOutcome::Failed(failure) => write!(f, "constraining {action} failed: {failure}"),
             },
-            Self::WaiverApplied { changes, authority, .. } => {
-                write!(f, "waiver by {authority}:")?;
-                for change in changes {
-                    write!(f, " {change}")?;
-                }
-                Ok(())
+            Self::AuthorizationApplied {
+                authorization,
+                authority,
+                derived,
+                ..
+            } => match derived {
+                Some(derived) => write!(f, "{authorization} granted by {authority}, minted {derived}"),
+                None => write!(f, "{authorization} granted by {authority}"),
+            },
+            Self::AuthorizationDenied {
+                authorization,
+                authority,
+                reason,
+            } => {
+                write!(f, "{authorization} denied by {authority}: {reason}")
             }
             Self::EffectsCommitted { action, effects } => {
                 write!(f, "{action} dispatching, effects committed: {effects}")
@@ -214,32 +183,6 @@ impl fmt::Display for AuditEvent {
             }
             Self::ApprovalRequested { plan, authority, .. } => {
                 write!(f, "{plan}: approval requested from {authority}")
-            }
-            Self::WaiverDenied { authority, reason } => {
-                write!(f, "waiver denied by {authority}: {reason}")
-            }
-            Self::AcceptApplied {
-                action,
-                effects,
-                authority,
-                ..
-            } => {
-                write!(f, "{action}: growth {effects} acquired by {authority}")
-            }
-            Self::AcceptDenied { authority, reason } => {
-                write!(f, "accept denied by {authority}: {reason}")
-            }
-            Self::EndorseApplied {
-                source,
-                derived,
-                authority,
-                delta,
-                ..
-            } => {
-                write!(f, "{source} -> {derived} endorsed by {authority} ({delta})")
-            }
-            Self::EndorseDenied { authority, reason } => {
-                write!(f, "endorse denied by {authority}: {reason}")
             }
         }
     }

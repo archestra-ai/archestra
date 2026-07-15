@@ -211,6 +211,8 @@ pub enum RejectedToken {
     /// The action the token was minted for is no longer pending.
     #[error("action {action} is not pending on this trajectory")]
     ActionNotPending { action: ActionId },
+    #[error("flow {flow} has no pending proposal on this trajectory")]
+    FlowNotPending { flow: crate::revision::FlowId },
 }
 
 /// The linear capability to apply one plan step. Bound to the trajectory,
@@ -246,6 +248,8 @@ pub enum StepRefused {
     ForeignEngine { minted_by: EngineId, this: EngineId },
     #[error("action {action} is not pending on this trajectory")]
     ActionNotPending { action: ActionId },
+    #[error("flow {flow} has no pending proposal on this trajectory")]
+    FlowNotPending { flow: crate::revision::FlowId },
 }
 
 /// The outcome of applying one plan step.

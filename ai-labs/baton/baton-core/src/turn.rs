@@ -26,7 +26,8 @@ use crate::audit::{AuditEvent, TrajectoryState};
 use crate::dimension::UserId;
 use crate::engine::{CanonicalRequest, DispatchReceipt, ExecutionToken, ReceiptParts, RejectedToken};
 use crate::event::{EventSet, Fact, ValueOrigin};
-use crate::plan::{NonEmptyVec, Posture, RemedyPlan, TransitionSpec};
+use crate::plan::{NonEmptyVec, RemedyPlan};
+use crate::remedy::PlannedRemedy;
 use crate::request::{ActionState, PendingAction, ToolRequest};
 use crate::revision::{ActionId, FlowId, PlanId, Revision, TransitionId, TurnId, ValueId};
 use crate::value::{OpaqueValue, StoredValue, UnknownValue, ValueLabel, ValueStore};
@@ -526,7 +527,7 @@ impl Trajectory {
         &mut self,
         action: ActionId,
         engine: crate::engine::EngineId,
-        drafts: Vec<(NonEmptyVec<TransitionSpec>, Posture)>,
+        drafts: Vec<NonEmptyVec<PlannedRemedy>>,
     ) -> Vec<RemedyPlan> {
         // The check fact is a new occurrence per evaluation (re-entry
         // included): it mirrors this unconditional advance 1:1 so the
@@ -541,14 +542,13 @@ impl Trajectory {
         let basis = self.revision;
         self.plans = drafts
             .into_iter()
-            .map(|(steps, final_postcondition)| {
+            .map(|steps| {
                 let id = PlanId::new(self.next_plan);
                 self.next_plan += 1;
                 RemedyPlan {
                     id,
-                    action,
+                    flow,
                     steps,
-                    final_postcondition,
                     basis,
                     engine,
                 }
@@ -563,46 +563,49 @@ impl Trajectory {
         self.commit(batch);
     }
 
-    /// Audit an applied check-transient authorization: the legacy audit
-    /// event plus the typed authorization fact, one batch, one advance.
+    /// Audit an applied check-transient authorization: one typed audit event
+    /// and its fact, one batch, one advance.
     pub(crate) fn record_applied_authorization(
         &mut self,
-        event: AuditEvent,
+        transition: TransitionId,
         authorization: crate::remedy::Authorization,
         authority: crate::audit::AuthorityName,
         resolved: Vec<crate::contract::Violation>,
     ) {
-        let batch = vec![
-            Fact::ControlPlane { event: event.clone() },
-            Fact::AuthorizationApplied {
-                authorization,
-                authority,
-                resolved,
-                derived: None,
-            },
-        ];
-        self.state.record(event);
+        let batch = vec![Fact::AuthorizationApplied {
+            authorization: authorization.clone(),
+            authority: authority.clone(),
+            resolved: resolved.clone(),
+            derived: None,
+        }];
+        self.state.record(AuditEvent::AuthorizationApplied {
+            transition,
+            authorization,
+            authority,
+            resolved,
+            derived: None,
+        });
         self.commit(batch);
     }
 
-    /// Audit a denied authorization: the legacy audit event plus the typed
-    /// denial fact, one batch, one advance.
+    /// Audit a denied authorization: one typed audit event and its fact, one
+    /// batch, one advance.
     pub(crate) fn record_denied_authorization(
         &mut self,
-        event: AuditEvent,
         authorization: crate::remedy::Authorization,
         authority: crate::audit::AuthorityName,
         reason: String,
     ) {
-        let batch = vec![
-            Fact::ControlPlane { event: event.clone() },
-            Fact::AuthorizationDenied {
-                authorization,
-                authority,
-                reason,
-            },
-        ];
-        self.state.record(event);
+        let batch = vec![Fact::AuthorizationDenied {
+            authorization: authorization.clone(),
+            authority: authority.clone(),
+            reason: reason.clone(),
+        }];
+        self.state.record(AuditEvent::AuthorizationDenied {
+            authorization,
+            authority,
+            reason,
+        });
         self.commit(batch);
     }
 
@@ -749,12 +752,17 @@ impl Trajectory {
             },
         ];
         pending.accept_growth(effects.clone());
-        self.state.record(AuditEvent::AcceptApplied {
+        self.state.record(AuditEvent::AuthorizationApplied {
             transition,
-            action,
-            effects,
+            authorization: crate::remedy::Authorization {
+                delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::AcquireEffects(
+                    effects,
+                )),
+                scope: crate::remedy::AuthorizationScope::PendingAction { action },
+            },
             authority,
             resolved,
+            derived: None,
         });
         self.commit(batch);
     }
@@ -768,7 +776,7 @@ impl Trajectory {
         &mut self,
         source: ValueId,
         authority: crate::audit::AuthorityName,
-        delta: crate::transition::EndorseDelta,
+        delta: crate::remedy::LabelRaise,
         raised: ValueLabel,
     ) -> ValueId {
         let transition = self.mint_transition();
@@ -799,7 +807,7 @@ impl Trajectory {
             Fact::AuthorizationApplied {
                 authorization: crate::remedy::Authorization {
                     delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(
-                        delta.as_raise(),
+                        delta.clone(),
                     )),
                     scope: crate::remedy::AuthorizationScope::DerivedValue { source },
                 },
@@ -817,14 +825,16 @@ impl Trajectory {
             .as_mut()
             .expect("pending action validated by the engine")
             .substitute_argument(source, derived);
-        self.state.record(AuditEvent::EndorseApplied {
+        let _ = input;
+        self.state.record(AuditEvent::AuthorizationApplied {
             transition,
-            source,
-            derived,
+            authorization: crate::remedy::Authorization {
+                delta: crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::RaiseLabel(delta)),
+                scope: crate::remedy::AuthorizationScope::DerivedValue { source },
+            },
             authority,
-            delta,
-            input,
-            raised,
+            resolved: Vec::new(),
+            derived: Some(derived),
         });
         self.commit(batch);
         derived

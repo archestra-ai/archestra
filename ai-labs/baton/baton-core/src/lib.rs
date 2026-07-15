@@ -117,13 +117,13 @@ pub use approval::{
 pub use audit::{AuthorityName, TransitionFailure};
 pub use contract::{AttentionRule, AudienceRule};
 pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
-pub use plan::{ExitKind, Justification, NonEmptyVec, RemedyPlan, TransitionKind};
+pub use plan::{NonEmptyVec, RemedyPlan};
 pub use remedy::{
     Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate, LabelRaise, PlannedRemedy, ReductionTarget,
 };
 pub use revision::{FlowId, PlanId};
 pub use transition::{
-    ActionTransition, AuthorityMandate, DuplicateRegistration, EndorseDelta, LabelPredicate, ProposedGrant,
-    RegisteredTransformer, TransformerDescriptor, TransformerError, TransformerFn, TransientWaiver,
+    ActionTransition, AuthorityMandate, DuplicateRegistration, LabelPredicate, RegisteredTransformer,
+    TransformerDescriptor, TransformerError, TransformerFn,
 };
 pub use value::TransformerRef;

@@ -25,9 +25,9 @@ use crate::ToolName;
 use crate::audit::{AuditEvent, AuthorityName};
 use crate::contract::Violation;
 use crate::dimension::Effects;
+use crate::remedy::LabelRaise;
 use crate::remedy::{Authorization, AuthorizationScope};
 use crate::revision::{ActionId, FlowId, TransitionId, TurnId, ValueId};
-use crate::transition::EndorseDelta;
 use crate::turn::Actor;
 use crate::value::{TransformerRef, ValueLabel};
 
@@ -132,7 +132,7 @@ pub enum ValueOrigin {
     Endorsed {
         source: ValueId,
         authority: AuthorityName,
-        delta: EndorseDelta,
+        delta: LabelRaise,
         raised: ValueLabel,
     },
 }

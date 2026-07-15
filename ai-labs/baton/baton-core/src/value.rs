@@ -50,7 +50,8 @@ impl OpaqueValue {
 /// Effects are deliberately absent — they are monotone *trajectory* state
 /// ([`crate::audit::TrajectoryState`]), not a property of a value. Audit is
 /// likewise control-plane history, not a label field.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only), never a policy order.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct ValueLabel {
     pub audience: Audience,
     pub trust: Trust,

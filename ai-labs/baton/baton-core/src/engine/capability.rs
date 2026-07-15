@@ -140,8 +140,14 @@ pub struct CanonicalRequest {
 
 /// The linear receipt minted at release: the only way to admit the dispatched
 /// tool's output — or declare its failure — and close the action. Bound to
-/// the trajectory, the action, and the post-release revision; one receipt
-/// closes one action exactly once.
+/// the trajectory and to the action's `Released` phase, deliberately *not* to
+/// the revision: a receipt closes an external dispatch that already happened,
+/// and refusing it cannot undo that dispatch, so an unrelated later mutation
+/// (a checked emission, a new value) must never wedge the action open.
+/// Tokens, step capabilities, and approvals authorize *future* state changes
+/// and stay revision-bound; the receipt records a past one. Linearity
+/// (non-`Clone`, consumed on use) plus the `Released`-phase check keep one
+/// receipt closing one action exactly once.
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct DispatchReceipt {
     action: ActionId,
@@ -150,7 +156,6 @@ pub struct DispatchReceipt {
     arguments: BTreeSet<ValueId>,
     control: BTreeSet<ValueId>,
     trajectory: TrajectoryId,
-    revision: Revision,
 }
 
 /// The consumed contents of a [`DispatchReceipt`].
@@ -161,7 +166,6 @@ pub(crate) struct ReceiptParts {
     pub(crate) arguments: BTreeSet<ValueId>,
     pub(crate) control: BTreeSet<ValueId>,
     pub(crate) trajectory: TrajectoryId,
-    pub(crate) revision: Revision,
 }
 
 impl DispatchReceipt {
@@ -169,7 +173,7 @@ impl DispatchReceipt {
         self.action
     }
 
-    pub(crate) fn from_token_parts(parts: TokenParts, revision: Revision) -> Self {
+    pub(crate) fn from_token_parts(parts: TokenParts) -> Self {
         Self {
             action: parts.action,
             tool: parts.tool,
@@ -177,7 +181,6 @@ impl DispatchReceipt {
             arguments: parts.arguments,
             control: parts.control,
             trajectory: parts.trajectory,
-            revision,
         }
     }
 
@@ -189,7 +192,6 @@ impl DispatchReceipt {
             arguments: self.arguments,
             control: self.control,
             trajectory: self.trajectory,
-            revision: self.revision,
         }
     }
 }

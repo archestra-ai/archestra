@@ -53,7 +53,9 @@ pub trait HasBottom: Ord {
 /// The confidentiality-meet preset (generalizes `Audience`). The fold is the
 /// most-restrictive combine: a value is `All` (top / identity), a concrete
 /// `Only(set)`, or `Unknown` (absorbing). Adequacy is `covers`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only) — the policy orders
+// are `combine` and the adequacy relation, never this derive.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum MeetSet<T: Ord> {
     All,
     Only(BTreeSet<T>),
@@ -94,7 +96,8 @@ impl<T: Ord + Clone> MeetSet<T> {
 
 /// The accumulating-union preset (generalizes `Effects`). A value is `Has(set)`
 /// (with `Has(∅)` the identity) or `Unknown` (absorbing). Adequacy is `avoids`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only), never a policy order.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum JoinSet<T: Ord> {
     Has(BTreeSet<T>),
     Unknown,
@@ -136,7 +139,8 @@ impl<T: Ord + Clone> JoinSet<T> {
 
 /// The trust-like ordered preset (generalizes `Trust`). Worse = lower, fold =
 /// min, `Unknown` just above bottom, adequacy = `at_least(floor)` — "least wins".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only), never a policy order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum MinLevel<T: Ord> {
     Known(T),
     Unknown,

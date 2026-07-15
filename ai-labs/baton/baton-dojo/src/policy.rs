@@ -6,10 +6,12 @@
 //!
 //! * [`begin`](BatonGate::begin) seeds a trusted user turn;
 //! * [`check`](BatonGate::check) evaluates a proposed call against the folded
-//!   read context; a downhill call yields an [`ExecutionToken`] directly, while
-//!   a remediable one is driven through its plan by the registered inline
-//!   authorities (a durable endorse, an effect accept) to a permit or a block;
-//! * [`commit`](BatonGate::commit) releases the stashed token and folds the
+//!   read context; a permitted call is *released on the spot* — may-effects
+//!   commit before anything runs — and the returned
+//!   [`GateVerdict::Execute`] carries the tool identity and arguments
+//!   recovered from the canonical checked request, the only call the harness
+//!   may run;
+//! * [`commit`](BatonGate::commit) consumes the dispatch receipt and folds the
 //!   tool's contract-fixed output label into the trajectory as a new value.
 //!
 //! The engine is value-granular: a request names the values it depends on. The
@@ -17,33 +19,45 @@
 //! folds the *whole* read context (the user turn and every prior tool output)
 //! into each call as its *body* argument leaves — the over-approximation of "the
 //! agent has seen all of this". Body leaves are endorsable, so a mandated
-//! authority can declassify the data in for a recipient.
+//! authority can declassify the data in for a recipient. The call's exact JSON
+//! arguments enter the checked tree as their own leaf, so the canonical
+//! request's rendering contains the very bytes the executor dispatches.
 //!
-//! PoC limitations of this coarse gate (all pre-dating and preserved by the
-//! value-granular port; see the follow-up ledger): the checked request is a
-//! whole-context proxy, not the exact JSON the agent dispatches; `commit`
-//! releases after the tool ran (not the engine's release-before-dispatch order);
-//! and control-only influence is modelled as endorsable data (so an authority
-//! without control-release competence can clear it). Acceptable for a benchmark
-//! substrate; a faithful gate needs the model's real argument provenance.
+//! PoC limitations of this coarse gate (pre-dating the value-granular port;
+//! see the follow-up ledger): the *labels* are a whole-context proxy, not the
+//! model's real argument provenance; and control-only influence is modelled
+//! as endorsable data (so an authority without control-release competence can
+//! clear it). Acceptable for a benchmark substrate.
 
 use std::collections::HashMap;
 
 use std::collections::BTreeSet;
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, EmissionPursuit, EmissionRequest,
-    ExecutionToken, OpaqueValue, PolicyEngine, Pursuit, Requirements, ResponsePolicy, Speaker, StallCause,
-    ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId, ValueLabel, Violation,
+    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Authority, DispatchReceipt, EmissionPursuit,
+    EmissionRequest, ExecutionToken, OpaqueValue, PolicyEngine, Pursuit, Requirements, ResponsePolicy, Speaker,
+    StallCause, ToolContract, ToolName, ToolRequest, Trajectory, UserId, ValueId, ValueLabel, Violation,
 };
 
 use crate::error::DojoError;
 
 /// The gate's verdict on a proposed tool call.
 pub enum GateVerdict {
-    /// The call may execute; the gate has stashed the permit for [`BatonGate::commit`].
-    Allow,
+    /// The call was checked and released: may-effects are already committed,
+    /// and `tool`/`args` are recovered from the canonical checked request —
+    /// the only call the harness may execute, followed by
+    /// [`BatonGate::commit`] with the result.
+    Execute { tool: String, args: serde_json::Value },
     /// The call is refused; `reason` is a human-readable block description.
+    Block { reason: String },
+}
+
+/// The gate's verdict on the agent's outward final text.
+pub enum EmissionVerdict {
+    /// The emission was permitted; `rendered` is the only bytes the harness
+    /// may send outward.
+    Emit { rendered: String },
+    /// The emission is refused; `reason` is a human-readable block description.
     Block { reason: String },
 }
 
@@ -57,6 +71,10 @@ const RECIPIENT_ARG: &str = "__recipients";
 /// as the call's body — argument leaves (endorsable), not control deps.
 const BODY_ARG: &str = "__body";
 
+/// The internal argument key carrying the call's exact JSON arguments as one
+/// leaf, so the canonical request renders the very bytes the executor runs.
+const ARGS_ARG: &str = "__args";
+
 type RecipientFn = Box<dyn Fn(&serde_json::Value) -> Vec<UserId> + Send + Sync>;
 
 /// An in-process baton policy gate carrying one run's trajectory.
@@ -67,7 +85,9 @@ pub struct BatonGate {
     /// Every value committed so far (the user turn and each tool output). Folded
     /// as the control dependencies of every proposed call — see the module doc.
     context: Vec<ValueId>,
-    pending: Option<ExecutionToken>,
+    /// The receipt of the released, not-yet-committed dispatch: `check`
+    /// releases before execution, `commit` closes with the result.
+    pending: Option<DispatchReceipt>,
 }
 
 impl BatonGate {
@@ -95,15 +115,15 @@ impl BatonGate {
 
     /// Evaluate a proposed call. A downhill call permits directly; a remediable
     /// one is driven through its first plan by the registered inline authorities.
-    /// On a permit the token is stashed and the caller must execute the tool and
-    /// then call [`commit`](BatonGate::commit).
+    /// A permit is released immediately — may-effects commit before anything
+    /// runs — and the caller must execute exactly the returned canonical call,
+    /// then [`commit`](BatonGate::commit) the result.
     pub(crate) fn check(&mut self, tool: &str, args: &serde_json::Value) -> GateVerdict {
-        // Refuse before touching the trajectory: building a request ingresses
-        // recipient values, which advances the revision and would stale the
-        // stashed token — the previous permit must be committed first.
+        // Refuse before touching the trajectory: a released dispatch must be
+        // committed before the next proposal.
         if self.pending.is_some() {
             return GateVerdict::Block {
-                reason: "a permitted call is awaiting commit".to_owned(),
+                reason: "a released call is awaiting commit".to_owned(),
             };
         }
         let request = self.build_request(tool, args);
@@ -113,10 +133,7 @@ impl BatonGate {
         // fail-closed backstop, not the expected path.
         let max_steps = self.context.len() + 8;
         match self.engine.pursue(&mut self.trajectory, request, max_steps) {
-            Pursuit::Permitted(token) => {
-                self.pending = Some(token);
-                GateVerdict::Allow
-            }
+            Pursuit::Permitted(token) => self.release_for_execution(token),
             // The engine cleared this request's slot on a terminal block.
             Pursuit::Terminal { reason, .. } => GateVerdict::Block {
                 reason: reason.to_string(),
@@ -151,16 +168,56 @@ impl BatonGate {
         }
     }
 
-    /// Fold an executed call's result into the trajectory, consuming the stashed
-    /// token via the two-phase `release → record_output`. Called after every
-    /// permitted execution — including a failed one, since the tool may have
+    /// Two-phase boundary, first half: release the permit *before* the tool
+    /// runs — committing may-effects and rendering the one canonical request
+    /// from the exact checked tree — and hand back the call the executor must
+    /// run: the canonical tool identity and the exact argument bytes the
+    /// check covered.
+    fn release_for_execution(&mut self, token: ExecutionToken) -> GateVerdict {
+        let (canonical, receipt) = match self.trajectory.release(token) {
+            Ok(released) => released,
+            Err(rejected) => {
+                return GateVerdict::Block {
+                    reason: format!("release refused: {rejected:?}"),
+                };
+            }
+        };
+        // The checked tree carries the call's exact JSON arguments under
+        // ARGS_ARG; the canonical rendering is therefore parseable and the
+        // executed bytes come from it, not from the model's message.
+        let args = serde_json::from_str::<serde_json::Value>(&canonical.rendered)
+            .ok()
+            .and_then(|rendered| {
+                rendered
+                    .get(ARGS_ARG)
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            });
+        match args {
+            Some(args) => {
+                let tool = canonical.tool.as_str().to_owned();
+                self.pending = Some(receipt);
+                GateVerdict::Execute { tool, args }
+            }
+            None => {
+                // The dispatch never happens; close the released action
+                // honestly instead of leaving it open.
+                let reason = "canonical request did not round-trip the call arguments".to_owned();
+                if self.trajectory.record_failure(receipt).is_err() {
+                    unreachable!("a just-minted receipt closes its own released action");
+                }
+                GateVerdict::Block { reason }
+            }
+        }
+    }
+
+    /// Two-phase boundary, second half: fold the executed call's result into
+    /// the trajectory by consuming the dispatch receipt. Called after every
+    /// released execution — including a failed one, since the tool may have
     /// mutated state before erroring.
     pub(crate) fn commit(&mut self, result_content: &str) -> Result<(), DojoError> {
-        let token = self.pending.take().ok_or_else(|| DojoError::Policy {
-            detail: "commit called without a pending token".to_owned(),
-        })?;
-        let (_canonical, receipt) = self.trajectory.release(token).map_err(|e| DojoError::Policy {
-            detail: format!("{e:?}"),
+        let receipt = self.pending.take().ok_or_else(|| DojoError::Policy {
+            detail: "commit called without a released dispatch".to_owned(),
         })?;
         let id = self
             .trajectory
@@ -179,10 +236,10 @@ impl BatonGate {
     /// through the registered inline authorities. Requires
     /// [`BatonGateBuilder::conversation_readers`]; an unconfigured response
     /// sink fails closed like any uncontracted tool.
-    pub(crate) fn check_emission(&mut self, text: &str) -> GateVerdict {
+    pub(crate) fn check_emission(&mut self, text: &str) -> EmissionVerdict {
         if self.pending.is_some() {
-            return GateVerdict::Block {
-                reason: "a permitted call is awaiting commit".to_owned(),
+            return EmissionVerdict::Block {
+                reason: "a released call is awaiting commit".to_owned(),
             };
         }
         let reads: BTreeSet<ValueId> = self.context.iter().copied().collect();
@@ -192,7 +249,7 @@ impl BatonGate {
         {
             Ok(id) => id,
             Err(unknown) => {
-                return GateVerdict::Block {
+                return EmissionVerdict::Block {
                     reason: format!("final text references an unadmitted value: {unknown:?}"),
                 };
             }
@@ -204,17 +261,21 @@ impl BatonGate {
         };
         let max_steps = self.context.len() + 8;
         match self.engine.pursue_emission(&mut self.trajectory, request, max_steps) {
-            EmissionPursuit::Emitted(_) => GateVerdict::Allow,
-            EmissionPursuit::Terminal { reason, .. } => GateVerdict::Block {
+            // The rendered bytes — from the exact checked tree — are the
+            // only bytes the harness may send outward.
+            EmissionPursuit::Emitted(emitted) => EmissionVerdict::Emit {
+                rendered: emitted.rendered,
+            },
+            EmissionPursuit::Terminal { reason, .. } => EmissionVerdict::Block {
                 reason: reason.to_string(),
             },
             EmissionPursuit::NeedsApproval(pending) => {
                 let reason = format!("needs external ruling from {}", pending.authority());
                 drop(pending);
                 self.trajectory.abandon_pending_emission();
-                GateVerdict::Block { reason }
+                EmissionVerdict::Block { reason }
             }
-            EmissionPursuit::Stalled { violations, cause } => GateVerdict::Block {
+            EmissionPursuit::Stalled { violations, cause } => EmissionVerdict::Block {
                 reason: match cause {
                     StallCause::BoundExhausted => "emission remedy did not converge within the step bound".to_owned(),
                     StallCause::Refused(refused) => {
@@ -223,7 +284,7 @@ impl BatonGate {
                     StallCause::Failed(failure) => format!("emission remedy step failed: {failure:?}"),
                 },
             },
-            EmissionPursuit::Refused(refusal) => GateVerdict::Block {
+            EmissionPursuit::Refused(refusal) => EmissionVerdict::Block {
                 reason: format!("emission proposal refused: {refusal}"),
             },
         }
@@ -235,7 +296,21 @@ impl BatonGate {
     /// be released). Recipients (if any) sit under the recipient key.
     fn build_request(&mut self, tool: &str, args: &serde_json::Value) -> ToolRequest {
         let body: Vec<ArgumentTree<ValueId>> = self.context.iter().copied().map(ArgumentTree::Value).collect();
-        let mut fields = vec![(ArgumentName::new(BODY_ARG), ArgumentTree::List(body))];
+        // The exact JSON arguments become their own leaf — a model output
+        // reading the whole context (same fold as the body, so no label
+        // change) — making the canonical rendering carry the executed bytes.
+        let args_leaf = self
+            .trajectory
+            .admit_model_output(
+                OpaqueValue::new(args.to_string()),
+                self.context.iter().copied().collect(),
+                BTreeSet::new(),
+            )
+            .expect("context values are admitted");
+        let mut fields = vec![
+            (ArgumentName::new(ARGS_ARG), ArgumentTree::Value(args_leaf)),
+            (ArgumentName::new(BODY_ARG), ArgumentTree::List(body)),
+        ];
         if let Some(recipients) = self.recipients.get(tool).map(|extract| extract(args)) {
             let leaves = recipients
                 .into_iter()
@@ -376,8 +451,24 @@ mod tests {
     const BOB: &str = "bob@archestra.ai";
     const AUDITOR: &str = "alex@finance-audit.com";
 
-    fn allow(verdict: GateVerdict) {
-        assert!(matches!(verdict, GateVerdict::Allow), "expected Allow");
+    /// A permitted check releases and returns the canonical execution; the
+    /// helper asserts the exact shape — tool and argument bytes recovered
+    /// from the checked tree — so a wrong-canonical release cannot pass.
+    fn executed(verdict: GateVerdict, tool: &str, args: &serde_json::Value) {
+        match verdict {
+            GateVerdict::Execute {
+                tool: canonical_tool,
+                args: canonical_args,
+            } => {
+                assert_eq!(canonical_tool, tool);
+                assert_eq!(&canonical_args, args);
+            }
+            GateVerdict::Block { reason } => panic!("expected Execute, got Block: {reason}"),
+        }
+    }
+
+    fn allow(gate: &mut BatonGate, tool: &str, args: serde_json::Value) {
+        executed(gate.check(tool, &args), tool, &args);
     }
 
     /// A read tool: internal-only output, no effects.
@@ -431,18 +522,48 @@ mod tests {
             .build()
             .unwrap();
         gate.begin("summarize the doc");
-        allow(gate.check("get_doc", &json!({})));
+        allow(&mut gate, "get_doc", json!({}));
         gate.commit("the internal doc").unwrap();
         // The summary derives from values readable by the conversation
-        // readers, so the emission is allowed.
-        allow(gate.check_emission("summary of the internal doc"));
+        // readers, so the emission is allowed, and the returned bytes are
+        // exactly the engine's rendering of the checked tree — the only
+        // bytes the harness may send.
+        match gate.check_emission("summary of the internal doc") {
+            EmissionVerdict::Emit { rendered } => {
+                assert_eq!(rendered, "\"summary of the internal doc\"");
+            }
+            EmissionVerdict::Block { reason } => panic!("expected Emit, got Block: {reason}"),
+        }
 
         let mut unconfigured = BatonGate::builder().contract(read_contract("get_doc")).build().unwrap();
         unconfigured.begin("hi");
         assert!(matches!(
             unconfigured.check_emission("anything"),
-            GateVerdict::Block { .. }
+            EmissionVerdict::Block { .. }
         ));
+    }
+
+    /// Release precedes execution: the may-effects are committed the moment
+    /// `check` returns `Execute` — before any tool runs — and a failed tool
+    /// still leaves them committed (a receipt closes, never undoes).
+    #[test]
+    fn check_releases_and_commits_effects_before_execution() {
+        let mut gate = auditor_gate();
+        gate.begin("send the invoices to the auditor");
+        allow(&mut gate, "list_invoices", json!({}));
+        gate.commit("invoice data").unwrap();
+        allow(&mut gate, "send_email", json!({ "to": AUDITOR }));
+        assert_eq!(
+            gate.trajectory.state().past_effects(),
+            &Effects::declared([Effect::Egress])
+        );
+        // The tool errored after release; committing the error result closes
+        // the dispatch and the committed effects stay.
+        gate.commit("{\"error\":\"smtp down\"}").unwrap();
+        assert_eq!(
+            gate.trajectory.state().past_effects(),
+            &Effects::declared([Effect::Egress])
+        );
     }
 
     fn auditor_authority() -> Authority {
@@ -468,18 +589,18 @@ mod tests {
     fn mandated_send_is_endorsed_and_accepted_to_a_permit() {
         let mut gate = auditor_gate();
         gate.begin("email the report to the auditor");
-        allow(gate.check("list_invoices", &json!({})));
+        allow(&mut gate, "list_invoices", json!({}));
         gate.commit("<invoices>").unwrap();
         // Crosses the audience boundary and is the first egress; the finance
         // approver endorses the auditor in and accepts the egress.
-        allow(gate.check("send_email", &json!({ "to": AUDITOR })));
+        allow(&mut gate, "send_email", json!({ "to": AUDITOR }));
     }
 
     #[test]
     fn send_outside_the_mandate_blocks() {
         let mut gate = auditor_gate();
         gate.begin("email the report to a stranger");
-        allow(gate.check("list_invoices", &json!({})));
+        allow(&mut gate, "list_invoices", json!({}));
         gate.commit("<invoices>").unwrap();
         // No mandate covers "eve": nothing declassifies the boundary crossing.
         assert!(matches!(
@@ -509,7 +630,7 @@ mod tests {
     fn a_check_before_commit_blocks_without_staling_the_stashed_token() {
         let mut gate = auditor_gate();
         gate.begin("email the report to the auditor");
-        allow(gate.check("list_invoices", &json!({})));
+        allow(&mut gate, "list_invoices", json!({}));
         // A second check — on the recipient-bearing tool — is refused before
         // recipient ingress can advance the revision, so the stashed permit
         // still commits.
@@ -524,7 +645,7 @@ mod tests {
     fn a_walk_that_blocks_does_not_wedge_later_calls() {
         let mut gate = external_auditor_gate();
         gate.begin("email the report to the auditor");
-        allow(gate.check("list_invoices", &json!({})));
+        allow(&mut gate, "list_invoices", json!({}));
         gate.commit("<invoices>").unwrap();
         // The remediable walk reaches an external grant it cannot resolve
         // in-process and blocks, discarding the approval and freeing the slot.
@@ -534,7 +655,7 @@ mod tests {
         ));
         // A later downhill call must still be evaluable — not refused with
         // `ActionAlreadyPending` from a leaked pending action.
-        allow(gate.check("list_invoices", &json!({})));
+        allow(&mut gate, "list_invoices", json!({}));
     }
 
     #[test]
@@ -544,10 +665,10 @@ mod tests {
         // Several restricted reads: each becomes an audience-failing body leaf,
         // so the send peels one Endorse per leaf — the walk must converge.
         for _ in 0..4 {
-            allow(gate.check("list_invoices", &json!({})));
+            allow(&mut gate, "list_invoices", json!({}));
             gate.commit("<invoices>").unwrap();
         }
-        allow(gate.check("send_email", &json!({ "to": AUDITOR })));
+        allow(&mut gate, "send_email", json!({ "to": AUDITOR }));
     }
 
     #[test]
@@ -559,7 +680,7 @@ mod tests {
             .build()
             .unwrap();
         gate.begin("open a public bug for the crash");
-        allow(gate.check("fetch_recording", &json!({})));
+        allow(&mut gate, "fetch_recording", json!({}));
         gate.commit("<transcript naming the customer>").unwrap();
         // Fail-closed: the internal recording cannot egress to the public.
         assert!(matches!(

@@ -58,7 +58,7 @@ pub use baton_core;
 pub use agent::{Agent, AgentRun, StopReason, ToolCallRecord, ToolOutcome};
 pub use error::DojoError;
 pub use model::Model;
-pub use policy::{BatonGate, BatonGateBuilder, GateVerdict};
+pub use policy::{BatonGate, BatonGateBuilder, EmissionVerdict, GateVerdict};
 pub use scoring::{
     Attack, EmptyCohort, Episode, ImportantInstructions, InjectionVector, Metrics, SecurityCheck, UtilityCheck,
     run_episode,

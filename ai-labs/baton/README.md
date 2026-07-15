@@ -36,8 +36,10 @@ two kinds:
 
 A soft block returns the irreducible nondominated frontier of plans — no
 removable steps, no plan dominated by a smaller ask, incomparable
-alternatives all retained — so the actor picks its remedy as early as
-possible. Authorities live in one registry — inline functions or external
+alternatives retained (control-release rescue is size-first: all
+incomparable releases of the smallest cardinality that works; only a
+fruitless search sweeps the whole lattice, which is what proves a
+terminal block) — so the actor picks its remedy as early as possible. Authorities live in one registry — inline functions or external
 approval round-trips — routed by mandate competence over typed deltas and
 scopes, inline-first in registration order, with a fail-closed recheck after
 every grant. `Unknown` is a first-class label and fail-closed: an unprovable

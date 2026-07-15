@@ -934,8 +934,11 @@ fn object_built_request_checks_and_renders_like_the_literal_tree() {
     trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
 }
 
+/// A receipt closes a dispatch that already happened, so an unrelated
+/// mutation between release and close — here a model output — must not
+/// wedge the released action.
 #[test]
-fn stale_receipt_is_rejected_after_any_mutation() {
+fn a_receipt_survives_unrelated_mutations_and_closes_the_action() {
     let engine = engine_with([email_contract()]);
     let mut trajectory = Trajectory::new();
     trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
@@ -949,8 +952,41 @@ fn stale_receipt_is_rejected_after_any_mutation() {
     trajectory
         .admit_model_output(OpaqueValue::new("meanwhile"), BTreeSet::from([body]), BTreeSet::new())
         .unwrap();
-    let err = trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap_err();
-    assert!(matches!(err, RejectedToken::Stale { .. }));
+    trajectory.record_output(receipt, OpaqueValue::new("sent")).unwrap();
+    assert!(trajectory.pending_action().is_none());
+}
+
+/// The same guarantee across sinks: a checked emission between release and
+/// the failure declaration does not wedge the released action.
+#[test]
+fn a_receipt_closes_a_failed_dispatch_after_an_interleaved_emission() {
+    let mut engine = response_engine(&["alice", "bob"]);
+    engine.register(email_contract()).unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let request = email_request(&mut trajectory, body, "bob");
+
+    let Ok(FlowOutcome::AllowedNow(token)) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected permit");
+    };
+    let (_, receipt) = trajectory.release(token).unwrap();
+
+    let note = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "sending now");
+    let emission = EmissionRequest {
+        body: ArgumentTree::Value(note),
+        control: BTreeSet::new(),
+        basis: trajectory.revision(),
+    };
+    assert!(matches!(
+        engine.evaluate_emission(&mut trajectory, emission),
+        Ok(FlowOutcome::AllowedNow(Emitted { .. }))
+    ));
+
+    trajectory.record_failure(receipt).unwrap();
+    assert!(trajectory.pending_action().is_none());
+    // The may-effects committed at release survive the failure.
+    assert_eq!(trajectory.state().past_effects(), &Effects::declared([Effect::Egress]));
 }
 
 #[test]
@@ -1268,6 +1304,46 @@ fn human() -> crate::approval::Authority {
 
 /// A suspicious payload with a registered redactor yields a single-step
 /// transform plan predicting a clean flow.
+/// Two registered transformers with the same declared output label are
+/// distinct derivations: both routes reach the frontier as incomparable
+/// alternatives — semantic-state deduplication must not collapse them.
+#[test]
+fn same_label_transformers_are_distinct_frontier_routes() {
+    fn scrub(_: &OpaqueValue) -> Result<OpaqueValue, crate::transition::TransformerError> {
+        Ok(OpaqueValue::new("[scrubbed]"))
+    }
+    let mut sibling = redact_transformer();
+    sibling.descriptor.transformer = crate::value::TransformerRef {
+        id: "pii.scrub".into(),
+        version: 1,
+    };
+    sibling.run = scrub;
+
+    let mut engine = engine_with([email_contract()]);
+    engine.register_transformer(redact_transformer()).unwrap();
+    engine.register_transformer(sibling).unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let raw = ingress(&mut trajectory, &["alice", "bob"], Trust::SUSPICIOUS, "raw page");
+    let request = email_request(&mut trajectory, raw, "bob");
+
+    let Ok(FlowOutcome::Remediable { plans, .. }) = engine.evaluate(&mut trajectory, request) else {
+        panic!("expected remediable block");
+    };
+    let mut derive_transformers: Vec<String> = plans
+        .iter()
+        .filter(|p| p.steps.len() == 1)
+        .filter_map(|p| match p.steps.first() {
+            PlannedRemedy::Reduce(crate::remedy::ReductionTarget::DeriveValue { transformer, .. }) => {
+                Some(transformer.id.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    derive_transformers.sort();
+    assert_eq!(derive_transformers, ["pii.redact", "pii.scrub"]);
+}
+
 #[test]
 fn tainted_payload_plans_a_transform() {
     let mut engine = engine_with([email_contract()]);

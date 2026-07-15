@@ -359,7 +359,7 @@ impl Trajectory {
             tool: parts.tool.clone(),
             rendered,
         };
-        let receipt = DispatchReceipt::from_token_parts(parts, self.revision());
+        let receipt = DispatchReceipt::from_token_parts(parts);
         Ok((canonical, receipt))
     }
 
@@ -420,6 +420,11 @@ impl Trajectory {
         Ok(())
     }
 
+    /// A receipt is validated by lifecycle, not revision: it closes a
+    /// dispatch that already happened, so an unrelated mutation after
+    /// release (a checked emission, a new value) must not wedge the released
+    /// action — only foreign, wrong-action, or already-closed receipts are
+    /// refused.
     fn validate_receipt(&self, receipt: DispatchReceipt) -> Result<ReceiptParts, RejectedToken> {
         let parts = receipt.into_parts();
         if parts.trajectory != self.id {
@@ -427,13 +432,6 @@ impl Trajectory {
             return Err(RejectedToken::ForeignTrajectory {
                 minted_for: parts.trajectory,
                 this: self.id,
-            });
-        }
-        if parts.revision != self.revision() {
-            debug!(minted_at = %parts.revision, current = %self.revision(), "receipt rejected (stale)");
-            return Err(RejectedToken::Stale {
-                minted_at: parts.revision,
-                current: self.revision(),
             });
         }
         match &self.pending {

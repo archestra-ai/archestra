@@ -6,6 +6,7 @@ from agentdojo.functions_runtime import FunctionCall, FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 from agentdojo.types import (
     ChatAssistantMessage,
+    ChatToolResultMessage,
     ChatUserMessage,
     text_content_block_from_string,
 )
@@ -17,6 +18,7 @@ from baton_dojo.defense import (
     INVALID_TOOL_ERROR_PREFIX,
     NESTED_CALL_ERROR,
     POLICY_BLOCK_SENTINEL,
+    UNSETTLED_PREFIX,
     BatonToolsExecutor,
     derive_episode,
     has_nested_call,
@@ -174,6 +176,25 @@ def test_derive_episode_classification():
     assert messages[-1]["error"].startswith(POLICY_BLOCK_SENTINEL)
     _, executed = derive_episode(messages, TABLE)
     assert [call.tool for call in executed] == ["get_unread_emails", "get_file_by_id"]
+
+
+def test_unsettled_calls_are_not_replayed_as_executed():
+    """A refused/unresolved call was never dispatched: it must not join the
+    executed episode on the next turn (baton would reject the replay)."""
+    call = FunctionCall(function="get_unread_emails", args={})
+    messages = [
+        user("do things"),
+        assistant(call),
+        ChatToolResultMessage(
+            role="tool",
+            content=[text_content_block_from_string("")],
+            tool_call_id="1",
+            tool_call=call,
+            error=f"{UNSETTLED_PREFIX}stale basis",
+        ),
+    ]
+    _, executed = derive_episode(messages, TABLE)
+    assert executed == []
 
 
 def test_derive_episode_requires_a_user_message():

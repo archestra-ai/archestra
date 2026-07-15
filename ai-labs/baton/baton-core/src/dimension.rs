@@ -64,7 +64,8 @@ impl fmt::Display for UserId {
 ///
 /// [`PUBLIC`]: Audience::PUBLIC
 /// [`UNKNOWN`]: Audience::UNKNOWN
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only), never a policy order.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct Audience(MeetSet<UserId>);
 
@@ -199,7 +200,8 @@ impl fmt::Display for KnownTrust {
 /// The fold keeps the strongest bad evidence: definite suspicion dominates
 /// missing knowledge, which dominates trust
 /// (`Suspicious ∧ Unknown = Suspicious`, `Trusted ∧ Unknown = Unknown`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only), never a policy order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct Trust(MinLevel<KnownTrust>);
 
@@ -284,7 +286,8 @@ impl fmt::Display for Effect {
 /// Union fold; [`none`](Effects::none) (`Has(∅)`) is the identity, and
 /// [`UNKNOWN`](Effects::UNKNOWN) (an unannotated tool ran, so anything may have
 /// happened) is absorbing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// PartialOrd/Ord are structural (container keys only), never a policy order.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct Effects(JoinSet<Effect>);
 

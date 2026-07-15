@@ -13,7 +13,7 @@ use rig_core::completion::{CompletionModel, CompletionRequest};
 
 use crate::error::DojoError;
 use crate::model::Model;
-use crate::policy::{BatonGate, GateVerdict};
+use crate::policy::{BatonGate, EmissionVerdict, GateVerdict};
 use crate::tool::{ToolError, Toolset};
 
 /// What one tool call produced.
@@ -199,9 +199,11 @@ impl<'m> Agent<'m> {
                 // sink: a gated run checks it as an emission flow and, on a
                 // block, surfaces the block instead of the leaking text.
                 let final_text = match gate.as_deref_mut() {
+                    // The permitted rendering — from the exact checked tree —
+                    // is the only text a gated run may return.
                     Some(g) => match g.check_emission(&final_text) {
-                        GateVerdict::Allow => final_text,
-                        GateVerdict::Block { reason } => format!("blocked by policy: {reason}"),
+                        EmissionVerdict::Emit { rendered } => rendered,
+                        EmissionVerdict::Block { reason } => format!("blocked by policy: {reason}"),
                     },
                     None => final_text,
                 };
@@ -235,13 +237,20 @@ impl<'m> Agent<'m> {
                             });
                             content
                         }
-                        GateVerdict::Allow => {
-                            let result = tools.dispatch(ws, &name, args.clone());
+                        // Effects are already committed (release precedes
+                        // execution); the dispatched call is the canonical
+                        // one recovered from the checked tree, never the
+                        // model's message verbatim.
+                        GateVerdict::Execute {
+                            tool: canonical_tool,
+                            args: canonical_args,
+                        } => {
+                            let result = tools.dispatch(ws, &canonical_tool, canonical_args.clone());
                             let content = result_content(&result);
                             // Fold the tool's contract-fixed output label into the trajectory,
                             // even on error: the handler may mutate state before failing.
                             g.commit(&content)?;
-                            tool_calls.push(record(name, args, result));
+                            tool_calls.push(record(canonical_tool, canonical_args, result));
                             content
                         }
                     }

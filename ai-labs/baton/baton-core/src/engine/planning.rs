@@ -61,25 +61,43 @@ struct GroupKey {
 }
 
 /// One reachable reduce-state of the exhaustive search: the simulated flow
-/// after a sequence of `Reduce` steps, the steps taken, and the leaves the
-/// current contract excludes from transformation (its recipients).
+/// after a sequence of `Reduce` steps, the steps taken, the leaves the
+/// current contract excludes from transformation (its recipients), the
+/// semantic states this route has passed through (path-local cycle
+/// detection), and the route's canonical move multiset (order-duplicate
+/// pruning).
 #[derive(Clone)]
 struct ReduceState {
     sim: SimFlow,
     steps: Vec<PlannedRemedy>,
     derives: Vec<(ValueId, TransformerRef)>,
     recipient_leaves: BTreeSet<ValueId>,
+    path: BTreeSet<StateKey>,
+    route: Vec<RouteMove>,
 }
 
-/// The semantic identity of a reduce-state for cycle detection: the per-leaf
-/// labels, the tool identity, and the proposed effects. Requirements and
-/// recipients are functions of the tool's contract over the fixed request
-/// tree, so they need no separate coordinate.
-#[derive(PartialEq)]
+/// The semantic identity of a reduce-state: the per-leaf labels, the tool
+/// identity, and the proposed effects. Requirements and recipients are
+/// functions of the tool's contract over the fixed request tree, so they
+/// need no separate coordinate. Semantic identity alone is deliberately NOT
+/// the deduplication key — two registered transformers with the same
+/// declared output label are distinct derivations and both must reach the
+/// frontier — so the walk dedups on (state, route multiset) globally and on
+/// revisited semantic states per route.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct StateKey {
     labels: Vec<(ValueId, ValueLabel)>,
     tool: ToolName,
     proposed_effects: Effects,
+}
+
+/// One move of the reduce walk, canonicalized (sorted) into a route multiset
+/// so the same set of reductions applied in a different order is one route,
+/// while different transformers to the same label stay distinct routes.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum RouteMove {
+    Derive { leaf: ValueId, transformer: TransformerRef },
+    Narrow { transition: TransformerRef },
 }
 
 impl StateKey {
@@ -215,25 +233,31 @@ impl PolicyEngine {
         plans
     }
 
-    /// Breadth-first walk of every reduce-state reachable from the checked
+    /// Breadth-first walk of every reduce-route reachable from the checked
     /// flow: a transformer application to any non-recipient leaf, or a gated
     /// action transition from the current tool, in registration order.
-    /// Semantic-state deduplication makes the walk terminate: leaf labels
-    /// range over the finite set of registered transformer outputs and tool
-    /// identity over the registered contracts, and a revisited state is never
-    /// expanded twice.
+    /// Two-level deduplication makes the walk terminate while keeping every
+    /// distinct derivation: a route never revisits its own semantic states
+    /// (so each hop strictly grows the route's path over the finite state
+    /// space), and the same move multiset reaching the same state is
+    /// expanded once globally (so leaf-order permutations collapse while two
+    /// transformers with the same declared output label both survive as
+    /// distinct routes).
     fn reduce_states(
         &self,
         base: &SimFlow,
         base_recipient_leaves: BTreeSet<ValueId>,
         ctx: &SearchCtx<'_>,
     ) -> Vec<ReduceState> {
-        let mut visited: Vec<StateKey> = vec![StateKey::of(base)];
+        let base_key = StateKey::of(base);
+        let mut expanded: BTreeSet<(StateKey, Vec<RouteMove>)> = BTreeSet::from([(base_key.clone(), Vec::new())]);
         let mut queue = VecDeque::from([ReduceState {
             sim: base.clone(),
             steps: Vec::new(),
             derives: Vec::new(),
             recipient_leaves: base_recipient_leaves,
+            path: BTreeSet::from([base_key]),
+            route: Vec::new(),
         }]);
         let mut states = Vec::new();
         while let Some(state) = queue.pop_front() {
@@ -249,8 +273,11 @@ impl PolicyEngine {
                     }
                     let mut next = state.clone();
                     next.sim.leaf_labels.insert(leaf, transformer.descriptor.output.clone());
-                    let key = StateKey::of(&next.sim);
-                    if visited.contains(&key) {
+                    let reduce = RouteMove::Derive {
+                        leaf,
+                        transformer: transformer.descriptor.transformer.clone(),
+                    };
+                    if !Self::enter(&mut next, reduce, &mut expanded) {
                         continue;
                     }
                     next.steps.push(PlannedRemedy::Reduce(ReductionTarget::DeriveValue {
@@ -258,7 +285,6 @@ impl PolicyEngine {
                         transformer: transformer.descriptor.transformer.clone(),
                     }));
                     next.derives.push((leaf, transformer.descriptor.transformer.clone()));
-                    visited.push(key);
                     queue.push_back(next);
                 }
             }
@@ -276,20 +302,41 @@ impl PolicyEngine {
                     // acquire then authorizes only the residual growth.
                     next.sim.proposed_effects = transition.effects.clone();
                     next.recipient_leaves = recipient_leaves_for(Some(target), ctx.tree);
-                    let key = StateKey::of(&next.sim);
-                    if visited.contains(&key) {
+                    let narrow = RouteMove::Narrow {
+                        transition: transition.id.clone(),
+                    };
+                    if !Self::enter(&mut next, narrow, &mut expanded) {
                         continue;
                     }
                     next.steps.push(PlannedRemedy::Reduce(ReductionTarget::NarrowAction {
                         transition: transition.id.clone(),
                     }));
-                    visited.push(key);
                     queue.push_back(next);
                 }
             }
             states.push(state);
         }
         states
+    }
+
+    /// Record one walk move onto `next`: refuse a route that revisits its
+    /// own semantic state (cycle) or an (state, route-multiset) pair another
+    /// order of the same moves already expanded; otherwise extend the
+    /// route's path and canonical multiset.
+    fn enter(next: &mut ReduceState, hop: RouteMove, expanded: &mut BTreeSet<(StateKey, Vec<RouteMove>)>) -> bool {
+        let key = StateKey::of(&next.sim);
+        if next.path.contains(&key) {
+            return false;
+        }
+        let mut route = next.route.clone();
+        route.push(hop);
+        route.sort();
+        if !expanded.insert((key.clone(), route.clone())) {
+            return false;
+        }
+        next.path.insert(key);
+        next.route = route;
+        true
     }
 
     /// The simulation-level narrowing gate, mirroring the applier's
@@ -489,9 +536,15 @@ impl PolicyEngine {
     /// Every minimum-cardinality release whose joint composition clears the
     /// projection: sizes ascending through a streaming lexicographic
     /// combination generator, collecting *all* successes of the first
-    /// successful size — the complete antichain of minimal releases (any
-    /// proper subset was probed at a smaller size and failed, so each is
-    /// inclusion-minimal; same-size sets are mutually incomparable). There is
+    /// successful size. Size-first semantics, not the full inclusion-minimal
+    /// antichain: each returned set is inclusion-minimal (every proper
+    /// subset was probed at a smaller size and failed) and same-size sets
+    /// are mutually incomparable, but cleanability is non-monotone, so a
+    /// *larger* inclusion-minimal release with no successful proper subset
+    /// is deliberately not enumerated — doing so would forfeit the early
+    /// exit and sweep the lattice even when a one-value release exists.
+    /// The complete sweep still happens whenever *nothing* succeeds, which
+    /// is exactly the `Terminal` proof. There is
     /// no width or count bound: a flow with no successful release at any size
     /// sweeps the full subset lattice — exponential in the request's own
     /// control-set size, and exactly the proof behind a `Terminal` claim

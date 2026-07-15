@@ -81,7 +81,12 @@ observable; preserve it (there is a typed-order test).
   receipt and close the action. There is deliberately no one-call shortcut
   that skips the canonical request — do not add one. Binding failures
   (stale/foreign) refuse *without* touching state; the capability is consumed
-  either way. The pending action's (possibly constrained) proposed effects
+  either way. Receipts are lifecycle-bound, not revision-bound: a receipt
+  closes a dispatch that already happened, so unrelated mutations after
+  release (a checked emission, a new value) never wedge the released action —
+  only foreign, wrong-action, or already-closed receipts refuse. Tokens,
+  step capabilities, and approvals authorize *future* changes and stay
+  revision-bound. The pending action's (possibly constrained) proposed effects
   are the single source of truth for what release commits.
 - Confirmation stays structural on user turns; it survives remedy steps on
   the confirmed action and is spent atomically at release as a grant

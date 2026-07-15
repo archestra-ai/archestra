@@ -90,6 +90,9 @@ def derive_episode(
         error = message["error"]
         if error is not None and (
             error.startswith(POLICY_BLOCK_SENTINEL)
+            # An unsettled (refused/unresolved) call was never dispatched, so
+            # replaying it as executed would make baton reject the episode.
+            or error.startswith(UNSETTLED_PREFIX)
             or error == EMPTY_FUNCTION_NAME_ERROR
             or error.startswith(INVALID_TOOL_ERROR_PREFIX)
         ):

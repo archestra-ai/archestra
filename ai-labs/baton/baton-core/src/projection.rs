@@ -135,11 +135,14 @@ pub fn pending_action(events: &EventSet) -> Option<PendingActionView> {
     for event in events.events() {
         match &event.fact {
             Fact::ActionProposed {
-                action, tool, effects, ..
+                action,
+                request,
+                effects,
+                ..
             } => {
                 view = Some(PendingActionView {
                     action: *action,
-                    tool: tool.clone(),
+                    tool: request.tool.clone(),
                     proposed_effects: effects.clone(),
                     accepted_effects: Effects::none(),
                     state: ActionState::Proposed,

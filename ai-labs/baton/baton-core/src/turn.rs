@@ -342,10 +342,6 @@ impl Trajectory {
             effects: parts.proposed_effects.clone(),
         });
         self.spend_confirmation();
-        self.pending
-            .as_mut()
-            .expect("pending action validated above")
-            .mark_released();
         self.commit(batch);
         debug!(action = %parts.action, "release: effects committed, action released");
 
@@ -393,7 +389,6 @@ impl Trajectory {
             actor: Actor::Tool(parts.tool),
             value,
         });
-        self.pending = None;
         self.commit(batch);
         debug!(action = %parts.action, %value, "record_output: recorded tool result");
         Ok(value)
@@ -407,7 +402,6 @@ impl Trajectory {
         let parts = self.validate_receipt(receipt)?;
         let batch = vec![Fact::DispatchFailed { action: parts.action }];
         self.state.record(AuditEvent::DispatchFailed { action: parts.action });
-        self.pending = None;
         self.commit(batch);
         debug!(action = %parts.action, "record_failure: dispatch failed, action closed");
         Ok(())
@@ -475,9 +469,7 @@ impl Trajectory {
             actor: Actor::Assistant,
             value,
         });
-        // An emitted response settles any pending emission (the fact batch's
-        // ResponseEmitted closes the live emission in the event log).
-        self.pending_emission = None;
+        // The batch's ResponseEmitted fact settles any pending emission.
         self.commit(batch);
         Ok((value, rendered))
     }
@@ -486,8 +478,8 @@ impl Trajectory {
     /// token). Clears the slot and advances the revision, so the dropped
     /// token can never be spent.
     pub fn abandon_pending(&mut self) {
-        if let Some(pending) = self.pending.take() {
-            self.commit(vec![Fact::ActionAbandoned { action: pending.id() }]);
+        if let Some(action) = self.pending.as_ref().map(PendingAction::id) {
+            self.commit(vec![Fact::ActionAbandoned { action }]);
         }
     }
 
@@ -527,20 +519,18 @@ impl Trajectory {
         self.next_action += 1;
         let flow = FlowId::new(self.next_flow);
         self.next_flow += 1;
-        let batch = vec![Fact::ActionProposed {
+        self.commit(vec![Fact::ActionProposed {
             action: id,
             flow,
-            tool: request.tool.clone(),
-            effects: proposed_effects.clone(),
-        }];
-        self.pending = Some(PendingAction::proposed(id, flow, request, proposed_effects));
-        self.commit(batch);
+            request,
+            effects: proposed_effects,
+        }]);
         id
     }
 
     pub(crate) fn clear_pending(&mut self) {
-        if let Some(pending) = self.pending.take() {
-            self.commit(vec![Fact::ActionAbandoned { action: pending.id() }]);
+        if let Some(action) = self.pending.as_ref().map(PendingAction::id) {
+            self.commit(vec![Fact::ActionAbandoned { action }]);
         }
     }
 
@@ -549,15 +539,13 @@ impl Trajectory {
     pub(crate) fn set_pending_emission(&mut self, request: EmissionRequest) -> FlowId {
         let flow = FlowId::new(self.next_flow);
         self.next_flow += 1;
-        let batch = vec![Fact::EmissionProposed { flow }];
-        self.pending_emission = Some(PendingEmission::proposed(flow, request));
-        self.commit(batch);
+        self.commit(vec![Fact::EmissionProposed { flow, request }]);
         flow
     }
 
     pub(crate) fn clear_pending_emission(&mut self) {
-        if let Some(pending) = self.pending_emission.take() {
-            self.commit(vec![Fact::EmissionAbandoned { flow: pending.flow() }]);
+        if let Some(flow) = self.pending_emission.as_ref().map(PendingEmission::flow) {
+            self.commit(vec![Fact::EmissionAbandoned { flow }]);
         }
     }
 
@@ -690,7 +678,6 @@ impl Trajectory {
             .admit_transformed(source, transition, transformer.clone(), declared_output.clone(), body)
             .expect("transform source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.substitute_into(site, source, derived);
         self.state.record(AuditEvent::ValueTransition {
             transition,
             transformer,
@@ -744,7 +731,6 @@ impl Trajectory {
             to_tool: to_tool.clone(),
             effects: effects.clone(),
         }];
-        pending.constrain(to_tool, effects);
         self.state.record(AuditEvent::ActionConstrained {
             transition,
             action,
@@ -783,7 +769,6 @@ impl Trajectory {
                 derived: None,
             },
         ];
-        pending.accept_growth(effects);
         self.state.record(AuditEvent::AuthorizationApplied {
             transition,
             authorization: acquisition,
@@ -841,7 +826,6 @@ impl Trajectory {
             .admit_endorsed(source, authority.clone(), delta.clone(), raised.clone(), body)
             .expect("endorse source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.substitute_into(site, source, derived);
         self.state.record(AuditEvent::AuthorizationApplied {
             transition,
             authorization: raise_grant,
@@ -878,22 +862,6 @@ impl Trajectory {
         }
     }
 
-    /// Substitute a derived value into the pending target at `site`.
-    fn substitute_into(&mut self, site: ReductionSite, from: ValueId, to: ValueId) {
-        match site {
-            ReductionSite::Action => self
-                .pending
-                .as_mut()
-                .expect("pending action validated by the engine")
-                .substitute_argument(from, to),
-            ReductionSite::Emission => self
-                .pending_emission
-                .as_mut()
-                .expect("pending emission validated by the engine")
-                .substitute_body(from, to),
-        }
-    }
-
     pub(crate) fn mint_transition(&mut self) -> TransitionId {
         let id = TransitionId::new(self.next_transition);
         self.next_transition += 1;
@@ -919,7 +887,11 @@ impl Trajectory {
             Fact::ActionProposed {
                 action,
                 flow,
-                tool: ToolName::new("seed.dispatch"),
+                request: ToolRequest::new(
+                    ToolName::new("seed.dispatch"),
+                    crate::request::ArgumentTree::empty(),
+                    BTreeSet::new(),
+                ),
                 effects: effects.clone(),
             },
             Fact::EffectsCommitted { action, effects },
@@ -982,11 +954,78 @@ impl Trajectory {
         let admitted_from = self.events.events().len();
         self.events
             .append_batch(facts)
-            .expect("shadow facts mirror an already-validated mutation");
+            .expect("facts mirror an already-validated mutation");
         for event in &self.events.events()[admitted_from..] {
             self.state.apply(&event.fact);
+            Self::apply_flow_fact(&mut self.pending, &mut self.pending_emission, &event.fact);
         }
         self.advance();
+    }
+
+    /// Materialize one admitted fact into the pending-slot read models — the
+    /// only writer of both slots, so the log is authoritative for the action
+    /// and emission lifecycles by construction (admission already refused
+    /// any fact contradicting them).
+    fn apply_flow_fact(
+        pending: &mut Option<PendingAction>,
+        pending_emission: &mut Option<PendingEmission>,
+        fact: &Fact,
+    ) {
+        match fact {
+            Fact::ActionProposed {
+                action,
+                flow,
+                request,
+                effects,
+            } => {
+                *pending = Some(PendingAction::proposed(
+                    *action,
+                    *flow,
+                    request.clone(),
+                    effects.clone(),
+                ));
+            }
+            Fact::ActionConstrained { to_tool, effects, .. } => {
+                pending
+                    .as_mut()
+                    .expect("admission guarantees a live action")
+                    .constrain(to_tool.clone(), effects.clone());
+            }
+            Fact::ArgumentSubstituted { from, to, .. } => {
+                pending
+                    .as_mut()
+                    .expect("admission guarantees a live action")
+                    .substitute_argument(*from, *to);
+            }
+            Fact::GrowthAccepted { effects, .. } => {
+                pending
+                    .as_mut()
+                    .expect("admission guarantees a live action")
+                    .accept_growth(effects.clone());
+            }
+            Fact::ActionReleased { .. } => {
+                pending
+                    .as_mut()
+                    .expect("admission guarantees a live action")
+                    .mark_released();
+            }
+            Fact::ActionCompleted { .. } | Fact::DispatchFailed { .. } | Fact::ActionAbandoned { .. } => {
+                *pending = None;
+            }
+            Fact::EmissionProposed { flow, request } => {
+                *pending_emission = Some(PendingEmission::proposed(*flow, request.clone()));
+            }
+            Fact::EmissionBodySubstituted { from, to, .. } => {
+                pending_emission
+                    .as_mut()
+                    .expect("admission guarantees a live emission")
+                    .substitute_body(*from, *to);
+            }
+            Fact::EmissionAbandoned { .. } | Fact::ResponseEmitted { .. } => {
+                *pending_emission = None;
+            }
+            _ => {}
+        }
     }
 }
 

@@ -155,7 +155,10 @@ pub enum Fact {
         /// The checked flow the proposal opens; check facts and check-scoped
         /// grants bind to it.
         flow: FlowId,
-        tool: ToolName,
+        /// The immutable original proposal — the pending-action read model
+        /// (identity basis for idempotent re-entry, current constrained form)
+        /// materializes from this and the later reduction facts.
+        request: crate::request::ToolRequest,
         effects: Effects,
     },
     ActionConstrained {
@@ -213,6 +216,9 @@ pub enum Fact {
     /// remediable, so the proposal is retained as the pending emission).
     EmissionProposed {
         flow: FlowId,
+        /// The immutable original proposal the pending-emission read model
+        /// materializes from.
+        request: crate::request::EmissionRequest,
     },
     /// A derivation replaced `from` with `to` in the pending emission's
     /// current body tree.
@@ -270,7 +276,7 @@ impl Fact {
             | Self::DispatchFailed { action }
             | Self::ActionAbandoned { action } => Subject::Action(*action),
             Self::CheckPerformed { flow, .. }
-            | Self::EmissionProposed { flow }
+            | Self::EmissionProposed { flow, .. }
             | Self::EmissionBodySubstituted { flow, .. }
             | Self::EmissionAbandoned { flow } => Subject::Check(*flow),
             Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
@@ -541,7 +547,7 @@ impl ProbeState {
                 Some(action) => self.requires_live(*action, ActionPhase::Open),
                 None => self.requires_live_emission(*flow),
             },
-            Fact::EmissionProposed { flow } => match self.live_emission {
+            Fact::EmissionProposed { flow, .. } => match self.live_emission {
                 Some(_) => Err(EventConflict::EmissionSlotOccupied { flow: *flow }),
                 None => Ok(()),
             },
@@ -601,7 +607,7 @@ impl ProbeState {
             Fact::ConfirmationSpent { turn } => {
                 self.spent_confirmations.insert(*turn);
             }
-            Fact::EmissionProposed { flow } => {
+            Fact::EmissionProposed { flow, .. } => {
                 self.live_emission = Some(*flow);
             }
             // An emitted response settles any pending emission; an
@@ -654,7 +660,11 @@ mod tests {
         Fact::ActionProposed {
             action: ActionId::new(action),
             flow: crate::revision::FlowId::new(action),
-            tool: crate::ToolName::new("email.send"),
+            request: crate::request::ToolRequest::new(
+                crate::ToolName::new("email.send"),
+                crate::request::ArgumentTree::empty(),
+                std::collections::BTreeSet::new(),
+            ),
             effects: Effects::none(),
         }
     }

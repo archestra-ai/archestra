@@ -412,7 +412,7 @@ function getSuccessMessage(agentType: AgentType, isUpdate: boolean): string {
   return isUpdate ? messages[agentType].update : messages[agentType].create;
 }
 
-const agentTypeDisplayName: Record<string, string> = {
+export const agentTypeDisplayName: Record<string, string> = {
   agent: "agent",
   mcp_gateway: "MCP Gateway",
   llm_proxy: "LLM Proxy",
@@ -443,7 +443,7 @@ function getScopeOptions(agentType: string) {
   ];
 }
 
-function AccessLevelSelector({
+export function AccessLevelSelector({
   scope,
   onScopeChange,
   isAdmin,

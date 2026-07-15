@@ -20,6 +20,7 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
   ConnectDialogSection,
@@ -37,7 +38,6 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
-  useCloneAgent,
   useDeleteProfile,
   useExportAgent,
   useProfile,
@@ -201,20 +201,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const viewDialog = useAgentDialogUrlParam("view");
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
 
-  const cloneAgent = useCloneAgent();
-
-  const handleClone = useCallback(
-    async (agentId: string) => {
-      try {
-        const cloned = await cloneAgent.mutateAsync(agentId);
-        if (cloned) {
-          // Open edit dialog for the cloned agent so user can rename immediately
-          editDialog.open(cloned as AgentData);
-        }
-      } catch (_error) {}
-    },
-    [cloneAgent, editDialog.open],
-  );
+  const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
@@ -383,7 +370,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 },
               });
             }}
-            onClone={handleClone}
+            onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
@@ -565,6 +552,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               agent={convertingAgent}
               onOpenChange={(open) => {
                 if (!open) setConvertingAgent(null);
+              }}
+            />
+
+            <CloneAgentDialog
+              agent={cloningAgent}
+              onOpenChange={(open) => {
+                if (!open) setCloningAgent(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the cloned agent so user can rename immediately
+                editDialog.open(cloned as AgentData);
               }}
             />
           </div>

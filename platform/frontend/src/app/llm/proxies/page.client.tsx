@@ -15,6 +15,7 @@ import {
   AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
+import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
@@ -198,6 +199,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   );
   const editDialog = useAgentDialogUrlParam("edit");
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
+  const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
   const restoreProxy = useRestoreProfile();
 
   const handleSortingChange = useCallback(
@@ -348,6 +350,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 },
               });
             }}
+            onClone={setCloningProxy}
           />
         );
       },
@@ -498,6 +501,17 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 onOpenChange={(open) => !open && setDeletingProxyId(null)}
               />
             )}
+
+            <CloneAgentDialog
+              agent={cloningProxy}
+              onOpenChange={(open) => {
+                if (!open) setCloningProxy(null);
+              }}
+              onCloned={(cloned) => {
+                // Open edit dialog for the clone so user can rename immediately
+                editDialog.open(cloned as ProxyData);
+              }}
+            />
           </div>
         </div>
       </PageLayout>

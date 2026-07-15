@@ -29,7 +29,7 @@ type AgentActionsProps = {
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
-  onClone: (agentId: string) => void;
+  onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
 };
@@ -130,7 +130,7 @@ export function AgentActions({
         ? "Built-in agents cannot be cloned"
         : undefined,
       permissions: { agent: ["create"] },
-      onClick: () => onClone(agent.id),
+      onClick: () => onClone(agent),
       testId: `${E2eTestId.CloneAgentButton}-${agent.name}`,
     },
     {

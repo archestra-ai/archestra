@@ -7,6 +7,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   CLAUDE_CLIENT_ID,
   CLAUDE_CODE_CLIENT_ID,
+  CODEX_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 
 type SessionSummary =
@@ -129,15 +130,21 @@ export function makeInteraction(
 }
 
 // Seed sessions for the LLM logs list. Client attribution lives in
-// `externalAgentIds`; the "Client" filter sends `client=claude` and the
-// query-aware handler matches those rows. Two Claude sessions (header-set
-// `claude code` and auto-discovered `claude`) plus a plain API session.
+// `externalAgentIds`; the "Client" filter sends `client=claude`/`client=codex`
+// and the query-aware handler matches those rows. Two Claude sessions
+// (header-set `claude code` and auto-discovered `claude`), one Codex session,
+// plus a plain API session.
 export const llmLogsSessionsSeed = [
   makeSessionSummary({
     sessionId: "cc-session",
     sessionSource: "claude_metadata",
     externalAgentIds: [CLAUDE_CODE_CLIENT_ID],
     claudeCodeTitle: "Claude Code session title",
+  }),
+  makeSessionSummary({
+    sessionId: "codex-session",
+    sessionSource: "codex_session",
+    externalAgentIds: [CODEX_CLIENT_ID],
   }),
   makeSessionSummary({
     sessionId: "cd-session",

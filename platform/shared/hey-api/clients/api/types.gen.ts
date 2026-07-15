@@ -36301,7 +36301,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude';
+        client?: 'claude' | 'codex';
         /**
          * Filter by session ID
          */
@@ -48436,6 +48436,7 @@ export type GetLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        isChatgptSubscription?: boolean;
     }>;
 };
 
@@ -48661,6 +48662,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        isChatgptSubscription?: boolean;
     }>;
 };
 
@@ -48854,6 +48856,7 @@ export type GetLlmProviderApiKeyResponses = {
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         bestModelId?: string | null;
         isAgentKey?: boolean;
+        isChatgptSubscription?: boolean;
     };
 };
 

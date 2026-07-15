@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SupportedProvider } from "../model-constants";
 
 /**
  * Client-app attribution for an interaction lives in
@@ -13,6 +14,9 @@ import { z } from "zod";
 /** Human-readable label for every Claude client id in the UI. */
 export const CLAUDE_CLIENT_LABEL = "Claude";
 
+/** Human-readable label for the Codex client id in the UI. */
+export const CODEX_CLIENT_LABEL = "Codex";
+
 /**
  * `external_agent_id` values for Claude clients:
  * - {@link CLAUDE_CLIENT_ID} — generic; recorded by auto-discovery when no
@@ -25,6 +29,40 @@ export const CLAUDE_CLIENT_LABEL = "Claude";
 export const CLAUDE_CLIENT_ID = "anthropic_claude";
 export const CLAUDE_CODE_CLIENT_ID = "anthropic_claude_code";
 export const CLAUDE_DESKTOP_CLIENT_ID = "anthropic_claude_desktop";
+
+/**
+ * `external_agent_id` value for the Codex CLI. Set explicitly by the
+ * connect-page setup script via an `X-Archestra-Agent-Id` request header and,
+ * when that header is absent, recorded by auto-discovery of a first-party Codex
+ * `originator` (see {@link isCodexOriginator}).
+ */
+export const CODEX_CLIENT_ID = "openai_codex";
+
+/**
+ * First-party Codex originators. Codex stamps its client identity on every
+ * request in the `originator` header (default `codex_cli_rs`, overridable via
+ * `CODEX_INTERNAL_ORIGINATOR_OVERRIDE`) and repeats it as the leading token of
+ * the User-Agent — this mirrors codex-rs `is_first_party_originator`. It is the
+ * Codex analog of the Anthropic billing header: a purpose-built client-identity
+ * signal the proxy uses to auto-attribute a Codex request to
+ * {@link CODEX_CLIENT_ID} when no explicit `X-Archestra-Agent-Id` is sent.
+ */
+const CODEX_FIRST_PARTY_ORIGINATORS = new Set<string>([
+  "codex_cli_rs",
+  "codex-tui",
+  "codex_vscode",
+]);
+
+/** Whether an `originator` value denotes a first-party Codex client. */
+export function isCodexOriginator(
+  originator: string | null | undefined,
+): boolean {
+  if (!originator) {
+    return false;
+  }
+  const value = originator.trim().toLowerCase();
+  return CODEX_FIRST_PARTY_ORIGINATORS.has(value) || value.startsWith("codex ");
+}
 
 export const CLAUDE_CLIENT_AGENT_IDS = [
   CLAUDE_CLIENT_ID,
@@ -45,18 +83,82 @@ export function isClaudeClientAgentId(
 }
 
 /**
- * Value used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
- * the stored ids above: the backend expands it to {@link CLAUDE_CLIENT_AGENT_IDS}.
- * Only Claude is surfaced today.
+ * `external_agent_id` values for Codex clients. Only the generic
+ * {@link CODEX_CLIENT_ID} exists today (the connect script sets it explicitly
+ * and auto-discovery records the same id), but this stays a set to mirror the
+ * Claude shape and leave room for a future per-app split.
+ */
+export const CODEX_CLIENT_AGENT_IDS = [CODEX_CLIENT_ID] as const;
+
+const CODEX_CLIENT_AGENT_ID_SET = new Set<string>(CODEX_CLIENT_AGENT_IDS);
+
+/** Whether an `external_agent_id` value denotes a Codex client app. */
+export function isCodexClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  if (!externalAgentId) {
+    return false;
+  }
+  return CODEX_CLIENT_AGENT_ID_SET.has(externalAgentId.trim().toLowerCase());
+}
+
+/**
+ * The UI label for whichever known client family an interaction's
+ * `external_agent_id` list belongs to ("Claude" / "Codex"), or `null` when none
+ * match. Drives the client badge on the logs table + session details page.
+ */
+export function clientLabelForExternalAgentIds(
+  externalAgentIds: ReadonlyArray<string | null | undefined>,
+): string | null {
+  if (externalAgentIds.some(isClaudeClientAgentId)) {
+    return CLAUDE_CLIENT_LABEL;
+  }
+  if (externalAgentIds.some(isCodexClientAgentId)) {
+    return CODEX_CLIENT_LABEL;
+  }
+  return null;
+}
+
+/**
+ * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
+ * the stored ids above: the backend expands each to its client's agent-id set
+ * (see {@link clientFilterToAgentIds}).
  */
 export const CLAUDE_CLIENT_FILTER = "claude";
+export const CODEX_CLIENT_FILTER = "codex";
 
-export const ClientFilterSchema = z.enum([CLAUDE_CLIENT_FILTER]);
+export const ClientFilterSchema = z.enum([
+  CLAUDE_CLIENT_FILTER,
+  CODEX_CLIENT_FILTER,
+]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
 
-/** Options for the logs "Client" filter dropdown. */
+/** The client-attribution agent ids a given filter value expands to. */
+export function clientFilterToAgentIds(
+  filter: ClientFilter,
+): ReadonlyArray<string> {
+  switch (filter) {
+    case CLAUDE_CLIENT_FILTER:
+      return CLAUDE_CLIENT_AGENT_IDS;
+    case CODEX_CLIENT_FILTER:
+      return CODEX_CLIENT_AGENT_IDS;
+  }
+}
+
+/**
+ * Options for the logs "Client" filter dropdown. `provider` selects the logo
+ * shown next to each option (Claude → Anthropic, Codex → OpenAI).
+ */
 export const CLIENT_FILTER_OPTIONS: ReadonlyArray<{
   value: ClientFilter;
   label: string;
-}> = [{ value: CLAUDE_CLIENT_FILTER, label: CLAUDE_CLIENT_LABEL }];
+  provider: SupportedProvider;
+}> = [
+  {
+    value: CLAUDE_CLIENT_FILTER,
+    label: CLAUDE_CLIENT_LABEL,
+    provider: "anthropic",
+  },
+  { value: CODEX_CLIENT_FILTER, label: CODEX_CLIENT_LABEL, provider: "openai" },
+];

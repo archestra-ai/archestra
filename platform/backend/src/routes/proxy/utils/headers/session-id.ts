@@ -7,6 +7,14 @@ import { getHeaderValue, parseMetaHeader } from "./meta-header";
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
 
 /**
+ * The Codex CLI stamps its session id on every request in a `session-id` header
+ * (codex-rs `build_session_headers`) and mirrors it in the Responses
+ * `prompt_cache_key` body field. The header is the primary signal; the body
+ * field is a last-resort fallback for when a middlebox strips the header.
+ */
+const CODEX_SESSION_ID_HEADER = "session-id";
+
+/**
  * Session source indicates where the session ID was extracted from. This is
  * stored in the database and is purely about *provenance of the session id* —
  * it does NOT identify the client app. Client-app attribution lives in the
@@ -24,6 +32,7 @@ export type SessionSource =
   | "header"
   | "meta_header"
   | "openwebui_chat"
+  | "codex_session"
   | "openai_user"
   | null;
 
@@ -40,17 +49,25 @@ export interface SessionInfo {
  * 1. Explicit X-Archestra-Session-Id header (source: 'header')
  * 2. X-Archestra-Meta third segment (source: 'meta_header')
  * 3. Open WebUI X-OpenWebUI-Chat-Id header (source: 'openwebui_chat')
- * 4. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
- * 5. OpenAI user field (source: 'openai_user')
+ * 4. Codex `session-id` request header (source: 'codex_session')
+ * 5. Claude/Anthropic metadata.user_id (source: 'claude_metadata')
+ * 6. OpenAI user field (source: 'openai_user')
+ * 7. Codex Responses `prompt_cache_key` body field, last resort (source:
+ *    'codex_session')
  *
  * @param headers - The request headers object
- * @param body - The request body (may contain metadata.user_id or user field)
+ * @param body - The request body (may contain metadata.user_id, user, or
+ *   prompt_cache_key)
  * @returns SessionInfo with sessionId and sessionSource
  */
 export function extractSessionInfo(
   headers: Record<string, string | string[] | undefined>,
   body:
-    | { metadata?: { user_id?: string | null }; user?: string | null }
+    | {
+        metadata?: { user_id?: string | null };
+        user?: string | null;
+        prompt_cache_key?: string | null;
+      }
     | undefined,
 ): SessionInfo {
   // Priority 1: Explicit header
@@ -72,7 +89,14 @@ export function extractSessionInfo(
     return { sessionId: openwebuiChatId, sessionSource: "openwebui_chat" };
   }
 
-  // Priority 4: Claude/Anthropic metadata.user_id (any known format)
+  // Priority 4: Codex `session-id` request header (its primary session signal,
+  // stamped on every request by codex-rs build_session_headers).
+  const codexHeaderSessionId = getHeaderValue(headers, CODEX_SESSION_ID_HEADER);
+  if (codexHeaderSessionId) {
+    return { sessionId: codexHeaderSessionId, sessionSource: "codex_session" };
+  }
+
+  // Priority 5: Claude/Anthropic metadata.user_id (any known format)
   const claudeSessionId = parseClaudeMetadataSessionId(body?.metadata?.user_id);
   if (claudeSessionId) {
     return {
@@ -81,10 +105,22 @@ export function extractSessionInfo(
     };
   }
 
-  // Priority 5: OpenAI user field (some clients use this for session tracking)
+  // Priority 6: OpenAI user field (some clients use this for session tracking)
   const user = body?.user;
   if (user && typeof user === "string" && user.trim().length > 0) {
     return { sessionId: user.trim(), sessionSource: "openai_user" };
+  }
+
+  // Priority 7 (last resort): Codex Responses `prompt_cache_key`. Codex defaults
+  // it to the session id, so it recovers grouping when the `session-id` header
+  // above was dropped in transit.
+  const promptCacheKey = body?.prompt_cache_key;
+  if (
+    promptCacheKey &&
+    typeof promptCacheKey === "string" &&
+    promptCacheKey.trim().length > 0
+  ) {
+    return { sessionId: promptCacheKey.trim(), sessionSource: "codex_session" };
   }
 
   return { sessionId: null, sessionSource: null };

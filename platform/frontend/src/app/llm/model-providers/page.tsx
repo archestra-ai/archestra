@@ -186,7 +186,11 @@ export default function ApiKeysPage() {
         awsAccessKeyId: null,
         awsSecretAccessKey: null,
         awsSessionToken: null,
-        openaiAuthMethod: "api-key",
+        // Open on the auth-mode tab that matches the stored credential: ChatGPT
+        // Subscription keys land on the subscription tab, plain keys on API Key.
+        openaiAuthMethod: selectedApiKey.isChatgptSubscription
+          ? "chatgpt-subscription"
+          : "api-key",
       });
     }
   }, [isEditDialogOpen, selectedApiKey, editForm]);

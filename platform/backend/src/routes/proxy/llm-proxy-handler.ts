@@ -189,6 +189,7 @@ type RequestBodyForExtraction =
       system?: unknown;
       metadata?: { user_id?: string | null };
       user?: string | null;
+      prompt_cache_key?: string | null;
     }
   | undefined;
 
@@ -219,10 +220,13 @@ export async function handleLLMProxy<
   const bodyForExtraction = body as RequestBodyForExtraction;
   // Client-app attribution: the caller-supplied X-Archestra-Agent-Id header (or
   // X-Archestra-Meta segment 0) wins; otherwise auto-discover a known client
-  // app from the request and record it (Claude clients → "anthropic_claude").
+  // app from the request and record it (Claude clients → "anthropic_claude"
+  // from the request body; Codex clients → "openai_codex" from the originator
+  // header the Codex CLI stamps on every request).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
-    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction);
+    utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
+    utils.headers.clientApp.detectCodexClientId(headersForExtraction);
   const executionId =
     utils.headers.executionId.getExecutionId(headersForExtraction);
   const authOverride = (
@@ -587,6 +591,19 @@ export async function handleLLMProxy<
     oauthUserId,
     regularVirtualKeyUserId,
   ]);
+
+  // Fall back to the personal standard virtual key's owner for user attribution.
+  // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
+  // X-Archestra-User-Id header — already set `userId` above, so this only fills
+  // the gap when a personal virtual key is the sole identity signal. That is the
+  // virtual-key connection mode: the connect flow mints a personal virtual key
+  // whose author is the acting user (Codex ChatGPT subscription, Claude Code
+  // virtual key). Consistency with any other authenticated identity was just
+  // asserted, so this can never disagree with them.
+  if (!userId && regularVirtualKeyUserId) {
+    userId = regularVirtualKeyUserId;
+    resolvedUser = await UserModel.getById(userId);
+  }
 
   if (!authMethod) {
     authMethod = passthroughVirtualKeyId

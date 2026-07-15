@@ -1,6 +1,6 @@
-import { CLAUDE_CLIENT_ID } from "@archestra/shared";
+import { CLAUDE_CLIENT_ID, CODEX_CLIENT_ID } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
-import { detectClaudeClientId } from "./client-app";
+import { detectClaudeClientId, detectCodexClientId } from "./client-app";
 
 describe("detectClaudeClientId", () => {
   test("detects Claude from an x-anthropic-billing-header system block", () => {
@@ -79,5 +79,51 @@ describe("detectClaudeClientId", () => {
     ).toBeUndefined();
     expect(detectClaudeClientId(undefined)).toBeUndefined();
     expect(detectClaudeClientId({})).toBeUndefined();
+  });
+});
+
+describe("detectCodexClientId", () => {
+  test("detects Codex from the default originator header", () => {
+    expect(detectCodexClientId({ originator: "codex_cli_rs" })).toBe(
+      CODEX_CLIENT_ID,
+    );
+  });
+
+  test("detects other first-party Codex originators", () => {
+    expect(detectCodexClientId({ originator: "codex-tui" })).toBe(
+      CODEX_CLIENT_ID,
+    );
+    expect(detectCodexClientId({ originator: "codex_vscode" })).toBe(
+      CODEX_CLIENT_ID,
+    );
+    // The `Codex ` prefix covers versioned first-party originator strings.
+    expect(detectCodexClientId({ originator: "Codex 1.2.3" })).toBe(
+      CODEX_CLIENT_ID,
+    );
+  });
+
+  test("falls back to the User-Agent leading token when originator is absent", () => {
+    expect(
+      detectCodexClientId({
+        "user-agent": "codex_cli_rs/0.20.0 (Linux 6.6; x86_64) reqwest",
+      }),
+    ).toBe(CODEX_CLIENT_ID);
+  });
+
+  test("does not attribute third-party clients that reuse the Codex backend", () => {
+    // OpenCode sends its own `originator`, not a first-party Codex one.
+    expect(detectCodexClientId({ originator: "opencode" })).toBeUndefined();
+    expect(
+      detectCodexClientId({
+        "user-agent": "opencode/1.0.0 (darwin) node",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("returns undefined when no Codex signal is present", () => {
+    expect(detectCodexClientId({})).toBeUndefined();
+    expect(
+      detectCodexClientId({ "user-agent": "OpenAI/Python 1.0" }),
+    ).toBeUndefined();
   });
 });

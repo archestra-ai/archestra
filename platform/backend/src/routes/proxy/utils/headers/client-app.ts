@@ -1,4 +1,9 @@
-import { CLAUDE_CLIENT_ID } from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_ID,
+  CODEX_CLIENT_ID,
+  isCodexOriginator,
+} from "@archestra/shared";
+import { getHeaderValue } from "./meta-header";
 import { isClaudeMetadataUserId } from "./session-id";
 
 /**
@@ -7,10 +12,12 @@ import { isClaudeMetadataUserId } from "./session-id";
  * When the caller does NOT supply an explicit `X-Archestra-Agent-Id` header,
  * we best-effort attribute the request to a known client app and persist that
  * id in `interactions.external_agent_id`. Identification is per-app; recording
- * is uniform. This phase recognizes Claude clients only, all recorded as the
- * generic {@link CLAUDE_CLIENT_ID} — we can only distinguish Claude Code from
- * Claude Desktop when the caller sets `X-Archestra-Agent-Id` itself (the setup
- * scripts do this), never from the request alone.
+ * is uniform. Two client families are recognized, each recorded as its generic
+ * id: Claude clients ({@link detectClaudeClientId} → {@link CLAUDE_CLIENT_ID})
+ * and Codex clients ({@link detectCodexClientId} → {@link CODEX_CLIENT_ID}). The
+ * finer split (Claude Code vs Desktop) is only knowable when the caller sets
+ * `X-Archestra-Agent-Id` itself (the setup scripts do this), never from the
+ * request alone.
  *
  * Two Claude signals, in order:
  * 1. The Anthropic `x-anthropic-billing-header` hint embedded in a `system`
@@ -35,6 +42,32 @@ export function detectClaudeClientId(
   }
   if (isClaudeMetadataUserId(body.metadata?.user_id)) {
     return CLAUDE_CLIENT_ID;
+  }
+  return undefined;
+}
+
+/**
+ * Codex client auto-discovery — the Codex counterpart to
+ * {@link detectClaudeClientId}. Codex has no request-body fingerprint we rely
+ * on; instead it stamps its identity on the `originator` request header
+ * (`codex_cli_rs` by default) and repeats it as the User-Agent's leading token
+ * on every request, exactly the way the Anthropic billing header identifies
+ * Claude. When the caller sets no explicit `X-Archestra-Agent-Id`, a
+ * first-party Codex originator (see {@link isCodexOriginator}) — or a matching
+ * User-Agent, in case a middlebox drops the originator header — attributes the
+ * request to {@link CODEX_CLIENT_ID}.
+ */
+export function detectCodexClientId(
+  headers: Record<string, string | string[] | undefined>,
+): typeof CODEX_CLIENT_ID | undefined {
+  if (isCodexOriginator(getHeaderValue(headers, "originator"))) {
+    return CODEX_CLIENT_ID;
+  }
+  // The User-Agent leads with the same originator value, e.g.
+  // `codex_cli_rs/0.20.0 (Linux 6.6; x86_64) …` — the token before the slash.
+  const userAgent = getHeaderValue(headers, "user-agent");
+  if (userAgent && isCodexOriginator(userAgent.split("/", 1)[0])) {
+    return CODEX_CLIENT_ID;
   }
   return undefined;
 }

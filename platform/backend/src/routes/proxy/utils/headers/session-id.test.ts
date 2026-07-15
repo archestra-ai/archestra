@@ -256,4 +256,52 @@ describe("extractSessionInfo", () => {
 
     expect(result).toEqual({ sessionId: null, sessionSource: null });
   });
+
+  test("extracts session ID from the Codex `session-id` header", () => {
+    const result = extractSessionInfo(
+      { "session-id": "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+      undefined,
+    );
+
+    expect(result).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("falls back to Codex prompt_cache_key when no session-id header", () => {
+    const result = extractSessionInfo(
+      {},
+      { prompt_cache_key: "019f66bc-440e-72d1-b927-4d96fad7dc3a" },
+    );
+
+    expect(result).toEqual({
+      sessionId: "019f66bc-440e-72d1-b927-4d96fad7dc3a",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("prefers the Codex session-id header over prompt_cache_key", () => {
+    const result = extractSessionInfo(
+      { "session-id": "header-session" },
+      { prompt_cache_key: "body-cache-key" },
+    );
+
+    expect(result).toEqual({
+      sessionId: "header-session",
+      sessionSource: "codex_session",
+    });
+  });
+
+  test("prompt_cache_key is a last resort, below the OpenAI user field", () => {
+    const result = extractSessionInfo(
+      {},
+      { user: "openai-user", prompt_cache_key: "cache-key" },
+    );
+
+    expect(result).toEqual({
+      sessionId: "openai-user",
+      sessionSource: "openai_user",
+    });
+  });
 });

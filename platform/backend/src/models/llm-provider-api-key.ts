@@ -10,6 +10,7 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema, type Transaction } from "@/database";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
+import { isOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type {
   InsertLlmProviderApiKey,
   LlmProviderApiKey,
@@ -235,6 +236,7 @@ class LlmProviderApiKeyModel {
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
         secretStorageType,
+        isChatgptSubscription: isChatgptSubscriptionSecret(key.secret),
       };
     });
   }
@@ -362,6 +364,7 @@ class LlmProviderApiKeyModel {
         vaultSecretPath: vaultRef?.vaultSecretPath ?? null,
         vaultSecretKey: vaultRef?.vaultSecretKey ?? null,
         secretStorageType,
+        isChatgptSubscription: isChatgptSubscriptionSecret(key.secret),
       };
     });
   }
@@ -854,6 +857,22 @@ function parseVaultReferenceFromSecret(
     };
   }
   return null;
+}
+
+/**
+ * True when the stored secret is an OpenAI "ChatGPT Subscription" (Codex)
+ * credential (marker-encoded), so the edit form can open on the right auth-mode
+ * tab. Reads only the marker prefix — the credential itself is never returned.
+ */
+function isChatgptSubscriptionSecret(secret: SecretValue | null): boolean {
+  if (!secret || typeof secret !== "object") return false;
+  const decrypted = isEncryptedSecret(secret)
+    ? decryptSecretValue(secret)
+    : secret;
+  const apiKeyValue = (decrypted as Record<string, unknown>).apiKey;
+  return (
+    typeof apiKeyValue === "string" && isOpenAiCodexCredential(apiKeyValue)
+  );
 }
 
 /**

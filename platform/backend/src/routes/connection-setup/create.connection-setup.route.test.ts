@@ -422,6 +422,76 @@ describe("POST /api/connection-setups", () => {
     expect(attributionKey?.authorId).toBe(user.id);
   });
 
+  test("codex openai passthrough provisions an attribution key by default (mirrors Claude Code)", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "codex",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "openai",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    // Codex keeps its own OpenAI key (provider-key mode); the passthrough key
+    // rides in the otherwise-null virtualApiKeyId column, just like Claude Code.
+    expect(setup?.proxyAuth).toBe("provider-key");
+    expect(setup?.virtualApiKeyId).not.toBeNull();
+    const attributionKey = await VirtualApiKeyModel.findById(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(attributionKey?.keyType).toBe("passthrough");
+    expect(attributionKey?.authorId).toBe(user.id);
+  });
+
+  test("codex openai virtual-key provisions only a personal standard key (no passthrough key)", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "openai",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "codex",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "openai",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.proxyAuth).toBe("virtual-key");
+
+    // The personal standard key carries the user's identity on its own — the
+    // proxy attributes the request to its owner, so no passthrough key is minted.
+    expect(setup?.virtualApiKeyId).not.toBeNull();
+    const standardKey = await VirtualApiKeyModel.findById(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(standardKey?.keyType).not.toBe("passthrough");
+    expect(standardKey?.scope).toBe("personal");
+    expect(standardKey?.authorId).toBe(user.id);
+  });
+
   test("passthrough attribution is best-effort: still 200 without llmVirtualKey:create, no key provisioned", async ({
     makeAgent,
   }) => {

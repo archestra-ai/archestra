@@ -133877,7 +133877,8 @@
             "schema": {
               "type": "string",
               "enum": [
-                "claude"
+                "claude",
+                "codex"
               ]
             },
             "in": "query",
@@ -186389,6 +186390,9 @@
                       },
                       "isAgentKey": {
                         "type": "boolean"
+                      },
+                      "isChatgptSubscription": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -187284,6 +187288,9 @@
                       },
                       "isAgentKey": {
                         "type": "boolean"
+                      },
+                      "isChatgptSubscription": {
+                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -187689,6 +187696,9 @@
                       "type": "string"
                     },
                     "isAgentKey": {
+                      "type": "boolean"
+                    },
+                    "isChatgptSubscription": {
                       "type": "boolean"
                     }
                   },

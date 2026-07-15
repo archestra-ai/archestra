@@ -7,8 +7,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Audience, Decision, Effects, KnownTrust, OpaqueValue,
-    PolicyEngine, Requirements, SinkAudience, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust, UserId,
+    ArgumentName, ArgumentSchema, ArgumentTree, AttentionRule, Audience, AudienceRule, Decision, Effects, KnownTrust,
+    OpaqueValue, PolicyEngine, Requirements, Speaker, ToolContract, ToolName, ToolRequest, Trajectory, Trust, UserId,
     ValueId, ValueLabel,
 };
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
@@ -141,10 +141,10 @@ fn random_trust_requirement(rng: &mut TinyRng) -> Option<KnownTrust> {
     }
 }
 
-fn random_audience_requirement(rng: &mut TinyRng) -> SinkAudience {
+fn random_audience_requirement(rng: &mut TinyRng) -> AudienceRule {
     match rng.below(2) {
-        0 => SinkAudience::None,
-        _ => SinkAudience::FromRecipients,
+        0 => AudienceRule::None,
+        _ => AudienceRule::FromRecipients,
     }
 }
 

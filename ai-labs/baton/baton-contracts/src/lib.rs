@@ -7,7 +7,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, AttentionRule, Audience, Effect, Effects, KnownTrust, Requirements, SinkAudience,
+    ArgumentName, ArgumentSchema, AttentionRule, Audience, AudienceRule, Effect, Effects, KnownTrust, Requirements,
     ToolContract, ToolName, Trust, UserId, ValueLabel,
 };
 use serde::Deserialize;
@@ -21,9 +21,9 @@ pub enum ContractsError {
     #[error("duplicate contract for tool `{0}`")]
     DuplicateTool(String),
     #[error("invalid sink audience `{0}` (use \"public\", a list of reader ids, or \"$.args.<argument>\")")]
-    SinkAudience(String),
+    AudienceRule(String),
     #[error("sink audience path `{0}` must name one top-level argument (no nested paths)")]
-    SinkAudiencePath(String),
+    AudienceRulePath(String),
     #[error("tool `{0}` declares an empty audience reader list")]
     EmptyAudience(String),
 }
@@ -81,7 +81,7 @@ impl RawConfig {
             }
             let (sink_audience, recipients_arg) = match &spec.audience {
                 Some(audience) => audience.build(&spec.name)?,
-                None => (SinkAudience::None, None),
+                None => (AudienceRule::None, None),
             };
             let name = ToolName::new(&spec.name);
             let arguments = match &recipients_arg {
@@ -148,7 +148,7 @@ struct ToolSpec {
     /// The sink's audience: who a call exposes the flow to. Absent means the
     /// tool exposes no one beyond the conversation — no audience check.
     #[serde(default)]
-    audience: Option<SinkAudienceSpec>,
+    audience: Option<AudienceRuleSpec>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -176,7 +176,7 @@ struct RequiresSpec {
 impl RequiresSpec {
     /// The sink audience is declared at the tool level (`audience = …`), not
     /// under `requires` — it is a fact about the sink, folded in here.
-    fn build(self, audience: SinkAudience) -> Requirements {
+    fn build(self, audience: AudienceRule) -> Requirements {
         Requirements {
             trust: self.trust.map(KnownTrustSpec::into_known_trust),
             audience,
@@ -197,27 +197,27 @@ const ARGS_PATH_PREFIX: &str = "$.args.";
 /// Sink audience as `"public"`, a list of reader ids, or `"$.args.<key>"`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-enum SinkAudienceSpec {
+enum AudienceRuleSpec {
     Keyword(String),
     Readers(Vec<String>),
 }
 
-impl SinkAudienceSpec {
+impl AudienceRuleSpec {
     /// The engine-side declaration plus, for the dynamic form, the wire
     /// argument the proxy must extract recipients from.
-    fn build(&self, tool: &str) -> Result<(SinkAudience, Option<String>), ContractsError> {
+    fn build(&self, tool: &str) -> Result<(AudienceRule, Option<String>), ContractsError> {
         match self {
-            Self::Keyword(k) if k == "public" => Ok((SinkAudience::Public, None)),
+            Self::Keyword(k) if k == "public" => Ok((AudienceRule::Public, None)),
             Self::Keyword(k) if k.starts_with(ARGS_PATH_PREFIX) => {
                 let key = &k[ARGS_PATH_PREFIX.len()..];
                 if key.is_empty() || key.contains('.') {
-                    return Err(ContractsError::SinkAudiencePath(k.clone()));
+                    return Err(ContractsError::AudienceRulePath(k.clone()));
                 }
-                Ok((SinkAudience::FromRecipients, Some(key.to_string())))
+                Ok((AudienceRule::FromRecipients, Some(key.to_string())))
             }
-            Self::Keyword(k) => Err(ContractsError::SinkAudience(k.clone())),
+            Self::Keyword(k) => Err(ContractsError::AudienceRule(k.clone())),
             Self::Readers(ids) if ids.is_empty() => Err(ContractsError::EmptyAudience(tool.to_string())),
-            Self::Readers(ids) => Ok((SinkAudience::Readers(ids.iter().map(UserId::new).collect()), None)),
+            Self::Readers(ids) => Ok((AudienceRule::Readers(ids.iter().map(UserId::new).collect()), None)),
         }
     }
 }
@@ -360,7 +360,7 @@ mod tests {
             .unwrap();
         assert_eq!(logs.output_label.trust, Trust::SUSPICIOUS);
         assert!(logs.requires.trust.is_none());
-        assert_eq!(logs.requires.audience, SinkAudience::None);
+        assert_eq!(logs.requires.audience, AudienceRule::None);
         assert_eq!(logs.effects, Effects::none());
 
         let del = c
@@ -373,17 +373,17 @@ mod tests {
         assert_eq!(del.effects, Effects::declared([Effect::Mutation]));
 
         let post = c.contracts.iter().find(|t| t.name.as_str() == "http_post").unwrap();
-        assert_eq!(post.requires.audience, SinkAudience::FromRecipients);
+        assert_eq!(post.requires.audience, AudienceRule::FromRecipients);
         assert_eq!(c.recipients_args.get(&post.name).map(String::as_str), Some("url"));
 
         let issue = c.contracts.iter().find(|t| t.name.as_str() == "create_issue").unwrap();
-        assert_eq!(issue.requires.audience, SinkAudience::Public);
+        assert_eq!(issue.requires.audience, AudienceRule::Public);
         assert!(!c.recipients_args.contains_key(&issue.name));
 
         let report = c.contracts.iter().find(|t| t.name.as_str() == "send_report").unwrap();
         assert_eq!(
             report.requires.audience,
-            SinkAudience::Readers(BTreeSet::from([UserId::new("ops-hook"), UserId::new("operator")]))
+            AudienceRule::Readers(BTreeSet::from([UserId::new("ops-hook"), UserId::new("operator")]))
         );
         assert!(!c.recipients_args.contains_key(&report.name));
     }
@@ -397,7 +397,7 @@ mod tests {
         "#;
         assert!(matches!(
             Contracts::from_toml(text),
-            Err(ContractsError::SinkAudience(_))
+            Err(ContractsError::AudienceRule(_))
         ));
     }
 
@@ -413,7 +413,7 @@ mod tests {
             );
             assert!(matches!(
                 Contracts::from_toml(&text),
-                Err(ContractsError::SinkAudiencePath(_))
+                Err(ContractsError::AudienceRulePath(_))
             ));
         }
     }

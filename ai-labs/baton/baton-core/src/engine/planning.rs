@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ToolName;
 use crate::approval::{Authority, AuthorityMode};
-use crate::contract::{Fixability, Requirements, SinkAudience, Unprovable, Verdict, Violation};
+use crate::contract::{AudienceRule, Fixability, Requirements, Unprovable, Verdict, Violation};
 use crate::dimension::{Effects, KnownTrust};
 use crate::plan::{ExitKind, Justification, NonEmptyVec, Posture, TransitionKind, TransitionSpec};
 use crate::request::ToolRequest;
@@ -833,9 +833,9 @@ fn endorse_steps(sim: &SimFlow, violations: &[Violation]) -> Vec<(ValueId, Endor
             // public sink has no finite reader set to vouch — no endorse step
             // can clear it (`AudienceNotPublic` likewise contributes none).
             Violation::Unprovable(Unprovable::AudienceUnknown) => match &sim.requires.audience {
-                SinkAudience::FromRecipients => readers.extend(sim.recipients.iter().cloned()),
-                SinkAudience::Readers(declared) => readers.extend(declared.iter().cloned()),
-                SinkAudience::Public | SinkAudience::None => {}
+                AudienceRule::FromRecipients => readers.extend(sim.recipients.iter().cloned()),
+                AudienceRule::Readers(declared) => readers.extend(declared.iter().cloned()),
+                AudienceRule::Public | AudienceRule::None => {}
             },
             _ => {}
         }

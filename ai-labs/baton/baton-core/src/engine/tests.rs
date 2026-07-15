@@ -23,7 +23,7 @@ fn email_contract() -> ToolContract {
         name: ToolName::new("email.send"),
         requires: Requirements {
             trust: Some(KnownTrust::Trusted),
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         output_label: ValueLabel::identity(),
@@ -823,7 +823,7 @@ fn spent_confirmation_cannot_authorize_a_second_attempt() {
 fn response_engine(readers: &[&str]) -> PolicyEngine {
     PolicyEngine::new().with_response_policy(ResponsePolicy {
         requires: Requirements {
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         readers: readers.iter().map(|r| user(r)).collect(),
@@ -1567,7 +1567,7 @@ fn control_release_fixpoint_avoids_masked_over_release() {
         name: ToolName::new("email.send"),
         requires: Requirements {
             trust: Some(KnownTrust::Suspicious),
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         output_label: ValueLabel::identity(),
@@ -1924,7 +1924,7 @@ fn mixed_residual_needs_acknowledge_competence_not_just_the_lift() {
             name: ToolName::new("email.send"),
             requires: Requirements {
                 trust: Some(KnownTrust::Trusted),
-                audience: crate::contract::SinkAudience::FromRecipients,
+                audience: crate::contract::AudienceRule::FromRecipients,
                 forbid_prior_effects: BTreeSet::from([Effect::Egress]),
                 ..Requirements::default()
             },
@@ -2499,7 +2499,7 @@ fn full_composition_reduces_then_authorizes_the_irreducible_residual() {
         name: ToolName::new("dispatch"),
         requires: Requirements {
             trust: Some(KnownTrust::Trusted),
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         output_label: ValueLabel::identity(),
@@ -3578,7 +3578,7 @@ fn a_missing_contract_reports_no_contract_then_unknown_growth() {
 fn a_response_is_independent_of_the_pending_tool_action() {
     let mut engine = engine_with([email_contract()]).with_response_policy(ResponsePolicy {
         requires: Requirements {
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         readers: BTreeSet::from([user("alice")]),
@@ -3681,7 +3681,7 @@ fn masked_contract() -> ToolContract {
         name: ToolName::new("post.publish"),
         requires: Requirements {
             trust: Some(KnownTrust::Suspicious),
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         output_label: ValueLabel::identity(),
@@ -3900,7 +3900,7 @@ fn rescue_carries_acknowledge_only_facts() {
     let contract = ToolContract {
         requires: Requirements {
             trust: Some(KnownTrust::Suspicious),
-            audience: crate::contract::SinkAudience::FromRecipients,
+            audience: crate::contract::AudienceRule::FromRecipients,
             forbid_prior_effects: BTreeSet::from([Effect::Egress]),
             ..Requirements::default()
         },

@@ -108,7 +108,7 @@ pub use approval::{
     AncestrySnapshot, Authority, AuthorityFn, AuthorityMode, PendingApproval, Ruling, TrajectoryView, ValueView,
 };
 pub use audit::{AuthorityName, TransitionFailure};
-pub use contract::{AttentionRule, SinkAudience};
+pub use contract::{AttentionRule, AudienceRule};
 pub use engine::{BlockReason, ResponseDecision, ResponsePolicy, StepCapability, StepOutcome, StepRefused};
 pub use plan::{ExitKind, Justification, NonEmptyVec, RemedyPlan, TransitionKind};
 pub use revision::PlanId;

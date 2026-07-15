@@ -11,11 +11,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use baton_core::{
-    ArgumentName, ArgumentSchema, ArgumentTree, Audience, Authority, AuthorityMandate, AuthorityMode, AuthorityName,
-    Blocked, Decision, Effect, Effects, KnownTrust, LabelPredicate, OpaqueValue, PolicyEngine, RegisteredTransformer,
-    Requirements, ResponseDecision, ResponsePolicy, ResponseRequest, Ruling, SinkAudience, Speaker, StepOutcome,
-    ToolContract, ToolName, ToolRequest, Trajectory, TransformerDescriptor, TransformerError, TransformerRef, Trust,
-    UserId, ValueId, ValueLabel,
+    ArgumentName, ArgumentSchema, ArgumentTree, Audience, AudienceRule, Authority, AuthorityMandate, AuthorityMode,
+    AuthorityName, Blocked, Decision, Effect, Effects, KnownTrust, LabelPredicate, OpaqueValue, PolicyEngine,
+    RegisteredTransformer, Requirements, ResponseDecision, ResponsePolicy, ResponseRequest, Ruling, Speaker,
+    StepOutcome, ToolContract, ToolName, ToolRequest, Trajectory, TransformerDescriptor, TransformerError,
+    TransformerRef, Trust, UserId, ValueId, ValueLabel,
 };
 use clap::Parser;
 
@@ -223,7 +223,7 @@ fn main() {
 fn build_engine() -> PolicyEngine {
     let mut engine = PolicyEngine::new().with_response_policy(ResponsePolicy {
         requires: Requirements {
-            audience: SinkAudience::FromRecipients,
+            audience: AudienceRule::FromRecipients,
             ..Requirements::default()
         },
         readers: BTreeSet::from([UserId::new("alice")]),
@@ -233,7 +233,7 @@ fn build_engine() -> PolicyEngine {
             name: ToolName::new("email.send"),
             requires: Requirements {
                 trust: Some(KnownTrust::Trusted),
-                audience: SinkAudience::FromRecipients,
+                audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
             },
             output_label: ValueLabel::identity(),

@@ -6,7 +6,7 @@ use serde::Serialize;
 use crate::ToolName;
 use crate::approval::PendingApproval;
 use crate::audit::AuthorityName;
-use crate::contract::{Requirements, SinkAudience, Violation};
+use crate::contract::{AudienceRule, Requirements, Violation};
 use crate::dimension::{Effect, Effects};
 use crate::plan::{NonEmptyVec, RemedyPlan};
 use crate::request::{ArgumentName, ArgumentSchema};
@@ -60,7 +60,7 @@ impl ToolContract {
         Self {
             name: ToolName::new(name),
             requires: Requirements {
-                audience: SinkAudience::FromRecipients,
+                audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
             },
             output_label: ValueLabel::identity(),

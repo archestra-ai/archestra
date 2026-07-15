@@ -65,7 +65,7 @@ fn gate() -> Result<BatonGate, DojoError> {
         .contract(ToolContract {
             name: ToolName::new("open_issue"),
             requires: Requirements {
-                audience: AudienceRule::RecipientsWithinContext,
+                audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
             },
             output_label: ValueLabel::identity(),

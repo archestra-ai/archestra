@@ -225,7 +225,7 @@ impl BatonGateBuilder {
     /// (e.g. an email's recipients). Tools without one expose to no one.
     ///
     /// Only consulted by a contract whose `requires.audience` is
-    /// `AudienceRule::RecipientsWithinContext`; for other audience rules the
+    /// `AudienceRule::FromRecipients`; for other audience rules the
     /// recipients are ignored. For such a contract, an extractor that returns no
     /// recipients (e.g. the arg is missing) yields a structural block.
     pub fn recipients_for(
@@ -307,12 +307,12 @@ mod tests {
         }
     }
 
-    /// An egressing sink guarded by `RecipientsWithinContext`.
+    /// An egressing sink guarded by `FromRecipients`.
     fn sink_contract(name: &str) -> ToolContract {
         ToolContract {
             name: ToolName::new(name),
             requires: Requirements {
-                audience: AudienceRule::RecipientsWithinContext,
+                audience: AudienceRule::FromRecipients,
                 ..Requirements::default()
             },
             output_label: ValueLabel::identity(),

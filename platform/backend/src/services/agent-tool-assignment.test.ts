@@ -707,6 +707,28 @@ describe("resolveAppToolsByName", () => {
     });
   });
 
+  test("accepts the file tools by their short names, resolving to the prefixed row", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent();
+    const user = await makeUser();
+    enableFileToolFlags();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const result = await resolveAppToolsByName({
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: agent.organizationId,
+      toolNames: ["search_files"],
+      environmentId: null,
+    });
+
+    expect(result).toMatchObject({
+      tools: [{ name: TOOL_SEARCH_FILES_FULL_NAME }],
+    });
+  });
+
   test("rejects other built-ins as unassignable to apps", async ({
     makeAgent,
     makeUser,

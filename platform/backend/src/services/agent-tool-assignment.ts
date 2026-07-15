@@ -191,7 +191,20 @@ export async function resolveAppToolsByName(params: {
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
 > {
-  const requested = [...new Set(params.toolNames)];
+  // The authoring guidance names the app-assignable built-ins by their short
+  // names (search_files, read_file) — accept those alongside the full prefixed
+  // form, normalizing to the canonical prefixed name the catalog row carries.
+  // A bare short name can never collide with an upstream tool: catalog tool
+  // names are always `<server>__<tool>`-prefixed.
+  const requested = [
+    ...new Set(
+      params.toolNames.map((name) =>
+        isAppAssignableArchestraTool(name)
+          ? archestraMcpBranding.getToolName(name)
+          : name,
+      ),
+    ),
+  ];
 
   // Built-ins are unassignable — except the app-assignable file tools (behind
   // the canonical availability predicate), which are the whole point of the

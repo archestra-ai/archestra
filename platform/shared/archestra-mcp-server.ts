@@ -625,7 +625,7 @@ const APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
 
 export function isAppAssignableArchestraToolShortName(
   shortName: string,
-): boolean {
+): shortName is ArchestraToolShortName {
   return APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 

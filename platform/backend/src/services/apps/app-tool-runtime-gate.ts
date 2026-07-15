@@ -1,3 +1,4 @@
+import type { ArchestraToolShortName } from "@archestra/shared";
 import {
   APP_ASSIGNABLE_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
@@ -49,7 +50,9 @@ export const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
  * are registered only under `skillsSandbox` (see the backend
  * `getArchestraMcpTools` gate).
  */
-export function isAppAssignableArchestraTool(shortName: string): boolean {
+export function isAppAssignableArchestraTool(
+  shortName: string,
+): shortName is ArchestraToolShortName {
   return (
     isAppAssignableArchestraToolShortName(shortName) &&
     config.skillsSandbox.enabled

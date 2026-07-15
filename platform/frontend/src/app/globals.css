@@ -387,33 +387,6 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
   animation: feedback-wave 1.8s ease-in-out 0.4s 2;
 }
 
-/* ── Settings deep-link highlight ──
-   Applied when a page is opened via a deep link that targets a specific
-   card/section (e.g. ?highlight=personal-token, see
-   components/settings/highlight-anchor.tsx): the target's border pulses
-   red a few times to draw the eye, then rests. */
-
-@keyframes settings-highlight-flash {
-  0%,
-  100% {
-    box-shadow: 0 0 0 2px transparent;
-  }
-  15%,
-  45%,
-  75% {
-    box-shadow: 0 0 0 2px
-      color-mix(in oklab, var(--destructive) 60%, transparent);
-  }
-  30%,
-  60% {
-    box-shadow: 0 0 0 2px transparent;
-  }
-}
-
-.settings-highlight-flash {
-  animation: settings-highlight-flash 2.4s ease-in-out 0.3s 1 both;
-}
-
 /* === Chat new-chat → conversation view transition ===
    Drives the React <ViewTransition> boundaries in app/chat/page.tsx and
    components/chat/new-chat-composer.tsx. The composer is a shared element

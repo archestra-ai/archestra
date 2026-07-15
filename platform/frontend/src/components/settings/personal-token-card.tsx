@@ -2,8 +2,8 @@
 
 import { archestraApiSdk } from "@archestra/shared";
 import { Key } from "lucide-react";
-import { useState } from "react";
-import { HighlightAnchor } from "@/components/settings/highlight-anchor";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { TokenManagerDialog } from "@/components/teams/token-manager-dialog";
 import { PlatformTokenCard } from "@/components/tokens/platform-token-card";
 import { Button } from "@/components/ui/button";
@@ -13,30 +13,38 @@ export function PersonalTokenCard() {
   const { data: token, isLoading, error } = useUserToken();
   const rotateMutation = useRotateUserToken();
   const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const highlight = searchParams.get("highlight");
+  const tokenExists = !!token;
+
+  // Deep link from connection instructions ("Manage your personal token"):
+  // ?highlight=personal-token opens the token dialog once the token loads.
+  useEffect(() => {
+    if (highlight === "personal-token" && tokenExists) {
+      setTokenDialogOpen(true);
+    }
+  }, [highlight, tokenExists]);
 
   return (
     <>
-      {/* Deep-linked from connection instructions ("Manage your personal token") */}
-      <HighlightAnchor id="personal-token">
-        <PlatformTokenCard
-          title="MCP Gateway/A2A Gateway Token"
-          description="Your personal token to authenticate with Agents / MCP Gateways."
-          isLoading={isLoading}
-          error={error}
-          tokenExists={!!token}
-          emptyDescription="No personal token available. It will be automatically created."
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setTokenDialogOpen(true)}
-            >
-              <Key className="h-4 w-4" />
-              Manage Token
-            </Button>
-          }
-        />
-      </HighlightAnchor>
+      <PlatformTokenCard
+        title="MCP Gateway/A2A Gateway Token"
+        description="Your personal token to authenticate with Agents / MCP Gateways."
+        isLoading={isLoading}
+        error={error}
+        tokenExists={!!token}
+        emptyDescription="No personal token available. It will be automatically created."
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTokenDialogOpen(true)}
+          >
+            <Key className="h-4 w-4" />
+            Manage Token
+          </Button>
+        }
+      />
 
       {token && (
         <TokenManagerDialog

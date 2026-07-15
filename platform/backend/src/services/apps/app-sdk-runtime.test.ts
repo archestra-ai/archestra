@@ -15,6 +15,14 @@ type StubResult = Record<string, unknown>;
 
 const calls: StubCall[] = [];
 const results: StubResult[] = [];
+// The SDK's files.read side channel: listeners it registers on `window`, and
+// the requests it posts to `window.parent` — the test plays the host.
+type MessageListener = (event: {
+  source: unknown;
+  data: Record<string, unknown>;
+}) => void;
+const messageListeners: MessageListener[] = [];
+const parentPosts: Record<string, unknown>[] = [];
 
 declare global {
   var __sdkTestCalls: StubCall[];
@@ -46,8 +54,14 @@ beforeAll(async () => {
   globalThis.__sdkTestResults = results;
   // biome-ignore lint/suspicious/noExplicitAny: minimal browser-shaped global
   (globalThis as any).window = {
-    addEventListener: () => {},
-    parent: { postMessage: () => {} },
+    addEventListener: (type: string, listener: MessageListener) => {
+      if (type === "message") messageListeners.push(listener);
+    },
+    parent: {
+      postMessage: (data: Record<string, unknown>) => {
+        parentPosts.push(data);
+      },
+    },
     __ARCHESTRA_APP_SDK_URL__: `data:text/javascript,${encodeURIComponent(GUEST_MODULE)}`,
     __ARCHESTRA_APP_CONTEXT__: {
       user: { id: "u1", name: "Alice" },
@@ -443,5 +457,89 @@ describe("Apps SDK runtime", () => {
     // a template with no interpolations returns the literal unchanged
     expect(archestra.llm.prompt`just text`).toBe("just text");
     expect(calls.length).toBe(before);
+  });
+});
+
+describe("files.read side channel", () => {
+  /** Plays the host: dispatch a message to the SDK's window listeners. */
+  const dispatch = (data: Record<string, unknown>, source?: unknown) => {
+    for (const listener of [...messageListeners]) {
+      listener({
+        // biome-ignore lint/suspicious/noExplicitAny: test window stub
+        source: source ?? (globalThis as any).window.parent,
+        data,
+      });
+    }
+  };
+
+  test("posts the request to the parent and resolves with the host's bytes", async () => {
+    const pending = archestra.files.read("model.stl");
+    const request = parentPosts.pop() as Record<string, unknown>;
+    expect(request).toMatchObject({
+      type: "archestra:files/read",
+      filename: "model.stl",
+    });
+
+    const bytes = new ArrayBuffer(8);
+    dispatch({
+      type: "archestra:files/read:result",
+      requestId: request.requestId,
+      ok: true,
+      bytes,
+      mimeType: "model/stl",
+      filename: "model.stl",
+      fileId: "f1",
+    });
+    await expect(pending).resolves.toEqual({
+      bytes,
+      mimeType: "model/stl",
+      filename: "model.stl",
+      sizeBytes: 8,
+      fileId: "f1",
+    });
+  });
+
+  test("accepts an { id } ref and rejects with the host's error code", async () => {
+    const pending = archestra.files.read({ id: "row-1" });
+    const request = parentPosts.pop() as Record<string, unknown>;
+    expect(request).toMatchObject({
+      type: "archestra:files/read",
+      id: "row-1",
+    });
+
+    dispatch({
+      type: "archestra:files/read:result",
+      requestId: request.requestId,
+      ok: false,
+      code: "not_found",
+      message: "File not found",
+    });
+    await expect(pending).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  test("ignores a result forged by a non-parent window", async () => {
+    const pending = archestra.files.read("a.bin");
+    const request = parentPosts.pop() as Record<string, unknown>;
+
+    const forged = {
+      type: "archestra:files/read:result",
+      requestId: request.requestId,
+      ok: true,
+      bytes: new ArrayBuffer(1),
+    };
+    dispatch(forged, { not: "the parent" });
+
+    // Still pending — only the genuine parent answer settles it.
+    const real = new ArrayBuffer(2);
+    dispatch({ ...forged, bytes: real });
+    await expect(pending).resolves.toMatchObject({ bytes: real, sizeBytes: 2 });
+  });
+
+  test("rejects locally when neither id nor filename is given", async () => {
+    const before = parentPosts.length;
+    await expect(archestra.files.read({})).rejects.toMatchObject({
+      code: "bad_request",
+    });
+    expect(parentPosts.length).toBe(before);
   });
 });

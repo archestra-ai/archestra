@@ -41,7 +41,17 @@ import { useFeature } from "@/lib/config/config.query";
  */
 type McpAppEndpoint =
   | { kind: "agent"; agentId: string; serverPrefix: string }
-  | { kind: "app"; appId: string }
+  | {
+      kind: "app";
+      appId: string;
+      /**
+       * The chat the app is rendered in, when embedded in a conversation. Set
+       * only by the trusted host layer (never the sandboxed iframe); it drives
+       * the archestra.files side channel — the files endpoints re-validate that
+       * the viewer can access the chat. Not forwarded to the MCP proxy.
+       */
+      conversationId?: string;
+    }
   | { kind: "server"; mcpServerId: string };
 
 /** MCP CallToolResult — defined inline to avoid direct @modelcontextprotocol/sdk dependency. */
@@ -167,7 +177,7 @@ export const McpAppRuntime = function McpAppRuntime({
       ? `agent:${endpoint.agentId}:${endpoint.serverPrefix}`
       : endpoint.kind === "server"
         ? `server:${endpoint.mcpServerId}`
-        : `app:${endpoint.appId}`;
+        : `app:${endpoint.appId}:${endpoint.conversationId ?? ""}`;
   // Sandbox-subdomain hash seed. Apps get a per-app bucket matching the backend
   // MCP server name; isolation does not depend on this being collision-free.
   const sandboxPrefix =
@@ -744,6 +754,100 @@ export const McpAppRuntime = function McpAppRuntime({
     );
   }, [appResource, sandboxResult.baseUrl]);
 
+  // Answer the SDK's archestra.files.read side channel: fetch the raw bytes
+  // from the app-bound files endpoint (as the viewer; the backend re-checks the
+  // app's read_file grant and the chat's scope) and hand them to the app as a
+  // transferable ArrayBuffer. Tool results must render for an LLM, so binary
+  // has no path through tools.call — this is the trusted host doing plain HTTP
+  // on the app's behalf. Owned apps rendered inside a chat only; every other
+  // surface answers "unsupported" so the SDK rejects instead of timing out.
+  const filesEndpoint =
+    endpoint.kind === "app" && endpoint.conversationId
+      ? { appId: endpoint.appId, conversationId: endpoint.conversationId }
+      : null;
+  const filesEndpointRef = useRef(filesEndpoint);
+  filesEndpointRef.current = filesEndpoint;
+  const onFilesReadRequest = useCallback(
+    (
+      params: { id?: string; filename?: string },
+      respond: (
+        result: Record<string, unknown>,
+        transfer?: Transferable[],
+      ) => void,
+    ) => {
+      const target = filesEndpointRef.current;
+      if (!target) {
+        respond({
+          ok: false,
+          code: "unsupported",
+          message:
+            "files.read works only for an app rendered inside an Archestra chat",
+        });
+        return;
+      }
+      const query = new URLSearchParams({
+        conversationId: target.conversationId,
+      });
+      if (params.id) {
+        query.set("id", params.id);
+      } else if (params.filename) {
+        query.set("filename", params.filename);
+      }
+      fetch(`/api/apps/${target.appId}/files/raw?${query.toString()}`, {
+        credentials: "include",
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            let message = response.statusText;
+            try {
+              const body = (await response.json()) as {
+                error?: { message?: string };
+              };
+              message = body?.error?.message ?? message;
+            } catch {
+              // non-JSON error body — keep the status text
+            }
+            respond({
+              ok: false,
+              code:
+                response.status === 404
+                  ? "not_found"
+                  : response.status === 403
+                    ? "forbidden"
+                    : "read_failed",
+              message,
+            });
+            return;
+          }
+          const bytes = await response.arrayBuffer();
+          let filename = "";
+          try {
+            filename = decodeURIComponent(
+              response.headers.get("X-Archestra-File-Name") ?? "",
+            );
+          } catch {
+            // malformed header — leave the filename empty
+          }
+          respond(
+            {
+              ok: true,
+              bytes,
+              mimeType:
+                response.headers.get("X-Archestra-File-Mime") ||
+                "application/octet-stream",
+              filename,
+              fileId: response.headers.get("X-Archestra-File-Id") || null,
+            },
+            [bytes],
+          );
+        })
+        .catch((error: unknown) => {
+          respond({ ok: false, code: "read_failed", message: String(error) });
+        });
+    },
+    [],
+  );
+
   return (
     <div>
       {toolCallAuthError && (
@@ -788,6 +892,7 @@ export const McpAppRuntime = function McpAppRuntime({
           toolInput={toolInput}
           toolResult={toolResult}
           onError={onError}
+          onFilesReadRequest={onFilesReadRequest}
           onSizeChanged={(size) => {
             if (typeof size.height === "number" && size.height > 0) {
               lastReportedHeightRef.current = size.height;
@@ -873,6 +978,7 @@ function SandboxIframe({
   toolInput,
   toolResult,
   onError,
+  onFilesReadRequest,
   onSizeChanged,
   useDedicatedOrigin,
   initialHeight = UNCAPPED_INITIAL_HEIGHT,
@@ -889,6 +995,14 @@ function SandboxIframe({
   toolInput?: Record<string, unknown>;
   toolResult?: McpCallToolResult;
   onError?: (error: Error) => void;
+  /** Answers the SDK's archestra.files.read side-channel message. */
+  onFilesReadRequest?: (
+    params: { id?: string; filename?: string },
+    respond: (
+      result: Record<string, unknown>,
+      transfer?: Transferable[],
+    ) => void,
+  ) => void;
   onSizeChanged?: (size: { width?: number; height?: number }) => void;
   /** When true, sandbox iframe uses allow-same-origin (dedicated subdomain provides isolation). */
   useDedicatedOrigin?: boolean;
@@ -926,6 +1040,7 @@ function SandboxIframe({
   const onErrorRef = useRef(onError);
   const onDiagnosticRef = useRef(onDiagnostic);
   const onScreenshotRef = useRef(onScreenshot);
+  const onFilesReadRequestRef = useRef(onFilesReadRequest);
   // Read at iframe-creation time only; a ref keeps it out of the effect deps so
   // the iframe never remounts when the height changes.
   const initialHeightRef = useRef(initialHeight);
@@ -948,6 +1063,7 @@ function SandboxIframe({
     onErrorRef.current = onError;
     onDiagnosticRef.current = onDiagnostic;
     onScreenshotRef.current = onScreenshot;
+    onFilesReadRequestRef.current = onFilesReadRequest;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
   });
@@ -1071,8 +1187,59 @@ function SandboxIframe({
       }
     };
 
+    // Persistent files.read listener: the proxy relays the SDK's request up;
+    // the response (with its ArrayBuffer) is posted back down and relayed to
+    // the app frame. Payloads are untrusted — only the two string fields are
+    // read, and the requestId is echoed opaquely.
+    const onFilesReadMessage = (event: MessageEvent) => {
+      if (
+        event.source !== iframe.contentWindow ||
+        event.origin !== expectedOrigin
+      ) {
+        return;
+      }
+      const data = event.data as {
+        type?: unknown;
+        requestId?: unknown;
+        id?: unknown;
+        filename?: unknown;
+      } | null;
+      if (data?.type !== "archestra:files/read") return;
+      const requestId = data.requestId;
+      const respond = (
+        result: Record<string, unknown>,
+        transfer?: Transferable[],
+      ) => {
+        iframe.contentWindow?.postMessage(
+          { type: "archestra:files/read:result", requestId, ...result },
+          // The opaque-origin proxy can only be addressed with "*" (its origin
+          // serializes as the literal "null"); a dedicated origin is explicit.
+          expectedOrigin === "null" ? "*" : sandboxUrl.origin,
+          transfer ?? [],
+        );
+      };
+      const handler = onFilesReadRequestRef.current;
+      if (!handler) {
+        respond({
+          ok: false,
+          code: "unsupported",
+          message: "File access is not available on this surface",
+        });
+        return;
+      }
+      handler(
+        {
+          id: typeof data.id === "string" ? data.id : undefined,
+          filename:
+            typeof data.filename === "string" ? data.filename : undefined,
+        },
+        respond,
+      );
+    };
+
     window.addEventListener("message", onMessage);
     window.addEventListener("message", onDiagnosticMessage);
+    window.addEventListener("message", onFilesReadMessage);
     container.appendChild(iframe);
 
     return () => {
@@ -1081,6 +1248,7 @@ function SandboxIframe({
       themeObserver.disconnect();
       window.removeEventListener("message", onMessage);
       window.removeEventListener("message", onDiagnosticMessage);
+      window.removeEventListener("message", onFilesReadMessage);
       iframe.remove();
       iframeRef.current = null;
       // Reset connection state so the send effects below don't fire against a

@@ -53,7 +53,16 @@ export const APP_PLATFORM_CSP: AppUiCsp = {
  * `knip --production`; the lint itself reads it in-module.
  */
 export const ARCHESTRA_APP_SDK_SURFACE = {
-  topLevel: ["ready", "user", "context", "storage", "llm", "tools", "ui"],
+  topLevel: [
+    "ready",
+    "user",
+    "context",
+    "storage",
+    "llm",
+    "tools",
+    "ui",
+    "files",
+  ],
   storage: {
     partitions: ["user", "shared"],
     methods: ["get", "set", "list", "delete"],
@@ -61,6 +70,7 @@ export const ARCHESTRA_APP_SDK_SURFACE = {
   tools: ["call", "list"],
   llm: ["complete", "prompt"],
   ui: ["openLink", "requestDisplayMode"],
+  files: ["read"],
 } as const;
 
 // The only iframe permissions an app may request. Mirrors AppUiPermissionsSchema

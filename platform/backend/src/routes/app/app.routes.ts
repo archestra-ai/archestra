@@ -39,6 +39,7 @@ import {
   createSeededAppConversation,
   createSeededExternalAppConversation,
 } from "@/services/apps/app-chat-conversation";
+import { readAppConversationFile } from "@/services/apps/app-conversation-file";
 import {
   createAppBacking,
   deleteAppBacking,
@@ -925,6 +926,64 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/apps/:appId/files/raw",
+    {
+      schema: {
+        operationId: RouteId.GetAppConversationFileRaw,
+        description:
+          "Stream the raw bytes of a chat-scoped file to a rendered app — " +
+          "the backing of the SDK's archestra.files.read. Identify the file " +
+          "by id (or obj_ ref) or by filename.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        querystring: z
+          .object({
+            // The chat the render is embedded in — scopes the file lookup the
+            // same way it scopes the read_file tool.
+            conversationId: UuidIdSchema,
+            id: z.string().max(2100).optional(),
+            filename: z.string().max(256).optional(),
+          })
+          .refine((query) => !!query.id !== !!query.filename, {
+            message: "Pass exactly one of id or filename",
+          }),
+        // no `response` schema: this endpoint streams raw bytes, not JSON, so
+        // the zod type-provider would reject the Buffer payload. The global
+        // error handler still formats 4xx/5xx as JSON.
+      },
+    },
+    async ({ params: { appId }, query, user, organizationId }, reply) => {
+      const file = await readAppConversationFile({
+        appId,
+        organizationId,
+        userId: user.id,
+        conversationId: query.conversationId,
+        id: query.id,
+        filename: query.filename,
+      });
+
+      // Served for programmatic consumption (the host layer fetches and hands
+      // an ArrayBuffer to the app) — never rendered by the browser, so a
+      // pasted URL downloads instead of parsing a polyglot file as HTML. The
+      // real mime rides in a custom header for the SDK.
+      return reply
+        .header("Content-Type", "application/octet-stream")
+        .header("Content-Length", String(file.data.byteLength))
+        .header(
+          "Content-Disposition",
+          `attachment; filename="${safeHeaderFilename(file.filename)}"`,
+        )
+        .header("X-Archestra-File-Mime", safeHeaderValue(file.mimeType))
+        .header("X-Archestra-File-Name", encodeURIComponent(file.filename))
+        .header("X-Archestra-File-Id", file.fileId ?? "")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Security-Policy", "default-src 'none'; sandbox")
+        .header("Cache-Control", "private, no-store")
+        .send(file.data);
+    },
+  );
+
   fastify.post(
     "/api/apps/:appId/diagnostics",
     {
@@ -1199,6 +1258,24 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
   });
+}
+
+/**
+ * Basename-only, header-safe filename for Content-Disposition: quotes,
+ * backslashes, control chars, and non-ASCII collapse to `_` so the header
+ * stays parseable. The faithful name rides in X-Archestra-File-Name
+ * (percent-encoded) for the SDK.
+ */
+function safeHeaderFilename(path: string): string {
+  const basename = path.split("/").pop() ?? "file";
+  const cleaned = basename.replace(/[^A-Za-z0-9._\- ]/g, "_");
+  return cleaned || "file";
+}
+
+/** Strip CR/LF and other control chars so a stored value cannot split the header. */
+function safeHeaderValue(value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: header-injection guard
+  return value.replace(/[\x00-\x1f\x7f]/g, "");
 }
 
 export default appRoutes;

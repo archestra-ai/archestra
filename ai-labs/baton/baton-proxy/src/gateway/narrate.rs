@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use baton_core::UserId;
 use serde::Serialize;
 
-use crate::session::Outcome;
+use crate::gateway::session::Outcome;
 
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";

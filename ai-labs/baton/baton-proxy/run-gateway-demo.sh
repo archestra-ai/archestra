@@ -11,6 +11,7 @@
 set -euo pipefail
 
 CRATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET_DIR="$CRATE_DIR/../../target"
 cd "$CRATE_DIR"
 
 GATEWAY_ADDR="127.0.0.1:8732"
@@ -57,7 +58,7 @@ trap cleanup EXIT INT TERM
 
 : > "$DECISIONS_LOG"  # fresh per run
 echo "starting baton-gateway ($GATEWAY_ADDR)…"
-./target/debug/baton-gateway --addr "$GATEWAY_ADDR" --log "$DECISIONS_LOG" ${GATEWAY_FLAGS[@]+"${GATEWAY_FLAGS[@]}"} &
+"$TARGET_DIR/debug/baton-gateway" --addr "$GATEWAY_ADDR" --log "$DECISIONS_LOG" ${GATEWAY_FLAGS[@]+"${GATEWAY_FLAGS[@]}"} &
 pids+=($!)
 
 wait_port() {
@@ -74,7 +75,7 @@ wait_port "$GATEWAY_ADDR"
 # --- run the agent (foreground: answer y/n at the approval prompt) ---------------
 echo "running demo — answer y/n when the approval prompt appears."
 echo
-./target/debug/baton-agent "$@"
+"$TARGET_DIR/debug/baton-gateway-agent" "$@"
 
 echo
 echo "decision log (one JSON line per decision): $DECISIONS_LOG"

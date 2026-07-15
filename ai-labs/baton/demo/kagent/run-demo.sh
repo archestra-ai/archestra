@@ -36,7 +36,7 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent \
   --version "$KAGENT_VERSION" -n "$NS"
 
 echo "▸ baton-proxy image"
-(cd ../.. && docker build -q -f baton-proxy/Dockerfile -t "$IMAGE" .)
+(cd ../../.. && docker build -q -f baton/baton-proxy/Dockerfile -t "$IMAGE" .)
 kind load docker-image "$IMAGE" --name "$CLUSTER"
 
 echo "▸ secrets, policy, manifests"

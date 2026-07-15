@@ -16,7 +16,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use baton_core::{Grant, ToolName, UserId};
+use baton_core::{ToolName, UserId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,15 +48,6 @@ impl ApprovalRecord {
             verdict,
             tool,
             recipients,
-        }
-    }
-
-    /// Read this record as the audience grant it stands for: admit exactly the
-    /// ruled-on recipients. Used by the approval authority's `covers` check.
-    pub fn grant(&self) -> Grant {
-        Grant {
-            audience: Some(self.recipients.clone()),
-            ..Grant::empty()
         }
     }
 

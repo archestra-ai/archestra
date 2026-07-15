@@ -59,7 +59,7 @@ resumes where it stopped.
 ```sh
 # build baton-check once and pin it, so the shards don't each rebuild it
 ( cd ../baton-check && cargo build --release )
-export BATON_CHECK_BIN="$PWD/../baton-check/target/release/baton-check"
+export BATON_CHECK_BIN="$PWD/../../target/release/baton-check"
 
 model=openai/gpt-4o-mini-2024-07-18
 for lo in 0 10 20 30; do                       # 4 shards of 10 user tasks each

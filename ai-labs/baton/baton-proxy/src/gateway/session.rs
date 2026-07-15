@@ -20,7 +20,7 @@ use baton_core::{
     ToolRequest, UserId, ValueId, Violation,
 };
 
-use crate::config::{GatewayConfig, ToolSim};
+use crate::gateway::config::{GatewayConfig, ToolSim};
 
 /// Remedy steps one pursuit may apply, and approval rounds one escalation may
 /// take — bounds against a planning livelock, far above any real remedy (the

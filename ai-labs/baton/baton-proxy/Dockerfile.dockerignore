@@ -1,0 +1,9 @@
+**
+!Cargo.lock
+!baton
+!baton/baton-core
+!baton/baton-core/**
+!baton/baton-contracts
+!baton/baton-contracts/**
+!baton/baton-proxy
+!baton/baton-proxy/**

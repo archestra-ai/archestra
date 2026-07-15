@@ -7,6 +7,7 @@
 set -euo pipefail
 
 CRATE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TARGET_DIR="$CRATE_DIR/../../target"
 cd "$CRATE_DIR"
 
 PROXY_ADDR="127.0.0.1:8730"
@@ -52,9 +53,9 @@ WIRE_DIR="$CRATE_DIR/wire-logs"   # raw model request/response, kept in-project
 : > "$TRAJECTORY_LOG"  # fresh per run
 
 echo "starting baton-approver ($APPROVER_ADDR) and baton-proxy ($PROXY_ADDR)…"
-./target/debug/baton-approver --addr "$APPROVER_ADDR" 2>"$APPROVER_LOG" &
+"$TARGET_DIR/debug/baton-approver" --addr "$APPROVER_ADDR" 2>"$APPROVER_LOG" &
 pids+=($!)
-RUST_LOG=info ./target/debug/baton-proxy --policy policy.toml --addr "$PROXY_ADDR" \
+RUST_LOG=info "$TARGET_DIR/debug/baton-proxy" --policy policy.toml --addr "$PROXY_ADDR" \
   --log "$TRAJECTORY_LOG" --wire-log-dir "$WIRE_DIR" 2>"$PROXY_LOG" &
 pids+=($!)
 
@@ -73,11 +74,11 @@ wait_port "$PROXY_ADDR"
 # --- run the demo (foreground: answer y/n at the approval prompt) ---------------
 echo "running demo — answer y/n when the approval prompt appears."
 echo
-./target/debug/baton-demo-agent "$@"
+"$TARGET_DIR/debug/baton-demo-agent" "$@"
 
 # --- pretty-print the run (proxy renders its own log) ---------------------------
 echo
-./target/debug/baton-proxy render "$WIRE_DIR"/$(ls -t "$WIRE_DIR" 2>/dev/null | head -1) || true
+"$TARGET_DIR/debug/baton-proxy" render "$WIRE_DIR"/$(ls -t "$WIRE_DIR" 2>/dev/null | head -1) || true
 
 wire_file="$(ls -t "$WIRE_DIR"/model-wire-*.jsonl 2>/dev/null | head -1)"
 echo

@@ -21,10 +21,7 @@ fn main() -> ExitCode {
     };
     match protocol::run(&input) {
         Ok(output) => {
-            println!(
-                "{}",
-                serde_json::to_string(&output).expect("output serializes")
-            );
+            println!("{}", serde_json::to_string(&output).expect("output serializes"));
             ExitCode::SUCCESS
         }
         Err(error) => fail(&error.to_string()),

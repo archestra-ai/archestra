@@ -1,3 +1,0 @@
-# baton-proxy image build context is this directory; keep local build
-# artifacts out of it (each crate has its own target/).
-**/target

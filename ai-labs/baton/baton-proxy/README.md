@@ -1,9 +1,14 @@
 # baton-proxy
 
-A prototype that puts baton's audience policy on the **inference layer**: an
-OpenAI-compatible HTTP proxy sits between an agent harness and the LLM, and when
-a tool call would send data outside its audience, it makes the harness ask a
-human first — no changes to the harness beyond two lines of config.
+Prototypes that put baton's policy engine between an agent and the world, at
+two enforcement points. This document covers the **inference layer**; the
+**tool layer** — an MCP gateway with soft blocks, escalation, and canonical
+dispatch — is documented in [GATEWAY.md](GATEWAY.md).
+
+The inference-layer proxy is an OpenAI-compatible HTTP proxy that sits between
+an agent harness and the LLM, and when a tool call would send data outside its
+audience, it makes the harness ask a human first — no changes to the harness
+beyond two lines of config.
 
 The human's approval travels back as an ordinary tool result, so the evidence
 lives *in the trajectory itself*. The proxy keeps no state: it rebuilds the
@@ -57,6 +62,8 @@ its own — the model never sees a dead end.
   `baton-approver` — so it drives the whole system, elicitation included. It
   answers the approver's elicitation by prompting you y/n (standing in for the
   approval UI a client like Claude Code would render).
+- **`baton-gateway`** / **`baton-gateway-agent`** — the tool-layer demo; see
+  [GATEWAY.md](GATEWAY.md).
 
 ## Policy
 
@@ -187,5 +194,5 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo fmt --check
 ```
 
-Standalone crate (its own `[workspace]`), like `baton-core` and `baton-check`.
+Part of the shared `ai-labs` Cargo workspace.
 Concepts of the policy engine live in `baton-core/src/lib.rs`.

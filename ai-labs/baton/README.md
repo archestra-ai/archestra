@@ -51,26 +51,25 @@ concepts and semantics are documented in `baton-core/src/lib.rs`.
 cd baton-core
 cargo test
 
-baton-gateway/run-demo.sh   # the end-to-end demo (needs OPENROUTER_API_KEY)
+baton-proxy/run-gateway-demo.sh   # the end-to-end demo (needs OPENROUTER_API_KEY)
 ```
-
-`baton-gateway/` is the demo: a real rig agent talking to an MCP server that
-mimics an Archestra-style tool gateway. The gateway serves the scenario's
-tools from a TOML file, checks every call against baton-core, **soft-blocks**
-breaches as ordinary tool results the model can act on, escalates to a human
-through MCP elicitation, and on approval dispatches the exact canonical
-request the engine checked. See its README.
 
 `agentdojo-harness/` evaluates the engine against the AgentDojo
 prompt-injection benchmark (with `baton-check`, a stateless JSON oracle over
 baton-core); see its README.
 
-`baton-proxy/` is a prototype that puts the engine on the inference layer: an
-OpenAI-compatible HTTP proxy that replays the conversation into a trajectory
-and blocks tool calls that fail their contract before the agent sees them. It
-loads its contracts from a TOML document via `baton-contracts/`, a small crate
-that translates the declarative policy into baton-core `ToolContract`s. See its
-README.
+`baton-proxy/` puts the engine between an agent and the world, at two
+enforcement points. The **tool layer** (`GATEWAY.md`, the demo above): a real
+rig agent talking to an MCP server that mimics an Archestra-style tool
+gateway — it serves the scenario's tools from a TOML file, checks every call
+against baton-core, **soft-blocks** breaches as ordinary tool results the
+model can act on, escalates to a human through MCP elicitation, and on
+approval dispatches the exact canonical request the engine checked. The
+**inference layer** (its README): an OpenAI-compatible HTTP proxy that replays
+the conversation into a trajectory and blocks tool calls that fail their
+contract before the agent sees them, loading contracts via `baton-contracts/`,
+a small crate that translates the declarative policy into baton-core
+`ToolContract`s.
 
 `demo/kagent/` wires baton-proxy into a stock [kagent](https://kagent.dev)
 agent as a pod sidecar: the agent is prompt-injected by a crashlooping pod's

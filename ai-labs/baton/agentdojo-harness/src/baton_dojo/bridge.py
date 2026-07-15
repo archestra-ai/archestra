@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BATON_CHECK_DIR = Path(__file__).resolve().parents[3] / "baton-check"
+AI_LABS_TARGET_DIR = BATON_CHECK_DIR.parents[1] / "target"
 
 UNKNOWN_POLICIES = ("deny", "allow_with_audit", "escalate")
 
@@ -58,7 +59,7 @@ def resolve_binary() -> Path:
         cwd=BATON_CHECK_DIR,
         check=True,
     )
-    path = BATON_CHECK_DIR / "target" / "release" / "baton-check"
+    path = AI_LABS_TARGET_DIR / "release" / "baton-check"
     if not path.is_file():
         raise FileNotFoundError(f"cargo build succeeded but {path} is missing")
     _binary_cache = path

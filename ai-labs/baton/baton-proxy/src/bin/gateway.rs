@@ -16,8 +16,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use baton_gateway::narrate::{DecisionLog, narrate};
-use baton_gateway::{ESCALATE_TOOL, GatewayConfig, Outcome, Session};
+use baton_proxy::gateway::narrate::{DecisionLog, narrate};
+use baton_proxy::gateway::{ESCALATE_TOOL, GatewayConfig, Outcome, Session};
 use clap::Parser;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, Content, CreateElicitationRequestParams, ElicitationAction,

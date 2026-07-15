@@ -3,11 +3,7 @@ name = "baton-proxy"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Inference-layer proxy + approval MCP server that gate out-of-audience tool calls on a human, over baton-core"
-
-# Standalone on purpose, like baton-core and baton-check: a harness sidecar for
-# the baton prototype, not part of the archestra-bench workspace.
-[workspace]
+description = "baton enforcement demos: inference-layer proxy and tool-layer MCP gateway that gate policy-breaching tool calls on a human, over baton-core"
 
 [features]
 # The demo agent pulls a full agent framework (rig-core) and a real LLM; keep it
@@ -15,6 +11,7 @@ description = "Inference-layer proxy + approval MCP server that gate out-of-audi
 default = []
 demo = [
     "dep:rig-core",
+    "rig-core/rmcp",
     "rmcp/client",
     "rmcp/transport-streamable-http-client",
     "rmcp/transport-streamable-http-client-reqwest",
@@ -38,6 +35,9 @@ thiserror = "2"
 tokio-util = "0.7"
 rig-core = { version = "0.39", optional = true }
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "baton-proxy"
 path = "src/bin/proxy.rs"
@@ -50,4 +50,13 @@ required-features = ["demo"]
 [[bin]]
 name = "baton-demo-agent"
 path = "src/bin/demo_agent.rs"
+required-features = ["demo"]
+
+[[bin]]
+name = "baton-gateway"
+path = "src/bin/gateway.rs"
+
+[[bin]]
+name = "baton-gateway-agent"
+path = "src/bin/gateway_agent.rs"
 required-features = ["demo"]

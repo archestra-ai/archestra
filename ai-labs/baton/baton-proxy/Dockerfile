@@ -1,17 +1,17 @@
-# Build context is ai-labs/baton (the crate depends on sibling path crates).
-#   docker build -f baton-proxy/Dockerfile -t baton-proxy:poc .
+# Build context is ai-labs (the reduced build reuses the workspace lockfile).
+#   docker build -f baton/baton-proxy/Dockerfile -t baton-proxy:poc .
 # Pin to bookworm so the runtime glibc (debian:bookworm-slim) matches the
 # build glibc — rust:1-slim tracks trixie and links a newer glibc.
 FROM rust:1-slim-bookworm AS build
 WORKDIR /src
-COPY baton-core baton-core
-COPY baton-contracts baton-contracts
-COPY baton-proxy baton-proxy
-# baton-core inherits `[workspace.lints]` from the ai-labs workspace, which is
-# outside this minimal build context. Drop the inheritance here — lint
-# enforcement is a CI concern, not the image's; this does not affect behavior.
-RUN sed -i '/^\[lints\]$/,+1d' baton-core/Cargo.toml
-RUN cargo build --release --manifest-path baton-proxy/Cargo.toml --bin baton-proxy
+COPY baton/baton-core baton-core
+COPY baton/baton-contracts baton-contracts
+COPY baton/baton-proxy baton-proxy
+COPY Cargo.lock baton-proxy/Cargo.lock
+# The copied crates inherit workspace lints, but the reduced image build does
+# not copy the workspace manifest. Lint enforcement remains in workspace CI.
+RUN sed -i '/^\[lints\]$/,+1d' baton-core/Cargo.toml baton-contracts/Cargo.toml baton-proxy/Cargo.toml
+RUN cargo build --release --locked --manifest-path baton-proxy/Cargo.toml --bin baton-proxy
 
 FROM debian:bookworm-slim
 # reqwest/rustls loads trust roots from the system store; the slim image has

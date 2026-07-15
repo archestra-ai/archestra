@@ -13,7 +13,7 @@ use crate::ToolName;
 use crate::dimension::Effects;
 use crate::event::{EventSet, Fact, ValueOrigin};
 use crate::request::ActionState;
-use crate::revision::{ActionId, TurnId, ValueId};
+use crate::revision::{ActionId, GrantId, TurnId, ValueId};
 use crate::turn::Actor;
 use crate::value::{Provenance, ValueLabel};
 
@@ -201,6 +201,29 @@ pub fn confirmation_available(events: &EventSet) -> Option<(TurnId, ToolName)> {
         Some((turn, Some(tool))) if !spent.contains(&turn) => Some((turn, tool)),
         _ => None,
     }
+}
+
+/// One-off grant availability: issued grants whose consumption fact has not
+/// (yet) been admitted. The engine issues and consumes a check-scoped grant
+/// in the same batch, so under the current issuance discipline this is empty
+/// between mutations — the projection exists because facts only grow: a
+/// consumed grant is unavailable by *projection*, never by removal.
+pub fn grant_availability(events: &EventSet) -> BTreeMap<GrantId, crate::remedy::Authorization> {
+    let mut available = BTreeMap::new();
+    for event in events.events() {
+        match &event.fact {
+            Fact::GrantIssued {
+                grant, authorization, ..
+            } => {
+                available.insert(*grant, authorization.clone());
+            }
+            Fact::GrantConsumed { grant, .. } => {
+                available.remove(grant);
+            }
+            _ => {}
+        }
+    }
+    available
 }
 
 /// The audit view: the ordered events themselves. The control-plane history

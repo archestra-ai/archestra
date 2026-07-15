@@ -27,7 +27,7 @@ use crate::contract::Violation;
 use crate::dimension::Effects;
 use crate::remedy::LabelRaise;
 use crate::remedy::{Authorization, AuthorizationScope};
-use crate::revision::{ActionId, FlowId, TransitionId, TurnId, ValueId};
+use crate::revision::{ActionId, FlowId, GrantId, TransitionId, TurnId, ValueId};
 use crate::turn::Actor;
 use crate::value::{TransformerRef, ValueLabel};
 
@@ -76,6 +76,8 @@ pub enum Subject {
     Turn(TurnId),
     /// One policy check of the named flow.
     Check(FlowId),
+    /// One issued one-off grant.
+    Grant(GrantId),
     Trajectory,
 }
 
@@ -237,6 +239,22 @@ pub enum Fact {
     ResponseEmitted {
         value: ValueId,
     },
+    /// A check-scoped authorization was issued as a one-off grant. Durable
+    /// and action-scoped grants need no grant object (they mint a value or a
+    /// growth marker); only the one-off kind has an availability to consume.
+    GrantIssued {
+        grant: GrantId,
+        authorization: Authorization,
+        authority: AuthorityName,
+    },
+    /// A one-off grant was consumed by its policy check. References the
+    /// exact grant, flow, and (for a tool flow) the pending action, so a
+    /// second consumption is refusable at admission and auditable after.
+    GrantConsumed {
+        grant: GrantId,
+        flow: FlowId,
+        action: Option<ActionId>,
+    },
     /// An authority granted and the engine applied a typed authorization:
     /// an exact delta at an exact scope. `derived` names the authorized
     /// derived value a durable grant minted.
@@ -275,6 +293,7 @@ impl Fact {
             | Self::ActionCompleted { action, .. }
             | Self::DispatchFailed { action }
             | Self::ActionAbandoned { action } => Subject::Action(*action),
+            Self::GrantIssued { grant, .. } | Self::GrantConsumed { grant, .. } => Subject::Grant(*grant),
             Self::CheckPerformed { flow, .. }
             | Self::EmissionProposed { flow, .. }
             | Self::EmissionBodySubstituted { flow, .. }
@@ -304,7 +323,9 @@ impl Fact {
             | Self::CheckPerformed { .. }
             | Self::EmissionProposed { .. }
             | Self::EmissionBodySubstituted { .. }
-            | Self::EmissionAbandoned { .. } => Scope::Action,
+            | Self::EmissionAbandoned { .. }
+            | Self::GrantIssued { .. }
+            | Self::GrantConsumed { .. } => Scope::Action,
             Self::AuthorizationApplied { authorization, .. } | Self::AuthorizationDenied { authorization, .. } => {
                 match &authorization.scope() {
                     AuthorizationScope::DerivedValue { .. } => Scope::Value,
@@ -331,6 +352,7 @@ impl Fact {
                 ..
             } => Issuer::Authority(authority.clone()),
             Self::GrowthAccepted { authority, .. }
+            | Self::GrantIssued { authority, .. }
             | Self::AuthorizationApplied { authority, .. }
             | Self::AuthorizationDenied { authority, .. } => Issuer::Authority(authority.clone()),
             _ => Issuer::Engine,
@@ -369,6 +391,12 @@ pub enum EventConflict {
     ConfirmationAlreadySpent { turn: TurnId },
     #[error("emission {flow}: fact contradicts its admitted lifecycle")]
     EmissionLifecycle { flow: FlowId },
+    #[error("grant {grant} was already issued")]
+    GrantAlreadyIssued { grant: GrantId },
+    #[error("grant {grant} was never issued")]
+    UnknownGrant { grant: GrantId },
+    #[error("grant {grant} was already consumed")]
+    GrantAlreadyConsumed { grant: GrantId },
     #[error("another emission is live; {flow} cannot be proposed")]
     EmissionSlotOccupied { flow: FlowId },
 }
@@ -404,6 +432,10 @@ pub struct EventSet {
     live_action: Option<(ActionId, ActionPhase)>,
     #[serde(skip)]
     live_emission: Option<FlowId>,
+    #[serde(skip)]
+    issued_grants: BTreeSet<GrantId>,
+    #[serde(skip)]
+    consumed_grants: BTreeSet<GrantId>,
 }
 
 impl EventSet {
@@ -476,6 +508,8 @@ impl EventSet {
             spent_confirmations: self.spent_confirmations.clone(),
             live_action: self.live_action,
             live_emission: self.live_emission,
+            issued_grants: self.issued_grants.clone(),
+            consumed_grants: self.consumed_grants.clone(),
         };
         for fact in facts {
             probe.check(fact)?;
@@ -491,6 +525,8 @@ impl EventSet {
             spent_confirmations: self.spent_confirmations.clone(),
             live_action: self.live_action,
             live_emission: self.live_emission,
+            issued_grants: self.issued_grants.clone(),
+            consumed_grants: self.consumed_grants.clone(),
         }
         .check(fact)
     }
@@ -502,6 +538,8 @@ impl EventSet {
             spent_confirmations: std::mem::take(&mut self.spent_confirmations),
             live_action: self.live_action,
             live_emission: self.live_emission,
+            issued_grants: std::mem::take(&mut self.issued_grants),
+            consumed_grants: std::mem::take(&mut self.consumed_grants),
         };
         state.index(fact);
         self.admitted_values = state.admitted_values;
@@ -509,6 +547,8 @@ impl EventSet {
         self.spent_confirmations = state.spent_confirmations;
         self.live_action = state.live_action;
         self.live_emission = state.live_emission;
+        self.issued_grants = state.issued_grants;
+        self.consumed_grants = state.consumed_grants;
     }
 }
 
@@ -520,6 +560,8 @@ struct ProbeState {
     spent_confirmations: BTreeSet<TurnId>,
     live_action: Option<(ActionId, ActionPhase)>,
     live_emission: Option<FlowId>,
+    issued_grants: BTreeSet<GrantId>,
+    consumed_grants: BTreeSet<GrantId>,
 }
 
 impl ProbeState {
@@ -566,6 +608,17 @@ impl ProbeState {
                 true => Err(EventConflict::ConfirmationAlreadySpent { turn: *turn }),
                 false => Ok(()),
             },
+            Fact::GrantIssued { grant, .. } => match self.issued_grants.contains(grant) {
+                true => Err(EventConflict::GrantAlreadyIssued { grant: *grant }),
+                false => Ok(()),
+            },
+            Fact::GrantConsumed { grant, .. } => {
+                match (self.issued_grants.contains(grant), self.consumed_grants.contains(grant)) {
+                    (false, _) => Err(EventConflict::UnknownGrant { grant: *grant }),
+                    (true, true) => Err(EventConflict::GrantAlreadyConsumed { grant: *grant }),
+                    (true, false) => Ok(()),
+                }
+            }
             Fact::ResponseEmitted { .. }
             | Fact::AuthorizationApplied { .. }
             | Fact::AuthorizationDenied { .. }
@@ -614,6 +667,12 @@ impl ProbeState {
             // abandonment clears it.
             Fact::EmissionAbandoned { .. } | Fact::ResponseEmitted { .. } => {
                 self.live_emission = None;
+            }
+            Fact::GrantIssued { grant, .. } => {
+                self.issued_grants.insert(*grant);
+            }
+            Fact::GrantConsumed { grant, .. } => {
+                self.consumed_grants.insert(*grant);
             }
             Fact::ActionConstrained { .. }
             | Fact::ArgumentSubstituted { .. }
@@ -772,6 +831,66 @@ mod tests {
         );
         assert_eq!(set.events(), before.as_slice());
         assert_eq!(set.frontier(), frontier);
+    }
+
+    /// The one-off grant lifecycle at admission: consumption requires
+    /// issuance, is keyed by the exact grant, and can happen once — reuse on
+    /// the same or any later check, action, or frontier is the same refused
+    /// second-consumption fact. Denial issues nothing, so it can never
+    /// create availability.
+    #[test]
+    fn grant_consumption_is_linear_at_admission() {
+        use crate::remedy::{Authorization, AuthorizationDelta, AuthorizationScope, DeltaCoordinate};
+        let authorization = Authorization::new(
+            AuthorizationDelta::single(DeltaCoordinate::StandInConfirmation),
+            AuthorizationScope::PolicyCheck {
+                flow: crate::revision::FlowId::new(0),
+            },
+        )
+        .unwrap();
+        let grant = crate::revision::GrantId::new(0);
+        let issued = Fact::GrantIssued {
+            grant,
+            authorization,
+            authority: AuthorityName::new("human"),
+        };
+        let consumed = Fact::GrantConsumed {
+            grant,
+            flow: crate::revision::FlowId::new(0),
+            action: None,
+        };
+
+        // Consuming a never-issued grant is refused.
+        let mut set = EventSet::default();
+        assert!(matches!(
+            set.append_batch(vec![consumed.clone()]),
+            Err(EventConflict::UnknownGrant { .. })
+        ));
+
+        // Issued then consumed in one batch: admitted; unavailable after.
+        set.append_batch(vec![issued.clone(), consumed.clone()]).unwrap();
+        assert!(crate::projection::grant_availability(&set).is_empty());
+
+        // A second consumption — same check, a different flow/action, or
+        // after unrelated frontier growth — is the same refused fact.
+        assert!(matches!(
+            set.append_batch(vec![consumed.clone()]),
+            Err(EventConflict::GrantAlreadyConsumed { .. })
+        ));
+        set.append_batch(vec![ingress_fact(0, ValueLabel::identity())]).unwrap();
+        assert!(matches!(
+            set.append_batch(vec![Fact::GrantConsumed {
+                grant,
+                flow: crate::revision::FlowId::new(7),
+                action: Some(ActionId::new(3)),
+            }]),
+            Err(EventConflict::GrantAlreadyConsumed { .. })
+        ));
+        // Re-issuing the same grant identity is likewise refused.
+        assert!(matches!(
+            set.append_batch(vec![issued]),
+            Err(EventConflict::GrantAlreadyIssued { .. })
+        ));
     }
 
     mod laws {

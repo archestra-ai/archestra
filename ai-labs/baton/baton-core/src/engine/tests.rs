@@ -3044,6 +3044,86 @@ fn external_waiver_approval_roundtrip() {
             .any(|e| matches!(e, AuditEvent::ApprovalRequested { .. }))
     );
     assert!(trajectory.state().audit().iter().any(|e| applied_lift(e).is_some()));
+
+    // The applied check-scoped authorization is a full one-off grant
+    // lifecycle in the log: issued, and consumed by exactly this check —
+    // the consumption references the flow and the pending action it cleared.
+    // The newest proposal (the seeded synthetic dispatch also proposed one).
+    let (action, flow) = trajectory
+        .events()
+        .events()
+        .iter()
+        .rev()
+        .find_map(|event| match &event.fact {
+            crate::event::Fact::ActionProposed { action, flow, .. } => Some((*action, *flow)),
+            _ => None,
+        })
+        .expect("the flow proposed an action");
+    let consumption = trajectory
+        .events()
+        .events()
+        .iter()
+        .find_map(|event| match &event.fact {
+            crate::event::Fact::GrantConsumed {
+                grant,
+                flow: consumed_flow,
+                action: consumed_action,
+            } => Some((*grant, *consumed_flow, *consumed_action)),
+            _ => None,
+        })
+        .expect("the applied lift consumed its grant");
+    assert_eq!(consumption.1, flow);
+    assert_eq!(consumption.2, Some(action));
+    assert!(
+        trajectory.events().events().iter().any(
+            |event| matches!(&event.fact, crate::event::Fact::GrantIssued { grant, .. } if *grant == consumption.0)
+        )
+    );
+    // Consumed in the same batch it was issued: nothing stays available.
+    assert!(crate::projection::grant_availability(trajectory.events()).is_empty());
+}
+
+/// A denied authorization issues no grant: denial never creates
+/// availability.
+#[test]
+fn a_denied_authorization_issues_no_grant() {
+    let mut engine = engine_with([email_contract()]);
+    engine.register_authority(human()).unwrap();
+    let mut trajectory = Trajectory::new();
+    trajectory.seed_committed_effects(Effects::declared([Effect::Egress]));
+    let body = ingress(&mut trajectory, &["alice", "bob"], Trust::TRUSTED, "doc");
+    let secret = ingress(&mut trajectory, &["alice"], Trust::TRUSTED, "selector");
+    let to = identity_ingress(&mut trajectory, "bob");
+    let request = ToolRequest::new(
+        ToolName::new("email.send"),
+        ArgumentTree::Object(std::collections::BTreeMap::from([
+            (ArgumentName::new("to"), ArgumentTree::Value(to)),
+            (ArgumentName::new("body"), ArgumentTree::Value(body)),
+        ])),
+        BTreeSet::from([secret]),
+    );
+    let plans = remediable(&engine, &mut trajectory, request);
+    let StepOutcome::NeedsApproval(pending) = apply_first_step(&engine, &mut trajectory, plans.first().id) else {
+        panic!("expected pending approval");
+    };
+    let denied = engine
+        .apply_approval(
+            &mut trajectory,
+            pending,
+            crate::approval::Ruling::Deny {
+                reason: "not on my watch".to_owned(),
+            },
+        )
+        .unwrap();
+    assert!(matches!(denied, FlowOutcome::Terminal { .. }));
+    assert!(
+        !trajectory
+            .events()
+            .events()
+            .iter()
+            .any(|event| matches!(&event.fact, crate::event::Fact::GrantIssued { .. }))
+    );
+    assert!(crate::projection::grant_availability(trajectory.events()).is_empty());
 }
 
 /// An inline authority reads the trajectory view (a value's label) and the

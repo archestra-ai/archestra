@@ -70,6 +70,14 @@ macro_rules! sequential_id {
 }
 
 sequential_id!(
+    /// Identity of one issued one-off grant within its trajectory: a
+    /// check-scoped authorization becomes an issued grant consumed by its
+    /// check, so reuse is refusable at event admission.
+    pub GrantId,
+    "grant"
+);
+
+sequential_id!(
     /// Identity of one stored value within its trajectory. Identifies
     /// *provenance*, not byte equality: two byte-identical values may carry
     /// different labels and derivations.

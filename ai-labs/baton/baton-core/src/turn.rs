@@ -129,6 +129,7 @@ pub struct Trajectory {
     next_action: u64,
     next_flow: u64,
     next_transition: u64,
+    next_grant: u64,
     /// The remedy plans minted for the current blocked flow, if any. Bound to
     /// the revision they were computed against; any state change stales them.
     plans: Vec<RemedyPlan>,
@@ -137,11 +138,12 @@ pub struct Trajectory {
     /// tool-action slot: a blocked emission never clears a pending action,
     /// and vice versa.
     pending_emission: Option<PendingEmission>,
-    /// The confirming turn most recently spent by an action release. A
-    /// receipt-declared failure closes the action without appending a turn,
-    /// so without this marker the confirming turn would become the newest
-    /// turn again and its confirmation would resurrect.
-    spent_confirmation: Option<TurnId>,
+    /// Confirmations consumed by action releases, materialized from
+    /// `ConfirmationSpent` facts. A receipt-declared failure closes the
+    /// action without appending a turn, so without this record the confirming
+    /// turn would become the newest turn again and its confirmation would
+    /// resurrect.
+    spent_confirmations: BTreeSet<TurnId>,
     /// Shadow substrate: every mutation dual-records its facts here as one
     /// batch (built before any legacy write, appended in the same
     /// transaction that advances the revision). Reads stay on the legacy
@@ -168,9 +170,10 @@ impl Trajectory {
             next_action: 0,
             next_flow: 0,
             next_transition: 0,
+            next_grant: 0,
             plans: Vec::new(),
             next_plan: 0,
-            spent_confirmation: None,
+            spent_confirmations: BTreeSet::new(),
             events: EventSet::default(),
         }
     }
@@ -341,7 +344,6 @@ impl Trajectory {
             action: parts.action,
             effects: parts.proposed_effects.clone(),
         });
-        self.spend_confirmation();
         self.commit(batch);
         debug!(action = %parts.action, "release: effects committed, action released");
 
@@ -489,7 +491,7 @@ impl Trajectory {
     /// following action, never a later one."
     pub fn pending_confirmation(&self) -> Option<&ToolName> {
         let newest = TurnId::new(self.turns.len().checked_sub(1)? as u64);
-        if self.spent_confirmation == Some(newest) {
+        if self.spent_confirmations.contains(&newest) {
             return None;
         }
         match self.turns.last() {
@@ -500,13 +502,6 @@ impl Trajectory {
                 ..
             }) => Some(tool),
             _ => None,
-        }
-    }
-
-    pub(crate) fn spend_confirmation(&mut self) {
-        if self.pending_confirmation().is_some() {
-            let newest = TurnId::new((self.turns.len() - 1) as u64);
-            self.spent_confirmation = Some(newest);
         }
     }
 
@@ -593,8 +588,11 @@ impl Trajectory {
         self.commit(batch);
     }
 
-    /// Audit an applied check-transient authorization: one typed audit event
-    /// and its fact, one batch, one advance.
+    /// Record an applied check-scoped authorization as its full one-off
+    /// grant lifecycle in one batch: issued, consumed by exactly this check
+    /// (referencing the flow and, for a tool flow, the pending action), and
+    /// audited. Consumption is keyed by the grant at event admission, so a
+    /// second consumption of the same grant is unrepresentable.
     pub(crate) fn record_applied_authorization(
         &mut self,
         transition: TransitionId,
@@ -602,12 +600,32 @@ impl Trajectory {
         authority: crate::audit::AuthorityName,
         resolved: Vec<crate::contract::Violation>,
     ) {
-        let batch = vec![Fact::AuthorizationApplied {
-            authorization: authorization.clone(),
-            authority: authority.clone(),
-            resolved: resolved.clone(),
-            derived: None,
-        }];
+        let grant = crate::revision::GrantId::new(self.next_grant);
+        self.next_grant += 1;
+        let crate::remedy::AuthorizationScope::PolicyCheck { flow } = *authorization.scope() else {
+            unreachable!(
+                "only check-scoped authorizations ride this path; durable and action scopes mint their value/marker instead"
+            );
+        };
+        let action = self
+            .pending
+            .as_ref()
+            .filter(|pending| pending.flow() == flow)
+            .map(PendingAction::id);
+        let batch = vec![
+            Fact::GrantIssued {
+                grant,
+                authorization: authorization.clone(),
+                authority: authority.clone(),
+            },
+            Fact::GrantConsumed { grant, flow, action },
+            Fact::AuthorizationApplied {
+                authorization: authorization.clone(),
+                authority: authority.clone(),
+                resolved: resolved.clone(),
+                derived: None,
+            },
+        ];
         self.state.record(AuditEvent::AuthorizationApplied {
             transition,
             authorization,
@@ -958,6 +976,9 @@ impl Trajectory {
         for event in &self.events.events()[admitted_from..] {
             self.state.apply(&event.fact);
             Self::apply_flow_fact(&mut self.pending, &mut self.pending_emission, &event.fact);
+            if let Fact::ConfirmationSpent { turn } = &event.fact {
+                self.spent_confirmations.insert(*turn);
+            }
         }
         self.advance();
     }
@@ -1100,8 +1121,11 @@ mod tests {
             .unwrap();
         assert_eq!(trajectory.pending_confirmation(), Some(&ToolName::new("db.drop")));
 
-        // A release spends it without appending a turn; it must not resurrect.
-        trajectory.spend_confirmation();
+        // A release spends it without appending a turn (the ConfirmationSpent
+        // fact is the consumption of the confirming turn's implicit grant);
+        // it must not resurrect.
+        let newest = TurnId::new((trajectory.turns().len() - 1) as u64);
+        trajectory.commit(vec![Fact::ConfirmationSpent { turn: newest }]);
         assert_eq!(trajectory.pending_confirmation(), None);
     }
 }

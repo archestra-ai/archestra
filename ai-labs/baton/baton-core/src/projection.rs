@@ -1,11 +1,11 @@
 //! Derived projections over the append-only [`EventSet`].
 //!
-//! Shadow phase: pure functions recomputed from the events on every call —
-//! nothing is cached, so rebuild equivalence holds by construction and
-//! determinism is exactly replay determinism. Labels are *recomputed* from
-//! each value's admission-time inputs (the fold over its dependency
-//! projections), never copied from the store, so parity against the legacy
-//! truth is a real check of the algebra, not of a copy.
+//! Pure functions recomputed from the events on every call — nothing is
+//! cached, so rebuild equivalence holds by construction and determinism is
+//! exactly replay determinism. Labels are *recomputed* from each value's
+//! admission-time inputs (the fold over its dependency projections), never
+//! copied from the store, so agreement with the materialized read models is
+//! a real check of the algebra, not of a copy.
 
 use std::collections::{BTreeMap, BTreeSet};
 

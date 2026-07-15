@@ -1,11 +1,13 @@
 //! Turns, the trajectory, and its engine-owned admission paths.
 //!
-//! A trajectory owns all per-conversation state: the immutable value store,
-//! the turn sequence (which references values, never free strings), the
-//! monotone control-plane state (past effects + audit), the pending action
-//! slot, and the [`Revision`] that advances on every mutation. Capabilities
-//! bind to the revision, so *any* state change — a new value, a constrained
-//! action, an audit event, a turn — invalidates everything minted before it.
+//! A trajectory owns all per-conversation state, authoritative in its
+//! append-only event log: every public mutation prevalidates, then commits
+//! one atomic batch of facts, and the read models (the immutable value
+//! store, the turn sequence, the control-plane state, the pending slots)
+//! materialize exclusively from the admitted facts. The [`Revision`] is the
+//! digest of the event frontier — it advances once per accepted batch, so
+//! capabilities bound to it are invalidated by *any* state change — a new
+//! value, a constrained action, an audit record, a turn.
 //!
 //! Admission is engine-owned: [`Trajectory::ingress`] is the only
 //! caller-labeled path (the explicit trust boundary); a model output's label
@@ -124,14 +126,16 @@ pub struct Trajectory {
     turns: Vec<Turn>,
     store: ValueStore,
     state: TrajectoryState,
-    revision: Revision,
     pending: Option<PendingAction>,
     next_action: u64,
     next_flow: u64,
     next_transition: u64,
     next_grant: u64,
-    /// The remedy plans minted for the current blocked flow, if any. Bound to
-    /// the revision they were computed against; any state change stales them.
+    /// Side cache of the remedy plans minted for the current blocked flow:
+    /// predictions, not state — storing them appends nothing and advances
+    /// nothing (the per-evaluation `CheckPerformed` fact supplies the
+    /// advance); they bind to the basis they were computed against, so any
+    /// state change stales them.
     plans: Vec<RemedyPlan>,
     next_plan: u64,
     /// The (at most one) pending emission, independent of the pending
@@ -144,10 +148,9 @@ pub struct Trajectory {
     /// turn would become the newest turn again and its confirmation would
     /// resurrect.
     spent_confirmations: BTreeSet<TurnId>,
-    /// Shadow substrate: every mutation dual-records its facts here as one
-    /// batch (built before any legacy write, appended in the same
-    /// transaction that advances the revision). Reads stay on the legacy
-    /// fields until the projection cutover.
+    /// The authoritative append-only state: every mutation prevalidates,
+    /// then commits one atomic batch of facts here; the fields above are
+    /// materialized read models written only as facts are applied.
     events: EventSet,
 }
 
@@ -164,7 +167,6 @@ impl Trajectory {
             turns: Vec::new(),
             store: ValueStore::default(),
             state: TrajectoryState::default(),
-            revision: Revision::INITIAL,
             pending: None,
             pending_emission: None,
             next_action: 0,
@@ -178,9 +180,8 @@ impl Trajectory {
         }
     }
 
-    /// The append-only event set this trajectory dual-records into (shadow
-    /// phase: derived projections are parity-tested against the legacy
-    /// fields, which remain authoritative until the cutover).
+    /// The append-only event set — the authoritative state; every reader
+    /// surface is a projection or a materialized read model over it.
     pub fn events(&self) -> &EventSet {
         &self.events
     }
@@ -189,8 +190,11 @@ impl Trajectory {
         self.id
     }
 
+    /// The revision is the digest of the event frontier: it advances exactly
+    /// when a batch of facts is accepted, so every capability bound to it is
+    /// invalidated by any state change.
     pub fn revision(&self) -> Revision {
-        self.revision
+        Revision::of_frontier(self.events.frontier())
     }
 
     pub fn turns(&self) -> &[Turn] {
@@ -303,11 +307,11 @@ impl Trajectory {
                 this: self.id,
             });
         }
-        if parts.revision != self.revision {
-            debug!(minted_at = %parts.revision, current = %self.revision, "release: rejected (stale token)");
+        if parts.revision != self.revision() {
+            debug!(minted_at = %parts.revision, current = %self.revision(), "release: rejected (stale token)");
             return Err(RejectedToken::Stale {
                 minted_at: parts.revision,
-                current: self.revision,
+                current: self.revision(),
             });
         }
         let rendered = match &self.pending {
@@ -337,13 +341,6 @@ impl Trajectory {
             });
         }
         batch.push(Fact::ActionReleased { action: parts.action });
-        // The commitment itself materializes from the batch's
-        // `EffectsCommitted` fact in `commit`; only the audit record is
-        // appended directly here (its projection cutover is a later slice).
-        self.state.record(AuditEvent::EffectsCommitted {
-            action: parts.action,
-            effects: parts.proposed_effects.clone(),
-        });
         self.commit(batch);
         debug!(action = %parts.action, "release: effects committed, action released");
 
@@ -352,7 +349,7 @@ impl Trajectory {
             tool: parts.tool.clone(),
             rendered,
         };
-        let receipt = DispatchReceipt::from_token_parts(parts, self.revision);
+        let receipt = DispatchReceipt::from_token_parts(parts, self.revision());
         Ok((canonical, receipt))
     }
 
@@ -402,9 +399,7 @@ impl Trajectory {
     /// cannot authorize a second attempt.
     pub fn record_failure(&mut self, receipt: DispatchReceipt) -> Result<(), RejectedToken> {
         let parts = self.validate_receipt(receipt)?;
-        let batch = vec![Fact::DispatchFailed { action: parts.action }];
-        self.state.record(AuditEvent::DispatchFailed { action: parts.action });
-        self.commit(batch);
+        self.commit(vec![Fact::DispatchFailed { action: parts.action }]);
         debug!(action = %parts.action, "record_failure: dispatch failed, action closed");
         Ok(())
     }
@@ -418,11 +413,11 @@ impl Trajectory {
                 this: self.id,
             });
         }
-        if parts.revision != self.revision {
-            debug!(minted_at = %parts.revision, current = %self.revision, "receipt rejected (stale)");
+        if parts.revision != self.revision() {
+            debug!(minted_at = %parts.revision, current = %self.revision(), "receipt rejected (stale)");
             return Err(RejectedToken::Stale {
                 minted_at: parts.revision,
-                current: self.revision,
+                current: self.revision(),
             });
         }
         match &self.pending {
@@ -564,7 +559,7 @@ impl Trajectory {
         // frontier can replace the revision at cutover without weakening
         // cross-evaluation staleness.
         self.commit(vec![Fact::CheckPerformed { flow, action }]);
-        let basis = self.revision;
+        let basis = self.revision();
         self.plans = drafts
             .into_iter()
             .map(|steps| {
@@ -583,9 +578,7 @@ impl Trajectory {
     }
 
     pub(crate) fn record_event(&mut self, event: AuditEvent) {
-        let batch = vec![Fact::ControlPlane { event: event.clone() }];
-        self.state.record(event);
-        self.commit(batch);
+        self.commit(vec![Fact::ControlPlane { event }]);
     }
 
     /// Record an applied check-scoped authorization as its full one-off
@@ -620,20 +613,14 @@ impl Trajectory {
             },
             Fact::GrantConsumed { grant, flow, action },
             Fact::AuthorizationApplied {
-                authorization: authorization.clone(),
-                authority: authority.clone(),
-                resolved: resolved.clone(),
+                transition,
+                authorization,
+                authority,
+                resolved,
                 derived: None,
+                labels: None,
             },
         ];
-        self.state.record(AuditEvent::AuthorizationApplied {
-            transition,
-            authorization,
-            authority,
-            resolved,
-            derived: None,
-            labels: None,
-        });
         self.commit(batch);
     }
 
@@ -645,17 +632,11 @@ impl Trajectory {
         authority: crate::audit::AuthorityName,
         reason: String,
     ) {
-        let batch = vec![Fact::AuthorizationDenied {
-            authorization: authorization.clone(),
-            authority: authority.clone(),
-            reason: reason.clone(),
-        }];
-        self.state.record(AuditEvent::AuthorizationDenied {
+        self.commit(vec![Fact::AuthorizationDenied {
             authorization,
             authority,
             reason,
-        });
-        self.commit(batch);
+        }]);
     }
 
     /// Apply a validated content-justified `Derive` step as one transaction: admit the
@@ -690,21 +671,23 @@ impl Trajectory {
                 },
             },
             self.substitution_fact(site, source, derived),
+            Fact::ControlPlane {
+                event: AuditEvent::ValueTransition {
+                    transition,
+                    transformer: transformer.clone(),
+                    source,
+                    derived: Some(derived),
+                    input,
+                    declared_output: declared_output.clone(),
+                    outcome: crate::audit::TransitionOutcome::Applied,
+                },
+            },
         ];
         let admitted = self
             .store
-            .admit_transformed(source, transition, transformer.clone(), declared_output.clone(), body)
+            .admit_transformed(source, transition, transformer, declared_output, body)
             .expect("transform source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.state.record(AuditEvent::ValueTransition {
-            transition,
-            transformer,
-            source,
-            derived: Some(derived),
-            input,
-            declared_output,
-            outcome: crate::audit::TransitionOutcome::Applied,
-        });
         self.commit(batch);
         derived
     }
@@ -734,9 +717,7 @@ impl Trajectory {
             declared_output,
             outcome: crate::audit::TransitionOutcome::Failed(failure),
         };
-        let batch = vec![Fact::ControlPlane { event: event.clone() }];
-        self.state.record(event);
-        self.commit(batch);
+        self.commit(vec![Fact::ControlPlane { event }]);
     }
 
     /// Apply a validated `ConstrainAction` step as one transaction.
@@ -744,17 +725,20 @@ impl Trajectory {
         let transition = self.mint_transition();
         let pending = self.pending.as_mut().expect("pending action validated by the engine");
         let action = pending.id();
-        let batch = vec![Fact::ActionConstrained {
-            action,
-            to_tool: to_tool.clone(),
-            effects: effects.clone(),
-        }];
-        self.state.record(AuditEvent::ActionConstrained {
-            transition,
-            action,
-            outcome: crate::audit::TransitionOutcome::Applied,
-        });
-        self.commit(batch);
+        self.commit(vec![
+            Fact::ActionConstrained {
+                action,
+                to_tool,
+                effects,
+            },
+            Fact::ControlPlane {
+                event: AuditEvent::ActionConstrained {
+                    transition,
+                    action,
+                    outcome: crate::audit::TransitionOutcome::Applied,
+                },
+            },
+        ]);
     }
 
     /// Apply a granted `AcceptGrowth` step as one transaction: record the
@@ -767,35 +751,28 @@ impl Trajectory {
         resolved: Vec<crate::contract::Violation>,
     ) {
         let transition = self.mint_transition();
-        let pending = self.pending.as_mut().expect("pending action validated by the engine");
+        let pending = self.pending.as_ref().expect("pending action validated by the engine");
         let action = pending.id();
         let acquisition = crate::remedy::Authorization::new(
             crate::remedy::AuthorizationDelta::single(crate::remedy::DeltaCoordinate::AcquireEffects(effects.clone())),
             crate::remedy::AuthorizationScope::PendingAction { action },
         )
         .expect("the engine accepts only non-empty growths");
-        let batch = vec![
+        self.commit(vec![
             Fact::GrowthAccepted {
                 action,
-                effects: effects.clone(),
+                effects,
                 authority: authority.clone(),
             },
             Fact::AuthorizationApplied {
-                authorization: acquisition.clone(),
-                authority: authority.clone(),
-                resolved: resolved.clone(),
+                transition,
+                authorization: acquisition,
+                authority,
+                resolved,
                 derived: None,
+                labels: None,
             },
-        ];
-        self.state.record(AuditEvent::AuthorizationApplied {
-            transition,
-            authorization: acquisition,
-            authority,
-            resolved,
-            derived: None,
-            labels: None,
-        });
-        self.commit(batch);
+        ]);
     }
 
     /// Apply a granted fiat `Derive` (Endorse) step as one transaction: admit a new
@@ -833,25 +810,22 @@ impl Trajectory {
             },
             self.substitution_fact(site, source, derived),
             Fact::AuthorizationApplied {
-                authorization: raise_grant.clone(),
+                transition,
+                authorization: raise_grant,
                 authority: authority.clone(),
                 resolved: Vec::new(),
                 derived: Some(derived),
+                labels: Some(crate::audit::RaiseLabels {
+                    input,
+                    raised: raised.clone(),
+                }),
             },
         ];
         let admitted = self
             .store
-            .admit_endorsed(source, authority.clone(), delta.clone(), raised.clone(), body)
+            .admit_endorsed(source, authority, delta, raised, body)
             .expect("endorse source validated by the engine");
         debug_assert_eq!(admitted, derived);
-        self.state.record(AuditEvent::AuthorizationApplied {
-            transition,
-            authorization: raise_grant,
-            authority,
-            resolved: Vec::new(),
-            derived: Some(derived),
-            labels: Some(crate::audit::RaiseLabels { input, raised }),
-        });
         self.commit(batch);
         derived
     }
@@ -955,19 +929,12 @@ impl Trajectory {
         derived
     }
 
-    /// Every public mutation advances the revision exactly once, as one
-    /// transaction.
-    fn advance(&mut self) {
-        self.revision = self.revision.next();
-    }
-
-    /// One mutation = one event batch + one revision advance, atomically.
-    /// The batch is built before any legacy write and mirrors validations
-    /// that already passed, so an admission conflict here is a crate bug —
-    /// it fails loudly rather than letting the log and the legacy state
-    /// diverge. Admitted facts are then materialized into the
-    /// [`TrajectoryState`] read model — the log is the only writer of the
-    /// committed effect surface.
+    /// One mutation = one atomically appended event batch (which is the
+    /// revision advance: the revision digests the frontier). The batch
+    /// mirrors validations that already passed, so an admission conflict
+    /// here is a crate bug — it fails loudly rather than letting the log
+    /// and the read models diverge. Admitted facts are then materialized
+    /// into the read models; nothing else writes them.
     fn commit(&mut self, facts: Vec<Fact>) {
         let admitted_from = self.events.events().len();
         self.events
@@ -980,7 +947,6 @@ impl Trajectory {
                 self.spent_confirmations.insert(*turn);
             }
         }
-        self.advance();
     }
 
     /// Materialize one admitted fact into the pending-slot read models — the

@@ -1,11 +1,11 @@
 //! The append-only event substrate: scoped facts and the `EventSet`.
 //!
-//! Shadow phase (S1 of the compact-architecture plan): every public
-//! [`Trajectory`](crate::turn::Trajectory) mutation dual-records its state
-//! change here as one atomically appended batch of facts, while all reads
-//! stay on the legacy fields. Projections over the set
-//! ([`crate::projection`]) are parity-tested against the legacy truth; the
-//! cutover that makes them authoritative is a later slice.
+//! The authoritative trajectory state: every public
+//! [`Trajectory`](crate::turn::Trajectory) mutation prevalidates, then
+//! appends one atomic batch of facts here. Reads go through pure
+//! projections ([`crate::projection`]) or materialized read models written
+//! only as facts are applied; rebuild equivalence is pinned by the parity
+//! suite.
 //!
 //! The algebra is `L' = L ∪ {event}` with union as the combine. Under the
 //! single-writer `&mut Trajectory` discipline the set is totally ordered by
@@ -22,7 +22,7 @@ use std::fmt;
 use serde::Serialize;
 
 use crate::ToolName;
-use crate::audit::{AuditEvent, AuthorityName};
+use crate::audit::{AuditEvent, AuthorityName, RaiseLabels};
 use crate::contract::Violation;
 use crate::dimension::Effects;
 use crate::remedy::LabelRaise;
@@ -257,12 +257,16 @@ pub enum Fact {
     },
     /// An authority granted and the engine applied a typed authorization:
     /// an exact delta at an exact scope. `derived` names the authorized
-    /// derived value a durable grant minted.
+    /// derived value a durable grant minted and `labels` its exact
+    /// before/after labels — the fact is self-contained so the audit
+    /// projection synthesizes its record from it alone.
     AuthorizationApplied {
+        transition: TransitionId,
         authorization: Authorization,
         authority: AuthorityName,
         resolved: Vec<Violation>,
         derived: Option<ValueId>,
+        labels: Option<RaiseLabels>,
     },
     /// An authority denied a typed authorization.
     AuthorizationDenied {

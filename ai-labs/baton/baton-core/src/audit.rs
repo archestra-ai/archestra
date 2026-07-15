@@ -239,17 +239,61 @@ impl TrajectoryState {
         &self.audit
     }
 
-    /// Append one audit event. Append-only by construction.
-    pub(crate) fn record(&mut self, event: AuditEvent) {
+    /// Append one audit event. Append-only by construction; private — every
+    /// record originates from an admitted fact via [`TrajectoryState::apply`].
+    fn record(&mut self, event: AuditEvent) {
         self.audit.push(event);
     }
 
-    /// Materialize one admitted fact into the read model. The only writer of
-    /// the effect surface: committed effects accumulate exactly as their
-    /// facts are admitted to the log.
+    /// Materialize one admitted fact into the read model — the only writer
+    /// of both the effect surface and the audit log: every audit record
+    /// originates from a fact (typed facts synthesize their records;
+    /// audit-only history rides `Fact::ControlPlane` verbatim).
     pub(crate) fn apply(&mut self, fact: &crate::event::Fact) {
-        if let crate::event::Fact::EffectsCommitted { effects, .. } = fact {
-            self.commit_effects(effects.clone());
+        use crate::event::Fact;
+        match fact {
+            Fact::EffectsCommitted { action, effects } => {
+                self.commit_effects(effects.clone());
+                self.record(AuditEvent::EffectsCommitted {
+                    action: *action,
+                    effects: effects.clone(),
+                });
+            }
+            Fact::DispatchFailed { action } => {
+                self.record(AuditEvent::DispatchFailed { action: *action });
+            }
+            Fact::AuthorizationApplied {
+                transition,
+                authorization,
+                authority,
+                resolved,
+                derived,
+                labels,
+            } => {
+                self.record(AuditEvent::AuthorizationApplied {
+                    transition: *transition,
+                    authorization: authorization.clone(),
+                    authority: authority.clone(),
+                    resolved: resolved.clone(),
+                    derived: *derived,
+                    labels: labels.clone(),
+                });
+            }
+            Fact::AuthorizationDenied {
+                authorization,
+                authority,
+                reason,
+            } => {
+                self.record(AuditEvent::AuthorizationDenied {
+                    authorization: authorization.clone(),
+                    authority: authority.clone(),
+                    reason: reason.clone(),
+                });
+            }
+            Fact::ControlPlane { event } => {
+                self.record(event.clone());
+            }
+            _ => {}
         }
     }
 

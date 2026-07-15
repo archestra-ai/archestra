@@ -1,6 +1,8 @@
-//! Shadow-phase parity: the projections over the dual-recorded event set
-//! must agree with the legacy trajectory truth on every representative flow.
-//! These tests retire with the legacy mirrors at the projection cutover.
+//! Rebuild equivalence: the pure projections over the event set must agree
+//! with the materialized read models on every representative flow — the log
+//! is authoritative, the materializations are rebuildable from it. (These
+//! started as shadow-phase parity tests; after the cutover they pin the
+//! materialization discipline itself.)
 
 use std::collections::BTreeSet;
 
@@ -101,6 +103,22 @@ fn email_request(trajectory: &mut Trajectory, body: ValueId, recipient: &str) ->
 fn assert_parity(trajectory: &Trajectory) {
     let events = trajectory.events();
 
+    // The whole control-plane read model rebuilds from the facts alone.
+    let mut rebuilt = crate::audit::TrajectoryState::default();
+    for event in events.events() {
+        rebuilt.apply(&event.fact);
+    }
+    assert_eq!(
+        rebuilt.past_effects(),
+        trajectory.state().past_effects(),
+        "state rebuild equivalence: effects"
+    );
+    assert_eq!(
+        rebuilt.audit(),
+        trajectory.state().audit(),
+        "state rebuild equivalence: audit"
+    );
+
     let labels = projection::value_labels(events);
     let provenances = projection::provenance(events);
     for (id, label) in &labels {
@@ -140,8 +158,9 @@ fn assert_parity(trajectory: &Trajectory) {
     );
 }
 
-/// Run one operation asserting the frontier advances iff the revision does,
-/// by exactly `expected_batches` batches.
+/// Run one operation asserting the one-mutation-one-batch discipline: the
+/// frontier (which the revision digests) advances by exactly
+/// `expected_batches` batches.
 fn tracked<R>(trajectory: &mut Trajectory, expected_batches: u64, op: impl FnOnce(&mut Trajectory) -> R) -> R {
     let revision = trajectory.revision();
     let frontier = trajectory.events().frontier();

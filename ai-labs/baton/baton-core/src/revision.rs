@@ -23,6 +23,13 @@ pub struct Revision(u64);
 impl Revision {
     pub const INITIAL: Self = Self(0);
 
+    /// The digest of an event frontier: the revision *is* the number of
+    /// accepted batches, so any admitted batch stales everything bound
+    /// before it.
+    pub(crate) fn of_frontier(frontier: crate::event::Basis) -> Self {
+        Self(frontier.index())
+    }
+
     #[must_use]
     pub fn next(self) -> Self {
         // Loud exhaustion beats a silent wrap that would let an ancient

@@ -1908,8 +1908,16 @@ fn transform_step_applies_and_flow_permits() {
     };
     // The raw value keeps its label; the derived value took its slot.
     assert_eq!(trajectory.value(raw).unwrap().label().trust, Trust::SUSPICIOUS);
+    // The seeded prior dispatch audited its own commitment and failure;
+    // this flow's only transition record is the applied transform.
+    let transitions: Vec<_> = trajectory
+        .state()
+        .audit()
+        .iter()
+        .filter(|e| matches!(e, AuditEvent::ValueTransition { .. }))
+        .collect();
     assert!(matches!(
-        trajectory.state().audit(),
+        transitions.as_slice(),
         [AuditEvent::ValueTransition {
             outcome: crate::audit::TransitionOutcome::Applied,
             ..
@@ -3458,8 +3466,14 @@ fn transformer_error_fails_the_step_and_audits() {
     ));
     assert_eq!(trajectory.store().len(), values_before);
     assert!(trajectory.revision() > revision_before);
+    let transitions: Vec<_> = trajectory
+        .state()
+        .audit()
+        .iter()
+        .filter(|e| matches!(e, AuditEvent::ValueTransition { .. }))
+        .collect();
     assert!(matches!(
-        trajectory.state().audit(),
+        transitions.as_slice(),
         [AuditEvent::ValueTransition {
             derived: None,
             outcome: crate::audit::TransitionOutcome::Failed(_),

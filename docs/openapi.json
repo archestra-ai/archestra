@@ -261757,7 +261757,7 @@
             "in": "query",
             "name": "profileId",
             "required": false,
-            "description": "Filter team tokens to only show tokens for teams the profile is assigned to"
+            "description": "Annotate each token with worksWithProfile: whether it can authenticate against this profile"
           }
         ],
         "responses": {
@@ -261812,6 +261812,10 @@
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "worksWithProfile": {
+                            "description": "Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)",
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -262431,6 +262435,10 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "worksWithProfile": {
+                      "description": "Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)",
+                      "type": "boolean"
                     },
                     "value": {
                       "type": "string"

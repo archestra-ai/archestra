@@ -141,11 +141,19 @@ export function A2AConnectionInstructions({
   // agent-card.json card) lives under /v2.
   const a2aEndpoint = `${toA2ABaseUrl(connectionUrl)}/a2a/${agent.id}`;
 
-  // Default to personal token if available, otherwise org token, then first token
+  // Default to personal token if available, otherwise org token, then the
+  // first token that can actually authenticate against this agent.
   const orgToken = tokens?.find((t) => t.isOrganizationToken);
+  const firstUsableToken = tokens?.find((t) => t.worksWithProfile !== false);
   const defaultTokenId = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens?.[0]?.id ?? "");
+    : (orgToken?.id ?? firstUsableToken?.id ?? "");
+
+  // Unusable tokens stay listed but greyed out with the reason.
+  const unusableTokenReason =
+    agent.scope === "personal"
+      ? "Team tokens can't access personal agents"
+      : "This agent isn't assigned to this team";
 
   // Check if personal token is selected (either explicitly or by default)
   const effectiveTokenId = selectedTokenId ?? defaultTokenId;
@@ -505,20 +513,29 @@ curl -X POST "${a2aEndpoint}" \\
               {/* Team tokens (non-organization) */}
               {tokens
                 ?.filter((token) => !token.isOrganizationToken)
-                .map((token) => (
-                  <SelectItem key={token.id} value={token.id}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>
-                        {token.team?.name
-                          ? `Team Token (${token.team.name})`
-                          : token.name}
+                .map((token) => {
+                  const unusable = token.worksWithProfile === false;
+                  return (
+                    <SelectItem
+                      key={token.id}
+                      value={token.id}
+                      disabled={unusable}
+                    >
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <div>
+                          {token.team?.name
+                            ? `Team Token (${token.team.name})`
+                            : token.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {unusable
+                            ? unusableTokenReason
+                            : "To share with your teammates"}
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        To share with your teammates
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
+                    </SelectItem>
+                  );
+                })}
               {/* Organization token */}
               {tokens
                 ?.filter((token) => token.isOrganizationToken)

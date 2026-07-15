@@ -13,6 +13,7 @@ import {
   ApiError,
   constructResponseSchema,
   type SelectTeamToken,
+  type TeamTokenWithTeam,
   TeamTokenWithValueResponseSchema,
   TokensListResponseSchema,
 } from "@/types";
@@ -60,9 +61,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
    *   only exposes metadata (name, tokenStart); the value endpoint below
    *   stays gated behind team admin / org-level team management
    *
-   * When profileId is provided, team tokens are further filtered to the
-   * ones that can authenticate against that agent (org-scoped agents accept
-   * any team token; team-scoped agents only their teams'; personal none).
+   * When profileId is provided, tokens are annotated with worksWithProfile
+   * (org-scoped agents accept any team token; team-scoped agents only their
+   * teams'; personal agents none) so the UI can grey out the rest.
    *
    * Also returns permission flags so the UI can show disabled options
    * for tokens the user doesn't have access to.
@@ -81,7 +82,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .uuid()
             .optional()
             .describe(
-              "Filter team tokens to only show tokens that can authenticate against this profile",
+              "Annotate each token with worksWithProfile: whether it can authenticate against this profile",
             ),
         }),
         response: constructResponseSchema(TokensListResponseSchema),
@@ -140,26 +141,26 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // If profileId is provided, further filter team tokens to the ones
-      // that can actually authenticate against that agent — mirroring
+      // If profileId is provided, annotate each token with whether it can
+      // actually authenticate against that agent — mirroring
       // AgentTeamModel.teamHasAgentAccess: org-scoped agents accept any
       // team token, team-scoped agents only their assigned teams' tokens,
-      // personal agents none. Org tokens always pass.
+      // personal agents none. Org tokens always pass. Tokens stay listed
+      // either way so the UI can show them greyed out with the reason.
+      let worksWithProfile: ((token: TeamTokenWithTeam) => boolean) | null =
+        null;
       if (profileId) {
         const agent = await AgentModel.findAccessContextById(profileId);
-        if (agent?.scope === "team") {
-          const profileTeamIds =
-            await AgentTeamModel.getTeamsForAgent(profileId);
-          visibleTokens = visibleTokens.filter(
-            (token) =>
-              token.isOrganizationToken ||
-              (token.teamId && profileTeamIds.includes(token.teamId)),
-          );
-        } else if (agent?.scope !== "org") {
-          visibleTokens = visibleTokens.filter(
-            (token) => token.isOrganizationToken,
-          );
-        }
+        const profileTeamIds =
+          agent?.scope === "team"
+            ? await AgentTeamModel.getTeamsForAgent(profileId)
+            : [];
+        worksWithProfile = (token) =>
+          token.isOrganizationToken ||
+          agent?.scope === "org" ||
+          (agent?.scope === "team" &&
+            !!token.teamId &&
+            profileTeamIds.includes(token.teamId));
       }
 
       return reply.send({
@@ -171,6 +172,9 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
           team: token.team,
           createdAt: token.createdAt,
           lastUsedAt: token.lastUsedAt,
+          worksWithProfile: worksWithProfile
+            ? worksWithProfile(token)
+            : undefined,
         })),
         permissions: {
           canAccessOrgToken,

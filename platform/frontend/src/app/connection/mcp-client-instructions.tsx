@@ -361,11 +361,13 @@ function GenericAuthRow({
   });
   const tokens = tokensData?.tokens ?? [];
 
-  // Mirror the original defaulting logic: personal > org > first team token.
+  // Mirror the original defaulting logic: personal > org > first team token
+  // that can actually authenticate against this gateway.
   const orgToken = tokens.find((t) => t.isOrganizationToken);
+  const firstUsableToken = tokens.find((t) => t.worksWithProfile !== false);
   const defaultTokenId: string | null = userToken
     ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? tokens[0]?.id ?? null);
+    : (orgToken?.id ?? firstUsableToken?.id ?? null);
   const [selectedId, setSelectedId] = useState<string | null>(defaultTokenId);
   useEffect(() => {
     if (selectedId === null && defaultTokenId) setSelectedId(defaultTokenId);
@@ -519,7 +521,12 @@ function GenericAuthRow({
             key={t.id}
             active={selectedId === t.id}
             label={t.team?.name ? `Team Token (${t.team.name})` : t.name}
-            description="To share with your teammates"
+            description={
+              t.worksWithProfile === false
+                ? "This team can't access this gateway"
+                : "To share with your teammates"
+            }
+            disabled={t.worksWithProfile === false}
             onSelect={() => {
               setSelectedId(t.id);
               setExposedValue(null);
@@ -547,16 +554,19 @@ function TokenOption({
   active,
   label,
   description,
+  disabled,
   onSelect,
 }: {
   active: boolean;
   label: string;
   description: string;
+  disabled?: boolean;
   onSelect: () => void;
 }) {
   return (
     <DropdownMenuItem
       onSelect={onSelect}
+      disabled={disabled}
       className={cn("flex flex-col items-start gap-0.5", active && "bg-accent")}
     >
       <span>{label}</span>

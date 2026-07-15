@@ -403,27 +403,29 @@ describe("Token Route Authorization", () => {
       );
     });
   });
-  describe("GET /api/tokens profileId filtering", () => {
+  describe("GET /api/tokens worksWithProfile annotation", () => {
     // Mirrors the route's rule (and AgentTeamModel.teamHasAgentAccess):
     // org-scoped agents accept any team token, team-scoped agents only
-    // their assigned teams' tokens, personal agents none.
-    const filterForAgent = async (
+    // their assigned teams' tokens, personal agents none. Tokens are
+    // annotated (not filtered) so the UI can grey out the rest.
+    const annotateForAgent = async (
       profileId: string,
       tokens: Awaited<ReturnType<typeof TeamTokenModel.findAllWithTeam>>,
     ) => {
       const agent = await AgentModel.findAccessContextById(profileId);
-      if (agent?.scope === "team") {
-        const profileTeamIds = await AgentTeamModel.getTeamsForAgent(profileId);
-        return tokens.filter(
-          (t) =>
-            t.isOrganizationToken ||
-            (t.teamId && profileTeamIds.includes(t.teamId)),
-        );
-      }
-      if (agent?.scope !== "org") {
-        return tokens.filter((t) => t.isOrganizationToken);
-      }
-      return tokens;
+      const profileTeamIds =
+        agent?.scope === "team"
+          ? await AgentTeamModel.getTeamsForAgent(profileId)
+          : [];
+      return tokens.map((t) => ({
+        ...t,
+        worksWithProfile:
+          t.isOrganizationToken ||
+          agent?.scope === "org" ||
+          (agent?.scope === "team" &&
+            !!t.teamId &&
+            profileTeamIds.includes(t.teamId)),
+      }));
     };
 
     test("org-scoped agent offers every team token, even without team assignments", async ({
@@ -444,11 +446,12 @@ describe("Token Route Authorization", () => {
       });
 
       const tokens = await TeamTokenModel.findAllWithTeam();
-      const visibleTokens = await filterForAgent(agent.id, tokens);
+      const annotated = await annotateForAgent(agent.id, tokens);
 
-      expect(visibleTokens.filter((t) => !t.isOrganizationToken).length).toBe(
-        1,
-      );
+      expect(
+        annotated.filter((t) => !t.isOrganizationToken && t.worksWithProfile)
+          .length,
+      ).toBe(1);
     });
 
     test("team-scoped agent only offers its assigned teams' tokens", async ({
@@ -471,11 +474,15 @@ describe("Token Route Authorization", () => {
       });
 
       const tokens = await TeamTokenModel.findAllWithTeam();
-      const visibleTokens = await filterForAgent(agent.id, tokens);
+      const annotated = await annotateForAgent(agent.id, tokens);
 
-      const teamTokens = visibleTokens.filter((t) => !t.isOrganizationToken);
-      expect(teamTokens.length).toBe(1);
-      expect(teamTokens[0].teamId).toBe(team1.id);
+      const workingTeamTokens = annotated.filter(
+        (t) => !t.isOrganizationToken && t.worksWithProfile,
+      );
+      expect(workingTeamTokens.length).toBe(1);
+      expect(workingTeamTokens[0].teamId).toBe(team1.id);
+      // The other team's token stays listed, just marked unusable
+      expect(annotated.filter((t) => !t.isOrganizationToken).length).toBe(2);
     });
 
     test("personal agent offers no team tokens", async ({
@@ -497,11 +504,14 @@ describe("Token Route Authorization", () => {
       });
 
       const tokens = await TeamTokenModel.findAllWithTeam();
-      const visibleTokens = await filterForAgent(agent.id, tokens);
+      const annotated = await annotateForAgent(agent.id, tokens);
 
-      expect(visibleTokens.filter((t) => !t.isOrganizationToken).length).toBe(
-        0,
-      );
+      // Still listed, but no team token is usable against a personal agent
+      expect(annotated.filter((t) => !t.isOrganizationToken).length).toBe(1);
+      expect(
+        annotated.filter((t) => !t.isOrganizationToken && t.worksWithProfile)
+          .length,
+      ).toBe(0);
     });
   });
 });

@@ -72,9 +72,13 @@ its own — the model never sees a dead end.
 
 `policy.toml` declares the requesting user's label, the upstream, and a contract
 per tool (audience readers, trust, effects, requirements, and which arguments
-carry recipients). See the checked-in `policy.toml` for the auditor scenario.
-Tools without a contract are outside the policy and pass through untouched
-(gradual adoption — annotate the risky tools, leave the rest).
+carry recipients). See the checked-in `policy.toml` for the auditor scenario —
+note it is written in this parked flow's retired prototype dialect
+(`unknown_policy`, `recipients_within_context`, …), which no current crate
+parses; the live dialect is `baton-contracts` (see the gateway's
+`gateway-policy.toml`). Tools without a contract are outside the policy and
+pass through untouched (gradual adoption — annotate the risky tools, leave
+the rest).
 
 ## Run the demo (parked — not currently runnable)
 

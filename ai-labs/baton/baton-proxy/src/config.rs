@@ -4,8 +4,10 @@
 //! unknown-handling is authority registration in current baton-core. Only
 //! inline `allow` authorities may be declared; `escalate` (external)
 //! authorities are rejected at load — the proxy has no human channel to serve
-//! them, and a silently-registered one would leave every routed grant pending
-//! forever. Flows no declared authority covers fail closed.
+//! them, so a silently-registered one could never rule: every call routed to
+//! it would block at runtime with a confusing "needs approval" dead end
+//! instead of the config failing at startup. Flows no declared authority
+//! covers fail closed.
 
 use baton_contracts::{Contracts, ContractsError};
 use baton_core::AuthorityMode;

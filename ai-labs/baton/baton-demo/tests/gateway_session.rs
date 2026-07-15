@@ -448,13 +448,29 @@ name = "name"
 }
 
 /// The checked-in config files drive the demo end-to-end: the clean read, the
-/// out-of-audience soft block, the human approval, and — the label guarantee —
-/// a follow-up in-audience send that only stays clean because the approved
-/// send's output is public/trusted. Were the policy to drop send_email's
-/// output label to unknown, the approved send would put an unknown-audience
-/// value into the context and block the in-audience follow-up.
+/// out-of-audience soft block, the human approval, and — the audience-label
+/// guarantee — a follow-up in-audience send that only stays clean because the
+/// approved send's output audience is public. Were the policy to drop
+/// send_email's output label to unknown, the approved send would put an
+/// unknown-audience value into the context and block the in-audience
+/// follow-up. The trust half of the migrated label is not observable through
+/// this scenario (no tool requires trust), so it is pinned directly on the
+/// parsed policy below.
 #[tokio::test]
 async fn checked_in_config_preserves_the_demo_scenario() {
+    // The old dialect defaulted a contract's output to public/trusted; the
+    // canonical dialect fails closed on omissions, so the checked-in policy
+    // must keep spelling both out.
+    let policy = baton_contracts::Contracts::from_toml(include_str!("../gateway-policy.toml"))
+        .expect("checked-in policy parses");
+    let send = policy
+        .contracts
+        .iter()
+        .find(|c| c.name.as_str() == "send_email")
+        .expect("send_email is contracted");
+    assert_eq!(send.output_label.trust, baton_core::Trust::TRUSTED);
+    assert_eq!(send.output_label.audience, baton_core::Audience::PUBLIC);
+
     let config = GatewayConfig::from_toml(include_str!("../gateway.toml"), include_str!("../gateway-policy.toml"))
         .expect("checked-in config parses");
     let mut session = Session::new(Arc::new(config));

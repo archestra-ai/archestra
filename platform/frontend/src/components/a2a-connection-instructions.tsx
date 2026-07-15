@@ -46,7 +46,6 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
-import { cn } from "@/lib/utils";
 import {
   AgentEmailDisabledMessage,
   EmailNotConfiguredMessage,
@@ -598,26 +597,42 @@ curl -X POST "${a2aEndpoint}" \\
             fetchUserTokenMutation={fetchUserTokenMutation}
             fetchTeamTokenMutation={fetchTeamTokenMutation}
           />
-          <CurlExampleSection
-            key={`reply-${effectiveTokenId}`}
-            code={replyCurlCode}
-            tokenForDisplay={tokenForDisplay}
-            isPersonalTokenSelected={isPersonalTokenSelected}
-            hasAdminPermission={hasAdminPermission ?? false}
-            selectedTeamToken={selectedTeamToken ?? null}
-            fetchUserTokenMutation={fetchUserTokenMutation}
-            fetchTeamTokenMutation={fetchTeamTokenMutation}
-          />
-          <CurlExampleSection
-            key={`approval-${effectiveTokenId}`}
-            code={approvalCurlCode}
-            tokenForDisplay={tokenForDisplay}
-            isPersonalTokenSelected={isPersonalTokenSelected}
-            hasAdminPermission={hasAdminPermission ?? false}
-            selectedTeamToken={selectedTeamToken ?? null}
-            fetchUserTokenMutation={fetchUserTokenMutation}
-            fetchTeamTokenMutation={fetchTeamTokenMutation}
-          />
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Continue the conversation (multi-turn)
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`reply-${effectiveTokenId}`}
+                code={replyCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Approve or deny tool calls
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`approval-${effectiveTokenId}`}
+                code={approvalCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
           <p className="text-xs text-muted-foreground">
             Full protocol reference — streaming, multi-turn conversations, and
             tool approvals — in the{" "}
@@ -634,29 +649,13 @@ curl -X POST "${a2aEndpoint}" \\
         </div>
       </WizardStep>
 
-      {layout === "dialog" ? (
-        <Collapsible className="mt-2 rounded-lg border">
-          <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
-            Other ways to reach this agent
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180",
-              )}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-6 px-4 pb-4">
-            {chatDeepLinkBlock}
-            {dialogOnlyChannels}
-          </CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <div className="mt-2 space-y-4 border-t pt-6">
-          <h3 className="text-sm font-semibold">
-            Other ways to reach this agent
-          </h3>
-          {chatDeepLinkBlock}
-        </div>
-      )}
+      <div className="mt-6 space-y-6 border-t pt-6">
+        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+          Other ways to reach this agent
+        </h3>
+        {chatDeepLinkBlock}
+        {layout === "dialog" && dialogOnlyChannels}
+      </div>
     </div>
   );
 }

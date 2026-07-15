@@ -614,12 +614,7 @@ function ConnectAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   return (
-    <ConnectDialog
-      agent={agent}
-      open={open}
-      onOpenChange={onOpenChange}
-      docsPage="platform-agents"
-    >
+    <ConnectDialog agent={agent} open={open} onOpenChange={onOpenChange}>
       <AgentConnectionColumns agentId={agent.id} />
     </ConnectDialog>
   );

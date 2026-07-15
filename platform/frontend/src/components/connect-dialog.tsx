@@ -1,14 +1,11 @@
 "use client";
 
-import type { AgentType, DocsPage } from "@archestra/shared";
+import type { AgentType } from "@archestra/shared";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, Bot, ExternalLink, Network, Route } from "lucide-react";
+import { Bot, Network, Route } from "lucide-react";
 import type { ReactNode } from "react";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { FormDialog } from "@/components/form-dialog";
-import { Button } from "@/components/ui/button";
-import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { DialogBody } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const AGENT_TYPE_CONFIG: Record<
@@ -28,7 +25,6 @@ interface ConnectDialogProps {
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  docsPage: DocsPage;
   children: ReactNode;
 }
 
@@ -36,10 +32,8 @@ export function ConnectDialog({
   agent,
   open,
   onOpenChange,
-  docsPage,
   children,
 }: ConnectDialogProps) {
-  const docsUrl = getFrontendDocsUrl(docsPage);
   const config = AGENT_TYPE_CONFIG[agent.agentType] ?? AGENT_TYPE_CONFIG.agent;
   const Icon = config.icon;
 
@@ -61,35 +55,6 @@ export function ConnectDialog({
       className="h-auto max-h-[90vh]"
     >
       <DialogBody className="pb-4">{children}</DialogBody>
-
-      <DialogStickyFooter className="mt-0 sm:justify-between sm:[&>*:first-child]:mr-auto">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {docsUrl && (
-            <>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              <span>
-                Need help? Check our{" "}
-                <ExternalDocsLink
-                  href={docsUrl}
-                  className="font-medium text-primary"
-                  showIcon={false}
-                >
-                  documentation
-                </ExternalDocsLink>
-              </span>
-            </>
-          )}
-        </div>
-        <Button
-          type="button"
-          onClick={() => onOpenChange(false)}
-          size="default"
-          className="min-w-[100px]"
-        >
-          Done
-          <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
-      </DialogStickyFooter>
     </FormDialog>
   );
 }
